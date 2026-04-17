@@ -1045,16 +1045,21 @@ class LinkerManagerDialog extends ComfyDialog {
                 const versionLabel = modelUrl ? `<a href="${modelUrl}" target="_blank" style="color: #FF9800; font-size: 14px; text-decoration: none;">${civitaiLabel}</a>` : `<span style="color: var(--ml-text-muted); font-size: 14px;">${civitaiLabel}</span>`;
                 titleHtml += ` ${versionLabel}`;
             }
+            // Add filename in quotes
+            if (missing.civitai_info.expected_filename) {
+                titleHtml += ` <span style="color: var(--ml-text-muted); font-size: 12px;">"${missing.civitai_info.expected_filename}"</span>`;
+            }
         } else if (missing.civitai_info && missing.civitai_info.model_name) {
             titleHtml += ` <span style="color: var(--ml-text-muted); font-size: 14px;">(${missing.civitai_info.model_name})</span>`;
         }
         html += `<h3 class="ml-card-title">${titleHtml}</h3>`;
-        html += `<div style="display: flex; align-items: center; gap: 6px;">`;
+        html += `<div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">`;
         if (missing.category) {
             html += `<span class="ml-category-chip">${missing.category}</span>`;
         }
         html += `<span class="ml-node-chip">${nodeLabel} #${missing.node_id}</span>`;
         html += `</div>`;
+        // Removed - filename is already shown in title
         html += `</div>`;
         
         // Two-column layout
@@ -1093,9 +1098,21 @@ class LinkerManagerDialog extends ComfyDialog {
                 html += `</div>`;
             }
             
-            // Add note if only showing 100% matches
+            // Add note if only showing 100% matches - make it expandable
             if (perfectMatches.length > 0 && otherMatches.length > 0) {
-                html += `<div class="ml-no-matches">${otherMatches.length} other match${otherMatches.length > 1 ? 'es' : ''} below 100%</div>`;
+                const matchId = `more-matches-${missing.node_id}-${missing.widget_index}`;
+                html += `<div class="ml-no-matches" style="cursor: pointer; color: #2196F3;" onclick="document.getElementById('${matchId}').style.display = document.getElementById('${matchId}').style.display === 'none' ? 'block' : 'none'; this.textContent = this.textContent === '${otherMatches.length} other matches below 100%' ? 'Hide alternatives' : '${otherMatches.length} other matches below 100%'">${otherMatches.length} other match${otherMatches.length > 1 ? 'es' : ''} below 100%</div>`;
+                // Hidden container with other matches
+                html += `<div id="${matchId}" style="display: none; flex-direction: column; gap: 4px; margin-top: 8px;">`;
+                for (const match of otherMatches) {
+                    const confClass = match.confidence >= 70 ? 'ml-badge-medium' : 'ml-badge-low';
+                    html += `<div class="ml-match-row" style="padding: 4px; background: var(--ml-bg-secondary); border-radius: 4px;">`;
+                    html += `<span class="ml-badge ${confClass}">${match.confidence}%</span>`;
+                    html += `<span class="ml-match-filename" title="${match.path || match.filename}" style="flex: 1; overflow: hidden; text-overflow: ellipsis;">${match.filename || match.path?.split(/[/\\]/).pop()}</span>`;
+                    html += `<button class="ml-btn ml-btn-secondary ml-btn-sm" onclick="document.getElementById('resolve-${missing.node_id}-${missing.widget_index}').click()">🔗 Link</button>`;
+                    html += `</div>`;
+                }
+                html += `</div>`;
             }
         } else if (allMatches.length > 0 && filteredMatches.length === 0) {
             html += `<div class="ml-no-matches">No matches above 70% confidence</div>`;
