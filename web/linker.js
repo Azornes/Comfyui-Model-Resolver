@@ -787,7 +787,6 @@ class LinkerManagerDialog extends ComfyDialog {
             return;
         }
 
-        // Category display name mapping (singular form)
         const categoryDisplayNames = {
             'checkpoints': 'checkpoint',
             'loras': 'lora',
@@ -801,86 +800,159 @@ class LinkerManagerDialog extends ComfyDialog {
             'hypernetworks': 'hypernetwork'
         };
 
-        // Group by category
         const byCategory = {};
+        
         for (const model of loadedModels) {
             const cat = model.category || 'unknown';
             if (!byCategory[cat]) {
-                byCategory[cat] = [];
+                byCategory[cat] = { active: [], inactive: [] };
             }
-            byCategory[cat].push(model);
+            
+            // Determine if model is active or inactive
+            // For LoraLoaderV2/LoraManager: check model.active field
+            // For other nodes: check model.connected field (false means not connected or bypassed)
+            let isActive = true;
+            if (model.is_lora_v2) {
+                // For text-based lora loaders, check both active flag AND connected status
+                isActive = model.active !== false && model.connected !== false;
+            } else {
+                // For regular nodes, check connected status
+                isActive = model.connected !== false;
+            }
+            
+            if (isActive) {
+                byCategory[cat].active.push(model);
+            } else {
+                byCategory[cat].inactive.push(model);
+            }
         }
 
-        // Build display string in format: <category:name:strength> for each category (using singular form)
-        const categoryStrings = {};
-        for (const [category, models] of Object.entries(byCategory)) {
-            const displayCat = categoryDisplayNames[category] || category;
-            const parts = [];
-            for (const model of models) {
-                const fullName = model.name || model.original_path?.split(/[\/\\]/).pop() || 'Unknown';
-                // Remove file extension
-                const name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx)$/i, '');
-                const strength = model.strength !== null && model.strength !== undefined 
-                    ? model.strength.toFixed(2) 
-                    : '1.00';
-                parts.push(`<${displayCat}:${name}:${strength}>`);
+        const activeCount = Object.values(byCategory).reduce((sum, cat) => sum + cat.active.length, 0);
+        const inactiveCount = Object.values(byCategory).reduce((sum, cat) => sum + cat.inactive.length, 0);
+
+        const buildCategoryStrings = (filter) => {
+            const result = {};
+            for (const [category, modelsObj] of Object.entries(byCategory)) {
+                const displayCat = categoryDisplayNames[category] || category;
+                const models = filter === 'active' ? modelsObj.active : filter === 'inactive' ? modelsObj.inactive : [...modelsObj.active, ...modelsObj.inactive];
+                const parts = models.map(model => {
+                    const fullName = model.name || model.original_path?.split(/[\/\\]/).pop() || 'Unknown';
+                    let name = fullName;
+                    if (fullName.match(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx)$/i)) {
+                        name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx)$/i, '');
+                    }
+                    const strength = model.strength !== null && model.strength !== undefined 
+                        ? model.strength.toFixed(2) 
+                        : '1.00';
+                    return `<${displayCat}:${name}:${strength}>`;
+                });
+                result[category] = parts.join(' ');
             }
-            categoryStrings[category] = parts.join(' ');
-        }
+            return Object.values(result).join(' ');
+        };
 
-        // Build all models string
-        const allParts = Object.values(categoryStrings).join(' ');
+        const activeString = buildCategoryStrings('active');
+        const inactiveString = buildCategoryStrings('inactive');
+        const allString = buildCategoryStrings('all');
 
-        // Display header
+        const self = this;
+        
         let html = `
             <div class="ml-loaded-models-header">
-                <h3 class="ml-loaded-models-title">${total} Loaded Model${total > 1 ? 's' : ''}</h3>
-                <p class="ml-loaded-models-subtitle">Models currently used in the workflow</p>
+                <h3 class="ml-loaded-models-title">${total} Model${total > 1 ? 's' : ''} in Workflow</h3>
+                <p class="ml-loaded-models-subtitle">LoraManager / LoraLoaderV2 nodes distinguish active/inactive</p>
             </div>
-            <div class="ml-models-list">
+            <div style="padding: 16px 20px;">
+                <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+                    <button class="ml-btn-filter active" id="filter-all" onclick="window.MLFilterSwitch('all')">All (${activeCount + inactiveCount})</button>
+                    <button class="ml-btn-filter" id="filter-active" onclick="window.MLFilterSwitch('active')">Active (${activeCount})</button>
+                    <button class="ml-btn-filter" id="filter-inactive" onclick="window.MLFilterSwitch('inactive')">Inactive (${inactiveCount})</button>
+                </div>
+                <style>
+                    .ml-btn-filter { padding: 6px 12px; font-size: 12px; background: #333; border: 1px solid #444; color: #aaa; cursor: pointer; border-radius: 4px; }
+                    .ml-btn-filter:hover { background: #444; color: #fff; }
+                    .ml-btn-filter.active { background: #4CAF50; border-color: #4CAF50; color: white; }
+                </style>
+            </div>
+            <div class="ml-models-list" style="padding: 0 20px;">
         `;
 
-        // Display as chips grouped by category with copy button for each section
-        for (const [category, models] of Object.entries(byCategory)) {
-            const catString = categoryStrings[category];
+        for (const [category, modelsObj] of Object.entries(byCategory)) {
             const displayName = categoryDisplayNames[category] || category;
-            html += `<div style="margin-bottom: 16px; padding: 12px; background: var(--ml-card-bg-alt, #252525); border-radius: 8px;">`;
-            html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">`;
-            html += `<span class="ml-category-chip" style="margin: 0; font-size: 12px; padding: 4px 10px;">${category}</span>`;
-            html += `<button class="ml-btn ml-btn-sm" style="padding: 3px 8px; font-size: 10px;" onclick="navigator.clipboard.writeText('${catString.replace(/'/g, "\\'")}').then(() => { const btn = event.target; const orig = btn.textContent; btn.textContent = '✓'; setTimeout(() => btn.textContent = orig, 1500); })">Copy</button>`;
-            html += `</div>`;
-            html += `<div style="display: flex; flex-wrap: wrap; gap: 8px;">`;
+            const hasActive = modelsObj.active.length > 0;
+            const hasInactive = modelsObj.inactive.length > 0;
             
-            for (const model of models) {
-                const fullName = model.name || model.original_path?.split(/[\/\\]/).pop() || 'Unknown';
-                const name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx)$/i, '');
-                const strength = model.strength !== null && model.strength !== undefined 
-                    ? model.strength.toFixed(2) 
-                    : null;
+            html += `<div class="ml-model-section" data-ml-filter="all" data-ml-active="${hasActive}" data-ml-inactive="${hasInactive}" style="margin-bottom: 16px; padding: 12px; background: var(--ml-card-bg-alt, #252525); border-radius: 8px;">`;
+            
+            if (hasActive) {
+                const activeStr = modelsObj.active.map(m => {
+                    const fullName = m.name || m.original_path?.split(/[\/\\]/).pop() || 'Unknown';
+                    let name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx)$/i, '');
+                    const strength = m.strength !== null && m.strength !== undefined ? m.strength.toFixed(2) : '1.00';
+                    return `<${displayName}:${name}:${strength}>`;
+                }).join(' ');
                 
-                html += `<span class="ml-model-chip">${name}`;
-                if (strength !== null) {
-                    html += `<span class="ml-model-chip-strength">${strength}</span>`;
+                html += `<div style="margin-bottom: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="color: #4CAF50; font-size: 11px; font-weight: 600;">● ACTIVE</span>
+                        <button class="ml-btn ml-btn-sm" style="padding: 3px 8px; font-size: 10px;" onclick="window.MLCopy('${activeStr.replace(/'/g, "\\'")}', this)">Copy</button>
+                    </div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px;">`;
+                
+                for (const model of modelsObj.active) {
+                    const fullName = model.name || model.original_path?.split(/[\/\\]/).pop() || 'Unknown';
+                    const name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx)$/i, '');
+                    const strength = model.strength !== null && model.strength !== undefined ? model.strength.toFixed(2) : null;
+                    html += `<span class="ml-model-chip">${name}${strength !== null ? `<span class="ml-model-chip-strength">${strength}</span>` : ''}</span>`;
                 }
-                html += `</span>`;
+                html += `</div></div>`;
             }
             
-            html += `</div></div>`;
+            if (hasInactive) {
+                const inactiveStr = modelsObj.inactive.map(m => {
+                    const fullName = m.name || m.original_path?.split(/[\/\\]/).pop() || 'Unknown';
+                    let name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx)$/i, '');
+                    const strength = m.strength !== null && m.strength !== undefined ? m.strength.toFixed(2) : '1.00';
+                    return `<${displayName}:${name}:${strength}>`;
+                }).join(' ');
+                
+                html += `<div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="color: #888; font-size: 11px; font-weight: 600;">○ INACTIVE</span>
+                        <button class="ml-btn ml-btn-sm" style="padding: 3px 8px; font-size: 10px; opacity: 0.6;" onclick="window.MLCopy('${inactiveStr.replace(/'/g, "\\'")}', this)">Copy</button>
+                    </div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px; opacity: 0.5;">`;
+                
+                for (const model of modelsObj.inactive) {
+                    const fullName = model.name || model.original_path?.split(/[\/\\]/).pop() || 'Unknown';
+                    const name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx)$/i, '');
+                    const strength = model.strength !== null && model.strength !== undefined ? model.strength.toFixed(2) : null;
+                    html += `<span class="ml-model-chip">${name}${strength !== null ? `<span class="ml-model-chip-strength">${strength}</span>` : ''}</span>`;
+                }
+                html += `</div></div>`;
+            }
+            
+            html += `</div>`;
         }
 
-        // Add copyable string at the bottom for all models
+        const copySectionId = 'ml-copy-' + Date.now();
         html += `
             </div>
-            <div style="padding: 16px 20px; border-top: 1px solid var(--ml-border);">
-                <div style="font-size: 12px; color: var(--ml-text-muted); margin-bottom: 8px;">Copy all models:</div>
+            <div id="${copySectionId}" style="padding: 16px 20px; border-top: 1px solid var(--ml-border);" data-ml-active="${activeString.replace(/'/g, "\\'")}" data-ml-inactive="${inactiveString.replace(/'/g, "\\'")}" data-ml-all="${allString.replace(/'/g, "\\'")}">
+                <div style="font-size: 12px; color: var(--ml-text-muted); margin-bottom: 8px;" id="${copySectionId}-label">Copy all:</div>
                 <div style="display: flex; gap: 8px; align-items: center;">
-                    <code style="flex: 1; padding: 8px 12px; background: #1a1a1a; border-radius: 4px; font-family: 'SF Mono', 'Consolas', monospace; font-size: 11px; color: #90caf9; overflow-x: auto; white-space: nowrap;">${allParts}</code>
-                    <button class="ml-btn ml-btn-secondary" onclick="navigator.clipboard.writeText('${allParts.replace(/'/g, "\\'")}').then(() => { const btn = event.target; const orig = btn.textContent; btn.textContent = '✓ Copied!'; setTimeout(() => btn.textContent = orig, 1500); })">Copy All</button>
+                    <code style="flex: 1; padding: 8px 12px; background: #1a1a1a; border-radius: 4px; font-family: 'SF Mono', 'Consolas', monospace; font-size: 11px; color: #90caf9; overflow-x: auto; white-space: nowrap;" id="${copySectionId}-code">${allString}</code>
+                    <button class="ml-btn ml-btn-secondary" onclick="window.MLCopyCode('${copySectionId}', this)">Copy</button>
                 </div>
             </div>
         `;
 
         container.innerHTML = html;
+        
+        // Store data on container for filter function
+        container.dataset.mlActiveString = activeString;
+        container.dataset.mlInactiveString = inactiveString;
+        container.dataset.mlAllString = allString;
     }
     
     createContent() {
@@ -3026,6 +3098,59 @@ class ModelLinker {
             alert("Error opening Model Linker: " + error.message);
         }
     }
+
+    static switchFilter(filter) {
+        document.querySelectorAll('.ml-btn-filter').forEach(b => b.classList.remove('active'));
+        document.getElementById('filter-' + filter).classList.add('active');
+        
+        document.querySelectorAll('.ml-model-section').forEach(s => {
+            const hasActive = s.dataset.mlActive === 'true';
+            const hasInactive = s.dataset.mlInactive === 'true';
+            
+            if (filter === 'all') {
+                s.style.display = 'block';
+            } else if (filter === 'active') {
+                s.style.display = hasActive ? 'block' : 'none';
+            } else if (filter === 'inactive') {
+                s.style.display = hasInactive ? 'block' : 'none';
+            }
+        });
+        
+        const copySection = document.querySelector('[id^="ml-copy-"]');
+        if (copySection) {
+            const codeEl = copySection.querySelector('code');
+            const labelEl = copySection.querySelector('div');
+            
+            if (filter === 'all') {
+                codeEl.textContent = copySection.dataset.mlAll;
+                labelEl.textContent = 'Copy all:';
+            } else if (filter === 'active') {
+                codeEl.textContent = copySection.dataset.mlActive;
+                labelEl.textContent = 'Copy active:';
+            } else if (filter === 'inactive') {
+                codeEl.textContent = copySection.dataset.mlInactive;
+                labelEl.textContent = 'Copy inactive:';
+            }
+        }
+    }
+
+    static copyToClipboard(text, btn) {
+        navigator.clipboard.writeText(text).then(() => {
+            const orig = btn.textContent;
+            btn.textContent = '✓';
+            setTimeout(() => btn.textContent = orig, 1500);
+        });
+    }
+
+    static copyFromCode(sectionId, btn) {
+        const section = document.getElementById(sectionId);
+        const codeEl = section.querySelector('code');
+        navigator.clipboard.writeText(codeEl.textContent).then(() => {
+            const orig = btn.textContent;
+            btn.textContent = '✓ Copied!';
+            setTimeout(() => btn.textContent = orig, 1500);
+        });
+    }
 }
 
 const modelLinker = new ModelLinker();
@@ -3035,4 +3160,69 @@ app.registerExtension({
     name: "Model Linker",
     setup: modelLinker.setup
 });
+
+// Global helper functions for inline onclick handlers
+window.MLFilterSwitch = function(filter) {
+    document.querySelectorAll('.ml-btn-filter').forEach(b => b.classList.remove('active'));
+    document.getElementById('filter-' + filter).classList.add('active');
+    
+    document.querySelectorAll('.ml-model-section').forEach(s => {
+        const hasActive = s.dataset.mlActive === 'true';
+        const hasInactive = s.dataset.mlInactive === 'true';
+        
+        // Get direct child divs (active and inactive sections)
+        const subSections = Array.from(s.children).filter(c => c.tagName === 'DIV');
+        const activeSection = subSections[0];
+        const inactiveSection = subSections[1];
+        
+        if (filter === 'all') {
+            s.style.display = 'block';
+            if (activeSection) activeSection.style.display = 'block';
+            if (inactiveSection) inactiveSection.style.display = 'block';
+        } else if (filter === 'active') {
+            s.style.display = hasActive ? 'block' : 'none';
+            if (activeSection) activeSection.style.display = hasActive ? 'block' : 'none';
+            if (inactiveSection) inactiveSection.style.display = 'none';
+        } else if (filter === 'inactive') {
+            s.style.display = hasInactive ? 'block' : 'none';
+            if (activeSection) activeSection.style.display = 'none';
+            if (inactiveSection) inactiveSection.style.display = hasInactive ? 'block' : 'none';
+        }
+    });
+    
+    const copySection = document.querySelector('[id^="ml-copy-"]');
+    if (copySection) {
+        const codeEl = copySection.querySelector('code');
+        const labelEl = copySection.querySelector('div');
+        
+        if (filter === 'all') {
+            codeEl.textContent = copySection.dataset.mlAll;
+            labelEl.textContent = 'Copy all:';
+        } else if (filter === 'active') {
+            codeEl.textContent = copySection.dataset.mlActive;
+            labelEl.textContent = 'Copy active:';
+        } else if (filter === 'inactive') {
+            codeEl.textContent = copySection.dataset.mlInactive;
+            labelEl.textContent = 'Copy inactive:';
+        }
+    }
+};
+
+window.MLCopy = function(text, btn) {
+    navigator.clipboard.writeText(text).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = '✓';
+        setTimeout(() => btn.textContent = orig, 1500);
+    });
+};
+
+window.MLCopyCode = function(sectionId, btn) {
+    const section = document.getElementById(sectionId);
+    const codeEl = section.querySelector('code');
+    navigator.clipboard.writeText(codeEl.textContent).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = '✓ Copied!';
+        setTimeout(() => btn.textContent = orig, 1500);
+    });
+};
 

@@ -343,7 +343,7 @@ class ModelLinkerExtension:
                         model_name = original_path.split("/")[-1].split("\\")[-1]
                         strength = None
 
-                        # For LoraLoader nodes, strength is in next widget_value
+                        # For standard LoraLoader nodes, strength is in next widget_value
                         if node_type in ["LoraLoader", "LoraLoaderModelOnly"]:
                             # Find the node in workflow to get strength value
                             for node in nodes:
@@ -357,6 +357,11 @@ class ModelLinkerExtension:
                                         except (ValueError, TypeError):
                                             strength = 1.0
                                     break
+
+                        # For text-based lora loaders (LoraLoaderV2, LoraManager), get strength from ref
+                        if ref.get("is_lora_v2"):
+                            strength = ref.get("strength")
+                            model_name = ref.get("name", model_name)
 
                         # Check if model exists locally
                         exists = ref.get("exists", False)
@@ -383,6 +388,9 @@ class ModelLinkerExtension:
                                 "strength": strength,
                                 "original_path": original_path,
                                 "is_urn": ref.get("is_urn", False),
+                                "is_lora_v2": ref.get("is_lora_v2", False),
+                                "active": ref.get("active"),
+                                "connected": ref.get("connected", True),
                             }
                         )
 
