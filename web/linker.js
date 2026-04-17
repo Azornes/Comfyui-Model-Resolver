@@ -1030,17 +1030,20 @@ class LinkerManagerDialog extends ComfyDialog {
         // Card Header: Filename as headline + node chip
         html += `<div class="ml-card-header">`;
         // Show URN + CivitAI model name + version name if available
-        let titleHtml = `<span title="${missingFilename.full}">${missingFilename.display}</span>`;
+        const modelUrl = missing.is_urn && missing.urn ? `https://civitai.com/models/${missing.urn.model_id}?modelVersionId=${missing.urn.version_id}` : '';
+        const titleContent = `<span title="${missingFilename.full}">${missingFilename.display}</span>`;
+        let titleHtml = modelUrl ? `<a href="${modelUrl}" target="_blank" style="color: inherit; text-decoration: none;">${titleContent}</a>` : titleContent;
         if (missing.is_urn && missing.civitai_info) {
             let civitaiLabel = '';
             if (missing.civitai_info.model_name) {
-                civitaiLabel += `"${missing.civitai_info.model_name}"`;
+                civitaiLabel += `${missing.civitai_info.model_name}`;
             }
             if (missing.civitai_info.version_name && missing.civitai_info.version_name !== missing.civitai_info.model_name) {
                 civitaiLabel += ` ${missing.civitai_info.version_name}`;
             }
             if (civitaiLabel) {
-                titleHtml += ` <span style="color: var(--ml-text-muted); font-size: 14px;">${civitaiLabel}</span>`;
+                const versionLabel = modelUrl ? `<a href="${modelUrl}" target="_blank" style="color: #FF9800; font-size: 14px; text-decoration: none;">${civitaiLabel}</a>` : `<span style="color: var(--ml-text-muted); font-size: 14px;">${civitaiLabel}</span>`;
+                titleHtml += ` ${versionLabel}`;
             }
         } else if (missing.civitai_info && missing.civitai_info.model_name) {
             titleHtml += ` <span style="color: var(--ml-text-muted); font-size: 14px;">(${missing.civitai_info.model_name})</span>`;
@@ -2017,15 +2020,16 @@ class LinkerManagerDialog extends ComfyDialog {
             const modelUrl = civitaiResult.url || `https://civitai.com/models/${civitaiResult.model_id || ''}`;
             // Use expected_filename from URN resolution, or fallback to civitaiResult filename
             const downloadFilename = missing.civitai_info?.expected_filename || civitaiResult.filename || civitaiResult.name;
+            // Build display name with version if available
+            const modelName = missing.civitai_info?.version_name ? `${missing.civitai_info.model_name} v${missing.civitai_info.version_name}` : (civitaiResult.name || 'Model');
             html += `<div class="ml-status ml-status-warning" style="flex-direction: column; align-items: flex-start;">`;
             html += `<strong>Found on CivitAI</strong>`;
             html += `<div style="margin-top: 4px; font-size: 12px;">`;
-            html += `<span class="ml-chip">${civitaiResult.filename || civitaiResult.name}</span> `;
-            html += `<span style="color: var(--ml-text-muted);">${civitaiResult.type || civitaiResult.name}</span>`;
+            // Model name as clickable button/link
+            html += `<button class="ml-btn ml-btn-sm" style="background: transparent; color: #FF9800; border: 1px solid #FF9800; font-weight: bold; cursor: pointer;" onclick="window.open('${modelUrl}', '_blank')">${modelName}</button> `;
+            html += `<span style="color: var(--ml-text-muted);">${civitaiResult.type || ''}</span>`;
             html += `</div>`;
             html += `<div style="margin-top: 8px; display: flex; gap: 8px;">`;
-            // Link to CivitAI model page
-            html += `<a href="${modelUrl}" target="_blank" class="ml-btn ml-btn-sm" style="background: #46b5e5; text-decoration: none;">🔗 View</a>`;
             // Download button - use expected_filename from URN resolution
             html += `<button class="search-download-btn ml-btn ml-btn-sm" style="background: #FF9800;" data-url="${civitaiResult.download_url}" data-filename="${downloadFilename}" data-category="${missing.category}">`;
             html += `<span class="ml-btn-icon">☁</span> Download`;
