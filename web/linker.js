@@ -1861,8 +1861,36 @@ class LinkerManagerDialog extends ComfyDialog {
      * Search online for a model
      */
     async searchOnline(missing) {
-        const filename = missing.original_path?.split('/').pop()?.split('\\').pop() || '';
-        const category = missing.category || '';
+        let filename = missing.original_path?.split('/').pop()?.split('\\').pop() || '';
+        let category = missing.category || '';
+        
+        // For URNs, use the CivitAI model name for searching instead of the URN itself
+        // and pass the URN type as category (CivitAI expects specific type names)
+        if (missing.is_urn) {
+            if (missing.civitai_info?.model_name) {
+                filename = missing.civitai_info.model_name;
+            }
+            // Pass URN type directly - CivitAPI expects types like 'Upscaler', 'Checkpoint'
+            const urnType = missing.urn_type || '';
+            if (urnType) {
+                // Map URN types to CivitAI type names
+                const typeMap = {
+                    'checkpoint': 'Checkpoint',
+                    'lora': 'LORA',
+                    'vae': 'VAE',
+                    'upscaler': 'Upscaler',
+                    'upscale_model': 'Upscaler',
+                    'embedding': 'TextualInversion',
+                    'controlnet': 'Controlnet'
+                };
+                const civitaiType = typeMap[urnType.toLowerCase()];
+                if (civitaiType) {
+                    category = civitaiType;
+                }
+            }
+        }
+        
+        const isUrn = missing.is_urn || false;
         const resultsId = `search-results-${missing.node_id}-${missing.widget_index}`;
         const resultsDiv = this.contentElement?.querySelector(`#${resultsId}`);
         const searchBtn = this.contentElement?.querySelector(`#search-${missing.node_id}-${missing.widget_index}`);
@@ -1877,10 +1905,19 @@ class LinkerManagerDialog extends ComfyDialog {
                 resultsDiv.innerHTML = '<span style="color: #2196F3;">Searching HuggingFace and CivitAI...</span>';
             }
 
+            // For URNs, include model_id and version_id for direct download
+            const searchData = { filename, category, is_urn: isUrn };
+            if (isUrn && missing.urn) {
+                searchData.model_id = missing.urn.model_id;
+                searchData.version_id = missing.urn.version_id;
+            }
+            
+            console.log('Model Linker: Search request:', JSON.stringify(searchData));
+
             const response = await api.fetchApi('/model_linker/search', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ filename, category })
+                body: JSON.stringify(searchData)
             });
 
             if (!response.ok) {
@@ -1888,6 +1925,7 @@ class LinkerManagerDialog extends ComfyDialog {
             }
 
             const data = await response.json();
+            console.log('Model Linker: Search response:', JSON.stringify(data));
             this.displaySearchResults(missing, data, resultsDiv);
 
         } catch (error) {
@@ -1911,8 +1949,9 @@ class LinkerManagerDialog extends ComfyDialog {
 
         const popular = data.popular;
         const modelListResult = data.model_list;
-        const hfResult = data.huggingface?.[0];
-        const civitaiResult = data.civitai?.[0];
+        // Backend sends these as objects, not arrays - handle both
+        const hfResult = data.huggingface ? (Array.isArray(data.huggingface) ? data.huggingface[0] : data.huggingface) : null;
+        const civitaiResult = data.civitai ? (Array.isArray(data.civitai) ? data.civitai[0] : data.civitai) : null;
         const hasResults = popular || modelListResult || hfResult || civitaiResult;
 
         if (!hasResults) {
@@ -1975,14 +2014,20 @@ class LinkerManagerDialog extends ComfyDialog {
 
         // CivitAI result
         if (civitaiResult && civitaiResult.download_url) {
+            const modelUrl = civitaiResult.url || `https://civitai.com/models/${civitaiResult.model_id || ''}`;
+            // Use expected_filename from URN resolution, or fallback to civitaiResult filename
+            const downloadFilename = missing.civitai_info?.expected_filename || civitaiResult.filename || civitaiResult.name;
             html += `<div class="ml-status ml-status-warning" style="flex-direction: column; align-items: flex-start;">`;
             html += `<strong>Found on CivitAI</strong>`;
             html += `<div style="margin-top: 4px; font-size: 12px;">`;
             html += `<span class="ml-chip">${civitaiResult.filename || civitaiResult.name}</span> `;
             html += `<span style="color: var(--ml-text-muted);">${civitaiResult.type || civitaiResult.name}</span>`;
             html += `</div>`;
-            html += `<div style="margin-top: 8px;">`;
-            html += `<button class="search-download-btn ml-btn ml-btn-sm" style="background: #FF9800;" data-url="${civitaiResult.download_url}" data-filename="${civitaiResult.filename || civitaiResult.name + '.safetensors'}" data-category="${missing.category}">`;
+            html += `<div style="margin-top: 8px; display: flex; gap: 8px;">`;
+            // Link to CivitAI model page
+            html += `<a href="${modelUrl}" target="_blank" class="ml-btn ml-btn-sm" style="background: #46b5e5; text-decoration: none;">🔗 View</a>`;
+            // Download button - use expected_filename from URN resolution
+            html += `<button class="search-download-btn ml-btn ml-btn-sm" style="background: #FF9800;" data-url="${civitaiResult.download_url}" data-filename="${downloadFilename}" data-category="${missing.category}">`;
             html += `<span class="ml-btn-icon">☁</span> Download`;
             html += `</button>`;
             html += `</div></div>`;

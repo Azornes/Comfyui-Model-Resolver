@@ -23,74 +23,76 @@ logger = logging.getLogger(__name__)
 URL_PATTERN = re.compile(r'(https?://(?:huggingface\.co|civitai\.com)[^\s"\'<>\)\\]+)')
 
 # Model file extensions to look for
-MODEL_EXTENSIONS = ('.safetensors', '.ckpt', '.pt', '.pth', '.bin', '.onnx')
+MODEL_EXTENSIONS = (".safetensors", ".ckpt", ".pt", ".pth", ".bin", ".onnx")
 
 
 def extract_workflow_urls(workflow_json: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     """
     Extract model URLs from workflow JSON.
-    
+
     Sources:
     1. node.properties.models array - contains {name, url, directory}
     2. Regex extraction from workflow JSON string - finds HuggingFace/CivitAI URLs
-    
+
     Args:
         workflow_json: Complete workflow JSON dictionary
-        
+
     Returns:
         Dict mapping model filename -> {url, directory, source}
     """
     url_map = {}
-    
+
     # Convert to string for regex search
     workflow_str = json.dumps(workflow_json)
-    
+
     # Collect all nodes including from subgraphs
-    all_nodes = list(workflow_json.get('nodes', []))
-    definitions = workflow_json.get('definitions', {})
-    subgraphs = definitions.get('subgraphs', [])
+    all_nodes = list(workflow_json.get("nodes", []))
+    definitions = workflow_json.get("definitions", {})
+    subgraphs = definitions.get("subgraphs", [])
     for subgraph in subgraphs:
-        subgraph_nodes = subgraph.get('nodes', [])
+        subgraph_nodes = subgraph.get("nodes", [])
         all_nodes.extend(subgraph_nodes)
-    
+
     # 1. Extract from node.properties.models (authoritative source)
     for node in all_nodes:
-        node_type = node.get('type', '')
-        properties = node.get('properties', {})
-        models_list = properties.get('models', [])
-        
+        node_type = node.get("type", "")
+        properties = node.get("properties", {})
+        models_list = properties.get("models", [])
+
         for model_info in models_list:
             if isinstance(model_info, dict):
-                name = model_info.get('name', '')
-                url = model_info.get('url', '')
-                directory = model_info.get('directory', '')
-                
+                name = model_info.get("name", "")
+                url = model_info.get("url", "")
+                directory = model_info.get("directory", "")
+
                 if name and name not in url_map:
                     url_map[name] = {
-                        'url': url,
-                        'directory': directory,
-                        'node_type': node_type,
-                        'source': 'node_properties'
+                        "url": url,
+                        "directory": directory,
+                        "node_type": node_type,
+                        "source": "node_properties",
                     }
-    
+
     # 2. Extract URLs via regex from workflow JSON
     urls_found = URL_PATTERN.findall(workflow_str)
-    
+
     # Clean URLs (remove trailing characters that may have been captured)
     cleaned_urls = []
     for url in urls_found:
-        url = url.split(')')[0].replace('\\n', '').replace('\n', '').strip()
+        url = url.split(")")[0].replace("\\n", "").replace("\n", "").strip()
         if url:
             cleaned_urls.append(url)
-    
+
     # 3. Extract model filenames via regex
-    model_pattern = re.compile(r'([\w\-\.%]+\.(?:safetensors|ckpt|pt|pth|bin|onnx))', re.IGNORECASE)
+    model_pattern = re.compile(
+        r"([\w\-\.%]+\.(?:safetensors|ckpt|pt|pth|bin|onnx))", re.IGNORECASE
+    )
     model_files_raw = model_pattern.findall(workflow_str)
-    
+
     # Clean and decode filenames
     model_files = set()
     model_name_map = {}  # decoded -> original
-    
+
     for model in model_files_raw:
         cleaned = model.strip()
         if cleaned and cleaned[0].isalnum():
@@ -100,79 +102,81 @@ def extract_workflow_urls(workflow_json: Dict[str, Any]) -> Dict[str, Dict[str, 
                 decoded = cleaned
             model_files.add(decoded)
             model_name_map[decoded] = cleaned
-    
+
     # 4. Match URLs to model filenames
     for model in model_files:
         # Skip if already found in node.properties.models
-        if model in url_map and url_map[model].get('url'):
+        if model in url_map and url_map[model].get("url"):
             continue
-        
+
         original_name = model_name_map.get(model, model)
-        
+
         for url in cleaned_urls:
             # Check decoded name in URL
             if model in url:
                 if model not in url_map:
-                    url_map[model] = {'url': url, 'directory': '', 'source': 'regex'}
-                elif not url_map[model].get('url'):
-                    url_map[model]['url'] = url
-                    url_map[model]['source'] = 'regex'
+                    url_map[model] = {"url": url, "directory": "", "source": "regex"}
+                elif not url_map[model].get("url"):
+                    url_map[model]["url"] = url
+                    url_map[model]["source"] = "regex"
                 break
             # Check original (possibly URL-encoded) name in URL
             if original_name in url:
                 if model not in url_map:
-                    url_map[model] = {'url': url, 'directory': '', 'source': 'regex'}
-                elif not url_map[model].get('url'):
-                    url_map[model]['url'] = url
-                    url_map[model]['source'] = 'regex'
+                    url_map[model] = {"url": url, "directory": "", "source": "regex"}
+                elif not url_map[model].get("url"):
+                    url_map[model]["url"] = url
+                    url_map[model]["source"] = "regex"
                 break
             # Check without extension
             model_base = os.path.splitext(model)[0]
             if model_base in url or unquote(model_base) in url:
                 if model not in url_map:
-                    url_map[model] = {'url': url, 'directory': '', 'source': 'regex'}
-                elif not url_map[model].get('url'):
-                    url_map[model]['url'] = url
-                    url_map[model]['source'] = 'regex'
+                    url_map[model] = {"url": url, "directory": "", "source": "regex"}
+                elif not url_map[model].get("url"):
+                    url_map[model]["url"] = url
+                    url_map[model]["source"] = "regex"
                 break
-    
+
     return url_map
 
 
 def parse_huggingface_url(url: str) -> Tuple[Optional[str], Optional[str]]:
     """
     Extract HuggingFace repo and path from URL.
-    
+
     Args:
         url: HuggingFace URL
-        
+
     Returns:
         Tuple of (repo_id, file_path) or (None, None) if not valid
     """
-    if not url or 'huggingface.co' not in url:
+    if not url or "huggingface.co" not in url:
         return None, None
-    
+
     # Pattern: https://huggingface.co/user/repo/resolve/main/path/to/file.safetensors
-    match = re.match(r'https?://huggingface\.co/([^/]+/[^/]+)/(?:resolve|blob)/[^/]+/(.+)', url)
+    match = re.match(
+        r"https?://huggingface\.co/([^/]+/[^/]+)/(?:resolve|blob)/[^/]+/(.+)", url
+    )
     if match:
         return match.group(1), match.group(2)
-    
+
     return None, None
 
 
 def analyze_and_find_matches(
     workflow_json: Dict[str, Any],
     similarity_threshold: float = 0.0,
-    max_matches_per_model: int = 10
+    max_matches_per_model: int = 10,
 ) -> Dict[str, Any]:
     """
     Main entry point: analyze workflow and find matches for missing models.
-    
+
     Args:
         workflow_json: Complete workflow JSON dictionary
         similarity_threshold: Minimum similarity score (0.0 to 1.0) for matches
         max_matches_per_model: Maximum number of matches to return per missing model
-        
+
     Returns:
         Dictionary with analysis results:
         {
@@ -204,109 +208,114 @@ def analyze_and_find_matches(
     # Extract URLs from workflow (node.properties.models + regex)
     workflow_urls = extract_workflow_urls(workflow_json)
     logger.debug(f"Extracted {len(workflow_urls)} URLs from workflow")
-    
+
     # Analyze workflow to find all model references
     all_model_refs = analyze_workflow_models(workflow_json)
-    
+
     # Get available models
     available_models = get_model_files()
-    
+
     # Identify missing models
     missing_models = identify_missing_models(all_model_refs, available_models)
-    
+
     # Enrich missing models with workflow URLs
     for missing in missing_models:
-        original_path = missing.get('original_path', '')
+        original_path = missing.get("original_path", "")
         filename = os.path.basename(original_path)
-        
+
         if filename in workflow_urls:
             url_info = workflow_urls[filename]
-            missing['workflow_url'] = url_info.get('url', '')
-            missing['workflow_directory'] = url_info.get('directory', '')
-            missing['url_source'] = url_info.get('source', '')
-    
+            missing["workflow_url"] = url_info.get("url", "")
+            missing["workflow_directory"] = url_info.get("directory", "")
+            missing["url_source"] = url_info.get("source", "")
+
     # Handle URNs: fetch expected filename from CivitAI
     for missing in missing_models:
-        if missing.get('is_urn'):
-            urn = missing['urn']
-            model_info = resolve_urn(urn['model_id'], urn['version_id'])
+        if missing.get("is_urn"):
+            urn = missing["urn"]
+            model_info = resolve_urn(urn["model_id"], urn["version_id"])
             if model_info:
-                missing['civitai_info'] = {
-                    'model_name': model_info.get('model_name'),
-                    'version_name': model_info.get('version_name')
+                missing["civitai_info"] = {
+                    "model_name": model_info.get("model_name"),
+                    "version_name": model_info.get("version_name"),
                 }
             if model_info:
-                missing['civitai_info'] = model_info
-                missing['expected_filename'] = model_info['expected_filename']
-                logger.debug(f"URN {missing['original_path']} → {missing['expected_filename']}")
-    
+                missing["civitai_info"] = model_info
+                missing["expected_filename"] = model_info["expected_filename"]
+                logger.debug(
+                    f"URN {missing['original_path']} → {missing['expected_filename']}"
+                )
+
+            # Add URN type to missing model for search functionality
+            if "urn" in missing:
+                missing["urn_type"] = missing["urn"].get("type", "")
+
     # Find matches for each missing model
     missing_with_matches = []
     for missing in missing_models:
-        target_for_matching = missing.get('original_path', '')
-        
+        target_for_matching = missing.get("original_path", "")
+
         # For URNs, prefer expected_filename for matching
-        if missing.get('is_urn') and missing.get('expected_filename'):
-            target_for_matching = missing['expected_filename']
-        
+        if missing.get("is_urn") and missing.get("expected_filename"):
+            target_for_matching = missing["expected_filename"]
+
         # Filter available models by category if known
-        category = missing.get('category')
-        if not category or category == 'unknown':
+        category = missing.get("category")
+        if not category or category == "unknown":
             from .workflow_analyzer import NODE_TYPE_TO_CATEGORY_HINTS
-            node_type = missing.get('node_type', '')
-            category = NODE_TYPE_TO_CATEGORY_HINTS.get(node_type, 'unknown')
-        
+
+            node_type = missing.get("node_type", "")
+            category = NODE_TYPE_TO_CATEGORY_HINTS.get(node_type, "unknown")
+
         candidates = available_models
-        if category and category != 'unknown':
-            candidates = [m for m in available_models if m.get('category') == category]
-            candidates.extend([m for m in available_models if m.get('category') != category])
-        
+        if category and category != "unknown":
+            candidates = [m for m in available_models if m.get("category") == category]
+            candidates.extend(
+                [m for m in available_models if m.get("category") != category]
+            )
+
         # Find matches
         matches = find_matches(
             target_for_matching,
             candidates,
             threshold=similarity_threshold,
-            max_results=max_matches_per_model
+            max_results=max_matches_per_model,
         )
-        
+
         # Deduplicate matches by absolute path
         seen_absolute_paths = {}
         deduplicated_matches = []
         for match in matches:
-            model_dict = match['model']
-            absolute_path = model_dict.get('path', '')
+            model_dict = match["model"]
+            absolute_path = model_dict.get("path", "")
             if absolute_path:
                 absolute_path = os.path.normpath(absolute_path)
-            
+
             if absolute_path not in seen_absolute_paths:
                 seen_absolute_paths[absolute_path] = match
                 deduplicated_matches.append(match)
             else:
                 existing_match = seen_absolute_paths[absolute_path]
-                if match['confidence'] > existing_match['confidence']:
+                if match["confidence"] > existing_match["confidence"]:
                     idx = deduplicated_matches.index(existing_match)
                     deduplicated_matches[idx] = match
                     seen_absolute_paths[absolute_path] = match
-        
-        missing_with_matches.append({
-            **missing,
-            'matches': deduplicated_matches
-        })
-    
+
+        missing_with_matches.append({**missing, "matches": deduplicated_matches})
+
     return {
-        'missing_models': missing_with_matches,
-        'total_missing': len(missing_with_matches),
-        'total_models_analyzed': len(all_model_refs)
+        "missing_models": missing_with_matches,
+        "total_missing": len(missing_with_matches),
+        "total_models_analyzed": len(all_model_refs),
     }
 
 
 def apply_resolution(
-    workflow_json: Dict[str, Any],
-    resolutions: List[Dict[str, Any]]
+    workflow_json: Dict[str, Any], resolutions: List[Dict[str, Any]]
 ) -> Dict[str, Any]:
     """
     Apply model resolutions to workflow.
-    
+
     Args:
         workflow_json: Workflow JSON dictionary (will be modified)
         resolutions: List of resolution dictionaries:
@@ -317,7 +326,7 @@ def apply_resolution(
                 'category': model category (optional),
                 'resolved_model': model dict from scanner (optional)
             }
-            
+
     Returns:
         Updated workflow JSON dictionary
     """
@@ -325,42 +334,45 @@ def apply_resolution(
     mappings = []
     for resolution in resolutions:
         mapping = {
-            'node_id': resolution.get('node_id'),
-            'widget_index': resolution.get('widget_index'),
-            'resolved_path': resolution.get('resolved_path'),
-            'category': resolution.get('category'),
-            'resolved_model': resolution.get('resolved_model'),
-            'subgraph_id': resolution.get('subgraph_id'),  # Include subgraph_id for subgraph nodes
-            'is_top_level': resolution.get('is_top_level')  # True for top-level nodes, False for nodes in subgraph definitions
+            "node_id": resolution.get("node_id"),
+            "widget_index": resolution.get("widget_index"),
+            "resolved_path": resolution.get("resolved_path"),
+            "category": resolution.get("category"),
+            "resolved_model": resolution.get("resolved_model"),
+            "subgraph_id": resolution.get(
+                "subgraph_id"
+            ),  # Include subgraph_id for subgraph nodes
+            "is_top_level": resolution.get(
+                "is_top_level"
+            ),  # True for top-level nodes, False for nodes in subgraph definitions
         }
-        
+
         # If resolved_model provided, extract path if needed
-        if 'resolved_model' in resolution and resolution['resolved_model']:
-            resolved_model = resolution['resolved_model']
-            if 'path' in resolved_model and not mapping.get('resolved_path'):
-                mapping['resolved_path'] = resolved_model['path']
-            if 'base_directory' in resolved_model:
-                mapping['base_directory'] = resolved_model['base_directory']
-        
+        if "resolved_model" in resolution and resolution["resolved_model"]:
+            resolved_model = resolution["resolved_model"]
+            if "path" in resolved_model and not mapping.get("resolved_path"):
+                mapping["resolved_path"] = resolved_model["path"]
+            if "base_directory" in resolved_model:
+                mapping["base_directory"] = resolved_model["base_directory"]
+
         mappings.append(mapping)
-    
+
     # Update workflow
     updated_workflow = update_workflow_nodes(workflow_json, mappings)
-    
+
     return updated_workflow
 
 
 def get_resolution_summary(workflow_json: Dict[str, Any]) -> Dict[str, Any]:
     """
     Get summary of missing models and matches without applying resolutions.
-    
+
     This is a convenience method that calls analyze_and_find_matches with defaults.
-    
+
     Args:
         workflow_json: Complete workflow JSON dictionary
-        
+
     Returns:
         Same format as analyze_and_find_matches
     """
     return analyze_and_find_matches(workflow_json)
-
