@@ -193,6 +193,23 @@ def get_node_model_info(node: Dict[str, Any]) -> List[Dict[str, Any]]:
         # widgets_values[1] = "<lora:name1:strength> <lora:name2:strength>"
         # widgets_values[2] = [{"name": "...", "strength": 1, "active": true}, ...]
 
+        # Get all lora files using scanner for recursive search
+        from .scanner import get_model_files
+
+        all_loras = get_model_files()
+        lora_files = [m for m in all_loras if m.get("category") == "loras"]
+
+        # Build a lookup by filename (without extension)
+        lora_lookup = {}
+        for lf in lora_files:
+            fname = lf.get("filename", "")
+            if fname:
+                # Get name without extension for matching
+                base_name = os.path.splitext(fname)[0]
+                if base_name not in lora_lookup:
+                    lora_lookup[base_name] = []
+                lora_lookup[base_name].append(lf)
+
         lora_list = widgets_values[2]
         if isinstance(lora_list, list):
             for lora_item in lora_list:
@@ -202,6 +219,38 @@ def get_node_model_info(node: Dict[str, Any]) -> List[Dict[str, Any]]:
                     active = lora_item.get("active", True)
 
                     if name:
+                        # Check if lora exists locally using scanner data (recursive search)
+                        lora_exists = False
+                        lora_full_path = None
+
+                        # Try exact name first (without extension)
+                        if name in lora_lookup:
+                            lora_full_path = lora_lookup[name][0].get("path")
+                            lora_exists = (
+                                os.path.exists(lora_full_path)
+                                if lora_full_path
+                                else False
+                            )
+                        else:
+                            # Try with common extensions
+                            for ext in [".safetensors", ".ckpt", ".pt", ".pth"]:
+                                test_name = name + ext
+                                if test_name in lora_lookup:
+                                    lora_full_path = lora_lookup[test_name][0].get(
+                                        "path"
+                                    )
+                                    lora_exists = (
+                                        os.path.exists(lora_full_path)
+                                        if lora_full_path
+                                        else False
+                                    )
+                                    if lora_exists:
+                                        break
+
+                        logging.debug(
+                            f"Lora {name}: exists={lora_exists}, path={lora_full_path}"
+                        )
+
                         model_refs.append(
                             {
                                 "node_id": node_id,
@@ -212,8 +261,8 @@ def get_node_model_info(node: Dict[str, Any]) -> List[Dict[str, Any]]:
                                 "strength": float(strength),
                                 "active": active,
                                 "category": "loras",
-                                "full_path": None,
-                                "exists": False,  # Will be resolved later
+                                "full_path": lora_full_path,
+                                "exists": lora_exists,
                                 "is_urn": False,
                                 "is_lora_v2": is_lora_text,
                                 "connected": is_active,

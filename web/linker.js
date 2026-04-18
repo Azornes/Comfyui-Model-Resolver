@@ -1266,8 +1266,8 @@ class LinkerManagerDialog extends ComfyDialog {
             return bBestConf - aBestConf; // Higher confidence first
         });
 
-        for (const missing of sortedMissingModels) {
-            html += this.renderMissingModel(missing);
+        for (let mi = 0; mi < sortedMissingModels.length; mi++) {
+            html += this.renderMissingModel(sortedMissingModels[mi], mi);
         }
 
         html += '</div>';
@@ -1299,12 +1299,22 @@ class LinkerManagerDialog extends ComfyDialog {
             
             sortedMatches.forEach((match, matchIndex) => {
                 // Attach listener to all matches (all now have resolve buttons)
-                const buttonId = `resolve-${missing.node_id}-${missing.widget_index}-${matchIndex}`;
+                // Use unique ID that includes missingIndex to avoid conflicts between different missing models with same node_id
+                const buttonId = `resolve-${missingIndex}-${missing.node_id}-${missing.widget_index}-${matchIndex}`;
                 const resolveButton = container.querySelector(`#${buttonId}`);
+                console.log('Attaching listener for', buttonId, 'missingIndex:', missingIndex);
                 if (resolveButton) {
+                    // Remove any existing listeners to prevent duplicates
+                    resolveButton.onclick = null;
                     resolveButton.addEventListener('click', () => {
-                        this.resolveModel(missing, match.model);
+                        console.log('>>> Link button clicked:', buttonId, missing.original_path, '->', match.model?.filename);
+                        this.resolveModel(missing, match.model).catch(err => {
+                            console.error('resolveModel error:', err);
+                            this.showNotification('Link failed: ' + err.message, 'error');
+                        });
                     });
+                } else {
+                    console.warn('Button not found:', buttonId);
                 }
             });
             
@@ -1331,7 +1341,7 @@ class LinkerManagerDialog extends ComfyDialog {
     /**
      * Render a single missing model entry
      */
-    renderMissingModel(missing) {
+    renderMissingModel(missing, missingIndex = 0) {
         const allMatches = missing.matches || [];
         
         // Filter out matches below 70% confidence threshold
@@ -1416,7 +1426,7 @@ class LinkerManagerDialog extends ComfyDialog {
             
             for (let matchIndex = 0; matchIndex < sortedMatches.length; matchIndex++) {
                 const match = sortedMatches[matchIndex];
-                const buttonId = `resolve-${missing.node_id}-${missing.widget_index}-${matchIndex}`;
+                const buttonId = `resolve-${missingIndex}-${missing.node_id}-${missing.widget_index}-${matchIndex}`;
                 const matchPath = match.model?.relative_path || match.filename || '';
                 const formattedPath = this.formatPath(matchPath, 45);
                 const isBestMatch = matchIndex === 0 && match.confidence >= 95;
@@ -1658,6 +1668,8 @@ class LinkerManagerDialog extends ComfyDialog {
      * Resolve a model - resolves ALL nodes that reference this model
      */
     async resolveModel(missing, resolvedModel) {
+        console.log('resolveModel called:', missing?.original_path, '->', resolvedModel?.filename);
+        
         if (!resolvedModel) {
             this.showNotification('No resolved model selected', 'error');
             return;
@@ -1672,6 +1684,8 @@ class LinkerManagerDialog extends ComfyDialog {
 
             // Resolve ALL nodes that need this model (all_node_refs contains deduplicated refs)
             const nodeRefs = missing.all_node_refs || [missing];
+            console.log('nodeRefs count:', nodeRefs?.length, 'is_lora_v2:', nodeRefs?.[0]?.is_lora_v2);
+            
             const resolutions = nodeRefs.map(ref => ({
                 node_id: ref.node_id,
                 widget_index: ref.widget_index,
@@ -1679,7 +1693,9 @@ class LinkerManagerDialog extends ComfyDialog {
                 category: ref.category,
                 resolved_model: resolvedModel,
                 subgraph_id: ref.subgraph_id,
-                is_top_level: ref.is_top_level
+                is_top_level: ref.is_top_level,
+                is_lora_v2: ref.is_lora_v2,
+                original_lora_name: ref.name || ref.original_path
             }));
 
             const response = await api.fetchApi('/model_linker/resolve', {
@@ -1696,6 +1712,7 @@ class LinkerManagerDialog extends ComfyDialog {
             }
 
             const data = await response.json();
+            console.log('Resolve response: success=', data.success, ' missing count:', data.workflow?.nodes?.length);
             
             if (data.success) {
                 // Update workflow in ComfyUI
@@ -1760,7 +1777,9 @@ class LinkerManagerDialog extends ComfyDialog {
                         category: missing.category,
                         resolved_model: perfectMatch.model,
                         subgraph_id: missing.subgraph_id,  // Include subgraph_id for subgraph nodes
-                        is_top_level: missing.is_top_level  // True for top-level nodes, False for nodes in subgraph definitions
+                        is_top_level: missing.is_top_level,  // True for top-level nodes, False for nodes in subgraph definitions
+                        is_lora_v2: missing.is_lora_v2,
+                        original_lora_name: missing.name || missing.original_path
                     });
                 }
             }
@@ -1940,7 +1959,9 @@ class LinkerManagerDialog extends ComfyDialog {
                     category: ref.category,
                     resolved_model: perfectMatch.model,
                     subgraph_id: ref.subgraph_id,
-                    is_top_level: ref.is_top_level
+                    is_top_level: ref.is_top_level,
+                    is_lora_v2: ref.is_lora_v2,
+                    original_lora_name: ref.name || ref.original_path
                 }));
 
                 const resolveResponse = await api.fetchApi('/model_linker/resolve', {

@@ -253,6 +253,16 @@ def analyze_and_find_matches(
     # Find matches for each missing model
     missing_with_matches = []
     for missing in missing_models:
+        # Skip LoraManager lorAs that already exist locally (exists=True means no linking needed)
+        is_lora_v2 = missing.get("is_lora_v2")
+        exists = missing.get("exists")
+        name = missing.get("name") or missing.get("original_path", "")
+        logger.debug(f"Checking {name}: is_lora_v2={is_lora_v2}, exists={exists}")
+
+        if is_lora_v2 and exists:
+            logger.info(f"Skipping LoraManager lora {name} - already exists locally")
+            continue
+
         target_for_matching = missing.get("original_path", "")
 
         # For URNs, prefer expected_filename for matching
@@ -345,6 +355,10 @@ def apply_resolution(
             "is_top_level": resolution.get(
                 "is_top_level"
             ),  # True for top-level nodes, False for nodes in subgraph definitions
+            "is_lora_v2": resolution.get("is_lora_v2"),  # Flag for LoraManager nodes
+            "original_lora_name": resolution.get(
+                "original_lora_name"
+            ),  # Original lora name for LoraManager replacement
         }
 
         # If resolved_model provided, extract path if needed

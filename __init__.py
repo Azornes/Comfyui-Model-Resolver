@@ -115,6 +115,31 @@ class ModelLinkerExtension:
                     # Analyze and find matches
                     result = analyze_and_find_matches(workflow_json)
 
+                    # Filter out LoraManager lorAs that already exist locally (exists=True)
+                    # These should not appear in missing models at all
+                    missing_models = result.get("missing_models", [])
+                    filtered_missing = []
+                    for missing in missing_models:
+                        is_lora = missing.get("is_lora_v2")
+                        exists = missing.get("exists")
+                        name = missing.get("name") or missing.get("original_path", "")
+                        # Log for debugging
+                        import logging
+
+                        logging.getLogger(__name__).debug(
+                            f"Filtering: {name} is_lora_v2={is_lora} exists={exists}"
+                        )
+
+                        # Skip LoraManager lorAs that already exist locally
+                        if is_lora and exists:
+                            logging.getLogger(__name__).info(
+                                f"Filtered out LoraManager lora: {name}"
+                            )
+                            continue
+                        filtered_missing.append(missing)
+                    result["missing_models"] = filtered_missing
+                    result["total_missing"] = len(filtered_missing)
+
                     # If download available, auto-search for download sources when no 100% local match
                     if download_available:
                         for missing in result.get("missing_models", []):
