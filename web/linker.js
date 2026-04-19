@@ -4090,17 +4090,22 @@ app.registerExtension({
 
 // Global helper functions for inline onclick handlers
 window.MLFilterSwitch = function(filter) {
-    document.querySelectorAll('.ml-btn-filter').forEach(b => b.classList.remove('active'));
-    document.getElementById('filter-' + filter).classList.add('active');
+    const filterBtn = document.getElementById('filter-' + filter);
+    if (!filterBtn) return;
     
+    // Update button states
+    document.querySelectorAll('.ml-btn-filter').forEach(b => b.classList.remove('active'));
+    filterBtn.classList.add('active');
+    
+    // Filter model sections
     document.querySelectorAll('.ml-model-section').forEach(s => {
-        const hasActive = s.dataset.mlActive === 'true';
-        const hasInactive = s.dataset.mlInactive === 'true';
+        const hasActive = s.getAttribute('data-ml-active') === 'true';
+        const hasInactive = s.getAttribute('data-ml-inactive') === 'true';
         
-        // Get direct child divs (active and inactive sections)
-        const subSections = Array.from(s.children).filter(c => c.tagName === 'DIV');
-        const activeSection = subSections[0];
-        const inactiveSection = subSections[1];
+        // Get child divs: category header, active section, inactive section
+        const childDivs = Array.from(s.children).filter(c => c.tagName === 'DIV');
+        const activeSection = childDivs[1];
+        const inactiveSection = childDivs[2];
         
         if (filter === 'all') {
             s.style.display = 'block';
