@@ -1789,6 +1789,58 @@ class LinkerManagerDialog extends ComfyDialog {
     }
 
     /**
+     * Locate and focus a node in the ComfyUI canvas
+     */
+    locateNodeInGraph(nodeId) {
+        try {
+            if (!app?.graph) {
+                this.showNotification('Cannot locate node - graph not available', 'error');
+                return;
+            }
+            
+            // Find the node in the graph
+            const node = app.graph.getNodeById(nodeId);
+            if (!node) {
+                this.showNotification(`Node #${nodeId} not found in graph`, 'error');
+                return;
+            }
+            
+            // Focus on the node in the canvas
+            if (app.canvas && typeof app.canvas.centerOnNode === 'function') {
+                // Modern ComfyUI versions
+                app.canvas.centerOnNode(node);
+            } else if (app.graph._nodes && app.graph._nodes.get(nodeId)) {
+                // Alternative method for older versions
+                const canvasNode = app.graph._nodes.get(nodeId);
+                if (canvasNode && canvasNode.setSelected && canvasNode.graph) {
+                    canvasNode.setSelected(true);
+                    // Scroll to node
+                    app.canvas.scrollToNode(canvasNode);
+                }
+            } else if (app.ui && app.ui.nodeGraph && typeof app.ui.nodeGraph.scrollToNode === 'function') {
+                // Alternative for other versions
+                app.ui.nodeGraph.scrollToNode(node);
+            }
+            
+            // Also try to flash/select the node
+            // Deselect all nodes first
+            if (app.graph && app.graph.nodes) {
+                app.graph.nodes.forEach(n => {
+                    if (n.selected) n.selected = false;
+                });
+            }
+            
+            // Select and highlight our node
+            node.selected = true;
+            
+            this.showNotification(`Focused on Node #${nodeId} (${node.type})`, 'info');
+        } catch (e) {
+            console.error('Model Linker: Error locating node:', e);
+            this.showNotification('Error locating node: ' + e.message, 'error');
+        }
+    }
+
+    /**
      * Reconnect active downloads to their new progress div elements after UI refresh
      */
     reconnectActiveDownloads() {
@@ -1993,6 +2045,15 @@ class LinkerManagerDialog extends ComfyDialog {
                 });
             }
             
+            // Wire Locate button (only for top-level nodes)
+            const locateId = `locate-${missing.node_id}-${missing.widget_index}`;
+            const locateBtn = container.querySelector(`#${locateId}`);
+            if (locateBtn && missing.is_top_level !== false) {
+                locateBtn.addEventListener('click', () => {
+                    this.locateNodeInGraph(missing.node_id);
+                });
+            }
+            
             // Wire up all-models search + dropdown
             const allSearchId = `search-all-${missing.node_id}-${missing.widget_index}`;
             const selectAllId = `select-all-${missing.node_id}-${missing.widget_index}`;
@@ -2110,6 +2171,11 @@ class LinkerManagerDialog extends ComfyDialog {
             html += `<span class="ml-category-chip">${missing.category}</span>`;
         }
         html += `<span class="ml-node-chip">${nodeLabel} #${missing.node_id}</span>`;
+        // Add Locate button for top-level nodes only
+        if (missing.is_top_level !== false) {
+            const locateId = `locate-${missing.node_id}-${missing.widget_index}`;
+            html += `<button id="${locateId}" class="ml-btn ml-btn-secondary ml-btn-sm" style="padding: 2px 8px; font-size: 11px;">📍 Locate</button>`;
+        }
         html += `</div>`;
         // Removed - filename is already shown in title
         html += `</div>`;
