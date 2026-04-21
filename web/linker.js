@@ -43,6 +43,35 @@ class LinkerManagerDialog extends ComfyDialog {
             }
         });
         
+        // Create context menu for model chips
+        this.contextMenu = $el("div.ml-context-menu", {
+            parent: document.body,
+            style: {
+                position: "fixed",
+                display: "none",
+                zIndex: "100001"
+            }
+        }, [
+            $el("div.ml-context-menu-item", {
+                onclick: () => this.handleContextMenuAction('showInfo'),
+                style: { cursor: "pointer" }
+            }, [
+                $el("span.ml-context-menu-item-icon", { textContent: "ℹ" }),
+                $el("span", { textContent: "Show Info" })
+            ]),
+            $el("div.ml-context-menu-divider"),
+            $el("div.ml-context-menu-item", {
+                onclick: () => this.handleContextMenuAction('civitai'),
+                style: { cursor: "pointer" }
+            }, [
+                $el("span.ml-context-menu-item-icon", { textContent: "🌐" }),
+                $el("span", { textContent: "Open in CivitAI" })
+            ])
+        ]);
+        
+        // Selected model for context menu
+        this._contextMenuModel = null;
+        
         // Create dialog element using $el
         this.element = $el("div.comfy-modal", {
             id: "model-linker-modal",
@@ -78,6 +107,466 @@ class LinkerManagerDialog extends ComfyDialog {
         
         // Add click listener to backdrop
         this.backdrop.addEventListener('click', () => this.close());
+        
+        // Add click listener to hide context menu when clicking outside
+        this.boundHandleContextMenuClick = (e) => this.handleContextMenuOutsideClick(e);
+        document.addEventListener('click', this.boundHandleContextMenuClick);
+    }
+    
+    /**
+     * Handle click outside context menu to hide it
+     */
+    handleContextMenuOutsideClick(e) {
+        if (!this.contextMenu) return;
+        if (this.contextMenu.style.display === 'none') return;
+        
+        // Check if click is outside the context menu
+        if (!this.contextMenu.contains(e.target)) {
+            this.hideContextMenu();
+        }
+    }
+    
+    /**
+     * Show context menu at the specified position
+     */
+    showContextMenu(x, y, model) {
+        if (!this.contextMenu) return;
+        
+        this._contextMenuModel = model;
+        
+        // Position the menu
+        this.contextMenu.style.left = `${x}px`;
+        this.contextMenu.style.top = `${y}px`;
+        this.contextMenu.style.display = 'block';
+        
+        // Adjust position if menu would go off screen
+        const rect = this.contextMenu.getBoundingClientRect();
+        if (rect.right > window.innerWidth) {
+            this.contextMenu.style.left = `${window.innerWidth - rect.width - 10}px`;
+        }
+        if (rect.bottom > window.innerHeight) {
+            this.contextMenu.style.top = `${window.innerHeight - rect.height - 10}px`;
+        }
+    }
+    
+    /**
+     * Hide context menu
+     */
+    hideContextMenu() {
+        if (!this.contextMenu) return;
+        this.contextMenu.style.display = 'none';
+        this._contextMenuModel = null;
+    }
+    
+    /**
+     * Handle context menu item click
+     */
+    handleContextMenuAction(action) {
+        const model = this._contextMenuModel;
+        this.hideContextMenu();
+        
+        if (!model) return;
+        
+        if (action === 'civitai') {
+            this.openInCivitAI(model);
+        } else if (action === 'showInfo') {
+            this.showModelInfo(model);
+        }
+    }
+    
+    /**
+     * Open model in CivitAI
+     */
+    async openInCivitAI(model) {
+        if (!model) return;
+        
+        const name = model.name || model.original_path?.split(/[\/\\]/).pop() || '';
+        if (!name) return;
+        
+        try {
+            // Search CivitAI for this model using hash (pass resolved_path for hash lookup)
+            const response = await api.fetchApi('/model_linker/civitai-search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    filename: name, 
+                    category: model.category,
+                    resolved_path: model.resolved_path || ''
+                })
+            });
+            
+            if (!response.ok) {
+                this.showNotification('Nie znaleziono modelu na CivitAI', 'error');
+                return;
+            }
+            
+            const data = await response.json();
+            if (data.url) {
+                window.open(data.url, '_blank');
+            } else {
+                // Try direct search on CivitAI
+                const searchName = name.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx|gguf)$/i, '');
+                const searchUrl = `https://civitai.com/search?q=${encodeURIComponent(searchName)}`;
+                window.open(searchUrl, '_blank');
+            }
+        } catch (e) {
+            console.error('Model Linker: Error searching CivitAI:', e);
+            // Fall back to direct search
+            const searchName = name.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx|gguf)$/i, '');
+            const searchUrl = `https://civitai.com/search?q=${encodeURIComponent(searchName)}`;
+            window.open(searchUrl, '_blank');
+        }
+    }
+    
+    /**
+     * Show model info dialog (similar to rgthree's RgthreeLoraInfoDialog)
+     */
+    async showModelInfo(model) {
+        if (!model) return;
+        
+        const name = model.name || model.original_path?.split(/[\/\\]/).pop() || '';
+        if (!name) return;
+        
+        // Create and show the info dialog
+        this.showModelInfoDialog(name, model);
+    }
+    
+    /**
+     * Show the model info dialog
+     */
+    showModelInfoDialog(loraName, modelData) {
+        // Create info dialog element
+        const dialog = this.createInfoDialog(loraName, modelData);
+        
+        // Show the dialog
+        document.body.appendChild(dialog);
+        
+        // Add close handlers
+        const closeBtn = dialog.querySelector('.ml-info-dialog-close');
+        const footerCloseBtn = dialog.querySelector('.ml-info-dialog-close-btn');
+        const backdrop = dialog.querySelector('.ml-info-dialog-backdrop');
+        
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => this.closeInfoDialog(dialog));
+        }
+        if (footerCloseBtn) {
+            footerCloseBtn.addEventListener('click', () => this.closeInfoDialog(dialog));
+        }
+        if (backdrop) {
+            backdrop.addEventListener('click', (e) => {
+                // Only close if clicking backdrop itself, not its children
+                if (e.target === backdrop) {
+                    this.closeInfoDialog(dialog);
+                }
+            });
+        }
+        
+        // Fetch CivitAI info
+        this.fetchModelInfoForDialog(loraName, modelData, dialog);
+    }
+    
+    /**
+     * Create the info dialog element
+     */
+    createInfoDialog(loraName, modelData) {
+        const loraDisplayName = loraName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx|gguf)$/i, '');
+        
+        const dialog = document.createElement('div');
+        dialog.className = 'ml-info-dialog-backdrop';
+        dialog.innerHTML = `
+            <div class="ml-info-dialog">
+                <div class="ml-info-dialog-header">
+                    <h3 class="ml-info-dialog-title">${loraDisplayName}</h3>
+                    <button class="ml-info-dialog-close">×</button>
+                </div>
+                <div class="ml-info-dialog-content">
+                    <div class="ml-info-dialog-loading">Loading...</div>
+                    <div class="ml-info-dialog-body" style="display: none;">
+                        <div class="ml-info-area">
+                            <span class="ml-info-tag ml-info-type"></span>
+                            <span class="ml-info-tag ml-info-basemodel"></span>
+                        </div>
+                        <table class="ml-info-table">
+                            <tbody>
+                                <tr class="ml-info-file-row">
+                                    <td><span>File <span class="ml-info-help" title=""></span></span></td>
+                                    <td><span class="ml-info-file"></span></td>
+                                </tr>
+                                <tr class="ml-info-hash-row">
+                                    <td><span>Hash (sha256) <span class="ml-info-help" title=""></span></span></td>
+                                    <td><span class="ml-info-hash"></span></td>
+                                </tr>
+                                <tr class="ml-info-civitai-row">
+                                    <td><span>CivitAI <span class="ml-info-help" title=""></span></span></td>
+                                    <td><span class="ml-info-civitai-link"></span></td>
+                                </tr>
+                                <tr class="ml-info-name-row">
+                                    <td><span>Name <span class="ml-info-help" title="The name for display."></span></span></td>
+                                    <td><span class="ml-info-name"></span></td>
+                                </tr>
+                                <tr class="ml-info-basemodel-row">
+                                    <td><span>Base Model <span class="ml-info-help" title=""></span></span></td>
+                                    <td><span class="ml-info-base-model"></span></td>
+                                </tr>
+                                <tr class="ml-info-trainedwords-row" style="display: none;">
+                                    <td><span>Trained Words <span class="ml-info-help" title="Trigger words/phrases for this Lora."></span></span></td>
+                                    <td><span class="ml-info-trained-words"></span></td>
+                                </tr>
+                                <tr class="ml-info-clipskip-row" style="display: none;">
+                                    <td><span>Clip Skip <span class="ml-info-help" title="Recommended clip skip value."></span></span></td>
+                                    <td><span class="ml-info-clip-skip"></span></td>
+                                </tr>
+                                <tr class="ml-info-description-row" style="display: none;">
+                                    <td><span>Description <span class="ml-info-help" title="Model description from CivitAI."></span></span></td>
+                                    <td><span class="ml-info-description"></span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <div class="ml-info-images"></div>
+                    </div>
+                </div>
+                <div class="ml-info-dialog-footer">
+                    <button class="ml-btn ml-btn-secondary ml-info-dialog-close-btn">Close</button>
+                </div>
+            </div>
+        `;
+        
+        return dialog;
+    }
+    
+    /**
+     * Fetch model info and update the dialog
+     */
+    async fetchModelInfoForDialog(loraName, modelData, dialog) {
+        try {
+            const response = await api.fetchApi('/model_linker/civitai-search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    filename: loraName,
+                    category: modelData?.category || '',
+                    resolved_path: modelData?.resolved_path || ''
+                })
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                this.updateInfoDialogWithData(dialog, data);
+            } else {
+                this.updateInfoDialogError(dialog, 'Model not found on CivitAI');
+            }
+        } catch (e) {
+            console.error('Model Linker: Error fetching model info:', e);
+            this.updateInfoDialogError(dialog, 'Error fetching info');
+        }
+    }
+    
+    /**
+     * Update the info dialog with data
+     */
+    updateInfoDialogWithData(dialog, data) {
+        const loadingDiv = dialog.querySelector('.ml-info-dialog-loading');
+        const bodyDiv = dialog.querySelector('.ml-info-dialog-body');
+        
+        if (loadingDiv) loadingDiv.style.display = 'none';
+        if (bodyDiv) bodyDiv.style.display = 'block';
+        
+        if (!data) {
+            this.updateInfoDialogError(dialog, 'No data received');
+            return;
+        }
+        
+        // Update title
+        const titleEl = dialog.querySelector('.ml-info-dialog-title');
+        if (titleEl) {
+            const modelName = data.model_name || data.modelName || 'Unknown Model';
+            const versionName = data.version_name || data.versionName || '';
+            titleEl.textContent = versionName ? `${modelName} - ${versionName}` : modelName;
+        }
+        
+        // Update type tag
+        const typeTag = dialog.querySelector('.ml-info-type');
+        if (typeTag) {
+            const modelType = data.model_type || data.modelType || '';
+            typeTag.textContent = modelType.toUpperCase();
+            typeTag.className = `ml-info-tag ml-info-type -type-${modelType.toLowerCase()}`;
+        }
+        
+        // Update base model tag
+        const baseModelTag = dialog.querySelector('.ml-info-basemodel');
+        if (baseModelTag) {
+            const baseModel = data.base_model || data.baseModel || '';
+            baseModelTag.textContent = baseModel || '';
+            if (baseModel) {
+                baseModelTag.style.display = '';
+                baseModelTag.className = `ml-info-tag ml-info-basemodel -basemodel-${baseModel.toLowerCase().replace(/\s+/g, '-')}`;
+            } else {
+                baseModelTag.style.display = 'none';
+            }
+        }
+        
+        // Update file
+        const fileEl = dialog.querySelector('.ml-info-file');
+        if (fileEl && data.filename) {
+            fileEl.textContent = data.filename;
+        }
+        
+        // Update hash
+        const hashEl = dialog.querySelector('.ml-info-hash');
+        if (hashEl) {
+            hashEl.textContent = data.sha256 || data.hash || '';
+        }
+        
+        // Update CivitAI link
+        const civitaiLinkEl = dialog.querySelector('.ml-info-civitai-link');
+        if (civitaiLinkEl) {
+            if (data.url || data.version_url) {
+                const url = data.version_url || data.url;
+                civitaiLinkEl.innerHTML = `
+                    <a href="${url}" target="_blank" class="ml-info-link">
+                        <svg viewBox="0 0 178 178" class="ml-info-civitai-logo">
+                            <defs>
+                                <linearGradient id="bgblue" gradientUnits="userSpaceOnUse" x1="89.3" y1="-665.5" x2="89.3" y2="-841.1" gradientTransform="matrix(1 0 0 -1 0 -664)">
+                                    <stop offset="0" style="stop-color:#1284F7"></stop>
+                                    <stop offset="1" style="stop-color:#0A20C9"></stop>
+                                </linearGradient>
+                            </defs>
+                            <path fill="#000" d="M13.3,45.4v87.7l76,43.9l76-43.9V45.4l-76-43.9L13.3,45.4z"></path>
+                            <path style="fill:url(#bgblue);" d="M89.3,29.2l52,30v60l-52,30l-52-30v-60L89.3,29.2 M89.3,1.5l-76,43.9v87.8l76,43.9l76-43.9V45.4L89.3,1.5z"></path>
+                            <path fill="#FFF" d="M104.1,97.2l-14.9,8.5l-14.9-8.5v-17l14.9-8.5l14.9,8.5h18.2V69.7l-33-19l-33,19v38.1l33,19l33-19V97.2H104.1z"></path>
+                        </svg>
+                        View on Civitai
+                    </a>
+                `;
+            } else {
+                const searchName = data.model_name || data.modelName || 'Unknown';
+                civitaiLinkEl.innerHTML = `
+                    <span class="ml-info-not-found">Model not found</span>
+                    <a href="https://civitai.com/search?q=${encodeURIComponent(searchName)}" target="_blank" class="ml-info-link">
+                        🔍 Search on CivitAI
+                    </a>
+                `;
+            }
+        }
+        
+        // Update name
+        const nameEl = dialog.querySelector('.ml-info-name');
+        if (nameEl) {
+            nameEl.textContent = data.model_name || data.modelName || '';
+        }
+        
+        // Update base model row
+        const baseModelRowEl = dialog.querySelector('.ml-info-base-model');
+        if (baseModelRowEl) {
+            const baseModel = data.base_model || data.baseModel || '';
+            baseModelRowEl.textContent = baseModel;
+            const row = baseModelRowEl.closest('tr');
+            if (row && baseModel) {
+                row.style.display = '';
+            } else if (row) {
+                row.style.display = 'none';
+            }
+        }
+        
+        // Update trained words
+        const trainedWordsEl = dialog.querySelector('.ml-info-trained-words');
+        if (trainedWordsEl) {
+            const words = data.trained_words || data.trainedWords || [];
+            if (Array.isArray(words) && words.length > 0) {
+                trainedWordsEl.textContent = words.join(', ');
+                const row = trainedWordsEl.closest('tr');
+                if (row) row.style.display = '';
+            } else {
+                const row = trainedWordsEl.closest('tr');
+                if (row) row.style.display = 'none';
+            }
+        }
+        
+        // Update clip skip
+        const clipSkipEl = dialog.querySelector('.ml-info-clip-skip');
+        if (clipSkipEl) {
+            const clipSkip = data.clip_skip || data.clipSkip;
+            if (clipSkip && clipSkip !== 'None') {
+                clipSkipEl.textContent = clipSkip;
+                const row = clipSkipEl.closest('tr');
+                if (row) row.style.display = '';
+            } else {
+                const row = clipSkipEl.closest('tr');
+                if (row) row.style.display = 'none';
+            }
+        }
+        
+        // Update description
+        const descEl = dialog.querySelector('.ml-info-description');
+        if (descEl) {
+            const desc = data.description || data.model_description || data.modelDescription || '';
+            if (desc) {
+                descEl.textContent = desc.substring(0, 200) + (desc.length > 200 ? '...' : '');
+                const row = descEl.closest('tr');
+                if (row) row.style.display = '';
+            } else {
+                const row = descEl.closest('tr');
+                if (row) row.style.display = 'none';
+            }
+        }
+        
+        // Update images
+        this.updateInfoDialogImages(dialog, data.images || data.modelImages || []);
+    }
+    
+    /**
+     * Update images in the info dialog
+     */
+    updateInfoDialogImages(dialog, images) {
+        const imagesContainer = dialog.querySelector('.ml-info-images');
+        if (!imagesContainer || !images.length) return;
+        
+        let imagesHtml = '<div class="ml-info-images-header">Example Images</div><div class="ml-info-images-grid">';
+        
+        for (const img of images.slice(0, 6)) {
+            if (!img.url) continue;
+            
+            let caption = '';
+            if (img.civitaiUrl) {
+                caption += `<a href="${img.civitaiUrl}" target="_blank" class="ml-info-image-link">civitai</a>`;
+            }
+            if (img.seed) caption += `<span><label>seed</label> ${img.seed}</span>`;
+            if (img.steps) caption += `<span><label>steps</label> ${img.steps}</span>`;
+            if (img.cfg) caption += `<span><label>cfg</label> ${img.cfg}</span>`;
+            if (img.sampler) caption += `<span><label>sampler</label> ${img.sampler}</span>`;
+            if (img.positive) caption += `<span><label>positive</label> ${img.positive.substring(0, 100)}${img.positive.length > 100 ? '...' : ''}</span>`;
+            
+            imagesHtml += `
+                <div class="ml-info-image-item">
+                    <figure>
+                        <img src="${img.url}" alt="Example" loading="lazy" />
+                        <figcaption>${caption}</figcaption>
+                    </figure>
+                </div>
+            `;
+        }
+        
+        imagesHtml += '</div>';
+        imagesContainer.innerHTML = imagesHtml;
+    }
+    
+    /**
+     * Update the info dialog with error
+     */
+    updateInfoDialogError(dialog, message) {
+        const civitaiLink = dialog.querySelector('.ml-info-civitai-link');
+        if (civitaiLink) {
+            civitaiLink.innerHTML = `<span class="ml-info-error">${message}</span>`;
+        }
+    }
+    
+    /**
+     * Close the info dialog
+     */
+    closeInfoDialog(dialog) {
+        if (dialog && dialog.parentNode) {
+            dialog.parentNode.removeChild(dialog);
+        }
     }
     
     /**
@@ -528,6 +1017,309 @@ class LinkerManagerDialog extends ComfyDialog {
             }
             .ml-link:hover {
                 text-decoration: underline;
+            }
+            
+            /* Context menu */
+            .ml-context-menu {
+                position: fixed;
+                background: var(--comfy-menu-bg, #202020);
+                border: 1px solid var(--border-color, #555555);
+                border-radius: 6px;
+                box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+                z-index: 100001;
+                min-width: 160px;
+                overflow: hidden;
+            }
+            .ml-context-menu-item {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 8px 12px;
+                font-size: 12px;
+                color: var(--input-text, #e0e0e0);
+                cursor: pointer;
+                transition: background 0.15s ease;
+            }
+            .ml-context-menu-item:hover {
+                background: rgba(255,255,255,0.1);
+            }
+            .ml-context-menu-item-icon {
+                font-size: 14px;
+                width: 20px;
+                text-align: center;
+            }
+            .ml-context-menu-divider {
+                height: 1px;
+                background: var(--border-color, #555555);
+                margin: 4px 0;
+            }
+            
+            /* Model Info Dialog (similar to rgthree's RgthreeLoraInfoDialog) */
+            .ml-info-dialog-backdrop {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                background: rgba(0, 0, 0, 0.6);
+                z-index: 100002;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .ml-info-dialog {
+                background: var(--comfy-menu-bg, #202020);
+                border: 2px solid var(--border-color, #555555);
+                border-radius: 8px;
+                width: 500px;
+                max-width: 90vw;
+                max-height: 80vh;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+                box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+            }
+            .ml-info-dialog-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 16px 20px;
+                border-bottom: 1px solid var(--border-color, #555555);
+                background: rgba(0,0,0,0.2);
+            }
+            .ml-info-dialog-header h3 {
+                margin: 0;
+                font-size: 16px;
+                color: var(--input-text, #e0e0e0);
+            }
+            .ml-info-dialog-close {
+                background: none;
+                border: none;
+                font-size: 24px;
+                color: var(--input-text, #e0e0e0);
+                cursor: pointer;
+                padding: 0;
+                width: 30px;
+                height: 30px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 4px;
+            }
+            .ml-info-dialog-close:hover {
+                background: rgba(255,255,255,0.1);
+            }
+            .ml-info-dialog-content {
+                padding: 16px 20px;
+                overflow-y: auto;
+                flex: 1;
+            }
+            .ml-info-dialog-loading {
+                text-align: center;
+                color: var(--ml-text-muted, #888);
+                padding: 20px;
+            }
+            .ml-info-section {
+                margin-bottom: 16px;
+                padding-bottom: 16px;
+                border-bottom: 1px solid var(--border-color, #555555);
+            }
+            .ml-info-section-header {
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--ml-text-muted, #888);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                margin-bottom: 12px;
+            }
+            .ml-info-row {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 6px 0;
+            }
+            .ml-info-label {
+                color: var(--ml-text-muted, #888);
+                font-size: 13px;
+            }
+            .ml-info-value {
+                color: var(--input-text, #e0e0e0);
+                font-size: 13px;
+                font-weight: 500;
+            }
+            .ml-info-value.ml-info-active {
+                color: #4CAF50;
+            }
+            .ml-info-value.ml-info-inactive {
+                color: #888;
+            }
+            .ml-info-section-civitai {
+                border-bottom: none;
+                margin-bottom: 0;
+                padding-bottom: 0;
+            }
+            .ml-info-civitai-link {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .ml-info-link {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 8px 12px;
+                background: #2196F3;
+                color: white;
+                border-radius: 6px;
+                text-decoration: none;
+                font-size: 13px;
+            }
+            .ml-info-link:hover {
+                background: #1976D2;
+            }
+            .ml-info-loading-small {
+                color: var(--ml-text-muted, #888);
+                font-size: 12px;
+                font-style: italic;
+            }
+            .ml-info-not-found {
+                color: #888;
+                font-size: 12px;
+            }
+            
+            /* Info Area (type/base model tags) */
+            .ml-info-area {
+                display: flex;
+                gap: 8px;
+                margin-bottom: 16px;
+            }
+            .ml-info-tag {
+                display: inline-flex;
+                align-items: center;
+                padding: 4px 10px;
+                background: rgba(255,255,255,0.1);
+                border-radius: 4px;
+                font-size: 11px;
+                font-weight: 600;
+                color: var(--input-text, #e0e0e0);
+            }
+            .ml-info-tag.-type-lora { background: rgba(33,150,243,0.2); color: #64B5F6; }
+            .ml-info-tag.-type-checkpoint { background: rgba(76,175,80,0.2); color: #81C784; }
+            .ml-info-tag.-type-vae { background: rgba(156,39,176,0.2); color: #BA68C8; }
+            .ml-info-tag.-basemodel-sd1 { background: rgba(244,67,54,0.2); color: #EF9A9A; }
+            .ml-info-tag.-basemodel-sdxl { background: rgba(33,150,243,0.2); color: #64B5F6; }
+            .ml-info-tag.-basemodel-sdxl-turbo { background: rgba(33,150,243,0.2); color: #64B5F6; }
+            .ml-info-tag.-basemodel-flux.1 { background: rgba(255,152,0,0.2); color: #FFB74D; }
+            .ml-info-tag.-basemodel-flux.1-d { background: rgba(255,152,0,0.2); color: #FFB74D; }
+            
+            /* Info Table */
+            .ml-info-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 16px;
+            }
+            .ml-info-table tr {
+                border-bottom: 1px solid rgba(255,255,255,0.05);
+            }
+            .ml-info-table tr:last-child {
+                border-bottom: none;
+            }
+            .ml-info-table td {
+                padding: 8px 4px;
+                font-size: 13px;
+                vertical-align: top;
+            }
+            .ml-info-table td:first-child {
+                color: var(--ml-text-muted, #888);
+                white-space: nowrap;
+                width: 140px;
+            }
+            .ml-info-table td:last-child {
+                color: var(--input-text, #e0e0e0);
+                word-break: break-word;
+            }
+            .ml-info-help {
+                display: inline-block;
+                width: 14px;
+                height: 14px;
+                background: rgba(255,255,255,0.1);
+                border-radius: 50%;
+                font-size: 10px;
+                text-align: center;
+                line-height: 14px;
+                cursor: help;
+                margin-left: 4px;
+                vertical-align: middle;
+            }
+            
+            /* Images Section */
+            .ml-info-images {
+                margin-top: 16px;
+                padding-top: 16px;
+                border-top: 1px solid var(--border-color, #555555);
+            }
+            .ml-info-images-header {
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--ml-text-muted, #888);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                margin-bottom: 12px;
+            }
+            .ml-info-images-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+                gap: 12px;
+            }
+            .ml-info-image-item {
+                border-radius: 6px;
+                overflow: hidden;
+                background: rgba(0,0,0,0.2);
+            }
+            .ml-info-image-item img {
+                width: 100%;
+                height: auto;
+                display: block;
+            }
+            .ml-info-image-item figcaption {
+                padding: 8px;
+                font-size: 11px;
+                color: var(--ml-text-muted, #888);
+            }
+            .ml-info-image-item figcaption span {
+                display: block;
+                margin-bottom: 2px;
+            }
+            .ml-info-image-item figcaption span label {
+                font-weight: 600;
+            }
+            .ml-info-image-link {
+                color: #2196F3;
+                text-decoration: none;
+                display: block;
+                margin-bottom: 4px;
+            }
+            
+            /* CivitAI Logo */
+            .ml-info-civitai-logo {
+                width: 16px;
+                height: 16px;
+            }
+            
+            /* Footer */
+            .ml-info-dialog-footer {
+                padding: 12px 20px;
+                border-top: 1px solid var(--border-color, #555555);
+                display: flex;
+                justify-content: flex-end;
+                gap: 8px;
+            }
+            .ml-info-dialog-close-btn {
+                padding: 8px 16px;
+            }
+            .ml-info-error {
+                color: #f44336;
+                font-size: 12px;
             }
         `;
         
@@ -1139,7 +1931,8 @@ class LinkerManagerDialog extends ComfyDialog {
                     const fullName = model.name || model.original_path?.split(/[\/\\]/).pop() || 'Unknown';
                     const name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx|gguf)$/i, '');
                     const strength = model.strength !== null && model.strength !== undefined ? model.strength.toFixed(2) : null;
-                    html += `<span class="ml-model-chip">${name}${strength !== null ? `<span class="ml-model-chip-strength">${strength}</span>` : ''}</span>`;
+                    const modelData = encodeURIComponent(JSON.stringify(model));
+                    html += `<span class="ml-model-chip" data-model="${modelData}" oncontextmenu="window.MLOpenContextMenu(event, this)">${name}${strength !== null ? `<span class="ml-model-chip-strength">${strength}</span>` : ''}</span>`;
                 }
                 html += `</div></div>`;
             }
@@ -1163,7 +1956,8 @@ class LinkerManagerDialog extends ComfyDialog {
                     const fullName = model.name || model.original_path?.split(/[\/\\]/).pop() || 'Unknown';
                     const name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx|gguf)$/i, '');
                     const strength = model.strength !== null && model.strength !== undefined ? model.strength.toFixed(2) : null;
-                    html += `<span class="ml-model-chip">${name}${strength !== null ? `<span class="ml-model-chip-strength">${strength}</span>` : ''}</span>`;
+                    const modelData = encodeURIComponent(JSON.stringify(model));
+                    html += `<span class="ml-model-chip" data-model="${modelData}" oncontextmenu="window.MLOpenContextMenu(event, this)">${name}${strength !== null ? `<span class="ml-model-chip-strength">${strength}</span>` : ''}</span>`;
                 }
                 html += `</div></div>`;
             }
@@ -3529,6 +4323,7 @@ class ModelLinker {
         // Create dialog instance
         if (!this.dialog) {
             this.dialog = new LinkerManagerDialog();
+            window.modelLinkerDialog = this.dialog;
         }
 
         // Register keyboard shortcut (Ctrl+Shift+L)
@@ -3727,11 +4522,12 @@ class ModelLinker {
         // Small delay to let popup close
         await new Promise(r => setTimeout(r, 200));
 
-        // Create dialog if needed
+// Create dialog if needed
         if (!this.dialog) {
             this.dialog = new LinkerManagerDialog();
+            window.modelLinkerDialog = this.dialog;
         }
-
+        
         // Run auto-resolve for 100% matches - returns the updated workflow
         const updatedWorkflow = await this.dialog.autoResolve100Percent();
         
@@ -4041,6 +4837,7 @@ class ModelLinker {
         try {
             if (!this.dialog) {
                 this.dialog = new LinkerManagerDialog();
+                window.modelLinkerDialog = this.dialog;
             }
             this.dialog.show();
         } catch (error) {
@@ -4179,5 +4976,25 @@ window.MLCopyCode = function(sectionId, btn) {
         btn.textContent = '✓ Copied!';
         setTimeout(() => btn.textContent = orig, 1500);
     });
+};
+
+window.MLOpenContextMenu = function(event, element) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    try {
+        const modelData = element.getAttribute('data-model');
+        if (!modelData) return;
+        
+        const model = JSON.parse(decodeURIComponent(modelData));
+        
+        // Get dialog instance
+        const dialog = window.modelLinkerDialog;
+        if (dialog && dialog.showContextMenu) {
+            dialog.showContextMenu(event.clientX, event.clientY, model);
+        }
+    } catch (e) {
+        console.error('Model Linker: Error opening context menu:', e);
+    }
 };
 

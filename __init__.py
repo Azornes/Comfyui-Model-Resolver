@@ -342,6 +342,47 @@ class ModelLinkerExtension:
                     # Get available models for existence checking
                     available_models = get_model_files()
                     available_paths = {m.get("path") for m in available_models}
+                    # Create lookup for full paths by filename (with and without extension)
+                    path_by_filename = {}
+                    for m in available_models:
+                        rel_path = m.get("relative_path", "")
+                        if rel_path:
+                            filename = rel_path.split("/")[-1].split("\\")[-1]
+                            path_by_filename[filename] = m.get("path")
+                            # Also add without extension for matching (simple approach)
+                            if "." in filename:
+                                filename_no_ext = filename.rsplit(".", 1)[0]
+                                if filename_no_ext not in path_by_filename:
+                                    path_by_filename[filename_no_ext] = m.get("path")
+                            # Add the full relative path as key too
+                            path_by_filename[rel_path] = m.get("path")
+
+                    # Also use folder_paths.get_full_path() to get paths
+                    import folder_paths
+
+                    for cat in [
+                        "loras",
+                        "checkpoints",
+                        "vae",
+                        "controlnet",
+                        "upscale_models",
+                    ]:
+                        try:
+                            filenames = folder_paths.get_filename_list(cat)
+                            for fn in filenames:
+                                full_path = folder_paths.get_full_path(cat, fn)
+                                if (
+                                    full_path
+                                    and full_path not in path_by_filename.values()
+                                ):
+                                    path_by_filename[fn] = full_path
+                                    fn_no_ext = (
+                                        fn.rsplit(".", 1)[0] if "." in fn else fn
+                                    )
+                                    if fn_no_ext not in path_by_filename:
+                                        path_by_filename[fn_no_ext] = full_path
+                        except Exception:
+                            pass
 
                     # Analyze workflow to get all model references
                     all_model_refs = analyze_workflow_models(workflow_json)
@@ -416,6 +457,10 @@ class ModelLinkerExtension:
                                 "is_lora_v2": ref.get("is_lora_v2", False),
                                 "active": ref.get("active"),
                                 "connected": ref.get("connected", True),
+                                "resolved_path": (
+                                    path_by_filename.get(model_name)
+                                    or path_by_filename.get(original_path)
+                                ),
                             }
                         )
 
@@ -465,6 +510,134 @@ class ModelLinkerExtension:
                 except Exception as e:
                     self.logger.error(
                         f"Model Linker get_loaded_models error: {e}", exc_info=True
+                    )
+                    return web.json_response({"error": str(e)}, status=500)
+
+            # ==================== CIVITAI SEARCH ROUTE ====================
+
+            @routes.post("/model_linker/civitai-search")
+            async def civitai_search(request):
+                """Search CivitAI for a model using file hash."""
+                try:
+                    data = await request.json()
+                    filename = data.get("filename", "")
+                    category = data.get("category", "")
+                    resolved_path = data.get("resolved_path", "")
+
+                    if not filename:
+                        return web.json_response(
+                            {"error": "Filename is required"}, status=400
+                        )
+
+                    # Clean filename for display
+                    import os as _os
+
+                    clean_name = _os.path.splitext(filename)[0]
+
+                    # Get the file path to hash
+                    file_path = resolved_path if resolved_path else None
+
+                    if not file_path and category:
+                        # Try to find the file in the model directories using folder_paths
+                        try:
+                            import folder_paths
+
+                            # Map category to folder_paths type
+                            category_map = {
+                                "loras": "loras",
+                                "checkpoints": "checkpoints",
+                                "vae": "vae",
+                                "controlnet": "controlnet",
+                                "upscale_models": "upscale_models",
+                            }
+                            folder_type = category_map.get(
+                                category.lower(), category.lower()
+                            )
+                            file_path = folder_paths.get_full_path(
+                                folder_type, filename
+                            )
+                        except Exception:
+                            pass
+
+                        # If not found, try scanner
+                        if not file_path:
+                            try:
+                                from .core.scanner import get_model_files
+
+                                available_models = get_model_files()
+                                for m in available_models:
+                                    if (
+                                        m.get("relative_path", "").endswith(filename)
+                                        or m.get("filename", "") == filename
+                                    ):
+                                        file_path = m.get("path")
+                                        break
+                            except Exception:
+                                pass
+
+                    # Search CivitAI for the model using hash
+                    if download_available and file_path and _os.path.exists(file_path):
+                        try:
+                            from .core.sources.civitai import (
+                                get_model_info_for_file,
+                            )
+
+                            result = get_model_info_for_file(file_path)
+                            if result and result.get("url"):
+                                return web.json_response(
+                                    {
+                                        "filename": filename,
+                                        "url": result.get("url"),
+                                        "version_url": result.get("version_url"),
+                                        "model_id": result.get("model_id"),
+                                        "model_name": result.get(
+                                            "model_name", clean_name
+                                        ),
+                                        "model_type": result.get("model_type", ""),
+                                        "version_id": result.get("version_id"),
+                                        "version_name": result.get("version_name", ""),
+                                        "sha256": result.get("sha256"),
+                                        "base_model": result.get("base_model"),
+                                        "tags": result.get("tags", []),
+                                        "trained_words": result.get(
+                                            "trained_words", []
+                                        ),
+                                        "images": result.get("images", []),
+                                        "clip_skip": result.get("clip_skip"),
+                                        "description": result.get("description", ""),
+                                        "model_description": result.get(
+                                            "model_description", ""
+                                        ),
+                                    }
+                                )
+                        except Exception as e:
+                            self.logger.warning(f"CivitAI search error: {e}")
+
+                    # No result found - try fallback to filename search
+                    if download_available:
+                        try:
+                            from .core.sources.civitai import (
+                                search_civitai_for_file,
+                            )
+
+                            result = search_civitai_for_file(filename)
+                            if result and result.get("url"):
+                                return web.json_response(
+                                    {
+                                        "url": result["url"],
+                                        "model_name": result.get("name", clean_name),
+                                        "version_id": result.get("version_id"),
+                                    }
+                                )
+                        except Exception as e:
+                            self.logger.warning(f"CivitAI fallback search error: {e}")
+
+                    # No result found
+                    return web.json_response({"url": None})
+
+                except Exception as e:
+                    self.logger.error(
+                        f"Model Linker civitai-search error: {e}", exc_info=True
                     )
                     return web.json_response({"error": str(e)}, status=500)
 
