@@ -60,6 +60,7 @@ NODE_TYPE_TO_CATEGORY_HINTS = {
     "LoraLoaderModelOnly": "loras",
     "LoraLoaderV2": "loras",
     "Lora Loader (LoraManager)": "loras",  # LoraManager custom node
+    "Lora Stacker (LoraManager)": "loras",  # LoraManager Stacker node
     "Power Lora Loader (rgthree)": "loras",  # rgthree's Power Lora Loader
     "UNETLoader": "diffusion_models",
     "ControlNetLoader": "controlnet",
@@ -204,7 +205,11 @@ def get_node_model_info(node: Dict[str, Any]) -> List[Dict[str, Any]]:
         return model_refs
 
     # Special handling for text-based lora loaders (LoraLoaderV2, LoraManager, etc.)
-    lora_text_types = ["LoraLoaderV2", "Lora Loader (LoraManager)"]
+    lora_text_types = [
+        "LoraLoaderV2",
+        "Lora Loader (LoraManager)",
+        "Lora Stacker (LoraManager)",
+    ]
     is_lora_text = node_type in lora_text_types
     if is_lora_text and len(widgets_values) >= 3:
         # widgets_values[0] = {"version": 1, "textWidgetName": "text"}
