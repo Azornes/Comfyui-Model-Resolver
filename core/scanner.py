@@ -5,17 +5,22 @@ Scans configured model directories and finds available model files.
 """
 
 import os
-import logging
 from typing import List, Dict, Tuple
 
-from .log_system.log_funcs import log_debug, log_info, log_warn, log_error, log_exception
+from .log_system.log_funcs import (
+    log_debug,
+    log_info,
+    log_warn,
+    log_error,
+    log_exception,
+)
 
 # Import folder_paths lazily - it may not be available until ComfyUI is initialized
 try:
     import folder_paths
 except ImportError:
     folder_paths = None
-    logging.warning("Model Linker: folder_paths not available yet - will retry later")
+    log_warn("Model Linker: folder_paths not available yet - will retry later")
 
 # Model file extensions to look for
 # This matches folder_paths.supported_pt_extensions
@@ -51,7 +56,7 @@ def get_model_directories() -> Dict[str, Tuple[List[str], set]]:
 
             folder_paths = fp
         except ImportError:
-            logging.error("Model Linker: folder_paths still not available")
+            log_error("Model Linker: folder_paths still not available")
             return {}
 
     return folder_paths.folder_names_and_paths.copy()
@@ -81,7 +86,7 @@ def scan_directory(
     models = []
 
     if not os.path.exists(directory) or not os.path.isdir(directory):
-        logging.debug(f"Directory does not exist or is not accessible: {directory}")
+        log_debug(f"Directory does not exist or is not accessible: {directory}")
         return models
 
     try:
@@ -132,7 +137,7 @@ def scan_directory(
                         }
                     )
     except (OSError, PermissionError) as e:
-        logging.warning(f"Error scanning directory {directory}: {e}")
+        log_warn(f"Error scanning directory {directory}: {e}")
 
     return models
 
@@ -161,7 +166,7 @@ def scan_all_directories() -> List[Dict[str, str]]:
                     paths = value[0] or []
                     raw_exts = value[1]
                 else:
-                    # Unexpected format: treat value as paths
+                    # Unexpected format; treat value as paths
                     paths = list(value)
                     raw_exts = []
             elif isinstance(value, dict):
@@ -169,7 +174,7 @@ def scan_all_directories() -> List[Dict[str, str]]:
                 raw_exts = value.get("extensions") or []
             else:
                 # Unknown format; skip category
-                logging.debug(
+                log_debug(
                     f"Unexpected folder_paths format for category {category}: {type(value)}"
                 )
                 continue
@@ -180,22 +185,16 @@ def scan_all_directories() -> List[Dict[str, str]]:
             elif raw_exts:
                 extensions = {str(raw_exts).lower()}
         except Exception as e:
-            logging.warning(
-                f"Error interpreting folder_paths entry for {category}: {e}"
-            )
+            log_warn(f"Error interpreting folder_paths entry for {category}: {e}")
             continue
 
         for directory_path in paths:
             try:
                 models = scan_directory(directory_path, extensions, category)
                 all_models.extend(models)
-                logging.debug(
-                    f"Found {len(models)} models in {category}/{directory_path}"
-                )
+                log_debug(f"Found {len(models)} models in {category}/{directory_path}")
             except Exception as e:
-                logging.warning(
-                    f"Error scanning {category} directory {directory_path}: {e}"
-                )
+                log_warn(f"Error scanning {category} directory {directory_path}: {e}")
 
     return all_models
 

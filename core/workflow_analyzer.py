@@ -5,17 +5,23 @@ Extracts model references from workflow JSON and identifies missing models.
 """
 
 import os
-import logging
+import re
 from typing import List, Dict, Any, Optional
 
-from .log_system.log_funcs import log_debug, log_info, log_warn, log_error, log_exception
+from .log_system.log_funcs import (
+    log_debug,
+    log_info,
+    log_warn,
+    log_error,
+    log_exception,
+)
 
 # Import folder_paths lazily - it may not be available until ComfyUI is initialized
 try:
     import folder_paths
 except ImportError:
     folder_paths = None
-    logging.warning("Model Linker: folder_paths not available yet - will retry later")
+    log_warn("Model Linker: folder_paths not available yet - will retry later")
 
 
 # Common model file extensions
@@ -31,8 +37,6 @@ MODEL_EXTENSIONS = {
     ".onnx",
     ".gguf",
 }
-
-import re
 
 # URN Type to ComfyUI category mapping
 URN_TYPE_MAP = {
@@ -140,7 +144,7 @@ def try_resolve_model_path(
 
             folder_paths = fp
         except ImportError:
-            logging.error("Model Linker: folder_paths not available")
+            log_error("Model Linker: folder_paths not available")
             return None
 
     # If categories not provided, try all categories
@@ -272,7 +276,7 @@ def get_node_model_info(node: Dict[str, Any]) -> List[Dict[str, Any]]:
                                     if lora_exists:
                                         break
 
-                        logging.debug(
+                        log_debug(
                             f"Lora {name}: exists={lora_exists}, path={lora_full_path}"
                         )
 
@@ -445,7 +449,7 @@ def analyze_workflow_models(workflow_json: Dict[str, Any]) -> List[Dict[str, Any
                 ref["is_top_level"] = True  # Flag to indicate this is a top-level node
             all_model_refs.extend(model_refs)
         except Exception as e:
-            logging.warning(f"Error analyzing node {node.get('id', 'unknown')}: {e}")
+            log_warn(f"Error analyzing node {node.get('id', 'unknown')}: {e}")
             continue
 
     # Recursively analyze subgraphs (definitions already loaded above)
@@ -457,7 +461,7 @@ def analyze_workflow_models(workflow_json: Dict[str, Any]) -> List[Dict[str, Any
         subgraph_name = subgraph.get("name", subgraph_id)
         subgraph_nodes = subgraph.get("nodes", [])
 
-        logging.debug(
+        log_debug(
             f"Analyzing subgraph: {subgraph_name} (ID: {subgraph_id}) with {len(subgraph_nodes)} nodes"
         )
 
@@ -477,7 +481,7 @@ def analyze_workflow_models(workflow_json: Dict[str, Any]) -> List[Dict[str, Any
                     ref["is_top_level"] = False  # This is inside a subgraph definition
                 all_model_refs.extend(model_refs)
             except Exception as e:
-                logging.warning(
+                log_warn(
                     f"Error analyzing subgraph node {node.get('id', 'unknown')}: {e}"
                 )
                 continue

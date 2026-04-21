@@ -7,15 +7,18 @@ Search and download models from CivitAI.
 import os
 import re
 import json
-import logging
 import hashlib
 import requests
 from typing import Dict, Any, Optional, List
 from urllib.parse import urlparse, parse_qs, quote
 
-from ..log_system.log_funcs import log_debug, log_info, log_warn, log_error, log_exception
-
-logger = logging.getLogger(__name__)
+from ..log_system.log_funcs import (
+    log_debug,
+    log_info,
+    log_warn,
+    log_error,
+    log_exception,
+)
 
 CIVITAI_API_URL = "https://civitai.com/api/v1"
 
@@ -109,7 +112,7 @@ def search_civitai_for_file(
 
         response = requests.get(search_url, headers=headers, timeout=15)
         if response.status_code != 200:
-            logger.debug(f"CivitAI search returned {response.status_code}")
+            log_debug(f"CivitAI search returned {response.status_code}")
             return None
 
         data = response.json()
@@ -148,7 +151,7 @@ def search_civitai_for_file(
                                 "match_type": "exact",
                             }
                             _search_cache[cache_key] = result
-                            logger.info(f"Found {filename} on CivitAI: {model_name}")
+                            log_info(f"Found {filename} on CivitAI: {model_name}")
                             return result
 
                     # Check for partial match (filename_base in file_base or vice versa)
@@ -171,7 +174,7 @@ def search_civitai_for_file(
                                     "match_type": "partial",
                                 }
                                 _search_cache[cache_key] = result
-                                logger.info(
+                                log_info(
                                     f"Found similar file for {filename} on CivitAI: {model_name}"
                                 )
                                 return result
@@ -181,7 +184,7 @@ def search_civitai_for_file(
         return None
 
     except Exception as e:
-        logger.error(f"CivitAI search error: {e}")
+        log_error(f"CivitAI search error: {e}")
         return None
 
 
@@ -267,7 +270,7 @@ def search_civitai(
                     results.append(result)
 
     except Exception as e:
-        logger.error(f"CivitAI search error: {e}")
+        log_error(f"CivitAI search error: {e}")
 
     return results
 
@@ -307,7 +310,7 @@ def search_civitai_by_hash(
             }
 
     except Exception as e:
-        logger.error(f"CivitAI hash lookup error: {e}")
+        log_error(f"CivitAI hash lookup error: {e}")
 
     return None
 
@@ -341,7 +344,7 @@ def resolve_urn(
         response = requests.get(url, headers=headers, params=params, timeout=15)
 
         if response.status_code != 200:
-            logger.warning(f"CivitAI URN resolve failed: {response.status_code}")
+            log_warn(f"CivitAI URN resolve failed: {response.status_code}")
             _urn_cache[cache_key] = None
             return None
 
@@ -349,9 +352,7 @@ def resolve_urn(
         versions = data.get("modelVersions", [])
 
         if not versions:
-            logger.warning(
-                f"No versions found for model {model_id}/version {version_id}"
-            )
+            log_warn(f"No versions found for model {model_id}/version {version_id}")
             _urn_cache[cache_key] = None
             return None
 
@@ -363,7 +364,7 @@ def resolve_urn(
                 break
 
         if not target_version:
-            logger.warning(f"Version {version_id} not found in model {model_id}")
+            log_warn(f"Version {version_id} not found in model {model_id}")
             _urn_cache[cache_key] = None
             return None
 
@@ -380,7 +381,7 @@ def resolve_urn(
             primary_file = files[0]  # Fallback to first
 
         if not primary_file:
-            logger.warning(f"No files found for version {version_id}")
+            log_warn(f"No files found for version {version_id}")
             _urn_cache[cache_key] = None
             return None
 
@@ -395,13 +396,13 @@ def resolve_urn(
         }
 
         _urn_cache[cache_key] = result
-        logger.info(
+        log_info(
             f"Resolved URN model {model_id}@{version_id} → {result['expected_filename']}"
         )
         return result
 
     except Exception as e:
-        logger.error(f"CivitAI URN resolve error for {model_id}@{version_id}: {e}")
+        log_error(f"CivitAI URN resolve error for {model_id}@{version_id}: {e}")
         _urn_cache[cache_key] = None
         return None
 
@@ -428,7 +429,7 @@ def _get_sha256_hash(file_path: str) -> Optional[str]:
                 sha256_hash.update(byte_block)
         return sha256_hash.hexdigest()
     except Exception as e:
-        logger.error(f"Error computing hash for {file_path}: {e}")
+        log_error(f"Error computing hash for {file_path}: {e}")
         return None
 
 
@@ -502,21 +503,21 @@ def get_model_info_by_hash(
             }
 
             _hash_cache[cache_key] = result
-            logger.info(f"Found model by hash {file_hash}: {result.get('model_name')}")
+            log_info(f"Found model by hash {file_hash}: {result.get('model_name')}")
             return result
 
         elif response.status_code == 404:
-            logger.info(f"Model not found on CivitAI for hash {file_hash}")
+            log_info(f"Model not found on CivitAI for hash {file_hash}")
             _hash_cache[cache_key] = None
             return None
         else:
-            logger.warning(
+            log_warn(
                 f"CivitAI hash lookup returned {response.status_code} for {file_hash}"
             )
             return None
 
     except Exception as e:
-        logger.error(f"Error looking up model by hash {file_hash}: {e}")
+        log_error(f"Error looking up model by hash {file_hash}: {e}")
         return None
 
     cache_key = f"hash_{file_hash}"
@@ -569,21 +570,21 @@ def get_model_info_by_hash(
             }
 
             _hash_cache[cache_key] = result
-            logger.info(f"Found model by hash {file_hash}: {result.get('model_name')}")
+            log_info(f"Found model by hash {file_hash}: {result.get('model_name')}")
             return result
 
         elif response.status_code == 404:
-            logger.info(f"Model not found on CivitAI for hash {file_hash}")
+            log_info(f"Model not found on CivitAI for hash {file_hash}")
             _hash_cache[cache_key] = None
             return None
         else:
-            logger.warning(
+            log_warn(
                 f"CivitAI hash lookup returned {response.status_code} for {file_hash}"
             )
             return None
 
     except Exception as e:
-        logger.error(f"Error looking up model by hash {file_hash}: {e}")
+        log_error(f"Error looking up model by hash {file_hash}: {e}")
         return None
 
 
@@ -687,7 +688,7 @@ def _get_metadata_file_path(model_path: str) -> str:
         if name:
             path = os.path.join(directory, name)
             if os.path.exists(path):
-                logger.info(f"Found metadata file: {path}")
+                log_info(f"Found metadata file: {path}")
                 return path
 
     return ""
@@ -713,10 +714,10 @@ def _read_model_metadata(metadata_path: str) -> Optional[Dict[str, Any]]:
         if not data.get("sha256") and not data.get("civitai"):
             return None
 
-        logger.info(f"Successfully read metadata from: {metadata_path}")
+        log_info(f"Successfully read metadata from: {metadata_path}")
         return data
     except Exception as e:
-        logger.debug(f"Error reading metadata file {metadata_path}: {e}")
+        log_debug(f"Error reading metadata file {metadata_path}: {e}")
         return None
 
 
@@ -797,16 +798,16 @@ def get_model_info_for_file(
     Returns:
         Dict with model info from CivitAI, or None if not found
     """
-    logger.info(f"get_model_info_for_file called with: {file_path}")
+    log_info(f"get_model_info_for_file called with: {file_path}")
 
     # First check for metadata file
     metadata_path = _get_metadata_file_path(file_path)
-    logger.info(f"Looking for metadata file, checked: {metadata_path}")
+    log_info(f"Looking for metadata file, checked: {metadata_path}")
 
     if metadata_path:
         metadata = _read_model_metadata(metadata_path)
         if metadata:
-            logger.info(f"Using metadata file for {file_path}")
+            log_info(f"Using metadata file for {file_path}")
             return _metadata_to_model_info(metadata)
     else:
         # Debug: list all files in the same directory
@@ -816,7 +817,7 @@ def get_model_info_for_file(
             metadata_files = [
                 f for f in files if "metadata" in f.lower() or f.endswith(".json")
             ]
-            logger.info(f"Files in {directory}: {metadata_files}")
+            log_info(f"Files in {directory}: {metadata_files}")
 
     # If no metadata file, compute hash and look up on CivitAI
     file_hash = _get_sha256_hash(file_path)

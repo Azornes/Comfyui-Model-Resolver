@@ -6,14 +6,17 @@ Search and download models from HuggingFace Hub.
 
 import os
 import re
-import logging
 import requests
 from typing import Dict, Any, Optional, List
 from urllib.parse import urlparse, quote
 
-from ..log_system.log_funcs import log_debug, log_info, log_warn, log_error, log_exception
-
-logger = logging.getLogger(__name__)
+from ..log_system.log_funcs import (
+    log_debug,
+    log_info,
+    log_warn,
+    log_error,
+    log_exception,
+)
 
 HF_API_URL = "https://huggingface.co/api"
 
@@ -110,7 +113,7 @@ def search_huggingface_for_file(
 
         response = requests.get(search_url, headers=headers, timeout=10)
         if response.status_code != 200:
-            logger.debug(f"HuggingFace search returned {response.status_code}")
+            log_debug(f"HuggingFace search returned {response.status_code}")
             return None
 
         repos = response.json()
@@ -146,7 +149,7 @@ def search_huggingface_for_file(
                                 "match_type": "exact",
                             }
                             _search_cache[cache_key] = result
-                            logger.info(f"Found {filename} on HuggingFace: {repo_id}")
+                            log_info(f"Found {filename} on HuggingFace: {repo_id}")
                             return result
 
                         # Check for partial match (filename_base in file_base or vice versa)
@@ -169,13 +172,13 @@ def search_huggingface_for_file(
                                         "match_type": "partial",
                                     }
                                     _search_cache[cache_key] = result
-                                    logger.info(
+                                    log_info(
                                         f"Found similar file for {filename} on HuggingFace: {repo_id}/{file_path}"
                                     )
                                     return result
 
             except Exception as e:
-                logger.debug(f"Error checking repo {repo_id}: {e}")
+                log_debug(f"Error checking repo {repo_id}: {e}")
                 continue
 
         # Not found
@@ -183,7 +186,7 @@ def search_huggingface_for_file(
         return None
 
     except Exception as e:
-        logger.error(f"HuggingFace search error: {e}")
+        log_error(f"HuggingFace search error: {e}")
         return None
 
 
@@ -228,7 +231,7 @@ def search_huggingface(
                 )
 
     except Exception as e:
-        logger.error(f"HuggingFace search error: {e}")
+        log_error(f"HuggingFace search error: {e}")
 
     return results
 
@@ -264,6 +267,6 @@ def get_repo_files(repo: str, token: Optional[str] = None) -> List[Dict[str, Any
                     )
 
     except Exception as e:
-        logger.error(f"Error getting repo files: {e}")
+        log_error(f"Error getting repo files: {e}")
 
     return files

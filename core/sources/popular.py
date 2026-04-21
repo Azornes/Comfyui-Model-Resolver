@@ -6,12 +6,15 @@ Curated list of common models with known download URLs.
 
 import os
 import json
-import logging
 from typing import Dict, Any, Optional, List
 
-from ..log_system.log_funcs import log_debug, log_info, log_warn, log_error, log_exception
-
-logger = logging.getLogger(__name__)
+from ..log_system.log_funcs import (
+    log_debug,
+    log_info,
+    log_warn,
+    log_error,
+    log_exception,
+)
 
 # Path to metadata directory
 METADATA_DIR = os.path.join(
@@ -39,7 +42,7 @@ def _load_popular_models() -> Dict[str, Any]:
                 _popular_models_cache = data.get("models", {})
                 return _popular_models_cache
     except Exception as e:
-        logger.error(f"Error loading popular models: {e}")
+        log_error(f"Error loading popular models: {e}")
 
     _popular_models_cache = {}
     return _popular_models_cache
@@ -59,7 +62,7 @@ def _load_model_aliases() -> Dict[str, List[str]]:
                 _model_aliases_cache = data.get("aliases", {})
                 return _model_aliases_cache
     except Exception as e:
-        logger.error(f"Error loading model aliases: {e}")
+        log_error(f"Error loading model aliases: {e}")
 
     _model_aliases_cache = {}
     return _model_aliases_cache

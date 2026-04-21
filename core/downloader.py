@@ -5,7 +5,6 @@ Handles downloading models from various sources with progress tracking.
 """
 
 import os
-import logging
 import threading
 import time
 import requests
@@ -13,7 +12,13 @@ from typing import Dict, Any, Optional, Callable, List
 from pathlib import Path
 from collections import deque
 
-from .log_system.log_funcs import log_debug, log_info, log_warn, log_error, log_exception
+from .log_system.log_funcs import (
+    log_debug,
+    log_info,
+    log_warn,
+    log_error,
+    log_exception,
+)
 
 try:
     import folder_paths
@@ -29,8 +34,6 @@ cancelled_downloads: set = set()
 SPEED_HISTORY_SIZE = 5  # Number of samples for smoothing
 CHUNK_SIZE = 1024 * 1024  # 1MB chunks for faster downloads
 CLI_LOG_INTERVAL = 5  # Log progress to CLI every N seconds
-
-logger = logging.getLogger(__name__)
 
 
 def format_bytes(bytes_value: int) -> str:
@@ -107,7 +110,7 @@ def get_download_directory(category: str) -> Optional[str]:
             if fallback_paths:
                 return fallback_paths[0]
     except Exception as e:
-        logger.debug(f"Could not get folder path for {folder_key}: {e}")
+        log_debug(f"Could not get folder path for {folder_key}: {e}")
 
     return None
 
@@ -373,7 +376,7 @@ def download_file(
         # CLI error log
         print(f"[Model Linker] ✗ Download failed: {os.path.basename(dest_path)}")
         print(f"[Model Linker] Error: {error_msg}")
-        logger.error(f"Download error: {e}", exc_info=True)
+        log_error(f"Download error: {e}", exc_info=True)
 
     return result
 

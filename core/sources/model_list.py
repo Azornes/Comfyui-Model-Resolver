@@ -6,13 +6,16 @@ Search the ComfyUI Manager model-list.json database with fuzzy matching.
 
 import os
 import json
-import logging
 from typing import Dict, Any, Optional, List
 from difflib import SequenceMatcher
 
-from ..log_system.log_funcs import log_debug, log_info, log_warn, log_error, log_exception
-
-logger = logging.getLogger(__name__)
+from ..log_system.log_funcs import (
+    log_debug,
+    log_info,
+    log_warn,
+    log_error,
+    log_exception,
+)
 
 # Path to metadata directory
 METADATA_DIR = os.path.join(
@@ -36,12 +39,12 @@ def _load_model_list() -> List[Dict]:
             with open(MODEL_LIST_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 _model_list_cache = data.get("models", [])
-                logger.info(
+                log_info(
                     f"Loaded {len(_model_list_cache)} models from model-list.json"
                 )
                 return _model_list_cache
     except Exception as e:
-        logger.error(f"Error loading model list: {e}")
+        log_error(f"Error loading model list: {e}")
 
     _model_list_cache = []
     return _model_list_cache

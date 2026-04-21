@@ -936,6 +936,6 @@ try:
     extension = ModelLinkerExtension()
     extension.initialize()
 except Exception as e:
-    logging.error(
+    log_error(
         f"ComfyUI Model Linker extension initialization failed: {e}", exc_info=True
     )
