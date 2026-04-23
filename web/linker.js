@@ -3072,29 +3072,38 @@ class LinkerManagerDialog extends ComfyDialog {
         
         // Card Header: Filename as headline + node chip
         html += `<div class="ml-card-header">`;
-        // Show URN + CivitAI model name + version name if available
-        const modelUrl = missing.is_urn && missing.urn ? `https://civitai.com/models/${missing.urn.model_id}?modelVersionId=${missing.urn.version_id}` : '';
-        const titleContent = `<span title="${missingFilename.full}">${missingFilename.display}</span>`;
-        let titleHtml = modelUrl ? `<a href="${modelUrl}" target="_blank" style="color: inherit; text-decoration: none;">${titleContent}</a>` : titleContent;
-        if (missing.is_urn && missing.civitai_info) {
+        
+        // Always show the URN/ filename first
+        let titleHtml = `<span title="${missingFilename.full}">${missingFilename.display}</span>`;
+        
+        const modelId = missing.urn_model_id || missing.urn?.model_id;
+        const versionId = missing.urn_version_id || missing.urn?.version_id;
+        const modelUrl = missing.is_urn && modelId ? `https://civitai.com/models/${modelId}${versionId ? '?modelVersionId=' + versionId : ''}` : '';
+        const urnLoadingId = `urn-loading-${missing.node_id}-${missing.widget_index}`;
+        
+        if (missing.is_urn && !missing.civitai_info) {
+            // URN without info - show Loading and fetch async in background
+            titleHtml += ` <span id="${urnLoadingId}" style="color: var(--ml-text-muted); font-size: 12px;">⏳ Loading...</span>`;
+            setTimeout(() => this.resolveUrnAsync(modelId, versionId, urnLoadingId, modelUrl), 10);
+        } else if (missing.is_urn && missing.civitai_info) {
+            // URN with resolved info - show model name/version
+            const civitaiInfo = missing.civitai_info;
             let civitaiLabel = '';
-            if (missing.civitai_info.model_name) {
-                civitaiLabel += `${missing.civitai_info.model_name}`;
+            if (civitaiInfo.model_name) {
+                civitaiLabel += civitaiInfo.model_name;
             }
-            if (missing.civitai_info.version_name && missing.civitai_info.version_name !== missing.civitai_info.model_name) {
-                civitaiLabel += ` ${missing.civitai_info.version_name}`;
+            if (civitaiInfo.version_name && civitaiInfo.version_name !== civitaiInfo.model_name) {
+                civitaiLabel += ` v${civitaiInfo.version_name}`;
             }
             if (civitaiLabel) {
-                const versionLabel = modelUrl ? `<a href="${modelUrl}" target="_blank" style="color: #FF9800; font-size: 14px; text-decoration: none;">${civitaiLabel}</a>` : `<span style="color: var(--ml-text-muted); font-size: 14px;">${civitaiLabel}</span>`;
-                titleHtml += ` ${versionLabel}`;
+                const linkHtml = modelUrl ? `<a href="${modelUrl}" target="_blank" style="color: #FF9800; font-size: 13px; font-weight: 600;">${civitaiLabel}</a>` : `<span style="color: #FF9800; font-size: 13px; font-weight: 600;">${civitaiLabel}</span>`;
+                titleHtml += ` ${linkHtml}`;
             }
-            // Add filename in quotes
-            if (missing.civitai_info.expected_filename) {
-                titleHtml += ` <span style="color: var(--ml-text-muted); font-size: 12px;">"${missing.civitai_info.expected_filename}"</span>`;
+            if (civitaiInfo.expected_filename) {
+                titleHtml += ` <span style="color: var(--ml-text-muted); font-size: 11px;">"${civitaiInfo.expected_filename}"</span>`;
             }
-        } else if (missing.civitai_info && missing.civitai_info.model_name) {
-            titleHtml += ` <span style="color: var(--ml-text-muted); font-size: 14px;">(${missing.civitai_info.model_name})</span>`;
         }
+        
         html += `<h3 class="ml-card-title">${titleHtml}</h3>`;
         html += `<div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">`;
         if (missing.category) {
@@ -4038,6 +4047,66 @@ class LinkerManagerDialog extends ComfyDialog {
     }
 
     /**
+     * Resolve URN asynchronously - fetch CivitAI info and update UI
+     */
+    async resolveUrnAsync(modelId, versionId, loadingElementId, modelUrl) {
+        console.log('resolveUrnAsync called:', modelId, versionId);
+        if (!modelId || !versionId) {
+            console.log('resolveUrnAsync: missing modelId or versionId');
+            return;
+        }
+        
+        try {
+            const payload = {
+                filename: modelId + '_' + versionId,
+                category: '',
+                is_urn: true,
+                model_id: modelId,
+                version_id: versionId
+            };
+            console.log('resolveUrnAsync payload:', JSON.stringify(payload));
+            
+            const response = await api.fetchApi('/model_linker/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            
+            console.log('resolveUrnAsync response status:', response.status);
+            
+            if (response.ok) {
+                const data = await response.json();
+                const loadingEl = document.getElementById(loadingElementId);
+                if (loadingEl && data.civitai) {
+                    const civitai = data.civitai;
+                    let label = civitai.name || 'Model';
+                    if (civitai.filename && civitai.filename !== civitai.name) {
+                        label += ` (${civitai.filename})`;
+                    }
+                    const url = modelUrl || `https://civitai.com/models/${modelId}?modelVersionId=${versionId}`;
+                    loadingEl.innerHTML = `<a href="${url}" target="_blank" style="color: #FF9800; font-size: 12px; font-weight: 600; text-decoration: none;">${label}</a>`;
+                } else if (loadingEl) {
+                    loadingEl.textContent = 'Not found';
+                    loadingEl.style.color = 'var(--ml-text-muted)';
+                }
+            } else {
+                const loadingEl = document.getElementById(loadingElementId);
+                if (loadingEl) {
+                    loadingEl.textContent = 'Error';
+                    loadingEl.style.color = '#f44336';
+                }
+            }
+        } catch (error) {
+            console.error('Model Linker: URN resolve error:', error);
+            const loadingEl = document.getElementById(loadingElementId);
+            if (loadingEl) {
+                loadingEl.textContent = 'Error';
+                loadingEl.style.color = '#f44336';
+            }
+        }
+    }
+
+    /**
      * Display search results
      */
     displaySearchResults(missing, data, container) {
@@ -4045,7 +4114,6 @@ class LinkerManagerDialog extends ComfyDialog {
 
         const popular = data.popular;
         const modelListResult = data.model_list;
-        // Backend sends these as objects, not arrays - handle both
         const hfResult = data.huggingface ? (Array.isArray(data.huggingface) ? data.huggingface[0] : data.huggingface) : null;
         const civitaiResult = data.civitai ? (Array.isArray(data.civitai) ? data.civitai[0] : data.civitai) : null;
         const hasResults = popular || modelListResult || hfResult || civitaiResult;

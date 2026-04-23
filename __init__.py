@@ -6,9 +6,14 @@
 @description: Extension for relinking missing models and downloading from HuggingFace/CivitAI
 """
 
-
 import logging
-from .core.log_system.log_funcs import log_debug, log_info, log_warn, log_error, log_exception
+from .core.log_system.log_funcs import (
+    log_debug,
+    log_info,
+    log_warn,
+    log_error,
+    log_exception,
+)
 
 # Web directory for JavaScript interface
 WEB_DIRECTORY = "./web"
@@ -91,6 +96,7 @@ class ModelLinkerExtension:
                     search_civitai_for_file,
                     search_civitai,
                     get_civitai_download_url,
+                    resolve_urn,
                 )
 
                 download_available = True
@@ -142,7 +148,9 @@ class ModelLinkerExtension:
                     result["missing_models"] = filtered_missing
                     result["total_missing"] = len(filtered_missing)
 
-                    # If download available, auto-search for download sources when no 100% local match
+                    # If download available, check for download sources only from LOCAL sources
+                    # (workflow_url, popular, model-list.json) - skip automatic online search
+                    # Online search is now only triggered on-demand via search button
                     if download_available:
                         for missing in result.get("missing_models", []):
                             # Check if there's a 100% local match
@@ -238,40 +246,9 @@ class ModelLinkerExtension:
                                     }
                                     continue
 
-                                # 3. Search HuggingFace (exact_only=True for downloads)
-                                hf_result = search_huggingface_for_file(
-                                    filename, exact_only=True
-                                )
-                                if hf_result:
-                                    missing["download_source"] = {
-                                        "source": "huggingface",
-                                        "url": hf_result.get("url"),
-                                        "filename": hf_result.get("filename"),
-                                        "name": hf_result.get("repo_id", ""),
-                                        "size": hf_result.get("size", ""),
-                                        "match_type": hf_result.get(
-                                            "match_type", "exact"
-                                        ),
-                                    }
-                                    continue
-
-                                # 4. Search CivitAI (exact_only=True for downloads)
-                                civitai_result = search_civitai_for_file(
-                                    filename, exact_only=True
-                                )
-                                if civitai_result:
-                                    missing["download_source"] = {
-                                        "source": "civitai",
-                                        "url": civitai_result.get(
-                                            "download_url"
-                                        ),  # CivitAI uses download_url
-                                        "filename": civitai_result.get("filename"),
-                                        "name": civitai_result.get("name", ""),
-                                        "size": civitai_result.get("size", ""),
-                                        "match_type": civitai_result.get(
-                                            "match_type", "exact"
-                                        ),
-                                    }
+                                # NOTE: Search for online sources (HuggingFace, CivitAI) is
+                                # now done on-demand via /model_linker/search endpoint
+                                # when user clicks "Search Online" button, not automatically
 
                     return web.json_response(result)
                 except Exception as e:
@@ -662,9 +639,15 @@ class ModelLinkerExtension:
                             else (str(is_urn_raw).lower() == "true")
                         )
 
-                        if not filename:
+                        # For URN-only requests, model_id and version_id are required instead of filename
+                        model_id = data.get("model_id")
+                        version_id = data.get("version_id")
+                        if not filename and not (is_urn and model_id and version_id):
                             return web.json_response(
-                                {"error": "Filename is required"}, status=400
+                                {
+                                    "error": "Filename is required for non-URN, or model_id+version_id for URN"
+                                },
+                                status=400,
                             )
 
                         # Debug logging
@@ -721,20 +704,23 @@ class ModelLinkerExtension:
                                 version_id = data.get("version_id")
 
                                 if model_id and version_id:
-                                    # Use direct download URL - no search needed
-                                    self.logger.info(
-                                        f"URN: Using direct download for model_id={model_id}, version_id={version_id}"
-                                    )
-                                    download_url = get_civitai_download_url(version_id)
-                                    results["civitai"] = {
-                                        "source": "civitai",
-                                        "name": filename,
-                                        "filename": filename,
-                                        "type": category,
-                                        "download_url": download_url,
-                                        "url": f"https://civitai.com/models/{model_id}",
-                                    }
-                                    results["found"] = True
+                                    # Use resolve_urn to get model info (cached)
+                                    model_info = resolve_urn(model_id, version_id)
+                                    if model_info:
+                                        download_url = get_civitai_download_url(
+                                            version_id
+                                        )
+                                        results["civitai"] = {
+                                            "source": "civitai",
+                                            "name": model_info.get("model_name"),
+                                            "filename": model_info.get(
+                                                "expected_filename"
+                                            ),
+                                            "type": category,
+                                            "download_url": download_url,
+                                            "url": f"https://civitai.com/models/{model_id}",
+                                        }
+                                        results["found"] = True
                                 elif category:
                                     # Fallback to search if no IDs
                                     self.logger.info(

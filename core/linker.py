@@ -10,7 +10,13 @@ import json
 from typing import Dict, Any, List, Optional, Tuple
 from urllib.parse import unquote
 
-from .log_system.log_funcs import log_debug, log_info, log_warn, log_error, log_exception
+from .log_system.log_funcs import (
+    log_debug,
+    log_info,
+    log_warn,
+    log_error,
+    log_exception,
+)
 from .scanner import get_model_files
 from .workflow_analyzer import analyze_workflow_models, identify_missing_models
 from .matcher import find_matches
@@ -227,24 +233,16 @@ def analyze_and_find_matches(
             missing["workflow_directory"] = url_info.get("directory", "")
             missing["url_source"] = url_info.get("source", "")
 
-    # Handle URNs: fetch expected filename from CivitAI
+    # Handle URNs: mark for async resolution by frontend
+    # No sync CivitAI calls here - frontend will fetch asynchronously
     for missing in missing_models:
         if missing.get("is_urn"):
-            urn = missing["urn"]
-            model_info = resolve_urn(urn["model_id"], urn["version_id"])
-            if model_info:
-                missing["civitai_info"] = {
-                    "model_name": model_info.get("model_name"),
-                    "version_name": model_info.get("version_name"),
-                }
-                missing["civitai_info"] = model_info
-                missing["expected_filename"] = model_info["expected_filename"]
-                log_debug(
-                    f"URN {missing['original_path']} -> {missing['expected_filename']}"
-                )
-
-            if "urn" in missing:
-                missing["urn_type"] = missing["urn"].get("type", "")
+            missing["needs_urn_resolve"] = True
+            urn = missing.get("urn")
+            if urn:
+                missing["urn_model_id"] = urn.get("model_id")
+                missing["urn_version_id"] = urn.get("version_id")
+                missing["urn_type"] = urn.get("type", "")
 
     # Find matches for each missing model
     missing_with_matches = []
