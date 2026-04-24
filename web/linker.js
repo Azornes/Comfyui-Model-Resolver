@@ -617,29 +617,29 @@ class LinkerManagerDialog extends ComfyDialog {
                         <table class="ml-info-table">
                             <tbody>
                                 <tr class="ml-info-file-row">
-                                    <td><span>File <span class="ml-info-help" title=""></span></span></td>
+                                    <td><span>File <span class="ml-info-help" title="Local filename or resolved model path used by this entry.">?</span></span></td>
                                     <td><span class="ml-info-file"></span></td>
                                 </tr>
                                 <tr class="ml-info-hash-row">
-                                    <td><span>Hash (sha256) <span class="ml-info-help" title=""></span></span></td>
+                                    <td><span>Hash (sha256) <span class="ml-info-help" title="SHA256 hash used to identify the exact model version on CivitAI.">?</span></span></td>
                                     <td><span class="ml-info-hash"></span></td>
                                 </tr>
                                 <tr class="ml-info-civitai-row">
-                                    <td><span>CivitAI <span class="ml-info-help" title=""></span></span></td>
+                                    <td><span>CivitAI <span class="ml-info-help" title="Direct link to the model or version page on CivitAI.">?</span></span></td>
                                     <td><span class="ml-info-civitai-link"></span></td>
                                 </tr>
                                 <tr class="ml-info-name-row">
-                                    <td><span>Name <span class="ml-info-help" title="The name for display."></span></span></td>
+                                    <td><span>Name <span class="ml-info-help" title="Display name returned from metadata or CivitAI for this model.">?</span></span></td>
                                     <td><span class="ml-info-name"></span></td>
                                 </tr>
                                 <tr class="ml-info-basemodel-row">
-                                    <td><span>Base Model <span class="ml-info-help" title=""></span></span></td>
+                                    <td><span>Base Model <span class="ml-info-help" title="Base model family this resource was trained or built on, for example SD1.5, SDXL or Flux.">?</span></span></td>
                                     <td><span class="ml-info-base-model"></span></td>
                                 </tr>
                                 <tr class="ml-info-trainedwords-row" style="display: none;">
                                     <td>
                                         <div class="ml-info-trained-words-label">
-                                            Trained Words <span class="ml-info-help" title="Trigger words/phrases for this model. Click words to select them, then copy the selection."></span>
+                                            Trained Words <span class="ml-info-help" title="Trigger words or phrases associated with this model. Click words to select them, then copy the selection.">?</span>
                                             <small class="ml-info-trained-words-meta">
                                                 <span class="ml-info-trained-words-count">0 selected</span>
                                                 <button type="button" class="ml-info-copy-trained-words" disabled>Copy</button>
@@ -652,12 +652,19 @@ class LinkerManagerDialog extends ComfyDialog {
                                     </td>
                                 </tr>
                                 <tr class="ml-info-clipskip-row" style="display: none;">
-                                    <td><span>Clip Skip <span class="ml-info-help" title="Recommended clip skip value."></span></span></td>
+                                    <td><span>Clip Skip <span class="ml-info-help" title="Recommended clip skip value when the model author provides one.">?</span></span></td>
                                     <td><span class="ml-info-clip-skip"></span></td>
                                 </tr>
                                 <tr class="ml-info-description-row" style="display: none;">
-                                    <td><span>Description <span class="ml-info-help" title="Model description from CivitAI."></span></span></td>
-                                    <td><span class="ml-info-description"></span></td>
+                                    <td><span>Description <span class="ml-info-help" title="Formatted description from CivitAI or local metadata. Use Show more to expand long content.">?</span></span></td>
+                                    <td>
+                                        <div class="ml-info-description-wrap">
+                                            <div class="ml-info-description"></div>
+                                            <div class="ml-info-description-actions" style="display: none;">
+                                                <button type="button" class="ml-info-description-toggle">Show more</button>
+                                            </div>
+                                        </div>
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>
@@ -686,6 +693,96 @@ class LinkerManagerDialog extends ComfyDialog {
         const text = String(value ?? '').trim();
         if (!text) return '';
         return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
+    }
+
+    sanitizeDescriptionHtml(html) {
+        const raw = String(html ?? '').trim();
+        if (!raw) return '';
+
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(`<div>${raw}</div>`, 'text/html');
+        const root = doc.body.firstElementChild;
+        if (!root) return this.escapeHtml(raw);
+
+        const allowedTags = new Set([
+            'p', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'code', 'pre',
+            'blockquote', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+            'a', 'span'
+        ]);
+        const allowedStyles = new Set(['color']);
+
+        const sanitizeNode = (node) => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                return;
+            }
+
+            if (node.nodeType !== Node.ELEMENT_NODE) {
+                node.remove();
+                return;
+            }
+
+            const tag = node.tagName.toLowerCase();
+            if (!allowedTags.has(tag)) {
+                const parent = node.parentNode;
+                if (!parent) {
+                    node.remove();
+                    return;
+                }
+
+                while (node.firstChild) {
+                    parent.insertBefore(node.firstChild, node);
+                }
+                parent.removeChild(node);
+                return;
+            }
+
+            const attrs = Array.from(node.attributes);
+            for (const attr of attrs) {
+                const name = attr.name.toLowerCase();
+                if (name.startsWith('on') || name === 'id' || name === 'class' || name.startsWith('data-')) {
+                    node.removeAttribute(attr.name);
+                    continue;
+                }
+
+                if (name === 'href' && tag === 'a') {
+                    const href = node.getAttribute('href') || '';
+                    if (!/^https?:\/\//i.test(href)) {
+                        node.removeAttribute('href');
+                    } else {
+                        node.setAttribute('target', '_blank');
+                        node.setAttribute('rel', 'noopener noreferrer');
+                    }
+                    continue;
+                }
+
+                if (name === 'style') {
+                    const safeStyles = [];
+                    const styleValue = node.getAttribute('style') || '';
+                    for (const part of styleValue.split(';')) {
+                        const [prop, value] = part.split(':').map(v => v?.trim());
+                        if (!prop || !value) continue;
+                        if (allowedStyles.has(prop.toLowerCase())) {
+                            safeStyles.push(`${prop}: ${value}`);
+                        }
+                    }
+                    if (safeStyles.length) {
+                        node.setAttribute('style', safeStyles.join('; '));
+                    } else {
+                        node.removeAttribute('style');
+                    }
+                    continue;
+                }
+
+                if (!(tag === 'a' && (name === 'target' || name === 'rel')) ) {
+                    node.removeAttribute(attr.name);
+                }
+            }
+
+            Array.from(node.childNodes).forEach(child => sanitizeNode(child));
+        };
+
+        Array.from(root.childNodes).forEach(child => sanitizeNode(child));
+        return root.innerHTML;
     }
 
     normalizeTrainedWords(words) {
@@ -772,6 +869,16 @@ class LinkerManagerDialog extends ComfyDialog {
                         copyBtn.textContent = 'Copy';
                     }
                 }, 1200);
+                return;
+            }
+
+            const descToggleBtn = event.target.closest('.ml-info-description-toggle');
+            if (descToggleBtn && dialog.contains(descToggleBtn)) {
+                const descEl = dialog.querySelector('.ml-info-description');
+                if (!descEl) return;
+
+                const isExpanded = descEl.classList.toggle('is-expanded');
+                descToggleBtn.textContent = isExpanded ? 'Show less' : 'Show more';
             }
         });
     }
@@ -1017,7 +1124,34 @@ class LinkerManagerDialog extends ComfyDialog {
         if (descEl) {
             const desc = data.description || data.model_description || data.modelDescription || '';
             if (desc) {
-                descEl.textContent = desc.substring(0, 200) + (desc.length > 200 ? '...' : '');
+                const actionsEl = dialog.querySelector('.ml-info-description-actions');
+                const toggleBtn = dialog.querySelector('.ml-info-description-toggle');
+
+                let sanitizedHtml = '';
+                try {
+                    sanitizedHtml = this.sanitizeDescriptionHtml(desc);
+                } catch (error) {
+                    console.error('Model Linker: Failed to sanitize description HTML:', error);
+                }
+
+                const fallbackText = this.escapeHtml(String(desc).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+                const finalHtml = sanitizedHtml && sanitizedHtml.trim() ? sanitizedHtml : `<p>${fallbackText}</p>`;
+                const textOnly = finalHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+                descEl.innerHTML = finalHtml;
+                descEl.classList.remove('is-expanded');
+
+                const shouldCollapse = textOnly.length > 520 || finalHtml.length > 900;
+                if (actionsEl) {
+                    actionsEl.style.display = shouldCollapse ? '' : 'none';
+                }
+                if (toggleBtn) {
+                    toggleBtn.textContent = 'Show more';
+                }
+                if (!shouldCollapse) {
+                    descEl.classList.add('is-expanded');
+                }
+
                 const row = descEl.closest('tr');
                 if (row) row.style.display = '';
             } else {
@@ -1642,38 +1776,78 @@ class LinkerManagerDialog extends ComfyDialog {
                 justify-content: flex-end;
                 align-items: center;
                 gap: 10px;
+                flex-wrap: wrap;
                 padding: 16px 20px;
                 background: linear-gradient(to top, var(--ml-bg) 0%, var(--ml-bg) 70%, transparent 100%);
                 border-top: 1px solid var(--ml-border);
+            }
+            .ml-footer-btn {
+                min-height: 34px;
+                min-width: 152px;
+                padding: 7px 14px;
+                font-size: 12px;
+                border-radius: 9px;
+                line-height: 1;
             }
 
             /* Tabs */
             .ml-tabs {
                 display: flex;
-                gap: 4px;
-                padding: 0 20px;
+                align-items: flex-end;
+                gap: 8px;
+                padding: 10px 20px 0 20px;
                 margin-bottom: 0;
-                background-color: var(--ml-bg, #222);
-                border-bottom: 1px solid var(--ml-border);
+                background:
+                    linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%);
+                position: relative;
+                z-index: 2;
             }
             .ml-tab {
-                padding: 12px 20px;
-                background: transparent;
-                border: none;
+                position: relative;
+                padding: 11px 18px 12px 18px;
+                background: linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.025) 100%);
+                border: 1px solid rgba(255,255,255,0.08);
+                border-bottom: none;
+                border-top-left-radius: 14px;
+                border-top-right-radius: 14px;
                 color: var(--ml-text-muted, #888);
                 font-size: 13px;
-                font-weight: 500;
+                font-weight: 600;
                 cursor: pointer;
-                border-bottom: 2px solid transparent;
-                transition: all 0.2s ease;
+                box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+                transform: translateY(6px);
+                opacity: 0.82;
+                transition: transform 0.18s ease, opacity 0.18s ease, color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
             }
             .ml-tab:hover {
                 color: var(--ml-text, #e0e0e0);
-                background: rgba(255,255,255,0.05);
+                background: linear-gradient(180deg, rgba(255,255,255,0.075) 0%, rgba(255,255,255,0.04) 100%);
+                border-color: rgba(255,255,255,0.12);
+                transform: translateY(3px);
+                opacity: 0.96;
             }
             .ml-tab.ml-tab-active {
-                color: var(--ml-accent, #4CAF50);
-                border-bottom-color: var(--ml-accent, #4CAF50);
+                color: var(--ml-text, #eef2f7);
+                background: var(--ml-bg, #222);
+                border-color: rgba(255,255,255,0.1);
+                box-shadow:
+                    0 -10px 24px rgba(0,0,0,0.14),
+                    0 10px 20px rgba(0,0,0,0.16),
+                    inset 0 1px 0 rgba(255,255,255,0.05);
+                transform: translateY(1px);
+                opacity: 1;
+                z-index: 3;
+            }
+            .ml-tab.ml-tab-active::after {
+                content: "";
+                position: absolute;
+                left: 0;
+                right: 0;
+                bottom: -8px;
+                height: 10px;
+                background: var(--ml-bg, #222);
+                border-bottom-left-radius: 10px;
+                border-bottom-right-radius: 10px;
             }
 
             /* Loaded Models Tab */
@@ -2034,18 +2208,115 @@ class LinkerManagerDialog extends ComfyDialog {
                 color: #d8ebff;
                 box-shadow: 0 0 0 1px rgba(78,161,255,0.15) inset;
             }
+            .ml-info-description-wrap {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .ml-info-description {
+                line-height: 1.55;
+                color: var(--input-text, #e0e0e0);
+                max-height: 220px;
+                overflow: hidden;
+                position: relative;
+            }
+            .ml-info-description:not(.is-expanded)::after {
+                content: "";
+                position: absolute;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                height: 56px;
+                background: linear-gradient(180deg, rgba(32,32,32,0) 0%, rgba(32,32,32,0.92) 100%);
+                pointer-events: none;
+            }
+            .ml-info-description.is-expanded {
+                max-height: none;
+                overflow: visible;
+            }
+            .ml-info-description p,
+            .ml-info-description ul,
+            .ml-info-description ol,
+            .ml-info-description blockquote,
+            .ml-info-description pre {
+                margin: 0 0 10px 0;
+            }
+            .ml-info-description h1,
+            .ml-info-description h2,
+            .ml-info-description h3,
+            .ml-info-description h4,
+            .ml-info-description h5,
+            .ml-info-description h6 {
+                margin: 14px 0 8px 0;
+                color: var(--ml-text);
+                line-height: 1.3;
+            }
+            .ml-info-description ul,
+            .ml-info-description ol {
+                padding-left: 18px;
+            }
+            .ml-info-description code,
+            .ml-info-description pre {
+                background: rgba(255,255,255,0.05);
+                border-radius: 6px;
+            }
+            .ml-info-description code {
+                padding: 1px 5px;
+                font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+                font-size: 12px;
+            }
+            .ml-info-description pre {
+                padding: 10px 12px;
+                overflow-x: auto;
+                white-space: pre-wrap;
+            }
+            .ml-info-description a {
+                color: var(--ml-link-color, #8fc2ff);
+                text-decoration: none;
+            }
+            .ml-info-description a:hover {
+                text-decoration: underline;
+            }
+            .ml-info-description-actions {
+                display: flex;
+                justify-content: flex-end;
+            }
+            .ml-info-description-toggle {
+                border: 1px solid rgba(255,255,255,0.12);
+                background: rgba(255,255,255,0.05);
+                color: var(--ml-link-color, #8fc2ff);
+                border-radius: 999px;
+                padding: 4px 12px;
+                font-size: 11px;
+                cursor: pointer;
+                transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+            }
+            .ml-info-description-toggle:hover {
+                background: rgba(78,161,255,0.14);
+                border-color: rgba(78,161,255,0.28);
+                color: #d6eaff;
+            }
             .ml-info-help {
-                display: inline-block;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
                 width: 14px;
                 height: 14px;
-                background: rgba(255,255,255,0.1);
+                background: rgba(255,255,255,0.14);
+                color: var(--ml-text-muted, #b4becb);
                 border-radius: 50%;
                 font-size: 10px;
-                text-align: center;
-                line-height: 14px;
+                font-weight: 700;
                 cursor: help;
                 margin-left: 4px;
                 vertical-align: middle;
+                border: 1px solid rgba(255,255,255,0.12);
+                user-select: none;
+            }
+            .ml-info-help:hover {
+                background: rgba(78,161,255,0.18);
+                color: #d9ecff;
+                border-color: rgba(78,161,255,0.3);
             }
             
             /* Images Section */
@@ -3010,6 +3281,7 @@ class LinkerManagerDialog extends ComfyDialog {
 
     switchTab(tab) {
         this.activeTab = tab;
+        this.animateTabContentTransition();
         
         if (tab === 'missing') {
             this.missingTab.classList.add('ml-tab-active');
@@ -3743,38 +4015,26 @@ class LinkerManagerDialog extends ComfyDialog {
     
     createFooter() {
         // Store reference to download all button so we can update its text
-        this.downloadAllButton = $el("button.ml-btn.ml-btn-download", {
-            onclick: () => this.handleDownloadAllClick(),
-            style: {
-                padding: "10px 20px",
-                fontSize: "13px"
-            }
+        this.downloadAllButton = $el("button.ml-btn.ml-btn-download.ml-footer-btn", {
+            onclick: () => this.handleDownloadAllClick()
         }, [
             $el("span.ml-btn-icon", { textContent: "☁" }),
             $el("span", { textContent: " Download All Missing" })
         ]);
         
         // Auto-resolve button (secondary style)
-        this.autoResolveButton = $el("button.ml-btn.ml-btn-secondary", {
-            onclick: () => this.autoResolve100Percent(),
-            style: {
-                padding: "10px 20px",
-                fontSize: "13px"
-            }
+        this.autoResolveButton = $el("button.ml-btn.ml-btn-secondary.ml-footer-btn", {
+            onclick: () => this.autoResolve100Percent()
         }, [
             $el("span.ml-btn-icon", { textContent: "🔗" }),
             $el("span", { textContent: " Auto-Link 100%" })
         ]);
         
         // Apply pending resolutions button
-        this.applyPendingBtn = $el("button.ml-btn.ml-btn-primary", {
+        this.applyPendingBtn = $el("button.ml-btn.ml-btn-primary.ml-footer-btn", {
             id: "apply-pending-resolutions",
             textContent: "Apply Selected (0)",
-            onclick: () => this.applyPendingResolutions(),
-            style: {
-                padding: "10px 20px",
-                fontSize: "13px"
-            }
+            onclick: () => this.applyPendingResolutions()
         });
         
         return $el("div.ml-footer", {
@@ -3790,6 +4050,25 @@ class LinkerManagerDialog extends ComfyDialog {
             this.applyPendingBtn,
             this.downloadAllButton
         ]);
+    }
+
+    animateTabContentTransition() {
+        if (!this.contentElement?.animate) return;
+
+        try {
+            this.contentElement.animate(
+                [
+                    { opacity: 0.72, transform: 'translateY(7px)' },
+                    { opacity: 1, transform: 'translateY(0)' }
+                ],
+                {
+                    duration: 180,
+                    easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)'
+                }
+            );
+        } catch (error) {
+            console.warn('Model Linker: tab content animation failed', error);
+        }
     }
     
     /**
