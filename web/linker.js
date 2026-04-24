@@ -562,9 +562,11 @@ class LinkerManagerDialog extends ComfyDialog {
     showModelInfoDialog(loraName, modelData) {
         // Create info dialog element
         const dialog = this.createInfoDialog(loraName, modelData);
+        this.restoreInfoDialogSize(dialog);
         
         // Show the dialog
         document.body.appendChild(dialog);
+        this.bindInfoDialogResizePersistence(dialog);
         
         // Add close handlers
         const closeBtn = dialog.querySelector('.ml-info-dialog-close');
@@ -598,6 +600,7 @@ class LinkerManagerDialog extends ComfyDialog {
         
         const dialog = document.createElement('div');
         dialog.className = 'ml-info-dialog-backdrop';
+        dialog._selectedTrainedWords = new Set();
         dialog.innerHTML = `
             <div class="ml-info-dialog">
                 <div class="ml-info-dialog-header">
@@ -634,8 +637,19 @@ class LinkerManagerDialog extends ComfyDialog {
                                     <td><span class="ml-info-base-model"></span></td>
                                 </tr>
                                 <tr class="ml-info-trainedwords-row" style="display: none;">
-                                    <td><span>Trained Words <span class="ml-info-help" title="Trigger words/phrases for this Lora."></span></span></td>
-                                    <td><span class="ml-info-trained-words"></span></td>
+                                    <td>
+                                        <div class="ml-info-trained-words-label">
+                                            Trained Words <span class="ml-info-help" title="Trigger words/phrases for this model. Click words to select them, then copy the selection."></span>
+                                            <small class="ml-info-trained-words-meta">
+                                                <span class="ml-info-trained-words-count">0 selected</span>
+                                                <button type="button" class="ml-info-copy-trained-words" disabled>Copy</button>
+                                            </small>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="ml-info-trained-words-hint">Click words to select them.</div>
+                                        <div class="ml-info-trained-words"></div>
+                                    </td>
                                 </tr>
                                 <tr class="ml-info-clipskip-row" style="display: none;">
                                     <td><span>Clip Skip <span class="ml-info-help" title="Recommended clip skip value."></span></span></td>
@@ -657,6 +671,170 @@ class LinkerManagerDialog extends ComfyDialog {
         `;
         
         return dialog;
+    }
+
+    escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    truncateText(value, maxLength = 160) {
+        const text = String(value ?? '').trim();
+        if (!text) return '';
+        return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
+    }
+
+    normalizeTrainedWords(words) {
+        if (Array.isArray(words)) {
+            return [...new Set(words.map(word => String(word || '').trim()).filter(Boolean))];
+        }
+
+        if (typeof words === 'string') {
+            return [...new Set(
+                words
+                    .split(/[\n,|;]/)
+                    .map(word => word.trim())
+                    .filter(Boolean)
+            )];
+        }
+
+        return [];
+    }
+
+    updateSelectedTrainedWordsSummary(dialog) {
+        if (!dialog) return;
+
+        const countEl = dialog.querySelector('.ml-info-trained-words-count');
+        const copyBtn = dialog.querySelector('.ml-info-copy-trained-words');
+        const selected = dialog._selectedTrainedWords instanceof Set
+            ? Array.from(dialog._selectedTrainedWords)
+            : [];
+
+        if (countEl) {
+            countEl.textContent = `${selected.length} selected`;
+        }
+        if (copyBtn) {
+            copyBtn.disabled = selected.length === 0;
+            copyBtn.textContent = 'Copy';
+        }
+    }
+
+    bindInfoDialogInteractions(dialog) {
+        if (!dialog || dialog.dataset.mlInfoBound === 'true') return;
+        dialog.dataset.mlInfoBound = 'true';
+
+        dialog.addEventListener('click', async (event) => {
+            const wordBtn = event.target.closest('.ml-info-trained-word');
+            if (wordBtn && dialog.contains(wordBtn)) {
+                const word = wordBtn.dataset.word || '';
+                if (word) {
+                    if (!(dialog._selectedTrainedWords instanceof Set)) {
+                        dialog._selectedTrainedWords = new Set();
+                    }
+
+                    if (dialog._selectedTrainedWords.has(word)) {
+                        dialog._selectedTrainedWords.delete(word);
+                        wordBtn.classList.remove('is-selected');
+                        wordBtn.setAttribute('aria-pressed', 'false');
+                    } else {
+                        dialog._selectedTrainedWords.add(word);
+                        wordBtn.classList.add('is-selected');
+                        wordBtn.setAttribute('aria-pressed', 'true');
+                    }
+
+                    this.updateSelectedTrainedWordsSummary(dialog);
+                }
+                return;
+            }
+
+            const copyBtn = event.target.closest('.ml-info-copy-trained-words');
+            if (copyBtn && dialog.contains(copyBtn)) {
+                const words = dialog._selectedTrainedWords instanceof Set
+                    ? Array.from(dialog._selectedTrainedWords)
+                    : [];
+
+                if (!words.length) return;
+
+                try {
+                    await navigator.clipboard.writeText(words.join(', '));
+                    copyBtn.textContent = 'Copied';
+                } catch (error) {
+                    console.error('Model Linker: Failed to copy trained words:', error);
+                    copyBtn.textContent = 'Failed';
+                }
+
+                setTimeout(() => {
+                    if (copyBtn.isConnected) {
+                        copyBtn.textContent = 'Copy';
+                    }
+                }, 1200);
+            }
+        });
+    }
+
+    getInfoDialogElement(dialog) {
+        return dialog?.querySelector?.('.ml-info-dialog') || null;
+    }
+
+    restoreInfoDialogSize(dialog) {
+        const panel = this.getInfoDialogElement(dialog);
+        if (!panel) return;
+
+        try {
+            const saved = JSON.parse(localStorage.getItem('model_linker_info_dialog_size') || 'null');
+            if (!saved || typeof saved !== 'object') return;
+
+            const width = Number(saved.w);
+            const height = Number(saved.h);
+            if (!Number.isFinite(width) || !Number.isFinite(height)) return;
+
+            const maxWidth = Math.floor(window.innerWidth * 0.9);
+            const maxHeight = Math.floor(window.innerHeight * 0.8);
+            const clampedWidth = Math.max(420, Math.min(width, maxWidth));
+            const clampedHeight = Math.max(320, Math.min(height, maxHeight));
+
+            panel.style.width = `${clampedWidth}px`;
+            panel.style.height = `${clampedHeight}px`;
+        } catch (error) {
+            console.warn('Model Linker: Failed to restore info dialog size:', error);
+        }
+    }
+
+    saveInfoDialogSize(dialog) {
+        const panel = this.getInfoDialogElement(dialog);
+        if (!panel) return;
+
+        const rect = panel.getBoundingClientRect();
+        const width = Math.round(rect.width);
+        const height = Math.round(rect.height);
+        if (!width || !height) return;
+
+        try {
+            localStorage.setItem('model_linker_info_dialog_size', JSON.stringify({ w: width, h: height }));
+        } catch (error) {
+            console.warn('Model Linker: Failed to save info dialog size:', error);
+        }
+    }
+
+    bindInfoDialogResizePersistence(dialog) {
+        const panel = this.getInfoDialogElement(dialog);
+        if (!panel || typeof ResizeObserver === 'undefined') return;
+        if (dialog._infoDialogResizeObserver) return;
+
+        let resizeSaveTimer = null;
+        const observer = new ResizeObserver(() => {
+            clearTimeout(resizeSaveTimer);
+            resizeSaveTimer = setTimeout(() => this.saveInfoDialogSize(dialog), 180);
+            dialog._infoDialogResizeSaveTimer = resizeSaveTimer;
+        });
+
+        observer.observe(panel);
+        dialog._infoDialogResizeObserver = observer;
+        dialog._infoDialogResizeSaveTimer = resizeSaveTimer;
     }
     
     /**
@@ -692,6 +870,7 @@ class LinkerManagerDialog extends ComfyDialog {
     updateInfoDialogWithData(dialog, data) {
         const loadingDiv = dialog.querySelector('.ml-info-dialog-loading');
         const bodyDiv = dialog.querySelector('.ml-info-dialog-body');
+        this.bindInfoDialogInteractions(dialog);
         
         if (loadingDiv) loadingDiv.style.display = 'none';
         if (bodyDiv) bodyDiv.style.display = 'block';
@@ -796,11 +975,23 @@ class LinkerManagerDialog extends ComfyDialog {
         // Update trained words
         const trainedWordsEl = dialog.querySelector('.ml-info-trained-words');
         if (trainedWordsEl) {
-            const words = data.trained_words || data.trainedWords || [];
-            if (Array.isArray(words) && words.length > 0) {
-                trainedWordsEl.textContent = words.join(', ');
+            const words = this.normalizeTrainedWords(data.trained_words || data.trainedWords || []);
+            if (words.length > 0) {
+                dialog._selectedTrainedWords = new Set();
+                trainedWordsEl.innerHTML = `<div class="ml-info-trained-words-list">${words.map(word => `
+                    <button
+                        type="button"
+                        class="ml-info-trained-word"
+                        data-word="${this.escapeHtml(word)}"
+                        title="${this.escapeHtml(word)}"
+                        aria-pressed="false"
+                    >
+                        ${this.escapeHtml(word)}
+                    </button>
+                `).join('')}</div>`;
                 const row = trainedWordsEl.closest('tr');
                 if (row) row.style.display = '';
+                this.updateSelectedTrainedWordsSummary(dialog);
             } else {
                 const row = trainedWordsEl.closest('tr');
                 if (row) row.style.display = 'none';
@@ -844,33 +1035,39 @@ class LinkerManagerDialog extends ComfyDialog {
      */
     updateInfoDialogImages(dialog, images) {
         const imagesContainer = dialog.querySelector('.ml-info-images');
-        if (!imagesContainer || !images.length) return;
-        
-        let imagesHtml = '<div class="ml-info-images-header">Example Images</div><div class="ml-info-images-grid">';
-        
-        for (const img of images.slice(0, 6)) {
-            if (!img.url) continue;
-            
-            let caption = '';
+        if (!imagesContainer) return;
+        if (!images.length) {
+            imagesContainer.innerHTML = '';
+            return;
+        }
+
+        const visibleImages = images.slice(0, 8).filter(img => img?.url);
+
+        const renderImageCard = (img) => {
+            const captionParts = [];
             if (img.civitaiUrl) {
-                caption += `<a href="${img.civitaiUrl}" target="_blank" class="ml-info-image-link">civitai</a>`;
+                captionParts.push(`<a href="${this.escapeHtml(img.civitaiUrl)}" target="_blank" rel="noopener noreferrer" class="ml-info-image-link">civitai</a>`);
             }
-            if (img.seed) caption += `<span><label>seed</label> ${img.seed}</span>`;
-            if (img.steps) caption += `<span><label>steps</label> ${img.steps}</span>`;
-            if (img.cfg) caption += `<span><label>cfg</label> ${img.cfg}</span>`;
-            if (img.sampler) caption += `<span><label>sampler</label> ${img.sampler}</span>`;
-            if (img.positive) caption += `<span><label>positive</label> ${img.positive.substring(0, 100)}${img.positive.length > 100 ? '...' : ''}</span>`;
-            
-            imagesHtml += `
+            if (img.seed) captionParts.push(`<span><label>seed</label> ${this.escapeHtml(img.seed)}</span>`);
+            if (img.steps) captionParts.push(`<span><label>steps</label> ${this.escapeHtml(img.steps)}</span>`);
+            if (img.cfg) captionParts.push(`<span><label>cfg</label> ${this.escapeHtml(img.cfg)}</span>`);
+            if (img.sampler) captionParts.push(`<span><label>sampler</label> ${this.escapeHtml(img.sampler)}</span>`);
+            if (img.model) captionParts.push(`<span><label>model</label> ${this.escapeHtml(this.truncateText(img.model, 72))}</span>`);
+            if (img.positive) captionParts.push(`<span><label>positive</label> ${this.escapeHtml(this.truncateText(img.positive, 180))}</span>`);
+            if (img.negative) captionParts.push(`<span><label>negative</label> ${this.escapeHtml(this.truncateText(img.negative, 180))}</span>`);
+
+            return `
                 <div class="ml-info-image-item">
                     <figure>
-                        <img src="${img.url}" alt="Example" loading="lazy" />
-                        <figcaption>${caption}</figcaption>
+                        <img src="${this.escapeHtml(img.url)}" alt="Example" loading="lazy" />
+                        <figcaption>${captionParts.join('')}</figcaption>
                     </figure>
                 </div>
             `;
-        }
-        
+        };
+
+        let imagesHtml = '<div class="ml-info-images-header">Example Images</div><div class="ml-info-images-layout">';
+        imagesHtml += visibleImages.map(renderImageCard).join('');
         imagesHtml += '</div>';
         imagesContainer.innerHTML = imagesHtml;
     }
@@ -889,6 +1086,16 @@ class LinkerManagerDialog extends ComfyDialog {
      * Close the info dialog
      */
     closeInfoDialog(dialog) {
+        if (dialog?._infoDialogResizeObserver) {
+            dialog._infoDialogResizeObserver.disconnect();
+            dialog._infoDialogResizeObserver = null;
+        }
+        if (dialog?._infoDialogResizeSaveTimer) {
+            clearTimeout(dialog._infoDialogResizeSaveTimer);
+            dialog._infoDialogResizeSaveTimer = null;
+        }
+        this.saveInfoDialogSize(dialog);
+
         if (dialog && dialog.parentNode) {
             dialog.parentNode.removeChild(dialog);
         }
@@ -1595,10 +1802,13 @@ class LinkerManagerDialog extends ComfyDialog {
                 width: 500px;
                 max-width: 90vw;
                 max-height: 80vh;
+                min-width: 420px;
+                min-height: 320px;
                 overflow: hidden;
                 display: flex;
                 flex-direction: column;
                 box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+                resize: both;
             }
             .ml-info-dialog-header {
                 display: flex;
@@ -1759,6 +1969,71 @@ class LinkerManagerDialog extends ComfyDialog {
                 color: var(--input-text, #e0e0e0);
                 word-break: break-word;
             }
+            .ml-info-trained-words-label {
+                display: flex;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: 6px;
+            }
+            .ml-info-trained-words-meta {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                font-size: 11px;
+                color: var(--ml-text-muted, #888);
+            }
+            .ml-info-trained-words-hint {
+                margin-bottom: 8px;
+                font-size: 11px;
+                color: var(--ml-text-muted, #888);
+            }
+            .ml-info-copy-trained-words {
+                border: 1px solid rgba(255,255,255,0.12);
+                background: rgba(255,255,255,0.05);
+                color: var(--ml-link-color, #8fc2ff);
+                border-radius: 999px;
+                padding: 2px 10px;
+                font-size: 11px;
+                cursor: pointer;
+                transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+            }
+            .ml-info-copy-trained-words:hover:not(:disabled) {
+                background: rgba(78,161,255,0.14);
+                border-color: rgba(78,161,255,0.28);
+                color: #d6eaff;
+            }
+            .ml-info-copy-trained-words:disabled {
+                opacity: 0.45;
+                cursor: default;
+            }
+            .ml-info-trained-words-list {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                align-items: flex-start;
+            }
+            .ml-info-trained-word {
+                border: 1px solid rgba(255,255,255,0.1);
+                background: rgba(255,255,255,0.04);
+                color: var(--ml-text);
+                border-radius: 999px;
+                padding: 6px 10px;
+                font-size: 12px;
+                line-height: 1.2;
+                cursor: pointer;
+                transition: transform 0.14s ease, background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+            }
+            .ml-info-trained-word:hover {
+                transform: translateY(-1px);
+                background: rgba(255,255,255,0.07);
+                border-color: rgba(255,255,255,0.18);
+            }
+            .ml-info-trained-word.is-selected {
+                background: rgba(78,161,255,0.18);
+                border-color: rgba(78,161,255,0.4);
+                color: #d8ebff;
+                box-shadow: 0 0 0 1px rgba(78,161,255,0.15) inset;
+            }
             .ml-info-help {
                 display: inline-block;
                 width: 14px;
@@ -1787,38 +2062,82 @@ class LinkerManagerDialog extends ComfyDialog {
                 letter-spacing: 0.5px;
                 margin-bottom: 12px;
             }
-            .ml-info-images-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-                gap: 12px;
+            .ml-info-images-layout {
+                column-count: 3;
+                column-gap: 14px;
             }
             .ml-info-image-item {
                 border-radius: 6px;
                 overflow: hidden;
                 background: rgba(0,0,0,0.2);
+                border: 1px solid rgba(255,255,255,0.06);
+                break-inside: avoid;
+                margin-bottom: 14px;
+            }
+            .ml-info-image-item figure {
+                margin: 0;
+                position: relative;
+                display: block;
+                background: rgba(0,0,0,0.3);
             }
             .ml-info-image-item img {
                 width: 100%;
                 height: auto;
                 display: block;
+                object-fit: contain;
+                transition: transform 0.24s ease, filter 0.24s ease;
             }
             .ml-info-image-item figcaption {
-                padding: 8px;
+                position: absolute;
+                inset: auto 0 0 0;
+                max-height: 60%;
+                overflow-y: auto;
+                padding: 10px;
                 font-size: 11px;
-                color: var(--ml-text-muted, #888);
+                color: #e9eef5;
+                background: linear-gradient(180deg, rgba(7,10,14,0) 0%, rgba(7,10,14,0.82) 16%, rgba(7,10,14,0.94) 100%);
+                opacity: 0;
+                transform: translateY(10px);
+                transition: opacity 0.2s ease, transform 0.2s ease;
+                pointer-events: none;
             }
             .ml-info-image-item figcaption span {
                 display: block;
-                margin-bottom: 2px;
+                margin-bottom: 4px;
+                line-height: 1.4;
             }
             .ml-info-image-item figcaption span label {
                 font-weight: 600;
+                color: #b9c8d8;
+                margin-right: 4px;
+                text-transform: lowercase;
             }
             .ml-info-image-link {
-                color: #2196F3;
+                color: #8fc2ff;
                 text-decoration: none;
-                display: block;
-                margin-bottom: 4px;
+                display: inline-flex;
+                margin-bottom: 6px;
+                pointer-events: auto;
+                font-weight: 700;
+            }
+            .ml-info-image-item:hover img {
+                transform: scale(1.01);
+                filter: brightness(0.82);
+            }
+            .ml-info-image-item:hover figcaption,
+            .ml-info-image-item:focus-within figcaption {
+                opacity: 1;
+                transform: translateY(0);
+            }
+            @media (max-width: 900px) {
+                .ml-info-images-layout {
+                    column-count: 2;
+                }
+            }
+            @media (max-width: 640px) {
+                .ml-info-images-layout {
+                    column-count: 1;
+                }
             }
             
             /* CivitAI Logo */
