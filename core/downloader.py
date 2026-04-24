@@ -96,11 +96,31 @@ def get_download_directory(category: str) -> Optional[str]:
 
     folder_key = category_map.get(category.lower(), category.lower())
 
+    def _normalize(path_value: str) -> str:
+        return os.path.normcase(os.path.abspath(path_value))
+
+    def _is_within(path_value: str, root_value: str) -> bool:
+        try:
+            return os.path.commonpath([_normalize(path_value), _normalize(root_value)]) == _normalize(root_value)
+        except Exception:
+            return False
+
+    def _choose_preferred_path(paths: List[str]) -> Optional[str]:
+        if not paths:
+            return None
+
+        comfy_root = os.path.dirname(os.path.abspath(getattr(folder_paths, "__file__", "")))
+        if comfy_root:
+            redirected_paths = [path for path in paths if not _is_within(path, comfy_root)]
+            if redirected_paths:
+                return redirected_paths[0]
+
+        return paths[0]
+
     try:
         paths = folder_paths.get_folder_paths(folder_key)
         if paths:
-            # Return the first path (usually the main models directory)
-            return paths[0]
+            return _choose_preferred_path(paths)
 
         # If category not found, try to get any models directory as fallback
         all_names = folder_paths.get_folder_names()
@@ -108,7 +128,7 @@ def get_download_directory(category: str) -> Optional[str]:
             # Fall back to first available directory
             fallback_paths = folder_paths.get_folder_paths(all_names[0])
             if fallback_paths:
-                return fallback_paths[0]
+                return _choose_preferred_path(fallback_paths)
     except Exception as e:
         log_debug(f"Could not get folder path for {folder_key}: {e}")
 

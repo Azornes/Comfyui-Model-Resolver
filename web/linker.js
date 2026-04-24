@@ -16,6 +16,8 @@ class LinkerManagerDialog extends ComfyDialog {
         this.currentWorkflow = null;
         this.missingModels = [];
         this.allModels = null; // list of all available models for dropdown
+        this.downloadDirectories = null;
+        this.downloadSubfolders = new Map();
         this.pendingResolutions = [];
         this.pendingIndex = new Map(); // key -> index in pendingResolutions
         this.activeDownloads = {};  // Track active downloads
@@ -254,6 +256,7 @@ class LinkerManagerDialog extends ComfyDialog {
             html += `<br><span class="ml-muted-note" style="display:inline-block; margin-top: 8px;">Direct CivitAI download can require an API key for some models.</span>`;
         }
         html += `</div>`;
+        html += this.renderDownloadTargetControls(missing, downloadSource.directory || downloadSource.category || 'checkpoints');
         html += `</div>`;
         return html;
     }
@@ -1910,6 +1913,71 @@ class LinkerManagerDialog extends ComfyDialog {
                 font-size: 12px;
                 color: var(--ml-text-muted);
             }
+            .ml-download-target {
+                margin-top: 10px;
+                padding-top: 10px;
+                border-top: 1px solid rgba(255,255,255,0.06);
+                display: grid;
+                gap: 8px;
+            }
+            .ml-download-target-row {
+                display: grid;
+                gap: 6px;
+            }
+            .ml-download-target-label {
+                font-size: 11px;
+                font-weight: 700;
+                color: var(--ml-text-muted);
+                text-transform: uppercase;
+                letter-spacing: 0.06em;
+            }
+            .ml-download-target-input,
+            .ml-download-target-select {
+                width: 100%;
+                padding: 8px 10px;
+                background: rgba(255,255,255,0.04);
+                color: var(--ml-text);
+                border: 1px solid var(--ml-border);
+                border-radius: 10px;
+                font-size: 12px;
+                outline: none;
+            }
+            .ml-download-target-input:focus,
+            .ml-download-target-select:focus {
+                border-color: rgba(78,161,255,0.45);
+                box-shadow: 0 0 0 3px rgba(78,161,255,0.12);
+            }
+            .ml-download-target-wrap {
+                position: relative;
+            }
+            .ml-download-target-list {
+                position: absolute;
+                top: calc(100% + 4px);
+                left: 0;
+                right: 0;
+                max-height: 220px;
+                overflow: auto;
+                display: none;
+                z-index: 100000;
+                background: #22272e;
+                border: 1px solid var(--ml-border-strong);
+                border-radius: 12px;
+                box-shadow: var(--ml-shadow);
+            }
+            .ml-download-target-option {
+                padding: 8px 10px;
+                cursor: pointer;
+                border-bottom: 1px solid rgba(255,255,255,0.04);
+                color: var(--ml-text);
+                font-size: 12px;
+            }
+            .ml-download-target-option:last-child {
+                border-bottom: none;
+            }
+            .ml-download-target-option:hover,
+            .ml-download-target-option.is-highlighted {
+                background: rgba(78,161,255,0.16);
+            }
         `;
         
         document.head.appendChild(styles);
@@ -2327,6 +2395,230 @@ class LinkerManagerDialog extends ComfyDialog {
             console.warn('Model Linker: could not load all models', e);
             this.allModels = [];
         }
+    }
+
+    async ensureDownloadDirectoriesLoaded() {
+        if (this.downloadDirectories) return;
+        try {
+            const resp = await api.fetchApi('/model_linker/directories');
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const directories = await resp.json();
+            this.downloadDirectories = directories && typeof directories === 'object' ? directories : {};
+        } catch (e) {
+            console.warn('Model Linker: could not load download directories', e);
+            this.downloadDirectories = {};
+        }
+    }
+
+    getDownloadCategoryOptions(defaultCategory = 'checkpoints') {
+        const directories = this.downloadDirectories || {};
+        const keys = Object.keys(directories);
+        const preferred = defaultCategory || 'checkpoints';
+        const ordered = [
+            preferred,
+            ...keys.filter(key => key !== preferred)
+        ].filter((value, index, arr) => value && arr.indexOf(value) === index);
+
+        return ordered.length > 0 ? ordered : [preferred];
+    }
+
+    getAvailableSubfolders(category = '') {
+        return this.downloadSubfolders.get((category || '').toLowerCase()) || [];
+    }
+
+    normalizeFolderToken(value = '') {
+        return String(value || '')
+            .toLowerCase()
+            .replace(/[\/\\]+/g, ' ')
+            .replace(/[^a-z0-9]+/g, '');
+    }
+
+    getSuggestedCivitaiSubfolder(missing, category, folders = []) {
+        if ((category || '').toLowerCase() !== 'loras' || !folders.length) {
+            return '';
+        }
+
+        const civitaiData = {
+            ...(missing?.civitai_info || {}),
+            ...(missing?.download_source || {})
+        };
+        const baseModel = civitaiData.base_model || '';
+        const tags = Array.isArray(civitaiData.tags) ? civitaiData.tags.filter(Boolean) : [];
+        if (!baseModel) return '';
+
+        const priorityTags = [
+            'concept',
+            'style',
+            'character',
+            'clothing',
+            'pose',
+            'object',
+            'vehicle',
+            'artist',
+            'celebrity'
+        ];
+        const normalizedBase = this.normalizeFolderToken(baseModel);
+        if (!normalizedBase) return '';
+
+        const folderEntries = folders.map(folder => {
+            const segments = String(folder || '').split(/[\/\\]/).filter(Boolean);
+            return {
+                value: folder,
+                segments,
+                normalizedSegments: segments.map(segment => this.normalizeFolderToken(segment))
+            };
+        });
+
+        const baseMatches = folderEntries.filter(entry => entry.normalizedSegments[0] === normalizedBase);
+        if (!baseMatches.length) return '';
+
+        const exactBase = baseMatches.find(entry => entry.segments.length === 1);
+        const orderedTags = [
+            ...priorityTags.filter(tag => tags.some(value => this.normalizeFolderToken(value) === this.normalizeFolderToken(tag))),
+            ...tags
+        ].filter((value, index, arr) => value && arr.findIndex(other => this.normalizeFolderToken(other) === this.normalizeFolderToken(value)) === index);
+
+        for (const tag of orderedTags) {
+            const normalizedTag = this.normalizeFolderToken(tag);
+            if (!normalizedTag) continue;
+            const match = baseMatches.find(entry => entry.normalizedSegments[1] === normalizedTag);
+            if (match) {
+                return match.value;
+            }
+        }
+
+        return exactBase?.value || '';
+    }
+
+    async applySuggestedCivitaiSubfolder(missing, categoryEl, subfolderEl) {
+        if (!categoryEl || !subfolderEl || subfolderEl.value.trim()) return;
+
+        await this.ensureDownloadSubfoldersLoaded(categoryEl.value);
+        const folders = this.getAvailableSubfolders(categoryEl.value);
+        const suggestion = this.getSuggestedCivitaiSubfolder(missing, categoryEl.value, folders);
+        if (suggestion) {
+            subfolderEl.value = suggestion;
+        }
+    }
+
+    async ensureDownloadSubfoldersLoaded(category = '') {
+        const key = (category || '').trim().toLowerCase();
+        if (!key) return [];
+        if (this.downloadSubfolders.has(key)) {
+            return this.downloadSubfolders.get(key) || [];
+        }
+
+        try {
+            const resp = await api.fetchApi(`/model_linker/subfolders/${encodeURIComponent(key)}`);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const subfolders = await resp.json();
+            const list = Array.isArray(subfolders) ? subfolders : [];
+            this.downloadSubfolders.set(key, list);
+            return list;
+        } catch (e) {
+            console.warn(`Model Linker: could not load subfolders for ${key}`, e);
+            this.downloadSubfolders.set(key, []);
+            return [];
+        }
+    }
+
+    renderDownloadTargetControls(missing, defaultCategory = 'checkpoints') {
+        const selectId = `download-category-${missing.node_id}-${missing.widget_index}`;
+        const subfolderId = `download-subfolder-${missing.node_id}-${missing.widget_index}`;
+        const subfolderListId = `download-subfolder-list-${missing.node_id}-${missing.widget_index}`;
+        const options = this.getDownloadCategoryOptions(defaultCategory)
+            .map(category => `<option value="${category}" ${category === defaultCategory ? 'selected' : ''}>${category}</option>`)
+            .join('');
+
+        let html = `<div class="ml-download-target">`;
+        html += `<div class="ml-download-target-row">`;
+        html += `<label class="ml-download-target-label" for="${selectId}">Folder</label>`;
+        html += `<select id="${selectId}" class="ml-download-target-select">${options}</select>`;
+        html += `</div>`;
+        html += `<div class="ml-download-target-row">`;
+        html += `<label class="ml-download-target-label" for="${subfolderId}">Subfolder (optional)</label>`;
+        html += `<div class="ml-download-target-wrap">`;
+        html += `<input id="${subfolderId}" class="ml-download-target-input" type="text" placeholder="e.g. ponyxl\\styles" autocomplete="off">`;
+        html += `<div id="${subfolderListId}" class="ml-download-target-list"></div>`;
+        html += `</div>`;
+        html += `</div>`;
+        html += `</div>`;
+        return html;
+    }
+
+    getDownloadTargetSelection(missing, fallbackCategory = 'checkpoints') {
+        const categoryEl = this.contentElement?.querySelector(`#download-category-${missing.node_id}-${missing.widget_index}`);
+        const subfolderEl = this.contentElement?.querySelector(`#download-subfolder-${missing.node_id}-${missing.widget_index}`);
+        return {
+            category: categoryEl?.value || fallbackCategory || 'checkpoints',
+            subfolder: (subfolderEl?.value || '').trim()
+        };
+    }
+
+    wireDownloadTargetAutocomplete(container, missing) {
+        const categoryEl = container.querySelector(`#download-category-${missing.node_id}-${missing.widget_index}`);
+        const subfolderEl = container.querySelector(`#download-subfolder-${missing.node_id}-${missing.widget_index}`);
+        const listEl = container.querySelector(`#download-subfolder-list-${missing.node_id}-${missing.widget_index}`);
+        if (!categoryEl || !subfolderEl || !listEl) return;
+
+        const renderOptions = (targetEl, values, onSelect) => {
+            if (!values.length) {
+                targetEl.innerHTML = '';
+                targetEl.style.display = 'none';
+                return;
+            }
+
+            targetEl.innerHTML = values
+                .slice(0, 50)
+                .map(value => `<div class="ml-download-target-option" data-value="${encodeURIComponent(value)}">${value}</div>`)
+                .join('');
+
+            targetEl.style.display = 'block';
+
+            targetEl.querySelectorAll('.ml-download-target-option').forEach(option => {
+                option.addEventListener('mousedown', (event) => {
+                    event.preventDefault();
+                    const value = decodeURIComponent(option.dataset.value || '');
+                    onSelect(value);
+                    targetEl.style.display = 'none';
+                });
+            });
+        };
+
+        const populateSubfolderOptions = async (filterText = '') => {
+            const filter = (filterText || '').toLowerCase();
+            await this.ensureDownloadSubfoldersLoaded(categoryEl.value);
+            const folders = this.getAvailableSubfolders(categoryEl.value);
+            const filtered = filter
+                ? folders.filter(folder => folder.toLowerCase().includes(filter))
+                : folders;
+
+            renderOptions(listEl, filtered, (value) => {
+                subfolderEl.value = value;
+            });
+        };
+
+        const hideList = (targetEl) => {
+            setTimeout(() => {
+                targetEl.style.display = 'none';
+            }, 150);
+        };
+
+        categoryEl.addEventListener('change', () => {
+            populateSubfolderOptions(subfolderEl.value);
+            this.applySuggestedCivitaiSubfolder(missing, categoryEl, subfolderEl);
+        });
+
+        subfolderEl.addEventListener('focus', () => {
+            populateSubfolderOptions(subfolderEl.value);
+        });
+
+        subfolderEl.addEventListener('input', () => {
+            populateSubfolderOptions(subfolderEl.value);
+        });
+
+        subfolderEl.addEventListener('blur', () => hideList(listEl));
+        this.applySuggestedCivitaiSubfolder(missing, categoryEl, subfolderEl);
     }
 
     getStoredTokens() {
@@ -3237,6 +3529,7 @@ class LinkerManagerDialog extends ComfyDialog {
         
         // Ensure all models are loaded for dropdown
         await this.ensureAllModelsLoaded();
+        await this.ensureDownloadDirectoriesLoaded();
         
         // Always default to Missing Models tab when opening dialog
         if (this.activeTab !== 'missing') {
@@ -3579,6 +3872,8 @@ class LinkerManagerDialog extends ComfyDialog {
             if (sourceButtons.length > 0) {
                 this.syncSearchSourceUi(missing, container);
             }
+
+            this.wireDownloadTargetAutocomplete(container, missing);
             
             // Wire Locate button (only for top-level nodes)
             const locateId = `locate-${missing.node_id}-${missing.widget_index}`;
@@ -3818,6 +4113,7 @@ class LinkerManagerDialog extends ComfyDialog {
             html += `<span class="ml-btn-icon">🔍</span> Search Online`;
             html += `</button>`;
             html += `<div id="${searchInfoId}" class="ml-download-info">Selected source: Everything</div>`;
+            html += this.renderDownloadTargetControls(missing, missing.category || 'checkpoints');
             html += `</div>`;
             html += `<div id="search-results-${missing.node_id}-${missing.widget_index}" class="ml-search-results"></div>`;
         }
@@ -4306,7 +4602,9 @@ class LinkerManagerDialog extends ComfyDialog {
         // Use filename from download source if available (may be different from original)
         const originalFilename = missing.original_path?.split('/').pop()?.split('\\').pop() || 'model.safetensors';
         const filename = source.filename || originalFilename;
-        const category = source.directory || missing.category || 'checkpoints';
+        const targetSelection = this.getDownloadTargetSelection(missing, source.directory || missing.category || 'checkpoints');
+        const category = targetSelection.category;
+        const subfolder = targetSelection.subfolder;
         const progressId = `download-progress-${missing.node_id}-${missing.widget_index}`;
         const progressDiv = this.contentElement?.querySelector(`#${progressId}`);
         const downloadBtn = this.contentElement?.querySelector(`#download-${missing.node_id}-${missing.widget_index}`);
@@ -4346,6 +4644,7 @@ class LinkerManagerDialog extends ComfyDialog {
                     url: source.url,
                     filename: filename,
                     category: category,
+                    subfolder: subfolder,
                     hf_token: tokens.hf_token,
                     civitai_key: tokens.civitai_key
                 })
@@ -4676,7 +4975,9 @@ class LinkerManagerDialog extends ComfyDialog {
                         missing.civitai_info = {
                             model_name: data.civitai.name,
                             version_name: data.civitai.version_name,
-                            expected_filename: data.civitai.filename
+                            expected_filename: data.civitai.filename,
+                            base_model: data.civitai.base_model,
+                            tags: data.civitai.tags || []
                         };
                         missing.download_source = {
                             source: 'civitai',
@@ -4689,7 +4990,9 @@ class LinkerManagerDialog extends ComfyDialog {
                             size: data.civitai.size,
                             model_id: data.civitai.model_id || modelId,
                             version_id: data.civitai.version_id || versionId,
-                            model_url: data.civitai.url || `https://civitai.com/models/${modelId}?modelVersionId=${versionId}`
+                            model_url: data.civitai.url || `https://civitai.com/models/${modelId}?modelVersionId=${versionId}`,
+                            base_model: data.civitai.base_model,
+                            tags: data.civitai.tags || []
                         };
                         downloadEl.outerHTML = this.renderDownloadSourceSection(missing, missing.download_source);
 
@@ -4698,6 +5001,9 @@ class LinkerManagerDialog extends ComfyDialog {
                             refreshedBtn.addEventListener('click', () => {
                                 this.downloadModel(missing);
                             });
+                        }
+                        if (this.contentElement) {
+                            this.wireDownloadTargetAutocomplete(this.contentElement, missing);
                         }
                         this.refreshUrnLocalMatches(missing);
                     }
@@ -4855,6 +5161,7 @@ class LinkerManagerDialog extends ComfyDialog {
         const progressId = `download-progress-${missing.node_id}-${missing.widget_index}`;
         const progressDiv = this.contentElement?.querySelector(`#${progressId}`);
         const tokens = this.getStoredTokens();
+        const targetSelection = this.getDownloadTargetSelection(missing, category || missing.category || 'checkpoints');
 
         try {
             btn.disabled = true;
@@ -4886,7 +5193,8 @@ class LinkerManagerDialog extends ComfyDialog {
                 body: JSON.stringify({
                     url,
                     filename,
-                    category,
+                    category: targetSelection.category,
+                    subfolder: targetSelection.subfolder,
                     hf_token: tokens.hf_token,
                     civitai_key: tokens.civitai_key
                 })

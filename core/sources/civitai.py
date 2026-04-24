@@ -148,6 +148,8 @@ def search_civitai_for_file(
                                 "url": f"https://civitai.com/models/{model_id}",
                                 "download_url": download_url,
                                 "size": file_info.get("sizeKB", 0) * 1024,
+                                "base_model": version.get("baseModel"),
+                                "tags": item.get("tags", []),
                                 "match_type": "exact",
                             }
                             _search_cache[cache_key] = result
@@ -171,6 +173,8 @@ def search_civitai_for_file(
                                     "url": f"https://civitai.com/models/{model_id}",
                                     "download_url": download_url,
                                     "size": file_info.get("sizeKB", 0) * 1024,
+                                    "base_model": version.get("baseModel"),
+                                    "tags": item.get("tags", []),
                                     "match_type": "partial",
                                 }
                                 _search_cache[cache_key] = result
@@ -261,6 +265,8 @@ def search_civitai(
                         "url": f"https://civitai.com/models/{model_id}",
                         "download_url": get_civitai_download_url(version_id, api_key),
                         "downloads": model.get("stats", {}).get("downloadCount", 0),
+                        "base_model": latest.get("baseModel"),
+                        "tags": model.get("tags", []),
                     }
 
                     if primary_file:
@@ -389,6 +395,8 @@ def resolve_urn(
             "model_name": data.get("name", "Unknown"),
             "version_name": target_version.get("name", "Unknown"),
             "expected_filename": primary_file.get("name", "Unknown"),
+            "base_model": target_version.get("baseModel"),
+            "tags": data.get("tags", []),
             "files": [
                 {"name": f.get("name"), "size": f.get("sizeKB", 0) * 1024}
                 for f in files

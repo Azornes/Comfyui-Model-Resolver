@@ -824,6 +824,8 @@ class ModelLinkerExtension:
                                             "model_id": model_id,
                                             "version_id": version_id,
                                             "size": primary_file.get("size"),
+                                            "base_model": model_info.get("base_model"),
+                                            "tags": model_info.get("tags", []),
                                         }
                                         results["found"] = True
                                 elif category:
@@ -846,6 +848,8 @@ class ModelLinkerExtension:
                                             ),
                                             "url": first_result.get("url"),
                                             "size": first_result.get("size"),
+                                            "base_model": first_result.get("base_model"),
+                                            "tags": first_result.get("tags", []),
                                         }
                                         results["found"] = True
                             else:
@@ -1003,6 +1007,56 @@ class ModelLinkerExtension:
                     except Exception as e:
                         self.logger.error(
                             f"Model Linker directories error: {e}", exc_info=True
+                        )
+                        return web.json_response({"error": str(e)}, status=500)
+
+                @routes.get("/model_linker/subfolders/{category}")
+                async def get_subfolders(request):
+                    """Get known subfolders for a category using ComfyUI folder_paths."""
+                    try:
+                        import folder_paths
+
+                        raw_category = (request.match_info.get("category") or "").strip()
+                        category_map = {
+                            "checkpoint": "checkpoints",
+                            "checkpoints": "checkpoints",
+                            "lora": "loras",
+                            "loras": "loras",
+                            "vae": "vae",
+                            "controlnet": "controlnet",
+                            "clip": "clip",
+                            "clip_vision": "clip_vision",
+                            "upscaler": "upscale_models",
+                            "upscale_models": "upscale_models",
+                            "embeddings": "embeddings",
+                            "embedding": "embeddings",
+                            "diffusion_models": "diffusion_models",
+                            "unet": "diffusion_models",
+                            "text_encoders": "text_encoders",
+                            "text_encoder": "text_encoders",
+                            "ipadapter": "ipadapter",
+                            "ip-adapter": "ipadapter",
+                            "default": "upscale_models",
+                        }
+                        category = category_map.get(raw_category.lower(), raw_category.lower())
+
+                        subfolders = set()
+                        filenames = folder_paths.get_filename_list(category) or []
+                        for rel_path in filenames:
+                            if not isinstance(rel_path, str):
+                                continue
+                            parts = [p for p in rel_path.replace("/", "\\").split("\\") if p]
+                            if len(parts) <= 1:
+                                continue
+                            current = ""
+                            for part in parts[:-1]:
+                                current = f"{current}\\{part}" if current else part
+                                subfolders.add(current)
+
+                        return web.json_response(sorted(subfolders))
+                    except Exception as e:
+                        self.logger.error(
+                            f"Model Linker subfolders error: {e}", exc_info=True
                         )
                         return web.json_response({"error": str(e)}, status=500)
 
