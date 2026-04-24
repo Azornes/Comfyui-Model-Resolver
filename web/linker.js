@@ -204,6 +204,52 @@ class LinkerManagerDialog extends ComfyDialog {
         this.syncSearchSourceUi(missing, container);
     }
 
+    renderDownloadSourceSection(missing, downloadSource) {
+        const filename = missing.original_path?.split('/').pop()?.split('\\').pop() || '';
+        const isFromWorkflow = downloadSource.url_source === 'workflow';
+        const isCivitaiSource = downloadSource.source === 'civitai';
+        const sourceLabels = {
+            popular: 'Popular Models',
+            model_list: 'Model Database',
+            huggingface: 'HuggingFace',
+            civitai: 'CivitAI',
+            workflow: 'Workflow'
+        };
+        const sourceLabel = isFromWorkflow ? 'Workflow' : (sourceLabels[downloadSource.source] || 'Online');
+        const downloadFilename = downloadSource.filename || filename;
+        const formattedDownloadName = this.formatFilename(downloadFilename, 45);
+
+        let sizeDisplay = '';
+        if (downloadSource.size) {
+            sizeDisplay = typeof downloadSource.size === 'number'
+                ? this.formatBytes(downloadSource.size)
+                : downloadSource.size;
+        }
+
+        const modelCardUrl = downloadSource.model_url || this.getModelCardUrl(downloadSource.url);
+
+        let html = `<div class="ml-download-section">`;
+        html += `<button id="download-${missing.node_id}-${missing.widget_index}" class="ml-btn ml-btn-download">`;
+        html += `<span class="ml-btn-icon">☁</span> Download${sizeDisplay ? ` (${sizeDisplay})` : ''}`;
+        html += `</button>`;
+        if (isCivitaiSource && modelCardUrl) {
+            html += ` <a href="${modelCardUrl}" target="_blank" rel="noopener noreferrer" class="ml-btn ml-btn-secondary">Open on CivitAI</a>`;
+        }
+        html += `<div class="ml-download-info">`;
+        html += `<span class="ml-download-source">${isFromWorkflow ? 'URL from workflow' : sourceLabel}</span>`;
+        if (modelCardUrl) {
+            html += `<br><a href="${modelCardUrl}" target="_blank" rel="noopener noreferrer" class="ml-link" title="Open model card">${formattedDownloadName.display}</a>`;
+        } else {
+            html += `<br><span title="${formattedDownloadName.full}">${formattedDownloadName.display}</span>`;
+        }
+        if (isCivitaiSource) {
+            html += `<br><span class="ml-muted-note" style="display:inline-block; margin-top: 8px;">Direct CivitAI download can require an API key for some models.</span>`;
+        }
+        html += `</div>`;
+        html += `</div>`;
+        return html;
+    }
+
     /**
      * Handle click outside context menu to hide it
      */
@@ -3073,6 +3119,7 @@ class LinkerManagerDialog extends ComfyDialog {
     displayMissingModels(container, data) {
         const missingModels = data.missing_models || [];
         const totalMissing = data.total_missing || 0;
+        this.missingModels = missingModels;
         
         // Check if there are active downloads
         const activeCount = Object.keys(this.activeDownloads).length;
@@ -3504,48 +3551,16 @@ class LinkerManagerDialog extends ComfyDialog {
         
         const filename = missing.original_path?.split('/').pop()?.split('\\').pop() || '';
         const downloadSource = missing.download_source;
+        const urnDownloadId = `urn-download-${missing.node_id}-${missing.widget_index}`;
         
         if (perfectMatches.length > 0) {
             // Has perfect local match - download not needed
             html += `<div class="ml-no-matches">Not needed - exact local match available</div>`;
         } else if (downloadSource && downloadSource.url) {
-            // We have a known download URL
-            const isExact = downloadSource.match_type === 'exact' || downloadSource.source === 'popular' || downloadSource.source === 'huggingface' || downloadSource.source === 'civitai';
-            const isFromWorkflow = downloadSource.url_source === 'workflow';
-            const sourceLabels = {
-                'popular': 'Popular Models',
-                'model_list': 'Model Database',
-                'huggingface': 'HuggingFace',
-                'civitai': 'CivitAI',
-                'workflow': 'Workflow'
-            };
-            const sourceLabel = isFromWorkflow ? 'Workflow' : (sourceLabels[downloadSource.source] || 'Online');
-            const downloadFilename = downloadSource.filename || filename;
-            const formattedDownloadName = this.formatFilename(downloadFilename, 45);
-            
-            // Format file size
-            let sizeDisplay = '';
-            if (downloadSource.size) {
-                if (typeof downloadSource.size === 'number') {
-                    sizeDisplay = this.formatBytes(downloadSource.size);
-                } else {
-                    sizeDisplay = downloadSource.size;
-                }
-            }
-            
-            html += `<div class="ml-download-section">`;
-            html += `<button id="download-${missing.node_id}-${missing.widget_index}" class="ml-btn ml-btn-download">`;
-            html += `<span class="ml-btn-icon">☁</span> Download${sizeDisplay ? ` (${sizeDisplay})` : ''}`;
-            html += `</button>`;
-            html += `<div class="ml-download-info">`;
-            html += `<span class="ml-download-source">${isFromWorkflow ? 'URL from workflow' : sourceLabel}</span>`;
-            const modelCardUrl = this.getModelCardUrl(downloadSource.url);
-            if (modelCardUrl) {
-                html += `<br><a href="${modelCardUrl}" target="_blank" rel="noopener noreferrer" class="ml-link" title="Open model card">${formattedDownloadName.display}</a>`;
-            } else {
-                html += `<br><span title="${formattedDownloadName.full}">${formattedDownloadName.display}</span>`;
-            }
-            html += `</div>`;
+            html += this.renderDownloadSourceSection(missing, downloadSource);
+        } else if (missing.is_urn) {
+            html += `<div id="${urnDownloadId}" class="ml-download-section">`;
+            html += `<div class="ml-download-info">Resolving CivitAI download for this URN...</div>`;
             html += `</div>`;
         } else {
             // No known download - offer search
@@ -4406,11 +4421,54 @@ class LinkerManagerDialog extends ComfyDialog {
                     loadingEl.textContent = 'Not found';
                     loadingEl.style.color = 'var(--ml-text-muted)';
                 }
+
+                const downloadContainerId = loadingElementId.replace('urn-loading-', 'urn-download-');
+                const downloadEl = document.getElementById(downloadContainerId);
+                if (downloadEl && data.civitai) {
+                    const missing = this.missingModels.find(m =>
+                        `urn-download-${m.node_id}-${m.widget_index}` === downloadContainerId
+                    );
+                    if (missing) {
+                        missing.civitai_info = {
+                            model_name: data.civitai.name,
+                            version_name: data.civitai.version_name,
+                            expected_filename: data.civitai.filename
+                        };
+                        missing.download_source = {
+                            source: 'civitai',
+                            url: data.civitai.download_url,
+                            filename: data.civitai.filename,
+                            name: data.civitai.name,
+                            type: data.civitai.type,
+                            directory: missing.category || 'checkpoints',
+                            match_type: 'exact',
+                            size: data.civitai.size,
+                            model_id: data.civitai.model_id || modelId,
+                            version_id: data.civitai.version_id || versionId,
+                            model_url: data.civitai.url || `https://civitai.com/models/${modelId}?modelVersionId=${versionId}`
+                        };
+                        downloadEl.outerHTML = this.renderDownloadSourceSection(missing, missing.download_source);
+
+                        const refreshedBtn = this.contentElement?.querySelector(`#download-${missing.node_id}-${missing.widget_index}`);
+                        if (refreshedBtn) {
+                            refreshedBtn.addEventListener('click', () => {
+                                this.downloadModel(missing);
+                            });
+                        }
+                    }
+                } else if (downloadEl) {
+                    downloadEl.innerHTML = `<div class="ml-download-info">Unable to resolve direct download for this URN.</div>`;
+                }
             } else {
                 const loadingEl = document.getElementById(loadingElementId);
                 if (loadingEl) {
                     loadingEl.textContent = 'Error';
                     loadingEl.style.color = '#f44336';
+                }
+                const downloadContainerId = loadingElementId.replace('urn-loading-', 'urn-download-');
+                const downloadEl = document.getElementById(downloadContainerId);
+                if (downloadEl) {
+                    downloadEl.innerHTML = `<div class="ml-download-info">Failed to resolve URN download.</div>`;
                 }
             }
         } catch (error) {
@@ -4419,6 +4477,11 @@ class LinkerManagerDialog extends ComfyDialog {
             if (loadingEl) {
                 loadingEl.textContent = 'Error';
                 loadingEl.style.color = '#f44336';
+            }
+            const downloadContainerId = loadingElementId.replace('urn-loading-', 'urn-download-');
+            const downloadEl = document.getElementById(downloadContainerId);
+            if (downloadEl) {
+                downloadEl.innerHTML = `<div class="ml-download-info">Failed to resolve URN download.</div>`;
             }
         }
     }
@@ -4505,7 +4568,7 @@ class LinkerManagerDialog extends ComfyDialog {
 
         // CivitAI result
         if (civitaiResult && civitaiResult.download_url) {
-            const modelUrl = civitaiResult.url || `https://civitai.com/models/${civitaiResult.model_id || ''}`;
+            const modelUrl = civitaiResult.url || (civitaiResult.model_id ? `https://civitai.com/models/${civitaiResult.model_id}${civitaiResult.version_id ? `?modelVersionId=${civitaiResult.version_id}` : ''}` : '');
             // Use expected_filename from URN resolution, or fallback to civitaiResult filename
             const downloadFilename = missing.civitai_info?.expected_filename || civitaiResult.filename || civitaiResult.name;
             // Build display name with version if available

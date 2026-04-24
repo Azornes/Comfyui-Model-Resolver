@@ -210,54 +210,7 @@ class ModelLinkerExtension:
                                     }
                                     continue
 
-                                # 1. For URNs, we already have an exact CivitAI identity.
-                                # Expose it immediately as a direct download source.
-                                if missing.get("is_urn"):
-                                    urn_model_id = missing.get("urn_model_id") or (
-                                        missing.get("urn", {}) or {}
-                                    ).get("model_id")
-                                    urn_version_id = missing.get(
-                                        "urn_version_id"
-                                    ) or (missing.get("urn", {}) or {}).get(
-                                        "version_id"
-                                    )
-
-                                    if urn_model_id and urn_version_id:
-                                        civitai_info = resolve_urn(
-                                            urn_model_id, urn_version_id
-                                        )
-                                        if civitai_info:
-                                            missing["civitai_info"] = civitai_info
-                                            expected_filename = (
-                                                civitai_info.get("expected_filename")
-                                                or filename
-                                            )
-                                            primary_file = (
-                                                civitai_info.get("files") or [{}]
-                                            )[0]
-
-                                            missing["download_source"] = {
-                                                "source": "civitai",
-                                                "url": get_civitai_download_url(
-                                                    urn_version_id
-                                                ),
-                                                "filename": expected_filename,
-                                                "name": civitai_info.get(
-                                                    "model_name"
-                                                ),
-                                                "type": missing.get("category"),
-                                                "directory": missing.get(
-                                                    "category", "checkpoints"
-                                                ),
-                                                "match_type": "exact",
-                                                "size": primary_file.get("size"),
-                                                "model_id": urn_model_id,
-                                                "version_id": urn_version_id,
-                                                "model_url": f"https://civitai.com/models/{urn_model_id}?modelVersionId={urn_version_id}",
-                                            }
-                                            continue
-
-                                # 2. Check popular models (always exact match)
+                                # 1. Check popular models (always exact match)
                                 popular_info = get_popular_model_url(filename)
                                 if popular_info:
                                     missing["download_source"] = {
@@ -270,7 +223,7 @@ class ModelLinkerExtension:
                                     }
                                     continue
 
-                                # 3. Check model list (ComfyUI Manager database)
+                                # 2. Check model list (ComfyUI Manager database)
                                 # Use exact_only=True to avoid confusing fuzzy matches for downloads
                                 model_list_result = search_model_list(
                                     filename, exact_only=True
@@ -772,6 +725,19 @@ class ModelLinkerExtension:
                                     # Use resolve_urn to get model info (cached)
                                     model_info = resolve_urn(model_id, version_id)
                                     if model_info:
+                                        primary_file = None
+                                        for file_info in model_info.get("files", []):
+                                            if (
+                                                file_info.get("name")
+                                                == model_info.get("expected_filename")
+                                            ):
+                                                primary_file = file_info
+                                                break
+                                        if primary_file is None:
+                                            primary_file = (
+                                                model_info.get("files") or [{}]
+                                            )[0]
+
                                         download_url = get_civitai_download_url(
                                             version_id
                                         )
@@ -783,7 +749,10 @@ class ModelLinkerExtension:
                                             ),
                                             "type": category,
                                             "download_url": download_url,
-                                            "url": f"https://civitai.com/models/{model_id}",
+                                            "url": f"https://civitai.com/models/{model_id}?modelVersionId={version_id}",
+                                            "model_id": model_id,
+                                            "version_id": version_id,
+                                            "size": primary_file.get("size"),
                                         }
                                         results["found"] = True
                                 elif category:
