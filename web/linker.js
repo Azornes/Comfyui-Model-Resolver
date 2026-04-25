@@ -22,6 +22,8 @@ class LinkerManagerDialog extends ComfyDialog {
         this.pendingIndex = new Map(); // key -> index in pendingResolutions
         this.activeDownloads = {};  // Track active downloads
         this.searchResultCache = new Map();
+        this.cachedAnalysisData = null;
+        this.cachedWorkflowSignature = null;
         this.boundHandleOutsideClick = this.handleOutsideClick.bind(this);
         this.activeTab = 'missing';  // Default tab
         this.fullscreen = false;
@@ -2970,6 +2972,16 @@ class LinkerManagerDialog extends ComfyDialog {
             await new Promise(resolve => setTimeout(resolve, 250));
         }
     }
+
+    getWorkflowSignature(workflow) {
+        if (!workflow) return null;
+        try {
+            return JSON.stringify(workflow);
+        } catch (error) {
+            console.warn('Model Linker: workflow signature generation failed', error);
+            return null;
+        }
+    }
     
     /**
      * Handle clicks outside the dialog
@@ -4470,17 +4482,7 @@ class LinkerManagerDialog extends ComfyDialog {
     async loadWorkflowData(workflow = null) {
         if (!this.contentElement) return;
 
-        const analysisId = `an-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        this._analysisProgressToken = analysisId;
-
         // Show loading state
-        this.contentElement.innerHTML = this.renderAnalysisProgress({
-            status: 'starting',
-            message: 'Starting analysis...',
-            current: 0,
-            total: 0
-        });
-
         try {
             // Use provided workflow, or get current workflow from ComfyUI
             if (!workflow) {
@@ -4492,6 +4494,26 @@ class LinkerManagerDialog extends ComfyDialog {
                 this.contentElement.innerHTML = '<p>No workflow loaded. Please load a workflow first.</p>';
                 return;
             }
+
+            const workflowSignature = this.getWorkflowSignature(workflow);
+            if (
+                workflowSignature &&
+                this.cachedWorkflowSignature === workflowSignature &&
+                this.cachedAnalysisData
+            ) {
+                this.displayMissingModels(this.contentElement, this.cachedAnalysisData);
+                this.reconnectActiveDownloads();
+                return;
+            }
+
+            const analysisId = `an-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            this._analysisProgressToken = analysisId;
+            this.contentElement.innerHTML = this.renderAnalysisProgress({
+                status: 'starting',
+                message: 'Starting analysis...',
+                current: 0,
+                total: 0
+            });
 
             // Call analyze endpoint
             const progressPromise = this.pollAnalysisProgress(analysisId, analysisId);
@@ -4508,6 +4530,8 @@ class LinkerManagerDialog extends ComfyDialog {
             }
 
             const data = await response.json();
+            this.cachedWorkflowSignature = workflowSignature;
+            this.cachedAnalysisData = data;
             this.searchResultCache.clear();
             this.displayMissingModels(this.contentElement, data);
             
