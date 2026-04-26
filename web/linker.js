@@ -262,6 +262,56 @@ class LinkerManagerDialog extends ComfyDialog {
         return html;
     }
 
+    formatSearchResultMeta(result = {}, options = {}) {
+        const filename = options.filename || result.filename || '';
+        const secondaryText = options.secondaryText || '';
+        const confidenceValue = result.confidence;
+        const confidenceDisplay = typeof confidenceValue === 'number'
+            ? `${Math.round(confidenceValue)}% match`
+            : '';
+        const sizeDisplay = result.size
+            ? (typeof result.size === 'number' ? this.formatBytes(result.size) : result.size)
+            : '';
+
+        let html = `<div style="margin-top: 4px; font-size: 12px;">`;
+        if (filename) {
+            html += `<span class="ml-chip">${filename}</span>`;
+        }
+        if (confidenceDisplay) {
+            html += ` <span class="ml-chip">${confidenceDisplay}</span>`;
+        }
+        if (sizeDisplay) {
+            html += ` <span class="ml-download-size">[${sizeDisplay}]</span>`;
+        }
+        if (secondaryText) {
+            html += ` <span style="color: var(--ml-text-muted);">${secondaryText}</span>`;
+        }
+        html += `</div>`;
+        return html;
+    }
+
+    renderOnlineSearchResultCard({
+        statusClass,
+        title,
+        result,
+        filename,
+        secondaryText = '',
+        actionHtml = '',
+        topLineHtml = ''
+    }) {
+        let html = `<div class="ml-status ${statusClass}" style="flex-direction: column; align-items: flex-start;">`;
+        html += `<strong>${title}</strong>`;
+        if (topLineHtml) {
+            html += topLineHtml;
+        }
+        html += this.formatSearchResultMeta(result, { filename, secondaryText });
+        if (actionHtml) {
+            html += `<div style="margin-top: 8px; display: flex; gap: 8px;">${actionHtml}</div>`;
+        }
+        html += `</div>`;
+        return html;
+    }
+
     buildContextMenuModelData(model = {}, fallbackName = '') {
         const resolvedPath = model.path || model.resolved_path || '';
         const filename = model.filename || fallbackName || resolvedPath.split(/[\/\\]/).pop() || '';
@@ -6011,53 +6061,45 @@ class LinkerManagerDialog extends ComfyDialog {
 
         // Popular models result (highest priority)
         if (popular) {
-            html += `<div class="ml-status ml-status-success" style="flex-direction: column; align-items: flex-start;">`;
-            html += `<strong>Found in Popular Models</strong>`;
-            html += `<div style="margin-top: 8px;">`;
-            html += `<button class="search-download-btn ml-btn ml-btn-primary ml-btn-sm" data-url="${popular.url}" data-filename="${popular.filename || missing.original_path?.split('/').pop()?.split('\\').pop()}" data-category="${popular.directory || missing.category}">`;
-            html += `<span class="ml-btn-icon">☁</span> Download`;
-            html += `</button>`;
-            html += `</div></div>`;
+            const popularFilename = popular.filename || missing.original_path?.split('/').pop()?.split('\\').pop() || '';
+            const actionHtml = `<button class="search-download-btn ml-btn ml-btn-primary ml-btn-sm" data-url="${popular.url}" data-filename="${popularFilename}" data-category="${popular.directory || missing.category}"><span class="ml-btn-icon">☁</span> Download</button>`;
+            html += this.renderOnlineSearchResultCard({
+                statusClass: 'ml-status-success',
+                title: 'Found in Popular Models',
+                result: popular,
+                filename: popularFilename,
+                secondaryText: popular.name || '',
+                actionHtml
+            });
         }
 
         // Model list result (ComfyUI Manager database with fuzzy matching)
         if (modelListResult && modelListResult.url) {
-            const confidence = modelListResult.confidence ? ` (${modelListResult.confidence}%)` : '';
             const matchType = modelListResult.match_type === 'exact' ? 'Exact match' : 'Similar model';
             const statusClass = modelListResult.match_type === 'exact' ? 'ml-status-success' : 'ml-status-info';
-            
-            html += `<div class="ml-status ${statusClass}" style="flex-direction: column; align-items: flex-start;">`;
-            html += `<strong>${matchType} in Model Database${confidence}</strong>`;
-            html += `<div style="margin-top: 4px; font-size: 12px;">`;
-            html += `<span class="ml-chip">${modelListResult.filename}</span>`;
-            if (modelListResult.name) {
-                html += ` <span style="color: var(--ml-text-muted);">${modelListResult.name}</span>`;
-            }
-            if (modelListResult.size) {
-                html += ` <span class="ml-download-size">[${modelListResult.size}]</span>`;
-            }
-            html += `</div>`;
-            html += `<div style="margin-top: 8px;">`;
-            html += `<button class="search-download-btn ml-btn ml-btn-primary ml-btn-sm" data-url="${modelListResult.url}" data-filename="${modelListResult.filename}" data-category="${modelListResult.directory || missing.category}">`;
-            html += `<span class="ml-btn-icon">☁</span> Download`;
-            html += `</button>`;
-            html += `</div></div>`;
+            const actionHtml = `<button class="search-download-btn ml-btn ml-btn-primary ml-btn-sm" data-url="${modelListResult.url}" data-filename="${modelListResult.filename}" data-category="${modelListResult.directory || missing.category}"><span class="ml-btn-icon">☁</span> Download</button>`;
+            html += this.renderOnlineSearchResultCard({
+                statusClass,
+                title: `${matchType} in Model Database`,
+                result: modelListResult,
+                filename: modelListResult.filename,
+                secondaryText: modelListResult.name || '',
+                actionHtml
+            });
         }
 
         // HuggingFace result
         if (hfResult && hfResult.url) {
             const hfRepo = hfResult.repo_id || hfResult.repo || '';
-            html += `<div class="ml-status ml-status-info" style="flex-direction: column; align-items: flex-start;">`;
-            html += `<strong>Found on HuggingFace</strong>`;
-            html += `<div style="margin-top: 4px; font-size: 12px;">`;
-            html += `<span class="ml-chip">${hfResult.filename}</span> `;
-            html += `<span style="color: var(--ml-text-muted);">${hfRepo}</span>`;
-            html += `</div>`;
-            html += `<div style="margin-top: 8px;">`;
-            html += `<button class="search-download-btn ml-btn ml-btn-link ml-btn-sm" data-url="${hfResult.url}" data-filename="${hfResult.filename}" data-category="${missing.category}">`;
-            html += `<span class="ml-btn-icon">☁</span> Download`;
-            html += `</button>`;
-            html += `</div></div>`;
+            const actionHtml = `<button class="search-download-btn ml-btn ml-btn-link ml-btn-sm" data-url="${hfResult.url}" data-filename="${hfResult.filename}" data-category="${missing.category}"><span class="ml-btn-icon">☁</span> Download</button>`;
+            html += this.renderOnlineSearchResultCard({
+                statusClass: 'ml-status-info',
+                title: 'Found on HuggingFace',
+                result: hfResult,
+                filename: hfResult.filename,
+                secondaryText: hfRepo,
+                actionHtml
+            });
         }
 
         // CivitAI result
@@ -6067,36 +6109,17 @@ class LinkerManagerDialog extends ComfyDialog {
             const downloadFilename = missing.civitai_info?.expected_filename || civitaiResult.filename || civitaiResult.name;
             // Build display name with version if available
             const modelName = missing.civitai_info?.version_name ? `${missing.civitai_info.model_name} v${missing.civitai_info.version_name}` : (civitaiResult.name || 'Model');
-            const confidenceDisplay = typeof civitaiResult.confidence === 'number'
-                ? `${Math.round(civitaiResult.confidence)}% match`
-                : '';
-            const sizeDisplay = civitaiResult.size
-                ? (typeof civitaiResult.size === 'number'
-                    ? this.formatBytes(civitaiResult.size)
-                    : civitaiResult.size)
-                : '';
-            html += `<div class="ml-status ml-status-warning" style="flex-direction: column; align-items: flex-start;">`;
-            html += `<strong>Found on CivitAI</strong>`;
-            html += `<div style="margin-top: 4px; font-size: 12px;">`;
-            // Model name as clickable button/link
-            html += `<button class="ml-btn ml-btn-sm" style="background: transparent; color: #FF9800; border: 1px solid #FF9800; font-weight: bold; cursor: pointer;" onclick="window.open('${modelUrl}', '_blank')">${modelName}</button> `;
-            html += `<span style="color: var(--ml-text-muted);">${civitaiResult.type || ''}</span>`;
-            html += `</div>`;
-            html += `<div style="margin-top: 4px; font-size: 12px;">`;
-            html += `<span class="ml-chip">${downloadFilename}</span>`;
-            if (confidenceDisplay) {
-                html += ` <span class="ml-chip">${confidenceDisplay}</span>`;
-            }
-            if (sizeDisplay) {
-                html += ` <span class="ml-download-size">[${sizeDisplay}]</span>`;
-            }
-            html += `</div>`;
-            html += `<div style="margin-top: 8px; display: flex; gap: 8px;">`;
-            // Download button - use expected_filename from URN resolution
-            html += `<button class="search-download-btn ml-btn ml-btn-sm" style="background: #FF9800;" data-url="${civitaiResult.download_url}" data-filename="${downloadFilename}" data-category="${missing.category}">`;
-            html += `<span class="ml-btn-icon">☁</span> Download`;
-            html += `</button>`;
-            html += `</div></div>`;
+            const topLineHtml = `<div style="margin-top: 4px; font-size: 12px;"><button class="ml-btn ml-btn-sm" style="background: transparent; color: #FF9800; border: 1px solid #FF9800; font-weight: bold; cursor: pointer;" onclick="window.open('${modelUrl}', '_blank')">${modelName}</button> <span style="color: var(--ml-text-muted);">${civitaiResult.type || ''}</span></div>`;
+            const actionHtml = `<button class="search-download-btn ml-btn ml-btn-sm" style="background: #FF9800;" data-url="${civitaiResult.download_url}" data-filename="${downloadFilename}" data-category="${missing.category}"><span class="ml-btn-icon">☁</span> Download</button>`;
+            html += this.renderOnlineSearchResultCard({
+                statusClass: 'ml-status-warning',
+                title: 'Found on CivitAI',
+                result: civitaiResult,
+                filename: downloadFilename,
+                secondaryText: '',
+                topLineHtml,
+                actionHtml
+            });
         }
 
         html += '</div>';
