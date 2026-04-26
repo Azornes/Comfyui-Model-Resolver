@@ -6358,7 +6358,11 @@ class LinkerManagerDialog extends ComfyDialog {
         // HuggingFace result
         if (hfResult && hfResult.url) {
             const hfRepo = hfResult.repo_id || hfResult.repo || '';
-            const actionHtml = `<button class="search-download-btn ml-btn ml-btn-link ml-btn-sm" data-url="${hfResult.url}" data-filename="${hfResult.filename}" data-category="${missing.category}"><span class="ml-btn-icon">☁</span> Download</button>`;
+            const hfModelUrl = hfRepo ? `https://huggingface.co/${hfRepo}` : this.getModelCardUrl(hfResult.url);
+            let actionHtml = `<button class="search-download-btn ml-btn ml-btn-link ml-btn-sm" data-url="${hfResult.url}" data-filename="${hfResult.filename}" data-category="${missing.category}"><span class="ml-btn-icon">☁</span> Download</button>`;
+            if (hfModelUrl) {
+                actionHtml += `<a href="${hfModelUrl}" target="_blank" rel="noopener noreferrer" class="ml-btn ml-btn-secondary ml-btn-sm">Open on HuggingFace</a>`;
+            }
             html += this.renderOnlineSearchResultCard({
                 statusClass: 'ml-status-info',
                 title: 'Found on HuggingFace',
