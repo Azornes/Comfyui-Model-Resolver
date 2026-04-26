@@ -108,6 +108,11 @@ class ModelLinkerExtension:
                     resolve_urn,
                     clear_search_cache as clear_civitai_search_cache,
                 )
+                from .core.sources.lora_manager_archive import (
+                    is_lora_manager_archive_available,
+                    search_lora_manager_archive_for_file,
+                    clear_search_cache as clear_lora_manager_archive_search_cache,
+                )
 
                 download_available = True
             except ImportError as e:
@@ -853,11 +858,19 @@ class ModelLinkerExtension:
                             normalized_sources = {"all"}
 
                         if "all" in normalized_sources:
-                            normalized_sources = {"local", "huggingface", "civitai"}
+                            normalized_sources = {
+                                "local",
+                                "huggingface",
+                                "civitai",
+                                "lora_manager_archive",
+                            }
 
                         search_local = "local" in normalized_sources
                         search_huggingface_source = "huggingface" in normalized_sources
                         search_civitai_source = "civitai" in normalized_sources
+                        search_lora_manager_archive_source = (
+                            "lora_manager_archive" in normalized_sources
+                        )
 
                         log_info(
                             f"Search request: filename={filename}, category={category}, is_urn={is_urn}, model_id={data.get('model_id')}, version_id={data.get('version_id')}, sources={sorted(normalized_sources)}, civitai_candidate_limit={civitai_candidate_limit}"
@@ -868,6 +881,7 @@ class ModelLinkerExtension:
                             "model_list": None,
                             "huggingface": None,
                             "civitai": None,
+                            "lora_manager_archive": None,
                             "found": False,
                             "searched_sources": sorted(normalized_sources),
                         }
@@ -1027,6 +1041,27 @@ class ModelLinkerExtension:
                                     results["civitai"] = civitai_result
                                     results["found"] = True
 
+                        # 4. Search local archive DB from comfyui-lora-manager
+                        if search_lora_manager_archive_source and not is_urn:
+                            log_info(
+                                f"Search source [lora_manager_archive] start: filename={filename}, category={category}"
+                            )
+                            lora_manager_archive_result = (
+                                search_lora_manager_archive_for_file(
+                                    filename,
+                                    model_type=category,
+                                )
+                            )
+                            log_search_result(
+                                "lora_manager_archive",
+                                lora_manager_archive_result,
+                            )
+                            if lora_manager_archive_result:
+                                results["lora_manager_archive"] = (
+                                    lora_manager_archive_result
+                                )
+                                results["found"] = True
+
                         log_info(
                             f"Search summary: found={results['found']}, searched_sources={results['searched_sources']}"
                         )
@@ -1042,6 +1077,7 @@ class ModelLinkerExtension:
                     try:
                         clear_huggingface_search_cache()
                         clear_civitai_search_cache()
+                        clear_lora_manager_archive_search_cache()
                         log_info("Cleared backend search caches")
                         return web.json_response({"success": True})
                     except Exception as e:
@@ -1189,6 +1225,23 @@ class ModelLinkerExtension:
                     except Exception as e:
                         self.logger.error(
                             f"Model Linker directories error: {e}", exc_info=True
+                        )
+                        return web.json_response({"error": str(e)}, status=500)
+
+                @routes.get("/model_linker/capabilities")
+                async def get_capabilities(request):
+                    """Get optional source capabilities available in this install."""
+                    try:
+                        return web.json_response(
+                            {
+                                "sources": {
+                                    "lora_manager_archive": is_lora_manager_archive_available()
+                                }
+                            }
+                        )
+                    except Exception as e:
+                        self.logger.error(
+                            f"Model Linker capabilities error: {e}", exc_info=True
                         )
                         return web.json_response({"error": str(e)}, status=500)
 

@@ -17,6 +17,7 @@ class LinkerManagerDialog extends ComfyDialog {
         this.missingModels = [];
         this.allModels = null; // list of all available models for dropdown
         this.downloadDirectories = null;
+        this.capabilities = null;
         this.downloadSubfolders = new Map();
         this.pendingResolutions = [];
         this.pendingIndex = new Map(); // key -> index in pendingResolutions
@@ -164,7 +165,8 @@ class LinkerManagerDialog extends ComfyDialog {
             popular: newResults.popular || existingResults.popular || null,
             model_list: newResults.model_list || existingResults.model_list || null,
             huggingface: newResults.huggingface || existingResults.huggingface || null,
-            civitai: newResults.civitai || existingResults.civitai || null
+            civitai: newResults.civitai || existingResults.civitai || null,
+            lora_manager_archive: newResults.lora_manager_archive || existingResults.lora_manager_archive || null
         };
     }
 
@@ -172,7 +174,7 @@ class LinkerManagerDialog extends ComfyDialog {
      * Return true when at least one downloadable source was found
      */
     hasSearchResults(data = {}) {
-        return !!(data.popular || data.model_list || data.huggingface || data.civitai);
+        return !!(data.popular || data.model_list || data.huggingface || data.civitai || data.lora_manager_archive);
     }
 
     /**
@@ -183,7 +185,8 @@ class LinkerManagerDialog extends ComfyDialog {
             all: 'Everything',
             local: 'Local Database',
             huggingface: 'HuggingFace',
-            civitai: 'CivitAI'
+            civitai: 'CivitAI',
+            lora_manager_archive: 'LoRA Manager Archive'
         };
         return labels[source] || source;
     }
@@ -3382,6 +3385,26 @@ class LinkerManagerDialog extends ComfyDialog {
         }
     }
 
+    async ensureCapabilitiesLoaded() {
+        if (this.capabilities) return;
+        try {
+            const resp = await api.fetchApi('/model_linker/capabilities');
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            this.capabilities = data && typeof data === 'object' ? data : { sources: {} };
+        } catch (e) {
+            console.warn('Model Linker: could not load capabilities', e);
+            this.capabilities = { sources: {} };
+        }
+    }
+
+    isSourceAvailable(source) {
+        if (!source || ['all', 'local', 'huggingface', 'civitai'].includes(source)) {
+            return true;
+        }
+        return Boolean(this.capabilities?.sources?.[source]);
+    }
+
     getDownloadCategoryOptions(defaultCategory = 'checkpoints') {
         const directories = this.downloadDirectories || {};
         const keys = Object.keys(directories);
@@ -4653,6 +4676,7 @@ class LinkerManagerDialog extends ComfyDialog {
         this.updateDownloadAllButtonState();
         
         // Ensure all models are loaded for dropdown
+        await this.ensureCapabilitiesLoaded();
         await this.ensureAllModelsLoaded();
         await this.ensureDownloadDirectoriesLoaded();
         
@@ -5279,6 +5303,9 @@ class LinkerManagerDialog extends ComfyDialog {
             html += `<option value="local">Local Database</option>`;
             html += `<option value="huggingface">HuggingFace</option>`;
             html += `<option value="civitai">CivitAI</option>`;
+            if (this.isSourceAvailable('lora_manager_archive')) {
+                html += `<option value="lora_manager_archive">LoRA Manager Archive</option>`;
+            }
             html += `</select>`;
             html += `</div>`;
             html += `</div>`;
@@ -6235,7 +6262,8 @@ class LinkerManagerDialog extends ComfyDialog {
         const modelListResult = results.model_list;
         const hfResult = results.huggingface ? (Array.isArray(results.huggingface) ? results.huggingface[0] : results.huggingface) : null;
         const civitaiResult = results.civitai ? (Array.isArray(results.civitai) ? results.civitai[0] : results.civitai) : null;
-        const hasResults = popular || modelListResult || hfResult || civitaiResult;
+        const loraManagerArchiveResult = results.lora_manager_archive ? (Array.isArray(results.lora_manager_archive) ? results.lora_manager_archive[0] : results.lora_manager_archive) : null;
+        const hasResults = popular || modelListResult || hfResult || civitaiResult || loraManagerArchiveResult;
 
         if (!hasResults) {
             const searchedLabel = (state?.lastAttemptSources || []).map(source => this.getSearchSourceLabel(source)).join(', ');
@@ -6292,6 +6320,22 @@ class LinkerManagerDialog extends ComfyDialog {
                 result: hfResult,
                 filename: hfResult.filename,
                 secondaryText: hfRepo,
+                actionHtml
+            });
+        }
+
+        // LoRA Manager archive result
+        if (loraManagerArchiveResult && loraManagerArchiveResult.url) {
+            const archiveFilename = loraManagerArchiveResult.filename || missing.original_path?.split('/').pop()?.split('\\').pop() || '';
+            const actionHtml = loraManagerArchiveResult.download_url
+                ? `<button class="search-download-btn ml-btn ml-btn-secondary ml-btn-sm" data-url="${loraManagerArchiveResult.download_url}" data-filename="${archiveFilename}" data-category="${missing.category}"><span class="ml-btn-icon">☁</span> Download</button>`
+                : '';
+            html += this.renderOnlineSearchResultCard({
+                statusClass: 'ml-status-info',
+                title: 'Found in LoRA Manager Archive',
+                result: loraManagerArchiveResult,
+                filename: archiveFilename,
+                secondaryText: loraManagerArchiveResult.version_name || loraManagerArchiveResult.name || '',
                 actionHtml
             });
         }
