@@ -26,7 +26,8 @@ class LinkerManagerDialog extends ComfyDialog {
         this.cachedAnalysisData = null;
         this.cachedWorkflowSignature = null;
         this.boundHandleOutsideClick = this.handleOutsideClick.bind(this);
-        this.activeTab = 'missing';  // Default tab
+        this.activeTabStorageKey = 'model_linker_active_tab';
+        this.activeTab = this.restoreActiveTab();  // Default tab
         this.fullscreen = false;
         this._dragging = false;
         this._dragStart = null;
@@ -83,6 +84,13 @@ class LinkerManagerDialog extends ComfyDialog {
                 $el("span", { textContent: "Open Containing Folder" })
             ])
         ]);
+
+        this.tooltipElement = $el("div.ml-global-tooltip", {
+            parent: document.body,
+            style: {
+                display: "none"
+            }
+        });
         
         // Selected model for context menu
         this._contextMenuModel = null;
@@ -172,6 +180,70 @@ class LinkerManagerDialog extends ComfyDialog {
 
     getSearchIconHtml() {
         return `<span class="ml-btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l5 5"></path></svg></span>`;
+    }
+
+    showTooltip(target) {
+        if (!target || !this.tooltipElement) return;
+        const text = target.getAttribute('data-tooltip');
+        if (!text) return;
+
+        this.tooltipElement.textContent = text;
+        this.tooltipElement.style.display = 'block';
+
+        const rect = target.getBoundingClientRect();
+        const tooltipRect = this.tooltipElement.getBoundingClientRect();
+        const margin = 12;
+        const maxLeft = Math.max(margin, window.innerWidth - tooltipRect.width - margin);
+        let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+        left = Math.min(Math.max(margin, left), maxLeft);
+
+        let top = rect.top - tooltipRect.height - 10;
+        if (top < margin) {
+            top = Math.min(window.innerHeight - tooltipRect.height - margin, rect.bottom + 10);
+        }
+        top = Math.max(margin, top);
+
+        this.tooltipElement.style.left = `${Math.round(left)}px`;
+        this.tooltipElement.style.top = `${Math.round(top)}px`;
+        this.tooltipElement.setAttribute('data-visible', 'true');
+    }
+
+    hideTooltip() {
+        if (!this.tooltipElement) return;
+        this.tooltipElement.style.display = 'none';
+        this.tooltipElement.removeAttribute('data-visible');
+    }
+
+    bindTooltips(container) {
+        if (!container) return;
+
+        container.querySelectorAll('.ml-tooltip-badge').forEach((badge) => {
+            badge.addEventListener('mouseenter', () => this.showTooltip(badge));
+            badge.addEventListener('focus', () => this.showTooltip(badge));
+            badge.addEventListener('mouseleave', () => this.hideTooltip());
+            badge.addEventListener('blur', () => this.hideTooltip());
+        });
+    }
+
+    getValidTab(tab) {
+        return ['missing', 'loaded', 'options'].includes(tab) ? tab : 'missing';
+    }
+
+    restoreActiveTab() {
+        try {
+            return this.getValidTab(localStorage.getItem(this.activeTabStorageKey));
+        } catch (error) {
+            console.warn('Model Linker: Failed to restore active tab:', error);
+            return 'missing';
+        }
+    }
+
+    persistActiveTab(tab) {
+        try {
+            localStorage.setItem(this.activeTabStorageKey, this.getValidTab(tab));
+        } catch (error) {
+            console.warn('Model Linker: Failed to persist active tab:', error);
+        }
     }
 
     /**
@@ -2934,7 +3006,6 @@ class LinkerManagerDialog extends ComfyDialog {
                 text-decoration: underline;
             }
             .ml-tooltip-badge {
-                position: relative;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
@@ -2949,14 +3020,10 @@ class LinkerManagerDialog extends ComfyDialog {
                 cursor: help;
                 flex: 0 0 auto;
             }
-            .ml-tooltip-badge::after {
-                content: attr(data-tooltip);
-                position: absolute;
-                left: 50%;
-                bottom: calc(100% + 10px);
-                transform: translateX(-50%);
+            .ml-global-tooltip {
+                position: fixed;
                 min-width: 220px;
-                max-width: 320px;
+                max-width: min(320px, calc(100vw - 24px));
                 padding: 9px 11px;
                 border-radius: 10px;
                 background: rgba(34, 34, 38, 0.98);
@@ -2968,15 +3035,8 @@ class LinkerManagerDialog extends ComfyDialog {
                 white-space: normal;
                 text-align: left;
                 box-shadow: 0 12px 28px rgba(0,0,0,0.32);
-                opacity: 0;
                 pointer-events: none;
-                visibility: hidden;
-                transition: opacity 0.15s ease, visibility 0.15s ease;
-                z-index: 50;
-            }
-            .ml-tooltip-badge:hover::after {
-                opacity: 1;
-                visibility: visible;
+                z-index: 100002;
             }
             .ml-options-input-row {
                 display: grid;
@@ -4322,6 +4382,8 @@ class LinkerManagerDialog extends ComfyDialog {
             });
         });
 
+        this.bindTooltips(this.contentElement);
+
         navButtons.forEach((btn) => {
             btn.addEventListener('click', () => {
                 const targetId = btn.dataset.target;
@@ -4358,10 +4420,12 @@ class LinkerManagerDialog extends ComfyDialog {
     }
 
     switchTab(tab) {
-        this.activeTab = tab;
+        this.activeTab = this.getValidTab(tab);
+        this.persistActiveTab(this.activeTab);
+        this.hideTooltip();
         this.animateTabContentTransition();
-        
-        if (tab === 'missing') {
+
+        if (this.activeTab === 'missing') {
             if (this.contentElement) {
                 this.contentElement.style.overflowY = 'auto';
             }
@@ -4379,7 +4443,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 this.splitterElement.style.display = '';
             }
             this.loadWorkflowData();
-        } else if (tab === 'loaded') {
+        } else if (this.activeTab === 'loaded') {
             if (this.contentElement) {
                 this.contentElement.style.overflowY = 'auto';
             }
@@ -5222,16 +5286,6 @@ class LinkerManagerDialog extends ComfyDialog {
         await this.ensureAllModelsLoaded();
         await this.ensureDownloadDirectoriesLoaded();
         
-        // Always default to Missing Models tab when opening dialog
-        if (this.activeTab !== 'missing') {
-            // Manually switch tab without loading
-            this.activeTab = 'missing';
-            this.missingTab.classList.add('ml-tab-active');
-            this.loadedTab.classList.remove('ml-tab-active');
-            this.downloadAllButton.style.display = 'inline-flex';
-            this.autoResolveButton.style.display = 'inline-flex';
-        }
-        
         // Restore fullscreen state if enabled
         try {
             const fs = localStorage.getItem('model_linker_modal_fullscreen');
@@ -5240,9 +5294,16 @@ class LinkerManagerDialog extends ComfyDialog {
         
         // Attach drag handle event listener (only once)
         this.attachDragHandleIfNeeded();
-        
-        // Use provided workflow or fetch from current graph
-        await this.loadWorkflowData(workflow);
+
+        this.activeTab = this.restoreActiveTab();
+
+        if (this.activeTab === 'missing') {
+            await this.loadWorkflowData(workflow);
+        } else if (this.activeTab === 'loaded') {
+            this.switchTab('loaded');
+        } else {
+            this.switchTab('options');
+        }
     }
     
     // Attach drag handle event listeners
@@ -5267,6 +5328,7 @@ class LinkerManagerDialog extends ComfyDialog {
     
     close() {
         this._hidePreview?.();
+        this.hideTooltip();
         this.backdrop.style.display = "none";
         this.element.style.display = "none";
     }
