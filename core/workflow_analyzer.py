@@ -193,6 +193,7 @@ def get_node_model_info(
     model_refs = []
     node_id = node.get("id")
     node_type = node.get("type", "")
+    node_title = str(node.get("title", "") or "").strip()
     widgets_values = node.get("widgets_values", [])
 
     # Check if node is connected (has any inputs or outputs with links)
@@ -291,6 +292,7 @@ def get_node_model_info(
                                 "name": name,
                                 "strength": float(strength),
                                 "active": active,
+                                "node_title": node_title,
                                 "category": "loras",
                                 "full_path": lora_full_path,
                                 "exists": lora_exists,
@@ -340,6 +342,7 @@ def get_node_model_info(
                             "node_type": node_type,
                             "widget_index": idx,
                             "original_path": value_str,
+                            "node_title": node_title,
                             "category": category,
                             "full_path": full_path,
                             "exists": exists,
@@ -372,6 +375,7 @@ def get_node_model_info(
                         "model_id": int(model_id),
                         "version_id": int(version_id),
                     },
+                    "node_title": node_title,
                     "category": category,
                     "full_path": None,
                     "exists": False,
@@ -398,6 +402,7 @@ def get_node_model_info(
                 "node_type": node_type,
                 "widget_index": idx,
                 "original_path": value_str,
+                "node_title": node_title,
                 "category": category,
                 "full_path": full_path,
                 "exists": exists,

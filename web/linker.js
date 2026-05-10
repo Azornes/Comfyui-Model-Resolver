@@ -5967,6 +5967,11 @@ class LinkerManagerDialog extends ComfyDialog {
         } else {
             nodeLabel = missing.node_type || 'Node';
         }
+        const customNodeTitle = String(missing.node_title || '').trim();
+        const hasCustomNodeTitle = customNodeTitle && customNodeTitle !== nodeLabel;
+        const nodeChipText = this.escapeHtml(hasCustomNodeTitle
+            ? `${nodeLabel} #${missing.node_id} · ${customNodeTitle}`
+            : `${nodeLabel} #${missing.node_id}`);
         
         // Start card
         let html = `<div class="ml-card">`;
@@ -6030,7 +6035,7 @@ class LinkerManagerDialog extends ComfyDialog {
         if (missing.is_top_level !== false) {
             html += this.getLocateIconHtml();
         }
-        html += `${nodeLabel} #${missing.node_id}</span>`;
+        html += `${nodeChipText}</span>`;
         html += `</div>`;
         html += `</div>`;
         html += `</div>`;
