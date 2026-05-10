@@ -826,10 +826,34 @@ class ModelLinkerExtension:
                         # Handle both boolean and string forms
                         is_urn_raw = data.get("is_urn", False)
                         civitai_session_token = data.get("civitai_session_token", "")
+                        hf_token = data.get("hf_token", "")
+                        brave_search_api_key = data.get("brave_search_api_key", "")
+                        hf_use_api_search = data.get("hf_use_api_search", True)
+                        hf_use_comfy_org_fallback = data.get(
+                            "hf_use_comfy_org_fallback", True
+                        )
+                        hf_use_brave_fallback = data.get(
+                            "hf_use_brave_fallback", True
+                        )
                         is_urn = (
                             is_urn_raw
                             if isinstance(is_urn_raw, bool)
                             else (str(is_urn_raw).lower() == "true")
+                        )
+                        hf_use_api_search = (
+                            hf_use_api_search
+                            if isinstance(hf_use_api_search, bool)
+                            else str(hf_use_api_search).lower() == "true"
+                        )
+                        hf_use_comfy_org_fallback = (
+                            hf_use_comfy_org_fallback
+                            if isinstance(hf_use_comfy_org_fallback, bool)
+                            else str(hf_use_comfy_org_fallback).lower() == "true"
+                        )
+                        hf_use_brave_fallback = (
+                            hf_use_brave_fallback
+                            if isinstance(hf_use_brave_fallback, bool)
+                            else str(hf_use_brave_fallback).lower() == "true"
                         )
 
                         # For URN-only requests, model_id and version_id are required instead of filename
@@ -923,7 +947,14 @@ class ModelLinkerExtension:
                         # 2. Search HuggingFace for exact file match
                         if search_huggingface_source:
                             log_info(f"Search source [huggingface] start: filename={filename}")
-                            hf_result = search_huggingface_for_file(filename)
+                            hf_result = search_huggingface_for_file(
+                                filename,
+                                token=hf_token or None,
+                                brave_api_key=brave_search_api_key or None,
+                                use_api_search=hf_use_api_search,
+                                use_comfy_org_fallback=hf_use_comfy_org_fallback,
+                                use_brave_fallback=hf_use_brave_fallback,
+                            )
                             log_search_result("huggingface", hf_result)
                             if hf_result:
                                 results["huggingface"] = hf_result

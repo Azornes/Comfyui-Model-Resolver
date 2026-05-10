@@ -2796,6 +2796,22 @@ class LinkerManagerDialog extends ComfyDialog {
                 color: var(--ml-text-muted);
                 line-height: 1.45;
             }
+            .ml-checkbox-row {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-size: 13px;
+                color: var(--ml-text);
+                cursor: pointer;
+                user-select: none;
+            }
+            .ml-checkbox-row input[type="checkbox"] {
+                width: 15px;
+                height: 15px;
+                margin: 0;
+                accent-color: #4ea1ff;
+                cursor: pointer;
+            }
             .ml-options-input-row {
                 display: flex;
                 align-items: center;
@@ -3687,6 +3703,10 @@ class LinkerManagerDialog extends ComfyDialog {
             civitai_key: localStorage.getItem('modelLinker.civitaiApiKey') || '',
             civitai_session_token: localStorage.getItem('modelLinker.civitaiSessionToken') || '',
             hf_token: localStorage.getItem('modelLinker.huggingFaceToken') || '',
+            brave_search_api_key: localStorage.getItem('modelLinker.braveSearchApiKey') || '',
+            hf_use_api_search: localStorage.getItem('modelLinker.hfUseApiSearch') !== 'false',
+            hf_use_comfy_org_fallback: localStorage.getItem('modelLinker.hfUseComfyOrgFallback') !== 'false',
+            hf_use_brave_fallback: localStorage.getItem('modelLinker.hfUseBraveFallback') !== 'false',
             civitai_candidate_limit
         };
     }
@@ -3720,7 +3740,7 @@ class LinkerManagerDialog extends ComfyDialog {
                             <p class="ml-options-section-subtitle">All CivitAI-related options are grouped here for downloads and search behavior.</p>
                             <div class="ml-options-stack">
                                 <div class="ml-options-field">
-                                    <label for="ml-options-civitai" class="ml-options-label">CivitAI API Key</label>
+                                    <label for="ml-options-civitai" class="ml-options-label">CivitAI API Key <a href="https://civitai.com/user/account" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a></label>
                                     <div class="ml-options-input-row">
                                         <input id="ml-options-civitai" class="ml-options-input" type="password" placeholder="Paste CivitAI API key" value="${tokens.civitai_key}">
                                         <button id="ml-options-civitai-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide CivitAI API key" title="Show or hide">
@@ -3775,7 +3795,22 @@ class LinkerManagerDialog extends ComfyDialog {
                             <p class="ml-options-section-subtitle">Authorization for gated repositories and protected downloads.</p>
                             <div class="ml-options-stack">
                                 <div class="ml-options-field">
-                                    <label for="ml-options-hf" class="ml-options-label">HuggingFace Token</label>
+                                    <div class="ml-options-help">Choose which HuggingFace search methods are allowed. You can enable any combination.</div>
+                                    <label class="ml-checkbox-row">
+                                        <input id="ml-options-hf-use-api-search" type="checkbox" ${tokens.hf_use_api_search ? 'checked' : ''}>
+                                        <span>Use HuggingFace API repo search</span>
+                                    </label>
+                                    <label class="ml-checkbox-row">
+                                        <input id="ml-options-hf-use-comfy-org-fallback" type="checkbox" ${tokens.hf_use_comfy_org_fallback ? 'checked' : ''}>
+                                        <span>Use Comfy-Org fallback</span>
+                                    </label>
+                                    <label class="ml-checkbox-row">
+                                        <input id="ml-options-hf-use-brave-fallback" type="checkbox" ${tokens.hf_use_brave_fallback ? 'checked' : ''}>
+                                        <span>Use Brave fallback</span>
+                                    </label>
+                                </div>
+                                <div class="ml-options-field">
+                                    <label for="ml-options-hf" class="ml-options-label">HuggingFace Token <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a></label>
                                     <div class="ml-options-input-row">
                                         <input id="ml-options-hf" class="ml-options-input" type="password" placeholder="Paste HuggingFace token" value="${tokens.hf_token}">
                                         <button id="ml-options-hf-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide HuggingFace token" title="Show or hide">
@@ -3786,6 +3821,19 @@ class LinkerManagerDialog extends ComfyDialog {
                                         </button>
                                     </div>
                                     <div class="ml-options-help">Used for gated HuggingFace repos that need authorization during download.</div>
+                                </div>
+                                <div class="ml-options-field">
+                                    <label for="ml-options-brave" class="ml-options-label">Brave Search API Key <a href="https://api-dashboard.search.brave.com/app/keys" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a></label>
+                                    <div class="ml-options-input-row">
+                                        <input id="ml-options-brave" class="ml-options-input" type="password" placeholder="Paste Brave Search API key" value="${tokens.brave_search_api_key}">
+                                        <button id="ml-options-brave-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide Brave Search API key" title="Show or hide">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path>
+                                                <circle cx="12" cy="12" r="3"></circle>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <div class="ml-options-help">Used as the last fallback for exact web search with query format like <code>"model.safetensors" site:huggingface.co</code>.</div>
                                 </div>
                             </div>
                         </div>
@@ -3801,10 +3849,15 @@ class LinkerManagerDialog extends ComfyDialog {
         const civitaiInput = this.contentElement.querySelector('#ml-options-civitai');
         const civitaiSessionInput = this.contentElement.querySelector('#ml-options-civitai-session');
         const hfInput = this.contentElement.querySelector('#ml-options-hf');
+        const braveInput = this.contentElement.querySelector('#ml-options-brave');
         const civitaiToggle = this.contentElement.querySelector('#ml-options-civitai-toggle');
         const civitaiSessionToggle = this.contentElement.querySelector('#ml-options-civitai-session-toggle');
         const hfToggle = this.contentElement.querySelector('#ml-options-hf-toggle');
+        const braveToggle = this.contentElement.querySelector('#ml-options-brave-toggle');
         const civitaiLimitInput = this.contentElement.querySelector('#ml-options-civitai-limit');
+        const hfUseApiSearchInput = this.contentElement.querySelector('#ml-options-hf-use-api-search');
+        const hfUseComfyOrgFallbackInput = this.contentElement.querySelector('#ml-options-hf-use-comfy-org-fallback');
+        const hfUseBraveFallbackInput = this.contentElement.querySelector('#ml-options-hf-use-brave-fallback');
         const status = this.contentElement.querySelector('#ml-options-status');
         const saveBtn = this.contentElement.querySelector('#ml-options-save');
         const civitaiHelpBtn = this.contentElement.querySelector('#ml-options-civitai-help');
@@ -3848,6 +3901,7 @@ class LinkerManagerDialog extends ComfyDialog {
         bindVisibilityToggle(civitaiInput, civitaiToggle);
         bindVisibilityToggle(civitaiSessionInput, civitaiSessionToggle);
         bindVisibilityToggle(hfInput, hfToggle);
+        bindVisibilityToggle(braveInput, braveToggle);
 
         if (saveBtn) {
             saveBtn.addEventListener('click', async () => {
@@ -3858,6 +3912,10 @@ class LinkerManagerDialog extends ComfyDialog {
                 localStorage.setItem('modelLinker.civitaiApiKey', civitaiInput?.value || '');
                 localStorage.setItem('modelLinker.civitaiSessionToken', civitaiSessionInput?.value || '');
                 localStorage.setItem('modelLinker.huggingFaceToken', hfInput?.value || '');
+                localStorage.setItem('modelLinker.braveSearchApiKey', braveInput?.value || '');
+                localStorage.setItem('modelLinker.hfUseApiSearch', hfUseApiSearchInput?.checked ? 'true' : 'false');
+                localStorage.setItem('modelLinker.hfUseComfyOrgFallback', hfUseComfyOrgFallbackInput?.checked ? 'true' : 'false');
+                localStorage.setItem('modelLinker.hfUseBraveFallback', hfUseBraveFallbackInput?.checked ? 'true' : 'false');
                 localStorage.setItem('modelLinker.civitaiCandidateLimit', `${civitaiCandidateLimit}`);
                 if (civitaiLimitInput) {
                     civitaiLimitInput.value = `${civitaiCandidateLimit}`;
@@ -6146,7 +6204,12 @@ class LinkerManagerDialog extends ComfyDialog {
                 is_urn: isUrn,
                 sources: [selectedSource],
                 civitai_session_token: tokens.civitai_session_token,
-                civitai_candidate_limit: tokens.civitai_candidate_limit
+                civitai_candidate_limit: tokens.civitai_candidate_limit,
+                hf_token: tokens.hf_token,
+                brave_search_api_key: tokens.brave_search_api_key,
+                hf_use_api_search: tokens.hf_use_api_search,
+                hf_use_comfy_org_fallback: tokens.hf_use_comfy_org_fallback,
+                hf_use_brave_fallback: tokens.hf_use_brave_fallback
             };
             if (isUrn && missing.urn) {
                 searchData.model_id = missing.urn.model_id;
