@@ -2728,103 +2728,182 @@ class LinkerManagerDialog extends ComfyDialog {
             }
 
             .ml-options-wrap {
-                max-width: 760px;
+                max-width: 1120px;
                 margin: 0 auto;
+                padding: 0 0 18px 0;
+            }
+            .ml-options-shell {
+                display: grid;
+                grid-template-columns: 240px minmax(0, 1fr);
+                gap: 0;
+                border: 1px solid rgba(255,255,255,0.08);
+                border-radius: 22px;
+                overflow: hidden;
+                background: #171717;
+            }
+            .ml-options-sidebar {
+                display: grid;
+                align-content: start;
+                gap: 18px;
+                padding: 18px 14px;
+                background: #242424;
+                border-right: 1px solid rgba(255,255,255,0.08);
+            }
+            .ml-options-sidebar-title {
+                margin: 0;
+                font-size: 17px;
+                font-weight: 700;
+                color: var(--ml-text);
+            }
+            .ml-options-sidebar-group {
+                display: grid;
+                gap: 8px;
+            }
+            .ml-options-sidebar-label {
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+                color: rgba(255,255,255,0.45);
+            }
+            .ml-options-nav {
+                display: grid;
+                gap: 6px;
+            }
+            .ml-options-nav-btn {
                 display: flex;
-                flex-direction: column;
-                gap: 16px;
+                align-items: center;
+                justify-content: space-between;
+                gap: 10px;
+                width: 100%;
+                padding: 12px 14px;
+                border-radius: 8px;
+                border: 1px solid transparent;
+                background: transparent;
+                color: var(--ml-text-muted);
+                font-size: 14px;
+                font-weight: 600;
+                text-align: left;
+                cursor: pointer;
+                transition: background 0.16s ease, color 0.16s ease;
+            }
+            .ml-options-nav-btn:hover {
+                color: var(--ml-text);
+                background: rgba(255,255,255,0.04);
+            }
+            .ml-options-nav-btn.is-active {
+                color: #ffffff;
+                background: #3a3a40;
+            }
+            .ml-options-nav-meta {
+                font-size: 11px;
+                font-weight: 600;
+                color: rgba(255,255,255,0.42);
+            }
+            .ml-options-nav-btn.is-active .ml-options-nav-meta {
+                color: rgba(255,255,255,0.65);
+            }
+            .ml-options-main {
+                display: grid;
+                gap: 0;
+                padding: 18px 26px 24px 26px;
+                background: #171717;
             }
             .ml-options-card {
-                background: var(--ml-card-bg);
-                border: 1px solid var(--ml-border);
-                border-radius: var(--ml-radius-lg);
-                padding: 18px;
-                box-shadow: 0 6px 20px rgba(0,0,0,0.14);
+                background: transparent;
+                border: none;
+                border-radius: 0;
+                padding: 0;
+                box-shadow: none;
             }
             .ml-options-title {
+                margin: 0;
+                font-size: 17px;
+                font-weight: 700;
+                color: var(--ml-text);
+            }
+            .ml-options-section {
+                display: grid;
+                gap: 0;
+                scroll-margin-top: 24px;
+            }
+            .ml-options-section + .ml-options-section {
+                margin-top: 36px;
+                padding-top: 4px;
+            }
+            .ml-options-section-head {
+                display: block;
+                padding: 0 0 10px 0;
+            }
+            .ml-options-section-title {
+                margin: 0;
+                font-size: 20px;
+                font-weight: 700;
+                color: var(--ml-text);
+            }
+            .ml-options-grid {
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: 0;
+            }
+            .ml-options-stack {
+                display: grid;
+                gap: 0;
+            }
+            .ml-options-panel {
+                display: grid;
+                gap: 0;
+                padding: 0;
+                border: none;
+                background: transparent;
+            }
+            .ml-options-panel-title {
                 margin: 0 0 6px 0;
                 font-size: 16px;
                 font-weight: 700;
                 color: var(--ml-text);
             }
-            .ml-options-subtitle {
-                margin: 0 0 16px 0;
-                font-size: 12px;
-                color: var(--ml-text-muted);
-                line-height: 1.5;
-            }
-            .ml-options-grid {
-                display: grid;
-                gap: 14px;
-            }
-            .ml-options-section {
-                display: grid;
-                gap: 14px;
-                padding: 14px;
-                border: 1px solid rgba(255,255,255,0.08);
-                border-radius: 14px;
-                background: rgba(255,255,255,0.02);
-            }
-            .ml-options-section-title {
-                margin: 0;
-                font-size: 13px;
-                font-weight: 700;
-                color: var(--ml-text);
-            }
-            .ml-options-section-subtitle {
-                margin: -6px 0 0 0;
-                font-size: 12px;
-                color: var(--ml-text-muted);
-                line-height: 1.45;
-            }
-            .ml-options-stack {
-                display: grid;
-                gap: 14px;
-            }
             .ml-options-field {
                 display: flex;
                 flex-direction: column;
-                gap: 6px;
+                gap: 0;
             }
             .ml-options-label {
-                font-size: 12px;
-                font-weight: 700;
-                color: var(--ml-text);
-            }
-            .ml-options-help {
-                font-size: 12px;
-                color: var(--ml-text-muted);
-                line-height: 1.45;
-            }
-            .ml-checkbox-row {
                 display: flex;
                 align-items: center;
+                flex-wrap: wrap;
                 gap: 8px;
                 font-size: 13px;
-                color: var(--ml-text);
-                cursor: pointer;
-                user-select: none;
+                font-weight: 600;
+                color: #d8d8dd;
             }
-            .ml-checkbox-row input[type="checkbox"] {
-                width: 15px;
-                height: 15px;
-                margin: 0;
-                accent-color: #4ea1ff;
+            .ml-options-inline-link {
+                border: none;
+                background: none;
+                font-size: 11px;
+                font-weight: 700;
+                padding: 0;
                 cursor: pointer;
+                text-decoration: none;
+                color: rgba(255,255,255,0.6);
+            }
+            .ml-options-inline-link:hover {
+                color: #ffffff;
+                text-decoration: underline;
             }
             .ml-tooltip-badge {
                 position: relative;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                width: 16px;
-                height: 16px;
+                width: 18px;
+                height: 18px;
                 border-radius: 999px;
-                border: 1px solid var(--ml-border);
-                color: var(--ml-text-muted);
+                border: 1px solid rgba(255,255,255,0.12);
+                color: rgba(255,255,255,0.7);
                 font-size: 11px;
                 font-weight: 700;
-                background: rgba(255,255,255,0.04);
+                background: rgba(255,255,255,0.03);
                 cursor: help;
                 flex: 0 0 auto;
             }
@@ -2832,21 +2911,21 @@ class LinkerManagerDialog extends ComfyDialog {
                 content: attr(data-tooltip);
                 position: absolute;
                 left: 50%;
-                bottom: calc(100% + 8px);
+                bottom: calc(100% + 10px);
                 transform: translateX(-50%);
                 min-width: 220px;
                 max-width: 320px;
-                padding: 8px 10px;
-                border-radius: 8px;
-                background: rgba(18, 22, 28, 0.96);
-                border: 1px solid var(--ml-border);
+                padding: 9px 11px;
+                border-radius: 10px;
+                background: rgba(34, 34, 38, 0.98);
+                border: 1px solid rgba(255,255,255,0.08);
                 color: var(--ml-text);
                 font-size: 12px;
                 font-weight: 400;
-                line-height: 1.45;
+                line-height: 1.5;
                 white-space: normal;
                 text-align: left;
-                box-shadow: 0 12px 28px rgba(0,0,0,0.28);
+                box-shadow: 0 12px 28px rgba(0,0,0,0.32);
                 opacity: 0;
                 pointer-events: none;
                 visibility: hidden;
@@ -2858,62 +2937,210 @@ class LinkerManagerDialog extends ComfyDialog {
                 visibility: visible;
             }
             .ml-options-input-row {
-                display: flex;
+                display: grid;
+                grid-template-columns: minmax(220px, 1fr) minmax(260px, 380px) 42px;
                 align-items: center;
-                gap: 8px;
+                gap: 10px;
+                padding: 14px 0;
+                border-bottom: 1px solid rgba(255,255,255,0.1);
+            }
+            .ml-options-input-row > .ml-options-label {
+                min-width: 0;
+                padding-right: 8px;
             }
             .ml-options-input {
                 width: 100%;
-                padding: 10px 12px;
-                background: rgba(255,255,255,0.04);
+                min-height: 42px;
+                padding: 11px 14px;
+                background: #0f1013;
                 color: var(--ml-text);
-                border: 1px solid var(--ml-border);
-                border-radius: 10px;
+                border: 1px solid rgba(255,255,255,0.16);
+                border-radius: 8px;
                 font-size: 13px;
                 outline: none;
+                transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
             }
             .ml-options-input:focus {
+                background: #0f1013;
                 border-color: rgba(78,161,255,0.45);
-                box-shadow: 0 0 0 3px rgba(78,161,255,0.12);
+                box-shadow: none;
             }
             .ml-options-visibility-btn {
-                width: 38px;
-                min-width: 38px;
-                height: 38px;
+                width: 42px;
+                min-width: 42px;
+                height: 42px;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
-                border: 1px solid var(--ml-border);
-                border-radius: 10px;
-                background: rgba(255,255,255,0.04);
+                border: 1px solid rgba(255,255,255,0.14);
+                border-radius: 8px;
+                background: #0f1013;
                 color: var(--ml-text-muted);
                 cursor: pointer;
                 transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
             }
             .ml-options-visibility-btn:hover {
-                background: rgba(255,255,255,0.08);
+                background: #15171b;
                 color: var(--ml-text);
-                border-color: rgba(78,161,255,0.35);
+                border-color: rgba(255,255,255,0.2);
             }
             .ml-options-visibility-btn[aria-pressed="true"] {
                 color: var(--ml-text);
-                border-color: rgba(78,161,255,0.35);
+                border-color: rgba(255,255,255,0.2);
+                background: #15171b;
             }
             .ml-options-visibility-btn svg {
                 width: 18px;
                 height: 18px;
                 display: block;
             }
+            .ml-options-toggle-list {
+                display: grid;
+                gap: 0;
+            }
+            .ml-options-toggle-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 16px;
+                padding: 16px 0;
+                border-bottom: 1px solid rgba(255,255,255,0.1);
+                border-radius: 0;
+                border-top: none;
+                border-left: none;
+                border-right: none;
+                background: transparent;
+                cursor: pointer;
+                transition: background 0.16s ease;
+            }
+            .ml-options-toggle-row:hover {
+                background: transparent;
+            }
+            .ml-options-toggle-copy {
+                display: grid;
+                gap: 0;
+                min-width: 0;
+            }
+            .ml-options-toggle-title {
+                display: flex;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: 8px;
+                font-size: 13px;
+                font-weight: 500;
+                color: #d8d8dd;
+            }
+            .ml-options-toggle-control {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 46px;
+                padding-top: 1px;
+                flex: 0 0 auto;
+            }
+            .ml-options-switch-input {
+                position: absolute;
+                opacity: 0;
+                pointer-events: none;
+            }
+            .ml-options-switch {
+                position: relative;
+                width: 46px;
+                height: 26px;
+                border-radius: 999px;
+                background: #555560;
+                border: 1px solid rgba(255,255,255,0.06);
+                transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+            }
+            .ml-options-switch::after {
+                content: "";
+                position: absolute;
+                top: 2px;
+                left: 2px;
+                width: 20px;
+                height: 20px;
+                border-radius: 999px;
+                background: #f2f6fb;
+                box-shadow: 0 3px 8px rgba(0,0,0,0.3);
+                transition: transform 0.16s ease;
+            }
+            .ml-options-switch-input:checked + .ml-options-switch {
+                background: #4c97ff;
+                border-color: #4c97ff;
+                box-shadow: none;
+            }
+            .ml-options-switch-input:checked + .ml-options-switch::after {
+                transform: translateX(20px);
+            }
+            .ml-options-number-row {
+                display: grid;
+                grid-template-columns: minmax(220px, 1fr) 118px;
+                gap: 12px;
+                align-items: center;
+                padding: 16px 0;
+                border-bottom: 1px solid rgba(255,255,255,0.1);
+            }
+            .ml-options-number-copy {
+                display: grid;
+                gap: 0;
+                min-width: 0;
+            }
+            .ml-options-number-row .ml-options-input {
+                width: 100%;
+                min-width: 0;
+            }
             .ml-options-actions {
                 display: flex;
-                gap: 8px;
+                align-items: center;
+                justify-content: space-between;
+                gap: 16px;
                 flex-wrap: wrap;
-                margin-top: 8px;
+                padding-top: 18px;
             }
             .ml-options-status {
-                margin-top: 10px;
                 font-size: 12px;
                 color: var(--ml-text-muted);
+            }
+            .ml-options-status.is-dirty {
+                color: #ffd48a;
+            }
+            .ml-options-status.is-saved {
+                color: #9dd8a9;
+            }
+            @media (max-width: 980px) {
+                .ml-options-shell {
+                    grid-template-columns: 1fr;
+                    border-radius: 16px;
+                }
+                .ml-options-sidebar {
+                    border-right: none;
+                    border-bottom: 1px solid rgba(255,255,255,0.08);
+                }
+            }
+            @media (max-width: 640px) {
+                .ml-options-section-head,
+                .ml-options-actions,
+                .ml-options-toggle-row,
+                .ml-options-number-row {
+                    grid-template-columns: 1fr;
+                    flex-direction: column;
+                    align-items: flex-start;
+                }
+                .ml-options-toggle-control {
+                    min-width: 0;
+                }
+                .ml-options-number-row {
+                    grid-template-columns: 1fr;
+                }
+                .ml-options-input {
+                    width: 100%;
+                }
+                .ml-options-input-row {
+                    grid-template-columns: 1fr;
+                }
+                .ml-options-input-row > .ml-options-label {
+                    padding-right: 0;
+                }
             }
             .ml-download-target {
                 margin-top: 10px;
@@ -3778,129 +4005,162 @@ class LinkerManagerDialog extends ComfyDialog {
         const tokens = this.getStoredTokens();
         this.contentElement.innerHTML = `
             <div class="ml-options-wrap">
-                <div class="ml-options-card">
-                    <h3 class="ml-options-title">API Tokens</h3>
-                    <p class="ml-options-subtitle">Stored locally in your browser. API keys are used for downloads. Session token can improve CivitAI web search results, including NSFW items visible to your logged-in account.</p>
-                    <div class="ml-options-grid">
-                        <div class="ml-options-section">
-                            <h4 class="ml-options-section-title">CivitAI</h4>
-                            <p class="ml-options-section-subtitle">All CivitAI-related options are grouped here for downloads and search behavior.</p>
-                            <div class="ml-options-stack">
-                                <div class="ml-options-field">
-                                    <label for="ml-options-civitai" class="ml-options-label">CivitAI API Key <a href="https://civitai.com/user/account" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a> <span class="ml-tooltip-badge" data-tooltip="Used for direct CivitAI downloads that otherwise return HTTP 401 or 403.">?</span></label>
-                                    <div class="ml-options-input-row">
-                                        <input id="ml-options-civitai" class="ml-options-input" type="password" placeholder="Paste CivitAI API key" value="${tokens.civitai_key}">
-                                        <button id="ml-options-civitai-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide CivitAI API key" title="Show or hide">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                                <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path>
-                                                <circle cx="12" cy="12" r="3"></circle>
-                                            </svg>
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="ml-options-field">
-                                    <label for="ml-options-civitai-session" class="ml-options-label">CivitAI Session Token <button id="ml-options-civitai-help" type="button" class="ml-options-inline-link">(How to get)</button> <span class="ml-tooltip-badge" data-tooltip="Used only for CivitAI web search on civitai.red to include results available to your logged-in session, including NSFW. Keep it private.">?</span></label>
-                                    <div class="ml-options-input-row">
-                                        <input id="ml-options-civitai-session" class="ml-options-input" type="password" placeholder="Paste __Secure-civitai-token" value="${tokens.civitai_session_token}">
-                                        <button id="ml-options-civitai-session-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide CivitAI session token" title="Show or hide">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                                <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path>
-                                                <circle cx="12" cy="12" r="3"></circle>
-                                            </svg>
-                                        </button>
-                                    </div>
-                                    <div id="ml-options-civitai-help-panel" class="ml-options-help-panel" style="display: none;">
-                                        <h4 class="ml-options-help-title">How to get the CivitAI Session Token</h4>
-                                        <ol class="ml-options-help-list">
-                                            <li>Click <strong>Open CivitAI</strong> below and sign in to your CivitAI account in the browser.</li>
-                                            <li>On the CivitAI page, press <strong>F12</strong> to open DevTools.</li>
-                                            <li>Open the <strong>Application</strong> tab. If you do not see it, click the <strong>&raquo;</strong> overflow menu first.</li>
-                                            <li>In the left sidebar, open <strong>Storage</strong> or <strong>Cookies</strong>, then select <strong>https://civitai.red</strong>.</li>
-                                            <li>Find the cookie named <strong>__Secure-civitai-token</strong>.</li>
-                                            <li>Copy its <strong>Value</strong> and paste it into the <strong>CivitAI Session Token</strong> field above.</li>
-                                            <li>Click <strong>Save</strong>. The search cache will be cleared automatically.</li>
-                                        </ol>
-                                        <div class="ml-options-help-actions">
-                                            <button id="ml-options-open-civitai" class="ml-btn ml-btn-primary">Open CivitAI</button>
+                <div class="ml-options-shell">
+                    <aside class="ml-options-sidebar">
+                        <div class="ml-options-sidebar-group">
+                            <h3 class="ml-options-sidebar-title">Settings</h3>
+                        </div>
+                        <div class="ml-options-sidebar-group">
+                            <div class="ml-options-sidebar-label">Providers</div>
+                            <div class="ml-options-nav">
+                                <button type="button" class="ml-options-nav-btn is-active" data-target="ml-options-section-civitai">
+                                    <span>CivitAI</span>
+                                    <span class="ml-options-nav-meta">01</span>
+                                </button>
+                                <button type="button" class="ml-options-nav-btn" data-target="ml-options-section-hf">
+                                    <span>HuggingFace</span>
+                                    <span class="ml-options-nav-meta">02</span>
+                                </button>
+                            </div>
+                        </div>
+                    </aside>
+                    <div class="ml-options-main">
+                        <section id="ml-options-section-civitai" class="ml-options-card ml-options-section">
+                            <div class="ml-options-section-head">
+                                <h4 class="ml-options-section-title">CivitAI</h4>
+                            </div>
+                            <div class="ml-options-grid">
+                                <div class="ml-options-panel">
+                                    <div class="ml-options-stack">
+                                        <div class="ml-options-field">
+                                            <div class="ml-options-input-row">
+                                                <label for="ml-options-civitai" class="ml-options-label">CivitAI API Key <a href="https://civitai.com/user/account" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a> <span class="ml-tooltip-badge" data-tooltip="Used for direct CivitAI downloads that otherwise return HTTP 401 or 403.">?</span></label>
+                                                <input id="ml-options-civitai" class="ml-options-input" type="password" placeholder="Paste CivitAI API key" value="${tokens.civitai_key}">
+                                                <button id="ml-options-civitai-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide CivitAI API key" title="Show or hide">
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path>
+                                                        <circle cx="12" cy="12" r="3"></circle>
+                                                    </svg>
+                                                </button>
+                                            </div>
                                         </div>
-                                        <div class="ml-options-help-note">Keep this token private. It gives access to search results visible to your logged-in CivitAI account.</div>
+                                        <div class="ml-options-field">
+                                            <div class="ml-options-input-row">
+                                                <label for="ml-options-civitai-session" class="ml-options-label">CivitAI Session Token <span class="ml-tooltip-badge" data-tooltip="Used only for CivitAI web search on civitai.red to include results available to your logged-in session, including NSFW. To get it: sign in on civitai.red, open DevTools with F12, go to Application or Cookies, find __Secure-civitai-token, and paste its value here.">?</span></label>
+                                                <input id="ml-options-civitai-session" class="ml-options-input" type="password" placeholder="Paste __Secure-civitai-token" value="${tokens.civitai_session_token}">
+                                                <button id="ml-options-civitai-session-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide CivitAI session token" title="Show or hide">
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path>
+                                                        <circle cx="12" cy="12" r="3"></circle>
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-                                <div class="ml-options-field">
-                                    <div class="ml-options-help">Choose which CivitAI search methods are allowed. You can enable any combination.</div>
-                                    <label class="ml-checkbox-row">
-                                        <input id="ml-options-civitai-use-trpc-search" type="checkbox" ${tokens.civitai_use_trpc_search ? 'checked' : ''}>
-                                        <span>Use CivitAI tRPC search</span>
-                                        <span class="ml-tooltip-badge" data-tooltip="Uses the CivitAI.red tRPC search endpoint, which is usually the closest to the live website search experience. This is typically the best first method when you want fresher or more relevant candidate models. It can benefit from your CivitAI session token to expose results visible to your logged-in account.">?</span>
-                                    </label>
-                                    <label class="ml-checkbox-row">
-                                        <input id="ml-options-civitai-use-html-fallback" type="checkbox" ${tokens.civitai_use_html_fallback ? 'checked' : ''}>
-                                        <span>Use CivitAI HTML fallback</span>
-                                        <span class="ml-tooltip-badge" data-tooltip="Uses the regular CivitAI.red search page HTML as a fallback when tRPC does not return enough candidates. This is a broader backup path and can recover results when the API-like search path misses something.">?</span>
-                                    </label>
-                                </div>
-                                <div class="ml-options-field">
-                                    <label for="ml-options-civitai-limit" class="ml-options-label">CivitAI Models To Inspect</label>
-                                    <div class="ml-options-input-row">
-                                        <input id="ml-options-civitai-limit" class="ml-options-input" type="number" min="1" max="20" step="1" value="${tokens.civitai_candidate_limit}">
-                                    </div>
-                                    <div class="ml-options-help">Checks the first N CivitAI search results in order. Stops early when an exact 100% filename match is found.</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="ml-options-section">
-                            <h4 class="ml-options-section-title">HuggingFace</h4>
-                            <p class="ml-options-section-subtitle">Authorization for gated repositories and protected downloads.</p>
-                            <div class="ml-options-stack">
-                                <div class="ml-options-field">
-                                    <div class="ml-options-help">Choose which HuggingFace search methods are allowed. You can enable any combination.</div>
-                                    <label class="ml-checkbox-row">
-                                        <input id="ml-options-hf-use-api-search" type="checkbox" ${tokens.hf_use_api_search ? 'checked' : ''}>
-                                        <span>Use HuggingFace API repo search</span>
-                                        <span class="ml-tooltip-badge" data-tooltip="Uses the official HuggingFace models API with search queries derived from the filename, then inspects candidate repositories recursively. This is the most direct and preferred method, but it depends on HuggingFace search returning the right repository candidates.">?</span>
-                                    </label>
-                                    <label class="ml-checkbox-row">
-                                        <input id="ml-options-hf-use-comfy-org-fallback" type="checkbox" ${tokens.hf_use_comfy_org_fallback ? 'checked' : ''}>
-                                        <span>Use Comfy-Org fallback</span>
-                                        <span class="ml-tooltip-badge" data-tooltip="Skips global search and directly inspects repositories under Comfy-Org. This is useful for ComfyUI-oriented repackaged models that may not be discoverable by filename through the standard HuggingFace search API.">?</span>
-                                    </label>
-                                    <label class="ml-checkbox-row">
-                                        <input id="ml-options-hf-use-brave-fallback" type="checkbox" ${tokens.hf_use_brave_fallback ? 'checked' : ''}>
-                                        <span>Use Brave fallback</span>
-                                        <span class="ml-tooltip-badge" data-tooltip="Uses Brave Search API as a last-resort web search with an exact query like &quot;model.safetensors&quot; site:huggingface.co. The results are still verified against the HuggingFace repository tree before a match is accepted. This helps when HuggingFace search itself does not surface the correct repository.">?</span>
-                                    </label>
-                                </div>
-                                <div class="ml-options-field">
-                                    <label for="ml-options-hf" class="ml-options-label">HuggingFace Token <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a> <span class="ml-tooltip-badge" data-tooltip="Used for gated HuggingFace repos that need authorization during download.">?</span></label>
-                                    <div class="ml-options-input-row">
-                                        <input id="ml-options-hf" class="ml-options-input" type="password" placeholder="Paste HuggingFace token" value="${tokens.hf_token}">
-                                        <button id="ml-options-hf-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide HuggingFace token" title="Show or hide">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                                <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path>
-                                                <circle cx="12" cy="12" r="3"></circle>
-                                            </svg>
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="ml-options-field">
-                                    <label for="ml-options-brave" class="ml-options-label">Brave Search API Key <a href="https://api-dashboard.search.brave.com/app/keys" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a> <span class="ml-tooltip-badge" data-tooltip="Used as the last fallback for exact web search with queries like &quot;model.safetensors&quot; site:huggingface.co when Brave fallback is enabled.">?</span></label>
-                                    <div class="ml-options-input-row">
-                                        <input id="ml-options-brave" class="ml-options-input" type="password" placeholder="Paste Brave Search API key" value="${tokens.brave_search_api_key}">
-                                        <button id="ml-options-brave-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide Brave Search API key" title="Show or hide">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                                <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path>
-                                                <circle cx="12" cy="12" r="3"></circle>
-                                            </svg>
-                                        </button>
+                                <div class="ml-options-panel">
+                                    <div class="ml-options-toggle-list">
+                                        <label class="ml-options-toggle-row">
+                                            <div class="ml-options-toggle-copy">
+                                                <span class="ml-options-toggle-title">Use CivitAI tRPC search <span class="ml-tooltip-badge" data-tooltip="Uses the CivitAI.red tRPC search endpoint, which is usually the closest to the live website search experience. This is typically the best first method when you want fresher or more relevant candidate models. It can benefit from your CivitAI session token to expose results visible to your logged-in account.">?</span></span>
+                                            </div>
+                                            <span class="ml-options-toggle-control">
+                                                <input id="ml-options-civitai-use-trpc-search" class="ml-options-switch-input" type="checkbox" ${tokens.civitai_use_trpc_search ? 'checked' : ''}>
+                                                <span class="ml-options-switch"></span>
+                                            </span>
+                                        </label>
+                                        <label class="ml-options-toggle-row">
+                                            <div class="ml-options-toggle-copy">
+                                                <span class="ml-options-toggle-title">Use CivitAI HTML fallback <span class="ml-tooltip-badge" data-tooltip="Uses the regular CivitAI.red search page HTML as a fallback when tRPC does not return enough candidates. This is a broader backup path and can recover results when the API-like search path misses something.">?</span></span>
+                                            </div>
+                                            <span class="ml-options-toggle-control">
+                                                <input id="ml-options-civitai-use-html-fallback" class="ml-options-switch-input" type="checkbox" ${tokens.civitai_use_html_fallback ? 'checked' : ''}>
+                                                <span class="ml-options-switch"></span>
+                                            </span>
+                                        </label>
+                                        <div class="ml-options-number-row">
+                                            <div class="ml-options-number-copy">
+                                                <span class="ml-options-label">CivitAI Models To Inspect <span class="ml-tooltip-badge" data-tooltip="Checks the first N CivitAI results and stops early after an exact 100 percent filename match.">?</span></span>
+                                            </div>
+                                            <input id="ml-options-civitai-limit" class="ml-options-input" type="number" min="1" max="20" step="1" value="${tokens.civitai_candidate_limit}">
+                                        </div>
                                     </div>
                                 </div>
                             </div>
+                        </section>
+                        <section id="ml-options-section-hf" class="ml-options-card ml-options-section">
+                            <div class="ml-options-section-head">
+                                <h4 class="ml-options-section-title">HuggingFace</h4>
+                            </div>
+                            <div class="ml-options-grid">
+                                <div class="ml-options-panel">
+                                    <div class="ml-options-stack">
+                                        <div class="ml-options-field">
+                                            <div class="ml-options-input-row">
+                                                <label for="ml-options-hf" class="ml-options-label">HuggingFace Token <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a> <span class="ml-tooltip-badge" data-tooltip="Used for gated HuggingFace repos that need authorization during download.">?</span></label>
+                                                <input id="ml-options-hf" class="ml-options-input" type="password" placeholder="Paste HuggingFace token" value="${tokens.hf_token}">
+                                                <button id="ml-options-hf-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide HuggingFace token" title="Show or hide">
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path>
+                                                        <circle cx="12" cy="12" r="3"></circle>
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="ml-options-field">
+                                            <div class="ml-options-input-row">
+                                                <label for="ml-options-brave" class="ml-options-label">Brave Search API Key <a href="https://api-dashboard.search.brave.com/app/keys" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a> <span class="ml-tooltip-badge" data-tooltip="Used as the last fallback for exact web search with queries like &quot;model.safetensors&quot; site:huggingface.co when Brave fallback is enabled.">?</span></label>
+                                                <input id="ml-options-brave" class="ml-options-input" type="password" placeholder="Paste Brave Search API key" value="${tokens.brave_search_api_key}">
+                                                <button id="ml-options-brave-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide Brave Search API key" title="Show or hide">
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path>
+                                                        <circle cx="12" cy="12" r="3"></circle>
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="ml-options-panel">
+                                    <div class="ml-options-toggle-list">
+                                        <label class="ml-options-toggle-row">
+                                            <div class="ml-options-toggle-copy">
+                                                <span class="ml-options-toggle-title">Use HuggingFace API repo search <span class="ml-tooltip-badge" data-tooltip="Uses the official HuggingFace models API with search queries derived from the filename, then inspects candidate repositories recursively. This is the most direct and preferred method, but it depends on HuggingFace search returning the right repository candidates.">?</span></span>
+                                            </div>
+                                            <span class="ml-options-toggle-control">
+                                                <input id="ml-options-hf-use-api-search" class="ml-options-switch-input" type="checkbox" ${tokens.hf_use_api_search ? 'checked' : ''}>
+                                                <span class="ml-options-switch"></span>
+                                            </span>
+                                        </label>
+                                        <label class="ml-options-toggle-row">
+                                            <div class="ml-options-toggle-copy">
+                                                <span class="ml-options-toggle-title">Use Comfy-Org fallback <span class="ml-tooltip-badge" data-tooltip="Skips global search and directly inspects repositories under Comfy-Org. This is useful for ComfyUI-oriented repackaged models that may not be discoverable by filename through the standard HuggingFace search API.">?</span></span>
+                                            </div>
+                                            <span class="ml-options-toggle-control">
+                                                <input id="ml-options-hf-use-comfy-org-fallback" class="ml-options-switch-input" type="checkbox" ${tokens.hf_use_comfy_org_fallback ? 'checked' : ''}>
+                                                <span class="ml-options-switch"></span>
+                                            </span>
+                                        </label>
+                                        <label class="ml-options-toggle-row">
+                                            <div class="ml-options-toggle-copy">
+                                                <span class="ml-options-toggle-title">Use Brave fallback <span class="ml-tooltip-badge" data-tooltip="Uses Brave Search API as a last-resort web search with an exact query like &quot;model.safetensors&quot; site:huggingface.co. The results are still verified against the HuggingFace repository tree before a match is accepted. This helps when HuggingFace search itself does not surface the correct repository.">?</span></span>
+                                            </div>
+                                            <span class="ml-options-toggle-control">
+                                                <input id="ml-options-hf-use-brave-fallback" class="ml-options-switch-input" type="checkbox" ${tokens.hf_use_brave_fallback ? 'checked' : ''}>
+                                                <span class="ml-options-switch"></span>
+                                            </span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                        <div class="ml-options-card">
+                            <div class="ml-options-actions">
+                                <div id="ml-options-status" class="ml-options-status">Saved only on this machine.</div>
+                                <button id="ml-options-save" class="ml-btn ml-btn-primary ml-footer-btn">Save</button>
+                            </div>
                         </div>
                     </div>
-                    <div class="ml-options-actions">
-                        <button id="ml-options-save" class="ml-btn ml-btn-primary ml-footer-btn">Save</button>
-                    </div>
-                    <div id="ml-options-status" class="ml-options-status">Saved only on this machine.</div>
                 </div>
             </div>
         `;
@@ -3921,9 +4181,32 @@ class LinkerManagerDialog extends ComfyDialog {
         const hfUseBraveFallbackInput = this.contentElement.querySelector('#ml-options-hf-use-brave-fallback');
         const status = this.contentElement.querySelector('#ml-options-status');
         const saveBtn = this.contentElement.querySelector('#ml-options-save');
-        const civitaiHelpBtn = this.contentElement.querySelector('#ml-options-civitai-help');
-        const civitaiHelpPanel = this.contentElement.querySelector('#ml-options-civitai-help-panel');
-        const openCivitaiBtn = this.contentElement.querySelector('#ml-options-open-civitai');
+        const navButtons = Array.from(this.contentElement.querySelectorAll('.ml-options-nav-btn'));
+        const trackedInputs = [
+            civitaiInput,
+            civitaiSessionInput,
+            hfInput,
+            braveInput,
+            civitaiLimitInput,
+            civitaiUseTrpcSearchInput,
+            civitaiUseHtmlFallbackInput,
+            hfUseApiSearchInput,
+            hfUseComfyOrgFallbackInput,
+            hfUseBraveFallbackInput,
+        ].filter(Boolean);
+
+        const setStatus = (text, mode = '') => {
+            if (!status) return;
+            status.textContent = text;
+            status.classList.remove('is-dirty', 'is-saved');
+            if (mode) status.classList.add(mode);
+        };
+
+        const setActiveNav = (targetId) => {
+            navButtons.forEach((btn) => {
+                btn.classList.toggle('is-active', btn.dataset.target === targetId);
+            });
+        };
 
         const getVisibilityIcon = (visible) => visible
             ? `
@@ -3963,6 +4246,25 @@ class LinkerManagerDialog extends ComfyDialog {
         bindVisibilityToggle(civitaiSessionInput, civitaiSessionToggle);
         bindVisibilityToggle(hfInput, hfToggle);
         bindVisibilityToggle(braveInput, braveToggle);
+        setStatus('Saved only on this machine.');
+
+        trackedInputs.forEach((input) => {
+            const eventName = input.type === 'checkbox' ? 'change' : 'input';
+            input.addEventListener(eventName, () => {
+                setStatus('You have unsaved changes.', 'is-dirty');
+            });
+        });
+
+        navButtons.forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const targetId = btn.dataset.target;
+                const targetEl = targetId ? this.contentElement.querySelector(`#${targetId}`) : null;
+                if (!targetEl) return;
+                setActiveNav(targetId);
+                const top = Math.max(0, targetEl.offsetTop - 12);
+                this.contentElement.scrollTo({ top, behavior: 'smooth' });
+            });
+        });
 
         if (saveBtn) {
             saveBtn.addEventListener('click', async () => {
@@ -3984,26 +4286,11 @@ class LinkerManagerDialog extends ComfyDialog {
                     civitaiLimitInput.value = `${civitaiCandidateLimit}`;
                 }
                 await this.clearSearchCaches();
-                if (status) status.textContent = 'Options saved locally.';
+                setStatus('Options saved locally.', 'is-saved');
                 this.showNotification('Options saved and search cache cleared', 'success');
             });
         }
 
-        if (civitaiHelpBtn && civitaiHelpPanel) {
-            civitaiHelpBtn.addEventListener('click', () => {
-                const isHidden = civitaiHelpPanel.style.display === 'none';
-                civitaiHelpPanel.style.display = isHidden ? 'block' : 'none';
-                civitaiHelpBtn.textContent = isHidden
-                    ? 'Hide CivitAI Token Instructions'
-                    : 'How To Get CivitAI Session Token';
-            });
-        }
-
-        if (openCivitaiBtn) {
-            openCivitaiBtn.addEventListener('click', () => {
-                window.open('https://civitai.red', '_blank', 'noopener,noreferrer');
-            });
-        }
     }
 
     switchTab(tab) {
