@@ -32,6 +32,7 @@ class LinkerManagerDialog extends ComfyDialog {
         this._dragging = false;
         this._dragStart = null;
         this._analysisProgressToken = null;
+        this._locateAnimationFrame = null;
         
         // Inject global styles for the redesigned UI
         this.injectStyles();
@@ -5547,11 +5548,14 @@ class LinkerManagerDialog extends ComfyDialog {
                 return;
             }
             
-            // Focus on the node in the canvas
-            if (app.canvas && typeof app.canvas.centerOnNode === 'function') {
-                // Modern ComfyUI versions
-                app.canvas.centerOnNode(node);
-            } else if (app.graph._nodes && app.graph._nodes.get(nodeId)) {
+            let locatedWithAnimation = false;
+
+            // Focus on the node in the canvas with animated panning when possible
+            if (app.canvas?.ds && app.canvas?.canvas) {
+                locatedWithAnimation = this.animateCanvasToNode(node);
+            }
+
+            if (!locatedWithAnimation && app.graph._nodes && app.graph._nodes.get(nodeId)) {
                 // Alternative method for older versions
                 const canvasNode = app.graph._nodes.get(nodeId);
                 if (canvasNode && canvasNode.setSelected && canvasNode.graph) {
@@ -5559,9 +5563,12 @@ class LinkerManagerDialog extends ComfyDialog {
                     // Scroll to node
                     app.canvas.scrollToNode(canvasNode);
                 }
-            } else if (app.ui && app.ui.nodeGraph && typeof app.ui.nodeGraph.scrollToNode === 'function') {
+            } else if (!locatedWithAnimation && app.ui && app.ui.nodeGraph && typeof app.ui.nodeGraph.scrollToNode === 'function') {
                 // Alternative for other versions
                 app.ui.nodeGraph.scrollToNode(node);
+            } else if (!locatedWithAnimation && app.canvas && typeof app.canvas.centerOnNode === 'function') {
+                // Final fallback for versions where animation path is unavailable
+                app.canvas.centerOnNode(node);
             }
             
             // Also try to flash/select the node
@@ -5580,6 +5587,58 @@ class LinkerManagerDialog extends ComfyDialog {
             console.error('Model Linker: Error locating node:', e);
             this.showNotification('Error locating node: ' + e.message, 'error');
         }
+    }
+
+    animateCanvasToNode(node) {
+        const canvas = app?.canvas;
+        const ds = canvas?.ds;
+        const htmlCanvas = canvas?.canvas;
+        if (!canvas || !ds || !htmlCanvas) return false;
+
+        const rect = node.boundingRect || [node.pos?.[0] || 0, node.pos?.[1] || 0, node.size?.[0] || 0, node.size?.[1] || 0];
+        const centerX = rect[0] + (rect[2] || 0) / 2;
+        const centerY = rect[1] + (rect[3] || 0) / 2;
+        const scale = Number.isFinite(ds.scale) && ds.scale > 0 ? ds.scale : 1;
+        const dpr = window.devicePixelRatio || 1;
+        const viewWidth = (htmlCanvas.width || htmlCanvas.clientWidth || 0) / (scale * dpr);
+        const viewHeight = (htmlCanvas.height || htmlCanvas.clientHeight || 0) / (scale * dpr);
+
+        if (!viewWidth || !viewHeight) return false;
+
+        const targetX = -centerX + (viewWidth / 2);
+        const targetY = -centerY + (viewHeight / 2);
+        const startX = Number.isFinite(ds.offset?.[0]) ? ds.offset[0] : targetX;
+        const startY = Number.isFinite(ds.offset?.[1]) ? ds.offset[1] : targetY;
+
+        if (this._locateAnimationFrame) {
+            cancelAnimationFrame(this._locateAnimationFrame);
+            this._locateAnimationFrame = null;
+        }
+
+        const durationMs = 380;
+        const startTime = performance.now();
+        const easeInOutCubic = (t) => t < 0.5
+            ? 4 * t * t * t
+            : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+        const tick = (now) => {
+            const progress = Math.min(1, (now - startTime) / durationMs);
+            const eased = easeInOutCubic(progress);
+
+            ds.offset[0] = startX + ((targetX - startX) * eased);
+            ds.offset[1] = startY + ((targetY - startY) * eased);
+            canvas.setDirty?.(true, true);
+            app.graph?.setDirtyCanvas?.(true, true);
+
+            if (progress < 1) {
+                this._locateAnimationFrame = requestAnimationFrame(tick);
+            } else {
+                this._locateAnimationFrame = null;
+            }
+        };
+
+        this._locateAnimationFrame = requestAnimationFrame(tick);
+        return true;
     }
 
     /**
