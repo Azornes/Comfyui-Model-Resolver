@@ -552,6 +552,8 @@ def search_civitai_for_file(
     model_type: Optional[str] = None,
     session_token: Optional[str] = None,
     candidate_limit: int = DEFAULT_CIVITAI_CANDIDATE_LIMIT,
+    use_trpc_search: bool = True,
+    use_html_fallback: bool = True,
 ) -> Optional[Dict[str, Any]]:
     """
     Search CivitAI for a specific model file.
@@ -571,8 +573,9 @@ def search_civitai_for_file(
     candidate_limit = max(1, min(int(candidate_limit), MAX_CIVITAI_CANDIDATE_LIMIT))
     session_key = "session" if session_token else "anon"
     model_type_key = str(model_type or "").lower()
+    methods_key = f"trpc{int(bool(use_trpc_search))}_html{int(bool(use_html_fallback))}"
     cache_key = (
-        f"civit_{filename}_exact{exact_only}_type{model_type_key}_session{session_key}_limit{candidate_limit}"
+        f"civit_{filename}_exact{exact_only}_type{model_type_key}_session{session_key}_limit{candidate_limit}_{methods_key}"
     )
     if cache_key in _search_cache:
         log_debug(f"CivitAI search cache hit for {filename} (exact_only={exact_only})")
@@ -581,11 +584,15 @@ def search_civitai_for_file(
     try:
         # Prefer the CivitAI.red tRPC search because it is much closer to what
         # the browser search UI returns than the broad public /models API.
-        trpc_candidates = _search_civitai_trpc_candidates(
-            filename,
-            model_type=model_type,
-            session_token=session_token,
-            limit=candidate_limit,
+        trpc_candidates = (
+            _search_civitai_trpc_candidates(
+                filename,
+                model_type=model_type,
+                session_token=session_token,
+                limit=candidate_limit,
+            )
+            if use_trpc_search
+            else []
         )
         candidates_to_check: List[Dict[str, Optional[int]]] = []
         seen_candidates = set()
@@ -602,7 +609,7 @@ def search_civitai_for_file(
 
         add_candidates(trpc_candidates)
 
-        if len(candidates_to_check) < candidate_limit:
+        if use_html_fallback and len(candidates_to_check) < candidate_limit:
             html_candidates = _search_civitai_red_candidates(
                 filename, limit=candidate_limit
             )

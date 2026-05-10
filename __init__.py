@@ -828,6 +828,12 @@ class ModelLinkerExtension:
                         civitai_session_token = data.get("civitai_session_token", "")
                         hf_token = data.get("hf_token", "")
                         brave_search_api_key = data.get("brave_search_api_key", "")
+                        civitai_use_trpc_search = data.get(
+                            "civitai_use_trpc_search", True
+                        )
+                        civitai_use_html_fallback = data.get(
+                            "civitai_use_html_fallback", True
+                        )
                         hf_use_api_search = data.get("hf_use_api_search", True)
                         hf_use_comfy_org_fallback = data.get(
                             "hf_use_comfy_org_fallback", True
@@ -844,6 +850,16 @@ class ModelLinkerExtension:
                             hf_use_api_search
                             if isinstance(hf_use_api_search, bool)
                             else str(hf_use_api_search).lower() == "true"
+                        )
+                        civitai_use_trpc_search = (
+                            civitai_use_trpc_search
+                            if isinstance(civitai_use_trpc_search, bool)
+                            else str(civitai_use_trpc_search).lower() == "true"
+                        )
+                        civitai_use_html_fallback = (
+                            civitai_use_html_fallback
+                            if isinstance(civitai_use_html_fallback, bool)
+                            else str(civitai_use_html_fallback).lower() == "true"
                         )
                         hf_use_comfy_org_fallback = (
                             hf_use_comfy_org_fallback
@@ -1066,6 +1082,8 @@ class ModelLinkerExtension:
                                     model_type=category,
                                     session_token=civitai_session_token or None,
                                     candidate_limit=civitai_candidate_limit,
+                                    use_trpc_search=civitai_use_trpc_search,
+                                    use_html_fallback=civitai_use_html_fallback,
                                 )
                                 log_search_result("civitai", civitai_result)
                                 if civitai_result:

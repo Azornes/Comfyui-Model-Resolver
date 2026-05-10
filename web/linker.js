@@ -2812,6 +2812,51 @@ class LinkerManagerDialog extends ComfyDialog {
                 accent-color: #4ea1ff;
                 cursor: pointer;
             }
+            .ml-tooltip-badge {
+                position: relative;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 16px;
+                height: 16px;
+                border-radius: 999px;
+                border: 1px solid var(--ml-border);
+                color: var(--ml-text-muted);
+                font-size: 11px;
+                font-weight: 700;
+                background: rgba(255,255,255,0.04);
+                cursor: help;
+                flex: 0 0 auto;
+            }
+            .ml-tooltip-badge::after {
+                content: attr(data-tooltip);
+                position: absolute;
+                left: 50%;
+                bottom: calc(100% + 8px);
+                transform: translateX(-50%);
+                min-width: 220px;
+                max-width: 320px;
+                padding: 8px 10px;
+                border-radius: 8px;
+                background: rgba(18, 22, 28, 0.96);
+                border: 1px solid var(--ml-border);
+                color: var(--ml-text);
+                font-size: 12px;
+                font-weight: 400;
+                line-height: 1.45;
+                white-space: normal;
+                text-align: left;
+                box-shadow: 0 12px 28px rgba(0,0,0,0.28);
+                opacity: 0;
+                pointer-events: none;
+                visibility: hidden;
+                transition: opacity 0.15s ease, visibility 0.15s ease;
+                z-index: 50;
+            }
+            .ml-tooltip-badge:hover::after {
+                opacity: 1;
+                visibility: visible;
+            }
             .ml-options-input-row {
                 display: flex;
                 align-items: center;
@@ -3704,6 +3749,8 @@ class LinkerManagerDialog extends ComfyDialog {
             civitai_session_token: localStorage.getItem('modelLinker.civitaiSessionToken') || '',
             hf_token: localStorage.getItem('modelLinker.huggingFaceToken') || '',
             brave_search_api_key: localStorage.getItem('modelLinker.braveSearchApiKey') || '',
+            civitai_use_trpc_search: localStorage.getItem('modelLinker.civitaiUseTrpcSearch') !== 'false',
+            civitai_use_html_fallback: localStorage.getItem('modelLinker.civitaiUseHtmlFallback') !== 'false',
             hf_use_api_search: localStorage.getItem('modelLinker.hfUseApiSearch') !== 'false',
             hf_use_comfy_org_fallback: localStorage.getItem('modelLinker.hfUseComfyOrgFallback') !== 'false',
             hf_use_brave_fallback: localStorage.getItem('modelLinker.hfUseBraveFallback') !== 'false',
@@ -3740,7 +3787,7 @@ class LinkerManagerDialog extends ComfyDialog {
                             <p class="ml-options-section-subtitle">All CivitAI-related options are grouped here for downloads and search behavior.</p>
                             <div class="ml-options-stack">
                                 <div class="ml-options-field">
-                                    <label for="ml-options-civitai" class="ml-options-label">CivitAI API Key <a href="https://civitai.com/user/account" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a></label>
+                                    <label for="ml-options-civitai" class="ml-options-label">CivitAI API Key <a href="https://civitai.com/user/account" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a> <span class="ml-tooltip-badge" data-tooltip="Used for direct CivitAI downloads that otherwise return HTTP 401 or 403.">?</span></label>
                                     <div class="ml-options-input-row">
                                         <input id="ml-options-civitai" class="ml-options-input" type="password" placeholder="Paste CivitAI API key" value="${tokens.civitai_key}">
                                         <button id="ml-options-civitai-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide CivitAI API key" title="Show or hide">
@@ -3750,10 +3797,9 @@ class LinkerManagerDialog extends ComfyDialog {
                                             </svg>
                                         </button>
                                     </div>
-                                    <div class="ml-options-help">Used for direct CivitAI downloads that otherwise return HTTP 401 or 403.</div>
                                 </div>
                                 <div class="ml-options-field">
-                                    <label for="ml-options-civitai-session" class="ml-options-label">CivitAI Session Token <button id="ml-options-civitai-help" type="button" class="ml-options-inline-link">(How to get)</button></label>
+                                    <label for="ml-options-civitai-session" class="ml-options-label">CivitAI Session Token <button id="ml-options-civitai-help" type="button" class="ml-options-inline-link">(How to get)</button> <span class="ml-tooltip-badge" data-tooltip="Used only for CivitAI web search on civitai.red to include results available to your logged-in session, including NSFW. Keep it private.">?</span></label>
                                     <div class="ml-options-input-row">
                                         <input id="ml-options-civitai-session" class="ml-options-input" type="password" placeholder="Paste __Secure-civitai-token" value="${tokens.civitai_session_token}">
                                         <button id="ml-options-civitai-session-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide CivitAI session token" title="Show or hide">
@@ -3763,7 +3809,6 @@ class LinkerManagerDialog extends ComfyDialog {
                                             </svg>
                                         </button>
                                     </div>
-                                    <div class="ml-options-help">Used only for CivitAI web search (civitai.red) to include results available to your logged-in session, including NSFW. Keep it private.</div>
                                     <div id="ml-options-civitai-help-panel" class="ml-options-help-panel" style="display: none;">
                                         <h4 class="ml-options-help-title">How to get the CivitAI Session Token</h4>
                                         <ol class="ml-options-help-list">
@@ -3780,6 +3825,19 @@ class LinkerManagerDialog extends ComfyDialog {
                                         </div>
                                         <div class="ml-options-help-note">Keep this token private. It gives access to search results visible to your logged-in CivitAI account.</div>
                                     </div>
+                                </div>
+                                <div class="ml-options-field">
+                                    <div class="ml-options-help">Choose which CivitAI search methods are allowed. You can enable any combination.</div>
+                                    <label class="ml-checkbox-row">
+                                        <input id="ml-options-civitai-use-trpc-search" type="checkbox" ${tokens.civitai_use_trpc_search ? 'checked' : ''}>
+                                        <span>Use CivitAI tRPC search</span>
+                                        <span class="ml-tooltip-badge" data-tooltip="Uses the CivitAI.red tRPC search endpoint, which is usually the closest to the live website search experience. This is typically the best first method when you want fresher or more relevant candidate models. It can benefit from your CivitAI session token to expose results visible to your logged-in account.">?</span>
+                                    </label>
+                                    <label class="ml-checkbox-row">
+                                        <input id="ml-options-civitai-use-html-fallback" type="checkbox" ${tokens.civitai_use_html_fallback ? 'checked' : ''}>
+                                        <span>Use CivitAI HTML fallback</span>
+                                        <span class="ml-tooltip-badge" data-tooltip="Uses the regular CivitAI.red search page HTML as a fallback when tRPC does not return enough candidates. This is a broader backup path and can recover results when the API-like search path misses something.">?</span>
+                                    </label>
                                 </div>
                                 <div class="ml-options-field">
                                     <label for="ml-options-civitai-limit" class="ml-options-label">CivitAI Models To Inspect</label>
@@ -3799,18 +3857,21 @@ class LinkerManagerDialog extends ComfyDialog {
                                     <label class="ml-checkbox-row">
                                         <input id="ml-options-hf-use-api-search" type="checkbox" ${tokens.hf_use_api_search ? 'checked' : ''}>
                                         <span>Use HuggingFace API repo search</span>
+                                        <span class="ml-tooltip-badge" data-tooltip="Uses the official HuggingFace models API with search queries derived from the filename, then inspects candidate repositories recursively. This is the most direct and preferred method, but it depends on HuggingFace search returning the right repository candidates.">?</span>
                                     </label>
                                     <label class="ml-checkbox-row">
                                         <input id="ml-options-hf-use-comfy-org-fallback" type="checkbox" ${tokens.hf_use_comfy_org_fallback ? 'checked' : ''}>
                                         <span>Use Comfy-Org fallback</span>
+                                        <span class="ml-tooltip-badge" data-tooltip="Skips global search and directly inspects repositories under Comfy-Org. This is useful for ComfyUI-oriented repackaged models that may not be discoverable by filename through the standard HuggingFace search API.">?</span>
                                     </label>
                                     <label class="ml-checkbox-row">
                                         <input id="ml-options-hf-use-brave-fallback" type="checkbox" ${tokens.hf_use_brave_fallback ? 'checked' : ''}>
                                         <span>Use Brave fallback</span>
+                                        <span class="ml-tooltip-badge" data-tooltip="Uses Brave Search API as a last-resort web search with an exact query like &quot;model.safetensors&quot; site:huggingface.co. The results are still verified against the HuggingFace repository tree before a match is accepted. This helps when HuggingFace search itself does not surface the correct repository.">?</span>
                                     </label>
                                 </div>
                                 <div class="ml-options-field">
-                                    <label for="ml-options-hf" class="ml-options-label">HuggingFace Token <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a></label>
+                                    <label for="ml-options-hf" class="ml-options-label">HuggingFace Token <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a> <span class="ml-tooltip-badge" data-tooltip="Used for gated HuggingFace repos that need authorization during download.">?</span></label>
                                     <div class="ml-options-input-row">
                                         <input id="ml-options-hf" class="ml-options-input" type="password" placeholder="Paste HuggingFace token" value="${tokens.hf_token}">
                                         <button id="ml-options-hf-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide HuggingFace token" title="Show or hide">
@@ -3820,10 +3881,9 @@ class LinkerManagerDialog extends ComfyDialog {
                                             </svg>
                                         </button>
                                     </div>
-                                    <div class="ml-options-help">Used for gated HuggingFace repos that need authorization during download.</div>
                                 </div>
                                 <div class="ml-options-field">
-                                    <label for="ml-options-brave" class="ml-options-label">Brave Search API Key <a href="https://api-dashboard.search.brave.com/app/keys" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a></label>
+                                    <label for="ml-options-brave" class="ml-options-label">Brave Search API Key <a href="https://api-dashboard.search.brave.com/app/keys" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a> <span class="ml-tooltip-badge" data-tooltip="Used as the last fallback for exact web search with queries like &quot;model.safetensors&quot; site:huggingface.co when Brave fallback is enabled.">?</span></label>
                                     <div class="ml-options-input-row">
                                         <input id="ml-options-brave" class="ml-options-input" type="password" placeholder="Paste Brave Search API key" value="${tokens.brave_search_api_key}">
                                         <button id="ml-options-brave-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide Brave Search API key" title="Show or hide">
@@ -3833,7 +3893,6 @@ class LinkerManagerDialog extends ComfyDialog {
                                             </svg>
                                         </button>
                                     </div>
-                                    <div class="ml-options-help">Used as the last fallback for exact web search with query format like <code>"model.safetensors" site:huggingface.co</code>.</div>
                                 </div>
                             </div>
                         </div>
@@ -3855,6 +3914,8 @@ class LinkerManagerDialog extends ComfyDialog {
         const hfToggle = this.contentElement.querySelector('#ml-options-hf-toggle');
         const braveToggle = this.contentElement.querySelector('#ml-options-brave-toggle');
         const civitaiLimitInput = this.contentElement.querySelector('#ml-options-civitai-limit');
+        const civitaiUseTrpcSearchInput = this.contentElement.querySelector('#ml-options-civitai-use-trpc-search');
+        const civitaiUseHtmlFallbackInput = this.contentElement.querySelector('#ml-options-civitai-use-html-fallback');
         const hfUseApiSearchInput = this.contentElement.querySelector('#ml-options-hf-use-api-search');
         const hfUseComfyOrgFallbackInput = this.contentElement.querySelector('#ml-options-hf-use-comfy-org-fallback');
         const hfUseBraveFallbackInput = this.contentElement.querySelector('#ml-options-hf-use-brave-fallback');
@@ -3911,6 +3972,8 @@ class LinkerManagerDialog extends ComfyDialog {
                     : 5;
                 localStorage.setItem('modelLinker.civitaiApiKey', civitaiInput?.value || '');
                 localStorage.setItem('modelLinker.civitaiSessionToken', civitaiSessionInput?.value || '');
+                localStorage.setItem('modelLinker.civitaiUseTrpcSearch', civitaiUseTrpcSearchInput?.checked ? 'true' : 'false');
+                localStorage.setItem('modelLinker.civitaiUseHtmlFallback', civitaiUseHtmlFallbackInput?.checked ? 'true' : 'false');
                 localStorage.setItem('modelLinker.huggingFaceToken', hfInput?.value || '');
                 localStorage.setItem('modelLinker.braveSearchApiKey', braveInput?.value || '');
                 localStorage.setItem('modelLinker.hfUseApiSearch', hfUseApiSearchInput?.checked ? 'true' : 'false');
@@ -6205,6 +6268,8 @@ class LinkerManagerDialog extends ComfyDialog {
                 sources: [selectedSource],
                 civitai_session_token: tokens.civitai_session_token,
                 civitai_candidate_limit: tokens.civitai_candidate_limit,
+                civitai_use_trpc_search: tokens.civitai_use_trpc_search,
+                civitai_use_html_fallback: tokens.civitai_use_html_fallback,
                 hf_token: tokens.hf_token,
                 brave_search_api_key: tokens.brave_search_api_key,
                 hf_use_api_search: tokens.hf_use_api_search,
