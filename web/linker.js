@@ -2731,23 +2731,28 @@ class LinkerManagerDialog extends ComfyDialog {
                 max-width: 1120px;
                 margin: 0 auto;
                 padding: 0 0 18px 0;
+                height: 100%;
             }
             .ml-options-shell {
                 display: grid;
                 grid-template-columns: 240px minmax(0, 1fr);
                 gap: 0;
+                height: 100%;
                 border: 1px solid rgba(255,255,255,0.08);
                 border-radius: 22px;
                 overflow: hidden;
                 background: #171717;
             }
             .ml-options-sidebar {
-                display: grid;
-                align-content: start;
+                display: flex;
+                flex-direction: column;
+                align-items: stretch;
                 gap: 18px;
+                height: 100%;
                 padding: 18px 14px;
                 background: #242424;
                 border-right: 1px solid rgba(255,255,255,0.08);
+                overflow: hidden;
             }
             .ml-options-sidebar-title {
                 margin: 0;
@@ -2758,6 +2763,9 @@ class LinkerManagerDialog extends ComfyDialog {
             .ml-options-sidebar-group {
                 display: grid;
                 gap: 8px;
+                min-height: 0;
+                align-content: start;
+                flex: 0 0 auto;
             }
             .ml-options-sidebar-label {
                 font-size: 11px;
@@ -2769,6 +2777,8 @@ class LinkerManagerDialog extends ComfyDialog {
             .ml-options-nav {
                 display: grid;
                 gap: 6px;
+                align-content: start;
+                grid-auto-rows: min-content;
             }
             .ml-options-nav-btn {
                 display: flex;
@@ -2776,6 +2786,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 justify-content: space-between;
                 gap: 10px;
                 width: 100%;
+                min-height: 48px;
                 padding: 12px 14px;
                 border-radius: 8px;
                 border: 1px solid transparent;
@@ -2806,8 +2817,30 @@ class LinkerManagerDialog extends ComfyDialog {
             .ml-options-main {
                 display: grid;
                 gap: 0;
+                min-height: 0;
+                height: 100%;
                 padding: 18px 26px 24px 26px;
                 background: #171717;
+                overflow-y: auto;
+                overflow-x: hidden;
+                scrollbar-gutter: stable;
+                scrollbar-width: auto;
+                scrollbar-color: rgba(255,255,255,0.34) rgba(255,255,255,0.08);
+            }
+            .ml-options-main::-webkit-scrollbar {
+                width: 12px;
+            }
+            .ml-options-main::-webkit-scrollbar-track {
+                background: rgba(255,255,255,0.06);
+                border-radius: 999px;
+            }
+            .ml-options-main::-webkit-scrollbar-thumb {
+                background: rgba(255,255,255,0.34);
+                border-radius: 999px;
+                border: 2px solid rgba(23,23,23,0.95);
+            }
+            .ml-options-main::-webkit-scrollbar-thumb:hover {
+                background: rgba(255,255,255,0.48);
             }
             .ml-options-card {
                 background: transparent;
@@ -2827,9 +2860,8 @@ class LinkerManagerDialog extends ComfyDialog {
                 gap: 0;
                 scroll-margin-top: 24px;
             }
-            .ml-options-section + .ml-options-section {
-                margin-top: 36px;
-                padding-top: 4px;
+            .ml-options-section.is-hidden {
+                display: none;
             }
             .ml-options-section-head {
                 display: block;
@@ -3091,15 +3123,31 @@ class LinkerManagerDialog extends ComfyDialog {
             }
             .ml-options-actions {
                 display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: 16px;
-                flex-wrap: wrap;
-                padding-top: 18px;
+                flex-direction: column;
+                align-items: stretch;
+                justify-content: flex-end;
+                margin-top: auto;
+                padding-top: 10px;
+                border-top: 1px solid rgba(255,255,255,0.08);
+                gap: 10px;
+                flex: 0 0 auto;
+            }
+            .ml-options-actions .ml-footer-btn {
+                width: 100%;
+                min-width: 0;
+            }
+            .ml-options-actions .ml-btn.ml-btn-primary.ml-footer-btn {
+                background: #3a3a40;
+                border-color: rgba(255,255,255,0.12);
+            }
+            .ml-options-actions .ml-btn.ml-btn-primary.ml-footer-btn:hover:not(:disabled) {
+                background: #474750;
+                border-color: rgba(255,255,255,0.18);
             }
             .ml-options-status {
                 font-size: 12px;
                 color: var(--ml-text-muted);
+                text-align: left;
             }
             .ml-options-status.is-dirty {
                 color: #ffd48a;
@@ -3115,6 +3163,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 .ml-options-sidebar {
                     border-right: none;
                     border-bottom: 1px solid rgba(255,255,255,0.08);
+                    height: auto;
                 }
             }
             @media (max-width: 640px) {
@@ -4001,6 +4050,7 @@ class LinkerManagerDialog extends ComfyDialog {
 
     displayOptions() {
         if (!this.contentElement) return;
+        this.contentElement.style.overflowY = 'hidden';
 
         const tokens = this.getStoredTokens();
         this.contentElement.innerHTML = `
@@ -4022,6 +4072,10 @@ class LinkerManagerDialog extends ComfyDialog {
                                     <span class="ml-options-nav-meta">02</span>
                                 </button>
                             </div>
+                        </div>
+                        <div class="ml-options-actions">
+                            <div id="ml-options-status" class="ml-options-status">Saved only on this machine.</div>
+                            <button id="ml-options-save" class="ml-btn ml-btn-primary ml-footer-btn">Save</button>
                         </div>
                     </aside>
                     <div class="ml-options-main">
@@ -4154,12 +4208,6 @@ class LinkerManagerDialog extends ComfyDialog {
                                 </div>
                             </div>
                         </section>
-                        <div class="ml-options-card">
-                            <div class="ml-options-actions">
-                                <div id="ml-options-status" class="ml-options-status">Saved only on this machine.</div>
-                                <button id="ml-options-save" class="ml-btn ml-btn-primary ml-footer-btn">Save</button>
-                            </div>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -4182,6 +4230,7 @@ class LinkerManagerDialog extends ComfyDialog {
         const status = this.contentElement.querySelector('#ml-options-status');
         const saveBtn = this.contentElement.querySelector('#ml-options-save');
         const navButtons = Array.from(this.contentElement.querySelectorAll('.ml-options-nav-btn'));
+        const optionSections = Array.from(this.contentElement.querySelectorAll('.ml-options-section'));
         const trackedInputs = [
             civitaiInput,
             civitaiSessionInput,
@@ -4206,6 +4255,13 @@ class LinkerManagerDialog extends ComfyDialog {
             navButtons.forEach((btn) => {
                 btn.classList.toggle('is-active', btn.dataset.target === targetId);
             });
+        };
+
+        const setVisibleSection = (targetId) => {
+            optionSections.forEach((section) => {
+                section.classList.toggle('is-hidden', section.id !== targetId);
+            });
+            setActiveNav(targetId);
         };
 
         const getVisibilityIcon = (visible) => visible
@@ -4247,6 +4303,7 @@ class LinkerManagerDialog extends ComfyDialog {
         bindVisibilityToggle(hfInput, hfToggle);
         bindVisibilityToggle(braveInput, braveToggle);
         setStatus('Saved only on this machine.');
+        setVisibleSection('ml-options-section-civitai');
 
         trackedInputs.forEach((input) => {
             const eventName = input.type === 'checkbox' ? 'change' : 'input';
@@ -4258,11 +4315,8 @@ class LinkerManagerDialog extends ComfyDialog {
         navButtons.forEach((btn) => {
             btn.addEventListener('click', () => {
                 const targetId = btn.dataset.target;
-                const targetEl = targetId ? this.contentElement.querySelector(`#${targetId}`) : null;
-                if (!targetEl) return;
-                setActiveNav(targetId);
-                const top = Math.max(0, targetEl.offsetTop - 12);
-                this.contentElement.scrollTo({ top, behavior: 'smooth' });
+                if (!targetId) return;
+                setVisibleSection(targetId);
             });
         });
 
@@ -4298,6 +4352,9 @@ class LinkerManagerDialog extends ComfyDialog {
         this.animateTabContentTransition();
         
         if (tab === 'missing') {
+            if (this.contentElement) {
+                this.contentElement.style.overflowY = 'auto';
+            }
             this.missingTab.classList.add('ml-tab-active');
             this.loadedTab.classList.remove('ml-tab-active');
             this.optionsTab.classList.remove('ml-tab-active');
@@ -4313,6 +4370,9 @@ class LinkerManagerDialog extends ComfyDialog {
             }
             this.loadWorkflowData();
         } else if (tab === 'loaded') {
+            if (this.contentElement) {
+                this.contentElement.style.overflowY = 'auto';
+            }
             this.missingTab.classList.remove('ml-tab-active');
             this.loadedTab.classList.add('ml-tab-active');
             this.optionsTab.classList.remove('ml-tab-active');
@@ -4328,6 +4388,9 @@ class LinkerManagerDialog extends ComfyDialog {
             }
             this.loadLoadedModels();
         } else {
+            if (this.contentElement) {
+                this.contentElement.style.overflowY = 'hidden';
+            }
             this.missingTab.classList.remove('ml-tab-active');
             this.loadedTab.classList.remove('ml-tab-active');
             this.optionsTab.classList.add('ml-tab-active');
