@@ -2861,11 +2861,25 @@ class LinkerManagerDialog extends ComfyDialog {
                 display: grid;
                 gap: 8px;
             }
+            .ml-download-target-grid {
+                display: grid;
+                grid-template-columns: minmax(120px, 33%) minmax(0, 1fr);
+                gap: 10px;
+                align-items: start;
+            }
             .ml-download-target-row {
                 display: grid;
                 gap: 6px;
             }
+            @media (max-width: 720px) {
+                .ml-download-target-grid {
+                    grid-template-columns: 1fr;
+                }
+            }
             .ml-download-target-label {
+                min-height: 28px;
+                display: flex;
+                align-items: flex-end;
                 font-size: 11px;
                 font-weight: 700;
                 color: var(--ml-text-muted);
@@ -3571,6 +3585,7 @@ class LinkerManagerDialog extends ComfyDialog {
             .join('');
 
         let html = `<div class="ml-download-target">`;
+        html += `<div class="ml-download-target-grid">`;
         html += `<div class="ml-download-target-row">`;
         html += `<label class="ml-download-target-label" for="${selectId}">Folder</label>`;
         html += `<select id="${selectId}" class="ml-download-target-select">${options}</select>`;
@@ -3580,6 +3595,7 @@ class LinkerManagerDialog extends ComfyDialog {
         html += `<div class="ml-download-target-wrap">`;
         html += `<input id="${subfolderId}" class="ml-download-target-input" type="text" placeholder="e.g. ponyxl\\styles" autocomplete="off">`;
         html += `<div id="${subfolderListId}" class="ml-download-target-list"></div>`;
+        html += `</div>`;
         html += `</div>`;
         html += `</div>`;
         html += `</div>`;
