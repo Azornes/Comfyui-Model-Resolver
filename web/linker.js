@@ -2819,6 +2819,8 @@ class LinkerManagerDialog extends ComfyDialog {
                 gap: 0;
                 min-height: 0;
                 height: 100%;
+                align-content: start;
+                align-items: start;
                 padding: 18px 26px 24px 26px;
                 background: #171717;
                 overflow-y: auto;
@@ -2848,6 +2850,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 border-radius: 0;
                 padding: 0;
                 box-shadow: none;
+                align-self: start;
             }
             .ml-options-title {
                 margin: 0;
@@ -2858,6 +2861,8 @@ class LinkerManagerDialog extends ComfyDialog {
             .ml-options-section {
                 display: grid;
                 gap: 0;
+                align-content: start;
+                align-items: start;
                 scroll-margin-top: 24px;
             }
             .ml-options-section.is-hidden {
@@ -2877,14 +2882,18 @@ class LinkerManagerDialog extends ComfyDialog {
                 display: grid;
                 grid-template-columns: 1fr;
                 gap: 0;
+                align-content: start;
+                align-items: start;
             }
             .ml-options-stack {
                 display: grid;
                 gap: 0;
+                align-content: start;
             }
             .ml-options-panel {
                 display: grid;
                 gap: 0;
+                align-content: start;
                 padding: 0;
                 border: none;
                 background: transparent;
@@ -2899,6 +2908,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 display: flex;
                 flex-direction: column;
                 gap: 0;
+                align-items: stretch;
             }
             .ml-options-label {
                 display: flex;
