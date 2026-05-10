@@ -45,7 +45,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 left: "0",
                 width: "100vw",
                 height: "100vh",
-                backgroundColor: "rgba(0, 0, 0, 0.5)",
+                backgroundColor: "transparent",
                 zIndex: "99998",
                 display: "none"
             }
@@ -128,9 +128,6 @@ class LinkerManagerDialog extends ComfyDialog {
             this.createFooter()
         ]);
         
-        // Add click listener to backdrop
-        this.backdrop.addEventListener('click', () => this.close());
-        
         // Add click listener to hide context menu when clicking outside
         this.boundHandleContextMenuClick = (e) => this.handleContextMenuOutsideClick(e);
         document.addEventListener('click', this.boundHandleContextMenuClick);
@@ -180,6 +177,10 @@ class LinkerManagerDialog extends ComfyDialog {
 
     getSearchIconHtml() {
         return `<span class="ml-btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l5 5"></path></svg></span>`;
+    }
+
+    getLocateIconHtml() {
+        return `<span class="ml-node-chip-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h3"></path><path d="M19 12h3"></path><path d="M12 2v3"></path><path d="M12 19v3"></path><circle cx="12" cy="12" r="7"></circle><circle cx="12" cy="12" r="2.5"></circle></svg></span>`;
     }
 
     showTooltip(target) {
@@ -1539,9 +1540,17 @@ class LinkerManagerDialog extends ComfyDialog {
                 transform: translateY(-1px);
             }
             .ml-node-chip-icon {
-                font-size: 11px;
-                line-height: 1;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 12px;
+                height: 12px;
                 opacity: 0.95;
+            }
+            .ml-node-chip-icon svg {
+                width: 12px;
+                height: 12px;
+                display: block;
             }
             .ml-category-chip {
                 display: inline-flex;
@@ -5375,7 +5384,7 @@ class LinkerManagerDialog extends ComfyDialog {
     }
     
     async show(workflow = null) {
-        this.backdrop.style.display = "block";
+        this.backdrop.style.display = "none";
         this.element.style.display = "flex";
         
         // Update button state in case there are active downloads
@@ -5939,7 +5948,7 @@ class LinkerManagerDialog extends ComfyDialog {
         }
         html += `<span id="${locateId}" class="${nodeChipClasses}"${nodeChipTitle ? ` title="${nodeChipTitle}"` : ''}>`;
         if (missing.is_top_level !== false) {
-            html += `<span class="ml-node-chip-icon">⌖</span>`;
+            html += this.getLocateIconHtml();
         }
         html += `${nodeLabel} #${missing.node_id}</span>`;
         html += `</div>`;
