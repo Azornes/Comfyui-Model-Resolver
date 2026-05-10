@@ -3321,6 +3321,7 @@ class LinkerManagerDialog extends ComfyDialog {
             .ml-download-target-grid {
                 display: grid;
                 grid-template-columns: minmax(120px, 33%) minmax(0, 1fr);
+                grid-template-rows: auto auto;
                 gap: 10px;
                 align-items: start;
             }
@@ -3331,10 +3332,10 @@ class LinkerManagerDialog extends ComfyDialog {
             @media (max-width: 720px) {
                 .ml-download-target-grid {
                     grid-template-columns: 1fr;
+                    grid-template-rows: auto;
                 }
             }
             .ml-download-target-label {
-                min-height: 28px;
                 display: flex;
                 align-items: flex-end;
                 font-size: 11px;
@@ -3342,17 +3343,29 @@ class LinkerManagerDialog extends ComfyDialog {
                 color: var(--ml-text-muted);
                 text-transform: uppercase;
                 letter-spacing: 0.06em;
+                line-height: 1.2;
             }
             .ml-download-target-input,
             .ml-download-target-select {
+                display: block;
                 width: 100%;
+                height: 40px;
+                margin: 3px;
                 padding: 8px 10px;
                 background: rgba(255,255,255,0.04);
                 color: var(--ml-text);
                 border: 1px solid var(--ml-border);
                 border-radius: 10px;
                 font-size: 12px;
+                line-height: 1.2;
                 outline: none;
+                box-sizing: border-box;
+                vertical-align: top;
+            }
+            .ml-download-target-select {
+                appearance: none;
+                -webkit-appearance: none;
+                -moz-appearance: none;
             }
             .ml-download-target-input:focus,
             .ml-download-target-select:focus {
@@ -3361,6 +3374,13 @@ class LinkerManagerDialog extends ComfyDialog {
             }
             .ml-download-target-wrap {
                 position: relative;
+                display: flex;
+                align-items: stretch;
+            }
+            @media (max-width: 720px) {
+                .ml-download-target-label {
+                    min-height: 0;
+                }
             }
             .ml-download-target-list {
                 position: absolute;
@@ -4048,16 +4068,12 @@ class LinkerManagerDialog extends ComfyDialog {
 
         let html = `<div class="ml-download-target">`;
         html += `<div class="ml-download-target-grid">`;
-        html += `<div class="ml-download-target-row">`;
         html += `<label class="ml-download-target-label" for="${selectId}">Folder</label>`;
-        html += `<select id="${selectId}" class="ml-download-target-select">${options}</select>`;
-        html += `</div>`;
-        html += `<div class="ml-download-target-row">`;
         html += `<label class="ml-download-target-label" for="${subfolderId}">Subfolder (optional)</label>`;
+        html += `<select id="${selectId}" class="ml-download-target-select">${options}</select>`;
         html += `<div class="ml-download-target-wrap">`;
         html += `<input id="${subfolderId}" class="ml-download-target-input" type="text" placeholder="e.g. ponyxl\\styles" autocomplete="off">`;
         html += `<div id="${subfolderListId}" class="ml-download-target-list"></div>`;
-        html += `</div>`;
         html += `</div>`;
         html += `</div>`;
         html += `</div>`;
