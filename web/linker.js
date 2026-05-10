@@ -1937,16 +1937,17 @@ class LinkerManagerDialog extends ComfyDialog {
             .ml-search-source-select {
                 min-height: 30px;
                 padding: 5px 10px;
-                background: rgba(255,255,255,0.03);
+                background: rgba(255,255,255,0.04);
                 color: var(--ml-text);
-                border: 1px solid rgba(255,255,255,0.1);
+                border: 1px solid var(--ml-border);
                 border-radius: 10px;
                 font-size: 11px;
                 outline: none;
+                appearance: none;
             }
             .ml-search-source-select:focus {
-                border-color: rgba(255,255,255,0.16);
-                box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+                border-color: rgba(114,211,138,0.4);
+                box-shadow: 0 0 0 3px rgba(114,211,138,0.12);
             }
             .ml-search-results {
                 margin-top: 8px;
@@ -1978,16 +1979,17 @@ class LinkerManagerDialog extends ComfyDialog {
                 min-width: 0;
                 min-height: 30px;
                 padding: 5px 10px;
-                background: rgba(12,16,22,0.5);
+                background: rgba(255,255,255,0.04);
                 color: var(--ml-text);
-                border: 1px solid rgba(255,255,255,0.1);
+                border: 1px solid var(--ml-border);
                 border-radius: 10px;
                 font-size: 12px;
                 outline: none;
+                transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
             }
             .ml-combo-input:focus {
                 border-color: rgba(114,211,138,0.4);
-                box-shadow: 0 0 0 2px rgba(114,211,138,0.12);
+                box-shadow: 0 0 0 3px rgba(114,211,138,0.12);
             }
             .ml-combo-list {
                 position: absolute;
@@ -1999,23 +2001,26 @@ class LinkerManagerDialog extends ComfyDialog {
                 overflow: auto;
                 display: none;
                 z-index: 100000;
-                background: #22272e;
+                background: linear-gradient(180deg, var(--ml-panel-bg-strong) 0%, var(--ml-card-bg) 100%);
                 border: 1px solid var(--ml-border-strong);
-                border-radius: 10px;
+                border-radius: 12px;
                 box-shadow: var(--ml-shadow);
             }
             .ml-combo-option {
-                padding: 6px 8px;
+                padding: 8px 10px;
                 cursor: pointer;
                 border-bottom: 1px solid rgba(255,255,255,0.04);
                 font-size: 12px;
+                color: var(--ml-text);
+                background: transparent;
+                transition: background 0.14s ease, color 0.14s ease;
             }
             .ml-combo-option:last-child {
                 border-bottom: none;
             }
             .ml-combo-option:hover,
             .ml-combo-option.is-highlighted {
-                background: rgba(78,161,255,0.16);
+                background: rgba(114,211,138,0.12);
             }
             .ml-combo-option-row {
                 display: flex;
@@ -3351,8 +3356,8 @@ class LinkerManagerDialog extends ComfyDialog {
             }
             .ml-download-target-input:focus,
             .ml-download-target-select:focus {
-                border-color: rgba(78,161,255,0.45);
-                box-shadow: 0 0 0 3px rgba(78,161,255,0.12);
+                border-color: rgba(114,211,138,0.4);
+                box-shadow: 0 0 0 3px rgba(114,211,138,0.12);
             }
             .ml-download-target-wrap {
                 position: relative;
@@ -3366,7 +3371,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 overflow: auto;
                 display: none;
                 z-index: 100000;
-                background: #22272e;
+                background: linear-gradient(180deg, var(--ml-panel-bg-strong) 0%, var(--ml-card-bg) 100%);
                 border: 1px solid var(--ml-border-strong);
                 border-radius: 12px;
                 box-shadow: var(--ml-shadow);
@@ -3383,7 +3388,12 @@ class LinkerManagerDialog extends ComfyDialog {
             }
             .ml-download-target-option:hover,
             .ml-download-target-option.is-highlighted {
-                background: rgba(78,161,255,0.16);
+                background: rgba(114,211,138,0.12);
+            }
+            .ml-search-source-select option,
+            .ml-download-target-select option {
+                background: var(--ml-panel-bg-strong);
+                color: var(--ml-text);
             }
         `;
         
@@ -4063,11 +4073,40 @@ class LinkerManagerDialog extends ComfyDialog {
         };
     }
 
+    enableWheelScrollChaining(scrollEl) {
+        if (!scrollEl || scrollEl.dataset.mlWheelChainBound === 'true') return;
+        scrollEl.dataset.mlWheelChainBound = 'true';
+
+        scrollEl.addEventListener('wheel', (event) => {
+            const deltaY = event.deltaY;
+            if (!deltaY) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            const maxScrollTop = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight);
+            if (maxScrollTop <= 0) {
+                return;
+            }
+
+            const nextScrollTop = Math.min(
+                maxScrollTop,
+                Math.max(0, scrollEl.scrollTop + deltaY)
+            );
+
+            scrollEl.scrollTop = nextScrollTop;
+        }, { passive: false });
+    }
+
     wireDownloadTargetAutocomplete(container, missing) {
         const categoryEl = container.querySelector(`#download-category-${missing.node_id}-${missing.widget_index}`);
         const subfolderEl = container.querySelector(`#download-subfolder-${missing.node_id}-${missing.widget_index}`);
         const listEl = container.querySelector(`#download-subfolder-list-${missing.node_id}-${missing.widget_index}`);
         if (!categoryEl || !subfolderEl || !listEl) return;
+
+        this.enableWheelScrollChaining(listEl);
 
         const renderOptions = (targetEl, values, onSelect) => {
             if (!values.length) {
@@ -5710,6 +5749,10 @@ class LinkerManagerDialog extends ComfyDialog {
             const comboInput = container.querySelector(`#combo-input-${comboId}`);
             const comboList = container.querySelector(`#combo-list-${comboId}`);
             const comboRefresh = container.querySelector(`#combo-refresh-${comboId}`);
+
+            if (comboList) {
+                this.enableWheelScrollChaining(comboList);
+            }
 
             const allModels = Array.isArray(this.allModels) ? this.allModels : [];
             const buildLabel = (m) => `${m.category ? m.category + ': ' : ''}${m.relative_path || m.filename || ''}`;
