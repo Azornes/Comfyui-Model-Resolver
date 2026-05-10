@@ -5598,17 +5598,37 @@ class LinkerManagerDialog extends ComfyDialog {
         const rect = node.boundingRect || [node.pos?.[0] || 0, node.pos?.[1] || 0, node.size?.[0] || 0, node.size?.[1] || 0];
         const centerX = rect[0] + (rect[2] || 0) / 2;
         const centerY = rect[1] + (rect[3] || 0) / 2;
-        const scale = Number.isFinite(ds.scale) && ds.scale > 0 ? ds.scale : 1;
+        const startScale = Number.isFinite(ds.scale) && ds.scale > 0 ? ds.scale : 1;
         const dpr = window.devicePixelRatio || 1;
-        const viewWidth = (htmlCanvas.width || htmlCanvas.clientWidth || 0) / (scale * dpr);
-        const viewHeight = (htmlCanvas.height || htmlCanvas.clientHeight || 0) / (scale * dpr);
+        const canvasWidth = htmlCanvas.width || htmlCanvas.clientWidth || 0;
+        const canvasHeight = htmlCanvas.height || htmlCanvas.clientHeight || 0;
 
-        if (!viewWidth || !viewHeight) return false;
+        if (!canvasWidth || !canvasHeight) return false;
 
-        const targetX = -centerX + (viewWidth / 2);
-        const targetY = -centerY + (viewHeight / 2);
-        const startX = Number.isFinite(ds.offset?.[0]) ? ds.offset[0] : targetX;
-        const startY = Number.isFinite(ds.offset?.[1]) ? ds.offset[1] : targetY;
+        const viewportWidth = canvasWidth / dpr;
+        const viewportHeight = canvasHeight / dpr;
+        const nodeWidth = Math.max(rect[2] || 0, 1);
+        const nodeHeight = Math.max(rect[3] || 0, 1);
+        const paddingX = 140;
+        const paddingY = 96;
+        const fitScaleX = viewportWidth / (nodeWidth + (paddingX * 2));
+        const fitScaleY = viewportHeight / (nodeHeight + (paddingY * 2));
+        const targetScale = Math.max(0.15, Math.min(1, fitScaleX, fitScaleY));
+
+        const getCenteredOffset = (scale) => {
+            const viewWidth = canvasWidth / (scale * dpr);
+            const viewHeight = canvasHeight / (scale * dpr);
+            return {
+                x: -centerX + (viewWidth / 2),
+                y: -centerY + (viewHeight / 2)
+            };
+        };
+
+        const startOffset = {
+            x: Number.isFinite(ds.offset?.[0]) ? ds.offset[0] : getCenteredOffset(startScale).x,
+            y: Number.isFinite(ds.offset?.[1]) ? ds.offset[1] : getCenteredOffset(startScale).y
+        };
+        const targetOffset = getCenteredOffset(targetScale);
 
         if (this._locateAnimationFrame) {
             cancelAnimationFrame(this._locateAnimationFrame);
@@ -5625,8 +5645,9 @@ class LinkerManagerDialog extends ComfyDialog {
             const progress = Math.min(1, (now - startTime) / durationMs);
             const eased = easeInOutCubic(progress);
 
-            ds.offset[0] = startX + ((targetX - startX) * eased);
-            ds.offset[1] = startY + ((targetY - startY) * eased);
+            ds.scale = startScale + ((targetScale - startScale) * eased);
+            ds.offset[0] = startOffset.x + ((targetOffset.x - startOffset.x) * eased);
+            ds.offset[1] = startOffset.y + ((targetOffset.y - startOffset.y) * eased);
             canvas.setDirty?.(true, true);
             app.graph?.setDirtyCanvas?.(true, true);
 
