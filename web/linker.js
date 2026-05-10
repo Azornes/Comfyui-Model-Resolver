@@ -2802,7 +2802,7 @@ class LinkerManagerDialog extends ComfyDialog {
             .ml-options-wrap {
                 max-width: 1120px;
                 margin: 0 auto;
-                padding: 0 0 18px 0;
+                padding: 0 0 0 0;
                 height: 100%;
             }
             .ml-options-shell {
@@ -2825,6 +2825,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 background: #242424;
                 border-right: 1px solid rgba(255,255,255,0.08);
                 overflow: hidden;
+                min-width: 0;
             }
             .ml-options-sidebar-title {
                 margin: 0;
@@ -2890,10 +2891,11 @@ class LinkerManagerDialog extends ComfyDialog {
                 display: grid;
                 gap: 0;
                 min-height: 0;
+                min-width: 0;
                 height: 100%;
                 align-content: start;
                 align-items: start;
-                padding: 18px 26px 24px 26px;
+                padding: 18px 26px 0px 26px;
                 background: #171717;
                 overflow-y: auto;
                 overflow-x: hidden;
@@ -2936,6 +2938,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 align-content: start;
                 align-items: start;
                 scroll-margin-top: 24px;
+                min-width: 0;
             }
             .ml-options-section.is-hidden {
                 display: none;
@@ -2956,11 +2959,13 @@ class LinkerManagerDialog extends ComfyDialog {
                 gap: 0;
                 align-content: start;
                 align-items: start;
+                min-width: 0;
             }
             .ml-options-stack {
                 display: grid;
                 gap: 0;
                 align-content: start;
+                min-width: 0;
             }
             .ml-options-panel {
                 display: grid;
@@ -2969,6 +2974,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 padding: 0;
                 border: none;
                 background: transparent;
+                min-width: 0;
             }
             .ml-options-panel-title {
                 margin: 0 0 6px 0;
@@ -3040,11 +3046,12 @@ class LinkerManagerDialog extends ComfyDialog {
             }
             .ml-options-input-row {
                 display: grid;
-                grid-template-columns: minmax(220px, 1fr) minmax(260px, 380px) 42px;
+                grid-template-columns: minmax(150px, 1fr) minmax(0, 380px) 42px;
                 align-items: center;
                 gap: 10px;
                 padding: 14px 0;
                 border-bottom: 1px solid rgba(255,255,255,0.1);
+                min-width: 0;
             }
             .ml-options-input-row > .ml-options-label {
                 min-width: 0;
@@ -3052,6 +3059,7 @@ class LinkerManagerDialog extends ComfyDialog {
             }
             .ml-options-input {
                 width: 100%;
+                min-width: 0;
                 min-height: 42px;
                 padding: 11px 14px;
                 background: #0f1013;
@@ -3114,6 +3122,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 background: transparent;
                 cursor: pointer;
                 transition: background 0.16s ease;
+                min-width: 0;
             }
             .ml-options-toggle-row:hover {
                 background: transparent;
@@ -3139,6 +3148,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 min-width: 46px;
                 padding-top: 1px;
                 flex: 0 0 auto;
+                margin-left: auto;
             }
             .ml-options-switch-input {
                 position: absolute;
@@ -3176,11 +3186,12 @@ class LinkerManagerDialog extends ComfyDialog {
             }
             .ml-options-number-row {
                 display: grid;
-                grid-template-columns: minmax(220px, 1fr) 118px;
+                grid-template-columns: minmax(150px, 1fr) minmax(72px, 118px);
                 gap: 12px;
                 align-items: center;
                 padding: 16px 0;
                 border-bottom: 1px solid rgba(255,255,255,0.1);
+                min-width: 0;
             }
             .ml-options-number-copy {
                 display: grid;
@@ -3236,6 +3247,46 @@ class LinkerManagerDialog extends ComfyDialog {
                     height: auto;
                 }
             }
+            @media (max-width: 900px) {
+                .ml-options-main {
+                    padding: 16px 18px 0px 18px;
+                }
+                .ml-options-input-row {
+                    grid-template-columns: minmax(120px, 1fr) minmax(0, 1fr) 42px;
+                    gap: 8px;
+                }
+                .ml-options-number-row {
+                    grid-template-columns: minmax(120px, 1fr) minmax(64px, 96px);
+                    gap: 8px;
+                }
+                .ml-options-toggle-row {
+                    gap: 10px;
+                }
+            }
+            @media (max-width: 760px) {
+                .ml-options-input-row {
+                    grid-template-columns: 1fr;
+                }
+                .ml-options-input-row > .ml-options-label {
+                    padding-right: 0;
+                }
+                .ml-options-visibility-btn {
+                    justify-self: start;
+                }
+                .ml-options-toggle-row,
+                .ml-options-number-row {
+                    grid-template-columns: 1fr;
+                    flex-direction: column;
+                    align-items: flex-start;
+                }
+                .ml-options-toggle-control {
+                    min-width: 0;
+                    margin-left: 0;
+                }
+                .ml-options-number-row {
+                    grid-template-columns: 1fr;
+                }
+            }
             @media (max-width: 640px) {
                 .ml-options-section-head,
                 .ml-options-actions,
@@ -3253,12 +3304,6 @@ class LinkerManagerDialog extends ComfyDialog {
                 }
                 .ml-options-input {
                     width: 100%;
-                }
-                .ml-options-input-row {
-                    grid-template-columns: 1fr;
-                }
-                .ml-options-input-row > .ml-options-label {
-                    padding-right: 0;
                 }
             }
             .ml-download-target {
