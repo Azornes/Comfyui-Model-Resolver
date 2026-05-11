@@ -18,16 +18,6 @@ export function loadAllStyles() {
         // Load all CSS files using getUrl for proper path resolution
         const cssFiles = [
             './css/css-variables.css',        // CSS Custom Properties - MUST BE FIRST!
-            './css/common-components.css',    // Shared component styles using cascade
-            './css/aspect-ratio-columns.css', // Shared aspect ratio column styles
-            './css/preset-manager-dialog.css',
-            './css/searchable-dropdown.css',
-            './css/rename-dialog.css',
-            './css/json-editor-dialog.css',
-            './css/preset-ui-components.css',
-            './css/preset-list-renderer.css',
-            './css/preset-add-view.css',
-            './css/drag-drop.css'
         ];
         
         cssFiles.forEach(file => {
