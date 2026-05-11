@@ -10,6 +10,7 @@ import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
 import { $el, ComfyDialog } from "../../../scripts/ui.js";
 import { loadStylesWhenNeeded } from "./utils/css-loader.js";
+import { getSvgIcon } from "./utils/IconUtils.js";
 
 class LinkerManagerDialog extends ComfyDialog {
     constructor() {
@@ -129,11 +130,11 @@ class LinkerManagerDialog extends ComfyDialog {
     }
 
     getSearchIconHtml() {
-        return `<span class="ml-btn-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l5 5"></path></svg></span>`;
+        return `<span class="ml-btn-icon" aria-hidden="true">${getSvgIcon('search')}</span>`;
     }
 
     getLocateIconHtml() {
-        return `<span class="ml-node-chip-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h3"></path><path d="M19 12h3"></path><path d="M12 2v3"></path><path d="M12 19v3"></path><circle cx="12" cy="12" r="7"></circle><circle cx="12" cy="12" r="2.5"></circle></svg></span>`;
+        return `<span class="ml-node-chip-icon" aria-hidden="true">${getSvgIcon('locate')}</span>`;
     }
 
     showTooltip(target) {
@@ -306,7 +307,7 @@ class LinkerManagerDialog extends ComfyDialog {
             ? (typeof result.size === 'number' ? this.formatBytes(result.size) : result.size)
             : '';
 
-        let html = `<div style="margin-top: 4px; font-size: 12px;">`;
+        let html = `<div class="ml-meta-line">`;
         if (filename) {
             html += `<span class="ml-chip">${filename}</span>`;
         }
@@ -317,7 +318,7 @@ class LinkerManagerDialog extends ComfyDialog {
             html += ` <span class="ml-download-size">[${sizeDisplay}]</span>`;
         }
         if (secondaryText) {
-            html += ` <span style="color: var(--ml-text-muted);">${secondaryText}</span>`;
+            html += ` <span class="ml-meta-secondary">${secondaryText}</span>`;
         }
         html += `</div>`;
         return html;
@@ -332,17 +333,43 @@ class LinkerManagerDialog extends ComfyDialog {
         actionHtml = '',
         topLineHtml = ''
     }) {
-        let html = `<div class="ml-status ${statusClass}" style="flex-direction: column; align-items: flex-start;">`;
+        let html = `<div class="ml-status ${statusClass} ml-status-card-vertical">`;
         html += `<strong>${title}</strong>`;
         if (topLineHtml) {
             html += topLineHtml;
         }
         html += this.formatSearchResultMeta(result, { filename, secondaryText });
         if (actionHtml) {
-            html += `<div style="margin-top: 8px; display: flex; gap: 8px;">${actionHtml}</div>`;
+            html += `<div class="ml-action-row">${actionHtml}</div>`;
         }
         html += `</div>`;
         return html;
+    }
+
+    renderProgressWithAction({
+        percent = 0,
+        leftText = '',
+        rightText = '',
+        actionClass = '',
+        actionText = '',
+        actionDataAttr = ''
+    } = {}) {
+        const safePercent = Math.max(0, Math.min(100, Number(percent) || 0));
+        const actionAttr = actionDataAttr ? ` ${actionDataAttr}` : '';
+        return `
+            <div class="ml-progress-container">
+                <div class="ml-progress-row">
+                    <div class="ml-progress-bar ml-progress-bar-grow">
+                        <div class="ml-progress-fill" style="width: ${safePercent}%;"></div>
+                    </div>
+                    <button class="${actionClass}"${actionAttr}>${actionText}</button>
+                </div>
+                <div class="ml-progress-text">
+                    <span>${leftText}</span>
+                    <span>${rightText}</span>
+                </div>
+            </div>
+        `;
     }
 
     buildContextMenuModelData(model = {}, fallbackName = '') {
@@ -397,8 +424,8 @@ class LinkerManagerDialog extends ComfyDialog {
 
             if (perfectMatches.length > 0 && otherMatches.length > 0) {
                 const matchId = `more-matches-${missing.node_id}-${missing.widget_index}`;
-                html += `<div class="ml-no-matches ml-inline-note-action ml-inline-note-link" onclick="document.getElementById('${matchId}').style.display = document.getElementById('${matchId}').style.display === 'none' ? 'block' : 'none'; this.textContent = this.textContent === '${otherMatches.length} other matches below 100%' ? 'Hide alternatives' : '${otherMatches.length} other matches below 100%'">${otherMatches.length} other match${otherMatches.length > 1 ? 'es' : ''} below 100%</div>`;
-                html += `<div id="${matchId}" style="display: none; flex-direction: column; gap: 4px; margin-top: 8px;">`;
+                html += `<div class="ml-no-matches ml-inline-note-action ml-inline-note-link" onclick="window.MLToggleHidden('${matchId}', this, '${otherMatches.length} other matches below 100%', 'Hide alternatives')">${otherMatches.length} other match${otherMatches.length > 1 ? 'es' : ''} below 100%</div>`;
+                html += `<div id="${matchId}" class="ml-stack-sm ml-hidden">`;
                 for (let mIdx = 0; mIdx < otherMatches.length; mIdx++) {
                     const match = otherMatches[mIdx];
                     const altBtnId = `resolve-alt-${missingIndex}-${missing.node_id}-${missing.widget_index}-${mIdx}`;
@@ -406,7 +433,7 @@ class LinkerManagerDialog extends ComfyDialog {
                     const modelData = encodeURIComponent(JSON.stringify(contextModel));
                     html += `<div class="ml-match-row" data-model="${modelData}" oncontextmenu="window.MLOpenContextMenu(event, this)">`;
                     html += this.getConfidenceBadge(match.confidence);
-                    html += `<span class="ml-match-filename" title="${match.path || match.filename}" style="flex: 1; overflow: hidden; text-overflow: ellipsis;">${match.filename || match.path?.split(/[/\\]/).pop()}</span>`;
+                    html += `<span class="ml-match-filename" title="${match.path || match.filename}">${match.filename || match.path?.split(/[/\\]/).pop()}</span>`;
                     html += `<button id="${altBtnId}" class="ml-btn ml-btn-secondary ml-btn-sm ml-btn-utility ml-btn-link-compact">🔗 Link</button>`;
                     html += `</div>`;
                 }
@@ -692,7 +719,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 </div>
                 <div class="ml-info-dialog-content">
                     <div class="ml-info-dialog-loading">Loading...</div>
-                    <div class="ml-info-dialog-body" style="display: none;">
+                    <div class="ml-info-dialog-body ml-hidden-initial">
                         <div class="ml-info-area">
                             <span class="ml-info-tag ml-info-type"></span>
                             <span class="ml-info-tag ml-info-basemodel"></span>
@@ -719,7 +746,7 @@ class LinkerManagerDialog extends ComfyDialog {
                                     <td><span>Base Model <span class="ml-info-help" title="Base model family this resource was trained or built on, for example SD1.5, SDXL or Flux.">?</span></span></td>
                                     <td><span class="ml-info-base-model"></span></td>
                                 </tr>
-                                <tr class="ml-info-trainedwords-row" style="display: none;">
+                                <tr class="ml-info-trainedwords-row ml-hidden-initial">
                                     <td>
                                         <div class="ml-info-trained-words-label">
                                             Trained Words <span class="ml-info-help" title="Trigger words or phrases associated with this model. Click words to select them, then copy the selection.">?</span>
@@ -734,16 +761,16 @@ class LinkerManagerDialog extends ComfyDialog {
                                         <div class="ml-info-trained-words"></div>
                                     </td>
                                 </tr>
-                                <tr class="ml-info-clipskip-row" style="display: none;">
+                                <tr class="ml-info-clipskip-row ml-hidden-initial">
                                     <td><span>Clip Skip <span class="ml-info-help" title="Recommended clip skip value when the model author provides one.">?</span></span></td>
                                     <td><span class="ml-info-clip-skip"></span></td>
                                 </tr>
-                                <tr class="ml-info-description-row" style="display: none;">
+                                <tr class="ml-info-description-row ml-hidden-initial">
                                     <td><span>Description <span class="ml-info-help" title="Formatted description from CivitAI or local metadata. Use Show more to expand long content.">?</span></span></td>
                                     <td>
                                         <div class="ml-info-description-wrap">
                                             <div class="ml-info-description"></div>
-                                            <div class="ml-info-description-actions" style="display: none;">
+                                            <div class="ml-info-description-actions ml-hidden-initial">
                                                 <button type="button" class="ml-info-description-toggle">Show more</button>
                                             </div>
                                         </div>
@@ -1118,17 +1145,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 const url = data.version_url || data.url;
                 civitaiLinkEl.innerHTML = `
                     <a href="${url}" target="_blank" class="ml-info-link">
-                        <svg viewBox="0 0 178 178" class="ml-info-civitai-logo">
-                            <defs>
-                                <linearGradient id="bgblue" gradientUnits="userSpaceOnUse" x1="89.3" y1="-665.5" x2="89.3" y2="-841.1" gradientTransform="matrix(1 0 0 -1 0 -664)">
-                                    <stop offset="0" style="stop-color:#1284F7"></stop>
-                                    <stop offset="1" style="stop-color:#0A20C9"></stop>
-                                </linearGradient>
-                            </defs>
-                            <path fill="#000" d="M13.3,45.4v87.7l76,43.9l76-43.9V45.4l-76-43.9L13.3,45.4z"></path>
-                            <path style="fill:url(#bgblue);" d="M89.3,29.2l52,30v60l-52,30l-52-30v-60L89.3,29.2 M89.3,1.5l-76,43.9v87.8l76,43.9l76-43.9V45.4L89.3,1.5z"></path>
-                            <path fill="#FFF" d="M104.1,97.2l-14.9,8.5l-14.9-8.5v-17l14.9-8.5l14.9,8.5h18.2V69.7l-33-19l-33,19v38.1l33,19l33-19V97.2H104.1z"></path>
-                        </svg>
+                        ${getSvgIcon('civitai', 'currentColor', 'ml-info-civitai-logo')}
                         View on Civitai
                     </a>
                 `;
@@ -2098,10 +2115,7 @@ class LinkerManagerDialog extends ComfyDialog {
                                                 <label for="ml-options-civitai" class="ml-options-label">CivitAI API Key <a href="https://civitai.com/user/account" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a> <span class="ml-tooltip-badge" data-tooltip="Used for direct CivitAI downloads that otherwise return HTTP 401 or 403.">?</span></label>
                                                 <input id="ml-options-civitai" class="ml-options-input" type="password" placeholder="Paste CivitAI API key" value="${tokens.civitai_key}">
                                                 <button id="ml-options-civitai-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide CivitAI API key" title="Show or hide">
-                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path>
-                                                        <circle cx="12" cy="12" r="3"></circle>
-                                                    </svg>
+                                                    ${getSvgIcon('eye')}
                                                 </button>
                                             </div>
                                         </div>
@@ -2110,10 +2124,7 @@ class LinkerManagerDialog extends ComfyDialog {
                                                 <label for="ml-options-civitai-session" class="ml-options-label">CivitAI Session Token <span class="ml-tooltip-badge" data-tooltip="Used only for CivitAI web search on civitai.red to include results available to your logged-in session, including NSFW. To get it: sign in on civitai.red, open DevTools with F12, go to Application or Cookies, find __Secure-civitai-token, and paste its value here.">?</span></label>
                                                 <input id="ml-options-civitai-session" class="ml-options-input" type="password" placeholder="Paste __Secure-civitai-token" value="${tokens.civitai_session_token}">
                                                 <button id="ml-options-civitai-session-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide CivitAI session token" title="Show or hide">
-                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path>
-                                                        <circle cx="12" cy="12" r="3"></circle>
-                                                    </svg>
+                                                    ${getSvgIcon('eye')}
                                                 </button>
                                             </div>
                                         </div>
@@ -2161,10 +2172,7 @@ class LinkerManagerDialog extends ComfyDialog {
                                                 <label for="ml-options-hf" class="ml-options-label">HuggingFace Token <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a> <span class="ml-tooltip-badge" data-tooltip="Used for gated HuggingFace repos that need authorization during download.">?</span></label>
                                                 <input id="ml-options-hf" class="ml-options-input" type="password" placeholder="Paste HuggingFace token" value="${tokens.hf_token}">
                                                 <button id="ml-options-hf-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide HuggingFace token" title="Show or hide">
-                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path>
-                                                        <circle cx="12" cy="12" r="3"></circle>
-                                                    </svg>
+                                                    ${getSvgIcon('eye')}
                                                 </button>
                                             </div>
                                         </div>
@@ -2173,10 +2181,7 @@ class LinkerManagerDialog extends ComfyDialog {
                                                 <label for="ml-options-brave" class="ml-options-label">Brave Search API Key <a href="https://api-dashboard.search.brave.com/app/keys" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a> <span class="ml-tooltip-badge" data-tooltip="Used as the last fallback for exact web search with queries like &quot;model.safetensors&quot; site:huggingface.co when Brave fallback is enabled.">?</span></label>
                                                 <input id="ml-options-brave" class="ml-options-input" type="password" placeholder="Paste Brave Search API key" value="${tokens.brave_search_api_key}">
                                                 <button id="ml-options-brave-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide Brave Search API key" title="Show or hide">
-                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path>
-                                                        <circle cx="12" cy="12" r="3"></circle>
-                                                    </svg>
+                                                    ${getSvgIcon('eye')}
                                                 </button>
                                             </div>
                                         </div>
@@ -2272,20 +2277,8 @@ class LinkerManagerDialog extends ComfyDialog {
         };
 
         const getVisibilityIcon = (visible) => visible
-            ? `
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"></path>
-                    <circle cx="12" cy="12" r="3"></circle>
-                </svg>
-            `
-            : `
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M17.94 17.94A10.94 10.94 0 0 1 12 19C5 19 1 12 1 12a21.77 21.77 0 0 1 5.06-5.94"></path>
-                    <path d="M9.9 4.24A10.93 10.93 0 0 1 12 4c7 0 11 8 11 8a21.72 21.72 0 0 1-4.31 5.18"></path>
-                    <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"></path>
-                    <path d="M1 1l22 22"></path>
-                </svg>
-            `;
+            ? getSvgIcon('eye')
+            : getSvgIcon('eyeOff');
 
         const syncVisibilityToggle = (input, button) => {
             if (!input || !button) return;
@@ -2446,7 +2439,7 @@ class LinkerManagerDialog extends ComfyDialog {
         } catch (error) {
             console.error('Model Linker: Error loading loaded models:', error);
             if (this.contentElement) {
-                this.contentElement.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+                this.contentElement.innerHTML = `<p class="ml-error-text">Error: ${error.message}</p>`;
             }
         }
     }
@@ -2535,19 +2528,14 @@ class LinkerManagerDialog extends ComfyDialog {
                 <h3 class="ml-loaded-models-title">${total} Model${total > 1 ? 's' : ''} in Workflow</h3>
                 <p class="ml-loaded-models-subtitle">LoraManager / LoraLoaderV2 nodes distinguish active/inactive</p>
             </div>
-            <div style="padding: 16px 20px;">
-                <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+            <div class="ml-loaded-filters">
+                <div class="ml-loaded-filter-row">
                     <button class="ml-btn-filter active" id="filter-all" onclick="window.MLFilterSwitch('all')">All (${activeCount + inactiveCount})</button>
                     <button class="ml-btn-filter" id="filter-active" onclick="window.MLFilterSwitch('active')">Active (${activeCount})</button>
                     <button class="ml-btn-filter" id="filter-inactive" onclick="window.MLFilterSwitch('inactive')">Inactive (${inactiveCount})</button>
                 </div>
-                <style>
-                    .ml-btn-filter { padding: 6px 12px; font-size: 12px; background: #333; border: 1px solid #444; color: #aaa; cursor: pointer; border-radius: 4px; }
-                    .ml-btn-filter:hover { background: #444; color: #fff; }
-                    .ml-btn-filter.active { background: #4CAF50; border-color: #4CAF50; color: white; }
-                </style>
             </div>
-            <div class="ml-models-list" style="padding: 0 20px;">
+            <div class="ml-models-list ml-models-list-pad">
         `;
 
         for (const [category, modelsObj] of Object.entries(byCategory)) {
@@ -2555,11 +2543,11 @@ class LinkerManagerDialog extends ComfyDialog {
             const hasActive = modelsObj.active.length > 0;
             const hasInactive = modelsObj.inactive.length > 0;
             
-            html += `<div class="ml-model-section" data-ml-filter="all" data-ml-active="${hasActive}" data-ml-inactive="${hasInactive}" style="margin-bottom: 16px; padding: 12px; background: var(--ml-card-bg-alt, #252525); border-radius: 8px;">`;
+            html += `<div class="ml-model-section" data-ml-filter="all" data-ml-active="${hasActive}" data-ml-inactive="${hasInactive}">`;
             
             // Add category header
-            html += `<div style="margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #333;">
-                <span style="color: var(--ml-text-primary); font-size: 14px; font-weight: 600;">${displayName.toUpperCase()}</span>
+            html += `<div class="ml-model-section-header">
+                <span class="ml-model-section-title">${displayName.toUpperCase()}</span>
             </div>`;
             
             if (hasActive) {
@@ -2570,12 +2558,12 @@ class LinkerManagerDialog extends ComfyDialog {
                     return `<${displayName}:${name}:${strength}>`;
                 }).join(' ');
                 
-                html += `<div style="margin-bottom: 10px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <span style="color: #4CAF50; font-size: 11px; font-weight: 600;">● ACTIVE</span>
-                        <button class="ml-btn ml-btn-sm" style="padding: 3px 8px; font-size: 10px;" onclick="window.MLCopy('${activeStr.replace(/'/g, "\\'")}', this)">Copy</button>
+                html += `<div class="ml-model-group">
+                    <div class="ml-model-group-head">
+                        <span class="ml-model-group-label ml-model-group-label-active">● ACTIVE</span>
+                        <button class="ml-btn ml-btn-sm ml-btn-copy-compact" onclick="window.MLCopy('${activeStr.replace(/'/g, "\\'")}', this)">Copy</button>
                     </div>
-                    <div style="display: flex; flex-wrap: wrap; gap: 8px;">`;
+                    <div class="ml-model-chip-list">`;
                 
                 for (const model of modelsObj.active) {
                     const fullName = model.name || model.original_path?.split(/[\/\\]/).pop() || 'Unknown';
@@ -2596,11 +2584,11 @@ class LinkerManagerDialog extends ComfyDialog {
                 }).join(' ');
                 
                 html += `<div>
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <span style="color: #888; font-size: 11px; font-weight: 600;">○ INACTIVE</span>
-                        <button class="ml-btn ml-btn-sm" style="padding: 3px 8px; font-size: 10px; opacity: 0.6;" onclick="window.MLCopy('${inactiveStr.replace(/'/g, "\\'")}', this)">Copy</button>
+                    <div class="ml-model-group-head">
+                        <span class="ml-model-group-label ml-model-group-label-inactive">○ INACTIVE</span>
+                        <button class="ml-btn ml-btn-sm ml-btn-copy-compact is-muted" onclick="window.MLCopy('${inactiveStr.replace(/'/g, "\\'")}', this)">Copy</button>
                     </div>
-                    <div style="display: flex; flex-wrap: wrap; gap: 8px; opacity: 0.5;">`;
+                    <div class="ml-model-chip-list ml-model-chip-list-inactive">`;
                 
                 for (const model of modelsObj.inactive) {
                     const fullName = model.name || model.original_path?.split(/[\/\\]/).pop() || 'Unknown';
@@ -2618,10 +2606,10 @@ class LinkerManagerDialog extends ComfyDialog {
         const copySectionId = 'ml-copy-' + Date.now();
         html += `
             </div>
-            <div id="${copySectionId}" style="padding: 16px 20px; border-top: 1px solid var(--ml-border);" data-ml-active="${activeString.replace(/'/g, "\\'")}" data-ml-inactive="${inactiveString.replace(/'/g, "\\'")}" data-ml-all="${allString.replace(/'/g, "\\'")}">
-                <div style="font-size: 12px; color: var(--ml-text-muted); margin-bottom: 8px;" id="${copySectionId}-label">Copy all:</div>
-                <div style="display: flex; gap: 8px; align-items: center;">
-                    <code style="flex: 1; padding: 8px 12px; background: #1a1a1a; border-radius: 4px; font-family: 'SF Mono', 'Consolas', monospace; font-size: 11px; color: #90caf9; overflow-x: auto; white-space: nowrap;" id="${copySectionId}-code">${allString}</code>
+            <div id="${copySectionId}" class="ml-copy-section" data-ml-active="${activeString.replace(/'/g, "\\'")}" data-ml-inactive="${inactiveString.replace(/'/g, "\\'")}" data-ml-all="${allString.replace(/'/g, "\\'")}">
+                <div class="ml-copy-label" id="${copySectionId}-label">Copy all:</div>
+                <div class="ml-copy-row">
+                    <code class="ml-copy-code" id="${copySectionId}-code">${allString}</code>
                     <button class="ml-btn ml-btn-secondary" onclick="window.MLCopyCode('${copySectionId}', this)">Copy</button>
                 </div>
             </div>
@@ -3264,7 +3252,7 @@ class LinkerManagerDialog extends ComfyDialog {
             this._analysisProgressToken = null;
             console.error('Model Linker: Error loading workflow data:', error);
             if (this.contentElement) {
-                this.contentElement.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+                this.contentElement.innerHTML = `<p class="ml-error-text">Error: ${error.message}</p>`;
             }
         }
     }
@@ -3439,21 +3427,14 @@ class LinkerManagerDialog extends ComfyDialog {
                 
                 // Show that download is in progress
                 newProgressDiv.style.display = 'block';
-                newProgressDiv.innerHTML = `
-                    <div class="ml-progress-container">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <div class="ml-progress-bar" style="flex: 1;">
-                                <div class="ml-progress-fill" style="width: 0%;"></div>
-                            </div>
-                            <button class="cancel-download-btn ml-btn ml-btn-danger ml-btn-sm" data-download-id="${downloadId}">
-                                Cancel
-                            </button>
-                        </div>
-                        <div class="ml-progress-text">
-                            <span style="color: #2196F3;">Downloading...</span>
-                        </div>
-                    </div>
-                `;
+                newProgressDiv.innerHTML = this.renderProgressWithAction({
+                    percent: 0,
+                    leftText: '<span class="ml-info-accent-text">Downloading...</span>',
+                    rightText: '',
+                    actionClass: 'cancel-download-btn ml-btn ml-btn-danger ml-btn-sm',
+                    actionText: 'Cancel',
+                    actionDataAttr: `data-download-id="${downloadId}"`
+                });
                 
                 // Attach cancel handler
                 const cancelBtn = newProgressDiv.querySelector('.cancel-download-btn');
@@ -3522,7 +3503,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 </div>
             </div>
         `;
-        html += '<div style="display: flex; flex-direction: column; gap: 10px;">';
+        html += '<div class="ml-stack-md">';
 
         // Skip rendering if active tab is not "missing"
         if (this.activeTab !== 'missing') {
@@ -3872,7 +3853,7 @@ class LinkerManagerDialog extends ComfyDialog {
         }
         
         // Progress container (for downloads)
-        html += `<div id="download-progress-${missing.node_id}-${missing.widget_index}" style="margin-top: 8px; display: none;"></div>`;
+        html += `<div id="download-progress-${missing.node_id}-${missing.widget_index}" class="ml-download-progress-slot"></div>`;
         
         html += `</div>`; // End right column
         html += `</div>`; // End columns
@@ -4308,21 +4289,13 @@ class LinkerManagerDialog extends ComfyDialog {
             if (progressDiv) {
                 progressDiv.style.display = 'block';
                 // Show progress bar with cancel button immediately
-                progressDiv.innerHTML = `
-                    <div class="ml-progress-container">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <div class="ml-progress-bar" style="flex: 1;">
-                                <div class="ml-progress-fill" style="width: 0%;"></div>
-                            </div>
-                            <button class="cancel-download-btn-pending ml-btn ml-btn-danger ml-btn-sm">
-                                Cancel
-                            </button>
-                        </div>
-                        <div class="ml-progress-text">
-                            <span style="color: #2196F3;">Connecting...</span>
-                        </div>
-                    </div>
-                `;
+                progressDiv.innerHTML = this.renderProgressWithAction({
+                    percent: 0,
+                    leftText: '<span class="ml-info-accent-text">Connecting...</span>',
+                    rightText: '',
+                    actionClass: 'cancel-download-btn-pending ml-btn ml-btn-danger ml-btn-sm',
+                    actionText: 'Cancel'
+                });
             }
 
             // Start download
@@ -4399,22 +4372,14 @@ class LinkerManagerDialog extends ComfyDialog {
                 const speed = progress.speed ? this.formatBytes(progress.speed) + '/s' : '';
                 
                 if (progressDiv) {
-                    progressDiv.innerHTML = `
-                        <div class="ml-progress-container">
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <div class="ml-progress-bar" style="flex: 1;">
-                                    <div class="ml-progress-fill" style="width: ${percent}%;"></div>
-                                </div>
-                                <button class="cancel-download-btn ml-btn ml-btn-danger ml-btn-sm" data-download-id="${downloadId}">
-                                    Cancel
-                                </button>
-                            </div>
-                            <div class="ml-progress-text">
-                                <span>${downloaded} / ${total} (${percent}%)</span>
-                                <span>${speed}</span>
-                            </div>
-                        </div>
-                    `;
+                    progressDiv.innerHTML = this.renderProgressWithAction({
+                        percent,
+                        leftText: `${downloaded} / ${total} (${percent}%)`,
+                        rightText: speed,
+                        actionClass: 'cancel-download-btn ml-btn ml-btn-danger ml-btn-sm',
+                        actionText: 'Cancel',
+                        actionDataAttr: `data-download-id="${downloadId}"`
+                    });
                     // Attach cancel handler
                     const cancelBtn = progressDiv.querySelector('.cancel-download-btn');
                     if (cancelBtn && !cancelBtn._hasListener) {
@@ -4567,7 +4532,7 @@ class LinkerManagerDialog extends ComfyDialog {
             }
             if (resultsDiv) {
                 resultsDiv.style.display = 'block';
-                resultsDiv.innerHTML = `<span style="color: #2196F3;">Searching ${selectedSourceLabel}...</span>`;
+                resultsDiv.innerHTML = `<span class="ml-info-accent-text">Searching ${selectedSourceLabel}...</span>`;
             }
 
             // For URNs, include model_id and version_id for direct download
@@ -4774,7 +4739,7 @@ class LinkerManagerDialog extends ComfyDialog {
             return;
         }
 
-        let html = '<div style="margin-top: 8px; display: flex; flex-direction: column; gap: 8px;">';
+        let html = '<div class="ml-search-results-stack">';
 
         if (state?.lastAttemptFound === false) {
             const searchedLabel = (state.lastAttemptSources || []).map(source => this.getSearchSourceLabel(source)).join(', ');
@@ -4851,8 +4816,8 @@ class LinkerManagerDialog extends ComfyDialog {
             const downloadFilename = missing.civitai_info?.expected_filename || civitaiResult.filename || civitaiResult.name;
             // Build display name with version if available
             const modelName = missing.civitai_info?.version_name ? `${missing.civitai_info.model_name} v${missing.civitai_info.version_name}` : (civitaiResult.name || 'Model');
-            const topLineHtml = `<div style="margin-top: 4px; font-size: 12px;"><button class="ml-btn ml-btn-sm" style="background: transparent; color: #FF9800; border: 1px solid #FF9800; font-weight: bold; cursor: pointer;" onclick="window.open('${modelUrl}', '_blank')">${modelName}</button> <span style="color: var(--ml-text-muted);">${civitaiResult.type || ''}</span></div>`;
-            const actionHtml = `<button class="search-download-btn ml-btn ml-btn-sm" style="background: #FF9800;" data-url="${civitaiResult.download_url}" data-filename="${downloadFilename}" data-category="${missing.category}"><span class="ml-btn-icon">☁</span> Download</button>`;
+            const topLineHtml = `<div class="ml-meta-line"><button class="ml-btn ml-btn-sm ml-civitai-open-btn" onclick="window.open('${modelUrl}', '_blank')">${modelName}</button> <span class="ml-meta-secondary">${civitaiResult.type || ''}</span></div>`;
+            const actionHtml = `<button class="search-download-btn ml-btn ml-btn-sm ml-civitai-download-btn" data-url="${civitaiResult.download_url}" data-filename="${downloadFilename}" data-category="${missing.category}"><span class="ml-btn-icon">☁</span> Download</button>`;
             html += this.renderOnlineSearchResultCard({
                 statusClass: 'ml-status-warning',
                 title: 'Found on CivitAI',
@@ -4895,21 +4860,13 @@ class LinkerManagerDialog extends ComfyDialog {
             if (progressDiv) {
                 progressDiv.style.display = 'block';
                 // Show progress bar with cancel button immediately
-                progressDiv.innerHTML = `
-                    <div class="ml-progress-container">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <div class="ml-progress-bar" style="flex: 1;">
-                                <div class="ml-progress-fill" style="width: 0%;"></div>
-                            </div>
-                            <button class="cancel-download-btn-pending ml-btn ml-btn-danger ml-btn-sm">
-                                Cancel
-                            </button>
-                        </div>
-                        <div class="ml-progress-text">
-                            <span style="color: #2196F3;">Connecting...</span>
-                        </div>
-                    </div>
-                `;
+                progressDiv.innerHTML = this.renderProgressWithAction({
+                    percent: 0,
+                    leftText: '<span class="ml-info-accent-text">Connecting...</span>',
+                    rightText: '',
+                    actionClass: 'cancel-download-btn-pending ml-btn ml-btn-danger ml-btn-sm',
+                    actionText: 'Cancel'
+                });
             }
 
             const response = await api.fetchApi('/model_linker/download', {
@@ -5589,6 +5546,16 @@ app.registerExtension({
 });
 
 // Global helper functions for inline onclick handlers
+window.MLToggleHidden = function(id, trigger, collapsedText, expandedText) {
+    const element = document.getElementById(id);
+    if (!element) return;
+
+    const isHidden = element.classList.toggle('ml-hidden');
+    if (trigger) {
+        trigger.textContent = isHidden ? collapsedText : expandedText;
+    }
+};
+
 window.MLFilterSwitch = function(filter) {
     const filterBtn = document.getElementById('filter-' + filter);
     if (!filterBtn) return;
