@@ -1,13 +1,20 @@
 /**
- * Logger - Central logging system for ComfyUI-ResolutionMaster
- *
- * Features:
- * - Multiple log levels (DEBUG, INFO, WARN, ERROR)
- * - Ability to enable/disable logging globally or per module
- * - Colorful logs in the console
- * - Ability to save logs to localStorage
- * - Ability to export logs
- */
+author: Azornes
+title: AzLogs
+version: 1.4.1
+description: Logging Setup - Central logging system
+
+Features:
+Logger - Central logging system for comfyui-model-linker
+- Multiple log levels (DEBUG, INFO, WARN, ERROR)
+- Ability to enable/disable logging globally or per module
+- Colorful logs in the console
+- Ability to save logs to localStorage
+- Ability to export logs
+*/
+
+import { DEFAULT_LOGGER_NAME, LOG_MODULE_NAME } from './config.js';
+
 function padStart(str, targetLength, padString) {
     targetLength = targetLength >> 0;
     padString = String(padString || ' ');
@@ -22,6 +29,22 @@ function padStart(str, targetLength, padString) {
         return padString.slice(0, targetLength) + String(str);
     }
 }
+function sanitizeKeyPart(value) {
+    return String(value).replace(/[^a-zA-Z0-9_-]+/g, '_');
+}
+function toPascalCase(value) {
+    return String(value)
+        .split(/[^a-zA-Z0-9]+/)
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join('');
+}
+const LOGGER_NAME = LOG_MODULE_NAME || DEFAULT_LOGGER_NAME;
+const STORAGE_PREFIX = sanitizeKeyPart(LOGGER_NAME);
+const LOGGER_CONFIG_KEY = `${STORAGE_PREFIX}_logger_config`;
+const LOGGER_STORAGE_KEY = `${STORAGE_PREFIX}_logs`;
+const LOGGER_EXPORT_PREFIX = STORAGE_PREFIX;
+const WINDOW_LOGGER_KEY = `${toPascalCase(LOGGER_NAME)}Logger`;
 export const LogLevel = {
     DEBUG: 0,
     INFO: 1,
@@ -36,7 +59,7 @@ const DEFAULT_CONFIG = {
     saveToStorage: false,
     maxStoredLogs: 1000,
     timestampFormat: 'HH:mm:ss',
-    storageKey: 'ResolutionMaster_logs'
+    storageKey: LOGGER_STORAGE_KEY
 };
 const COLORS = {
     [LogLevel.DEBUG]: '#9e9e9e',
@@ -213,7 +236,7 @@ class Logger {
     saveConfig() {
         if (typeof localStorage !== 'undefined') {
             try {
-                localStorage.setItem('ResolutionMaster_logger_config', JSON.stringify(this.config));
+                localStorage.setItem(LOGGER_CONFIG_KEY, JSON.stringify(this.config));
             }
             catch (e) {
                 console.error('Failed to save logger config to localStorage:', e);
@@ -226,7 +249,7 @@ class Logger {
     loadConfig() {
         if (typeof localStorage !== 'undefined') {
             try {
-                const storedConfig = localStorage.getItem('ResolutionMaster_logger_config');
+                const storedConfig = localStorage.getItem(LOGGER_CONFIG_KEY);
                 if (storedConfig) {
                     this.config = { ...this.config, ...JSON.parse(storedConfig) };
                 }
@@ -272,7 +295,7 @@ class Logger {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `ResolutionMaster_logs_${new Date().toISOString().replace(/[:.]/g, '-')}.${extension}`;
+        a.download = `${LOGGER_EXPORT_PREFIX}_logs_${new Date().toISOString().replace(/[:.]/g, '-')}.${extension}`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -317,6 +340,6 @@ export const info = (module, ...args) => logger.info(module, ...args);
 export const warn = (module, ...args) => logger.warn(module, ...args);
 export const error = (module, ...args) => logger.error(module, ...args);
 if (typeof window !== 'undefined') {
-    window.ResolutionMasterLogger = logger;
+    window[WINDOW_LOGGER_KEY] = logger;
 }
 export default logger;

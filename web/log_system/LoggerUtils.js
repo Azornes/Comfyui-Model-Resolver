@@ -1,4 +1,10 @@
 /**
+@author: Azornes
+@title: AzLogs
+@version: 1.4.1
+@description: Logging Initializator
+*/
+/**
  * LoggerUtils - Centralization of logger initialization
  * Eliminates repetitive logger initialization code in each module
  */

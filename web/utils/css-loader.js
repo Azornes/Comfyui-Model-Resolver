@@ -3,8 +3,8 @@
  * Loads all CSS files for the resolution master components
  */
 
-import { addStylesheet, getUrl } from "./utils/ResourceManager.js";
-import { createModuleLogger } from "./utils/LoggerUtils.js";
+import { addStylesheet, getUrl } from "./ResourceManager.js";
+import { createModuleLogger } from "../log_system/LoggerUtils.js";
 
 const log = createModuleLogger('CSSLoader');
 
