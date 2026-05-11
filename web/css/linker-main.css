@@ -1296,8 +1296,8 @@
 .ml-info-tag.-basemodel-sd1 { background: rgba(244,67,54,0.2); color: #EF9A9A; }
 .ml-info-tag.-basemodel-sdxl { background: rgba(33,150,243,0.2); color: #64B5F6; }
 .ml-info-tag.-basemodel-sdxl-turbo { background: rgba(33,150,243,0.2); color: #64B5F6; }
-.ml-info-tag.-basemodel-flux.1 { background: rgba(255,152,0,0.2); color: #FFB74D; }
-.ml-info-tag.-basemodel-flux.1-d { background: rgba(255,152,0,0.2); color: #FFB74D; }
+.ml-info-tag.-basemodel-flux\.1 { background: rgba(255,152,0,0.2); color: #FFB74D; }
+.ml-info-tag.-basemodel-flux\.1-d { background: rgba(255,152,0,0.2); color: #FFB74D; }
 
 /* Info Table */
 .ml-info-table {
@@ -2171,7 +2171,6 @@
     line-height: 1.2;
     outline: none;
     box-sizing: border-box;
-    vertical-align: top;
 }
 .ml-download-target-select {
     appearance: none;
