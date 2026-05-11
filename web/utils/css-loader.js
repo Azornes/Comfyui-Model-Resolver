@@ -17,7 +17,9 @@ export function loadAllStyles() {
         
         // Load all CSS files using getUrl for proper path resolution
         const cssFiles = [
-            './css/css-variables.css',        // CSS Custom Properties - MUST BE FIRST!
+            './css/css-variables.css',
+            './css/linker-shell.css',
+            './css/linker-main.css',
         ];
         
         cssFiles.forEach(file => {

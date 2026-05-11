@@ -9,6 +9,7 @@
 import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
 import { $el, ComfyDialog } from "../../../scripts/ui.js";
+import { loadStylesWhenNeeded } from "./utils/css-loader.js";
 
 class LinkerManagerDialog extends ComfyDialog {
     constructor() {
@@ -34,95 +35,46 @@ class LinkerManagerDialog extends ComfyDialog {
         this._analysisProgressToken = null;
         this._locateAnimationFrame = null;
         
-        // Inject global styles for the redesigned UI
-        this.injectStyles();
-        
         // Create backdrop overlay for click-outside-to-close
         this.backdrop = $el("div.model-linker-backdrop", {
-            parent: document.body,
-            style: {
-                position: "fixed",
-                top: "0",
-                left: "0",
-                width: "100vw",
-                height: "100vh",
-                backgroundColor: "transparent",
-                zIndex: "99998",
-                display: "none"
-            }
+            parent: document.body
         });
         
         // Create context menu for model chips
         this.contextMenu = $el("div.ml-context-menu", {
-            parent: document.body,
-            style: {
-                position: "fixed",
-                display: "none",
-                zIndex: "100001"
-            }
+            parent: document.body
         }, [
             $el("div.ml-context-menu-item", {
-                onclick: () => this.handleContextMenuAction('showInfo'),
-                style: { cursor: "pointer" }
+                onclick: () => this.handleContextMenuAction('showInfo')
             }, [
                 $el("span.ml-context-menu-item-icon", { textContent: "ℹ" }),
                 $el("span", { textContent: "Show Info" })
             ]),
             $el("div.ml-context-menu-divider"),
             $el("div.ml-context-menu-item", {
-                onclick: () => this.handleContextMenuAction('civitai'),
-                style: { cursor: "pointer" }
+                onclick: () => this.handleContextMenuAction('civitai')
             }, [
                 $el("span.ml-context-menu-item-icon", { textContent: "🌐" }),
                 $el("span", { textContent: "Open in CivitAI" })
             ]),
             $el("div.ml-context-menu-divider"),
             $el("div.ml-context-menu-item", {
-                onclick: () => this.handleContextMenuAction('openFolder'),
-                style: { cursor: "pointer" }
+                onclick: () => this.handleContextMenuAction('openFolder')
             }, [
                 $el("span.ml-context-menu-item-icon", { textContent: "📁" }),
                 $el("span", { textContent: "Open Containing Folder" })
             ])
         ]);
 
-        this.tooltipElement = $el("div.ml-global-tooltip", {
-            parent: document.body,
-            style: {
-                display: "none"
-            }
-        });
+        this.tooltipElement = $el("div.ml-global-tooltip", { parent: document.body });
         
         // Selected model for context menu
         this._contextMenuModel = null;
         
         // Create dialog element using $el
-        this.element = $el("div.comfy-modal", {
+        this.element = $el("div.comfy-modal.model-linker-modal", {
             id: "model-linker-modal",
-            parent: document.body,
-            style: {
-                position: "fixed",
-                top: "50%",
-                left: "50%",
-                transform: "translate(-50%, -50%)",
-                width: "1100px",
-                height: "700px",
-                maxWidth: "95vw",
-                maxHeight: "95vh",
-                backgroundColor: "var(--comfy-menu-bg, #202020)",
-                color: "var(--input-text, #ffffff)",
-                border: "2px solid var(--border-color, #555555)",
-                borderRadius: "8px",
-                padding: "0",
-                zIndex: "99999",
-                boxShadow: "0 4px 20px rgba(0,0,0,0.8)",
-                display: "none",
-                flexDirection: "column",
-                resize: "both",
-                overflow: "hidden",
-                minWidth: "640px",
-                minHeight: "420px"
-            }
+            parent: document.body
         }, [
             this.createHeader(),
             this.createContent(),
@@ -445,7 +397,7 @@ class LinkerManagerDialog extends ComfyDialog {
 
             if (perfectMatches.length > 0 && otherMatches.length > 0) {
                 const matchId = `more-matches-${missing.node_id}-${missing.widget_index}`;
-                html += `<div class="ml-no-matches ml-inline-note-action" style="cursor: pointer; color: var(--ml-accent-blue);" onclick="document.getElementById('${matchId}').style.display = document.getElementById('${matchId}').style.display === 'none' ? 'block' : 'none'; this.textContent = this.textContent === '${otherMatches.length} other matches below 100%' ? 'Hide alternatives' : '${otherMatches.length} other matches below 100%'">${otherMatches.length} other match${otherMatches.length > 1 ? 'es' : ''} below 100%</div>`;
+                html += `<div class="ml-no-matches ml-inline-note-action ml-inline-note-link" onclick="document.getElementById('${matchId}').style.display = document.getElementById('${matchId}').style.display === 'none' ? 'block' : 'none'; this.textContent = this.textContent === '${otherMatches.length} other matches below 100%' ? 'Hide alternatives' : '${otherMatches.length} other matches below 100%'">${otherMatches.length} other match${otherMatches.length > 1 ? 'es' : ''} below 100%</div>`;
                 html += `<div id="${matchId}" style="display: none; flex-direction: column; gap: 4px; margin-top: 8px;">`;
                 for (let mIdx = 0; mIdx < otherMatches.length; mIdx++) {
                     const match = otherMatches[mIdx];
@@ -1364,2072 +1316,7 @@ class LinkerManagerDialog extends ComfyDialog {
         if (dialog && dialog.parentNode) {
             dialog.parentNode.removeChild(dialog);
         }
-    }
-    
-    /**
-     * Inject global CSS styles for the Model Linker UI
-     */
-    injectStyles() {
-        // Only inject once
-        if (document.getElementById('model-linker-styles')) return;
-        
-        const styles = document.createElement('style');
-        styles.id = 'model-linker-styles';
-        styles.textContent = `
-            #model-linker-modal button {
-                font-size: 15px;
-            }
-
-            /* CSS Variables for Model Linker */
-            :root {
-                --ml-bg: #121212;
-                --ml-bg-soft: #171717;
-                --ml-surface-elevated: #232323;
-                --ml-card-bg: #1a1a1a;
-                --ml-card-bg-alt: #1d1d1d;
-                --ml-panel-bg: #202020;
-                --ml-panel-bg-strong: #262626;
-                --ml-border: rgba(255, 255, 255, 0.08);
-                --ml-border-strong: rgba(255, 255, 255, 0.14);
-                --ml-divider: rgba(255, 255, 255, 0.08);
-                --ml-text: #f3f3f3;
-                --ml-text-muted: #b1b1b1;
-                --ml-text-dim: #7b7b7b;
-                --ml-text-soft: #dfdfdf;
-                --ml-accent: #72d38a;
-                --ml-accent-hover: #88de9e;
-                --ml-accent-blue: #72d38a;
-                --ml-warning: #e1b24d;
-                --ml-confidence-high: #72d38a;
-                --ml-confidence-medium: #e1b24d;
-                --ml-confidence-low: #e06a6a;
-                --ml-link-color: #d8d8d8;
-                --ml-shadow: 0 18px 42px rgba(0,0,0,0.28);
-                --ml-radius-sm: 8px;
-                --ml-radius-md: 12px;
-                --ml-radius-lg: 16px;
-            }
-
-            .ml-missing-summary {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                gap: 12px;
-                margin-bottom: 10px;
-                padding: 10px 12px;
-                border-radius: var(--ml-radius-lg);
-                background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%);
-                border: 1px solid var(--ml-border-strong);
-                box-shadow: var(--ml-shadow);
-            }
-            .ml-missing-summary-title {
-                display: flex;
-                align-items: baseline;
-                gap: 10px;
-                flex-wrap: wrap;
-            }
-            .ml-missing-summary-count {
-                font-size: 15px;
-                font-weight: 700;
-                color: var(--ml-text);
-                letter-spacing: -0.02em;
-            }
-            .ml-missing-summary-meta {
-                font-size: 11px;
-                color: var(--ml-text-muted);
-            }
-            
-            /* Card Styles */
-            .ml-card {
-                background: var(--ml-card-bg);
-                border: 1px solid transparent;
-                border-radius: 0;
-                padding: 10px 12px;
-                margin-bottom: 4px;
-                transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
-                box-shadow: inset 0 0 0 1px rgba(255,255,255,0.018);
-                font-family: "Segoe UI Variable", "Segoe UI", sans-serif;
-            }
-            .ml-card:nth-child(even) {
-                background: var(--ml-card-bg-alt);
-            }
-            .ml-card:hover {
-                transform: translateY(-1px);
-                box-shadow:
-                    inset 0 0 0 1px rgba(255,255,255,0.05),
-                    0 10px 24px rgba(0,0,0,0.14);
-            }
-            
-            /* Card Header */
-            .ml-card-header {
-                display: flex;
-                align-items: flex-start;
-                justify-content: space-between;
-                gap: 10px;
-                margin-bottom: 6px;
-            }
-            .ml-card-title-wrap {
-                min-width: 0;
-                flex: 1;
-                display: grid;
-                gap: 4px;
-            }
-            .ml-card-title-meta {
-                display: grid;
-                gap: 2px;
-            }
-            .ml-card-title {
-                font-size: 15px;
-                line-height: 1.24;
-                font-weight: 700;
-                color: var(--ml-text);
-                margin: 0;
-                word-break: break-word;
-                letter-spacing: -0.01em;
-            }
-            .ml-card-title-eyebrow {
-                display: block;
-                font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
-                font-size: 10px;
-                line-height: 1.35;
-                color: var(--ml-text-dim);
-                word-break: break-all;
-            }
-            .ml-card-title-primary {
-                display: block;
-                color: var(--ml-text-soft);
-            }
-            .ml-card-title-secondary {
-                display: block;
-                font-size: 12px;
-                line-height: 1.4;
-                color: var(--ml-text-muted);
-                word-break: break-word;
-            }
-            .ml-card-subtitle {
-                margin-top: 0;
-                display: flex;
-                align-items: center;
-                gap: 4px;
-                flex-wrap: wrap;
-            }
-            .ml-node-chip {
-                display: inline-flex;
-                align-items: center;
-                gap: 4px;
-                padding: 2px 7px;
-                background: rgba(255,255,255,0.04);
-                border: 1px solid rgba(255,255,255,0.06);
-                border-radius: 999px;
-                font-size: 10px;
-                color: #c8c8c8;
-                white-space: nowrap;
-                flex-shrink: 0;
-            }
-            .ml-node-chip.is-locatable {
-                cursor: pointer;
-                padding-right: 9px;
-                color: #f1f1f1;
-                background: rgba(255,255,255,0.08);
-                border-color: rgba(255,255,255,0.12);
-                transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
-            }
-            .ml-node-chip.is-locatable:hover {
-                background: rgba(255,255,255,0.12);
-                border-color: rgba(255,255,255,0.18);
-                color: #ffffff;
-                transform: translateY(-1px);
-            }
-            .ml-node-chip-icon {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                width: 12px;
-                height: 12px;
-                opacity: 0.95;
-            }
-            .ml-node-chip-icon svg {
-                width: 12px;
-                height: 12px;
-                display: block;
-            }
-            .ml-category-chip {
-                display: inline-flex;
-                padding: 2px 7px;
-                background: rgba(255,255,255,0.045);
-                border: 1px solid rgba(255,255,255,0.07);
-                border-radius: 999px;
-                font-size: 9px;
-                color: #d3d3d3;
-                text-transform: uppercase;
-                letter-spacing: 0.08em;
-                font-weight: 700;
-            }
-            .ml-card-actions {
-                display: flex;
-                align-items: center;
-                justify-content: flex-end;
-                gap: 6px;
-                flex-wrap: wrap;
-                flex-shrink: 0;
-            }
-            .ml-inline-civitai-link {
-                color: var(--ml-text-soft);
-                font-size: 14px;
-                font-weight: 700;
-                text-decoration: none;
-                letter-spacing: -0.01em;
-            }
-            .ml-inline-civitai-link:hover {
-                color: #ffffff;
-                text-decoration: none;
-            }
-            
-            /* Two-Column Layout */
-            .ml-columns {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 8px;
-            }
-            @media (max-width: 700px) {
-                .ml-missing-summary {
-                    flex-direction: column;
-                    align-items: flex-start;
-                }
-                .ml-columns {
-                    grid-template-columns: 1fr;
-                }
-                .ml-card-header {
-                    flex-direction: column;
-                }
-                .ml-card-actions {
-                    justify-content: flex-start;
-                }
-            }
-            .ml-column {
-                min-width: 0;
-                background: var(--ml-panel-bg);
-                border: 1px solid transparent;
-                border-radius: 0;
-                padding: 10px;
-                box-shadow: inset 0 0 0 1px rgba(148,163,184,0.06);
-            }
-            .ml-column-header {
-                font-size: 10px;
-                font-weight: 700;
-                color: var(--ml-text-muted);
-                text-transform: uppercase;
-                letter-spacing: 0.1em;
-                margin-bottom: 8px;
-                padding-bottom: 6px;
-                border-bottom: 1px solid var(--ml-divider);
-            }
-            .ml-muted-note,
-            .ml-no-matches {
-                padding: 8px 10px;
-                border-radius: var(--ml-radius-sm);
-                background: rgba(255,255,255,0.018);
-                border: 1px solid transparent;
-                color: var(--ml-text-muted);
-                font-size: 11px;
-            }
-            .ml-inline-note-action {
-                transition: color 0.15s ease, background 0.15s ease;
-            }
-            .ml-inline-note-action:hover {
-                color: var(--ml-text);
-                background: rgba(255,255,255,0.05);
-            }
-            
-            /* Filename Chips */
-            .ml-chip {
-                display: inline-flex;
-                align-items: center;
-                padding: 5px 10px;
-                background: rgba(255,255,255,0.07);
-                border: 1px solid rgba(255,255,255,0.08);
-                border-radius: 999px;
-                font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
-                font-size: 12px;
-                color: var(--ml-text);
-                max-width: 100%;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
-            .ml-chip:hover {
-                background: #444;
-            }
-            
-            /* Confidence Badges */
-            .ml-badge {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                padding: 1px 7px;
-                border-radius: 999px;
-                font-size: 10px;
-                font-weight: 600;
-                min-width: 36px;
-                text-align: center;
-                border: 1px solid transparent;
-            }
-            .ml-badge-high {
-                background: rgba(114,211,138,0.14);
-                color: #a7e6b6;
-                border-color: rgba(114,211,138,0.22);
-            }
-            .ml-badge-medium {
-                background: rgba(225,178,77,0.15);
-                color: #efd391;
-                border-color: rgba(225,178,77,0.2);
-            }
-            .ml-badge-low {
-                background: rgba(224,106,106,0.14);
-                color: #efb1b1;
-                border-color: rgba(224,106,106,0.2);
-            }
-            .ml-badge-neutral {
-                background: rgba(255,255,255,0.06);
-                color: #d4d4d4;
-                border-color: rgba(255,255,255,0.1);
-            }
-            
-            /* Match Row */
-            .ml-match-row {
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                padding: 6px 8px;
-                border-radius: var(--ml-radius-sm);
-                margin-bottom: 4px;
-                background: rgba(255,255,255,0.016);
-                border: 1px solid transparent;
-                transition: background 0.15s ease, box-shadow 0.15s ease;
-            }
-            .ml-match-row:hover {
-                background: rgba(255,255,255,0.032);
-                box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
-            }
-            .ml-match-row.ml-best-match {
-                background: rgba(114,211,138,0.08);
-                box-shadow: inset 0 0 0 1px rgba(114,211,138,0.16);
-            }
-            .ml-match-filename {
-                flex: 1;
-                min-width: 0;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-                font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
-                font-size: 11.5px;
-                color: var(--ml-text-soft);
-            }
-            
-            /* Buttons */
-            .ml-btn {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                gap: 5px;
-                min-height: 30px;
-                padding: 6px 11px;
-                border: 1px solid transparent;
-                border-radius: 10px;
-                font-size: 11px;
-                font-weight: 600;
-                cursor: pointer;
-                transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
-                white-space: nowrap;
-                text-decoration: none;
-                box-sizing: border-box;
-            }
-            .ml-btn:disabled {
-                opacity: 0.5;
-                cursor: not-allowed;
-            }
-            .ml-btn-primary {
-                background: var(--ml-accent);
-                color: white;
-            }
-            .ml-btn-primary:hover:not(:disabled) {
-                background: var(--ml-accent-hover);
-            }
-            .ml-btn-secondary {
-                background: rgba(255,255,255,0.03);
-                color: var(--ml-text);
-                border-color: rgba(255,255,255,0.1);
-                box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
-            }
-            .ml-btn-secondary:hover:not(:disabled) {
-                background: rgba(255,255,255,0.05);
-                border-color: rgba(255,255,255,0.16);
-                transform: translateY(-1px);
-            }
-            .ml-btn-link {
-                background: rgba(255,255,255,0.03);
-                color: var(--ml-text);
-                border-color: rgba(255,255,255,0.1);
-                box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
-            }
-            .ml-btn-link:hover:not(:disabled) {
-                background: rgba(255,255,255,0.05);
-                color: var(--ml-text);
-                border-color: rgba(255,255,255,0.16);
-                transform: translateY(-1px);
-            }
-            .ml-btn-download {
-                background: var(--ml-accent);
-                color: #101010;
-                box-shadow: 0 8px 18px rgba(114,211,138,0.18);
-            }
-            .ml-btn-download:hover:not(:disabled) {
-                background: var(--ml-accent-hover);
-                transform: translateY(-1px);
-            }
-            .ml-btn-danger {
-                background: #f44336;
-                color: white;
-            }
-            .ml-btn-danger:hover:not(:disabled) {
-                background: #d32f2f;
-            }
-            .ml-btn-sm {
-                min-height: 24px;
-                padding: 2px 7px;
-                font-size: 9px;
-                border-radius: 8px;
-            }
-            .ml-btn-ghost {
-                background: rgba(255,255,255,0.018);
-                color: var(--ml-text-muted);
-                border-color: rgba(255,255,255,0.08);
-                box-shadow: none;
-            }
-            .ml-btn-ghost:hover:not(:disabled) {
-                background: rgba(255,255,255,0.04);
-                color: var(--ml-text);
-                border-color: rgba(255,255,255,0.14);
-            }
-            .ml-btn-utility {
-                padding-inline: 6px;
-                font-weight: 600;
-                letter-spacing: 0.01em;
-                color: var(--ml-text-soft);
-            }
-            .ml-btn-link-compact {
-                min-width: 58px;
-                gap: 4px;
-                padding-inline: 5px;
-                font-size: 8.75px;
-            }
-            .ml-btn-icon-only {
-                width: 24px;
-                min-width: 24px;
-                padding: 0;
-                aspect-ratio: 1;
-            }
-            .ml-btn-icon {
-                font-size: 12px;
-            }
-            .ml-btn-icon svg {
-                width: 13px;
-                height: 13px;
-                display: block;
-            }
-            .ml-card-actions .ml-btn,
-            .ml-match-row .ml-btn,
-            .ml-combo-row .ml-btn {
-                min-height: 24px;
-            }
-            .ml-search-source-btn {
-                border-radius: 999px;
-                padding-inline: 11px;
-                background: rgba(255,255,255,0.03);
-                color: var(--ml-text);
-                border-color: rgba(255,255,255,0.1);
-                box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
-            }
-            .ml-search-source-btn.ml-btn-primary {
-                background: rgba(255,255,255,0.03);
-                color: var(--ml-text);
-                border-color: rgba(255,255,255,0.1);
-                box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
-            }
-            .ml-search-source-btn:hover:not(:disabled),
-            .ml-search-source-btn.ml-btn-primary:hover:not(:disabled) {
-                background: rgba(255,255,255,0.05);
-                color: var(--ml-text);
-                border-color: rgba(255,255,255,0.16);
-            }
-            
-            /* Download Section */
-            .ml-download-section {
-                display: grid;
-                gap: 8px;
-                padding: 10px;
-                background: var(--ml-surface-elevated);
-                border-radius: 0;
-                border: 1px solid transparent;
-                box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
-            }
-            .ml-download-actions {
-                display: grid;
-                grid-template-columns: minmax(0, 1fr) auto;
-                gap: 8px;
-                align-items: center;
-            }
-            .ml-download-actions .ml-btn-download,
-            .ml-download-actions .ml-btn-download:hover:not(:disabled),
-            .ml-btn.ml-btn-download.ml-footer-btn,
-            .ml-btn.ml-btn-download.ml-footer-btn:hover:not(:disabled) {
-                background: rgba(255,255,255,0.03);
-                color: var(--ml-text);
-                border-color: rgba(255,255,255,0.1);
-                box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
-            }
-            .ml-download-actions .ml-btn-download:hover:not(:disabled),
-            .ml-btn.ml-btn-download.ml-footer-btn:hover:not(:disabled) {
-                background: rgba(255,255,255,0.05);
-                color: var(--ml-text);
-                border-color: rgba(255,255,255,0.16);
-                box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
-                transform: translateY(-1px);
-            }
-            .ml-btn-download-main {
-                justify-content: flex-start;
-                padding-inline: 10px;
-                font-size: 8.9px;
-            }
-            .ml-btn-download-side {
-                min-width: 132px;
-                font-size: 8.6px;
-            }
-            .ml-status-inline {
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                flex-wrap: wrap;
-            }
-            .ml-download-info {
-                font-size: 11px;
-                color: var(--ml-text-muted);
-                margin-top: 0;
-                line-height: 1.55;
-            }
-            .ml-download-source {
-                color: var(--ml-accent);
-                font-weight: 700;
-            }
-            .ml-download-size {
-                color: var(--ml-text-dim);
-                margin-left: 8px;
-            }
-            .ml-search-source-bar {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: 8px;
-                margin-bottom: 8px;
-            }
-            .ml-search-source-picker {
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                min-width: 0;
-                margin-left: auto;
-            }
-            .ml-search-source-picker-label {
-                color: var(--ml-text-muted);
-                font-size: 11px;
-                white-space: nowrap;
-            }
-            .ml-search-source-select {
-                min-height: 30px;
-                padding: 5px 10px;
-                background: rgba(255,255,255,0.04);
-                color: var(--ml-text);
-                border: 1px solid var(--ml-border);
-                border-radius: 10px;
-                font-size: 11px;
-                outline: none;
-                appearance: none;
-            }
-            .ml-search-source-select:focus {
-                border-color: rgba(114,211,138,0.4);
-                box-shadow: 0 0 0 3px rgba(114,211,138,0.12);
-            }
-            .ml-search-results {
-                margin-top: 8px;
-                display: none;
-            }
-            .ml-combo-section {
-                position: relative;
-                margin-top: 8px;
-                padding-top: 8px;
-                border-top: 1px solid var(--ml-divider);
-            }
-            .ml-combo-row {
-                display: flex;
-                align-items: center;
-                gap: 6px;
-                margin-bottom: 4px;
-            }
-            .ml-combo-label {
-                opacity: 0.9;
-                font-size: 10px;
-                color: var(--ml-text-muted);
-                font-weight: 600;
-                min-width: 42px;
-                letter-spacing: 0.08em;
-                text-transform: uppercase;
-            }
-            .ml-combo-input {
-                flex: 1;
-                min-width: 0;
-                min-height: 30px;
-                padding: 5px 10px;
-                background: rgba(255,255,255,0.04);
-                color: var(--ml-text);
-                border: 1px solid var(--ml-border);
-                border-radius: 10px;
-                font-size: 12px;
-                outline: none;
-                transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
-            }
-            .ml-combo-input:focus {
-                border-color: rgba(114,211,138,0.4);
-                box-shadow: 0 0 0 3px rgba(114,211,138,0.12);
-            }
-            .ml-combo-list {
-                position: absolute;
-                top: calc(100% + 4px);
-                left: 44px;
-                right: 0;
-                width: auto;
-                max-height: 220px;
-                overflow: auto;
-                display: none;
-                z-index: 100000;
-                background: linear-gradient(180deg, var(--ml-panel-bg-strong) 0%, var(--ml-card-bg) 100%);
-                border: 1px solid var(--ml-border-strong);
-                border-radius: 12px;
-                box-shadow: var(--ml-shadow);
-            }
-            .ml-combo-option {
-                padding: 8px 10px;
-                cursor: pointer;
-                border-bottom: 1px solid rgba(255,255,255,0.04);
-                font-size: 12px;
-                color: var(--ml-text);
-                background: transparent;
-                transition: background 0.14s ease, color 0.14s ease;
-            }
-            .ml-combo-option:last-child {
-                border-bottom: none;
-            }
-            .ml-combo-option:hover,
-            .ml-combo-option.is-highlighted {
-                background: rgba(114,211,138,0.12);
-            }
-            .ml-combo-option-row {
-                display: flex;
-                align-items: center;
-                gap: 6px;
-            }
-            .ml-combo-option code {
-                flex: 1 1 0%;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                color: var(--ml-text);
-            }
-            .ml-combo-folder {
-                margin-top: 4px;
-                font-size: 10px;
-                color: var(--ml-text-dim);
-                opacity: 0.9;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
-            
-            /* Status Messages */
-            .ml-status {
-                display: flex;
-                align-items: flex-start;
-                gap: 10px;
-                padding: 10px 14px;
-                border-radius: 10px;
-                font-size: 13px;
-                margin-top: 8px;
-                border: 1px solid rgba(255,255,255,0.06);
-            }
-            .ml-status-icon {
-                font-size: 16px;
-                flex-shrink: 0;
-            }
-            .ml-status-error {
-                background: rgba(244, 67, 54, 0.1);
-                border: 1px solid rgba(244, 67, 54, 0.3);
-                color: #ef9a9a;
-            }
-            .ml-status-success {
-                background: rgba(76, 175, 80, 0.1);
-                border: 1px solid rgba(76, 175, 80, 0.3);
-                color: #a5d6a7;
-            }
-            .ml-status-info {
-                background: rgba(33, 150, 243, 0.1);
-                border: 1px solid rgba(33, 150, 243, 0.3);
-                color: #90caf9;
-            }
-            .ml-status-warning {
-                background: rgba(255, 152, 0, 0.1);
-                border: 1px solid rgba(255, 152, 0, 0.3);
-                color: #ffcc80;
-            }
-            
-            /* Progress Bar */
-            .ml-progress-container {
-                margin-top: 8px;
-            }
-            .ml-progress-bar {
-                height: 6px;
-                background: #333;
-                border-radius: 3px;
-                overflow: hidden;
-            }
-            .ml-progress-fill {
-                height: 100%;
-                background: var(--ml-accent);
-                transition: width 0.3s ease;
-            }
-            .ml-progress-text {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-top: 6px;
-                font-size: 11px;
-                color: var(--ml-text-muted);
-            }
-            
-            /* Scrollbar */
-            .ml-scrollable {
-                overflow-y: auto;
-            }
-            .ml-scrollable::-webkit-scrollbar {
-                width: 8px;
-            }
-            .ml-scrollable::-webkit-scrollbar-track {
-                background: transparent;
-            }
-            .ml-scrollable::-webkit-scrollbar-thumb {
-                background: #444;
-                border-radius: 4px;
-            }
-            .ml-scrollable::-webkit-scrollbar-thumb:hover {
-                background: #555;
-            }
-            
-            /* Footer */
-            .ml-footer {
-                display: flex;
-                justify-content: flex-end;
-                align-items: center;
-                gap: 10px;
-                flex-wrap: wrap;
-                padding: 5px 18px;
-                background: linear-gradient(to top, rgba(18,18,18,0.98) 0%, rgba(18,18,18,0.92) 70%, transparent 100%);
-                border-top: 1px solid var(--ml-border);
-            }
-            .ml-footer-btn {
-                min-height: 32px;
-                min-width: 144px;
-                padding: 7px 13px;
-                font-size: 12px;
-                border-radius: 9px;
-                line-height: 1;
-                backdrop-filter: blur(10px);
-            }
-            .ml-btn.ml-footer-btn,
-            .ml-btn.ml-btn-primary.ml-footer-btn,
-            .ml-btn.ml-btn-download.ml-footer-btn {
-                background: rgba(255,255,255,0.03);
-                color: var(--ml-text);
-                border-color: rgba(255,255,255,0.1);
-                box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
-            }
-            .ml-btn.ml-footer-btn:hover:not(:disabled),
-            .ml-btn.ml-btn-primary.ml-footer-btn:hover:not(:disabled),
-            .ml-btn.ml-btn-download.ml-footer-btn:hover:not(:disabled) {
-                background: rgba(255,255,255,0.05);
-                color: var(--ml-text);
-                border-color: rgba(255,255,255,0.16);
-                box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
-                transform: translateY(-1px);
-            }
-
-            /* Tabs */
-            .ml-tabs {
-                display: flex;
-                align-items: flex-end;
-                gap: 6px;
-                padding: 7px 16px 0 16px;
-                margin-bottom: 0;
-                background:
-                    linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.005) 100%);
-                position: relative;
-                z-index: 2;
-                border-bottom: 1px solid var(--ml-border);
-            }
-            .ml-tab {
-                position: relative;
-                padding: 8px 13px 9px 13px;
-                background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.015) 100%);
-                border: 1px solid rgba(255,255,255,0.1);
-                border-bottom: none;
-                border-top-left-radius: 11px;
-                border-top-right-radius: 11px;
-                color: var(--ml-text-muted, #888);
-                font-size: 12px;
-                font-weight: 600;
-                cursor: pointer;
-                box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
-                transform: translateY(4px);
-                opacity: 0.8;
-                transition: transform 0.18s ease, opacity 0.18s ease, color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
-            }
-            .ml-tab:hover {
-                color: var(--ml-text-muted, #888);
-                background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.015) 100%);
-                border-color: rgba(255,255,255,0.14);
-                transform: translateY(2px);
-                opacity: 0.96;
-            }
-            .ml-tab.ml-tab-active {
-                color: var(--ml-text, #eef2f7);
-                background: var(--ml-bg);
-                border-color: rgba(255,255,255,0.16);
-                box-shadow:
-                    0 -8px 18px rgba(0,0,0,0.1),
-                    0 6px 10px rgba(0,0,0,0.08),
-                    inset 0 1px 0 rgba(255,255,255,0.03);
-                transform: translateY(1px);
-                opacity: 1;
-                z-index: 3;
-            }
-            .ml-tab.ml-tab-active::after {
-                content: "";
-                position: absolute;
-                left: 0;
-                right: 0;
-                bottom: -6px;
-                height: 8px;
-                background: var(--ml-bg);
-                border-bottom-left-radius: 8px;
-                border-bottom-right-radius: 8px;
-            }
-
-            /* Loaded Models Tab */
-            .ml-loaded-models {
-                padding: 0;
-            }
-            .ml-loaded-models-header {
-                padding: 16px 20px;
-                border-bottom: 1px solid var(--ml-border);
-            }
-            .ml-loaded-models-title {
-                font-size: 15px;
-                font-weight: 600;
-                color: var(--ml-text);
-                margin: 0 0 8px 0;
-            }
-            .ml-loaded-models-subtitle {
-                font-size: 12px;
-                color: var(--ml-text-muted);
-            }
-            .ml-models-list {
-                padding: 12px 20px;
-                display: flex;
-                flex-direction: column;
-                gap: 8px;
-            }
-            .ml-model-chip {
-                display: inline-flex;
-                align-items: center;
-                padding: 6px 12px;
-                background: #3a3a3a;
-                border-radius: 6px;
-                font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
-                font-size: 12px;
-                color: var(--ml-text);
-            }
-            .ml-model-chip-category {
-                padding: 2px 6px;
-                background: #555;
-                border-radius: 4px;
-                font-size: 10px;
-                color: #aaa;
-                margin-left: 8px;
-                text-transform: uppercase;
-            }
-            .ml-model-chip-strength {
-                padding: 2px 6px;
-                background: #4CAF50;
-                border-radius: 4px;
-                font-size: 10px;
-                color: white;
-                margin-left: 8px;
-            }
-
-            .model-linker-selected {
-                margin: 8px 0;
-                padding: 10px 12px;
-                background: rgba(78, 161, 255, 0.12);
-                border: 1px solid rgba(78, 161, 255, 0.28);
-                border-radius: 0;
-                color: var(--ml-text);
-                font-size: 12px;
-            }
-            
-            /* Link styling */
-            .ml-link {
-                color: var(--ml-link-color);
-                text-decoration: none;
-            }
-            .ml-link:hover {
-                text-decoration: underline;
-            }
-            
-            /* Context menu */
-            .ml-context-menu {
-                position: fixed;
-                background: var(--comfy-menu-bg, #202020);
-                border: 1px solid var(--border-color, #555555);
-                border-radius: 6px;
-                box-shadow: 0 4px 16px rgba(0,0,0,0.5);
-                z-index: 100001;
-                min-width: 160px;
-                overflow: hidden;
-            }
-            .ml-context-menu-item {
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                padding: 8px 12px;
-                font-size: 12px;
-                color: var(--input-text, #e0e0e0);
-                cursor: pointer;
-                transition: background 0.15s ease;
-            }
-            .ml-context-menu-item:hover {
-                background: rgba(255,255,255,0.1);
-            }
-            .ml-context-menu-item-icon {
-                font-size: 14px;
-                width: 20px;
-                text-align: center;
-            }
-            .ml-context-menu-divider {
-                height: 1px;
-                background: var(--border-color, #555555);
-                margin: 4px 0;
-            }
-            
-            /* Model Info Dialog (similar to rgthree's RgthreeLoraInfoDialog) */
-            .ml-info-dialog-backdrop {
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100vw;
-                height: 100vh;
-                background: rgba(0, 0, 0, 0.6);
-                z-index: 100002;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
-            .ml-info-dialog {
-                background: var(--comfy-menu-bg, #202020);
-                border: 2px solid var(--border-color, #555555);
-                border-radius: 8px;
-                width: 500px;
-                max-width: 90vw;
-                max-height: 80vh;
-                min-width: 420px;
-                min-height: 320px;
-                overflow: hidden;
-                display: flex;
-                flex-direction: column;
-                box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-                resize: both;
-            }
-            .ml-info-dialog-header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                padding: 16px 20px;
-                border-bottom: 1px solid var(--border-color, #555555);
-                background: rgba(0,0,0,0.2);
-            }
-            .ml-info-dialog-header h3 {
-                margin: 0;
-                font-size: 16px;
-                color: var(--input-text, #e0e0e0);
-            }
-            .ml-info-dialog-close {
-                background: none;
-                border: none;
-                font-size: 24px;
-                color: var(--input-text, #e0e0e0);
-                cursor: pointer;
-                padding: 0;
-                width: 30px;
-                height: 30px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                border-radius: 4px;
-            }
-            .ml-info-dialog-close:hover {
-                background: rgba(255,255,255,0.1);
-            }
-            .ml-info-dialog-content {
-                padding: 16px 20px;
-                overflow-y: auto;
-                flex: 1;
-            }
-            .ml-info-dialog-loading {
-                text-align: center;
-                color: var(--ml-text-muted, #888);
-                padding: 20px;
-            }
-            .ml-info-section {
-                margin-bottom: 16px;
-                padding-bottom: 16px;
-                border-bottom: 1px solid var(--border-color, #555555);
-            }
-            .ml-info-section-header {
-                font-size: 12px;
-                font-weight: 600;
-                color: var(--ml-text-muted, #888);
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-                margin-bottom: 12px;
-            }
-            .ml-info-row {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                padding: 6px 0;
-            }
-            .ml-info-label {
-                color: var(--ml-text-muted, #888);
-                font-size: 13px;
-            }
-            .ml-info-value {
-                color: var(--input-text, #e0e0e0);
-                font-size: 13px;
-                font-weight: 500;
-            }
-            .ml-info-value.ml-info-active {
-                color: #4CAF50;
-            }
-            .ml-info-value.ml-info-inactive {
-                color: #888;
-            }
-            .ml-info-section-civitai {
-                border-bottom: none;
-                margin-bottom: 0;
-                padding-bottom: 0;
-            }
-            .ml-info-civitai-link {
-                display: flex;
-                flex-direction: column;
-                gap: 8px;
-            }
-            .ml-info-link {
-                display: inline-flex;
-                align-items: center;
-                gap: 6px;
-                padding: 8px 12px;
-                background: #2196F3;
-                color: white;
-                border-radius: 6px;
-                text-decoration: none;
-                font-size: 13px;
-            }
-            .ml-info-link:hover {
-                background: #1976D2;
-            }
-            .ml-info-loading-small {
-                color: var(--ml-text-muted, #888);
-                font-size: 12px;
-                font-style: italic;
-            }
-            .ml-info-not-found {
-                color: #888;
-                font-size: 12px;
-            }
-            
-            /* Info Area (type/base model tags) */
-            .ml-info-area {
-                display: flex;
-                gap: 8px;
-                margin-bottom: 16px;
-            }
-            .ml-info-tag {
-                display: inline-flex;
-                align-items: center;
-                padding: 4px 10px;
-                background: rgba(255,255,255,0.1);
-                border-radius: 4px;
-                font-size: 11px;
-                font-weight: 600;
-                color: var(--input-text, #e0e0e0);
-            }
-            .ml-info-tag.-type-lora { background: rgba(33,150,243,0.2); color: #64B5F6; }
-            .ml-info-tag.-type-checkpoint { background: rgba(76,175,80,0.2); color: #81C784; }
-            .ml-info-tag.-type-vae { background: rgba(156,39,176,0.2); color: #BA68C8; }
-            .ml-info-tag.-basemodel-sd1 { background: rgba(244,67,54,0.2); color: #EF9A9A; }
-            .ml-info-tag.-basemodel-sdxl { background: rgba(33,150,243,0.2); color: #64B5F6; }
-            .ml-info-tag.-basemodel-sdxl-turbo { background: rgba(33,150,243,0.2); color: #64B5F6; }
-            .ml-info-tag.-basemodel-flux.1 { background: rgba(255,152,0,0.2); color: #FFB74D; }
-            .ml-info-tag.-basemodel-flux.1-d { background: rgba(255,152,0,0.2); color: #FFB74D; }
-            
-            /* Info Table */
-            .ml-info-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 16px;
-            }
-            .ml-info-table tr {
-                border-bottom: 1px solid rgba(255,255,255,0.05);
-            }
-            .ml-info-table tr:last-child {
-                border-bottom: none;
-            }
-            .ml-info-table td {
-                padding: 8px 4px;
-                font-size: 13px;
-                vertical-align: top;
-            }
-            .ml-info-table td:first-child {
-                color: var(--ml-text-muted, #888);
-                white-space: nowrap;
-                width: 140px;
-            }
-            .ml-info-table td:last-child {
-                color: var(--input-text, #e0e0e0);
-                word-break: break-word;
-            }
-            .ml-info-trained-words-label {
-                display: flex;
-                align-items: center;
-                flex-wrap: wrap;
-                gap: 6px;
-            }
-            .ml-info-trained-words-meta {
-                display: inline-flex;
-                align-items: center;
-                gap: 8px;
-                font-size: 11px;
-                color: var(--ml-text-muted, #888);
-            }
-            .ml-info-trained-words-hint {
-                margin-bottom: 8px;
-                font-size: 11px;
-                color: var(--ml-text-muted, #888);
-            }
-            .ml-info-copy-trained-words {
-                border: 1px solid rgba(255,255,255,0.12);
-                background: rgba(255,255,255,0.05);
-                color: var(--ml-link-color, #8fc2ff);
-                border-radius: 999px;
-                padding: 2px 10px;
-                font-size: 11px;
-                cursor: pointer;
-                transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
-            }
-            .ml-info-copy-trained-words:hover:not(:disabled) {
-                background: rgba(78,161,255,0.14);
-                border-color: rgba(78,161,255,0.28);
-                color: #d6eaff;
-            }
-            .ml-info-copy-trained-words:disabled {
-                opacity: 0.45;
-                cursor: default;
-            }
-            .ml-info-trained-words-list {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 8px;
-                align-items: flex-start;
-            }
-            .ml-info-trained-word {
-                border: 1px solid rgba(255,255,255,0.1);
-                background: rgba(255,255,255,0.04);
-                color: var(--ml-text);
-                border-radius: 999px;
-                padding: 6px 10px;
-                font-size: 12px;
-                line-height: 1.2;
-                cursor: pointer;
-                transition: transform 0.14s ease, background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
-            }
-            .ml-info-trained-word:hover {
-                transform: translateY(-1px);
-                background: rgba(255,255,255,0.07);
-                border-color: rgba(255,255,255,0.18);
-            }
-            .ml-info-trained-word.is-selected {
-                background: rgba(78,161,255,0.18);
-                border-color: rgba(78,161,255,0.4);
-                color: #d8ebff;
-                box-shadow: 0 0 0 1px rgba(78,161,255,0.15) inset;
-            }
-            .ml-info-description-wrap {
-                display: flex;
-                flex-direction: column;
-                gap: 8px;
-            }
-            .ml-info-description {
-                line-height: 1.55;
-                color: var(--input-text, #e0e0e0);
-                max-height: 220px;
-                overflow: hidden;
-                position: relative;
-            }
-            .ml-info-description:not(.is-expanded)::after {
-                content: "";
-                position: absolute;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                height: 56px;
-                background: linear-gradient(180deg, rgba(32,32,32,0) 0%, rgba(32,32,32,0.92) 100%);
-                pointer-events: none;
-            }
-            .ml-info-description.is-expanded {
-                max-height: none;
-                overflow: visible;
-            }
-            .ml-info-description p,
-            .ml-info-description ul,
-            .ml-info-description ol,
-            .ml-info-description blockquote,
-            .ml-info-description pre {
-                margin: 0 0 10px 0;
-            }
-            .ml-info-description h1,
-            .ml-info-description h2,
-            .ml-info-description h3,
-            .ml-info-description h4,
-            .ml-info-description h5,
-            .ml-info-description h6 {
-                margin: 14px 0 8px 0;
-                color: var(--ml-text);
-                line-height: 1.3;
-            }
-            .ml-info-description ul,
-            .ml-info-description ol {
-                padding-left: 18px;
-            }
-            .ml-info-description code,
-            .ml-info-description pre {
-                background: rgba(255,255,255,0.05);
-                border-radius: 6px;
-            }
-            .ml-info-description code {
-                padding: 1px 5px;
-                font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
-                font-size: 12px;
-            }
-            .ml-info-description pre {
-                padding: 10px 12px;
-                overflow-x: auto;
-                white-space: pre-wrap;
-            }
-            .ml-info-description a {
-                color: var(--ml-link-color, #8fc2ff);
-                text-decoration: none;
-            }
-            .ml-info-description a:hover {
-                text-decoration: underline;
-            }
-            .ml-info-description-actions {
-                display: flex;
-                justify-content: flex-end;
-            }
-            .ml-info-description-toggle {
-                border: 1px solid rgba(255,255,255,0.12);
-                background: rgba(255,255,255,0.05);
-                color: var(--ml-link-color, #8fc2ff);
-                border-radius: 999px;
-                padding: 4px 12px;
-                font-size: 11px;
-                cursor: pointer;
-                transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
-            }
-            .ml-info-description-toggle:hover {
-                background: rgba(78,161,255,0.14);
-                border-color: rgba(78,161,255,0.28);
-                color: #d6eaff;
-            }
-            .ml-info-help {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                width: 14px;
-                height: 14px;
-                background: rgba(255,255,255,0.14);
-                color: var(--ml-text-muted, #b4becb);
-                border-radius: 50%;
-                font-size: 10px;
-                font-weight: 700;
-                cursor: help;
-                margin-left: 4px;
-                vertical-align: middle;
-                border: 1px solid rgba(255,255,255,0.12);
-                user-select: none;
-            }
-            .ml-info-help:hover {
-                background: rgba(78,161,255,0.18);
-                color: #d9ecff;
-                border-color: rgba(78,161,255,0.3);
-            }
-            
-            /* Images Section */
-            .ml-info-images {
-                margin-top: 16px;
-                padding-top: 16px;
-                border-top: 1px solid var(--border-color, #555555);
-            }
-            .ml-info-images-header {
-                font-size: 12px;
-                font-weight: 600;
-                color: var(--ml-text-muted, #888);
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-                margin-bottom: 12px;
-            }
-            .ml-info-images-layout {
-                column-count: 3;
-                column-gap: 14px;
-            }
-            .ml-info-image-item {
-                border-radius: 6px;
-                overflow: hidden;
-                background: rgba(0,0,0,0.2);
-                border: 1px solid rgba(255,255,255,0.06);
-                break-inside: avoid;
-                margin-bottom: 14px;
-            }
-            .ml-info-image-item figure {
-                margin: 0;
-                position: relative;
-                display: block;
-                background: rgba(0,0,0,0.3);
-            }
-            .ml-info-image-item img {
-                width: 100%;
-                height: auto;
-                display: block;
-                object-fit: contain;
-                transition: transform 0.24s ease, filter 0.24s ease;
-            }
-            .ml-info-image-item figcaption {
-                position: absolute;
-                inset: auto 0 0 0;
-                max-height: 60%;
-                overflow-y: auto;
-                padding: 10px;
-                font-size: 11px;
-                color: #e9eef5;
-                background: linear-gradient(180deg, rgba(7,10,14,0) 0%, rgba(7,10,14,0.82) 16%, rgba(7,10,14,0.94) 100%);
-                opacity: 0;
-                transform: translateY(10px);
-                transition: opacity 0.2s ease, transform 0.2s ease;
-                pointer-events: none;
-            }
-            .ml-info-image-item figcaption span {
-                display: block;
-                margin-bottom: 4px;
-                line-height: 1.4;
-            }
-            .ml-info-image-item figcaption span label {
-                font-weight: 600;
-                color: #b9c8d8;
-                margin-right: 4px;
-                text-transform: lowercase;
-            }
-            .ml-info-image-link {
-                color: #8fc2ff;
-                text-decoration: none;
-                display: inline-flex;
-                margin-bottom: 6px;
-                pointer-events: auto;
-                font-weight: 700;
-            }
-            .ml-info-image-item:hover img {
-                transform: scale(1.01);
-                filter: brightness(0.82);
-            }
-            .ml-info-image-item:hover figcaption,
-            .ml-info-image-item:focus-within figcaption {
-                opacity: 1;
-                transform: translateY(0);
-            }
-            @media (max-width: 900px) {
-                .ml-info-images-layout {
-                    column-count: 2;
-                }
-            }
-            @media (max-width: 640px) {
-                .ml-info-images-layout {
-                    column-count: 1;
-                }
-            }
-            
-            /* CivitAI Logo */
-            .ml-info-civitai-logo {
-                width: 16px;
-                height: 16px;
-            }
-            
-            /* Footer */
-            .ml-info-dialog-footer {
-                padding: 12px 20px;
-                border-top: 1px solid var(--border-color, #555555);
-                display: flex;
-                justify-content: flex-end;
-                gap: 8px;
-            }
-            .ml-info-dialog-close-btn {
-                padding: 8px 16px;
-            }
-            .ml-info-error {
-                color: #f44336;
-                font-size: 12px;
-            }
-
-            .ml-options-wrap {
-                max-width: 1120px;
-                margin: 0 auto;
-                padding: 0 0 0 0;
-                height: 100%;
-            }
-            .ml-options-shell {
-                display: grid;
-                grid-template-columns: 240px minmax(0, 1fr);
-                gap: 0;
-                height: 100%;
-                border: 1px solid rgba(255,255,255,0.08);
-                border-radius: 22px;
-                overflow: hidden;
-                background: #171717;
-            }
-            .ml-options-sidebar {
-                display: flex;
-                flex-direction: column;
-                align-items: stretch;
-                gap: 18px;
-                height: 100%;
-                padding: 18px 14px;
-                background: #242424;
-                border-right: 1px solid rgba(255,255,255,0.08);
-                overflow: hidden;
-                min-width: 0;
-            }
-            .ml-options-sidebar-title {
-                margin: 0;
-                font-size: 17px;
-                font-weight: 700;
-                color: var(--ml-text);
-            }
-            .ml-options-sidebar-group {
-                display: grid;
-                gap: 8px;
-                min-height: 0;
-                align-content: start;
-                flex: 0 0 auto;
-            }
-            .ml-options-sidebar-label {
-                font-size: 11px;
-                font-weight: 700;
-                letter-spacing: 0.04em;
-                text-transform: uppercase;
-                color: rgba(255,255,255,0.45);
-            }
-            .ml-options-nav {
-                display: grid;
-                gap: 6px;
-                align-content: start;
-                grid-auto-rows: min-content;
-            }
-            .ml-options-nav-btn {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: 10px;
-                width: 100%;
-                min-height: 48px;
-                padding: 12px 14px;
-                border-radius: 8px;
-                border: 1px solid transparent;
-                background: transparent;
-                color: var(--ml-text-muted);
-                font-size: 14px;
-                font-weight: 600;
-                text-align: left;
-                cursor: pointer;
-                transition: background 0.16s ease, color 0.16s ease;
-            }
-            .ml-options-nav-btn:hover {
-                color: var(--ml-text);
-                background: rgba(255,255,255,0.04);
-            }
-            .ml-options-nav-btn.is-active {
-                color: #ffffff;
-                background: #3a3a40;
-            }
-            .ml-options-nav-meta {
-                font-size: 11px;
-                font-weight: 600;
-                color: rgba(255,255,255,0.42);
-            }
-            .ml-options-nav-btn.is-active .ml-options-nav-meta {
-                color: rgba(255,255,255,0.65);
-            }
-            .ml-options-main {
-                display: grid;
-                gap: 0;
-                min-height: 0;
-                min-width: 0;
-                height: 100%;
-                align-content: start;
-                align-items: start;
-                padding: 18px 26px 0px 26px;
-                background: #171717;
-                overflow-y: auto;
-                overflow-x: hidden;
-                scrollbar-gutter: stable;
-                scrollbar-width: auto;
-                scrollbar-color: rgba(255,255,255,0.34) rgba(255,255,255,0.08);
-            }
-            .ml-options-main::-webkit-scrollbar {
-                width: 12px;
-            }
-            .ml-options-main::-webkit-scrollbar-track {
-                background: rgba(255,255,255,0.06);
-                border-radius: 999px;
-            }
-            .ml-options-main::-webkit-scrollbar-thumb {
-                background: rgba(255,255,255,0.34);
-                border-radius: 999px;
-                border: 2px solid rgba(23,23,23,0.95);
-            }
-            .ml-options-main::-webkit-scrollbar-thumb:hover {
-                background: rgba(255,255,255,0.48);
-            }
-            .ml-options-card {
-                background: transparent;
-                border: none;
-                border-radius: 0;
-                padding: 0;
-                box-shadow: none;
-                align-self: start;
-            }
-            .ml-options-title {
-                margin: 0;
-                font-size: 17px;
-                font-weight: 700;
-                color: var(--ml-text);
-            }
-            .ml-options-section {
-                display: grid;
-                gap: 0;
-                align-content: start;
-                align-items: start;
-                scroll-margin-top: 24px;
-                min-width: 0;
-            }
-            .ml-options-section.is-hidden {
-                display: none;
-            }
-            .ml-options-section-head {
-                display: block;
-                padding: 0 0 10px 0;
-            }
-            .ml-options-section-title {
-                margin: 0;
-                font-size: 20px;
-                font-weight: 700;
-                color: var(--ml-text);
-            }
-            .ml-options-grid {
-                display: grid;
-                grid-template-columns: 1fr;
-                gap: 0;
-                align-content: start;
-                align-items: start;
-                min-width: 0;
-            }
-            .ml-options-stack {
-                display: grid;
-                gap: 0;
-                align-content: start;
-                min-width: 0;
-            }
-            .ml-options-panel {
-                display: grid;
-                gap: 0;
-                align-content: start;
-                padding: 0;
-                border: none;
-                background: transparent;
-                min-width: 0;
-            }
-            .ml-options-panel-title {
-                margin: 0 0 6px 0;
-                font-size: 16px;
-                font-weight: 700;
-                color: var(--ml-text);
-            }
-            .ml-options-field {
-                display: flex;
-                flex-direction: column;
-                gap: 0;
-                align-items: stretch;
-            }
-            .ml-options-label {
-                display: flex;
-                align-items: center;
-                flex-wrap: wrap;
-                gap: 8px;
-                font-size: 13px;
-                font-weight: 600;
-                color: #d8d8dd;
-            }
-            .ml-options-inline-link {
-                border: none;
-                background: none;
-                font-size: 11px;
-                font-weight: 700;
-                padding: 0;
-                cursor: pointer;
-                text-decoration: none;
-                color: rgba(255,255,255,0.6);
-            }
-            .ml-options-inline-link:hover {
-                color: #ffffff;
-                text-decoration: underline;
-            }
-            .ml-tooltip-badge {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                width: 18px;
-                height: 18px;
-                border-radius: 999px;
-                border: 1px solid rgba(255,255,255,0.12);
-                color: rgba(255,255,255,0.7);
-                font-size: 11px;
-                font-weight: 700;
-                background: rgba(255,255,255,0.03);
-                cursor: help;
-                flex: 0 0 auto;
-            }
-            .ml-global-tooltip {
-                position: fixed;
-                min-width: 220px;
-                max-width: min(320px, calc(100vw - 24px));
-                padding: 9px 11px;
-                border-radius: 10px;
-                background: rgba(34, 34, 38, 0.98);
-                border: 1px solid rgba(255,255,255,0.08);
-                color: var(--ml-text);
-                font-size: 12px;
-                font-weight: 400;
-                line-height: 1.5;
-                white-space: normal;
-                text-align: left;
-                box-shadow: 0 12px 28px rgba(0,0,0,0.32);
-                pointer-events: none;
-                z-index: 100002;
-            }
-            .ml-options-input-row {
-                display: grid;
-                grid-template-columns: minmax(150px, 1fr) minmax(0, 380px) 42px;
-                align-items: center;
-                gap: 10px;
-                padding: 14px 0;
-                border-bottom: 1px solid rgba(255,255,255,0.1);
-                min-width: 0;
-            }
-            .ml-options-input-row > .ml-options-label {
-                min-width: 0;
-                padding-right: 8px;
-            }
-            .ml-options-input {
-                width: 100%;
-                min-width: 0;
-                min-height: 42px;
-                padding: 11px 14px;
-                background: #0f1013;
-                color: var(--ml-text);
-                border: 1px solid rgba(255,255,255,0.16);
-                border-radius: 8px;
-                font-size: 13px;
-                outline: none;
-                transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
-            }
-            .ml-options-input:focus {
-                background: #0f1013;
-                border-color: rgba(78,161,255,0.45);
-                box-shadow: none;
-            }
-            .ml-options-visibility-btn {
-                width: 42px;
-                min-width: 42px;
-                height: 42px;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                border: 1px solid rgba(255,255,255,0.14);
-                border-radius: 8px;
-                background: #0f1013;
-                color: var(--ml-text-muted);
-                cursor: pointer;
-                transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
-            }
-            .ml-options-visibility-btn:hover {
-                background: #15171b;
-                color: var(--ml-text);
-                border-color: rgba(255,255,255,0.2);
-            }
-            .ml-options-visibility-btn[aria-pressed="true"] {
-                color: var(--ml-text);
-                border-color: rgba(255,255,255,0.2);
-                background: #15171b;
-            }
-            .ml-options-visibility-btn svg {
-                width: 18px;
-                height: 18px;
-                display: block;
-            }
-            .ml-options-toggle-list {
-                display: grid;
-                gap: 0;
-            }
-            .ml-options-toggle-row {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: 16px;
-                padding: 16px 0;
-                border-bottom: 1px solid rgba(255,255,255,0.1);
-                border-radius: 0;
-                border-top: none;
-                border-left: none;
-                border-right: none;
-                background: transparent;
-                cursor: pointer;
-                transition: background 0.16s ease;
-                min-width: 0;
-            }
-            .ml-options-toggle-row:hover {
-                background: transparent;
-            }
-            .ml-options-toggle-copy {
-                display: grid;
-                gap: 0;
-                min-width: 0;
-            }
-            .ml-options-toggle-title {
-                display: flex;
-                align-items: center;
-                flex-wrap: wrap;
-                gap: 8px;
-                font-size: 13px;
-                font-weight: 500;
-                color: #d8d8dd;
-            }
-            .ml-options-toggle-control {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                min-width: 46px;
-                padding-top: 1px;
-                flex: 0 0 auto;
-                margin-left: auto;
-            }
-            .ml-options-switch-input {
-                position: absolute;
-                opacity: 0;
-                pointer-events: none;
-            }
-            .ml-options-switch {
-                position: relative;
-                width: 46px;
-                height: 26px;
-                border-radius: 999px;
-                background: #555560;
-                border: 1px solid rgba(255,255,255,0.06);
-                transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
-            }
-            .ml-options-switch::after {
-                content: "";
-                position: absolute;
-                top: 2px;
-                left: 2px;
-                width: 20px;
-                height: 20px;
-                border-radius: 999px;
-                background: #f2f6fb;
-                box-shadow: 0 3px 8px rgba(0,0,0,0.3);
-                transition: transform 0.16s ease;
-            }
-            .ml-options-switch-input:checked + .ml-options-switch {
-                background: #4c97ff;
-                border-color: #4c97ff;
-                box-shadow: none;
-            }
-            .ml-options-switch-input:checked + .ml-options-switch::after {
-                transform: translateX(20px);
-            }
-            .ml-options-number-row {
-                display: grid;
-                grid-template-columns: minmax(150px, 1fr) minmax(72px, 118px);
-                gap: 12px;
-                align-items: center;
-                padding: 16px 0;
-                border-bottom: 1px solid rgba(255,255,255,0.1);
-                min-width: 0;
-            }
-            .ml-options-number-copy {
-                display: grid;
-                gap: 0;
-                min-width: 0;
-            }
-            .ml-options-number-row .ml-options-input {
-                width: 100%;
-                min-width: 0;
-            }
-            .ml-options-actions {
-                display: flex;
-                flex-direction: column;
-                align-items: stretch;
-                justify-content: flex-end;
-                margin-top: auto;
-                padding-top: 10px;
-                border-top: 1px solid rgba(255,255,255,0.08);
-                gap: 10px;
-                flex: 0 0 auto;
-            }
-            .ml-options-actions .ml-footer-btn {
-                width: 100%;
-                min-width: 0;
-            }
-            .ml-options-actions .ml-btn.ml-btn-primary.ml-footer-btn {
-                background: #3a3a40;
-                border-color: rgba(255,255,255,0.12);
-            }
-            .ml-options-actions .ml-btn.ml-btn-primary.ml-footer-btn:hover:not(:disabled) {
-                background: #474750;
-                border-color: rgba(255,255,255,0.18);
-            }
-            .ml-options-status {
-                font-size: 12px;
-                color: var(--ml-text-muted);
-                text-align: left;
-            }
-            .ml-options-status.is-dirty {
-                color: #ffd48a;
-            }
-            .ml-options-status.is-saved {
-                color: #9dd8a9;
-            }
-            @media (max-width: 980px) {
-                .ml-options-shell {
-                    grid-template-columns: 1fr;
-                    border-radius: 16px;
-                }
-                .ml-options-sidebar {
-                    border-right: none;
-                    border-bottom: 1px solid rgba(255,255,255,0.08);
-                    height: auto;
-                }
-            }
-            @media (max-width: 900px) {
-                .ml-options-main {
-                    padding: 16px 18px 0px 18px;
-                }
-                .ml-options-input-row {
-                    grid-template-columns: minmax(120px, 1fr) minmax(0, 1fr) 42px;
-                    gap: 8px;
-                }
-                .ml-options-number-row {
-                    grid-template-columns: minmax(120px, 1fr) minmax(64px, 96px);
-                    gap: 8px;
-                }
-                .ml-options-toggle-row {
-                    gap: 10px;
-                }
-            }
-            @media (max-width: 760px) {
-                .ml-options-input-row {
-                    grid-template-columns: 1fr;
-                }
-                .ml-options-input-row > .ml-options-label {
-                    padding-right: 0;
-                }
-                .ml-options-visibility-btn {
-                    justify-self: start;
-                }
-                .ml-options-toggle-row,
-                .ml-options-number-row {
-                    grid-template-columns: 1fr;
-                    flex-direction: column;
-                    align-items: flex-start;
-                }
-                .ml-options-toggle-control {
-                    min-width: 0;
-                    margin-left: 0;
-                }
-                .ml-options-number-row {
-                    grid-template-columns: 1fr;
-                }
-            }
-            @media (max-width: 640px) {
-                .ml-options-section-head,
-                .ml-options-actions,
-                .ml-options-toggle-row,
-                .ml-options-number-row {
-                    grid-template-columns: 1fr;
-                    flex-direction: column;
-                    align-items: flex-start;
-                }
-                .ml-options-toggle-control {
-                    min-width: 0;
-                }
-                .ml-options-number-row {
-                    grid-template-columns: 1fr;
-                }
-                .ml-options-input {
-                    width: 100%;
-                }
-            }
-            .ml-download-target {
-                margin-top: 10px;
-                padding-top: 10px;
-                border-top: 1px solid rgba(255,255,255,0.06);
-                display: grid;
-                gap: 8px;
-            }
-            .ml-download-target-grid {
-                display: grid;
-                grid-template-columns: minmax(120px, 33%) minmax(0, 1fr);
-                grid-template-rows: auto auto;
-                gap: 10px;
-                align-items: start;
-            }
-            .ml-download-target-row {
-                display: grid;
-                gap: 6px;
-            }
-            @media (max-width: 720px) {
-                .ml-download-target-grid {
-                    grid-template-columns: 1fr;
-                    grid-template-rows: auto;
-                }
-            }
-            .ml-download-target-label {
-                display: flex;
-                align-items: flex-end;
-                font-size: 11px;
-                font-weight: 700;
-                color: var(--ml-text-muted);
-                text-transform: uppercase;
-                letter-spacing: 0.06em;
-                line-height: 1.2;
-            }
-            .ml-download-target-input,
-            .ml-download-target-select {
-                display: block;
-                width: 100%;
-                height: 40px;
-                margin: 3px;
-                padding: 8px 10px;
-                background: rgba(255,255,255,0.04);
-                color: var(--ml-text);
-                border: 1px solid var(--ml-border);
-                border-radius: 10px;
-                font-size: 12px;
-                line-height: 1.2;
-                outline: none;
-                box-sizing: border-box;
-                vertical-align: top;
-            }
-            .ml-download-target-select {
-                appearance: none;
-                -webkit-appearance: none;
-                -moz-appearance: none;
-            }
-            .ml-download-target-input:focus,
-            .ml-download-target-select:focus {
-                border-color: rgba(114,211,138,0.4);
-                box-shadow: 0 0 0 3px rgba(114,211,138,0.12);
-            }
-            .ml-download-target-wrap {
-                position: relative;
-                display: flex;
-                align-items: stretch;
-            }
-            @media (max-width: 720px) {
-                .ml-download-target-label {
-                    min-height: 0;
-                }
-            }
-            .ml-download-target-list {
-                position: absolute;
-                top: calc(100% + 4px);
-                left: 0;
-                right: 0;
-                max-height: 220px;
-                overflow: auto;
-                display: none;
-                z-index: 100000;
-                background: linear-gradient(180deg, var(--ml-panel-bg-strong) 0%, var(--ml-card-bg) 100%);
-                border: 1px solid var(--ml-border-strong);
-                border-radius: 12px;
-                box-shadow: var(--ml-shadow);
-            }
-            .ml-download-target-option {
-                padding: 8px 10px;
-                cursor: pointer;
-                border-bottom: 1px solid rgba(255,255,255,0.04);
-                color: var(--ml-text);
-                font-size: 12px;
-            }
-            .ml-download-target-option:last-child {
-                border-bottom: none;
-            }
-            .ml-download-target-option:hover,
-            .ml-download-target-option.is-highlighted {
-                background: rgba(114,211,138,0.12);
-            }
-            .ml-search-source-select option,
-            .ml-download-target-select option {
-                background: var(--ml-panel-bg-strong);
-                color: var(--ml-text);
-            }
-        `;
-        
-        document.head.appendChild(styles);
-    }
-    
+    }
     /**
      * Get a colored confidence badge HTML
      * @param {number} confidence - Confidence percentage (0-100)
@@ -3641,90 +1528,30 @@ class LinkerManagerDialog extends ComfyDialog {
             onclick: () => this.switchTab('options')
         });
         
-        return $el("div", {
-            style: {
-                display: "flex",
-                flexDirection: "column"
-            }
-        }, [
-            $el("div", {
-                style: {
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    padding: "5px 5px 5px",
-                    borderBottom: "1px solid var(--border-color)",
-                    backgroundColor: "var(--comfy-menu-bg, #202020)"
-                }
-            }, [
-                $el("div", { style: { display: "flex", gap: "8px", alignItems: "center" } }, [
+        return $el("div.ml-dialog-shell", {}, [
+            $el("div.ml-dialog-topbar", {}, [
+                $el("div.ml-dialog-brand", {}, [
                     $el("div", {
                         id: "model-linker-drag-handle",
                         title: "Drag window",
-                        ondragstart: (e) => e.preventDefault(),
-                        style: {
-                            cursor: "grab",
-                            userSelect: "none",
-                            border: "1px solid var(--border-color)",
-                            borderRadius: "4px",
-                            padding: "0 6px",
-                            height: "24px",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            opacity: "0.9"
-                        }
+                        ondragstart: (e) => e.preventDefault()
                     }, [
                         $el("span", { textContent: "⠿" })
                     ]),
-                    $el("h2", {
-                        textContent: "🔗 Model Linker",
-                        style: {
-                            margin: "0",
-                            color: "var(--input-text)",
-                            fontSize: "18px",
-                            fontWeight: "600"
-                        }
-                    })
+                    $el("h2.ml-dialog-title", { textContent: "🔗 Model Linker" })
                 ]),
-                $el("div", { style: { display: "flex", gap: "8px", alignItems: "center" } }, [
+                $el("div.ml-dialog-controls", {}, [
                     $el("button", {
                         id: "model-linker-fullscreen-toggle",
+                        className: "ml-window-btn ml-window-btn--fullscreen",
                         title: "Toggle full screen",
                         textContent: "⛶",
-                        onclick: () => this.toggleFullScreen(),
-                        style: {
-                            background: "none",
-                            border: "1px solid var(--border-color)",
-                            fontSize: "16px",
-                            cursor: "pointer",
-                            color: "var(--input-text)",
-                            padding: "2px 8px",
-                            minWidth: "32px",
-                            height: "30px",
-                            borderRadius: "4px",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center"
-                        }
+                        onclick: () => this.toggleFullScreen()
                     }),
                     $el("button", {
+                        className: "ml-window-btn ml-window-btn--close",
                         textContent: "×",
-                        onclick: () => this.close(),
-                        style: {
-                            background: "none",
-                            border: "none",
-                            fontSize: "24px",
-                            cursor: "pointer",
-                            color: "var(--input-text)",
-                            padding: "0",
-                            width: "30px",
-                            height: "30px",
-                            borderRadius: "4px",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center"
-                        }
+                        onclick: () => this.close()
                     })
                 ])
             ]),
@@ -4811,40 +2638,15 @@ class LinkerManagerDialog extends ComfyDialog {
     createContent() {
         // Wrap the body in a two-column layout: left = items, right = queued panel
         const body = $el("div", {
-            id: "model-linker-body",
-            style: {
-                display: "flex",
-                gap: "12px",
-                padding: "10px 5px 5px 5px",
-                flex: "1",
-                minHeight: "0",
-                alignItems: "stretch",
-                position: "relative",
-                backgroundColor: "var(--ml-bg, #222)"
-            }
+            id: "model-linker-body"
         });
 
         this.contentElement = $el("div.ml-scrollable", {
-            id: "model-linker-content",
-            style: {
-                overflowY: "auto",
-                flex: "1",
-                minHeight: "0",
-                backgroundColor: "var(--ml-bg, #222)"
-            }
+            id: "model-linker-content"
         });
 
         this.queueElement = $el("div", {
-            id: "model-linker-queue",
-            style: {
-                width: "320px",
-                minWidth: "240px",
-                maxWidth: "70%",
-                borderLeft: "1px solid var(--border-color)",
-                paddingLeft: "12px",
-                display: "flex",
-                flexDirection: "column"
-            }
+            id: "model-linker-queue"
         }, [
             this.createQueuePanel()
         ]);
@@ -4853,14 +2655,6 @@ class LinkerManagerDialog extends ComfyDialog {
         this.splitterElement = $el("div", {
             id: "model-linker-splitter",
             title: "Drag to resize panels",
-            style: {
-                cursor: "col-resize",
-                width: "6px",
-                minWidth: "6px",
-                background: "var(--border-color)",
-                opacity: "0.4",
-                borderRadius: "3px"
-            },
             ondragstart: (e) => e.preventDefault()
         });
 
@@ -4890,20 +2684,7 @@ class LinkerManagerDialog extends ComfyDialog {
             this.queueToggleIcon = $el("button", {
                 id: "queue-toggle-icon",
                 title: "Collapse queue",
-                onclick: () => this.toggleQueueCollapsed(),
-                style: {
-                    position: "absolute",
-                    top: "50%",
-                    right: "6px",
-                    transform: "translateY(-50%)",
-                    zIndex: "1000",
-                    padding: "2px 6px",
-                    border: "1px solid var(--border-color)",
-                    borderRadius: "4px",
-                    background: "var(--comfy-input-bg, #2f2f2f)",
-                    cursor: "pointer",
-                    opacity: "0.9"
-                }
+                onclick: () => this.toggleQueueCollapsed()
             }, [document.createTextNode('⮜')]);
             body.appendChild(this.queueToggleIcon);
             this.updateQueueToggleIcon();
@@ -4920,48 +2701,30 @@ class LinkerManagerDialog extends ComfyDialog {
     
     createQueuePanel() {
         // Header row with title and clear button
-        this.queueHeader = $el("div", {
-            style: {
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: "8px"
-            }
-        }, [
-            $el("div", { id: "queue-title", textContent: "Queued Selections (0)", style: { fontWeight: "600" } }),
-            $el("div", { style: { display: "flex", gap: "6px" } }, [
+        this.queueHeader = $el("div.ml-queue-header", {}, [
+            $el("div#queue-title.ml-queue-title", { textContent: "Queued Selections (0)" }),
+            $el("div.ml-queue-actions", {}, [
                 $el("button", {
                     id: "queue-toggle",
                     className: "ml-btn ml-btn-secondary ml-btn-sm",
                     textContent: "Collapse",
-                    onclick: () => this.toggleQueueCollapsed(),
-                    style: { padding: "4px 8px" }
+                    onclick: () => this.toggleQueueCollapsed()
                 }),
                 $el("button", {
                     id: "queue-clear",
                     className: "ml-btn ml-btn-secondary ml-btn-sm",
                     textContent: "Clear All",
-                    onclick: () => this.clearAllQueued(),
-                    style: { padding: "4px 8px" }
+                    onclick: () => this.clearAllQueued()
                 })
             ])
         ]);
 
         // Scrollable list
-        this.queueList = $el("div", {
-            id: "queue-list",
-            style: {
-                overflowY: "auto",
-                flex: "1",
-                minHeight: "0",
-                border: "1px solid var(--border-color)",
-                borderRadius: "4px",
-                padding: "8px",
-                background: "var(--comfy-input-bg, #2f2f2f)"
-            }
-        });
+        this.queueList = $el("div#queue-list.ml-queue-list");
 
-        const panel = $el("div", { style: { display: "flex", flexDirection: "column", minHeight: "0", flex: "1 1 auto" } }, [this.queueHeader, this.queueList]);
+        const panel = $el("div.ml-queue-panel", {}, [
+            $el("div.ml-queue-stack", {}, [this.queueHeader, this.queueList])
+        ]);
         return panel;
     }
 
@@ -4975,22 +2738,22 @@ class LinkerManagerDialog extends ComfyDialog {
         if (toggleBtn) toggleBtn.textContent = this.queueCollapsed ? 'Expand' : 'Collapse';
 
         if (!list.length) {
-            this.queueList.innerHTML = '<div style="opacity:0.7;">No selections queued.</div>';
+            this.queueList.innerHTML = '<div class="ml-queue-empty">No selections queued.</div>';
             return;
         }
 
-        let html = '<div style="display:flex; flex-direction:column; gap:6px;">';
+        let html = '<div class="ml-queue-items">';
         for (let i = 0; i < list.length; i++) {
             const r = list[i];
             const label = (r.resolved_model?.relative_path || r.resolved_model?.filename || r.resolved_path || '').toString();
             const nodeLabel = r.node_label || r.node_type || (r.subgraph_id ? 'Subgraph' : 'Node');
             const orig = (r.original_path || '').toString();
             const rmId = `queue-remove-${i}`;
-            html += `<div style="border:1px solid var(--border-color); border-radius:4px; padding:6px; background: rgba(255,255,255,0.02);">`;
-            html += `<div style="font-weight:600;">${nodeLabel} #${r.node_id}</div>`;
-            html += `<div style="font-size:12px; opacity:0.9;">Original: <code>${orig}</code></div>`;
-            html += `<div style="font-size:12px;">Selected: <code>${label}</code></div>`;
-            html += `<div style="margin-top:6px;"><button id="${rmId}" class="ml-btn ml-btn-secondary ml-btn-sm" style="padding:2px 8px;">Remove</button></div>`;
+            html += `<div class="ml-queue-item">`;
+            html += `<div class="ml-queue-item-title">${nodeLabel} #${r.node_id}</div>`;
+            html += `<div class="ml-queue-item-meta">Original: <code>${orig}</code></div>`;
+            html += `<div class="ml-queue-item-selection">Selected: <code>${label}</code></div>`;
+            html += `<div class="ml-queue-item-actions"><button id="${rmId}" class="ml-btn ml-btn-secondary ml-btn-sm">Remove</button></div>`;
         }
         html += '</div>';
         this.queueList.innerHTML = html;
@@ -5064,10 +2827,10 @@ class LinkerManagerDialog extends ComfyDialog {
         const label = selection.resolved_model?.relative_path || selection.resolved_model?.filename || selection.resolved_path || '';
         const resolveBtnId = `selected-remove-${nodeId}-${widgetIndex}`;
         
-        selectedBar.innerHTML = `<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">`;
-        selectedBar.innerHTML += `<span style="color: #4CAF50; font-weight: 600;">✓ Selected:</span>`;
-        selectedBar.innerHTML += `<code style="flex: 1; overflow: hidden; text-overflow: ellipsis;">${label}</code>`;
-        selectedBar.innerHTML += `<button id="${resolveBtnId}" class="ml-btn ml-btn-secondary ml-btn-sm" style="padding: 2px 8px;">Remove</button>`;
+        selectedBar.innerHTML = `<div class="ml-selected-bar-inner">`;
+        selectedBar.innerHTML += `<span class="ml-selected-label">✓ Selected:</span>`;
+        selectedBar.innerHTML += `<code class="ml-selected-code">${label}</code>`;
+        selectedBar.innerHTML += `<button id="${resolveBtnId}" class="ml-btn ml-btn-secondary ml-btn-sm">Remove</button>`;
         selectedBar.innerHTML += `</div>`;
         selectedBar.style.display = 'block';
         
@@ -5299,15 +3062,7 @@ class LinkerManagerDialog extends ComfyDialog {
             onclick: () => this.applyPendingResolutions()
         });
         
-        return $el("div.ml-footer", {
-            style: {
-                position: "sticky",
-                bottom: "0",
-                backgroundColor: "var(--ml-bg, #222)",
-                backdropFilter: "blur(8px)",
-                WebkitBackdropFilter: "blur(8px)"
-            }
-        }, [
+        return $el("div.ml-footer", {}, [
             this.autoResolveButton,
             this.applyPendingBtn,
             this.downloadAllButton
@@ -6042,7 +3797,7 @@ class LinkerManagerDialog extends ComfyDialog {
         
         // Selected bar - shows if this slot has a queued selection (BELOW card header)
         const selectedBarId = `selected-bar-${missing.node_id}-${missing.widget_index}`;
-        html += `<div id="${selectedBarId}" class="model-linker-selected" style="display: none;"></div>`;
+        html += `<div id="${selectedBarId}" class="model-linker-selected"></div>`;
         
         // Two-column layout
         html += `<div class="ml-columns">`;
@@ -6136,58 +3891,30 @@ class LinkerManagerDialog extends ComfyDialog {
         if (type === 'success') {
             children.push($el("span", {
                 textContent: "✓",
-                style: {
-                    fontSize: "18px",
-                    fontWeight: "bold"
-                }
+                className: "ml-notification-icon"
             }));
         } else if (type === 'error') {
             children.push($el("span", {
                 textContent: "×",
-                style: {
-                    fontSize: "18px",
-                    fontWeight: "bold"
-                }
+                className: "ml-notification-icon"
             }));
         } else if (type === 'info') {
             children.push($el("span", {
                 textContent: "ℹ",
-                style: {
-                    fontSize: "18px",
-                    fontWeight: "bold"
-                }
+                className: "ml-notification-icon"
             }));
         }
         
         // Create notification banner
         const notification = $el("div", {
-            style: {
-                position: "fixed",
-                top: "0",
-                left: "50%",
-                transform: "translateX(-50%)",
-                backgroundColor: type === 'success' ? '#28a745' : type === 'error' ? '#dc3545' : '#007acc',
-                color: "#ffffff",
-                padding: "12px 24px",
-                borderRadius: "0 0 8px 8px",
-                fontSize: "14px",
-                fontWeight: "500",
-                zIndex: "100000",
-                boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
-                display: "flex",
-                alignItems: "center",
-                gap: "12px",
-                minWidth: "300px",
-                maxWidth: "600px",
-                textAlign: "center",
-                animation: "slideDown 0.3s ease"
-            }
+            className: `ml-notification ml-notification--${type}`
         }, [
             ...children,
             $el("span", {
                 textContent: message
             }),
             $el("button", {
+                className: "ml-notification-close",
                 textContent: "×",
                 onclick: () => {
                     if (notification.parentNode) {
@@ -6199,45 +3926,9 @@ class LinkerManagerDialog extends ComfyDialog {
                             }
                         }, 300);
                     }
-                },
-                style: {
-                    background: "none",
-                    border: "none",
-                    color: "#ffffff",
-                    fontSize: "20px",
-                    cursor: "pointer",
-                    padding: "0",
-                    marginLeft: "auto",
-                    opacity: "0.8",
-                    width: "24px",
-                    height: "24px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    borderRadius: "4px"
                 }
             })
         ]);
-
-        // Add CSS animation if not already added
-        if (!document.getElementById('model-linker-notification-style')) {
-            const style = $el("style", {
-                id: 'model-linker-notification-style',
-                textContent: `
-                    @keyframes slideDown {
-                        from {
-                            opacity: 0;
-                            transform: translateX(-50%) translateY(-100%);
-                        }
-                        to {
-                            opacity: 1;
-                            transform: translateX(-50%) translateY(0);
-                        }
-                    }
-                `
-            });
-            document.head.appendChild(style);
-        }
 
         document.body.appendChild(notification);
 
@@ -7369,6 +5060,8 @@ class ModelLinker {
     }
 
     setup = async () => {
+        loadStylesWhenNeeded();
+
         // Remove any existing button
         this.removeExistingButton();
 
@@ -7475,32 +5168,12 @@ class ModelLinker {
 
         // Find a suitable place to inject the button
         const injectButtons = () => {
-            // Common button style
-            const btnStyle = `
-                padding: 6px 12px;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                cursor: pointer;
-                font-size: 12px;
-                font-weight: 600;
-                transition: all 0.2s ease;
-                white-space: nowrap;
-            `;
-
             // Auto-resolve button (green)
             const autoResolveBtn = document.createElement('button');
             autoResolveBtn.id = 'model-linker-btn-container'; // Use this ID to prevent duplicate injection
+            autoResolveBtn.className = 'ml-popup-auto-resolve-btn';
             autoResolveBtn.textContent = '🔗 Auto-resolve 100%';
             autoResolveBtn.title = 'Automatically link models with 100% confidence matches';
-            autoResolveBtn.style.cssText = btnStyle + `background: #4CAF50;`;
-            
-            autoResolveBtn.addEventListener('mouseenter', () => {
-                autoResolveBtn.style.background = '#45a049';
-            });
-            autoResolveBtn.addEventListener('mouseleave', () => {
-                autoResolveBtn.style.background = '#4CAF50';
-            });
             autoResolveBtn.addEventListener('click', async () => {
                 await this.handleAutoResolveInPopup(dialog, autoResolveBtn);
             });
@@ -7511,13 +5184,7 @@ class ModelLinker {
                 const checkboxRow = checkbox.closest('label') || checkbox.parentElement;
                 if (checkboxRow && checkboxRow.parentElement) {
                     // Make the parent a flex container to align checkbox and button
-                    checkboxRow.parentElement.style.cssText = `
-                        display: flex;
-                        align-items: center;
-                        gap: 16px;
-                        padding: 0 16px;
-                        margin-bottom: 8px;
-                    `;
+                    checkboxRow.parentElement.classList.add('ml-popup-inline-actions');
                     // Insert button at the beginning (left side)
                     checkboxRow.parentElement.insertBefore(autoResolveBtn, checkboxRow);
                     return;
@@ -7532,7 +5199,7 @@ class ModelLinker {
             if (modelList) {
                 // Create a wrapper and insert before the model list
                 const wrapper = document.createElement('div');
-                wrapper.style.cssText = 'display: flex; justify-content: flex-end; padding: 0 16px; margin-bottom: 8px;';
+                wrapper.className = 'ml-popup-actions-wrap';
                 wrapper.appendChild(autoResolveBtn);
                 modelList.parentElement?.insertBefore(wrapper, modelList);
             } else {
@@ -7646,26 +5313,14 @@ class ModelLinker {
         console.log('Model Linker: Marking entry as resolved', container);
         
         // Add green background/styling to the container
-        container.style.transition = 'all 0.3s ease';
-        container.style.background = 'rgba(76, 175, 80, 0.2)';
-        container.style.borderRadius = '6px';
-        container.style.border = '1px solid #4CAF50';
+        container.classList.add('ml-resolved-entry');
         
         // Hide the Download button and replace with badge
         if (downloadBtn) {
             // Create badge
             const badge = document.createElement('span');
+            badge.className = 'ml-resolved-badge';
             badge.textContent = '✓ Linked';
-            badge.style.cssText = `
-                display: inline-flex;
-                align-items: center;
-                padding: 4px 12px;
-                background: #4CAF50;
-                color: white;
-                border-radius: 4px;
-                font-size: 12px;
-                font-weight: 600;
-            `;
             
             // Replace download button with badge
             downloadBtn.style.display = 'none';
@@ -7852,34 +5507,7 @@ class ModelLinker {
             onclick: () => {
                 this.openLinkerManager();
             },
-            style: {
-                position: "fixed",
-                top: "10px",
-                right: "10px",
-                zIndex: "10000",
-                backgroundColor: "var(--comfy-input-bg, #353535)",
-                color: "var(--input-text, #ffffff)",
-                border: "2px solid var(--primary-color, #007acc)",
-                padding: "8px 16px",
-                borderRadius: "6px",
-                cursor: "pointer",
-                fontSize: "14px",
-                fontWeight: "600",
-                boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-                transition: "all 0.2s ease",
-                whiteSpace: "nowrap"
-            }
-        });
-
-        // Add hover effects
-        this.linkerButton.addEventListener("mouseenter", () => {
-            this.linkerButton.style.backgroundColor = "var(--primary-color, #007acc)";
-            this.linkerButton.style.transform = "scale(1.05)";
-        });
-
-        this.linkerButton.addEventListener("mouseleave", () => {
-            this.linkerButton.style.backgroundColor = "var(--comfy-input-bg, #353535)";
-            this.linkerButton.style.transform = "scale(1)";
+            className: "model-linker-floating-button"
         });
 
         document.body.appendChild(this.linkerButton);
@@ -8049,4 +5677,5 @@ window.MLOpenContextMenu = function(event, element) {
         console.error('Model Linker: Error opening context menu:', e);
     }
 };
+
 
