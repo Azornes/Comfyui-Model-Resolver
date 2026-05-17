@@ -346,6 +346,30 @@ class LinkerManagerDialog extends ComfyDialog {
         return html;
     }
 
+    renderSearchControls(missing) {
+        const searchSourcesId = `search-sources-${missing.node_id}-${missing.widget_index}`;
+        const searchSourceSelectId = `search-source-select-${missing.node_id}-${missing.widget_index}`;
+
+        let html = `<div id="${searchSourcesId}" class="ml-search-source-bar">`;
+        html += `<button id="search-${missing.node_id}-${missing.widget_index}" class="ml-btn ml-btn-link">`;
+        html += `${this.getSearchIconHtml()} Search`;
+        html += `</button>`;
+        html += `<div class="ml-search-source-picker">`;
+        html += `<label class="ml-search-source-picker-label" for="${searchSourceSelectId}">Source</label>`;
+        html += `<select id="${searchSourceSelectId}" class="ml-search-source-select">`;
+        html += `<option value="all">Everything</option>`;
+        html += `<option value="local">Local Database</option>`;
+        html += `<option value="huggingface">HuggingFace</option>`;
+        html += `<option value="civitai">CivitAI</option>`;
+        if (this.isSourceAvailable('lora_manager_archive')) {
+            html += `<option value="lora_manager_archive">LoRA Manager Archive</option>`;
+        }
+        html += `</select>`;
+        html += `</div>`;
+        html += `</div>`;
+        return html;
+    }
+
     renderProgressWithAction({
         percent = 0,
         leftText = '',
@@ -3844,6 +3868,10 @@ class LinkerManagerDialog extends ComfyDialog {
             html += `</div>`;
         } else if (downloadSource && downloadSource.url) {
             html += this.renderDownloadSourceSection(missing, downloadSource);
+            html += `<div class="ml-download-section">`;
+            html += this.renderSearchControls(missing);
+            html += `</div>`;
+            html += `<div id="search-results-${missing.node_id}-${missing.widget_index}" class="ml-search-results"></div>`;
         } else if (missing.is_urn) {
             html += `<div id="${urnDownloadId}" class="ml-download-section">`;
             html += `<div class="ml-download-info">Resolving CivitAI download for this URN...</div>`;
@@ -3851,25 +3879,7 @@ class LinkerManagerDialog extends ComfyDialog {
         } else {
             // No known download - offer search
             html += `<div class="ml-download-section">`;
-            const searchSourcesId = `search-sources-${missing.node_id}-${missing.widget_index}`;
-            const searchSourceSelectId = `search-source-select-${missing.node_id}-${missing.widget_index}`;
-            html += `<div id="${searchSourcesId}" class="ml-search-source-bar">`;
-            html += `<button id="search-${missing.node_id}-${missing.widget_index}" class="ml-btn ml-btn-link">`;
-            html += `${this.getSearchIconHtml()} Search`;
-            html += `</button>`;
-            html += `<div class="ml-search-source-picker">`;
-            html += `<label class="ml-search-source-picker-label" for="${searchSourceSelectId}">Source</label>`;
-            html += `<select id="${searchSourceSelectId}" class="ml-search-source-select">`;
-            html += `<option value="all">Everything</option>`;
-            html += `<option value="local">Local Database</option>`;
-            html += `<option value="huggingface">HuggingFace</option>`;
-            html += `<option value="civitai">CivitAI</option>`;
-            if (this.isSourceAvailable('lora_manager_archive')) {
-                html += `<option value="lora_manager_archive">LoRA Manager Archive</option>`;
-            }
-            html += `</select>`;
-            html += `</div>`;
-            html += `</div>`;
+            html += this.renderSearchControls(missing);
             html += this.renderDownloadTargetControls(missing, missing.category || 'checkpoints');
             html += `</div>`;
             html += `<div id="search-results-${missing.node_id}-${missing.widget_index}" class="ml-search-results"></div>`;
