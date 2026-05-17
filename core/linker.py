@@ -30,6 +30,32 @@ URL_PATTERN = re.compile(r'(https?://(?:huggingface\.co|civitai\.com)[^\s"\'<>\)
 MODEL_EXTENSIONS = (".safetensors", ".ckpt", ".pt", ".pth", ".bin", ".onnx", ".gguf")
 
 
+def normalize_workflow_download_url(url: str) -> str:
+    """Convert workflow file-page URLs into direct download URLs when possible."""
+    if not isinstance(url, str) or not url:
+        return url
+
+    # HuggingFace /blob/ pages return HTML. /resolve/ returns the actual file.
+    return re.sub(
+        r"(https?://huggingface\.co/[^/]+/[^/]+)/blob/([^/]+)/(.+)",
+        r"\1/resolve/\2/\3",
+        url,
+    )
+
+
+def workflow_url_points_to_file(url: str, filename: str) -> bool:
+    """Return true when a URL appears to reference the specific model file."""
+    if not url or not filename:
+        return False
+
+    try:
+        decoded_url = unquote(url)
+    except Exception:
+        decoded_url = url
+
+    return filename in decoded_url or unquote(filename) in decoded_url
+
+
 def search_local_matches(
     target_for_matching: str,
     category: Optional[str] = None,
@@ -126,7 +152,8 @@ def extract_workflow_urls(workflow_json: Dict[str, Any]) -> Dict[str, Dict[str, 
 
                 if name and name not in url_map:
                     url_map[name] = {
-                        "url": url,
+                        "url": normalize_workflow_download_url(url),
+                        "model_url": url,
                         "directory": directory,
                         "node_type": node_type,
                         "source": "node_properties",
@@ -164,8 +191,14 @@ def extract_workflow_urls(workflow_json: Dict[str, Any]) -> Dict[str, Dict[str, 
 
     # 4. Match URLs to model filenames
     for model in model_files:
-        # Skip if already found in node.properties.models
-        if model in url_map and url_map[model].get("url"):
+        # Keep authoritative node.properties URLs only when they point to the file.
+        # Some workflows store a repo/model-page URL there and a concrete file URL
+        # elsewhere in the JSON; in that case the file URL is the usable download.
+        if (
+            model in url_map
+            and url_map[model].get("url")
+            and workflow_url_points_to_file(url_map[model].get("url"), model)
+        ):
             continue
 
         original_name = model_name_map.get(model, model)
@@ -173,27 +206,59 @@ def extract_workflow_urls(workflow_json: Dict[str, Any]) -> Dict[str, Dict[str, 
         for url in cleaned_urls:
             # Check decoded name in URL
             if model in url:
-                if model not in url_map:
-                    url_map[model] = {"url": url, "directory": "", "source": "regex"}
-                elif not url_map[model].get("url"):
-                    url_map[model]["url"] = url
+                if (
+                    model not in url_map
+                    or not url_map[model].get("url")
+                    or not workflow_url_points_to_file(url_map[model].get("url"), model)
+                ):
+                    url_map[model] = {
+                        "url": normalize_workflow_download_url(url),
+                        "model_url": url,
+                        "directory": url_map.get(model, {}).get("directory", ""),
+                        "source": "regex",
+                    }
+                else:
+                    url_map[model]["url"] = normalize_workflow_download_url(url)
+                    url_map[model]["model_url"] = url
                     url_map[model]["source"] = "regex"
                 break
             # Check original (possibly URL-encoded) name in URL
             if original_name in url:
-                if model not in url_map:
-                    url_map[model] = {"url": url, "directory": "", "source": "regex"}
-                elif not url_map[model].get("url"):
-                    url_map[model]["url"] = url
+                if (
+                    model not in url_map
+                    or not url_map[model].get("url")
+                    or not workflow_url_points_to_file(
+                        url_map[model].get("url"), original_name
+                    )
+                ):
+                    url_map[model] = {
+                        "url": normalize_workflow_download_url(url),
+                        "model_url": url,
+                        "directory": url_map.get(model, {}).get("directory", ""),
+                        "source": "regex",
+                    }
+                else:
+                    url_map[model]["url"] = normalize_workflow_download_url(url)
+                    url_map[model]["model_url"] = url
                     url_map[model]["source"] = "regex"
                 break
             # Check without extension
             model_base = os.path.splitext(model)[0]
             if model_base in url or unquote(model_base) in url:
-                if model not in url_map:
-                    url_map[model] = {"url": url, "directory": "", "source": "regex"}
-                elif not url_map[model].get("url"):
-                    url_map[model]["url"] = url
+                if (
+                    model not in url_map
+                    or not url_map[model].get("url")
+                    or not workflow_url_points_to_file(url_map[model].get("url"), model)
+                ):
+                    url_map[model] = {
+                        "url": normalize_workflow_download_url(url),
+                        "model_url": url,
+                        "directory": url_map.get(model, {}).get("directory", ""),
+                        "source": "regex",
+                    }
+                else:
+                    url_map[model]["url"] = normalize_workflow_download_url(url)
+                    url_map[model]["model_url"] = url
                     url_map[model]["source"] = "regex"
                 break
 
@@ -337,6 +402,7 @@ def analyze_and_find_matches(
         if filename in workflow_urls:
             url_info = workflow_urls[filename]
             missing["workflow_url"] = url_info.get("url", "")
+            missing["workflow_model_url"] = url_info.get("model_url", "")
             missing["workflow_directory"] = url_info.get("directory", "")
             missing["url_source"] = url_info.get("source", "")
 

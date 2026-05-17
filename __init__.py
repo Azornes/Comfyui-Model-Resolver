@@ -236,6 +236,9 @@ class ModelLinkerExtension:
                                     missing["download_source"] = {
                                         "source": source,
                                         "url": workflow_url,
+                                        "model_url": missing.get(
+                                            "workflow_model_url", workflow_url
+                                        ),
                                         "filename": filename,
                                         "directory": missing.get(
                                             "workflow_directory", ""
