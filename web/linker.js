@@ -2205,7 +2205,7 @@ class LinkerManagerDialog extends ComfyDialog {
                                     <div class="ml-options-stack">
                                         <div class="ml-options-field">
                                             <div class="ml-options-input-row">
-                                                <label for="ml-options-hf" class="ml-options-label">HuggingFace Token <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a> <span class="ml-tooltip-badge" data-tooltip="Used for gated HuggingFace repos that need authorization during download.">?</span></label>
+                                                <label for="ml-options-hf" class="ml-options-label">HuggingFace Token <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a> <span class="ml-tooltip-badge" data-tooltip="Used for gated HuggingFace repos that need authorization during download. Create a fine-grained token with: Read access to contents of all public gated repos you can access. Write, Inference, Webhooks, Billing, Jobs, and org permissions are not needed.">?</span></label>
                                                 <input id="ml-options-hf" class="ml-options-input" type="password" placeholder="Paste HuggingFace token" value="${tokens.hf_token}">
                                                 <button id="ml-options-hf-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide HuggingFace token" title="Show or hide">
                                                     ${getSvgIcon('eye')}
