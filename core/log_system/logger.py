@@ -59,15 +59,26 @@ DEFAULT_CONFIG = {
     "max_file_size_mb": 10,
     "backup_count": 5,
     "timestamp_format": "%H:%M:%S",
+    "level_field_width": 9,
+    "source_field_width": 72,
 }
 
 
 class ColoredFormatter(logging.Formatter):
     """Formatter that adds colors to console logs"""
 
-    def __init__(self, fmt=None, datefmt=None, use_colors=True):
+    def __init__(
+        self,
+        fmt=None,
+        datefmt=None,
+        use_colors=True,
+        level_field_width=DEFAULT_CONFIG["level_field_width"],
+        source_field_width=DEFAULT_CONFIG["source_field_width"],
+    ):
         super().__init__(fmt, datefmt)
         self.use_colors = use_colors
+        self.level_field_width = self._field_width(level_field_width)
+        self.source_field_width = self._field_width(source_field_width)
 
     def format(self, record):
         # Get the formatted message from the record
@@ -76,13 +87,14 @@ class ColoredFormatter(logging.Formatter):
             message += "\n" + self.formatException(record.exc_info)
 
         levelname = record.levelname
+        level = f"[{levelname}]".center(self.level_field_width)
+        source = f"[{record.name}:{record.lineno}]".ljust(self.source_field_width)
 
         # Build the log prefix
-        prefix = "[{}] [{}] [{}:{}]".format(
+        prefix = "[{}] {} {}".format(
             self.formatTime(record, self.datefmt),
-            record.levelname,
-            record.name,
-            record.lineno,
+            level,
+            source,
         )
 
         # Apply color and bold styling to the prefix
@@ -93,6 +105,12 @@ class ColoredFormatter(logging.Formatter):
                 prefix = f"\033[1m{COLORS[level_enum]}{prefix}{COLORS['RESET']}"
 
         return f"{prefix} {message}"
+
+    def _field_width(self, value):
+        try:
+            return max(0, int(value))
+        except (TypeError, ValueError):
+            return 0
 
 
 class AzLogsLogger:
@@ -240,6 +258,8 @@ class AzLogsLogger:
             fmt="[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s",
             datefmt=self.config["timestamp_format"],
             use_colors=self.config["use_colors"],
+            level_field_width=self.config["level_field_width"],
+            source_field_width=self.config["source_field_width"],
         )
         console_handler.setFormatter(console_formatter)
         logger.addHandler(console_handler)

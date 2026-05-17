@@ -9,4 +9,4 @@
 LOG_LEVEL = "DEBUG"
 
 # Logger module name. Set to None to auto-detect from folder name.
-LOG_MODULE_NAME = None
+LOG_MODULE_NAME = "MLinker"
