@@ -17,6 +17,7 @@ import sys
 import json
 import re
 import logging
+import time
 from enum import IntEnum
 from logging.handlers import RotatingFileHandler
 import traceback
@@ -46,6 +47,7 @@ COLORS = {
     LogLevel.INFO: "\033[94m",  # Blue
     LogLevel.WARN: "\033[93m",  # Yellow
     LogLevel.ERROR: "\033[91m",  # Red
+    "MESSAGE": "\033[96m",  # Cyan
     "RESET": "\033[0m",  # Reset
 }
 
@@ -59,8 +61,8 @@ DEFAULT_CONFIG = {
     "max_file_size_mb": 10,
     "backup_count": 5,
     "timestamp_format": "%H:%M:%S",
-    "level_field_width": 9,
-    "source_field_width": 72,
+    "level_field_width": 5,
+    "source_field_width": 0,
 }
 
 
@@ -86,31 +88,43 @@ class ColoredFormatter(logging.Formatter):
         if record.exc_info:
             message += "\n" + self.formatException(record.exc_info)
 
-        levelname = record.levelname
-        level = f"[{levelname}]".center(self.level_field_width)
-        source = f"[{record.name}:{record.lineno}]".ljust(self.source_field_width)
+        levelname = self._display_level_name(record.levelname)
+        level = levelname.ljust(self.level_field_width)
+        logger_name = self._display_logger_name(record.name)
+        source = f"({logger_name}:{record.lineno})"
+        if self.source_field_width:
+            source = source.ljust(self.source_field_width)
 
-        # Build the log prefix
-        prefix = "[{}] {} {}".format(
-            self.formatTime(record, self.datefmt),
-            level,
-            source,
-        )
+        if self.use_colors:
+            level = self._color_level(levelname, level)
+            message = f"{COLORS['MESSAGE']}{message}{COLORS['RESET']}"
 
-        # Apply color and bold styling to the prefix
-        if self.use_colors and hasattr(LogLevel, levelname):
-            level_enum = getattr(LogLevel, levelname)
-            if level_enum in COLORS:
-                # Apply bold (\033[1m) and color, then reset
-                prefix = f"\033[1m{COLORS[level_enum]}{prefix}{COLORS['RESET']}"
-
-        return f"{prefix} {message}"
+        return f"[{self._format_time(record)}] {level} {source}: {message}"
 
     def _field_width(self, value):
         try:
             return max(0, int(value))
         except (TypeError, ValueError):
             return 0
+
+    def _display_logger_name(self, name):
+        return str(name or "").removeprefix("azlogs.")
+
+    def _display_level_name(self, levelname):
+        return "WARN" if levelname == "WARNING" else str(levelname or "")
+
+    def _format_time(self, record):
+        timestamp = time.strftime(
+            self.datefmt or "%H:%M:%S", self.converter(record.created)
+        )
+        return f"{timestamp}.{int(record.msecs):03d}"
+
+    def _color_level(self, levelname, text):
+        level_enum = getattr(LogLevel, levelname, None)
+        color = COLORS.get(level_enum)
+        if not color:
+            return text
+        return f"\033[1m{color}{text}{COLORS['RESET']}"
 
 
 class AzLogsLogger:

@@ -199,7 +199,7 @@ def create_module_logger(module_name=None):
 def log_debug(*args, **kwargs):
     module_name = _resolve_module_name(stack_depth=2)
     if _initialized:
-        kwargs.setdefault("stacklevel", 3)
+        kwargs.setdefault("stacklevel", 4)
         debug(module_name, *args, **kwargs)
     else:
         print(f"[DEBUG] [{module_name}]", *args)
@@ -208,7 +208,7 @@ def log_debug(*args, **kwargs):
 def log_info(*args, **kwargs):
     module_name = _resolve_module_name(stack_depth=2)
     if _initialized:
-        kwargs.setdefault("stacklevel", 3)
+        kwargs.setdefault("stacklevel", 4)
         info(module_name, *args, **kwargs)
     else:
         print(f"[INFO] [{module_name}]", *args)
@@ -217,7 +217,7 @@ def log_info(*args, **kwargs):
 def log_warn(*args, **kwargs):
     module_name = _resolve_module_name(stack_depth=2)
     if _initialized:
-        kwargs.setdefault("stacklevel", 3)
+        kwargs.setdefault("stacklevel", 4)
         warn(module_name, *args, **kwargs)
     else:
         print(f"[WARN] [{module_name}]", *args)
@@ -226,7 +226,7 @@ def log_warn(*args, **kwargs):
 def log_error(*args, **kwargs):
     module_name = _resolve_module_name(stack_depth=2)
     if _initialized:
-        kwargs.setdefault("stacklevel", 3)
+        kwargs.setdefault("stacklevel", 4)
         error(module_name, *args, **kwargs)
     else:
         print(f"[ERROR] [{module_name}]", *args)
@@ -235,7 +235,7 @@ def log_error(*args, **kwargs):
 def log_exception(*args):
     module_name = _resolve_module_name(stack_depth=2)
     if _initialized:
-        exception(module_name, *args, stacklevel=3)
+        exception(module_name, *args, stacklevel=4)
     else:
         print(f"[ERROR] [{module_name}]", *args)
         traceback.print_exc()
