@@ -47,8 +47,16 @@ COLORS = {
     LogLevel.INFO: "\033[94m",  # Blue
     LogLevel.WARN: "\033[93m",  # Yellow
     LogLevel.ERROR: "\033[91m",  # Red
+    "TIME_BG": "\033[48;2;38;63;76;97m",  # #263f4c background, white text
     "MESSAGE": "\033[96m",  # Cyan
     "RESET": "\033[0m",  # Reset
+}
+
+LEVEL_THEME = {
+    "DEBUG": (155, 89, 182),  # #9B59B6
+    "INFO": (46, 204, 113),  # #2ECC71
+    "WARN": (243, 156, 18),  # #F39C12
+    "ERROR": (192, 57, 43),  # #C0392B
 }
 
 # Default configuration
@@ -91,15 +99,27 @@ class ColoredFormatter(logging.Formatter):
         levelname = self._display_level_name(record.levelname)
         level = levelname.ljust(self.level_field_width)
         logger_name = self._display_logger_name(record.name)
-        source = f"({logger_name}:{record.lineno})"
+        logger_root, logger_detail = self._split_logger_name(logger_name)
+        source = (
+            f"({logger_detail}:{record.lineno})"
+            if logger_detail
+            else f"({record.lineno})"
+        )
         if self.source_field_width:
             source = source.ljust(self.source_field_width)
 
+        timestamp = self._format_time(record)
+        separator = " "
+        root_label = logger_root
         if self.use_colors:
-            level = self._color_level(levelname, level)
-            message = f"{COLORS['MESSAGE']}{message}{COLORS['RESET']}"
+            level = self._color_level_badge(levelname, level)
+            timestamp = self._color_timestamp(timestamp)
+            root_label = self._color_root_label(root_label)
+            separator = self._color_separator(levelname, separator)
+            message = self._color_message(levelname, message)
+            return f"{level}{timestamp}{separator}{root_label}{separator} {message} {source}"
 
-        return f"[{self._format_time(record)}] {level} {source}: {message}"
+        return f"{level} {timestamp} {root_label} {message} {source}"
 
     def _field_width(self, value):
         try:
@@ -110,6 +130,12 @@ class ColoredFormatter(logging.Formatter):
     def _display_logger_name(self, name):
         return str(name or "").removeprefix("azlogs.")
 
+    def _split_logger_name(self, name):
+        parts = str(name or "").split(".", 1)
+        if len(parts) == 1:
+            return parts[0], ""
+        return parts[0], parts[1]
+
     def _display_level_name(self, levelname):
         return "WARN" if levelname == "WARNING" else str(levelname or "")
 
@@ -119,12 +145,32 @@ class ColoredFormatter(logging.Formatter):
         )
         return f"{timestamp}.{int(record.msecs):03d}"
 
-    def _color_level(self, levelname, text):
-        level_enum = getattr(LogLevel, levelname, None)
-        color = COLORS.get(level_enum)
-        if not color:
+    def _color_level_badge(self, levelname, text):
+        rgb = LEVEL_THEME.get(levelname)
+        if not rgb:
             return text
-        return f"\033[1m{color}{text}{COLORS['RESET']}"
+        r, g, b = rgb
+        return f"\033[1m\033[48;2;{r};{g};{b};97m {text} {COLORS['RESET']}"
+
+    def _color_timestamp(self, text):
+        return f"{COLORS['TIME_BG']} {text} {COLORS['RESET']}"
+
+    def _color_root_label(self, text):
+        return f"{COLORS['TIME_BG']} {text} {COLORS['RESET']}"
+
+    def _color_separator(self, levelname, text):
+        rgb = LEVEL_THEME.get(levelname)
+        if not rgb:
+            return text
+        r, g, b = rgb
+        return f"\033[48;2;{r};{g};{b}m{text}{COLORS['RESET']}"
+
+    def _color_message(self, levelname, text):
+        rgb = LEVEL_THEME.get(levelname)
+        if not rgb:
+            return f"{COLORS['MESSAGE']}{text}{COLORS['RESET']}"
+        r, g, b = rgb
+        return f"\033[38;2;{r};{g};{b}m{text}{COLORS['RESET']}"
 
 
 class AzLogsLogger:
