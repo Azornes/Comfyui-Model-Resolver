@@ -1,7 +1,7 @@
 /**
 author: Azornes
 title: AzLogs
-version: 1.5.0
+version: 1.5.1
 description: Logging Setup - Central logging system
 
 Features:
@@ -197,13 +197,14 @@ class Logger {
             const message = this.stringifyArgs(args);
             const suffix = detail ? ` (${detail})` : '';
             consoleFn(
-                `%c ${levelName.padEnd(LEVEL_WIDTH, ' ')} %c ${timestamp} %c %c ${root} %c %c${message}${suffix}`,
+                `%c ${levelName.padEnd(LEVEL_WIDTH, ' ')} %c ${timestamp} %c %c ${root} %c %c ${message}%c${suffix}`,
                 `background:${color};color:#fff;font-weight:bold;`,
                 `background:${TIME_BG};color:#fff;font-weight:bold;`,
                 `background:${color};color:${color};`,
                 `background:${TIME_BG};color:#fff;font-weight:bold;`,
                 `background:${color};color:${color};`,
                 `color:${color};font-weight:bold;`,
+                '',
             );
             return;
         }
@@ -215,6 +216,12 @@ class Logger {
     splitModuleName(module) {
         const value = String(module || LOGGER_NAME);
         const parts = value.split('.');
+        if (parts.length === 1 && value !== LOGGER_NAME) {
+            return {
+                root: LOGGER_NAME,
+                detail: value
+            };
+        }
         const root = parts.shift() || LOGGER_NAME;
         return {
             root,
