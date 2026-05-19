@@ -9,8 +9,8 @@
 import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
 import { $el, ComfyDialog } from "../../../scripts/ui.js";
-import { loadStylesWhenNeeded } from "./utils/css-loader.js";
-import { getSvgIcon } from "./utils/IconUtils.js";
+import { loadStylesWhenNeeded } from "./utils/css_loader.js";
+import { getSvgIcon } from "./utils/icon_utils.js";
 
 class LinkerManagerDialog extends ComfyDialog {
     constructor() {
@@ -1357,7 +1357,8 @@ class LinkerManagerDialog extends ComfyDialog {
         if (dialog && dialog.parentNode) {
             dialog.parentNode.removeChild(dialog);
         }
-    }
+    }
+
     /**
      * Get a colored confidence badge HTML
      * @param {number} confidence - Confidence percentage (0-100)

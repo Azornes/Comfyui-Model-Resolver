@@ -1,8 +1,8 @@
 // @ts-ignore
 import { $el } from "../../../scripts/ui.js";
-import { createModuleLogger } from "../log_system/LoggerUtils.js";
-import { withErrorHandling, createValidationError, createNetworkError } from "./ErrorHandler.js";
-const log = createModuleLogger('ResourceManager');
+import { createModuleLogger } from "../log_system/log_funcs.js";
+import { withErrorHandling, createValidationError, createNetworkError } from "./error_handler.js";
+const log = createModuleLogger('resource_manager');
 export const addStylesheet = withErrorHandling(function (url) {
     if (!url) {
         throw createValidationError("URL is required", { url });

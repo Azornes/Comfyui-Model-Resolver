@@ -1,4 +1,4 @@
-// IconUtils.js - Utility for loading SVG icons
+// icon_utils - Utility for loading SVG icons
 import { app } from "../../../scripts/app.js";
 
 const SVG_ICONS = {

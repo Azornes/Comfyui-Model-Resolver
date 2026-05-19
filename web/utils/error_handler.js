@@ -1,9 +1,9 @@
 /**
- * ErrorHandler - Central error handling
+ * error_handler - Central error handling
  * Eliminates repetitive error handling patterns throughout the project
  */
-import { createModuleLogger } from "../log_system/LoggerUtils.js";
-const log = createModuleLogger('ErrorHandler');
+import { createModuleLogger } from "../log_system/log_funcs.js";
+const log = createModuleLogger('error_handler');
 /**
  * Error types in the application
  */

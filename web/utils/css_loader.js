@@ -1,10 +1,10 @@
 /**
- * CSS Loader
+ * css_loader
  * Loads all CSS files for the resolution master components
  */
 
-import { addStylesheet, getUrl } from "./ResourceManager.js";
-import { createModuleLogger } from "../log_system/LoggerUtils.js";
+import { addStylesheet, getUrl } from "./resource_manager.js";
+import { createModuleLogger } from "../log_system/log_funcs.js";
 
 const log = createModuleLogger('CSSLoader');
 
