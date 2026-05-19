@@ -13,7 +13,7 @@ Logger - Central logging system for comfyui-model-linker
 - Ability to export logs
 */
 
-import { DEFAULT_LOGGER_NAME, LOG_MODULE_NAME } from './config.js';
+import { DEFAULT_LOGGER_NAME, LOG_MODULE_NAME, USE_COLORS } from './config.js';
 
 function padStart(str, targetLength, padString) {
     targetLength = targetLength >> 0;
@@ -55,17 +55,17 @@ export const LogLevel = {
 const DEFAULT_CONFIG = {
     globalLevel: LogLevel.INFO,
     moduleSettings: {},
-    useColors: true,
+    useColors: USE_COLORS,
     saveToStorage: false,
     maxStoredLogs: 1000,
-    timestampFormat: 'HH:mm:ss',
+    timestampFormat: 'HH:mm:ss.SSS',
     storageKey: LOGGER_STORAGE_KEY
 };
 const COLORS = {
-    [LogLevel.DEBUG]: '#9e9e9e',
-    [LogLevel.INFO]: '#2196f3',
-    [LogLevel.WARN]: '#ff9800',
-    [LogLevel.ERROR]: '#f44336',
+    [LogLevel.DEBUG]: '#9B59B6',
+    [LogLevel.INFO]: '#2ECC71',
+    [LogLevel.WARN]: '#F39C12',
+    [LogLevel.ERROR]: '#C0392B',
 };
 const LEVEL_NAMES = {
     [LogLevel.DEBUG]: 'DEBUG',
@@ -79,6 +79,9 @@ const CONSOLE_METHODS = {
     [LogLevel.WARN]: 'warn',
     [LogLevel.ERROR]: 'error',
 };
+const TIME_BG = '#263f4c';
+const LEVEL_WIDTH = 5;
+
 class Logger {
     constructor() {
         this.config = { ...DEFAULT_CONFIG };
@@ -184,17 +187,59 @@ class Logger {
      */
     printToConsole(logData) {
         const { timestamp, module, level, levelName, args } = logData;
-        const prefix = `[${timestamp}] [${module}] [${levelName}]`;
         const consoleMethod = CONSOLE_METHODS[level] || 'log';
         const consoleFn = typeof console[consoleMethod] === 'function'
             ? console[consoleMethod].bind(console)
             : console.log.bind(console);
         if (this.config.useColors && typeof consoleFn === 'function') {
             const color = COLORS[level] || '#000000';
-            consoleFn(`%c${prefix}`, `color: ${color}; font-weight: bold;`, ...args);
+            const { root, detail } = this.splitModuleName(module);
+            const message = this.stringifyArgs(args);
+            const suffix = detail ? ` (${detail})` : '';
+            consoleFn(
+                `%c ${levelName.padEnd(LEVEL_WIDTH, ' ')} %c ${timestamp} %c %c ${root} %c %c${message}${suffix}`,
+                `background:${color};color:#fff;font-weight:bold;`,
+                `background:${TIME_BG};color:#fff;font-weight:bold;`,
+                `background:${color};color:${color};`,
+                `background:${TIME_BG};color:#fff;font-weight:bold;`,
+                `background:${color};color:${color};`,
+                `color:${color};font-weight:bold;`,
+            );
             return;
         }
-        consoleFn(prefix, ...args);
+        const { root, detail } = this.splitModuleName(module);
+        const suffix = detail ? ` (${detail})` : '';
+        consoleFn(`${levelName.padEnd(LEVEL_WIDTH, ' ')} ${timestamp} ${root} ${this.stringifyArgs(args)}${suffix}`);
+    }
+
+    splitModuleName(module) {
+        const value = String(module || LOGGER_NAME);
+        const parts = value.split('.');
+        const root = parts.shift() || LOGGER_NAME;
+        return {
+            root,
+            detail: parts.join('.')
+        };
+    }
+
+    stringifyArgs(args = []) {
+        return args.map((arg) => {
+            if (typeof arg === 'string') {
+                return arg;
+            }
+            if (arg instanceof Error) {
+                return arg.stack || arg.message;
+            }
+            if (typeof arg === 'object' && arg !== null) {
+                try {
+                    return JSON.stringify(arg);
+                }
+                catch (e) {
+                    return String(arg);
+                }
+            }
+            return String(arg);
+        }).join(' ');
     }
     serializeLogEntry(log) {
         return {
@@ -331,7 +376,7 @@ class Logger {
             extension = 'json';
         }
         else {
-            content = this.logs.map((log) => `[${log.timestamp}] [${log.module}] [${log.levelName}] ${log.args.join(' ')}`).join('\n');
+            content = this.logs.map((log) => `${log.levelName.padEnd(LEVEL_WIDTH, ' ')} ${log.timestamp} ${log.module} ${this.stringifyArgs(log.args)}`).join('\n');
             mimeType = 'text/plain';
             extension = 'txt';
         }
