@@ -1,11 +1,11 @@
 /**
 author: Azornes
 title: AzLogs
-version: 1.5.1
+version: 1.5.3
 description: Logging Initializator
 
 Features:
-LoggerUtils - Centralization of logger initialization
+log_funcs - Centralization of logger initialization
 Eliminates repetitive logger initialization code in each module
 */
 

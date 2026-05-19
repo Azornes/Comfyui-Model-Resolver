@@ -1,11 +1,11 @@
 /**
 author: Azornes
 title: AzLogs
-version: 1.5.1
+version: 1.5.3
 description: Logging Setup - Central logging system
 
 Features:
-Logger - Central logging system for comfyui-model-linker
+logger - Central logging system
 - Multiple log levels (DEBUG, INFO, WARN, ERROR)
 - Ability to enable/disable logging globally or per module
 - Colorful logs in the console
