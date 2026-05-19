@@ -1,7 +1,7 @@
 """
 @author: Azornes
 @title: AzLogs
-@version: 1.5.0
+@version: 1.5.1
 @description: Logging Setup - Central logging system
 
 Features:
@@ -11,7 +11,7 @@ Features:
 - Log file rotation
 - Configuration via environment variables
 """
-
+# ruff: noqa: T201
 import os
 import sys
 import json

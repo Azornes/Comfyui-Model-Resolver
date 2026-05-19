@@ -1,10 +1,10 @@
 """
 @author: Azornes
 @title: AzLogs
-@version: 1.5.0
+@version: 1.5.1
 @description: Logging Initializator
 """
-
+# ruff: noqa: T201
 import os
 import sys
 import traceback
