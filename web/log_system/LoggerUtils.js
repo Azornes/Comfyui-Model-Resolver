@@ -1,13 +1,14 @@
 /**
-@author: Azornes
-@title: AzLogs
-@version: 1.4.1
-@description: Logging Initializator
+author: Azornes
+title: AzLogs
+version: 1.5.0
+description: Logging Initializator
+
+Features:
+LoggerUtils - Centralization of logger initialization
+Eliminates repetitive logger initialization code in each module
 */
-/**
- * LoggerUtils - Centralization of logger initialization
- * Eliminates repetitive logger initialization code in each module
- */
+
 import { logger, LogLevel } from "./logger.js";
 import { LOG_LEVEL } from './config.js';
 /**
