@@ -1,7 +1,7 @@
 """
 @author: Azornes
 @title: AzLogs
-@version: 1.5.1
+@version: 1.5.2
 @description: Logging Configuration
 """
 # Log level for development.

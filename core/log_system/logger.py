@@ -1,7 +1,7 @@
 """
 @author: Azornes
 @title: AzLogs
-@version: 1.5.1
+@version: 1.5.2
 @description: Logging Setup - Central logging system
 
 Features:
@@ -84,11 +84,13 @@ class ColoredFormatter(logging.Formatter):
         use_colors=True,
         level_field_width=DEFAULT_CONFIG["level_field_width"],
         source_field_width=DEFAULT_CONFIG["source_field_width"],
+        include_milliseconds=True,
     ):
         super().__init__(fmt, datefmt)
         self.use_colors = use_colors
         self.level_field_width = self._field_width(level_field_width)
         self.source_field_width = self._field_width(source_field_width)
+        self.include_milliseconds = include_milliseconds
 
     def format(self, record):
         # Get the formatted message from the record
@@ -97,20 +99,20 @@ class ColoredFormatter(logging.Formatter):
             message += "\n" + self.formatException(record.exc_info)
 
         levelname = self._display_level_name(record.levelname)
-        level = levelname.ljust(self.level_field_width)
+        level = self._format_level(levelname)
         logger_name = self._display_logger_name(record.name)
         logger_root, logger_detail = self._split_logger_name(logger_name)
         source = (
             f"({logger_detail}:{record.lineno})"
             if logger_detail
-            else f"({record.lineno})"
+            else f"({logger_root}:{record.lineno})"
         )
         if self.source_field_width:
             source = source.ljust(self.source_field_width)
 
-        timestamp = self._format_time(record)
+        timestamp = f"[{self._format_time(record)}]"
         separator = " "
-        root_label = logger_root
+        root_label = f"[{logger_root}]"
         if self.use_colors:
             level = self._color_level_badge(levelname, level)
             timestamp = self._color_timestamp(timestamp)
@@ -139,11 +141,17 @@ class ColoredFormatter(logging.Formatter):
     def _display_level_name(self, levelname):
         return "WARN" if levelname == "WARNING" else str(levelname or "")
 
+    def _format_level(self, levelname):
+        width = self.level_field_width + 2
+        return f"[{levelname}]".ljust(width)
+
     def _format_time(self, record):
         timestamp = time.strftime(
             self.datefmt or "%H:%M:%S", self.converter(record.created)
         )
-        return f"{timestamp}.{int(record.msecs):03d}"
+        if self.include_milliseconds:
+            return f"{timestamp}.{int(record.msecs):03d}"
+        return timestamp
 
     def _color_level_badge(self, levelname, text):
         rgb = LEVEL_THEME.get(levelname)
@@ -191,6 +199,7 @@ class AzLogsLogger:
         self.config = DEFAULT_CONFIG.copy()
         self.enabled = True
         self.loggers = {}
+        self.file_handlers = {}
 
         # Load configuration from environment variables
         self._load_config_from_env()
@@ -302,6 +311,58 @@ class AzLogsLogger:
         sanitized = re.sub(r'[<>:"/\\|?*\s]+', "_", str(value or "")).strip("._")
         return sanitized or "default"
 
+    def _root_module_name(self, module):
+        """Return the top-level logger name used for shared log files."""
+        return str(module or "default").split(".", 1)[0] or "default"
+
+    def _get_log_file(self, module):
+        safe_root = self._sanitize_logger_name(self._root_module_name(module))
+        return os.path.join(self.config["log_dir"], f"azlogs_{safe_root}.log")
+
+    def _get_file_handler(self, module):
+        """Get or create a shared rotating file handler for the root module."""
+        log_file = self._get_log_file(module)
+        if log_file in self.file_handlers:
+            return self.file_handlers[log_file]
+
+        os.makedirs(self.config["log_dir"], exist_ok=True)
+        file_handler = RotatingFileHandler(
+            log_file,
+            maxBytes=self.config["max_file_size_mb"] * 1024 * 1024,
+            backupCount=self.config["backup_count"],
+            encoding="utf-8",
+        )
+        file_formatter = ColoredFormatter(
+            datefmt="%Y-%m-%d %H:%M:%S",
+            use_colors=False,
+            source_field_width=self.config["source_field_width"],
+            include_milliseconds=True,
+        )
+        file_handler.setFormatter(file_formatter)
+        self.file_handlers[log_file] = file_handler
+        return file_handler
+
+    def reset_loggers(self):
+        """Remove configured handlers so new settings are applied cleanly."""
+        handlers_to_close = set()
+
+        for module in self.loggers:
+            configured_logger = logging.getLogger(f"azlogs.{module}")
+            for handler in list(configured_logger.handlers):
+                configured_logger.removeHandler(handler)
+                if isinstance(handler, RotatingFileHandler):
+                    handlers_to_close.add(handler)
+
+        for handler in self.file_handlers.values():
+            handlers_to_close.add(handler)
+
+        for handler in handlers_to_close:
+            handler.close()
+
+        self.loggers = {}
+        self.file_handlers = {}
+        return self
+
     def _get_logger(self, module):
         """Get or create a logger for the module"""
         if module in self.loggers:
@@ -326,26 +387,14 @@ class AzLogsLogger:
 
         # Add file handler if file logging is enabled
         if self.config["log_to_file"]:
-            safe_module = self._sanitize_logger_name(module)
-            log_file = os.path.join(self.config["log_dir"], f"azlogs_{safe_module}.log")
             try:
-                file_handler = RotatingFileHandler(
-                    log_file,
-                    maxBytes=self.config["max_file_size_mb"] * 1024 * 1024,
-                    backupCount=self.config["backup_count"],
-                    encoding="utf-8",
-                )
-                file_formatter = logging.Formatter(
-                    fmt="[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s",
-                    datefmt="%Y-%m-%d %H:%M:%S",
-                )
-                file_handler.setFormatter(file_formatter)
+                file_handler = self._get_file_handler(module)
                 logger.addHandler(file_handler)
             except OSError as e:
                 self.config["log_to_file"] = False
                 logger.warning(
                     "AzLogs: disabling file logging after handler setup failed for %s: %s",
-                    log_file,
+                    self._get_log_file(module),
                     e,
                 )
 
@@ -444,5 +493,5 @@ def set_file_logging(enabled=True, log_dir=None):
         os.makedirs(log_dir, exist_ok=True)
 
     # Reset loggers to apply new settings
-    logger.loggers = {}
+    logger.reset_loggers()
     return logger
