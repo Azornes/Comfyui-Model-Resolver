@@ -286,7 +286,7 @@ class LinkerManagerDialog extends ComfyDialog {
             html += ` <span class="ml-chip">${confidenceDisplay}</span>`;
         }
         if (modelCardUrl) {
-            html += `<br><a href="${modelCardUrl}" target="_blank" rel="noopener noreferrer" class="ml-link" title="Open model card">${formattedDownloadName.display}</a>${sizeDisplay ? ` <span class="ml-download-filesize">(${sizeDisplay})</span>` : ''}`;
+            html += `<br><a href="${modelCardUrl}" target="_blank" rel="noopener noreferrer" class="ml-link" title="Open the model page for this download.">${formattedDownloadName.display}</a>${sizeDisplay ? ` <span class="ml-download-filesize">(${sizeDisplay})</span>` : ''}`;
         } else {
             html += `<br><span title="${formattedDownloadName.full}">${formattedDownloadName.display}</span>${sizeDisplay ? ` <span class="ml-download-filesize">(${sizeDisplay})</span>` : ''}`;
         }
@@ -751,29 +751,29 @@ class LinkerManagerDialog extends ComfyDialog {
                         <table class="ml-info-table">
                             <tbody>
                                 <tr class="ml-info-file-row">
-                                    <td><span>File <span class="ml-info-help" title="Local filename or resolved model path used by this entry.">?</span></span></td>
+                                    <td><span>File <span class="ml-info-help" title="The model file name found locally or returned by CivitAI.">?</span></span></td>
                                     <td><span class="ml-info-file"></span></td>
                                 </tr>
                                 <tr class="ml-info-hash-row">
-                                    <td><span>Hash (sha256) <span class="ml-info-help" title="SHA256 hash used to identify the exact model version on CivitAI.">?</span></span></td>
+                                    <td><span>Hash (sha256) <span class="ml-info-help" title="Unique fingerprint of the local file. Model Linker uses it to confirm the exact CivitAI version.">?</span></span></td>
                                     <td><span class="ml-info-hash"></span></td>
                                 </tr>
                                 <tr class="ml-info-civitai-row">
-                                    <td><span>CivitAI <span class="ml-info-help" title="Direct link to the model or version page on CivitAI.">?</span></span></td>
+                                    <td><span>CivitAI <span class="ml-info-help" title="Opens the matching CivitAI model or version page when one was found.">?</span></span></td>
                                     <td><span class="ml-info-civitai-link"></span></td>
                                 </tr>
                                 <tr class="ml-info-name-row">
-                                    <td><span>Name <span class="ml-info-help" title="Display name returned from metadata or CivitAI for this model.">?</span></span></td>
+                                    <td><span>Name <span class="ml-info-help" title="Model name from CivitAI or local metadata.">?</span></span></td>
                                     <td><span class="ml-info-name"></span></td>
                                 </tr>
                                 <tr class="ml-info-basemodel-row">
-                                    <td><span>Base Model <span class="ml-info-help" title="Base model family this resource was trained or built on, for example SD1.5, SDXL or Flux.">?</span></span></td>
+                                    <td><span>Base Model <span class="ml-info-help" title="Base model this resource was made for, for example SD1.5, SDXL or Flux.">?</span></span></td>
                                     <td><span class="ml-info-base-model"></span></td>
                                 </tr>
                                 <tr class="ml-info-trainedwords-row ml-hidden-initial">
                                     <td>
                                         <div class="ml-info-trained-words-label">
-                                            Trained Words <span class="ml-info-help" title="Trigger words or phrases associated with this model. Click words to select them, then copy the selection.">?</span>
+                                            Trained Words <span class="ml-info-help" title="Trigger words recommended by the model author. Click the words you want, then copy them into your prompt.">?</span>
                                             <small class="ml-info-trained-words-meta">
                                                 <span class="ml-info-trained-words-count">0 selected</span>
                                                 <button type="button" class="ml-info-copy-trained-words" disabled>Copy</button>
@@ -786,11 +786,11 @@ class LinkerManagerDialog extends ComfyDialog {
                                     </td>
                                 </tr>
                                 <tr class="ml-info-clipskip-row ml-hidden-initial">
-                                    <td><span>Clip Skip <span class="ml-info-help" title="Recommended clip skip value when the model author provides one.">?</span></span></td>
+                                    <td><span>Clip Skip <span class="ml-info-help" title="Recommended Clip Skip value from the model author, if one is provided.">?</span></span></td>
                                     <td><span class="ml-info-clip-skip"></span></td>
                                 </tr>
                                 <tr class="ml-info-description-row ml-hidden-initial">
-                                    <td><span>Description <span class="ml-info-help" title="Formatted description from CivitAI or local metadata. Use Show more to expand long content.">?</span></span></td>
+                                    <td><span>Description <span class="ml-info-help" title="Model description from CivitAI or local metadata. Long descriptions are shortened until you click Show more.">?</span></span></td>
                                     <td>
                                         <div class="ml-info-description-wrap">
                                             <div class="ml-info-description"></div>
@@ -2173,18 +2173,18 @@ class LinkerManagerDialog extends ComfyDialog {
                                     <div class="ml-options-stack">
                                         <div class="ml-options-field">
                                             <div class="ml-options-input-row">
-                                                <label for="ml-options-civitai" class="ml-options-label">CivitAI API Key <a href="https://civitai.com/user/account" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a> <span class="ml-tooltip-badge" data-tooltip="Used for direct CivitAI downloads that otherwise return HTTP 401 or 403.">?</span></label>
+                                                <label for="ml-options-civitai" class="ml-options-label">CivitAI API Key <a href="https://civitai.com/user/account" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a> <span class="ml-tooltip-badge" data-tooltip="Optional. Used when downloading from CivitAI requires your account. Add this if CivitAI downloads fail or need access to models available to your account.">?</span></label>
                                                 <input id="ml-options-civitai" class="ml-options-input" type="password" placeholder="Paste CivitAI API key" value="${tokens.civitai_key}">
-                                                <button id="ml-options-civitai-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide CivitAI API key" title="Show or hide">
+                                                <button id="ml-options-civitai-toggle" type="button" class="ml-options-visibility-btn" aria-label="Toggle visibility for saved CivitAI API key" title="Show saved value">
                                                     ${getSvgIcon('eye')}
                                                 </button>
                                             </div>
                                         </div>
                                         <div class="ml-options-field">
                                             <div class="ml-options-input-row">
-                                                <label for="ml-options-civitai-session" class="ml-options-label">CivitAI Session Token <span class="ml-tooltip-badge" data-tooltip="Used only for CivitAI web search on civitai.red to include results available to your logged-in session, including NSFW. To get it: sign in on civitai.red, open DevTools with F12, go to Application or Cookies, find __Secure-civitai-token, and paste its value here.">?</span></label>
+                                                <label for="ml-options-civitai-session" class="ml-options-label">CivitAI Session Token <span class="ml-tooltip-badge" data-tooltip="Optional. Makes CivitAI search use your logged-in session, so results can match what you see in the browser. Useful for NSFW or account-visible results.">?</span></label>
                                                 <input id="ml-options-civitai-session" class="ml-options-input" type="password" placeholder="Paste __Secure-civitai-token" value="${tokens.civitai_session_token}">
-                                                <button id="ml-options-civitai-session-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide CivitAI session token" title="Show or hide">
+                                                <button id="ml-options-civitai-session-toggle" type="button" class="ml-options-visibility-btn" aria-label="Toggle visibility for saved CivitAI session token" title="Show saved value">
                                                     ${getSvgIcon('eye')}
                                                 </button>
                                             </div>
@@ -2195,7 +2195,7 @@ class LinkerManagerDialog extends ComfyDialog {
                                     <div class="ml-options-toggle-list">
                                         <label class="ml-options-toggle-row">
                                             <div class="ml-options-toggle-copy">
-                                                <span class="ml-options-toggle-title">Use CivitAI tRPC search <span class="ml-tooltip-badge" data-tooltip="Uses the CivitAI.red tRPC search endpoint, which is usually the closest to the live website search experience. This is typically the best first method when you want fresher or more relevant candidate models. It can benefit from your CivitAI session token to expose results visible to your logged-in account.">?</span></span>
+                                                <span class="ml-options-toggle-title">Use CivitAI tRPC search <span class="ml-tooltip-badge" data-tooltip="Main CivitAI search method. Keep this enabled unless CivitAI search stops working.">?</span></span>
                                             </div>
                                             <span class="ml-options-toggle-control">
                                                 <input id="ml-options-civitai-use-trpc-search" class="ml-options-switch-input" type="checkbox" ${tokens.civitai_use_trpc_search ? 'checked' : ''}>
@@ -2204,7 +2204,7 @@ class LinkerManagerDialog extends ComfyDialog {
                                         </label>
                                         <label class="ml-options-toggle-row">
                                             <div class="ml-options-toggle-copy">
-                                                <span class="ml-options-toggle-title">Use CivitAI HTML fallback <span class="ml-tooltip-badge" data-tooltip="Uses the regular CivitAI.red search page HTML as a fallback when tRPC does not return enough candidates. This is a broader backup path and can recover results when the API-like search path misses something.">?</span></span>
+                                                <span class="ml-options-toggle-title">Use CivitAI HTML fallback <span class="ml-tooltip-badge" data-tooltip="Backup CivitAI search. Leave this enabled to try the regular CivitAI page when the main search does not find enough results.">?</span></span>
                                             </div>
                                             <span class="ml-options-toggle-control">
                                                 <input id="ml-options-civitai-use-html-fallback" class="ml-options-switch-input" type="checkbox" ${tokens.civitai_use_html_fallback ? 'checked' : ''}>
@@ -2213,7 +2213,7 @@ class LinkerManagerDialog extends ComfyDialog {
                                         </label>
                                         <div class="ml-options-number-row">
                                             <div class="ml-options-number-copy">
-                                                <span class="ml-options-label">CivitAI Models To Inspect <span class="ml-tooltip-badge" data-tooltip="Checks the first N CivitAI results and stops early after an exact 100 percent filename match.">?</span></span>
+                                                <span class="ml-options-label">CivitAI Models To Inspect <span class="ml-tooltip-badge" data-tooltip="How many CivitAI results to check for the exact file. Higher values may find more matches, but searches can take longer. Range: 1-20.">?</span></span>
                                             </div>
                                             <input id="ml-options-civitai-limit" class="ml-options-input" type="number" min="1" max="20" step="1" value="${tokens.civitai_candidate_limit}">
                                         </div>
@@ -2230,18 +2230,18 @@ class LinkerManagerDialog extends ComfyDialog {
                                     <div class="ml-options-stack">
                                         <div class="ml-options-field">
                                             <div class="ml-options-input-row">
-                                                <label for="ml-options-hf" class="ml-options-label">HuggingFace Token <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a> <span class="ml-tooltip-badge" data-tooltip="Used for gated HuggingFace repos that need authorization during download. Create a fine-grained token with: Read access to contents of all public gated repos you can access. Write, Inference, Webhooks, Billing, Jobs, and org permissions are not needed.">?</span></label>
+                                                <label for="ml-options-hf" class="ml-options-label">HuggingFace Token <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a> <span class="ml-tooltip-badge" data-tooltip="Optional. Used to search and download files from Hugging Face repos your account can access, including gated repos. A read-only token is enough.">?</span></label>
                                                 <input id="ml-options-hf" class="ml-options-input" type="password" placeholder="Paste HuggingFace token" value="${tokens.hf_token}">
-                                                <button id="ml-options-hf-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide HuggingFace token" title="Show or hide">
+                                                <button id="ml-options-hf-toggle" type="button" class="ml-options-visibility-btn" aria-label="Toggle visibility for saved HuggingFace token" title="Show saved value">
                                                     ${getSvgIcon('eye')}
                                                 </button>
                                             </div>
                                         </div>
                                         <div class="ml-options-field">
                                             <div class="ml-options-input-row">
-                                                <label for="ml-options-brave" class="ml-options-label">Brave Search API Key <a href="https://api-dashboard.search.brave.com/app/keys" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a> <span class="ml-tooltip-badge" data-tooltip="Used as the last fallback for exact web search with queries like &quot;model.safetensors&quot; site:huggingface.co when Brave fallback is enabled.">?</span></label>
+                                                <label for="ml-options-brave" class="ml-options-label">Brave Search API Key <a href="https://api-dashboard.search.brave.com/app/keys" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a> <span class="ml-tooltip-badge" data-tooltip="Optional. Used only by the Brave fallback. It helps find Hugging Face files when Hugging Face search does not show the right repo.">?</span></label>
                                                 <input id="ml-options-brave" class="ml-options-input" type="password" placeholder="Paste Brave Search API key" value="${tokens.brave_search_api_key}">
-                                                <button id="ml-options-brave-toggle" type="button" class="ml-options-visibility-btn" aria-label="Show or hide Brave Search API key" title="Show or hide">
+                                                <button id="ml-options-brave-toggle" type="button" class="ml-options-visibility-btn" aria-label="Toggle visibility for saved Brave Search API key" title="Show saved value">
                                                     ${getSvgIcon('eye')}
                                                 </button>
                                             </div>
@@ -2252,7 +2252,7 @@ class LinkerManagerDialog extends ComfyDialog {
                                     <div class="ml-options-toggle-list">
                                         <label class="ml-options-toggle-row">
                                             <div class="ml-options-toggle-copy">
-                                                <span class="ml-options-toggle-title">Use HuggingFace API repo search <span class="ml-tooltip-badge" data-tooltip="Uses the official HuggingFace models API with search queries derived from the filename, then inspects candidate repositories recursively. This is the most direct and preferred method, but it depends on HuggingFace search returning the right repository candidates.">?</span></span>
+                                                <span class="ml-options-toggle-title">Use HuggingFace API repo search <span class="ml-tooltip-badge" data-tooltip="Main Hugging Face search method. It searches by filename, then checks matching repos for the actual file.">?</span></span>
                                             </div>
                                             <span class="ml-options-toggle-control">
                                                 <input id="ml-options-hf-use-api-search" class="ml-options-switch-input" type="checkbox" ${tokens.hf_use_api_search ? 'checked' : ''}>
@@ -2261,7 +2261,7 @@ class LinkerManagerDialog extends ComfyDialog {
                                         </label>
                                         <label class="ml-options-toggle-row">
                                             <div class="ml-options-toggle-copy">
-                                                <span class="ml-options-toggle-title">Use Comfy-Org fallback <span class="ml-tooltip-badge" data-tooltip="Skips global search and directly inspects repositories under Comfy-Org. This is useful for ComfyUI-oriented repackaged models that may not be discoverable by filename through the standard HuggingFace search API.">?</span></span>
+                                                <span class="ml-options-toggle-title">Use Comfy-Org fallback <span class="ml-tooltip-badge" data-tooltip="Checks Comfy-Org repositories directly. Useful for ComfyUI model packs that normal Hugging Face search may miss.">?</span></span>
                                             </div>
                                             <span class="ml-options-toggle-control">
                                                 <input id="ml-options-hf-use-comfy-org-fallback" class="ml-options-switch-input" type="checkbox" ${tokens.hf_use_comfy_org_fallback ? 'checked' : ''}>
@@ -2270,7 +2270,7 @@ class LinkerManagerDialog extends ComfyDialog {
                                         </label>
                                         <label class="ml-options-toggle-row">
                                             <div class="ml-options-toggle-copy">
-                                                <span class="ml-options-toggle-title">Use Brave fallback <span class="ml-tooltip-badge" data-tooltip="Uses Brave Search API as a last-resort web search with an exact query like &quot;model.safetensors&quot; site:huggingface.co. The results are still verified against the HuggingFace repository tree before a match is accepted. This helps when HuggingFace search itself does not surface the correct repository.">?</span></span>
+                                                <span class="ml-options-toggle-title">Use Brave fallback <span class="ml-tooltip-badge" data-tooltip="Last-resort web search for the exact filename on huggingface.co. Results are still checked before Model Linker offers them.">?</span></span>
                                             </div>
                                             <span class="ml-options-toggle-control">
                                                 <input id="ml-options-hf-use-brave-fallback" class="ml-options-switch-input" type="checkbox" ${tokens.hf_use_brave_fallback ? 'checked' : ''}>
@@ -2347,7 +2347,7 @@ class LinkerManagerDialog extends ComfyDialog {
             button.innerHTML = getVisibilityIcon(visible);
             button.style.color = visible ? 'var(--ml-text)' : 'var(--ml-text-muted)';
             button.setAttribute('aria-pressed', visible ? 'true' : 'false');
-            button.setAttribute('title', visible ? 'Hide value' : 'Show value');
+            button.setAttribute('title', visible ? 'Hide saved value' : 'Show saved value');
         };
 
         const bindVisibilityToggle = (input, button) => {
@@ -2719,7 +2719,7 @@ class LinkerManagerDialog extends ComfyDialog {
         try {
             this.queueToggleIcon = $el("button", {
                 id: "queue-toggle-icon",
-                title: "Collapse queue",
+                title: "Hide queued selections",
                 onclick: () => this.toggleQueueCollapsed()
             }, [document.createTextNode('⮜')]);
             body.appendChild(this.queueToggleIcon);
@@ -2934,10 +2934,10 @@ class LinkerManagerDialog extends ComfyDialog {
         if (!this.queueToggleIcon) return;
         if (this.queueCollapsed) {
             this.queueToggleIcon.textContent = '⮞';
-            this.queueToggleIcon.title = 'Expand queue';
+            this.queueToggleIcon.title = 'Show queued selections';
         } else {
             this.queueToggleIcon.textContent = '⮜';
-            this.queueToggleIcon.title = 'Collapse queue';
+            this.queueToggleIcon.title = 'Hide queued selections';
         }
     }
 
@@ -3809,7 +3809,7 @@ class LinkerManagerDialog extends ComfyDialog {
         html += `</div>`;
         const locateId = `locate-${missing.node_id}-${missing.widget_index}`;
         const nodeChipClasses = missing.is_top_level !== false ? 'ml-node-chip is-locatable' : 'ml-node-chip';
-        const nodeChipTitle = missing.is_top_level !== false ? 'Click to locate this node in the graph' : '';
+        const nodeChipTitle = missing.is_top_level !== false ? 'Center this node in the ComfyUI graph.' : '';
 
         html += `<div class="ml-card-subtitle">`;
         if (missing.category) {
@@ -3844,7 +3844,7 @@ class LinkerManagerDialog extends ComfyDialog {
         html += `<div class="ml-combo-row">`;
         html += `<label class="ml-combo-label">Model</label>`;
         html += `<input id="combo-input-${comboId}" class="ml-combo-input" type="text" placeholder="Type to filter local models...">`;
-        html += `<button id="combo-refresh-${comboId}" title="Refresh model list" class="ml-btn ml-btn-secondary ml-btn-sm ml-btn-icon-only">⟳</button>`;
+        html += `<button id="combo-refresh-${comboId}" title="Reload local model list" class="ml-btn ml-btn-secondary ml-btn-sm ml-btn-icon-only">⟳</button>`;
         html += `</div>`;
         html += `<div id="combo-list-${comboId}" class="ml-combo-list"></div>`;
         html += `</div>`;
@@ -5084,7 +5084,7 @@ class ModelLinker {
                 new ComfyButton({
                     icon: "link-variant",
                     action: () => this.openLinkerManager(),
-                    tooltip: "Model Linker - Resolve missing models (Ctrl+Shift+L)",
+                    tooltip: "Open Model Linker to find or download missing workflow models. Shortcut: Ctrl+Shift+L.",
                     content: "Model Linker",
                     classList: "comfyui-button comfyui-menu-mobile-collapse"
                 }).element
@@ -5164,7 +5164,7 @@ class ModelLinker {
             autoResolveBtn.id = 'model-linker-btn-container'; // Use this ID to prevent duplicate injection
             autoResolveBtn.className = 'ml-popup-auto-resolve-btn';
             autoResolveBtn.textContent = '🔗 Auto-resolve 100%';
-            autoResolveBtn.title = 'Automatically link models with 100% confidence matches';
+            autoResolveBtn.title = 'Link every missing model that already has an exact local match, then open Model Linker for the rest.';
             autoResolveBtn.addEventListener('click', async () => {
                 await this.handleAutoResolveInPopup(dialog, autoResolveBtn);
             });
@@ -5494,7 +5494,7 @@ class ModelLinker {
         this.linkerButton = $el("button", {
             id: this.buttonId,
             textContent: "🔗 Model Linker",
-            title: "Open Model Linker to resolve missing models (Ctrl+Shift+L)",
+            title: "Open Model Linker to find or download missing workflow models. Shortcut: Ctrl+Shift+L.",
             onclick: () => {
                 this.openLinkerManager();
             },
