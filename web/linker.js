@@ -4027,6 +4027,30 @@ class LinkerManagerDialog extends ComfyDialog {
         );
     }
 
+    getMissingModelsListLayout(missingModels = []) {
+        const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+        const textWidth = (value, charPx) => Math.ceil(String(value || '').length * charPx);
+
+        let modelPx = 180;
+        let typePx = 66;
+        for (const missing of missingModels) {
+            const filename = this.getMissingFilename(missing);
+            const nodeLabel = `${missing.subgraph_name || missing.node_type || 'Node'} #${missing.node_id || ''}`;
+            const typeLabel = missing.category ? this.getCategoryDisplayName(missing.category) : 'unknown';
+            modelPx = Math.max(
+                modelPx,
+                textWidth(filename, 7.2) + 12,
+                textWidth(nodeLabel, 5.5) + 12
+            );
+            typePx = Math.max(typePx, textWidth(typeLabel, 5.8) + 18);
+        }
+
+        return {
+            modelPx: clamp(modelPx, 180, 430),
+            typePx: clamp(typePx, 66, 120)
+        };
+    }
+
     renderMissingModelsBrowser(missingModels, selectedKey, totalMissing, activeCount, hasAny100Match) {
         const stats = this.getMissingModelSummaryStats(missingModels);
         const detailIndex = missingModels.findIndex(missing => this.getMissingModelKey(missing) === selectedKey);
@@ -4034,9 +4058,11 @@ class LinkerManagerDialog extends ComfyDialog {
         const activeHint = activeCount > 0
             ? `${activeCount} downloading`
             : (hasAny100Match ? 'Auto-link ready for exact matches' : 'Review matches or search online');
+        const listLayout = this.getMissingModelsListLayout(missingModels);
+        const listStyle = `--ml-missing-model-col:${listLayout.modelPx}px;--ml-missing-type-col:${listLayout.typePx}px;`;
 
         let html = `
-            <div class="ml-missing-browser">
+            <div class="ml-missing-browser" style="${listStyle}">
                 <section class="ml-missing-list-pane" aria-label="Missing model list">
                     <div class="ml-missing-list-toolbar">
                         <div>

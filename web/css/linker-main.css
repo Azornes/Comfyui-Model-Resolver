@@ -291,7 +291,7 @@
 .ml-missing-list-head,
 #model-linker-modal .ml-missing-list-row {
     display: grid;
-    grid-template-columns: 18px minmax(220px, 1.7fr) minmax(66px, 112px) minmax(150px, 1fr) 106px;
+    grid-template-columns: 18px minmax(170px, var(--ml-missing-model-col, 280px)) minmax(66px, var(--ml-missing-type-col, 112px)) minmax(150px, 1fr) 106px;
     align-items: center;
     gap: 8px;
 }
