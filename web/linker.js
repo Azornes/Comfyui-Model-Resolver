@@ -4173,13 +4173,16 @@ class LinkerManagerDialog extends ComfyDialog {
         const urnDownloadId = `urn-download-${missing.node_id}-${missing.widget_index}`;
         
         if (perfectMatches.length > 0) {
-            // Has perfect local match - download not needed
+            // Has perfect local match - download not needed, but allow online re-check.
             html += `<div class="ml-download-section">`;
             html += `<div class="ml-status-inline">`;
             html += this.getStatusBadge('Not needed', 'neutral');
             html += `<span class="ml-download-info">Exact local match available</span>`;
             html += `</div>`;
+            html += this.renderSearchControls(missing, { buttonText: 'Search Online' });
+            html += this.renderDownloadTargetControls(missing, missing.category || 'checkpoints');
             html += `</div>`;
+            html += `<div id="search-results-${missing.node_id}-${missing.widget_index}" class="ml-search-results"></div>`;
         } else if (downloadSource && downloadSource.url) {
             html += this.renderKnownDownloadPanel(missing, downloadSource);
         } else if (missing.is_urn) {
