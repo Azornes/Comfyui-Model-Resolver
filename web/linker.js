@@ -2198,7 +2198,7 @@ class LinkerManagerDialog extends ComfyDialog {
             'upscale_models': 'upscale_model',
             'latent_upscale_models': 'latent_upscale_model',
             'diffusion_models': 'unet',
-            'text_encoders': 'text_encoders (also scans clip)',
+            'text_encoders': 'text encoders',
             'clip': 'clip',
             'clip_vision': 'clip_vision',
             'hypernetworks': 'hypernetwork'

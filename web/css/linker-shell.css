@@ -25,10 +25,10 @@
     resize: both;
     z-index: var(--ml-z-dialog);
     color: var(--input-text, #fff);
-    background: var(--comfy-menu-bg, #202020);
-    border: 2px solid var(--border-color, #555);
-    border-radius: var(--ml-ui-radius-sm);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
+    background: var(--ml-bg, #121212);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 7px;
+    box-shadow: 0 18px 46px rgba(0, 0, 0, 0.42);
 }
 
 .ml-context-menu {
@@ -54,9 +54,10 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: var(--ml-spacing-5);
-    border-bottom: 1px solid var(--border-color);
-    background: var(--comfy-menu-bg, #202020);
+    min-height: 34px;
+    padding: 4px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+    background: rgba(255, 255, 255, 0.018);
 }
 
 .ml-dialog-brand,
@@ -71,19 +72,20 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    height: var(--ml-spacing-24);
-    padding: 0 var(--ml-spacing-6);
-    opacity: 0.9;
+    height: 24px;
+    padding: 0 7px;
+    opacity: 0.82;
     cursor: grab;
     user-select: none;
-    border: 1px solid var(--border-color);
-    border-radius: var(--ml-radius-md);
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.025);
 }
 
 .ml-dialog-title {
     margin: 0;
     color: var(--input-text);
-    font-size: var(--ml-font-2xl);
+    font-size: 14px;
     font-weight: 600;
 }
 
@@ -93,36 +95,34 @@
     justify-content: center;
     color: var(--input-text);
     cursor: pointer;
-    border-radius: var(--ml-radius-md);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid rgba(255, 255, 255, 0.11);
 }
 
 .ml-window-btn--fullscreen {
-    min-width: var(--ml-spacing-32);
-    height: 30px;
-    padding: var(--ml-spacing-2) var(--ml-spacing-8);
-    font-size: var(--ml-font-xl);
-    background: none;
-    border: 1px solid var(--border-color);
+    min-width: 28px;
+    height: 26px;
+    padding: 0 7px;
+    font-size: 13px;
 }
 
 .ml-window-btn--close {
-    width: 30px;
-    height: 30px;
+    width: 26px;
+    height: 26px;
     padding: 0;
-    font-size: var(--ml-font-4xl);
-    background: none;
-    border: none;
+    font-size: 18px;
 }
 
 #model-linker-body {
     display: flex;
     gap: var(--ml-spacing-12);
-    padding: var(--ml-spacing-10) var(--ml-spacing-5) var(--ml-spacing-5);
+    padding: 8px 6px 6px;
     flex: 1;
     min-height: 0;
     align-items: stretch;
     position: relative;
-    background: var(--ml-bg, #222);
+    background: var(--ml-bg, #121212);
 }
 
 #model-linker-content {
