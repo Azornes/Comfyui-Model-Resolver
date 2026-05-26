@@ -1127,7 +1127,7 @@ class ModelLinkerExtension:
                             search_tasks.append(
                                 asyncio.to_thread(search_civitai_source_task)
                             )
-                        if search_lora_manager_archive_source and not is_urn:
+                        if search_lora_manager_archive_source and filename:
                             search_tasks.append(
                                 asyncio.to_thread(
                                     search_lora_manager_archive_source_task

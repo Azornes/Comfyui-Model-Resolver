@@ -233,7 +233,7 @@ class LinkerManagerDialog extends ComfyDialog {
         }
 
         const sources = ['local', 'huggingface', 'civitai'];
-        if (!missing.is_urn && this.isSourceAvailable('lora_manager_archive')) {
+        if (this.isSourceAvailable('lora_manager_archive')) {
             sources.push('lora_manager_archive');
         }
         return sources;
@@ -402,58 +402,6 @@ class LinkerManagerDialog extends ComfyDialog {
         this.syncSearchSourceUi(missing, container);
     }
 
-    renderDownloadSourceSection(missing, downloadSource) {
-        const filename = missing.original_path?.split('/').pop()?.split('\\').pop() || '';
-        const isFromWorkflow = downloadSource.url_source === 'workflow';
-        const isCivitaiSource = downloadSource.source === 'civitai';
-        const sourceLabels = {
-            popular: 'Popular Models',
-            model_list: 'Model Database',
-            huggingface: 'HuggingFace',
-            civitai: 'CivitAI',
-            workflow: 'Workflow'
-        };
-        const sourceLabel = isFromWorkflow ? 'Workflow' : (sourceLabels[downloadSource.source] || 'Online');
-        const downloadFilename = downloadSource.filename || filename;
-        const formattedDownloadName = this.formatFilename(downloadFilename, 45);
-        const confidenceDisplay = typeof downloadSource.confidence === 'number'
-            ? `${Math.round(downloadSource.confidence)}% match`
-            : '';
-
-        let sizeDisplay = '';
-        if (downloadSource.size) {
-            sizeDisplay = typeof downloadSource.size === 'number'
-                ? this.formatBytes(downloadSource.size)
-                : downloadSource.size;
-        }
-
-        const modelCardUrl = downloadSource.model_url || this.getModelCardUrl(downloadSource.url);
-
-        let html = `<div class="ml-download-section">`;
-        html += `<div class="ml-download-actions">`;
-        html += `<button id="download-${missing.node_id}-${missing.widget_index}" class="ml-btn ml-btn-download ml-btn-sm ml-btn-download-main">`;
-        html += `<span class="ml-btn-icon">☁</span> Download${sizeDisplay ? ` (${sizeDisplay})` : ''}`;
-        html += `</button>`;
-        if (isCivitaiSource && modelCardUrl) {
-            html += `<a href="${modelCardUrl}" target="_blank" rel="noopener noreferrer" class="ml-btn ml-btn-secondary ml-btn-sm ml-btn-download-side">Open on CivitAI</a>`;
-        }
-        html += `</div>`;
-        html += `<div class="ml-download-info">`;
-        html += `<span class="ml-download-source">${isFromWorkflow ? 'URL from workflow' : sourceLabel}</span>`;
-        if (confidenceDisplay) {
-            html += ` <span class="ml-chip">${confidenceDisplay}</span>`;
-        }
-        if (modelCardUrl) {
-            html += `<br><a href="${modelCardUrl}" target="_blank" rel="noopener noreferrer" class="ml-link" title="Open the model page for this download.">${formattedDownloadName.display}</a>${sizeDisplay ? ` <span class="ml-download-filesize">(${sizeDisplay})</span>` : ''}`;
-        } else {
-            html += `<br><span title="${formattedDownloadName.full}">${formattedDownloadName.display}</span>${sizeDisplay ? ` <span class="ml-download-filesize">(${sizeDisplay})</span>` : ''}`;
-        }
-        html += `</div>`;
-        html += this.renderDownloadTargetControls(missing, downloadSource.directory || downloadSource.category || 'checkpoints');
-        html += `</div>`;
-        return html;
-    }
-
     formatSearchResultSize(result = {}) {
         if (result.size === 0) return '0 B';
         if (!result.size) return '';
@@ -523,6 +471,22 @@ class LinkerManagerDialog extends ComfyDialog {
             category: downloadSource.directory || downloadSource.category || missing.category || 'checkpoints',
             openUrl: modelUrl
         };
+    }
+
+    renderKnownDownloadPanel(missing, downloadSource) {
+        let html = `<div class="ml-download-section">`;
+        html += this.renderSearchControls(missing, { buttonText: 'Search Again' });
+        html += this.renderDownloadTargetControls(
+            missing,
+            downloadSource.directory || downloadSource.category || missing.category || 'checkpoints'
+        );
+        html += `</div>`;
+
+        const downloadSourceRow = this.getDownloadSourceTableRow(missing, downloadSource);
+        html += `<div id="search-results-${missing.node_id}-${missing.widget_index}" class="ml-search-results" style="display: block;">`;
+        html += this.renderSearchResultsTable(downloadSourceRow ? [downloadSourceRow] : []);
+        html += `</div>`;
+        return html;
     }
 
     renderSearchResultsTable(rows = []) {
@@ -3864,39 +3828,7 @@ class LinkerManagerDialog extends ComfyDialog {
         sortedMissingModels.forEach((missing, missingIndex) => {
             this.wireLocalMatchButtons(container, missing, missingIndex);
             
-            // Attach download button listener
-            const downloadBtnId = `download-${missing.node_id}-${missing.widget_index}`;
-            const downloadBtn = container.querySelector(`#${downloadBtnId}`);
-            if (downloadBtn && missing.download_source) {
-                downloadBtn.addEventListener('click', () => {
-                    this.downloadModel(missing);
-                });
-            }
-
-            const searchResultsId = `search-results-${missing.node_id}-${missing.widget_index}`;
-            const searchResultsDiv = container.querySelector(`#${searchResultsId}`);
-            if (searchResultsDiv) {
-                this.wireSearchDownloadButtons(searchResultsDiv, missing);
-            }
-            
-            // Attach search button listener
-            const searchBtnId = `search-${missing.node_id}-${missing.widget_index}`;
-            const searchBtn = container.querySelector(`#${searchBtnId}`);
-            if (searchBtn) {
-                searchBtn.addEventListener('click', () => {
-                    this.searchOnline(missing);
-                });
-            }
-
-            const sourceSelect = container.querySelector(`#search-source-select-${missing.node_id}-${missing.widget_index}`);
-            if (sourceSelect) {
-                sourceSelect.addEventListener('change', () => {
-                    this.setSearchSource(missing, sourceSelect.value, container);
-                });
-                this.syncSearchSourceUi(missing, container);
-            }
-
-            this.wireDownloadTargetAutocomplete(container, missing);
+            this.wireDownloadSearchPanel(container, missing);
             
             // Wire locate chip (only for top-level nodes)
             const locateId = `locate-${missing.node_id}-${missing.widget_index}`;
@@ -4142,17 +4074,7 @@ class LinkerManagerDialog extends ComfyDialog {
             html += `</div>`;
             html += `</div>`;
         } else if (downloadSource && downloadSource.url) {
-            html += `<div class="ml-download-section">`;
-            html += this.renderSearchControls(missing, { buttonText: 'Search Again' });
-            html += this.renderDownloadTargetControls(
-                missing,
-                downloadSource.directory || downloadSource.category || missing.category || 'checkpoints'
-            );
-            html += `</div>`;
-            const downloadSourceRow = this.getDownloadSourceTableRow(missing, downloadSource);
-            html += `<div id="search-results-${missing.node_id}-${missing.widget_index}" class="ml-search-results" style="display: block;">`;
-            html += this.renderSearchResultsTable(downloadSourceRow ? [downloadSourceRow] : []);
-            html += `</div>`;
+            html += this.renderKnownDownloadPanel(missing, downloadSource);
         } else if (missing.is_urn) {
             html += `<div id="${urnDownloadId}" class="ml-download-section">`;
             html += `<div class="ml-download-info">Resolving CivitAI download for this URN...</div>`;
@@ -4809,11 +4731,14 @@ class LinkerManagerDialog extends ComfyDialog {
         const selectedSourceLabel = this.getSearchSourceLabel(selectedSource);
         const sourceIds = this.getSearchSourcesForSelection(selectedSource, missing);
         
-        // For URNs, use the CivitAI model name for searching instead of the URN itself
+        // For URNs, use the resolved file/model name for searching instead of the URN itself
         // and pass the URN type as category (CivitAI expects specific type names)
         if (missing.is_urn) {
-            if (missing.civitai_info?.model_name) {
-                filename = missing.civitai_info.model_name;
+            const urnSearchName = missing.civitai_info?.expected_filename
+                || missing.download_source?.filename
+                || missing.civitai_info?.model_name;
+            if (urnSearchName) {
+                filename = urnSearchName;
             }
             // Pass URN type directly - CivitAPI expects types like 'Upscaler', 'Checkpoint'
             const urnType = missing.urn_type || '';
@@ -4906,8 +4831,10 @@ class LinkerManagerDialog extends ComfyDialog {
             let hadError = false;
 
             const searchPromises = sourceIds.map(async (source) => {
+                const sourceIsUrn = isUrn && source !== 'lora_manager_archive';
                 const searchData = {
                     ...baseSearchData,
+                    is_urn: sourceIsUrn,
                     sources: [source]
                 };
 
@@ -5061,7 +4988,7 @@ class LinkerManagerDialog extends ComfyDialog {
 
                 const downloadContainerId = loadingElementId.replace('urn-loading-', 'urn-download-');
                 const downloadEl = document.getElementById(downloadContainerId);
-                if (downloadEl && data.civitai) {
+                if (downloadEl && data.civitai?.download_url) {
                     const missing = this.missingModels.find(m =>
                         `urn-download-${m.node_id}-${m.widget_index}` === downloadContainerId
                     );
@@ -5088,18 +5015,10 @@ class LinkerManagerDialog extends ComfyDialog {
                             base_model: data.civitai.base_model,
                             tags: data.civitai.tags || []
                         };
-                        downloadEl.outerHTML = this.renderDownloadSourceSection(missing, missing.download_source);
-
-                        const refreshedBtn = this.contentElement?.querySelector(`#download-${missing.node_id}-${missing.widget_index}`);
-                        if (refreshedBtn) {
-                            refreshedBtn.addEventListener('click', () => {
-                                this.downloadModel(missing);
-                            });
-                        }
-                        if (this.contentElement) {
-                            this.wireDownloadTargetAutocomplete(this.contentElement, missing);
-                        }
-        this.refreshUrnLocalMatches(missing);
+                        const downloadParent = downloadEl.parentElement;
+                        downloadEl.outerHTML = this.renderKnownDownloadPanel(missing, missing.download_source);
+                        this.wireDownloadSearchPanel(downloadParent || this.contentElement, missing);
+                        this.refreshUrnLocalMatches(missing);
                     }
                 } else if (downloadEl) {
                     downloadEl.innerHTML = `<div class="ml-download-info">Unable to resolve direct download for this URN.</div>`;
@@ -5143,6 +5062,35 @@ class LinkerManagerDialog extends ComfyDialog {
                 this.downloadFromSearch(missing, url, filename, category, btn);
             });
         });
+    }
+
+    wireDownloadSearchPanel(container, missing) {
+        if (!container) return;
+
+        const searchResultsId = `search-results-${missing.node_id}-${missing.widget_index}`;
+        const searchResultsDiv = container.querySelector(`#${searchResultsId}`);
+        if (searchResultsDiv) {
+            this.wireSearchDownloadButtons(searchResultsDiv, missing);
+        }
+
+        const searchBtn = container.querySelector(`#search-${missing.node_id}-${missing.widget_index}`);
+        if (searchBtn && searchBtn.dataset.mlSearchBound !== 'true') {
+            searchBtn.dataset.mlSearchBound = 'true';
+            searchBtn.addEventListener('click', () => {
+                this.searchOnline(missing);
+            });
+        }
+
+        const sourceSelect = container.querySelector(`#search-source-select-${missing.node_id}-${missing.widget_index}`);
+        if (sourceSelect && sourceSelect.dataset.mlSearchSourceBound !== 'true') {
+            sourceSelect.dataset.mlSearchSourceBound = 'true';
+            sourceSelect.addEventListener('change', () => {
+                this.setSearchSource(missing, sourceSelect.value, container);
+            });
+            this.syncSearchSourceUi(missing, container);
+        }
+
+        this.wireDownloadTargetAutocomplete(container, missing);
     }
 
     /**
