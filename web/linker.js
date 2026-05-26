@@ -433,6 +433,66 @@ class LinkerManagerDialog extends ComfyDialog {
         return [nameHtml, versionHtml].filter(Boolean).join(' ');
     }
 
+    getSearchSourceIconName(sourceKey) {
+        const icons = {
+            popular: 'star',
+            'model-list': 'database',
+            huggingface: 'huggingface',
+            civitai: 'civitai',
+            'lora-archive': 'archive',
+            'lora-manager-archive': 'archive',
+            local: 'database',
+            'workflow-url': 'link',
+            workflow: 'link',
+            online: 'globe'
+        };
+        return icons[sourceKey] || 'globe';
+    }
+
+    renderSearchSourcePill(sourceKey, sourceLabel) {
+        const iconName = this.getSearchSourceIconName(sourceKey);
+        const iconHtml = getSvgIcon(iconName, 'currentColor', 'ml-search-source-icon');
+        return `
+            <span class="ml-search-source-pill ml-search-source-${sourceKey}" title="${this.escapeHtml(sourceLabel)}">
+                ${iconHtml}
+                <span>${this.escapeHtml(sourceLabel)}</span>
+            </span>
+        `;
+    }
+
+    getSearchResultsTableLayout(rows = []) {
+        const textWidth = (value, charPx = 6, minPx = 40, maxPx = 180) => {
+            const length = String(value || '').length;
+            return Math.max(minPx, Math.min(maxPx, Math.ceil(length * charPx)));
+        };
+
+        const maxSourceLabel = rows.reduce(
+            (max, row) => Math.max(max, String(row.sourceLabel || row.sourceKey || '').length),
+            'Source'.length
+        );
+        const maxMatchLabel = rows.reduce(
+            (max, row) => Math.max(max, String(row.match?.label || '').length),
+            'Match'.length
+        );
+        const maxSizeLabel = rows.reduce(
+            (max, row) => Math.max(max, String(row.size || '-').length),
+            'Size'.length
+        );
+        const maxActions = rows.reduce((max, row) => {
+            const count = (row.downloadUrl ? 1 : 0) + (row.openUrl ? 1 : 0);
+            return Math.max(max, count);
+        }, 1);
+
+        const sourcePx = textWidth('x'.repeat(maxSourceLabel), 6, 34, 100) + 52;
+        const matchPx = textWidth('x'.repeat(maxMatchLabel), 7, 34, 76) + 22;
+        const sizePx = textWidth('x'.repeat(maxSizeLabel), 6.5, 28, 72) + 22;
+        const actionsPx = Math.max(60, (maxActions * 24) + (Math.max(0, maxActions - 1) * 6) + 22);
+        const modelMinPx = 210;
+        const tableMinPx = Math.ceil(sourcePx + matchPx + sizePx + actionsPx + modelMinPx);
+
+        return { sourcePx, matchPx, sizePx, actionsPx, tableMinPx };
+    }
+
     formatSearchResultSize(result = {}) {
         if (result.size === 0) return '0 B';
         if (!result.size) return '';
@@ -473,6 +533,7 @@ class LinkerManagerDialog extends ComfyDialog {
             model_list: 'Local Database',
             huggingface: 'HuggingFace',
             civitai: 'CivitAI',
+            lora_manager_archive: 'LoRA Archive',
             workflow: 'Workflow',
             online: 'Online'
         };
@@ -530,10 +591,18 @@ class LinkerManagerDialog extends ComfyDialog {
 
     renderSearchResultsTable(rows = []) {
         if (!rows.length) return '';
+        const layout = this.getSearchResultsTableLayout(rows);
+        const tableStyle = [
+            `--ml-source-col:${layout.sourcePx}px`,
+            `--ml-match-col:${layout.matchPx}px`,
+            `--ml-size-col:${layout.sizePx}px`,
+            `--ml-actions-col:${layout.actionsPx}px`,
+            `--ml-table-min:${layout.tableMinPx}px`
+        ].join(';');
 
         let html = `
             <div class="ml-search-results-table-wrap">
-                <table class="ml-search-results-table">
+                <table class="ml-search-results-table" style="${tableStyle}">
                     <colgroup>
                         <col class="ml-search-col-source">
                         <col class="ml-search-col-model">
@@ -555,7 +624,8 @@ class LinkerManagerDialog extends ComfyDialog {
 
         for (const row of rows) {
             const sourceKey = String(row.sourceKey || '').replace(/[^a-z0-9_-]/gi, '');
-            const sourceLabel = this.escapeHtml(row.sourceLabel || row.sourceKey || 'Source');
+            const sourceLabel = row.sourceLabel || row.sourceKey || 'Source';
+            const sourcePill = this.renderSearchSourcePill(sourceKey, sourceLabel);
             const rawModel = row.model || row.filename || 'Model';
             const rawVersion = row.version || '';
             const model = this.escapeHtml(rawModel);
@@ -598,7 +668,7 @@ class LinkerManagerDialog extends ComfyDialog {
 
             html += `
                 <tr>
-                    <td><span class="ml-search-source-pill ml-search-source-${sourceKey}">${sourceLabel}</span></td>
+                    <td>${sourcePill}</td>
                     <td>
                         <div class="ml-search-result-model" title="${modelTitle}">
                             <span>${modelHtml}</span>
