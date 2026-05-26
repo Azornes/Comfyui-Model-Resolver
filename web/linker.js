@@ -2007,8 +2007,8 @@ class LinkerManagerDialog extends ComfyDialog {
             try { localStorage.setItem('model_linker_modal_fullscreen', '1'); } catch (e) {}
         } else {
             // Restore centered sizing
-            el.style.maxWidth = '95vw';
-            el.style.maxHeight = '95vh';
+            el.style.maxWidth = '100vw';
+            el.style.maxHeight = '100vh';
             el.style.borderRadius = '8px';
             el.style.resize = 'both';
             // Restore saved pre-FS size if available
