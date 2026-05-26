@@ -363,53 +363,119 @@ class LinkerManagerDialog extends ComfyDialog {
         return html;
     }
 
-    formatSearchResultMeta(result = {}, options = {}) {
-        const filename = options.filename || result.filename || '';
-        const secondaryText = options.secondaryText || '';
-        const confidenceValue = result.confidence;
-        const confidenceDisplay = typeof confidenceValue === 'number'
-            ? `${Math.round(confidenceValue)}% match`
-            : '';
-        const sizeDisplay = result.size
-            ? (typeof result.size === 'number' ? this.formatBytes(result.size) : result.size)
-            : '';
-
-        let html = `<div class="ml-meta-line">`;
-        if (filename) {
-            html += `<span class="ml-chip">${filename}</span>`;
-        }
-        if (confidenceDisplay) {
-            html += ` <span class="ml-chip">${confidenceDisplay}</span>`;
-        }
-        if (sizeDisplay) {
-            html += ` <span class="ml-download-size">[${sizeDisplay}]</span>`;
-        }
-        if (secondaryText) {
-            html += ` <span class="ml-meta-secondary">${secondaryText}</span>`;
-        }
-        html += `</div>`;
-        return html;
+    formatSearchResultSize(result = {}) {
+        if (result.size === 0) return '0 B';
+        if (!result.size) return '';
+        return typeof result.size === 'number' ? this.formatBytes(result.size) : String(result.size);
     }
 
-    renderOnlineSearchResultCard({
-        statusClass,
-        title,
-        result,
-        filename,
-        secondaryText = '',
-        actionHtml = '',
-        topLineHtml = ''
-    }) {
-        let html = `<div class="ml-status ${statusClass} ml-status-card-vertical">`;
-        html += `<strong>${title}</strong>`;
-        if (topLineHtml) {
-            html += topLineHtml;
+    getSearchResultMatchDisplay(result = {}, fallbackLabel = 'Match', fallbackClass = 'neutral') {
+        const matchType = String(result.match_type || '').toLowerCase();
+        if (matchType === 'exact') {
+            return { label: 'Exact', className: 'strong' };
         }
-        html += this.formatSearchResultMeta(result, { filename, secondaryText });
-        if (actionHtml) {
-            html += `<div class="ml-action-row">${actionHtml}</div>`;
+
+        const confidence = Number(result.confidence);
+        if (Number.isFinite(confidence) && confidence > 0) {
+            const className = confidence >= 95 ? 'strong' : (confidence >= 70 ? 'medium' : 'weak');
+            return { label: `${Math.round(confidence)}%`, className };
         }
-        html += `</div>`;
+
+        if (matchType === 'partial') {
+            return { label: 'Partial', className: 'medium' };
+        }
+        if (matchType === 'fuzzy' || matchType === 'similar') {
+            return { label: matchType === 'fuzzy' ? 'Fuzzy' : 'Similar', className: 'medium' };
+        }
+
+        return { label: fallbackLabel, className: fallbackClass };
+    }
+
+    renderSearchResultsTable(rows = []) {
+        if (!rows.length) return '';
+
+        let html = `
+            <div class="ml-search-results-table-wrap">
+                <table class="ml-search-results-table">
+                    <colgroup>
+                        <col class="ml-search-col-source">
+                        <col class="ml-search-col-model">
+                        <col class="ml-search-col-match">
+                        <col class="ml-search-col-size">
+                        <col class="ml-search-col-actions">
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th>Source</th>
+                            <th>Model</th>
+                            <th>Match</th>
+                            <th>Size</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        for (const row of rows) {
+            const sourceKey = String(row.sourceKey || '').replace(/[^a-z0-9_-]/gi, '');
+            const sourceLabel = this.escapeHtml(row.sourceLabel || row.sourceKey || 'Source');
+            const model = this.escapeHtml(row.model || row.filename || 'Model');
+            const secondary = row.secondary ? this.escapeHtml(row.secondary) : '';
+            const filename = row.filename && row.filename !== row.model ? this.escapeHtml(row.filename) : '';
+            const match = row.match || { label: 'Match', className: 'neutral' };
+            const matchClass = String(match.className || 'neutral').replace(/[^a-z0-9_-]/gi, '');
+            const size = this.escapeHtml(row.size || '-');
+            const downloadUrl = row.downloadUrl || '';
+            const openUrl = row.openUrl || '';
+            const downloadFilename = row.downloadFilename || row.filename || row.model || 'model';
+            const category = row.category || '';
+
+            let actions = '';
+            if (downloadUrl) {
+                actions += `
+                    <button class="search-download-btn ml-btn ml-btn-secondary ml-btn-sm ml-search-result-action-btn"
+                        title="Download"
+                        aria-label="Download ${this.escapeHtml(downloadFilename)}"
+                        data-url="${this.escapeHtml(downloadUrl)}"
+                        data-filename="${this.escapeHtml(downloadFilename)}"
+                        data-category="${this.escapeHtml(category)}">${getSvgIcon('download')}</button>
+                `;
+            }
+            if (openUrl) {
+                actions += `
+                    <a href="${this.escapeHtml(openUrl)}"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="ml-btn ml-btn-secondary ml-btn-sm ml-search-result-action-btn"
+                        title="Open model page"
+                        aria-label="Open model page">${getSvgIcon('externalLink')}</a>
+                `;
+            }
+            if (!actions) {
+                actions = '<span class="ml-search-result-empty">-</span>';
+            }
+
+            html += `
+                <tr>
+                    <td><span class="ml-search-source-pill ml-search-source-${sourceKey}">${sourceLabel}</span></td>
+                    <td>
+                        <div class="ml-search-result-model" title="${model}">
+                            <span>${model}</span>
+                            ${secondary || filename ? `<small>${secondary || filename}</small>` : ''}
+                        </div>
+                    </td>
+                    <td><span class="ml-search-match ml-search-match-${matchClass}">${this.escapeHtml(match.label)}</span></td>
+                    <td class="ml-search-size">${size}</td>
+                    <td><div class="ml-search-result-actions">${actions}</div></td>
+                </tr>
+            `;
+        }
+
+        html += `
+                    </tbody>
+                </table>
+            </div>
+        `;
         return html;
     }
 
@@ -4934,99 +5000,104 @@ class LinkerManagerDialog extends ComfyDialog {
             return;
         }
 
-        let html = `${progressHtml}<div class="ml-search-results-stack">`;
+        const rows = [];
 
+        let statusHtml = '';
         if (!hasActiveProgress && state?.lastAttemptError) {
-            html += this.renderStatusMessage(state.lastAttemptError, 'error');
+            statusHtml += this.renderStatusMessage(state.lastAttemptError, 'error');
         } else if (!hasActiveProgress && state?.lastAttemptFound === false) {
             const searchedLabel = (state.lastAttemptSources || []).map(source => this.getSearchSourceLabel(source)).join(', ');
-            html += this.renderStatusMessage(`No new matches found in ${searchedLabel}. Existing results are kept below.`, 'warning');
+            statusHtml += this.renderStatusMessage(`No new matches found in ${searchedLabel}. Existing results are kept below.`, 'warning');
         }
 
-        // Popular models result (highest priority)
         if (popular) {
             const popularFilename = popular.filename || missing.original_path?.split('/').pop()?.split('\\').pop() || '';
-            const actionHtml = `<button class="search-download-btn ml-btn ml-btn-primary ml-btn-sm" data-url="${popular.url}" data-filename="${popularFilename}" data-category="${popular.directory || missing.category}"><span class="ml-btn-icon">☁</span> Download</button>`;
-            html += this.renderOnlineSearchResultCard({
-                statusClass: 'ml-status-success',
-                title: 'Found in Popular Models',
-                result: popular,
+            rows.push({
+                sourceKey: 'popular',
+                sourceLabel: 'Popular',
+                model: popular.name || popularFilename,
                 filename: popularFilename,
-                secondaryText: popular.name || '',
-                actionHtml
+                secondary: popular.name && popular.name !== popularFilename ? popularFilename : '',
+                match: this.getSearchResultMatchDisplay(popular, 'Known', 'strong'),
+                size: this.formatSearchResultSize(popular),
+                downloadUrl: popular.url,
+                downloadFilename: popularFilename,
+                category: popular.directory || missing.category,
+                openUrl: this.getModelCardUrl(popular.url)
             });
         }
 
-        // Model list result (ComfyUI Manager database with fuzzy matching)
         if (modelListResult && modelListResult.url) {
-            const matchType = modelListResult.match_type === 'exact' ? 'Exact match' : 'Similar model';
-            const statusClass = modelListResult.match_type === 'exact' ? 'ml-status-success' : 'ml-status-info';
-            const actionHtml = `<button class="search-download-btn ml-btn ml-btn-primary ml-btn-sm" data-url="${modelListResult.url}" data-filename="${modelListResult.filename}" data-category="${modelListResult.directory || missing.category}"><span class="ml-btn-icon">☁</span> Download</button>`;
-            html += this.renderOnlineSearchResultCard({
-                statusClass,
-                title: `${matchType} in Model Database`,
-                result: modelListResult,
+            rows.push({
+                sourceKey: 'model-list',
+                sourceLabel: 'Local Database',
+                model: modelListResult.name || modelListResult.filename,
                 filename: modelListResult.filename,
-                secondaryText: modelListResult.name || '',
-                actionHtml
+                secondary: modelListResult.name && modelListResult.name !== modelListResult.filename ? modelListResult.filename : '',
+                match: this.getSearchResultMatchDisplay(modelListResult),
+                size: this.formatSearchResultSize(modelListResult),
+                downloadUrl: modelListResult.url,
+                downloadFilename: modelListResult.filename,
+                category: modelListResult.directory || missing.category,
+                openUrl: this.getModelCardUrl(modelListResult.url)
             });
         }
 
-        // HuggingFace result
         if (hfResult && hfResult.url) {
             const hfRepo = hfResult.repo_id || hfResult.repo || '';
             const hfModelUrl = hfRepo ? `https://huggingface.co/${hfRepo}` : this.getModelCardUrl(hfResult.url);
-            let actionHtml = `<button class="search-download-btn ml-btn ml-btn-link ml-btn-sm" data-url="${hfResult.url}" data-filename="${hfResult.filename}" data-category="${missing.category}"><span class="ml-btn-icon">☁</span> Download</button>`;
-            if (hfModelUrl) {
-                actionHtml += `<a href="${hfModelUrl}" target="_blank" rel="noopener noreferrer" class="ml-btn ml-btn-secondary ml-btn-sm">Open on HuggingFace</a>`;
-            }
-            html += this.renderOnlineSearchResultCard({
-                statusClass: 'ml-status-info',
-                title: 'Found on HuggingFace',
-                result: hfResult,
+            rows.push({
+                sourceKey: 'huggingface',
+                sourceLabel: 'HuggingFace',
+                model: hfRepo || hfResult.filename,
                 filename: hfResult.filename,
-                secondaryText: hfRepo,
-                actionHtml
+                secondary: hfResult.path && hfResult.path !== hfResult.filename ? hfResult.path : '',
+                match: this.getSearchResultMatchDisplay(hfResult),
+                size: this.formatSearchResultSize(hfResult),
+                downloadUrl: hfResult.url,
+                downloadFilename: hfResult.filename,
+                category: missing.category,
+                openUrl: hfModelUrl
             });
         }
 
-        // LoRA Manager archive result
         if (loraManagerArchiveResult && loraManagerArchiveResult.url) {
             const archiveFilename = loraManagerArchiveResult.filename || missing.original_path?.split('/').pop()?.split('\\').pop() || '';
-            const actionHtml = loraManagerArchiveResult.download_url
-                ? `<button class="search-download-btn ml-btn ml-btn-secondary ml-btn-sm" data-url="${loraManagerArchiveResult.download_url}" data-filename="${archiveFilename}" data-category="${missing.category}"><span class="ml-btn-icon">☁</span> Download</button>`
-                : '';
-            html += this.renderOnlineSearchResultCard({
-                statusClass: 'ml-status-info',
-                title: 'Found in LoRA Manager Archive',
-                result: loraManagerArchiveResult,
+            rows.push({
+                sourceKey: 'lora-archive',
+                sourceLabel: 'LoRA Archive',
+                model: loraManagerArchiveResult.name || loraManagerArchiveResult.version_name || archiveFilename,
                 filename: archiveFilename,
-                secondaryText: loraManagerArchiveResult.version_name || loraManagerArchiveResult.name || '',
-                actionHtml
+                secondary: loraManagerArchiveResult.version_name || '',
+                match: this.getSearchResultMatchDisplay(loraManagerArchiveResult),
+                size: this.formatSearchResultSize(loraManagerArchiveResult),
+                downloadUrl: loraManagerArchiveResult.download_url || '',
+                downloadFilename: archiveFilename,
+                category: missing.category,
+                openUrl: loraManagerArchiveResult.url
             });
         }
 
-        // CivitAI result
         if (civitaiResult && civitaiResult.download_url) {
             const modelUrl = civitaiResult.url || (civitaiResult.model_id ? `https://civitai.com/models/${civitaiResult.model_id}${civitaiResult.version_id ? `?modelVersionId=${civitaiResult.version_id}` : ''}` : '');
-            // Use expected_filename from URN resolution, or fallback to civitaiResult filename
             const downloadFilename = missing.civitai_info?.expected_filename || civitaiResult.filename || civitaiResult.name;
-            // Build display name with version if available
-            const modelName = missing.civitai_info?.version_name ? `${missing.civitai_info.model_name} v${missing.civitai_info.version_name}` : (civitaiResult.name || 'Model');
-            const topLineHtml = `<div class="ml-meta-line"><button class="ml-btn ml-btn-sm ml-civitai-open-btn" onclick="window.open('${modelUrl}', '_blank')">${modelName}</button> <span class="ml-meta-secondary">${civitaiResult.type || ''}</span></div>`;
-            const actionHtml = `<button class="search-download-btn ml-btn ml-btn-sm ml-civitai-download-btn" data-url="${civitaiResult.download_url}" data-filename="${downloadFilename}" data-category="${missing.category}"><span class="ml-btn-icon">☁</span> Download</button>`;
-            html += this.renderOnlineSearchResultCard({
-                statusClass: 'ml-status-warning',
-                title: 'Found on CivitAI',
-                result: civitaiResult,
+            const modelName = missing.civitai_info?.version_name ? `${missing.civitai_info.model_name} v${missing.civitai_info.version_name}` : (civitaiResult.name || downloadFilename || 'Model');
+            rows.push({
+                sourceKey: 'civitai',
+                sourceLabel: 'CivitAI',
+                model: modelName,
                 filename: downloadFilename,
-                secondaryText: '',
-                topLineHtml,
-                actionHtml
+                secondary: civitaiResult.type || civitaiResult.base_model || '',
+                match: this.getSearchResultMatchDisplay(civitaiResult),
+                size: this.formatSearchResultSize(civitaiResult),
+                downloadUrl: civitaiResult.download_url,
+                downloadFilename,
+                category: missing.category,
+                openUrl: modelUrl
             });
         }
 
-        html += '</div>';
+        const html = `${progressHtml}${statusHtml}${this.renderSearchResultsTable(rows)}`;
         container.innerHTML = html;
 
         // Attach download listeners
