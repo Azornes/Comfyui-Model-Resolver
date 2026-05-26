@@ -106,10 +106,14 @@ class LinkerManagerDialog extends ComfyDialog {
                     popular: null,
                     model_list: null,
                     huggingface: null,
-                    civitai: null
+                    civitai: null,
+                    lora_manager_archive: null
                 },
                 lastAttemptSources: [],
-                lastAttemptFound: null
+                lastAttemptFound: null,
+                lastAttemptError: null,
+                sourceProgress: {},
+                activeSearchRunId: null
             });
         }
         return this.searchResultCache.get(key);
@@ -220,6 +224,69 @@ class LinkerManagerDialog extends ComfyDialog {
             lora_manager_archive: 'LoRA Manager Archive'
         };
         return labels[source] || source;
+    }
+
+    getSearchSourcesForSelection(selectedSource, missing = {}) {
+        if (selectedSource !== 'all') {
+            return this.isSourceAvailable(selectedSource) ? [selectedSource] : [];
+        }
+
+        const sources = ['local', 'huggingface', 'civitai'];
+        if (!missing.is_urn && this.isSourceAvailable('lora_manager_archive')) {
+            sources.push('lora_manager_archive');
+        }
+        return sources;
+    }
+
+    setSourceProgress(state, source, patch = {}) {
+        state.sourceProgress = {
+            ...(state.sourceProgress || {}),
+            [source]: {
+                ...(state.sourceProgress?.[source] || {}),
+                ...patch
+            }
+        };
+    }
+
+    hasActiveSearchProgress(state = {}) {
+        return Object.values(state.sourceProgress || {}).some(progress => (
+            progress?.status === 'pending' || progress?.status === 'running'
+        ));
+    }
+
+    renderSearchProgress(state = {}) {
+        const progressEntries = Object.entries(state.sourceProgress || {});
+        if (!progressEntries.length) return '';
+
+        const statusLabels = {
+            pending: 'Queued',
+            running: 'Searching...',
+            found: 'Found',
+            none: 'No match',
+            error: 'Error'
+        };
+
+        let html = '<div class="ml-search-progress-list">';
+        for (const [source, progress] of progressEntries) {
+            const status = progress?.status || 'pending';
+            const label = this.getSearchSourceLabel(source);
+            const statusLabel = progress?.message || statusLabels[status] || status;
+            const percent = status === 'pending' ? 0 : (status === 'running' ? 55 : 100);
+            const safePercent = Math.max(0, Math.min(100, percent));
+            html += `
+                <div class="ml-search-progress-item ml-search-progress-${status}">
+                    <div class="ml-search-progress-head">
+                        <span>${this.escapeHtml(label)}</span>
+                        <span>${this.escapeHtml(statusLabel)}</span>
+                    </div>
+                    <div class="ml-search-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${safePercent}">
+                        <div class="ml-search-progress-fill${status === 'running' ? ' ml-search-progress-fill-running' : ''}" style="width: ${safePercent}%;"></div>
+                    </div>
+                </div>
+            `;
+        }
+        html += '</div>';
+        return html;
     }
 
     /**
@@ -4527,6 +4594,7 @@ class LinkerManagerDialog extends ComfyDialog {
         const state = this.getSearchState(missing);
         const selectedSource = state.selectedSource || 'all';
         const selectedSourceLabel = this.getSearchSourceLabel(selectedSource);
+        const sourceIds = this.getSearchSourcesForSelection(selectedSource, missing);
         
         // For URNs, use the CivitAI model name for searching instead of the URN itself
         // and pass the URN type as category (CivitAI expects specific type names)
@@ -4558,24 +4626,41 @@ class LinkerManagerDialog extends ComfyDialog {
         const resultsId = `search-results-${missing.node_id}-${missing.widget_index}`;
         const resultsDiv = this.contentElement?.querySelector(`#${resultsId}`);
         const searchBtn = this.contentElement?.querySelector(`#search-${missing.node_id}-${missing.widget_index}`);
+        let searchRunId = null;
 
         try {
+            if (!sourceIds.length) {
+                throw new Error(`${selectedSourceLabel} is not available in this install`);
+            }
+
+            searchRunId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+            state.activeSearchRunId = searchRunId;
+            state.lastAttemptSources = sourceIds;
+            state.lastAttemptFound = null;
+            state.lastAttemptError = null;
+            state.sourceProgress = {};
+            for (const source of sourceIds) {
+                this.setSourceProgress(state, source, {
+                    status: 'running',
+                    message: 'Searching...'
+                });
+            }
+
             if (searchBtn) {
                 searchBtn.disabled = true;
                 searchBtn.innerHTML = `${this.getSearchIconHtml()} Searching ${selectedSourceLabel}...`;
             }
             if (resultsDiv) {
                 resultsDiv.style.display = 'block';
-                resultsDiv.innerHTML = `<span class="ml-info-accent-text">Searching ${selectedSourceLabel}...</span>`;
+                this.displaySearchResults(missing, state, resultsDiv);
             }
 
             // For URNs, include model_id and version_id for direct download
             const tokens = this.getStoredTokens();
-            const searchData = {
+            const baseSearchData = {
                 filename,
                 category,
                 is_urn: isUrn,
-                sources: [selectedSource],
                 civitai_session_token: tokens.civitai_session_token,
                 civitai_candidate_limit: tokens.civitai_candidate_limit,
                 civitai_use_trpc_search: tokens.civitai_use_trpc_search,
@@ -4587,46 +4672,110 @@ class LinkerManagerDialog extends ComfyDialog {
                 hf_use_brave_fallback: tokens.hf_use_brave_fallback
             };
             if (isUrn && missing.urn) {
-                searchData.model_id = missing.urn.model_id;
-                searchData.version_id = missing.urn.version_id;
+                baseSearchData.model_id = missing.urn.model_id;
+                baseSearchData.version_id = missing.urn.version_id;
             }
-            
-            console.log('Model Linker: Search request:', JSON.stringify(searchData));
 
-            const response = await api.fetchApi('/model_linker/search', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(searchData)
+            const attemptedSources = new Set();
+            let anyFound = false;
+            let hadError = false;
+
+            const searchPromises = sourceIds.map(async (source) => {
+                const searchData = {
+                    ...baseSearchData,
+                    sources: [source]
+                };
+
+                try {
+                    console.log('Model Linker: Search request:', JSON.stringify(searchData));
+
+                    const response = await api.fetchApi('/model_linker/search', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(searchData)
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`Search failed: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    console.log('Model Linker: Search response:', JSON.stringify(data));
+
+                    if (state.activeSearchRunId !== searchRunId) {
+                        return { source, stale: true };
+                    }
+
+                    const responseSources = Array.isArray(data.searched_sources) && data.searched_sources.length
+                        ? data.searched_sources
+                        : [source];
+                    responseSources.forEach(responseSource => attemptedSources.add(responseSource));
+
+                    const found = this.hasSearchResults(data);
+                    anyFound = anyFound || found;
+                    state.results = this.mergeSearchResults(state.results, data);
+                    state.lastAttemptSources = Array.from(attemptedSources);
+                    state.lastAttemptFound = anyFound;
+                    this.setSourceProgress(state, source, {
+                        status: found ? 'found' : 'none',
+                        message: found ? 'Found' : 'No match'
+                    });
+
+                    if (data.civitai) {
+                        missing.civitai_search_result = {
+                            base_model: data.civitai.base_model,
+                            tags: data.civitai.tags || [],
+                            trained_words: data.civitai.trained_words || [],
+                            filename: data.civitai.filename,
+                            name: data.civitai.name,
+                            type: data.civitai.type
+                        };
+                    }
+
+                    this.displaySearchResults(missing, state, resultsDiv);
+                    this.applySearchResultSuggestion(missing);
+                    return { source, data };
+                } catch (error) {
+                    console.error(`Model Linker: Search error for ${source}:`, error);
+                    if (state.activeSearchRunId !== searchRunId) {
+                        return { source, stale: true, error };
+                    }
+
+                    hadError = true;
+                    attemptedSources.add(source);
+                    state.lastAttemptSources = Array.from(attemptedSources);
+                    state.lastAttemptFound = anyFound;
+                    this.setSourceProgress(state, source, {
+                        status: 'error',
+                        message: error.message || 'Error'
+                    });
+                    this.displaySearchResults(missing, state, resultsDiv);
+                    return { source, error };
+                }
             });
 
-            if (!response.ok) {
-                throw new Error(`Search failed: ${response.status}`);
-            }
+            await Promise.all(searchPromises);
 
-            const data = await response.json();
-            console.log('Model Linker: Search response:', JSON.stringify(data));
-            state.results = this.mergeSearchResults(state.results, data);
-            state.lastAttemptSources = Array.isArray(data.searched_sources) ? data.searched_sources : [selectedSource];
-            state.lastAttemptFound = this.hasSearchResults(data);
-            if (data.civitai) {
-                missing.civitai_search_result = {
-                    base_model: data.civitai.base_model,
-                    tags: data.civitai.tags || [],
-                    trained_words: data.civitai.trained_words || [],
-                    filename: data.civitai.filename,
-                    name: data.civitai.name,
-                    type: data.civitai.type
-                };
+            if (state.activeSearchRunId === searchRunId) {
+                state.activeSearchRunId = null;
+                state.lastAttemptSources = attemptedSources.size ? Array.from(attemptedSources) : sourceIds;
+                state.lastAttemptFound = anyFound;
+                state.lastAttemptError = hadError && !anyFound
+                    ? 'Search finished with errors. Check source statuses above.'
+                    : null;
+                this.displaySearchResults(missing, state, resultsDiv);
             }
-            this.displaySearchResults(missing, state, resultsDiv);
-            this.applySearchResultSuggestion(missing);
 
         } catch (error) {
             console.error('Model Linker: Search error:', error);
+            state.lastAttemptError = error.message;
             if (resultsDiv) {
                 resultsDiv.innerHTML = this.renderStatusMessage(`Search failed: ${error.message}`, 'error');
             }
         } finally {
+            if (!searchRunId || state.activeSearchRunId === searchRunId) {
+                state.activeSearchRunId = null;
+            }
             if (searchBtn) {
                 searchBtn.disabled = false;
                 searchBtn.innerHTML = `${this.getSearchIconHtml()} Search Again`;
@@ -4763,19 +4912,33 @@ class LinkerManagerDialog extends ComfyDialog {
         const civitaiResult = results.civitai ? (Array.isArray(results.civitai) ? results.civitai[0] : results.civitai) : null;
         const loraManagerArchiveResult = results.lora_manager_archive ? (Array.isArray(results.lora_manager_archive) ? results.lora_manager_archive[0] : results.lora_manager_archive) : null;
         const hasResults = popular || modelListResult || hfResult || civitaiResult || loraManagerArchiveResult;
+        const progressHtml = this.renderSearchProgress(state);
+        const hasActiveProgress = this.hasActiveSearchProgress(state);
 
         if (!hasResults) {
+            if (hasActiveProgress) {
+                container.innerHTML = progressHtml;
+                return;
+            }
+
+            if (state?.lastAttemptError) {
+                container.innerHTML = `${progressHtml}${this.renderStatusMessage(state.lastAttemptError, 'error')}`;
+                return;
+            }
+
             const searchedLabel = (state?.lastAttemptSources || []).map(source => this.getSearchSourceLabel(source)).join(', ');
-            container.innerHTML = this.renderStatusMessage(
+            container.innerHTML = `${progressHtml}${this.renderStatusMessage(
                 searchedLabel ? `No matches found in ${searchedLabel}.` : 'No matches found online for this model.',
                 'warning'
-            );
+            )}`;
             return;
         }
 
-        let html = '<div class="ml-search-results-stack">';
+        let html = `${progressHtml}<div class="ml-search-results-stack">`;
 
-        if (state?.lastAttemptFound === false) {
+        if (!hasActiveProgress && state?.lastAttemptError) {
+            html += this.renderStatusMessage(state.lastAttemptError, 'error');
+        } else if (!hasActiveProgress && state?.lastAttemptFound === false) {
             const searchedLabel = (state.lastAttemptSources || []).map(source => this.getSearchSourceLabel(source)).join(', ');
             html += this.renderStatusMessage(`No new matches found in ${searchedLabel}. Existing results are kept below.`, 'warning');
         }

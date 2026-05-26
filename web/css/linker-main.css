@@ -764,6 +764,74 @@
     margin-top: 8px;
     display: none;
 }
+.ml-search-progress-list {
+    display: grid;
+    gap: 6px;
+    margin: 8px 0;
+}
+.ml-search-progress-item {
+    padding: 6px 8px;
+    background: rgba(255,255,255,0.035);
+    border: 1px solid var(--ml-border);
+    border-radius: 8px;
+}
+.ml-search-progress-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 5px;
+    font-size: 11px;
+    color: var(--ml-text-muted);
+}
+.ml-search-progress-head span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ml-search-progress-head span:first-child {
+    color: var(--ml-text);
+    font-weight: 600;
+}
+.ml-search-progress-head span:last-child {
+    flex: 0 1 auto;
+    max-width: 55%;
+    text-align: right;
+}
+.ml-search-progress-bar {
+    height: 5px;
+    overflow: hidden;
+    background: rgba(255,255,255,0.08);
+    border-radius: 5px;
+}
+.ml-search-progress-fill {
+    height: 100%;
+    background: var(--ml-accent);
+    border-radius: inherit;
+    transition: width 0.2s ease, background 0.2s ease;
+}
+.ml-search-progress-fill-running {
+    width: 42% !important;
+    animation: ml-search-progress-slide 1.05s ease-in-out infinite;
+}
+.ml-search-progress-found .ml-search-progress-fill {
+    background: #72d38a;
+}
+.ml-search-progress-none .ml-search-progress-fill {
+    background: rgba(255,255,255,0.32);
+}
+.ml-search-progress-error .ml-search-progress-fill {
+    background: #ff8a80;
+}
+@keyframes ml-search-progress-slide {
+    0% {
+        transform: translateX(-120%);
+    }
+    100% {
+        transform: translateX(240%);
+    }
+}
 .ml-combo-section {
     position: relative;
     margin-top: 8px;
