@@ -903,11 +903,10 @@
     height: 100%;
     background: var(--ml-accent);
     border-radius: inherit;
-    transition: width 0.2s ease, background 0.2s ease;
+    transition: width 0.42s ease, background 0.2s ease;
 }
-.ml-search-progress-fill-running {
-    width: 42% !important;
-    animation: ml-search-progress-slide 1.05s ease-in-out infinite;
+.ml-search-progress-running .ml-search-progress-fill {
+    background: linear-gradient(90deg, rgba(114,211,138,0.62), var(--ml-accent));
 }
 .ml-search-progress-found .ml-search-progress-fill {
     background: #72d38a;
@@ -917,14 +916,6 @@
 }
 .ml-search-progress-error .ml-search-progress-fill {
     background: #ff8a80;
-}
-@keyframes ml-search-progress-slide {
-    0% {
-        transform: translateX(-120%);
-    }
-    100% {
-        transform: translateX(240%);
-    }
 }
 .ml-combo-section {
     position: relative;

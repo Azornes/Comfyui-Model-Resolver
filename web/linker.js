@@ -25,6 +25,7 @@ class LinkerManagerDialog extends ComfyDialog {
         this.pendingIndex = new Map(); // key -> index in pendingResolutions
         this.activeDownloads = {};  // Track active downloads
         this.searchResultCache = new Map();
+        this.searchProgressTimers = new Map();
         this.cachedAnalysisData = null;
         this.cachedWorkflowSignature = null;
         this.boundHandleOutsideClick = this.handleOutsideClick.bind(this);
@@ -248,6 +249,92 @@ class LinkerManagerDialog extends ComfyDialog {
         };
     }
 
+    getSearchSourceEstimateMs(source, isUrn = false) {
+        if (isUrn && source === 'civitai') return 5000;
+
+        const estimates = {
+            local: 1400,
+            lora_manager_archive: 3200,
+            huggingface: 18000,
+            civitai: 22000
+        };
+        return estimates[source] || 8000;
+    }
+
+    getEstimatedSearchProgressPercent(elapsedMs, estimateMs) {
+        const safeEstimate = Math.max(1000, Number(estimateMs) || 8000);
+        const elapsed = Math.max(0, Number(elapsedMs) || 0);
+
+        if (elapsed <= safeEstimate) {
+            const normalized = Math.min(1, elapsed / safeEstimate);
+            const eased = 1 - Math.pow(1 - normalized, 2.1);
+            return 6 + eased * 78;
+        }
+
+        const overtime = elapsed - safeEstimate;
+        const slowTail = 1 - Math.exp(-overtime / (safeEstimate * 1.6));
+        return Math.min(94, 84 + slowTail * 10);
+    }
+
+    getSearchProgressTimerKey(runId, source) {
+        return `${runId || 'search'}:${source}`;
+    }
+
+    clearSearchProgressTimer(runId, source) {
+        const key = this.getSearchProgressTimerKey(runId, source);
+        const timer = this.searchProgressTimers.get(key);
+        if (timer) {
+            clearInterval(timer);
+            this.searchProgressTimers.delete(key);
+        }
+    }
+
+    clearSearchProgressTimers(runId) {
+        if (!runId) return;
+        const prefix = `${runId}:`;
+        for (const [key, timer] of this.searchProgressTimers.entries()) {
+            if (key.startsWith(prefix)) {
+                clearInterval(timer);
+                this.searchProgressTimers.delete(key);
+            }
+        }
+    }
+
+    startEstimatedSearchProgress(state, missing, container, source, runId) {
+        this.clearSearchProgressTimer(runId, source);
+
+        const tick = () => {
+            if (state.activeSearchRunId !== runId) {
+                this.clearSearchProgressTimer(runId, source);
+                return;
+            }
+
+            const progress = state.sourceProgress?.[source];
+            if (!progress || progress.status !== 'running') {
+                this.clearSearchProgressTimer(runId, source);
+                return;
+            }
+
+            const elapsedMs = Date.now() - (progress.startedAt || Date.now());
+            const percent = this.getEstimatedSearchProgressPercent(
+                elapsedMs,
+                progress.estimateMs
+            );
+
+            if (percent > (Number(progress.percent) || 0) + 0.2) {
+                this.setSourceProgress(state, source, { percent });
+                this.displaySearchResults(missing, state, container);
+            }
+        };
+
+        tick();
+        const timer = setInterval(tick, 450);
+        this.searchProgressTimers.set(
+            this.getSearchProgressTimerKey(runId, source),
+            timer
+        );
+    }
+
     hasActiveSearchProgress(state = {}) {
         return Object.values(state.sourceProgress || {}).some(progress => (
             progress?.status === 'pending' || progress?.status === 'running'
@@ -270,9 +357,13 @@ class LinkerManagerDialog extends ComfyDialog {
         for (const [source, progress] of progressEntries) {
             const status = progress?.status || 'pending';
             const label = this.getSearchSourceLabel(source);
-            const statusLabel = progress?.message || statusLabels[status] || status;
-            const percent = status === 'pending' ? 0 : (status === 'running' ? 55 : 100);
-            const safePercent = Math.max(0, Math.min(100, percent));
+            const percent = status === 'pending'
+                ? 0
+                : (status === 'running' ? progress?.percent : 100);
+            const safePercent = Math.max(0, Math.min(100, Number(percent) || 0));
+            const statusLabel = status === 'running'
+                ? `Searching... ${Math.round(safePercent)}%`
+                : (progress?.message || statusLabels[status] || status);
             html += `
                 <div class="ml-search-progress-item ml-search-progress-${status}">
                     <div class="ml-search-progress-head">
@@ -280,7 +371,7 @@ class LinkerManagerDialog extends ComfyDialog {
                         <span>${this.escapeHtml(statusLabel)}</span>
                     </div>
                     <div class="ml-search-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${safePercent}">
-                        <div class="ml-search-progress-fill${status === 'running' ? ' ml-search-progress-fill-running' : ''}" style="width: ${safePercent}%;"></div>
+                        <div class="ml-search-progress-fill" style="width: ${safePercent}%;"></div>
                     </div>
                 </div>
             `;
@@ -4699,6 +4790,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 throw new Error(`${selectedSourceLabel} is not available in this install`);
             }
 
+            this.clearSearchProgressTimers(state.activeSearchRunId);
             searchRunId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
             state.activeSearchRunId = searchRunId;
             state.lastAttemptSources = sourceIds;
@@ -4708,7 +4800,9 @@ class LinkerManagerDialog extends ComfyDialog {
             for (const source of sourceIds) {
                 this.setSourceProgress(state, source, {
                     status: 'running',
-                    message: 'Searching...'
+                    percent: 6,
+                    startedAt: Date.now(),
+                    estimateMs: this.getSearchSourceEstimateMs(source, isUrn)
                 });
             }
 
@@ -4719,6 +4813,15 @@ class LinkerManagerDialog extends ComfyDialog {
             if (resultsDiv) {
                 resultsDiv.style.display = 'block';
                 this.displaySearchResults(missing, state, resultsDiv);
+            }
+            for (const source of sourceIds) {
+                this.startEstimatedSearchProgress(
+                    state,
+                    missing,
+                    resultsDiv,
+                    source,
+                    searchRunId
+                );
             }
 
             // For URNs, include model_id and version_id for direct download
@@ -4782,8 +4885,10 @@ class LinkerManagerDialog extends ComfyDialog {
                     state.results = this.mergeSearchResults(state.results, data);
                     state.lastAttemptSources = Array.from(attemptedSources);
                     state.lastAttemptFound = anyFound;
+                    this.clearSearchProgressTimer(searchRunId, source);
                     this.setSourceProgress(state, source, {
                         status: found ? 'found' : 'none',
+                        percent: 100,
                         message: found ? 'Found' : 'No match'
                     });
 
@@ -4811,8 +4916,10 @@ class LinkerManagerDialog extends ComfyDialog {
                     attemptedSources.add(source);
                     state.lastAttemptSources = Array.from(attemptedSources);
                     state.lastAttemptFound = anyFound;
+                    this.clearSearchProgressTimer(searchRunId, source);
                     this.setSourceProgress(state, source, {
                         status: 'error',
+                        percent: 100,
                         message: error.message || 'Error'
                     });
                     this.displaySearchResults(missing, state, resultsDiv);
@@ -4821,6 +4928,7 @@ class LinkerManagerDialog extends ComfyDialog {
             });
 
             await Promise.all(searchPromises);
+            this.clearSearchProgressTimers(searchRunId);
 
             if (state.activeSearchRunId === searchRunId) {
                 state.activeSearchRunId = null;
@@ -4834,12 +4942,14 @@ class LinkerManagerDialog extends ComfyDialog {
 
         } catch (error) {
             console.error('Model Linker: Search error:', error);
+            this.clearSearchProgressTimers(searchRunId);
             state.lastAttemptError = error.message;
             if (resultsDiv) {
                 resultsDiv.innerHTML = this.renderStatusMessage(`Search failed: ${error.message}`, 'error');
             }
         } finally {
             if (!searchRunId || state.activeSearchRunId === searchRunId) {
+                this.clearSearchProgressTimers(searchRunId);
                 state.activeSearchRunId = null;
             }
             if (searchBtn) {
