@@ -815,8 +815,9 @@ class LinkerManagerDialog extends ComfyDialog {
                 html += `<div class="ml-match-row ${isBestMatch ? 'ml-best-match' : ''}" data-model="${modelData}" oncontextmenu="window.MLOpenContextMenu(event, this)">`;
                 html += this.getConfidenceBadge(match.confidence);
                 html += `<span class="ml-match-filename" title="${formattedPath.full}">${formattedPath.display}</span>`;
+                html += `<span class="ml-match-status ${match.confidence === 100 ? 'ml-match-status-exact' : 'ml-match-status-partial'}">${match.confidence === 100 ? 'Exact' : 'Partial'}</span>`;
                 html += `<button id="${buttonId}" class="ml-btn ml-btn-secondary ml-btn-sm ml-btn-icon-only ml-local-link-btn" title="Link this local match" aria-label="Link this local match">`;
-                html += `<span class="ml-btn-icon">🔗</span> Link`;
+                html += getSvgIcon('link');
                 html += `</button>`;
                 html += `</div>`;
             }
@@ -824,12 +825,12 @@ class LinkerManagerDialog extends ComfyDialog {
             if (perfectMatches.length > 0 && otherMatches.length > 0) {
                 const matchId = `more-matches-${missing.node_id}-${missing.widget_index}`;
                 const altLabel = `Alternatives (${otherMatches.length})`;
-                html += `<button type="button" class="ml-local-alternatives-toggle" aria-expanded="false" onclick="window.MLToggleHidden('${matchId}', this, '${altLabel}', '${altLabel}')">`;
+                html += `<button type="button" class="ml-local-alternatives-toggle" aria-expanded="true" onclick="window.MLToggleHidden('${matchId}', this, '${altLabel}', '${altLabel}')">`;
                 html += `<span class="ml-local-alternatives-label">${altLabel}</span>`;
-                html += `<span class="ml-local-alternatives-state">Show</span>`;
+                html += `<span class="ml-local-alternatives-state">Hide</span>`;
                 html += `<span class="ml-local-alternatives-chevron" aria-hidden="true"></span>`;
                 html += `</button>`;
-                html += `<div id="${matchId}" class="ml-stack-sm ml-hidden">`;
+                html += `<div id="${matchId}" class="ml-stack-sm">`;
                 for (let mIdx = 0; mIdx < otherMatches.length; mIdx++) {
                     const match = otherMatches[mIdx];
                     const altBtnId = `resolve-alt-${missingIndex}-${missing.node_id}-${missing.widget_index}-${mIdx}`;
@@ -838,7 +839,8 @@ class LinkerManagerDialog extends ComfyDialog {
                     html += `<div class="ml-match-row" data-model="${modelData}" oncontextmenu="window.MLOpenContextMenu(event, this)">`;
                     html += this.getConfidenceBadge(match.confidence);
                     html += `<span class="ml-match-filename" title="${match.path || match.filename}">${match.filename || match.path?.split(/[/\\]/).pop()}</span>`;
-                    html += `<button id="${altBtnId}" class="ml-btn ml-btn-secondary ml-btn-sm ml-btn-utility ml-btn-link-compact">🔗 Link</button>`;
+                    html += `<span class="ml-match-status ml-match-status-partial">Partial</span>`;
+                    html += `<button id="${altBtnId}" class="ml-btn ml-btn-secondary ml-btn-sm ml-btn-icon-only ml-local-link-btn" title="Link this local match" aria-label="Link this local match">${getSvgIcon('link')}</button>`;
                     html += `</div>`;
                 }
                 html += `</div>`;
@@ -4081,10 +4083,11 @@ class LinkerManagerDialog extends ComfyDialog {
                         </div>
                     </div>
                     <div class="ml-missing-list-head">
-                        <span>ID</span>
+                        <span>#</span>
                         <span>Missing Model</span>
                         <span>Type</span>
                         <span>Best Local Match</span>
+                        <span>Match</span>
                         <span>Sources</span>
                     </div>
                     <div class="ml-missing-list">
@@ -4098,7 +4101,7 @@ class LinkerManagerDialog extends ComfyDialog {
             const bestMatch = this.getBestLocalMatch(missing, 70);
             const confidence = bestMatch ? Number(bestMatch.confidence || 0) : 0;
             const matchName = bestMatch?.model?.relative_path || bestMatch?.filename || bestMatch?.path || '';
-            const matchDisplay = matchName || 'Local match';
+            const matchDisplay = matchName || 'No local match';
             const matchClass = confidence === 100 ? 'exact' : (bestMatch ? 'partial' : 'none');
             const typeLabel = missing.category ? this.getCategoryDisplayName(missing.category) : 'unknown';
             const nodeLabel = missing.subgraph_name || missing.node_type || 'Node';
@@ -4113,8 +4116,11 @@ class LinkerManagerDialog extends ComfyDialog {
                         <span class="ml-missing-row-node">${this.escapeHtml(nodeLabel)} #${this.escapeHtml(String(missing.node_id || ''))}</span>
                     </span>
                     <span class="ml-missing-row-type">${this.escapeHtml(typeLabel)}</span>
+                    <span class="ml-missing-row-best" title="${this.escapeHtml(matchDisplay)}">
+                        ${bestMatch ? this.escapeHtml(matchDisplay) : '<span class="ml-missing-row-none">-- No local match</span>'}
+                    </span>
                     <span class="ml-missing-row-match ml-missing-row-match-${matchClass}">
-                        ${bestMatch ? `<strong>${confidence.toFixed(confidence % 1 ? 1 : 0)}%</strong><span title="${this.escapeHtml(matchDisplay)}">${this.escapeHtml(matchDisplay)}</span>` : '<strong>--</strong><span>No local match</span>'}
+                        <strong>${bestMatch ? `${confidence.toFixed(confidence % 1 ? 1 : 0)}%` : '--'}</strong>
                     </span>
                     <span class="ml-missing-row-sources">${this.renderMissingSourcesSummary(missing)}</span>
                 </button>
