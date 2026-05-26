@@ -905,11 +905,67 @@
     gap: 6px;
     margin: 8px 0;
 }
+.ml-search-progress-list-compact {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin: 6px 0;
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
 .ml-search-progress-item {
     padding: 6px 8px;
     background: rgba(255,255,255,0.035);
     border: 1px solid var(--ml-border);
     border-radius: 8px;
+}
+.ml-search-progress-list-compact .ml-search-progress-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+    max-width: 190px;
+    min-height: 24px;
+    padding: 3px 8px;
+    border-radius: 999px;
+}
+.ml-search-progress-list-compact .ml-search-progress-item::before {
+    content: "";
+    flex: 0 0 6px;
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--ml-text-muted);
+}
+.ml-search-progress-list-compact .ml-search-progress-found::before {
+    background: #72d38a;
+}
+.ml-search-progress-list-compact .ml-search-progress-none::before {
+    background: rgba(255,255,255,0.48);
+}
+.ml-search-progress-list-compact .ml-search-progress-error::before {
+    background: #ff8a80;
+}
+.ml-search-progress-list-compact .ml-search-progress-source,
+.ml-search-progress-list-compact .ml-search-progress-status {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 10px;
+}
+.ml-search-progress-list-compact .ml-search-progress-source {
+    color: var(--ml-text);
+    font-weight: 700;
+}
+.ml-search-progress-list-compact .ml-search-progress-status {
+    color: var(--ml-text-muted);
+}
+.ml-search-progress-list-compact .ml-search-progress-found .ml-search-progress-status {
+    color: #72d38a;
+}
+.ml-search-progress-list-compact .ml-search-progress-error .ml-search-progress-status {
+    color: #ff8a80;
 }
 .ml-search-progress-head {
     display: flex;

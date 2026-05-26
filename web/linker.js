@@ -344,6 +344,7 @@ class LinkerManagerDialog extends ComfyDialog {
     renderSearchProgress(state = {}) {
         const progressEntries = Object.entries(state.sourceProgress || {});
         if (!progressEntries.length) return '';
+        const isCompact = !this.hasActiveSearchProgress(state);
 
         const statusLabels = {
             pending: 'Queued',
@@ -353,9 +354,29 @@ class LinkerManagerDialog extends ComfyDialog {
             error: 'Error'
         };
 
+        if (isCompact) {
+            let html = '<div class="ml-search-progress-list ml-search-progress-list-compact">';
+            for (const [source, progress] of progressEntries) {
+                const status = progress?.status || 'pending';
+                const statusClass = String(status).replace(/[^a-z0-9_-]/gi, '');
+                const label = this.getSearchSourceLabel(source);
+                const statusLabel = progress?.message || statusLabels[status] || status;
+                const title = `${label}: ${statusLabel}`;
+                html += `
+                    <div class="ml-search-progress-item ml-search-progress-${statusClass}" title="${this.escapeHtml(title)}">
+                        <span class="ml-search-progress-source">${this.escapeHtml(label)}</span>
+                        <span class="ml-search-progress-status">${this.escapeHtml(statusLabel)}</span>
+                    </div>
+                `;
+            }
+            html += '</div>';
+            return html;
+        }
+
         let html = '<div class="ml-search-progress-list">';
         for (const [source, progress] of progressEntries) {
             const status = progress?.status || 'pending';
+            const statusClass = String(status).replace(/[^a-z0-9_-]/gi, '');
             const label = this.getSearchSourceLabel(source);
             const percent = status === 'pending'
                 ? 0
@@ -365,7 +386,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 ? `Searching... ${Math.round(safePercent)}%`
                 : (progress?.message || statusLabels[status] || status);
             html += `
-                <div class="ml-search-progress-item ml-search-progress-${status}">
+                <div class="ml-search-progress-item ml-search-progress-${statusClass}">
                     <div class="ml-search-progress-head">
                         <span>${this.escapeHtml(label)}</span>
                         <span>${this.escapeHtml(statusLabel)}</span>
@@ -5339,11 +5360,10 @@ class LinkerManagerDialog extends ComfyDialog {
                 return;
             }
 
-            const searchedLabel = (state?.lastAttemptSources || []).map(source => this.getSearchSourceLabel(source)).join(', ');
-            container.innerHTML = `${progressHtml}${this.renderStatusMessage(
-                searchedLabel ? `No matches found in ${searchedLabel}.` : 'No matches found online for this model.',
+            container.innerHTML = progressHtml || this.renderStatusMessage(
+                'No matches found online for this model.',
                 'warning'
-            )}`;
+            );
             return;
         }
 
@@ -5360,9 +5380,6 @@ class LinkerManagerDialog extends ComfyDialog {
         let statusHtml = '';
         if (!hasActiveProgress && state?.lastAttemptError) {
             statusHtml += this.renderStatusMessage(state.lastAttemptError, 'error');
-        } else if (!hasActiveProgress && state?.lastAttemptFound === false) {
-            const searchedLabel = (state.lastAttemptSources || []).map(source => this.getSearchSourceLabel(source)).join(', ');
-            statusHtml += this.renderStatusMessage(`No new matches found in ${searchedLabel}. Existing results are kept below.`, 'warning');
         }
 
         addRow(knownDownloadRow);
