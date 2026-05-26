@@ -924,20 +924,22 @@ class ModelLinkerExtension:
                             "searched_sources": sorted(normalized_sources),
                         }
 
-                        # 1. Search local databases (curated + model-list)
-                        if search_local:
+                        def search_local_sources():
+                            source_results = {"popular": None, "model_list": None}
+                            source_found = False
+
                             log_info(
                                 f"Search source [local] start: filename={filename}, category={category}"
                             )
                             popular_info = get_popular_model_url(filename)
                             log_search_result("popular", popular_info)
                             if popular_info:
-                                results["popular"] = {
+                                source_results["popular"] = {
                                     "source": "popular",
                                     "filename": filename,
                                     **popular_info,
                                 }
-                                results["found"] = True
+                                source_found = True
 
                             model_list_result = search_model_list(filename)
                             log_search_result(
@@ -952,14 +954,15 @@ class ModelLinkerExtension:
                             if model_list_result:
                                 confidence = model_list_result.get("confidence", 0)
                                 if is_urn and confidence >= 70:
-                                    results["model_list"] = model_list_result
-                                    results["found"] = True
+                                    source_results["model_list"] = model_list_result
+                                    source_found = True
                                 elif not is_urn:
-                                    results["model_list"] = model_list_result
-                                    results["found"] = True
+                                    source_results["model_list"] = model_list_result
+                                    source_found = True
 
-                        # 2. Search HuggingFace for exact file match
-                        if search_huggingface_source:
+                            return source_results, source_found
+
+                        def search_huggingface_source_task():
                             log_info(f"Search source [huggingface] start: filename={filename}")
                             hf_result = search_huggingface_for_file(
                                 filename,
@@ -970,12 +973,12 @@ class ModelLinkerExtension:
                                 use_brave_fallback=hf_use_brave_fallback,
                             )
                             log_search_result("huggingface", hf_result)
-                            if hf_result:
-                                results["huggingface"] = hf_result
-                                results["found"] = True
+                            return {"huggingface": hf_result}, bool(hf_result)
 
-                        # 3. Search CivitAI - use direct download for URNs
-                        if search_civitai_source:
+                        def search_civitai_source_task():
+                            source_results = {"civitai": None}
+                            source_found = False
+
                             log_info(
                                 f"Search source [civitai] start: filename={filename}, category={category}, is_urn={is_urn}"
                             )
@@ -1005,7 +1008,7 @@ class ModelLinkerExtension:
                                         download_url = get_civitai_download_url(
                                             version_id
                                         )
-                                        results["civitai"] = {
+                                        source_results["civitai"] = {
                                             "source": "civitai",
                                             "name": model_info.get("model_name"),
                                             "version_name": model_info.get(
@@ -1025,14 +1028,14 @@ class ModelLinkerExtension:
                                         }
                                         log_search_result(
                                             "civitai/urn",
-                                            results["civitai"],
+                                            source_results["civitai"],
                                             {
                                                 "files_count": len(
                                                     model_info.get("files", [])
                                                 )
                                             },
                                         )
-                                        results["found"] = True
+                                        source_found = True
                                     else:
                                         log_search_result(
                                             "civitai/urn",
@@ -1060,7 +1063,7 @@ class ModelLinkerExtension:
                                     )
                                     if civitai_results:
                                         first_result = civitai_results[0]
-                                        results["civitai"] = {
+                                        source_results["civitai"] = {
                                             "source": "civitai",
                                             "name": first_result.get("name"),
                                             "filename": first_result.get("filename"),
@@ -1073,7 +1076,7 @@ class ModelLinkerExtension:
                                             "base_model": first_result.get("base_model"),
                                             "tags": first_result.get("tags", []),
                                         }
-                                        results["found"] = True
+                                        source_found = True
                             else:
                                 civitai_result = search_civitai_for_file(
                                     filename,
@@ -1085,11 +1088,12 @@ class ModelLinkerExtension:
                                 )
                                 log_search_result("civitai", civitai_result)
                                 if civitai_result:
-                                    results["civitai"] = civitai_result
-                                    results["found"] = True
+                                    source_results["civitai"] = civitai_result
+                                    source_found = True
 
-                        # 4. Search local archive DB from comfyui-lora-manager
-                        if search_lora_manager_archive_source and not is_urn:
+                            return source_results, source_found
+
+                        def search_lora_manager_archive_source_task():
                             log_info(
                                 f"Search source [lora_manager_archive] start: filename={filename}, category={category}"
                             )
@@ -1103,10 +1107,45 @@ class ModelLinkerExtension:
                                 "lora_manager_archive",
                                 lora_manager_archive_result,
                             )
-                            if lora_manager_archive_result:
-                                results["lora_manager_archive"] = (
-                                    lora_manager_archive_result
+                            return (
+                                {
+                                    "lora_manager_archive": lora_manager_archive_result
+                                },
+                                bool(lora_manager_archive_result),
+                            )
+
+                        search_tasks = []
+                        if search_local:
+                            search_tasks.append(
+                                asyncio.to_thread(search_local_sources)
+                            )
+                        if search_huggingface_source:
+                            search_tasks.append(
+                                asyncio.to_thread(search_huggingface_source_task)
+                            )
+                        if search_civitai_source:
+                            search_tasks.append(
+                                asyncio.to_thread(search_civitai_source_task)
+                            )
+                        if search_lora_manager_archive_source and not is_urn:
+                            search_tasks.append(
+                                asyncio.to_thread(
+                                    search_lora_manager_archive_source_task
                                 )
+                            )
+
+                        if len(search_tasks) > 1:
+                            log_info(
+                                f"Search sources running asynchronously: count={len(search_tasks)}"
+                            )
+
+                        for source_results, source_found in await asyncio.gather(
+                            *search_tasks
+                        ):
+                            for source_key, source_result in source_results.items():
+                                if source_result:
+                                    results[source_key] = source_result
+                            if source_found:
                                 results["found"] = True
 
                         log_info(
