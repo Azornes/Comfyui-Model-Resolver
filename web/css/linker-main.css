@@ -3130,10 +3130,9 @@
 }
 #model-linker-modal .ml-missing-detail-pane .ml-column {
     padding: 14px;
-    background:
-        linear-gradient(180deg, rgba(255,255,255,0.036) 0%, rgba(255,255,255,0.018) 100%);
-    border-color: rgba(255,255,255,0.075);
-    border-radius: 7px;
+    background: transparent;
+    border-color: transparent;
+    border-radius: 0;
 }
 #model-linker-modal .ml-missing-detail-pane .ml-column-header {
     margin-bottom: 12px;
@@ -3234,10 +3233,10 @@
     box-shadow: 0 0 0 2px rgba(114,211,138,0.08);
 }
 #model-linker-modal .ml-missing-detail-pane .ml-download-section {
-    padding: 13px;
-    background: rgba(255,255,255,0.018);
-    border-color: rgba(255,255,255,0.065);
-    border-radius: 7px;
+    padding: 0;
+    background: transparent;
+    border-color: transparent;
+    border-radius: 0;
 }
 #model-linker-modal .ml-missing-detail-pane .ml-download-section .ml-search-source-bar > .ml-btn {
     min-height: 34px;
@@ -3270,6 +3269,38 @@
     color: var(--ml-text-soft);
     font-size: 12px;
     box-shadow: none;
+}
+
+/* Flatten right-side sections */
+#model-linker-modal .ml-missing-detail-pane .ml-columns {
+    gap: 0;
+}
+#model-linker-modal .ml-missing-detail-pane .ml-column + .ml-column {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255,255,255,0.075);
+}
+#model-linker-modal .ml-missing-detail-pane .ml-column-header {
+    background: transparent;
+}
+#model-linker-modal .ml-missing-detail-pane [id^="local-matches-body-"] {
+    background: rgba(255,255,255,0.014);
+    border-color: rgba(255,255,255,0.06);
+}
+#model-linker-modal .ml-missing-detail-pane .ml-download-section .ml-status-inline {
+    margin-bottom: 10px;
+}
+#model-linker-modal .ml-missing-detail-pane .ml-download-section .ml-search-source-bar,
+#model-linker-modal .ml-missing-detail-pane .ml-download-target {
+    padding: 0;
+}
+#model-linker-modal .ml-missing-detail-pane .ml-download-section .ml-search-source-bar {
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.065);
+}
+#model-linker-modal .ml-missing-detail-pane .ml-download-target {
+    padding-top: 12px;
+    border-top: 0;
 }
 #model-linker-modal .ml-missing-detail-pane .ml-selected-bar-inner {
     gap: 8px;
