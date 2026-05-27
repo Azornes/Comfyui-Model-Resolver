@@ -37,6 +37,8 @@ class LinkerManagerDialog extends ComfyDialog {
         this._dragStart = null;
         this._analysisProgressToken = null;
         this._locateAnimationFrame = null;
+        this._viewportClampFrame = null;
+        this._boundHandleViewportResize = () => this.scheduleModalViewportClamp(true);
         
         // Create backdrop overlay for click-outside-to-close
         this.backdrop = $el("div.model-linker-backdrop", {
@@ -102,6 +104,7 @@ class LinkerManagerDialog extends ComfyDialog {
         // Add click listener to hide context menu when clicking outside
         this.boundHandleContextMenuClick = (e) => this.handleContextMenuOutsideClick(e);
         document.addEventListener('click', this.boundHandleContextMenuClick);
+        window.addEventListener('resize', this._boundHandleViewportResize);
     }
     
     /**
@@ -2125,8 +2128,81 @@ class LinkerManagerDialog extends ComfyDialog {
                 el.style.transform = 'translate(-50%, -50%)';
             }
             if (btn) btn.textContent = '⛶';
+            this.ensureModalHandleInViewport({ persist: true });
             try { localStorage.setItem('model_linker_modal_fullscreen', '0'); } catch (e) {}
         }
+    }
+
+    getViewportClampedModalPosition(top, left) {
+        const el = this.element;
+        if (!el) return { top, left };
+
+        const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+        const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+        const pad = 4;
+        const handle = document.getElementById('model-linker-drag-handle');
+
+        if (handle) {
+            const elRect = el.getBoundingClientRect();
+            const handleRect = handle.getBoundingClientRect();
+            const handleOffsetLeft = handleRect.left - elRect.left;
+            const handleOffsetTop = handleRect.top - elRect.top;
+            const handleWidth = handleRect.width || handle.offsetWidth;
+            const handleHeight = handleRect.height || handle.offsetHeight;
+            const minLeft = pad - handleOffsetLeft;
+            const maxLeft = vw - pad - handleOffsetLeft - handleWidth;
+            const minTop = pad - handleOffsetTop;
+            const maxTop = vh - pad - handleOffsetTop - handleHeight;
+
+            left = Math.max(minLeft, Math.min(maxLeft, left));
+            top = Math.max(minTop, Math.min(maxTop, top));
+        } else {
+            const w = el.offsetWidth;
+            const h = el.offsetHeight;
+            left = Math.max(-w + pad, Math.min(vw - pad, left));
+            top = Math.max(-h + pad, Math.min(vh - pad, top));
+        }
+
+        return { top, left };
+    }
+
+    saveModalPosition() {
+        try {
+            const el = this.element;
+            if (!el) return;
+            const rect = el.getBoundingClientRect();
+            localStorage.setItem('model_linker_modal_pos', JSON.stringify({ top: Math.round(rect.top), left: Math.round(rect.left) }));
+        } catch (e) { /* ignore */ }
+    }
+
+    ensureModalHandleInViewport({ persist = false } = {}) {
+        if (this.fullscreen) return;
+        const el = this.element;
+        if (!el || getComputedStyle(el).display === 'none') return;
+
+        const rect = el.getBoundingClientRect();
+        const { top, left } = this.getViewportClampedModalPosition(rect.top, rect.left);
+        const nextTop = Math.round(top);
+        const nextLeft = Math.round(left);
+
+        if (Math.round(rect.top) === nextTop && Math.round(rect.left) === nextLeft) return;
+
+        el.style.top = `${nextTop}px`;
+        el.style.left = `${nextLeft}px`;
+        el.style.transform = 'none';
+
+        if (persist) this.saveModalPosition();
+    }
+
+    scheduleModalViewportClamp(persist = false) {
+        if (this._viewportClampFrame) {
+            cancelAnimationFrame(this._viewportClampFrame);
+        }
+
+        this._viewportClampFrame = requestAnimationFrame(() => {
+            this._viewportClampFrame = null;
+            this.ensureModalHandleInViewport({ persist });
+        });
     }
 
     // Begin window drag
@@ -2165,28 +2241,7 @@ class LinkerManagerDialog extends ComfyDialog {
         const dy = e.clientY - this._dragStart.y;
         let top = this._dragStart.top + dy;
         let left = this._dragStart.left + dx;
-        // Clamp so the drag handle always stays reachable on screen.
-        const vw = window.innerWidth;
-        const vh = window.innerHeight;
-        const pad = 4; // small padding
-        const handle = document.getElementById('model-linker-drag-handle');
-        if (handle) {
-            const handleOffsetLeft = handle.offsetLeft;
-            const handleOffsetTop = handle.offsetTop;
-            const handleWidth = handle.offsetWidth;
-            const handleHeight = handle.offsetHeight;
-            const minLeft = pad - handleOffsetLeft;
-            const maxLeft = vw - pad - handleOffsetLeft - handleWidth;
-            const minTop = pad - handleOffsetTop;
-            const maxTop = vh - pad - handleOffsetTop - handleHeight;
-            left = Math.max(minLeft, Math.min(maxLeft, left));
-            top = Math.max(minTop, Math.min(maxTop, top));
-        } else {
-            const w = el.offsetWidth;
-            const h = el.offsetHeight;
-            left = Math.max(-w + pad, Math.min(vw - pad, left));
-            top = Math.max(-h + pad, Math.min(vh - pad, top));
-        }
+        ({ top, left } = this.getViewportClampedModalPosition(top, left));
         el.style.top = `${Math.round(top)}px`;
         el.style.left = `${Math.round(left)}px`;
     }
@@ -2196,11 +2251,7 @@ class LinkerManagerDialog extends ComfyDialog {
         this._dragging = false;
         document.removeEventListener('mousemove', this._onMouseMove);
         // Persist position
-        try {
-            const el = this.element;
-            const rect = el.getBoundingClientRect();
-            localStorage.setItem('model_linker_modal_pos', JSON.stringify({ top: Math.round(rect.top), left: Math.round(rect.left) }));
-        } catch (e) { /* ignore */ }
+        this.saveModalPosition();
         // Restore selection
         try { document.body.style.userSelect = this._prevUserSelect || ''; } catch (e) {}
     }
@@ -3689,6 +3740,7 @@ class LinkerManagerDialog extends ComfyDialog {
     async show(workflow = null) {
         this.backdrop.style.display = "none";
         this.element.style.display = "flex";
+        this.scheduleModalViewportClamp();
         
         // Update button state in case there are active downloads
         this.updateDownloadAllButtonState();
