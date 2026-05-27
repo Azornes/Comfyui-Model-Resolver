@@ -4074,6 +4074,31 @@ class LinkerManagerDialog extends ComfyDialog {
         return missing.original_path?.split('/').pop()?.split('\\').pop() || missing.name || 'Missing model';
     }
 
+    getMissingNodeDisplay(missing = {}) {
+        const isSubgraphNode = missing.node_type && missing.node_type.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+        let nodeLabel;
+        if (missing.subgraph_name) {
+            nodeLabel = missing.subgraph_name;
+        } else if (isSubgraphNode) {
+            nodeLabel = 'Subgraph';
+        } else {
+            nodeLabel = missing.node_type || 'Node';
+        }
+
+        const nodeId = missing.node_id ?? '';
+        const customNodeTitle = String(missing.node_title || '').trim();
+        const hasCustomNodeTitle = customNodeTitle && customNodeTitle !== nodeLabel;
+        const text = hasCustomNodeTitle
+            ? `${nodeLabel} #${nodeId} · ${customNodeTitle}`
+            : `${nodeLabel} #${nodeId}`;
+
+        return {
+            label: nodeLabel,
+            text,
+            canLocate: missing.is_top_level !== false && nodeId !== ''
+        };
+    }
+
     getBestLocalMatch(missing = {}, minConfidence = 0) {
         const matches = Array.isArray(missing.matches) ? missing.matches : [];
         return matches
@@ -4221,12 +4246,12 @@ class LinkerManagerDialog extends ComfyDialog {
         let typePx = 66;
         for (const missing of missingModels) {
             const filename = this.getMissingFilename(missing);
-            const nodeLabel = `${missing.subgraph_name || missing.node_type || 'Node'} #${missing.node_id || ''}`;
+            const nodeLabel = this.getMissingNodeDisplay(missing).text;
             const typeLabel = missing.category ? this.getCategoryDisplayName(missing.category) : 'unknown';
             modelPx = Math.max(
                 modelPx,
                 textWidth(filename, 7.2) + 12,
-                textWidth(nodeLabel, 5.5) + 12
+                textWidth(nodeLabel, 5.5) + 34
             );
             typePx = Math.max(typePx, textWidth(typeLabel, 5.8) + 18);
         }
@@ -4283,16 +4308,20 @@ class LinkerManagerDialog extends ComfyDialog {
             const matchDisplay = matchName || 'No local match';
             const matchClass = confidence === 100 ? 'exact' : (bestMatch ? 'partial' : 'none');
             const typeLabel = missing.category ? this.getCategoryDisplayName(missing.category) : 'unknown';
-            const nodeLabel = missing.subgraph_name || missing.node_type || 'Node';
+            const nodeDisplay = this.getMissingNodeDisplay(missing);
+            const nodeId = missing.node_id ?? '';
+            const rowNodeHtml = nodeDisplay.canLocate
+                ? `<button type="button" class="ml-node-chip is-locatable ml-missing-row-node ml-missing-row-locate" data-node-id="${this.escapeHtml(String(nodeId))}" data-tooltip="Center this node in the ComfyUI graph." aria-label="Center ${this.escapeHtml(nodeDisplay.text)} in the ComfyUI graph">${this.getLocateIconHtml()}<span class="ml-missing-row-node-label">${this.escapeHtml(nodeDisplay.text)}</span></button>`
+                : `<span class="ml-missing-row-node">${this.escapeHtml(nodeDisplay.text)}</span>`;
 
             html += `
-                <button type="button"
+                <div role="button" tabindex="0"
                     class="ml-missing-list-row ${isSelected ? 'is-selected' : ''}"
                     data-missing-key="${this.escapeHtml(key)}">
                     <span class="ml-missing-row-index">${index + 1}</span>
                     <span class="ml-missing-row-model">
                         <span class="ml-missing-row-name" data-tooltip="${this.escapeHtml(filename)}">${this.escapeHtml(formattedFilename.display)}</span>
-                        <span class="ml-missing-row-node">${this.escapeHtml(nodeLabel)} #${this.escapeHtml(String(missing.node_id || ''))}</span>
+                        ${rowNodeHtml}
                     </span>
                     <span class="ml-missing-row-type">${this.escapeHtml(typeLabel)}</span>
                     <span class="ml-missing-row-best" data-tooltip="${this.escapeHtml(matchDisplay)}">
@@ -4302,7 +4331,7 @@ class LinkerManagerDialog extends ComfyDialog {
                         <strong>${bestMatch ? `${confidence.toFixed(confidence % 1 ? 1 : 0)}%` : '--'}</strong>
                     </span>
                     <span class="ml-missing-row-sources">${this.renderMissingSourcesSummary(missing)}</span>
-                </button>
+                </div>
             `;
         });
 
@@ -4318,12 +4347,34 @@ class LinkerManagerDialog extends ComfyDialog {
     }
 
     wireMissingModelsBrowser(container, data, sortedMissingModels) {
+        const selectRow = (row) => {
+            const key = row.dataset.missingKey;
+            if (!key || key === this.selectedMissingModelKey) return;
+            this.selectedMissingModelKey = key;
+            this.displayMissingModels(container, data);
+        };
+
         container.querySelectorAll('.ml-missing-list-row').forEach(row => {
-            row.addEventListener('click', () => {
-                const key = row.dataset.missingKey;
-                if (!key || key === this.selectedMissingModelKey) return;
-                this.selectedMissingModelKey = key;
-                this.displayMissingModels(container, data);
+            row.addEventListener('click', (event) => {
+                const clickedLocate = event.target instanceof Element && event.target.closest('.ml-missing-row-locate');
+                if (clickedLocate) return;
+                selectRow(row);
+            });
+
+            row.addEventListener('keydown', (event) => {
+                if (event.target !== row || (event.key !== 'Enter' && event.key !== ' ')) return;
+                event.preventDefault();
+                selectRow(row);
+            });
+        });
+
+        container.querySelectorAll('.ml-missing-row-locate').forEach(button => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const rawNodeId = button.dataset.nodeId;
+                const numericNodeId = Number(rawNodeId);
+                this.locateNodeInGraph(Number.isNaN(numericNodeId) ? rawNodeId : numericNodeId);
             });
         });
 
@@ -4542,20 +4593,8 @@ class LinkerManagerDialog extends ComfyDialog {
         const missingFilename = this.formatFilename(missing.original_path, 60);
         
         // Determine node info for the chip
-        const isSubgraphNode = missing.node_type && missing.node_type.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
-        let nodeLabel;
-        if (missing.subgraph_name) {
-            nodeLabel = missing.subgraph_name;
-        } else if (isSubgraphNode) {
-            nodeLabel = 'Subgraph';
-        } else {
-            nodeLabel = missing.node_type || 'Node';
-        }
-        const customNodeTitle = String(missing.node_title || '').trim();
-        const hasCustomNodeTitle = customNodeTitle && customNodeTitle !== nodeLabel;
-        const nodeChipText = this.escapeHtml(hasCustomNodeTitle
-            ? `${nodeLabel} #${missing.node_id} · ${customNodeTitle}`
-            : `${nodeLabel} #${missing.node_id}`);
+        const nodeDisplay = this.getMissingNodeDisplay(missing);
+        const nodeChipText = this.escapeHtml(nodeDisplay.text);
         
         // Start card
         let html = `<div class="ml-card">`;
@@ -4638,7 +4677,7 @@ class LinkerManagerDialog extends ComfyDialog {
         html += `<div class="ml-combo-row">`;
         html += `<label class="ml-combo-label">Model</label>`;
         html += `<input id="combo-input-${comboId}" class="ml-combo-input" type="text" placeholder="Type to filter local models...">`;
-        html += `<button id="combo-refresh-${comboId}" data-tooltip="Reload local model list" class="ml-btn ml-btn-secondary ml-btn-sm ml-btn-icon-only">⟳</button>`;
+        html += `<button id="combo-refresh-${comboId}" type="button" aria-label="Reload local model list" data-tooltip="Reload local model list" class="ml-btn ml-btn-secondary ml-btn-sm ml-btn-icon-only ml-combo-refresh-btn">${getSvgIcon('refreshCw', 'currentColor', 'ml-combo-refresh-icon')}</button>`;
         html += `</div>`;
         html += `<div id="combo-list-${comboId}" class="ml-combo-list"></div>`;
         html += `</div>`;
