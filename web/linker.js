@@ -83,6 +83,21 @@ class LinkerManagerDialog extends ComfyDialog {
             this.createContent(),
             this.createFooter()
         ]);
+
+        this.tooltipObserver = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                for (const node of mutation.addedNodes) {
+                    if (node.nodeType === Node.ELEMENT_NODE) {
+                        this.bindTooltips(node);
+                    }
+                }
+            }
+        });
+        this.tooltipObserver.observe(this.element, {
+            childList: true,
+            subtree: true
+        });
+        this.bindTooltips(this.element);
         
         // Add click listener to hide context menu when clicking outside
         this.boundHandleContextMenuClick = (e) => this.handleContextMenuOutsideClick(e);
@@ -145,6 +160,7 @@ class LinkerManagerDialog extends ComfyDialog {
 
     showTooltip(target) {
         if (!target || !this.tooltipElement) return;
+        this.normalizeTooltipTarget(target);
         const text = target.getAttribute('data-tooltip');
         if (!text) return;
 
@@ -175,14 +191,51 @@ class LinkerManagerDialog extends ComfyDialog {
         this.tooltipElement.removeAttribute('data-visible');
     }
 
+    normalizeTooltipTarget(target) {
+        if (!target || !target.getAttribute) return;
+
+        const title = target.getAttribute('title');
+        if (title && !target.getAttribute('data-tooltip')) {
+            target.setAttribute('data-tooltip', title);
+        }
+        if (target.hasAttribute('title')) {
+            target.removeAttribute('title');
+        }
+        if (target.classList?.contains('ml-tooltip-badge') && !target.hasAttribute('tabindex')) {
+            target.setAttribute('tabindex', '0');
+        }
+    }
+
+    setTooltip(target, text) {
+        if (!target || !text) return;
+        target.setAttribute('data-tooltip', text);
+        if (target.hasAttribute('title')) {
+            target.removeAttribute('title');
+        }
+        this.bindTooltips(target);
+    }
+
     bindTooltips(container) {
         if (!container) return;
 
-        container.querySelectorAll('.ml-tooltip-badge').forEach((badge) => {
-            badge.addEventListener('mouseenter', () => this.showTooltip(badge));
-            badge.addEventListener('focus', () => this.showTooltip(badge));
-            badge.addEventListener('mouseleave', () => this.hideTooltip());
-            badge.addEventListener('blur', () => this.hideTooltip());
+        const selector = '[data-tooltip], [title]';
+        const targets = [];
+        if (container.matches?.(selector)) {
+            targets.push(container);
+        }
+        if (container.querySelectorAll) {
+            targets.push(...container.querySelectorAll(selector));
+        }
+
+        targets.forEach((target) => {
+            this.normalizeTooltipTarget(target);
+            if (!target.dataset) return;
+            if (target.dataset.mlTooltipBound === '1') return;
+            target.dataset.mlTooltipBound = '1';
+            target.addEventListener('mouseenter', () => this.showTooltip(target));
+            target.addEventListener('focus', () => this.showTooltip(target));
+            target.addEventListener('mouseleave', () => this.hideTooltip());
+            target.addEventListener('blur', () => this.hideTooltip());
         });
     }
 
@@ -364,7 +417,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 const statusLabel = progress?.message || statusLabels[status] || status;
                 const title = `${label}: ${statusLabel}`;
                 html += `
-                    <div class="ml-search-progress-item ml-search-progress-${statusClass}" title="${this.escapeHtml(title)}">
+                    <div class="ml-search-progress-item ml-search-progress-${statusClass}" data-tooltip="${this.escapeHtml(title)}">
                         <span class="ml-search-progress-source">${this.escapeHtml(label)}</span>
                         <span class="ml-search-progress-status">${this.escapeHtml(statusLabel)}</span>
                     </div>
@@ -486,7 +539,7 @@ class LinkerManagerDialog extends ComfyDialog {
         const iconName = this.getSearchSourceIconName(sourceKey);
         const iconHtml = getSvgIcon(iconName, 'currentColor', 'ml-search-source-icon');
         return `
-            <span class="ml-search-source-pill ml-search-source-${sourceKey}" title="${this.escapeHtml(sourceLabel)}">
+            <span class="ml-search-source-pill ml-search-source-${sourceKey}" data-tooltip="${this.escapeHtml(sourceLabel)}">
                 ${iconHtml}
                 <span>${this.escapeHtml(sourceLabel)}</span>
             </span>
@@ -678,7 +731,7 @@ class LinkerManagerDialog extends ComfyDialog {
             if (downloadUrl) {
                 actions += `
                     <button type="button" class="search-download-btn ml-search-result-action-btn"
-                        title="Download"
+                        data-tooltip="Download"
                         aria-label="Download ${this.escapeHtml(downloadFilename)}"
                         data-url="${this.escapeHtml(downloadUrl)}"
                         data-filename="${this.escapeHtml(downloadFilename)}"
@@ -689,7 +742,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 actions += `
                     <button type="button"
                         class="search-open-page-btn ml-search-result-action-btn"
-                        title="Open model page"
+                        data-tooltip="Open model page"
                         aria-label="Open model page"
                         data-url="${this.escapeHtml(openUrl)}">${getSvgIcon('externalLink')}</button>
                 `;
@@ -702,7 +755,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 <tr>
                     <td>${sourcePill}</td>
                     <td>
-                        <div class="ml-search-result-model" title="${modelTitle}">
+                        <div class="ml-search-result-model" data-tooltip="${modelTitle}">
                             <span>${modelHtml}</span>
                             ${secondary || filename ? `<small>${secondary || filename}</small>` : ''}
                         </div>
@@ -814,9 +867,9 @@ class LinkerManagerDialog extends ComfyDialog {
 
                 html += `<div class="ml-match-row ${isBestMatch ? 'ml-best-match' : ''}" data-model="${modelData}" oncontextmenu="window.MLOpenContextMenu(event, this)">`;
                 html += this.getConfidenceBadge(match.confidence);
-                html += `<span class="ml-match-filename" title="${formattedPath.full}">${formattedPath.display}</span>`;
+                html += `<span class="ml-match-filename" data-tooltip="${this.escapeHtml(formattedPath.full)}">${formattedPath.display}</span>`;
                 html += `<span class="ml-match-status ${match.confidence === 100 ? 'ml-match-status-exact' : 'ml-match-status-partial'}">${match.confidence === 100 ? 'Exact' : 'Partial'}</span>`;
-                html += `<button id="${buttonId}" class="ml-btn ml-btn-secondary ml-btn-sm ml-btn-icon-only ml-local-link-btn" title="Link this local match" aria-label="Link this local match">`;
+                html += `<button id="${buttonId}" class="ml-btn ml-btn-secondary ml-btn-sm ml-btn-icon-only ml-local-link-btn" data-tooltip="Link this local match" aria-label="Link this local match">`;
                 html += getSvgIcon('link');
                 html += `</button>`;
                 html += `</div>`;
@@ -838,9 +891,9 @@ class LinkerManagerDialog extends ComfyDialog {
                     const modelData = encodeURIComponent(JSON.stringify(contextModel));
                     html += `<div class="ml-match-row" data-model="${modelData}" oncontextmenu="window.MLOpenContextMenu(event, this)">`;
                     html += this.getConfidenceBadge(match.confidence);
-                    html += `<span class="ml-match-filename" title="${match.path || match.filename}">${match.filename || match.path?.split(/[/\\]/).pop()}</span>`;
+                    html += `<span class="ml-match-filename" data-tooltip="${this.escapeHtml(match.path || match.filename)}">${match.filename || match.path?.split(/[/\\]/).pop()}</span>`;
                     html += `<span class="ml-match-status ml-match-status-partial">Partial</span>`;
-                    html += `<button id="${altBtnId}" class="ml-btn ml-btn-secondary ml-btn-sm ml-btn-icon-only ml-local-link-btn" title="Link this local match" aria-label="Link this local match">${getSvgIcon('link')}</button>`;
+                    html += `<button id="${altBtnId}" class="ml-btn ml-btn-secondary ml-btn-sm ml-btn-icon-only ml-local-link-btn" data-tooltip="Link this local match" aria-label="Link this local match">${getSvgIcon('link')}</button>`;
                     html += `</div>`;
                 }
                 html += `</div>`;
@@ -1082,6 +1135,7 @@ class LinkerManagerDialog extends ComfyDialog {
         
         // Show the dialog
         document.body.appendChild(dialog);
+        this.bindTooltips(dialog);
         this.bindInfoDialogResizePersistence(dialog);
         
         // Add close handlers
@@ -1133,29 +1187,29 @@ class LinkerManagerDialog extends ComfyDialog {
                         <table class="ml-info-table">
                             <tbody>
                                 <tr class="ml-info-file-row">
-                                    <td><span>File <span class="ml-info-help" title="The model file name found locally or returned by CivitAI.">?</span></span></td>
+                                    <td><span>File <span class="ml-tooltip-badge" data-tooltip="The model file name found locally or returned by CivitAI.">?</span></span></td>
                                     <td><span class="ml-info-file"></span></td>
                                 </tr>
                                 <tr class="ml-info-hash-row">
-                                    <td><span>Hash (sha256) <span class="ml-info-help" title="Unique fingerprint of the local file. Model Linker uses it to confirm the exact CivitAI version.">?</span></span></td>
+                                    <td><span>Hash (sha256) <span class="ml-tooltip-badge" data-tooltip="Unique fingerprint of the local file. Model Linker uses it to confirm the exact CivitAI version.">?</span></span></td>
                                     <td><span class="ml-info-hash"></span></td>
                                 </tr>
                                 <tr class="ml-info-civitai-row">
-                                    <td><span>CivitAI <span class="ml-info-help" title="Opens the matching CivitAI model or version page when one was found.">?</span></span></td>
+                                    <td><span>CivitAI <span class="ml-tooltip-badge" data-tooltip="Opens the matching CivitAI model or version page when one was found.">?</span></span></td>
                                     <td><span class="ml-info-civitai-link"></span></td>
                                 </tr>
                                 <tr class="ml-info-name-row">
-                                    <td><span>Name <span class="ml-info-help" title="Model name from CivitAI or local metadata.">?</span></span></td>
+                                    <td><span>Name <span class="ml-tooltip-badge" data-tooltip="Model name from CivitAI or local metadata.">?</span></span></td>
                                     <td><span class="ml-info-name"></span></td>
                                 </tr>
                                 <tr class="ml-info-basemodel-row">
-                                    <td><span>Base Model <span class="ml-info-help" title="Base model this resource was made for, for example SD1.5, SDXL or Flux.">?</span></span></td>
+                                    <td><span>Base Model <span class="ml-tooltip-badge" data-tooltip="Base model this resource was made for, for example SD1.5, SDXL or Flux.">?</span></span></td>
                                     <td><span class="ml-info-base-model"></span></td>
                                 </tr>
                                 <tr class="ml-info-trainedwords-row ml-hidden-initial">
                                     <td>
                                         <div class="ml-info-trained-words-label">
-                                            Trained Words <span class="ml-info-help" title="Trigger words recommended by the model author. Click the words you want, then copy them into your prompt.">?</span>
+                                            Trained Words <span class="ml-tooltip-badge" data-tooltip="Trigger words recommended by the model author. Click the words you want, then copy them into your prompt.">?</span>
                                             <small class="ml-info-trained-words-meta">
                                                 <span class="ml-info-trained-words-count">0 selected</span>
                                                 <button type="button" class="ml-info-copy-trained-words" disabled>Copy</button>
@@ -1168,11 +1222,11 @@ class LinkerManagerDialog extends ComfyDialog {
                                     </td>
                                 </tr>
                                 <tr class="ml-info-clipskip-row ml-hidden-initial">
-                                    <td><span>Clip Skip <span class="ml-info-help" title="Recommended Clip Skip value from the model author, if one is provided.">?</span></span></td>
+                                    <td><span>Clip Skip <span class="ml-tooltip-badge" data-tooltip="Recommended Clip Skip value from the model author, if one is provided.">?</span></span></td>
                                     <td><span class="ml-info-clip-skip"></span></td>
                                 </tr>
                                 <tr class="ml-info-description-row ml-hidden-initial">
-                                    <td><span>Description <span class="ml-info-help" title="Model description from CivitAI or local metadata. Long descriptions are shortened until you click Show more.">?</span></span></td>
+                                    <td><span>Description <span class="ml-tooltip-badge" data-tooltip="Model description from CivitAI or local metadata. Long descriptions are shortened until you click Show more.">?</span></span></td>
                                     <td>
                                         <div class="ml-info-description-wrap">
                                             <div class="ml-info-description"></div>
@@ -1596,7 +1650,7 @@ class LinkerManagerDialog extends ComfyDialog {
                         type="button"
                         class="ml-info-trained-word"
                         data-word="${this.escapeHtml(word)}"
-                        title="${this.escapeHtml(word)}"
+                        data-tooltip="${this.escapeHtml(word)}"
                         aria-pressed="false"
                     >
                         ${this.escapeHtml(word)}
@@ -1604,6 +1658,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 `).join('')}</div>`;
                 const row = trainedWordsEl.closest('tr');
                 if (row) row.style.display = '';
+                this.bindTooltips(trainedWordsEl);
                 this.updateSelectedTrainedWordsSummary(dialog);
             } else {
                 const row = trainedWordsEl.closest('tr');
@@ -1951,27 +2006,31 @@ class LinkerManagerDialog extends ComfyDialog {
             textContent: "Options",
             onclick: () => this.switchTab('options')
         });
+
+        const dragHandle = $el("div", {
+            id: "model-linker-drag-handle",
+            ondragstart: (e) => e.preventDefault()
+        }, [
+            $el("span", { textContent: "⠿" })
+        ]);
+        this.setTooltip(dragHandle, "Drag window");
+
+        const fullscreenButton = $el("button", {
+            id: "model-linker-fullscreen-toggle",
+            className: "ml-window-btn ml-window-btn--fullscreen",
+            textContent: "⛶",
+            onclick: () => this.toggleFullScreen()
+        });
+        this.setTooltip(fullscreenButton, "Toggle full screen");
         
         return $el("div.ml-dialog-shell", {}, [
             $el("div.ml-dialog-topbar", {}, [
                 $el("div.ml-dialog-brand", {}, [
-                    $el("div", {
-                        id: "model-linker-drag-handle",
-                        title: "Drag window",
-                        ondragstart: (e) => e.preventDefault()
-                    }, [
-                        $el("span", { textContent: "⠿" })
-                    ]),
+                    dragHandle,
                     $el("h2.ml-dialog-title", { textContent: "🔗 Model Linker" })
                 ]),
                 $el("div.ml-dialog-controls", {}, [
-                    $el("button", {
-                        id: "model-linker-fullscreen-toggle",
-                        className: "ml-window-btn ml-window-btn--fullscreen",
-                        title: "Toggle full screen",
-                        textContent: "⛶",
-                        onclick: () => this.toggleFullScreen()
-                    }),
+                    fullscreenButton,
                     $el("button", {
                         className: "ml-window-btn ml-window-btn--close",
                         textContent: "×",
@@ -2610,7 +2669,7 @@ class LinkerManagerDialog extends ComfyDialog {
                                             <div class="ml-options-input-row">
                                                 <label for="ml-options-civitai" class="ml-options-label">CivitAI API Key <a href="https://civitai.com/user/account" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a> <span class="ml-tooltip-badge" data-tooltip="Optional. Used when downloading from CivitAI requires your account. Add this if CivitAI downloads fail or need access to models available to your account.">?</span></label>
                                                 <input id="ml-options-civitai" class="ml-options-input" type="password" placeholder="Paste CivitAI API key" value="${tokens.civitai_key}">
-                                                <button id="ml-options-civitai-toggle" type="button" class="ml-options-visibility-btn" aria-label="Toggle visibility for saved CivitAI API key" title="Show saved value">
+                                                <button id="ml-options-civitai-toggle" type="button" class="ml-options-visibility-btn" aria-label="Toggle visibility for saved CivitAI API key" data-tooltip="Show saved value">
                                                     ${getSvgIcon('eye')}
                                                 </button>
                                             </div>
@@ -2619,7 +2678,7 @@ class LinkerManagerDialog extends ComfyDialog {
                                             <div class="ml-options-input-row">
                                                 <label for="ml-options-civitai-session" class="ml-options-label">CivitAI Session Token <span class="ml-tooltip-badge" data-tooltip="Optional. Makes CivitAI search use your logged-in session, so results can match what you see in the browser. Useful for NSFW or account-visible results.">?</span></label>
                                                 <input id="ml-options-civitai-session" class="ml-options-input" type="password" placeholder="Paste __Secure-civitai-token" value="${tokens.civitai_session_token}">
-                                                <button id="ml-options-civitai-session-toggle" type="button" class="ml-options-visibility-btn" aria-label="Toggle visibility for saved CivitAI session token" title="Show saved value">
+                                                <button id="ml-options-civitai-session-toggle" type="button" class="ml-options-visibility-btn" aria-label="Toggle visibility for saved CivitAI session token" data-tooltip="Show saved value">
                                                     ${getSvgIcon('eye')}
                                                 </button>
                                             </div>
@@ -2667,7 +2726,7 @@ class LinkerManagerDialog extends ComfyDialog {
                                             <div class="ml-options-input-row">
                                                 <label for="ml-options-hf" class="ml-options-label">HuggingFace Token <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a> <span class="ml-tooltip-badge" data-tooltip="Optional. Used to search and download files from Hugging Face repos your account can access, including gated repos. A read-only token is enough.">?</span></label>
                                                 <input id="ml-options-hf" class="ml-options-input" type="password" placeholder="Paste HuggingFace token" value="${tokens.hf_token}">
-                                                <button id="ml-options-hf-toggle" type="button" class="ml-options-visibility-btn" aria-label="Toggle visibility for saved HuggingFace token" title="Show saved value">
+                                                <button id="ml-options-hf-toggle" type="button" class="ml-options-visibility-btn" aria-label="Toggle visibility for saved HuggingFace token" data-tooltip="Show saved value">
                                                     ${getSvgIcon('eye')}
                                                 </button>
                                             </div>
@@ -2676,7 +2735,7 @@ class LinkerManagerDialog extends ComfyDialog {
                                             <div class="ml-options-input-row">
                                                 <label for="ml-options-brave" class="ml-options-label">Brave Search API Key <a href="https://api-dashboard.search.brave.com/app/keys" target="_blank" rel="noopener noreferrer" class="ml-options-inline-link">Get key</a> <span class="ml-tooltip-badge" data-tooltip="Optional. Used only by the Brave fallback. It helps find Hugging Face files when Hugging Face search does not show the right repo.">?</span></label>
                                                 <input id="ml-options-brave" class="ml-options-input" type="password" placeholder="Paste Brave Search API key" value="${tokens.brave_search_api_key}">
-                                                <button id="ml-options-brave-toggle" type="button" class="ml-options-visibility-btn" aria-label="Toggle visibility for saved Brave Search API key" title="Show saved value">
+                                                <button id="ml-options-brave-toggle" type="button" class="ml-options-visibility-btn" aria-label="Toggle visibility for saved Brave Search API key" data-tooltip="Show saved value">
                                                     ${getSvgIcon('eye')}
                                                 </button>
                                             </div>
@@ -2782,7 +2841,7 @@ class LinkerManagerDialog extends ComfyDialog {
             button.innerHTML = getVisibilityIcon(visible);
             button.style.color = visible ? 'var(--ml-text)' : 'var(--ml-text-muted)';
             button.setAttribute('aria-pressed', visible ? 'true' : 'false');
-            button.setAttribute('title', visible ? 'Hide saved value' : 'Show saved value');
+            this.setTooltip(button, visible ? 'Hide saved value' : 'Show saved value');
         };
 
         const bindVisibilityToggle = (input, button) => {
@@ -3125,9 +3184,9 @@ class LinkerManagerDialog extends ComfyDialog {
         // Splitter between content and queue
         this.splitterElement = $el("div", {
             id: "model-linker-splitter",
-            title: "Drag to resize panels",
             ondragstart: (e) => e.preventDefault()
         });
+        this.setTooltip(this.splitterElement, "Drag to resize panels");
 
         body.appendChild(this.contentElement);
         body.appendChild(this.splitterElement);
@@ -3154,7 +3213,6 @@ class LinkerManagerDialog extends ComfyDialog {
         try {
             this.queueToggleIcon = $el("button", {
                 id: "queue-toggle-icon",
-                title: "Hide queued selections",
                 onclick: () => this.toggleQueueCollapsed()
             }, [document.createTextNode('⮜')]);
             body.appendChild(this.queueToggleIcon);
@@ -3369,10 +3427,10 @@ class LinkerManagerDialog extends ComfyDialog {
         if (!this.queueToggleIcon) return;
         if (this.queueCollapsed) {
             this.queueToggleIcon.textContent = '⮞';
-            this.queueToggleIcon.title = 'Show queued selections';
+            this.setTooltip(this.queueToggleIcon, 'Show queued selections');
         } else {
             this.queueToggleIcon.textContent = '⮜';
-            this.queueToggleIcon.title = 'Hide queued selections';
+            this.setTooltip(this.queueToggleIcon, 'Hide queued selections');
         }
     }
 
@@ -4072,7 +4130,7 @@ class LinkerManagerDialog extends ComfyDialog {
             const title = `${label}: ${statusLabels[status] || status}`;
             const iconName = this.getSearchSourceIconName(item.source);
             const iconHtml = getSvgIcon(iconName, 'currentColor', 'ml-missing-source-icon');
-            return `<span class="ml-missing-source-dot ml-missing-source-${statusClass}" title="${this.escapeHtml(title)}" aria-label="${this.escapeHtml(title)}">${iconHtml}</span>`;
+            return `<span class="ml-missing-source-dot ml-missing-source-${statusClass}" data-tooltip="${this.escapeHtml(title)}" aria-label="${this.escapeHtml(title)}">${iconHtml}</span>`;
         }).join('');
     }
 
@@ -4163,11 +4221,11 @@ class LinkerManagerDialog extends ComfyDialog {
                     data-missing-key="${this.escapeHtml(key)}">
                     <span class="ml-missing-row-index">${index + 1}</span>
                     <span class="ml-missing-row-model">
-                        <span class="ml-missing-row-name" title="${this.escapeHtml(filename)}">${this.escapeHtml(formattedFilename.display)}</span>
+                        <span class="ml-missing-row-name" data-tooltip="${this.escapeHtml(filename)}">${this.escapeHtml(formattedFilename.display)}</span>
                         <span class="ml-missing-row-node">${this.escapeHtml(nodeLabel)} #${this.escapeHtml(String(missing.node_id || ''))}</span>
                     </span>
                     <span class="ml-missing-row-type">${this.escapeHtml(typeLabel)}</span>
-                    <span class="ml-missing-row-best" title="${this.escapeHtml(matchDisplay)}">
+                    <span class="ml-missing-row-best" data-tooltip="${this.escapeHtml(matchDisplay)}">
                         ${bestMatch ? this.escapeHtml(matchDisplay) : '<span class="ml-missing-row-none">-- No local match</span>'}
                     </span>
                     <span class="ml-missing-row-match ml-missing-row-match-${matchClass}">
@@ -4250,7 +4308,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 html += `<code>${this.escapeHtml(label)}</code>`;
                 html += `</div>`;
                 if (folderDisplay) {
-                    html += `<div class="ml-combo-folder" title="${this.escapeHtml(folderDisplay)}">Folder ${this.escapeHtml(folderDisplay)}</div>`;
+                    html += `<div class="ml-combo-folder" data-tooltip="${this.escapeHtml(folderDisplay)}">Folder ${this.escapeHtml(folderDisplay)}</div>`;
                 }
                 html += `</div>`;
             }
@@ -4437,7 +4495,7 @@ class LinkerManagerDialog extends ComfyDialog {
         html += `<div class="ml-card-title-wrap">`;
         
         const titleMetaParts = [];
-        let titlePrimaryHtml = `<span class="ml-card-title-primary" title="${missingFilename.full}">${missingFilename.display}</span>`;
+        let titlePrimaryHtml = `<span class="ml-card-title-primary" data-tooltip="${this.escapeHtml(missingFilename.full)}">${missingFilename.display}</span>`;
         let titleSecondaryHtml = '';
         
         const modelId = missing.urn_model_id || missing.urn?.model_id;
@@ -4446,7 +4504,7 @@ class LinkerManagerDialog extends ComfyDialog {
         const urnLoadingId = `urn-loading-${missing.node_id}-${missing.widget_index}`;
 
         if (missing.is_urn) {
-            titleMetaParts.push(`<span class="ml-card-title-eyebrow" title="${missingFilename.full}">${missingFilename.display}</span>`);
+            titleMetaParts.push(`<span class="ml-card-title-eyebrow" data-tooltip="${this.escapeHtml(missingFilename.full)}">${missingFilename.display}</span>`);
         }
         
         if (missing.is_urn && !missing.civitai_info) {
@@ -4479,9 +4537,9 @@ class LinkerManagerDialog extends ComfyDialog {
 
         html += `<div class="ml-card-subtitle">`;
         if (missing.category) {
-            html += `<span class="ml-category-chip" title="${missing.category}">${this.getCategoryDisplayName(missing.category)}</span>`;
+            html += `<span class="ml-category-chip" data-tooltip="${this.escapeHtml(missing.category)}">${this.getCategoryDisplayName(missing.category)}</span>`;
         }
-        html += `<span id="${locateId}" class="${nodeChipClasses}"${nodeChipTitle ? ` title="${nodeChipTitle}"` : ''}>`;
+        html += `<span id="${locateId}" class="${nodeChipClasses}"${nodeChipTitle ? ` data-tooltip="${this.escapeHtml(nodeChipTitle)}"` : ''}>`;
         if (missing.is_top_level !== false) {
             html += this.getLocateIconHtml();
         }
@@ -4510,7 +4568,7 @@ class LinkerManagerDialog extends ComfyDialog {
         html += `<div class="ml-combo-row">`;
         html += `<label class="ml-combo-label">Model</label>`;
         html += `<input id="combo-input-${comboId}" class="ml-combo-input" type="text" placeholder="Type to filter local models...">`;
-        html += `<button id="combo-refresh-${comboId}" title="Reload local model list" class="ml-btn ml-btn-secondary ml-btn-sm ml-btn-icon-only">⟳</button>`;
+        html += `<button id="combo-refresh-${comboId}" data-tooltip="Reload local model list" class="ml-btn ml-btn-secondary ml-btn-sm ml-btn-icon-only">⟳</button>`;
         html += `</div>`;
         html += `<div id="combo-list-${comboId}" class="ml-combo-list"></div>`;
         html += `</div>`;
@@ -5954,14 +6012,16 @@ class ModelLinker {
             const { ComfyButton } = await import("../../../scripts/ui/components/button.js");
 
             // Create button group with Model Linker button
+            const modelLinkerTooltip = "Open Model Linker to find or download missing workflow models. Shortcut: Ctrl+Shift+L.";
+            const modelLinkerButton = new ComfyButton({
+                icon: "link-variant",
+                action: () => this.openLinkerManager(),
+                content: "Model Linker",
+                classList: "comfyui-button comfyui-menu-mobile-collapse"
+            }).element;
+            this.dialog.setTooltip(modelLinkerButton, modelLinkerTooltip);
             this.buttonGroup = new ComfyButtonGroup(
-                new ComfyButton({
-                    icon: "link-variant",
-                    action: () => this.openLinkerManager(),
-                    tooltip: "Open Model Linker to find or download missing workflow models. Shortcut: Ctrl+Shift+L.",
-                    content: "Model Linker",
-                    classList: "comfyui-button comfyui-menu-mobile-collapse"
-                }).element
+                modelLinkerButton
             );
 
             // Insert before settings group in the menu
@@ -6038,7 +6098,7 @@ class ModelLinker {
             autoResolveBtn.id = 'model-linker-btn-container'; // Use this ID to prevent duplicate injection
             autoResolveBtn.className = 'ml-popup-auto-resolve-btn';
             autoResolveBtn.textContent = '🔗 Auto-resolve 100%';
-            autoResolveBtn.title = 'Link every missing model that already has an exact local match, then open Model Linker for the rest.';
+            this.dialog?.setTooltip(autoResolveBtn, 'Link every missing model that already has an exact local match, then open Model Linker for the rest.');
             autoResolveBtn.addEventListener('click', async () => {
                 await this.handleAutoResolveInPopup(dialog, autoResolveBtn);
             });
@@ -6368,7 +6428,6 @@ class ModelLinker {
         this.linkerButton = $el("button", {
             id: this.buttonId,
             textContent: "🔗 Model Linker",
-            title: "Open Model Linker to find or download missing workflow models. Shortcut: Ctrl+Shift+L.",
             onclick: () => {
                 this.openLinkerManager();
             },
@@ -6376,6 +6435,7 @@ class ModelLinker {
         });
 
         document.body.appendChild(this.linkerButton);
+        this.dialog?.setTooltip(this.linkerButton, "Open Model Linker to find or download missing workflow models. Shortcut: Ctrl+Shift+L.");
     }
 
     openLinkerManager() {
