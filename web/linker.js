@@ -3970,17 +3970,27 @@ class LinkerManagerDialog extends ComfyDialog {
     getMissingSourceStatus(missing = {}, source = '') {
         const state = this.searchResultCache.get(this.getMissingSearchKey(missing));
         const progress = state?.sourceProgress?.[source];
+        const resultStatus = this.getMissingSourceResultStatus(missing, source, state);
+        if (progress?.status === 'found') return resultStatus || 'found';
         if (progress?.status) return progress.status;
 
+        if (resultStatus) return resultStatus;
+
+        return 'idle';
+    }
+
+    getMissingSourceResultStatus(missing = {}, source = '', state = null) {
         const results = state?.results || {};
-        const resultKeys = {
-            local: 'model_list',
-            huggingface: 'huggingface',
-            civitai: 'civitai',
-            lora_manager_archive: 'lora_manager_archive'
-        };
-        if (resultKeys[source] && results[resultKeys[source]]) {
-            return 'found';
+        const candidates = [];
+
+        if (source === 'local') {
+            candidates.push(results.model_list, results.popular);
+        } else if (source === 'huggingface') {
+            candidates.push(results.huggingface);
+        } else if (source === 'civitai') {
+            candidates.push(results.civitai);
+        } else if (source === 'lora_manager_archive') {
+            candidates.push(results.lora_manager_archive);
         }
 
         const downloadSource = missing.download_source || {};
@@ -3990,10 +4000,49 @@ class LinkerManagerDialog extends ComfyDialog {
             workflow: 'civitai'
         }[downloadSource.source] || downloadSource.source;
         if (mappedDownloadSource === source && downloadSource.url) {
-            return 'found';
+            candidates.push(downloadSource);
         }
 
-        return 'idle';
+        return this.getSearchResultStatusLevel(candidates);
+    }
+
+    getSearchResultStatusLevel(resultOrResults) {
+        const results = Array.isArray(resultOrResults)
+            ? resultOrResults.flatMap(result => Array.isArray(result) ? result : [result])
+            : [resultOrResults];
+        let hasPartial = false;
+        let hasUnknownFound = false;
+
+        for (const result of results) {
+            if (!result) continue;
+
+            const confidence = Number(result.confidence);
+            const hasConfidence = Number.isFinite(confidence);
+            const matchType = String(result.match_type || '').toLowerCase();
+
+            if (hasConfidence) {
+                if (confidence >= 100) return 'exact';
+                if (confidence > 0) {
+                    hasPartial = true;
+                    continue;
+                }
+            }
+
+            if (matchType === 'exact' || result.source === 'popular') {
+                return 'exact';
+            }
+            if (matchType === 'partial' || matchType === 'fuzzy' || matchType === 'similar') {
+                hasPartial = true;
+                continue;
+            }
+            if (result.url || result.download_url) {
+                hasUnknownFound = true;
+            }
+        }
+
+        if (hasPartial) return 'partial';
+        if (hasUnknownFound) return 'found';
+        return '';
     }
 
     renderMissingSourcesSummary(missing = {}) {
@@ -4013,6 +4062,8 @@ class LinkerManagerDialog extends ComfyDialog {
             const statusLabels = {
                 pending: 'Queued',
                 running: 'Searching',
+                exact: 'Exact match',
+                partial: 'Partial match',
                 found: 'Found',
                 none: 'No match',
                 error: 'Error',

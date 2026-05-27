@@ -441,35 +441,63 @@
     color: rgba(255,255,255,0.42);
 }
 .ml-missing-row-sources {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 5px;
+    position: relative;
+    display: block;
+    justify-self: center;
     min-width: 0;
+    width: 98px;
+    height: 44px;
 }
 .ml-missing-source-dot {
+    position: absolute;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 20px;
+    width: 30px;
+    height: 30px;
     border-radius: 999px;
-    background: var(--ml-missing-surface);
+    background: rgba(255,255,255,0.035);
     border: 1px solid var(--ml-missing-line-strong);
     color: rgba(255,255,255,0.42);
     font-size: 9px;
     font-weight: 800;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.ml-missing-row-sources .ml-missing-source-dot:nth-child(1) {
+    left: 9px;
+    top: -3px;
+}
+.ml-missing-row-sources .ml-missing-source-dot:nth-child(2) {
+    left: 43px;
+    top: -3px;
+}
+.ml-missing-row-sources .ml-missing-source-dot:nth-child(3) {
+    left: 26px;
+    top: 17px;
+}
+.ml-missing-row-sources .ml-missing-source-dot:nth-child(4) {
+    left: 60px;
+    top: 17px;
+}
+.ml-missing-row-sources .ml-missing-source-dot:nth-child(3):last-child {
+    left: 36px;
 }
 .ml-missing-source-icon {
     display: block;
-    width: 12px;
-    height: 12px;
-    flex: 0 0 12px;
+    width: 17px;
+    height: 17px;
+    flex: 0 0 17px;
 }
-.ml-missing-source-found {
+.ml-missing-source-found,
+.ml-missing-source-exact {
     color: #72d38a;
     border-color: rgba(114,211,138,0.55);
     background: rgba(114,211,138,0.11);
+}
+.ml-missing-source-partial {
+    color: #f1cf64;
+    border-color: rgba(241,207,100,0.55);
+    background: rgba(241,207,100,0.11);
 }
 .ml-missing-source-none {
     color: rgba(255,255,255,0.48);
