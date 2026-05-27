@@ -293,7 +293,7 @@ class LinkerManagerDialog extends ComfyDialog {
         return sources;
     }
 
-    setSourceProgress(state, source, patch = {}) {
+    setSourceProgress(state, source, patch = {}, missing = null) {
         state.sourceProgress = {
             ...(state.sourceProgress || {}),
             [source]: {
@@ -301,6 +301,24 @@ class LinkerManagerDialog extends ComfyDialog {
                 ...patch
             }
         };
+        if (missing) {
+            this.refreshMissingSourcesSummary(missing);
+        }
+    }
+
+    refreshMissingSourcesSummary(missing = {}) {
+        if (!this.contentElement || !missing) return;
+
+        const key = this.getMissingModelKey(missing);
+        const rows = this.contentElement.querySelectorAll('.ml-missing-list-row');
+        for (const row of rows) {
+            if (row.getAttribute('data-missing-key') !== key) continue;
+
+            const sourcesEl = row.querySelector('.ml-missing-row-sources');
+            if (sourcesEl) {
+                sourcesEl.innerHTML = this.renderMissingSourcesSummary(missing);
+            }
+        }
     }
 
     getSearchSourceEstimateMs(source, isUrn = false) {
@@ -5305,7 +5323,7 @@ class LinkerManagerDialog extends ComfyDialog {
                     percent: 6,
                     startedAt: Date.now(),
                     estimateMs: this.getSearchSourceEstimateMs(source, isUrn)
-                });
+                }, missing);
             }
 
             if (searchBtn) {
@@ -5394,7 +5412,7 @@ class LinkerManagerDialog extends ComfyDialog {
                         status: found ? 'found' : 'none',
                         percent: 100,
                         message: found ? 'Found' : 'No match'
-                    });
+                    }, missing);
 
                     if (data.civitai) {
                         missing.civitai_search_result = {
@@ -5425,7 +5443,7 @@ class LinkerManagerDialog extends ComfyDialog {
                         status: 'error',
                         percent: 100,
                         message: error.message || 'Error'
-                    });
+                    }, missing);
                     this.displaySearchResults(missing, state, resultsDiv);
                     return { source, error };
                 }
