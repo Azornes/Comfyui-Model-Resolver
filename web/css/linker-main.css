@@ -17,6 +17,41 @@
     display: none !important;
 }
 
+.ml-is-hidden {
+    display: none !important;
+}
+
+.ml-is-visible {
+    display: block !important;
+}
+
+.ml-is-inline-flex {
+    display: inline-flex !important;
+}
+
+.ml-is-muted {
+    color: var(--ml-text-muted) !important;
+}
+
+.ml-is-error {
+    color: var(--ml-color-error-light, #f44336) !important;
+}
+
+.ml-is-active-text {
+    color: var(--ml-text) !important;
+}
+
+.ml-is-success-action {
+    background: var(--ml-accent, #4CAF50) !important;
+    border-color: var(--ml-accent, #4CAF50) !important;
+    color: #101010 !important;
+    box-shadow: none !important;
+}
+
+.ml-icon-img {
+    vertical-align: middle;
+}
+
 .ml-meta-line {
     margin-top: var(--ml-spacing-4);
     font-size: var(--ml-font-md);

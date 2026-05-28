@@ -24,12 +24,13 @@ const SVG_ICONS = {
  * @param {Image} icon - The icon Image object (or null)
  * @param {string} fallback - Fallback text/emoji if icon is not available (default: '')
  * @param {number} size - Size of the icon in pixels (default: 14)
- * @param {string} extraStyles - Additional CSS styles (default: 'vertical-align: middle;')
+ * @param {string} extraStyles - Optional additional CSS styles
  * @returns {string} HTML string for the icon or fallback
  */
-export function getIconHtml(icon, fallback = '', size = 14, extraStyles = 'vertical-align: middle;') {
+export function getIconHtml(icon, fallback = '', size = 14, extraStyles = '') {
     if (!icon) return fallback;
-    return `<img src="${icon.src}" style="width: ${size}px; height: ${size}px; ${extraStyles}">`;
+    const styleAttr = extraStyles ? ` style="${extraStyles}"` : '';
+    return `<img src="${icon.src}" class="ml-icon-img" width="${size}" height="${size}"${styleAttr}>`;
 }
 
 /**

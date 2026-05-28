@@ -690,7 +690,7 @@ class LinkerManagerDialog extends ComfyDialog {
         html += `</div>`;
 
         const downloadSourceRow = this.getDownloadSourceTableRow(missing, downloadSource);
-        html += `<div id="search-results-${missing.node_id}-${missing.widget_index}" class="ml-search-results" style="display: block;">`;
+        html += `<div id="search-results-${missing.node_id}-${missing.widget_index}" class="ml-search-results ml-is-visible">`;
         html += this.renderSearchResultsTable(downloadSourceRow ? [downloadSourceRow] : []);
         html += `</div>`;
         return html;
@@ -2908,7 +2908,8 @@ class LinkerManagerDialog extends ComfyDialog {
             if (!input || !button) return;
             const visible = input.type === 'text';
             button.innerHTML = getVisibilityIcon(visible);
-            button.style.color = visible ? 'var(--ml-text)' : 'var(--ml-text-muted)';
+            button.classList.toggle('ml-is-active-text', visible);
+            button.classList.toggle('ml-is-muted', !visible);
             button.setAttribute('aria-pressed', visible ? 'true' : 'false');
             this.setTooltip(button, visible ? 'Hide saved value' : 'Show saved value');
         };
@@ -4037,7 +4038,8 @@ class LinkerManagerDialog extends ComfyDialog {
                 info.downloadBtn = newDownloadBtn;
                 
                 // Show that download is in progress
-                newProgressDiv.style.display = 'block';
+                newProgressDiv.classList.remove('ml-is-hidden');
+                newProgressDiv.classList.add('ml-is-visible');
                 newProgressDiv.innerHTML = this.renderProgressWithAction({
                     percent: 0,
                     leftText: '<span class="ml-info-accent-text">Downloading...</span>',
@@ -4458,12 +4460,18 @@ class LinkerManagerDialog extends ComfyDialog {
             }, 200);
             comboInput.addEventListener('input', debouncedFilter);
             comboInput.addEventListener('focus', () => {
-                if (comboList) comboList.style.display = 'block';
+                if (comboList) {
+                    comboList.classList.remove('ml-is-hidden');
+                    comboList.classList.add('ml-is-visible');
+                }
                 populateComboOptions(comboInput.value);
             });
             comboInput.addEventListener('blur', () => {
                 setTimeout(() => {
-                    if (comboList) comboList.style.display = 'none';
+                    if (comboList) {
+                        comboList.classList.remove('ml-is-visible');
+                        comboList.classList.add('ml-is-hidden');
+                    }
                 }, 200);
             });
         }
@@ -4479,7 +4487,8 @@ class LinkerManagerDialog extends ComfyDialog {
         const state = this.searchResultCache.get(this.getMissingSearchKey(missing));
         const searchResultsDiv = container.querySelector(`#search-results-${missing.node_id}-${missing.widget_index}`);
         if (state && searchResultsDiv && this.hasRenderableSearchState(state)) {
-            searchResultsDiv.style.display = 'block';
+            searchResultsDiv.classList.remove('ml-is-hidden');
+            searchResultsDiv.classList.add('ml-is-visible');
             this.displaySearchResults(missing, state, searchResultsDiv);
         }
     }
@@ -5146,10 +5155,12 @@ class LinkerManagerDialog extends ComfyDialog {
             // Disable button and show progress with cancel button immediately
             if (downloadBtn) {
                 downloadBtn.disabled = true;
+                downloadBtn.classList.remove('ml-is-success-action', 'ml-btn-primary');
                 downloadBtn.textContent = 'Starting...';
             }
             if (progressDiv) {
-                progressDiv.style.display = 'block';
+                progressDiv.classList.remove('ml-is-hidden');
+                progressDiv.classList.add('ml-is-visible');
                 // Show progress bar with cancel button immediately
                 progressDiv.innerHTML = this.renderProgressWithAction({
                     percent: 0,
@@ -5205,6 +5216,7 @@ class LinkerManagerDialog extends ComfyDialog {
             }
             if (downloadBtn) {
                 downloadBtn.disabled = false;
+                downloadBtn.classList.remove('ml-is-success-action', 'ml-btn-primary');
                 downloadBtn.innerHTML = '<span class="ml-btn-icon">☁</span> Retry';
             }
             this.showNotification('Download failed: ' + error.message, 'error');
@@ -5262,6 +5274,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 }
                 if (downloadBtn) {
                     downloadBtn.textContent = '✓ Done';
+                    downloadBtn.classList.remove('ml-is-success-action');
                     downloadBtn.classList.add('ml-btn-primary');
                 }
                 delete this.activeDownloads[downloadId];
@@ -5280,6 +5293,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 }
                 if (downloadBtn) {
                     downloadBtn.disabled = false;
+                    downloadBtn.classList.remove('ml-is-success-action', 'ml-btn-primary');
                     downloadBtn.textContent = 'Retry';
                 }
                 delete this.activeDownloads[downloadId];
@@ -5291,6 +5305,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 }
                 if (downloadBtn) {
                     downloadBtn.disabled = false;
+                    downloadBtn.classList.remove('ml-is-success-action', 'ml-btn-primary');
                     downloadBtn.innerHTML = '<span class="ml-btn-icon">☁</span> Download';
                 }
                 delete this.activeDownloads[downloadId];
@@ -5314,7 +5329,8 @@ class LinkerManagerDialog extends ComfyDialog {
                 if (downloadBtn) {
                     downloadBtn.disabled = false;
                     downloadBtn.textContent = 'Retry';
-                    downloadBtn.style.background = '#4CAF50';
+                    downloadBtn.classList.remove('ml-btn-primary');
+                    downloadBtn.classList.add('ml-is-success-action');
                 }
             }
             delete this.activeDownloads[downloadId];
@@ -5418,7 +5434,8 @@ class LinkerManagerDialog extends ComfyDialog {
                 searchBtn.innerHTML = `${this.getSearchIconHtml()} Searching ${selectedSourceLabel}...`;
             }
             if (resultsDiv) {
-                resultsDiv.style.display = 'block';
+                resultsDiv.classList.remove('ml-is-hidden');
+                resultsDiv.classList.add('ml-is-visible');
                 this.displaySearchResults(missing, state, resultsDiv);
             }
             for (const source of sourceIds) {
@@ -5603,6 +5620,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 const data = await response.json();
                 const loadingEl = document.getElementById(loadingElementId);
                 if (loadingEl && data.civitai) {
+                    loadingEl.classList.remove('ml-is-muted', 'ml-is-error');
                     const civitai = data.civitai;
                     const labelHtml = this.renderVersionedModelNameHtml(civitai.name, civitai.version_name)
                         || this.escapeHtml(civitai.filename || 'Model');
@@ -5610,7 +5628,8 @@ class LinkerManagerDialog extends ComfyDialog {
                     loadingEl.innerHTML = `<a href="${url}" target="_blank" class="ml-inline-civitai-link">${labelHtml}</a>`;
                 } else if (loadingEl) {
                     loadingEl.textContent = 'Not found';
-                    loadingEl.style.color = 'var(--ml-text-muted)';
+                    loadingEl.classList.remove('ml-is-error');
+                    loadingEl.classList.add('ml-is-muted');
                 }
 
                 const downloadContainerId = loadingElementId.replace('urn-loading-', 'urn-download-');
@@ -5655,7 +5674,8 @@ class LinkerManagerDialog extends ComfyDialog {
                 const loadingEl = document.getElementById(loadingElementId);
                 if (loadingEl) {
                     loadingEl.textContent = 'Error';
-                    loadingEl.style.color = '#f44336';
+                    loadingEl.classList.remove('ml-is-muted');
+                    loadingEl.classList.add('ml-is-error');
                 }
                 const downloadContainerId = loadingElementId.replace('urn-loading-', 'urn-download-');
                 const downloadEl = document.getElementById(downloadContainerId);
@@ -5668,7 +5688,8 @@ class LinkerManagerDialog extends ComfyDialog {
             const loadingEl = document.getElementById(loadingElementId);
             if (loadingEl) {
                 loadingEl.textContent = 'Error';
-                loadingEl.style.color = '#f44336';
+                loadingEl.classList.remove('ml-is-muted');
+                loadingEl.classList.add('ml-is-error');
             }
             const downloadContainerId = loadingElementId.replace('urn-loading-', 'urn-download-');
             const downloadEl = document.getElementById(downloadContainerId);
@@ -5926,10 +5947,12 @@ class LinkerManagerDialog extends ComfyDialog {
 
         try {
             btn.disabled = true;
+            btn.classList.remove('ml-is-success-action', 'ml-btn-primary');
             btn.textContent = 'Starting...';
             
             if (progressDiv) {
-                progressDiv.style.display = 'block';
+                progressDiv.classList.remove('ml-is-hidden');
+                progressDiv.classList.add('ml-is-visible');
                 // Show progress bar with cancel button immediately
                 progressDiv.innerHTML = this.renderProgressWithAction({
                     percent: 0,
@@ -5983,6 +6006,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 progressDiv.innerHTML = this.renderStatusMessage(error.message, 'error');
             }
             btn.disabled = false;
+            btn.classList.remove('ml-is-success-action', 'ml-btn-primary');
             btn.textContent = 'Retry';
             this.showNotification('Download failed: ' + error.message, 'error');
         }
