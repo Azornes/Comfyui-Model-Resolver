@@ -136,4 +136,24 @@
     --ml-ui-radius-sm: var(--ml-radius-xl);
     --ml-ui-radius-md: var(--ml-radius-2xl);
     --ml-ui-radius-lg: var(--ml-radius-3xl);
+    --ml-missing-control-bg: rgba(255, 255, 255, 0.035);
+    --ml-missing-control-bg-hover: rgba(255, 255, 255, 0.06);
+    --ml-missing-control-border: rgba(255, 255, 255, 0.105);
+    --ml-missing-control-border-hover: rgba(255, 255, 255, 0.17);
+    --ml-missing-control-focus-border: rgba(114, 211, 138, 0.30);
+    --ml-missing-control-focus-ring: rgba(114, 211, 138, 0.08);
+    --ml-missing-control-radius: 7px;
+    --ml-missing-control-shadow: none;
+    --ml-missing-control-transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    --ml-missing-icon-button-size: 28px;
+    --ml-missing-icon-size: 13px;
+    --ml-missing-field-height: 38px;
+    --ml-missing-search-button-height: 34px;
+    --ml-missing-chip-bg: rgba(255, 255, 255, 0.045);
+    --ml-missing-chip-bg-hover: rgba(255, 255, 255, 0.06);
+    --ml-missing-chip-border: rgba(255, 255, 255, 0.08);
+    --ml-missing-chip-border-hover: rgba(255, 255, 255, 0.18);
+    --ml-missing-chip-radius: 999px;
+    --ml-missing-chip-height: 20px;
+    --ml-missing-chip-icon-size: var(--ml-spacing-12);
 }
