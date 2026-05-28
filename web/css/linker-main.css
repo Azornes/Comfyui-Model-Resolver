@@ -265,6 +265,7 @@
 }
 
 .ml-missing-browser {
+    --ml-missing-bg: #111;
     --ml-missing-surface: rgba(255,255,255,0.03);
     --ml-missing-surface-raised: rgba(255,255,255,0.052);
     --ml-missing-surface-muted: rgba(255,255,255,0.02);
@@ -278,19 +279,20 @@
     min-height: 0;
     overflow: hidden;
     border: 1px solid var(--ml-missing-line);
-    background: #111;
+    background: var(--ml-missing-bg);
 }
 .ml-missing-list-pane,
 .ml-missing-detail-pane {
     min-width: 0;
     min-height: 0;
     overflow: hidden;
+    background: var(--ml-missing-bg);
 }
 .ml-missing-list-pane {
     display: grid;
     grid-template-rows: auto auto minmax(0, 1fr);
     border-right: 1px solid var(--ml-missing-line);
-    background: transparent;
+    background: var(--ml-missing-bg);
 }
 .ml-missing-list-toolbar {
     display: flex;
@@ -356,7 +358,7 @@
     min-height: 0;
     overflow-y: auto;
     scrollbar-width: auto;
-    background: linear-gradient(180deg, transparent 0%, rgba(255,255,255,0.006) 100%);
+    background: var(--ml-missing-bg);
 }
 #model-linker-modal .ml-missing-list-row {
     width: 100%;
@@ -611,7 +613,7 @@
 }
 .ml-missing-detail-pane {
     overflow-y: auto;
-    background: transparent;
+    background: var(--ml-missing-bg);
 }
 .ml-missing-detail-pane .ml-card {
     margin: 0;
@@ -3367,7 +3369,7 @@
 
 /* Missing detail panel polish */
 #model-linker-modal .ml-missing-detail-pane {
-    background: transparent;
+    background: var(--ml-missing-bg);
 }
 #model-linker-modal .ml-missing-detail-pane .ml-card {
     padding: 18px 20px;
