@@ -2036,7 +2036,8 @@
     align-self: flex-end;
     height: 36px;
     min-height: 36px;
-    padding: 0 21px;
+    box-sizing: border-box;
+    padding: 0 21px 5px;
     margin-bottom: 0;
     background: transparent !important;
     border: 0;
@@ -2064,8 +2065,8 @@
 .ml-tab:not(.ml-tab-active):hover::after {
     content: "";
     position: absolute;
-    inset: 1px 5px 0;
-    border-radius: 8px 8px 0 0;
+    inset: 1px 5px 6px;
+    border-radius: 8px;
     background: var(--ml-tab-hover-bg);
     pointer-events: none;
     z-index: -1;
@@ -2078,8 +2079,8 @@
     content: "";
     position: absolute;
     left: 0;
-    top: 11px;
-    bottom: 11px;
+    top: 8px;
+    bottom: 14px;
     width: 1px;
     background: var(--ml-tab-separator);
     pointer-events: none;
@@ -2087,7 +2088,7 @@
 .ml-tab.ml-tab-active {
     height: 36px;
     min-height: 36px;
-    padding: 0 24px;
+    padding: 0 24px 5px;
     margin-bottom: 0;
     color: var(--ml-text, #eef2f7);
     background: var(--ml-tab-active-bg) !important;
