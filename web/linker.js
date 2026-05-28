@@ -2014,19 +2014,16 @@ class LinkerManagerDialog extends ComfyDialog {
     createHeader() {
         // Create tabs
         this.missingTab = $el("button.ml-tab.ml-tab-active", {
-            textContent: "Missing Models",
             onclick: () => this.switchTab('missing')
-        });
+        }, [$el("span.ml-tab-label", { textContent: "Missing Models" })]);
         
         this.loadedTab = $el("button.ml-tab", {
-            textContent: "Loaded Models",
             onclick: () => this.switchTab('loaded')
-        });
+        }, [$el("span.ml-tab-label", { textContent: "Loaded Models" })]);
 
         this.optionsTab = $el("button.ml-tab", {
-            textContent: "Options",
             onclick: () => this.switchTab('options')
-        });
+        }, [$el("span.ml-tab-label", { textContent: "Options" })]);
         if (this.activeTab === 'missing') {
             this.updateTabButtonStates();
         }

@@ -2037,7 +2037,7 @@
     height: 36px;
     min-height: 36px;
     box-sizing: border-box;
-    padding: 0 21px 5px;
+    padding: 0 24px 5px;
     margin-bottom: 0;
     background: transparent !important;
     border: 0;
@@ -2046,30 +2046,46 @@
     color: rgba(255,255,255,0.68);
     font-size: 12px;
     font-weight: 600;
+    line-height: 1;
     cursor: pointer;
     white-space: nowrap;
     box-shadow: none;
     transform: none;
     opacity: 1;
-    isolation: isolate;
     appearance: none;
     -webkit-appearance: none;
-    transition: color 0.16s ease, background 0.16s ease;
+    transition: none;
+}
+.ml-tab-label {
+    position: relative;
+    z-index: 2;
+    pointer-events: none;
+    transform: translateZ(0);
+    backface-visibility: hidden;
 }
 .ml-tab:not(.ml-tab-active):hover {
-    color: var(--ml-text, #eef2f7);
+    padding: 0 24px 5px !important;
     background: transparent !important;
     border-radius: 0;
-    z-index: 3;
+    transform: none !important;
 }
-.ml-tab:not(.ml-tab-active):hover::after {
+.ml-tab:not(.ml-tab-active):focus,
+.ml-tab:not(.ml-tab-active):active {
+    padding: 0 24px 5px !important;
+    transform: none !important;
+}
+.ml-tab:not(.ml-tab-active)::after {
     content: "";
     position: absolute;
     inset: 1px 5px 6px;
     border-radius: 8px;
     background: var(--ml-tab-hover-bg);
+    opacity: 0;
     pointer-events: none;
-    z-index: -1;
+    z-index: 1;
+}
+.ml-tab:not(.ml-tab-active):hover::after {
+    opacity: 1;
 }
 .ml-tab:not(.ml-tab-active):hover::before,
 .ml-tab:not(.ml-tab-active):hover + .ml-tab:not(.ml-tab-active)::before {
