@@ -1591,7 +1591,7 @@ class LinkerManagerDialog extends ComfyDialog {
         if (typeTag) {
             const modelType = data.model_type || data.modelType || '';
             typeTag.textContent = modelType.toUpperCase();
-            typeTag.className = `ml-info-tag ml-info-type -type-${modelType.toLowerCase()}`;
+            typeTag.className = `ml-info-tag ml-info-type ${this.getModelTypeColorClass(modelType)}`;
         }
         
         // Update base model tag
@@ -2348,6 +2348,75 @@ class LinkerManagerDialog extends ComfyDialog {
             'hypernetworks': 'hypernetwork'
         };
         return displayNames[category] || category || 'unknown';
+    }
+
+    getModelTypeColorClass(value = '') {
+        const token = String(value || '')
+            .trim()
+            .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+            .toLowerCase()
+            .replace(/[\s./\\-]+/g, '_')
+            .replace(/[^a-z0-9_]/g, '')
+            .replace(/_+/g, '_')
+            .replace(/^_|_$/g, '');
+        const colorNames = {
+            checkpoints: 'model',
+            checkpoint: 'model',
+            ckpt: 'model',
+            model: 'model',
+            diffusion_models: 'model',
+            diffusion_model: 'model',
+            unet: 'model',
+            loras: 'lora',
+            lora: 'lora',
+            locon: 'lora',
+            lycoris: 'lora',
+            dora: 'lora',
+            hypernetworks: 'lora',
+            hypernetwork: 'lora',
+            style_models: 'style-model',
+            style_model: 'style-model',
+            vae: 'vae',
+            vaes: 'vae',
+            vae_approx: 'taesd',
+            taesd: 'taesd',
+            controlnet: 'controlnet',
+            control_net: 'controlnet',
+            controlnets: 'controlnet',
+            control_nets: 'controlnet',
+            t2i_adapter: 'controlnet',
+            t2i_adapters: 'controlnet',
+            embeddings: 'conditioning',
+            embedding: 'conditioning',
+            textualinversion: 'conditioning',
+            textual_inversion: 'conditioning',
+            aesthetic_gradient: 'conditioning',
+            text_encoders: 'clip',
+            text_encoder: 'clip',
+            clip: 'clip',
+            clips: 'clip',
+            clip_vision: 'clip-vision',
+            clipvision: 'clip-vision',
+            clip_vision_output: 'clip-vision-output',
+            upscale_models: 'image',
+            upscale_model: 'image',
+            upscaler: 'image',
+            upscalers: 'image',
+            latent_upscale_models: 'latent',
+            latent_upscale_model: 'latent',
+            latent: 'latent',
+            image: 'image',
+            images: 'image',
+            mask: 'mask',
+            masks: 'mask',
+            noise: 'noise',
+            sampler: 'sampler',
+            samplers: 'sampler',
+            sigmas: 'sigmas',
+            guider: 'guider',
+            guiders: 'guider'
+        };
+        return `ml-type-chip ml-type-chip--${colorNames[token] || 'generic'}`;
     }
 
     getCategoryTokenName(category = '') {
@@ -4359,6 +4428,7 @@ class LinkerManagerDialog extends ComfyDialog {
             const matchDisplay = matchName || 'No local match';
             const matchClass = confidence === 100 ? 'exact' : (bestMatch ? 'partial' : 'none');
             const typeLabel = missing.category ? this.getCategoryDisplayName(missing.category) : 'unknown';
+            const typeColorClass = this.getModelTypeColorClass(missing.category || typeLabel);
             const nodeDisplay = this.getMissingNodeDisplay(missing);
             const nodeId = missing.node_id ?? '';
             const rowNodeHtml = nodeDisplay.canLocate
@@ -4374,7 +4444,7 @@ class LinkerManagerDialog extends ComfyDialog {
                         <span class="ml-missing-row-name" data-tooltip="${this.escapeHtml(filename)}">${this.escapeHtml(formattedFilename.display)}</span>
                         ${rowNodeHtml}
                     </span>
-                    <span class="ml-missing-row-type">${this.escapeHtml(typeLabel)}</span>
+                    <span class="ml-missing-row-type ${typeColorClass}">${this.escapeHtml(typeLabel)}</span>
                     <span class="ml-missing-row-best" data-tooltip="${this.escapeHtml(matchDisplay)}">
                         ${bestMatch ? this.escapeHtml(matchDisplay) : '<span class="ml-missing-row-none">-- No local match</span>'}
                     </span>
@@ -4704,7 +4774,7 @@ class LinkerManagerDialog extends ComfyDialog {
 
         html += `<div class="ml-card-subtitle">`;
         if (missing.category) {
-            html += `<span class="ml-category-chip" data-tooltip="${this.escapeHtml(missing.category)}">${this.getCategoryDisplayName(missing.category)}</span>`;
+            html += `<span class="ml-category-chip ${this.getModelTypeColorClass(missing.category)}" data-tooltip="${this.escapeHtml(missing.category)}">${this.getCategoryDisplayName(missing.category)}</span>`;
         }
         html += `<span id="${locateId}" class="${nodeChipClasses}"${nodeChipTitle ? ` data-tooltip="${this.escapeHtml(nodeChipTitle)}"` : ''}>`;
         if (missing.is_top_level !== false) {
