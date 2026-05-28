@@ -56,10 +56,10 @@
     justify-content: space-between;
     align-items: center;
     gap: var(--ml-spacing-10);
-    min-height: 40px;
-    padding: 5px 10px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.09);
-    background: linear-gradient(180deg, rgba(255,255,255,0.035) 0%, rgba(255,255,255,0.012) 100%);
+    min-height: 42px;
+    padding: 6px 10px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.075);
+    background: #1f1f1f;
 }
 
 .ml-dialog-brand,
@@ -73,13 +73,14 @@
 .ml-dialog-brand {
     min-width: 0;
     flex: 1 1 auto;
+    align-self: stretch;
 }
 
 .ml-dialog-controls {
     flex: 0 0 auto;
     align-self: stretch;
     gap: 0;
-    margin: -5px -10px -5px 0;
+    margin: -6px -10px 0 0;
 }
 
 #model-linker-drag-handle {

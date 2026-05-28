@@ -2027,6 +2027,9 @@ class LinkerManagerDialog extends ComfyDialog {
             textContent: "Options",
             onclick: () => this.switchTab('options')
         });
+        if (this.activeTab === 'missing') {
+            this.updateTabButtonStates();
+        }
 
         const dragHandle = $el("div", {
             id: "model-linker-drag-handle",
@@ -2983,19 +2986,48 @@ class LinkerManagerDialog extends ComfyDialog {
 
     }
 
+    getTabButton(tab) {
+        return {
+            missing: this.missingTab,
+            loaded: this.loadedTab,
+            options: this.optionsTab
+        }[tab] || null;
+    }
+
+    updateTabButtonStates() {
+        ['missing', 'loaded', 'options'].forEach((tab) => {
+            const button = this.getTabButton(tab);
+            if (!button) return;
+            const isActive = tab === this.activeTab;
+            button.classList.toggle('ml-tab-active', isActive);
+            button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            button.setAttribute('aria-disabled', isActive ? 'true' : 'false');
+            if (isActive) {
+                button.setAttribute('aria-current', 'page');
+            } else {
+                button.removeAttribute('aria-current');
+            }
+        });
+    }
+
     switchTab(tab) {
-        this.activeTab = this.getValidTab(tab);
+        const nextTab = this.getValidTab(tab);
+        const nextTabButton = this.getTabButton(nextTab);
+        if (nextTab === this.activeTab && nextTabButton?.classList.contains('ml-tab-active')) {
+            this.hideTooltip();
+            return;
+        }
+
+        this.activeTab = nextTab;
         this.persistActiveTab(this.activeTab);
         this.hideTooltip();
         this.animateTabContentTransition();
+        this.updateTabButtonStates();
 
         if (this.activeTab === 'missing') {
             if (this.contentElement) {
                 this.contentElement.style.overflowY = 'auto';
             }
-            this.missingTab.classList.add('ml-tab-active');
-            this.loadedTab.classList.remove('ml-tab-active');
-            this.optionsTab.classList.remove('ml-tab-active');
             this.downloadAllButton.style.display = 'inline-flex';
             this.autoResolveButton.style.display = 'inline-flex';
             this.applyPendingBtn.style.display = 'inline-flex';
@@ -3011,9 +3043,6 @@ class LinkerManagerDialog extends ComfyDialog {
             if (this.contentElement) {
                 this.contentElement.style.overflowY = 'auto';
             }
-            this.missingTab.classList.remove('ml-tab-active');
-            this.loadedTab.classList.add('ml-tab-active');
-            this.optionsTab.classList.remove('ml-tab-active');
             this.downloadAllButton.style.display = 'none';
             this.autoResolveButton.style.display = 'none';
             this.applyPendingBtn.style.display = 'none';
@@ -3029,9 +3058,6 @@ class LinkerManagerDialog extends ComfyDialog {
             if (this.contentElement) {
                 this.contentElement.style.overflowY = 'hidden';
             }
-            this.missingTab.classList.remove('ml-tab-active');
-            this.loadedTab.classList.remove('ml-tab-active');
-            this.optionsTab.classList.add('ml-tab-active');
             this.downloadAllButton.style.display = 'none';
             this.autoResolveButton.style.display = 'none';
             this.applyPendingBtn.style.display = 'none';
