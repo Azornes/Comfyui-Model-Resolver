@@ -244,7 +244,7 @@
     min-height: 0;
     overflow: hidden;
     border: 1px solid var(--ml-missing-line);
-    background: radial-gradient(circle at 18% 0%, rgba(255,255,255,0.035), transparent 34%), #111;
+    background: #111;
 }
 .ml-missing-list-pane,
 .ml-missing-detail-pane {
@@ -265,7 +265,7 @@
     gap: 12px;
     padding: 14px 16px;
     border-bottom: 1px solid var(--ml-missing-line);
-    background: linear-gradient(180deg, rgba(255,255,255,0.026) 0%, rgba(255,255,255,0.01) 100%);
+    background: var(--ml-missing-surface);
 }
 .ml-missing-list-title {
     font-size: 15px;
@@ -787,25 +787,39 @@
     display: block;
 }
 #model-linker-modal .ml-missing-row-locate {
+    all: unset;
+    display: inline-flex;
+    align-items: center;
+    box-sizing: border-box;
+    grid-column: 1;
     justify-self: start;
     max-width: 100%;
     min-width: 0;
-    min-height: 18px;
+    min-height: 20px;
     margin: 0;
-    padding: 1px 6px 1px 5px;
-    gap: 3px;
-    background: rgba(255,255,255,0.026);
-    border-color: rgba(255,255,255,0.065);
-    color: rgba(255,255,255,0.72);
+    padding: 2px 8px;
+    gap: var(--ml-spacing-4);
+    background: rgba(255,255,255,0.045);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 999px;
+    box-shadow: none;
+    color: #f1f1f1;
     font-family: inherit;
     font-size: 10px;
-    appearance: none;
+    font-weight: 400;
+    line-height: normal;
+    white-space: nowrap;
+    cursor: pointer;
     flex-shrink: 1;
+    overflow: hidden;
+    vertical-align: middle;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
 #model-linker-modal .ml-missing-row-locate:hover {
-    background: rgba(255,255,255,0.04);
-    border-color: rgba(255,255,255,0.11);
-    color: rgba(255,255,255,0.9);
+    background: rgba(255,255,255,0.06);
+    border-color: rgba(255,255,255,0.18);
+    color: #ffffff;
+    transform: none;
 }
 #model-linker-modal .ml-missing-row-locate:focus-visible {
     outline: none;
@@ -814,8 +828,8 @@
 }
 #model-linker-modal .ml-missing-row-locate .ml-node-chip-icon,
 #model-linker-modal .ml-missing-row-locate .ml-node-chip-icon svg {
-    width: 10px;
-    height: 10px;
+    width: var(--ml-spacing-12);
+    height: var(--ml-spacing-12);
 }
 .ml-category-chip {
     display: inline-flex;
@@ -3214,9 +3228,7 @@
 
 /* Missing detail panel polish */
 #model-linker-modal .ml-missing-detail-pane {
-    background:
-        radial-gradient(circle at 40% 0%, rgba(255,255,255,0.035), transparent 30%),
-        transparent;
+    background: transparent;
 }
 #model-linker-modal .ml-missing-detail-pane .ml-card {
     padding: 18px 20px;
@@ -3287,17 +3299,29 @@
 #model-linker-modal .ml-missing-detail-pane .ml-local-link-btn {
     width: 28px;
     min-width: 28px;
+    max-width: 28px;
     height: 28px;
     min-height: 28px;
-    color: #cfcfcf;
-    background: rgba(255,255,255,0.04);
-    border-color: rgba(255,255,255,0.12);
+    flex: 0 0 28px;
+    padding: 0;
+    color: var(--ml-text);
+    background: rgba(255,255,255,0.035) !important;
+    border: 1px solid rgba(255,255,255,0.105) !important;
     border-radius: 7px;
+    box-shadow: none !important;
 }
 #model-linker-modal .ml-missing-detail-pane .ml-local-link-btn:hover:not(:disabled) {
-    color: #ffffff;
-    background: rgba(255,255,255,0.07);
-    border-color: rgba(255,255,255,0.18);
+    color: var(--ml-text);
+    background: rgba(255,255,255,0.06) !important;
+    border-color: rgba(255,255,255,0.17) !important;
+    transform: none;
+}
+#model-linker-modal .ml-missing-detail-pane .ml-local-link-btn > svg {
+    display: block !important;
+    width: 13px !important;
+    height: 13px !important;
+    flex: 0 0 13px;
+    pointer-events: none;
 }
 #model-linker-modal .ml-missing-detail-pane .ml-local-alternatives-toggle {
     min-height: 28px;
@@ -3341,6 +3365,9 @@
     box-shadow: 0 0 0 2px rgba(114,211,138,0.08);
 }
 #model-linker-modal .ml-missing-detail-pane .ml-combo-refresh-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     flex: 0 0 38px;
     width: 38px;
     min-width: 38px;
@@ -3348,16 +3375,21 @@
     min-height: 38px;
     padding: 0;
     aspect-ratio: auto;
-    background: rgba(255,255,255,0.035);
-    border-color: rgba(255,255,255,0.10);
-    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.105) !important;
+    background: rgba(255,255,255,0.035) !important;
+    border-radius: 7px;
     box-shadow: none !important;
-    color: #d6d6d6;
+    color: var(--ml-text);
+    font-size: 0;
+    line-height: 1;
+    overflow: hidden;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 #model-linker-modal .ml-missing-detail-pane .ml-combo-refresh-btn:hover:not(:disabled) {
-    background: rgba(255,255,255,0.055);
-    border-color: rgba(255,255,255,0.16);
-    color: #ffffff;
+    background: rgba(255,255,255,0.06) !important;
+    border-color: rgba(255,255,255,0.17) !important;
+    color: var(--ml-text);
+    transform: none;
 }
 #model-linker-modal .ml-missing-detail-pane .ml-combo-refresh-btn:focus-visible {
     outline: none;
@@ -3365,8 +3397,8 @@
     box-shadow: 0 0 0 2px rgba(114,211,138,0.08) !important;
 }
 #model-linker-modal .ml-missing-detail-pane .ml-combo-refresh-icon {
-    width: 15px;
-    height: 15px;
+    width: 13px;
+    height: 13px;
     display: block;
 }
 #model-linker-modal .ml-missing-detail-pane .ml-download-section {
@@ -3379,16 +3411,30 @@
     min-height: 34px;
     height: 34px;
     padding: 0 12px;
-    background: rgba(255,255,255,0.028);
-    border-color: rgba(255,255,255,0.10);
-    border-radius: 6px;
+    background: rgba(255,255,255,0.035) !important;
+    border: 1px solid rgba(255,255,255,0.105) !important;
+    border-radius: 7px;
     box-shadow: none !important;
+    color: var(--ml-text);
     font-size: 12px;
     font-weight: 700;
+    transform: none;
 }
 #model-linker-modal .ml-missing-detail-pane .ml-download-section .ml-search-source-bar > .ml-btn:hover:not(:disabled) {
-    background: rgba(255,255,255,0.05);
-    border-color: rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.06) !important;
+    border-color: rgba(255,255,255,0.17) !important;
+    color: var(--ml-text);
+    transform: none;
+}
+#model-linker-modal .ml-missing-detail-pane .ml-download-section .ml-search-source-bar > .ml-btn .ml-btn-icon {
+    width: 13px;
+    height: 13px;
+    font-size: 13px;
+}
+#model-linker-modal .ml-missing-detail-pane .ml-download-section .ml-search-source-bar > .ml-btn .ml-btn-icon svg {
+    width: 13px;
+    height: 13px;
+    display: block;
 }
 #model-linker-modal .ml-missing-detail-pane .ml-download-target {
     padding-top: 12px;
