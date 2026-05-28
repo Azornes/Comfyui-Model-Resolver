@@ -2039,7 +2039,8 @@ class LinkerManagerDialog extends ComfyDialog {
         const fullscreenButton = $el("button", {
             id: "model-linker-fullscreen-toggle",
             className: "ml-window-btn ml-window-btn--fullscreen",
-            textContent: "⛶",
+            innerHTML: getSvgIcon('windowMaximize', 'currentColor', 'ml-window-btn-icon'),
+            ariaLabel: "Toggle full screen",
             onclick: () => this.toggleFullScreen()
         });
         this.setTooltip(fullscreenButton, "Toggle full screen");
@@ -2058,7 +2059,8 @@ class LinkerManagerDialog extends ComfyDialog {
                     fullscreenButton,
                     $el("button", {
                         className: "ml-window-btn ml-window-btn--close",
-                        textContent: "×",
+                        innerHTML: getSvgIcon('x', 'currentColor', 'ml-window-btn-icon'),
+                        ariaLabel: "Close Model Linker",
                         onclick: () => this.close()
                     })
                 ])
@@ -2091,7 +2093,11 @@ class LinkerManagerDialog extends ComfyDialog {
             el.style.maxHeight = '100vh';
             el.style.borderRadius = '0';
             el.style.resize = 'none';
-            if (btn) btn.textContent = '🗗';
+            if (btn) {
+                btn.innerHTML = getSvgIcon('windowRestore', 'currentColor', 'ml-window-btn-icon');
+                btn.setAttribute('aria-label', 'Exit full screen');
+                this.setTooltip(btn, 'Exit full screen');
+            }
             try { localStorage.setItem('model_linker_modal_fullscreen', '1'); } catch (e) {}
         } else {
             // Restore centered sizing
@@ -2126,7 +2132,11 @@ class LinkerManagerDialog extends ComfyDialog {
                 el.style.left = '50%';
                 el.style.transform = 'translate(-50%, -50%)';
             }
-            if (btn) btn.textContent = '⛶';
+            if (btn) {
+                btn.innerHTML = getSvgIcon('windowMaximize', 'currentColor', 'ml-window-btn-icon');
+                btn.setAttribute('aria-label', 'Enter full screen');
+                this.setTooltip(btn, 'Enter full screen');
+            }
             this.ensureModalHandleInViewport({ persist: true });
             try { localStorage.setItem('model_linker_modal_fullscreen', '0'); } catch (e) {}
         }

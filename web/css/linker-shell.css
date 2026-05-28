@@ -77,6 +77,9 @@
 
 .ml-dialog-controls {
     flex: 0 0 auto;
+    align-self: stretch;
+    gap: 0;
+    margin: -5px -10px -5px 0;
 }
 
 #model-linker-drag-handle {
@@ -93,29 +96,58 @@
     background: rgba(255, 255, 255, 0.025);
 }
 
-.ml-window-btn {
+#model-linker-modal .ml-window-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--input-text);
+    color: rgba(255, 255, 255, 0.70);
     cursor: pointer;
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.025);
-    border: 1px solid rgba(255, 255, 255, 0.11);
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    line-height: 1;
+    appearance: none;
+    -webkit-appearance: none;
+    transition: var(--ml-missing-control-transition, background 0.15s ease, border-color 0.15s ease, color 0.15s ease);
 }
 
-.ml-window-btn--fullscreen {
-    min-width: 28px;
-    height: 26px;
-    padding: 0 7px;
-    font-size: 13px;
+#model-linker-modal .ml-window-btn:hover {
+    color: rgba(255, 255, 255, 0.92);
+    background: rgba(255, 255, 255, 0.075) !important;
 }
 
-.ml-window-btn--close {
-    width: 26px;
-    height: 26px;
+#model-linker-modal .ml-window-btn:focus-visible {
+    outline: none;
+    box-shadow: none !important;
+}
+
+#model-linker-modal .ml-window-btn--fullscreen {
+    width: 46px;
+    min-width: 46px;
+    height: 100%;
+    min-height: 40px;
     padding: 0;
-    font-size: 18px;
+}
+
+#model-linker-modal .ml-window-btn--close {
+    width: 46px;
+    min-width: 46px;
+    height: 100%;
+    min-height: 40px;
+    padding: 0;
+}
+
+#model-linker-modal .ml-window-btn--close:hover {
+    color: #ffffff;
+    background: #c42b1c !important;
+}
+
+#model-linker-modal .ml-window-btn-icon {
+    display: block;
+    width: 23px;
+    height: 23px;
+    pointer-events: none;
 }
 
 #model-linker-body {
