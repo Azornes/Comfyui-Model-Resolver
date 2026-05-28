@@ -2020,10 +2020,12 @@
     padding: 0;
     margin: 0;
     background: transparent;
+    overflow: visible;
     position: relative;
     z-index: 2;
     --ml-tab-active-bg: var(--ml-bg, #121212);
-    --ml-tab-hover-bg: rgba(255,255,255,0.045);
+    --ml-tab-corner-size: 15px;
+    --ml-tab-hover-bg: rgba(255,255,255,0.075);
     --ml-tab-separator: rgba(255,255,255,0.125);
 }
 .ml-tab {
@@ -2039,6 +2041,7 @@
     background: transparent !important;
     border: 0;
     border-radius: 0;
+    overflow: visible;
     color: rgba(255,255,255,0.68);
     font-size: 12px;
     font-weight: 600;
@@ -2047,14 +2050,29 @@
     box-shadow: none;
     transform: none;
     opacity: 1;
+    isolation: isolate;
     appearance: none;
     -webkit-appearance: none;
     transition: color 0.16s ease, background 0.16s ease;
 }
-.ml-tab:hover {
+.ml-tab:not(.ml-tab-active):hover {
     color: var(--ml-text, #eef2f7);
-    background: var(--ml-tab-hover-bg) !important;
-    border-radius: 9px 9px 0 0;
+    background: transparent !important;
+    border-radius: 0;
+    z-index: 3;
+}
+.ml-tab:not(.ml-tab-active):hover::after {
+    content: "";
+    position: absolute;
+    inset: 1px 5px 0;
+    border-radius: 8px 8px 0 0;
+    background: var(--ml-tab-hover-bg);
+    pointer-events: none;
+    z-index: -1;
+}
+.ml-tab:not(.ml-tab-active):hover::before,
+.ml-tab:not(.ml-tab-active):hover + .ml-tab:not(.ml-tab-active)::before {
+    opacity: 0;
 }
 .ml-tab:not(.ml-tab-active) + .ml-tab:not(.ml-tab-active)::before {
     content: "";
@@ -2075,33 +2093,36 @@
     background: var(--ml-tab-active-bg) !important;
     border-radius: 10px 10px 0 0;
     cursor: default;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.07) !important;
+    box-shadow: 0 1px 0 var(--ml-tab-active-bg) !important;
     transform: none;
     z-index: 4;
 }
-.ml-tab.ml-tab-active:hover {
+.ml-tab.ml-tab-active:hover,
+.ml-tab.ml-tab-active:focus,
+.ml-tab.ml-tab-active:active {
     color: var(--ml-text, #eef2f7);
     background: var(--ml-tab-active-bg) !important;
+    box-shadow: 0 1px 0 var(--ml-tab-active-bg) !important;
 }
 .ml-tab.ml-tab-active::before,
 .ml-tab.ml-tab-active::after {
     content: "";
     position: absolute;
-    bottom: 0;
-    width: 10px;
-    height: 10px;
-    background: transparent;
+    bottom: -1px;
+    width: var(--ml-tab-corner-size);
+    height: var(--ml-tab-corner-size);
+    background: var(--ml-tab-active-bg);
     pointer-events: none;
 }
 .ml-tab.ml-tab-active::before {
-    left: -10px;
-    border-bottom-right-radius: 10px;
-    box-shadow: 5px 5px 0 5px var(--ml-tab-active-bg);
+    left: -13px;
+    -webkit-mask: radial-gradient(circle at 0 0, transparent 13px, #000 13px);
+    mask: radial-gradient(circle at 0 0, transparent 13px, #000 13px);
 }
 .ml-tab.ml-tab-active::after {
-    right: -10px;
-    border-bottom-left-radius: 10px;
-    box-shadow: -5px 5px 0 5px var(--ml-tab-active-bg);
+    right: -13px;
+    -webkit-mask: radial-gradient(circle at 100% 0, transparent 13px, #000 13px);
+    mask: radial-gradient(circle at 100% 0, transparent 13px, #000 13px);
 }
 #model-linker-modal .ml-tab,
 #model-linker-modal .ml-footer-btn,
@@ -2119,12 +2140,12 @@
     border-radius: 0 !important;
 }
 #model-linker-modal .ml-tab:not(.ml-tab-active):hover {
-    background: var(--ml-tab-hover-bg) !important;
-    border-radius: 9px 9px 0 0 !important;
+    background: transparent !important;
+    border-radius: 0 !important;
 }
 #model-linker-modal .ml-tab.ml-tab-active {
     margin-bottom: 0 !important;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.07) !important;
+    box-shadow: 0 1px 0 var(--ml-tab-active-bg) !important;
 }
 
 /* Loaded Models Tab */
