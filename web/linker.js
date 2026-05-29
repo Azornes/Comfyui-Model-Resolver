@@ -1276,21 +1276,31 @@ class LinkerManagerDialog extends ComfyDialog {
         }
     }
 
-    scheduleInitialUrnLocalMatchRefresh(missingModels = []) {
+    scheduleInitialUrnLocalMatchRefresh(missingModels = [], container = null, data = null) {
+        const refreshTasks = [];
+
         missingModels.forEach((missing) => {
             if (!missing?.is_urn || missing.__urnLocalRefreshQueued) return;
             if (this.getBestLocalMatch(missing, 70)) return;
 
             missing.__urnLocalRefreshQueued = true;
-            setTimeout(async () => {
+            const task = (async () => {
                 try {
                     await this.resolveUrnDataForMissing(missing);
                     await this.refreshUrnLocalMatches(missing);
                 } catch (error) {
-                    missing.__urnLocalRefreshQueued = false;
+                    missing.__urnLocalRefreshFailed = true;
                     console.error('Model Linker: initial URN local match refresh error:', error);
                 }
-            }, 0);
+            })();
+            refreshTasks.push(task);
+        });
+
+        if (!refreshTasks.length || !container || !data) return;
+
+        Promise.allSettled(refreshTasks).then(() => {
+            if (!container.isConnected || this.activeTab !== 'missing') return;
+            this.displayMissingModels(container, data);
         });
     }
 
@@ -5638,7 +5648,7 @@ class LinkerManagerDialog extends ComfyDialog {
             hasAny100Match
         );
         this.wireMissingModelsBrowser(container, data, sortedMissingModels);
-        this.scheduleInitialUrnLocalMatchRefresh(sortedMissingModels);
+        this.scheduleInitialUrnLocalMatchRefresh(sortedMissingModels, container, data);
     }
 
     renderMissingModel(missing, missingIndex = 0) {
@@ -5755,15 +5765,15 @@ class LinkerManagerDialog extends ComfyDialog {
         const downloadSource = missing.download_source;
         const urnDownloadId = `urn-download-${missing.node_id}-${missing.widget_index}`;
         
-        if (perfectMatches.length > 0) {
+        if (downloadSource && downloadSource.url) {
+            html += this.renderKnownDownloadPanel(missing, downloadSource);
+        } else if (perfectMatches.length > 0) {
             // Has perfect local match - download not needed, but allow online re-check.
             html += `<div class="ml-download-section">`;
             html += this.renderSearchControls(missing, { buttonText: 'Search Online' });
             html += this.renderDownloadTargetControls(missing, missing.category || 'checkpoints');
             html += `</div>`;
             html += `<div id="search-results-${missing.node_id}-${missing.widget_index}" class="ml-search-results"></div>`;
-        } else if (downloadSource && downloadSource.url) {
-            html += this.renderKnownDownloadPanel(missing, downloadSource);
         } else if (missing.is_urn) {
             html += `<div id="${urnDownloadId}" class="ml-download-section">`;
             html += `<div class="ml-download-info">Resolving CivitAI download for this URN...</div>`;
