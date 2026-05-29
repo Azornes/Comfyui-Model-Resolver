@@ -630,12 +630,6 @@
     top: 18px;
     z-index: 2;
 }
-.ml-missing-row-sources .ml-missing-source-dot:nth-child(3):nth-last-child(2) {
-    left: 22px;
-}
-.ml-missing-row-sources .ml-missing-source-dot:nth-child(4):last-child {
-    left: 52px;
-}
 .ml-missing-row-sources .ml-missing-source-dot:nth-child(3):last-child {
     left: 37px;
 }
@@ -3349,6 +3343,20 @@
     font-size: 13px;
     font-weight: 500;
     color: #d8d8dd;
+}
+.ml-options-source-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+    color: currentColor;
+}
+.ml-options-source-icon svg {
+    display: block;
+    width: 16px;
+    height: 16px;
 }
 .ml-options-toggle-control {
     display: inline-flex;

@@ -298,19 +298,71 @@ class LinkerManagerDialog extends ComfyDialog {
         return labels[source] || source;
     }
 
+    getSearchSourceDefinitions() {
+        return [
+            {
+                source: 'local',
+                storageKey: 'modelLinker.searchSource.localEnabled',
+                tooltip: 'Searches bundled known-model data before online providers.'
+            },
+            {
+                source: 'huggingface',
+                storageKey: 'modelLinker.searchSource.huggingFaceEnabled',
+                tooltip: 'Searches Hugging Face when Everything is selected.'
+            },
+            {
+                source: 'civitai',
+                storageKey: 'modelLinker.searchSource.civitaiEnabled',
+                tooltip: 'Searches CivitAI when Everything is selected.'
+            },
+            {
+                source: 'civarchive',
+                storageKey: 'modelLinker.searchSource.civArchiveEnabled',
+                tooltip: 'Searches CivArchive when Everything is selected.'
+            },
+            {
+                source: 'lora_manager_archive',
+                storageKey: 'modelLinker.searchSource.loraManagerArchiveEnabled',
+                tooltip: 'Searches the local LoRA Manager archive when Everything is selected.'
+            }
+        ];
+    }
+
+    getSearchSourceDefinition(source) {
+        return this.getSearchSourceDefinitions().find(def => def.source === source) || null;
+    }
+
+    isSearchSourceEnabled(source) {
+        if (!source || source === 'all') return true;
+        const definition = this.getSearchSourceDefinition(source);
+        if (!definition) return true;
+        return localStorage.getItem(definition.storageKey) !== 'false';
+    }
+
+    isSearchSourceUsable(source) {
+        return this.isSourceAvailable(source) && this.isSearchSourceEnabled(source);
+    }
+
+    getEnabledSearchSources() {
+        const sources = this.getSearchSourceDefinitions()
+            .filter(def => this.isSearchSourceUsable(def.source))
+            .map(def => def.source);
+        return sources.length ? sources : ['local'];
+    }
+
+    getSearchSourceEnabledMap() {
+        return this.getSearchSourceDefinitions().reduce((enabled, def) => {
+            enabled[def.source] = this.isSearchSourceEnabled(def.source);
+            return enabled;
+        }, {});
+    }
+
     getSearchSourcesForSelection(selectedSource, missing = {}) {
         if (selectedSource !== 'all') {
-            return this.isSourceAvailable(selectedSource) ? [selectedSource] : [];
+            return this.isSearchSourceUsable(selectedSource) ? [selectedSource] : [];
         }
 
-        const sources = ['local', 'huggingface', 'civitai'];
-        if (this.isSourceAvailable('civarchive')) {
-            sources.push('civarchive');
-        }
-        if (this.isSourceAvailable('lora_manager_archive')) {
-            sources.push('lora_manager_archive');
-        }
-        return sources;
+        return this.getEnabledSearchSources();
     }
 
     setSourceProgress(state, source, patch = {}, missing = null) {
@@ -504,6 +556,10 @@ class LinkerManagerDialog extends ComfyDialog {
         const state = this.getSearchState(missing);
         const selectEl = container.querySelector(`#search-source-select-${missing.node_id}-${missing.widget_index}`);
         if (selectEl) {
+            const options = this.getSearchSourceOptions();
+            if (!options.some(option => option.value === state.selectedSource)) {
+                state.selectedSource = 'all';
+            }
             this.setDropdownValue(selectEl, state.selectedSource, this.getSearchSourceLabel(state.selectedSource));
         }
     }
@@ -2824,13 +2880,7 @@ class LinkerManagerDialog extends ComfyDialog {
     }
 
     getSearchSourceOptions() {
-        const sources = ['all', 'local', 'huggingface', 'civitai'];
-        if (this.isSourceAvailable('civarchive')) {
-            sources.push('civarchive');
-        }
-        if (this.isSourceAvailable('lora_manager_archive')) {
-            sources.push('lora_manager_archive');
-        }
+        const sources = ['all', ...this.getEnabledSearchSources()];
         return sources.map(source => ({
             value: source,
             label: this.getSearchSourceLabel(source)
@@ -3122,6 +3172,7 @@ class LinkerManagerDialog extends ComfyDialog {
         const civitai_candidate_limit = Number.isFinite(civitaiCandidateLimitRaw)
             ? Math.min(20, Math.max(1, civitaiCandidateLimitRaw))
             : 5;
+        const search_source_enabled = this.getSearchSourceEnabledMap();
 
         return {
             civitai_key: localStorage.getItem('modelLinker.civitaiApiKey') || '',
@@ -3133,7 +3184,8 @@ class LinkerManagerDialog extends ComfyDialog {
             hf_use_api_search: localStorage.getItem('modelLinker.hfUseApiSearch') !== 'false',
             hf_use_comfy_org_fallback: localStorage.getItem('modelLinker.hfUseComfyOrgFallback') !== 'false',
             hf_use_brave_fallback: localStorage.getItem('modelLinker.hfUseBraveFallback') !== 'false',
-            civitai_candidate_limit
+            civitai_candidate_limit,
+            search_source_enabled
         };
     }
 
@@ -3156,6 +3208,29 @@ class LinkerManagerDialog extends ComfyDialog {
         this.contentElement.style.overflowY = 'hidden';
 
         const tokens = this.getStoredTokens();
+        const sourceDefaultsRows = this.getSearchSourceDefinitions()
+            .filter(def => this.isSourceAvailable(def.source))
+            .map(def => {
+                const iconName = this.getSearchSourceIconName(def.source);
+                const checked = tokens.search_source_enabled?.[def.source] !== false;
+                const inputId = `ml-options-source-${def.source.replace(/_/g, '-')}`;
+                return `
+                    <label class="ml-options-toggle-row">
+                        <div class="ml-options-toggle-copy">
+                            <span class="ml-options-toggle-title">
+                                <span class="ml-options-source-icon" aria-hidden="true">${getSvgIcon(iconName)}</span>
+                                <span>${this.escapeHtml(this.getSearchSourceLabel(def.source))}</span>
+                                <span class="ml-tooltip-badge" data-tooltip="${this.escapeHtml(def.tooltip)}">?</span>
+                            </span>
+                        </div>
+                        <span class="ml-options-toggle-control">
+                            <input id="${inputId}" class="ml-options-switch-input ml-options-source-enabled" type="checkbox" data-source="${this.escapeHtml(def.source)}" data-storage-key="${this.escapeHtml(def.storageKey)}" ${checked ? 'checked' : ''}>
+                            <span class="ml-options-switch"></span>
+                        </span>
+                    </label>
+                `;
+            })
+            .join('');
         this.contentElement.innerHTML = `
             <div class="ml-options-wrap">
                 <div class="ml-options-shell">
@@ -3164,21 +3239,33 @@ class LinkerManagerDialog extends ComfyDialog {
                             <h3 class="ml-options-sidebar-title">Application Settings</h3>
                         </div>
                         <div class="ml-options-sidebar-group">
+                            <div class="ml-options-sidebar-label">Download</div>
+                            <div class="ml-options-nav">
+                                <button type="button" class="ml-options-nav-btn is-active" data-target="ml-options-section-sources">
+                                    <span class="ml-options-nav-main">
+                                        <span class="ml-options-nav-icon" aria-hidden="true">${getSvgIcon('download')}</span>
+                                        <span>Sources</span>
+                                    </span>
+                                    <span class="ml-options-nav-meta">01</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="ml-options-sidebar-group">
                             <div class="ml-options-sidebar-label">Providers</div>
                             <div class="ml-options-nav">
-                                <button type="button" class="ml-options-nav-btn is-active" data-target="ml-options-section-civitai">
+                                <button type="button" class="ml-options-nav-btn" data-target="ml-options-section-civitai">
                                     <span class="ml-options-nav-main">
                                         <span class="ml-options-nav-icon" aria-hidden="true">${getSvgIcon('database')}</span>
                                         <span>CivitAI</span>
                                     </span>
-                                    <span class="ml-options-nav-meta">01</span>
+                                    <span class="ml-options-nav-meta">02</span>
                                 </button>
                                 <button type="button" class="ml-options-nav-btn" data-target="ml-options-section-hf">
                                     <span class="ml-options-nav-main">
                                         <span class="ml-options-nav-icon" aria-hidden="true">${getSvgIcon('globe')}</span>
                                         <span>HuggingFace</span>
                                     </span>
-                                    <span class="ml-options-nav-meta">02</span>
+                                    <span class="ml-options-nav-meta">03</span>
                                 </button>
                             </div>
                         </div>
@@ -3188,6 +3275,18 @@ class LinkerManagerDialog extends ComfyDialog {
                         </div>
                     </aside>
                     <div class="ml-options-main">
+                        <section id="ml-options-section-sources" class="ml-options-card ml-options-section">
+                            <div class="ml-options-section-head">
+                                <h4 class="ml-options-section-title">Download Sources</h4>
+                            </div>
+                            <div class="ml-options-grid">
+                                <div class="ml-options-panel">
+                                    <div class="ml-options-toggle-list">
+                                        ${sourceDefaultsRows}
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
                         <section id="ml-options-section-civitai" class="ml-options-card ml-options-section">
                             <div class="ml-options-section-head">
                                 <h4 class="ml-options-section-title">CivitAI</h4>
@@ -3324,6 +3423,7 @@ class LinkerManagerDialog extends ComfyDialog {
         const hfUseApiSearchInput = this.contentElement.querySelector('#ml-options-hf-use-api-search');
         const hfUseComfyOrgFallbackInput = this.contentElement.querySelector('#ml-options-hf-use-comfy-org-fallback');
         const hfUseBraveFallbackInput = this.contentElement.querySelector('#ml-options-hf-use-brave-fallback');
+        const sourceEnabledInputs = Array.from(this.contentElement.querySelectorAll('.ml-options-source-enabled'));
         const status = this.contentElement.querySelector('#ml-options-status');
         const saveBtn = this.contentElement.querySelector('#ml-options-save');
         const navButtons = Array.from(this.contentElement.querySelectorAll('.ml-options-nav-btn'));
@@ -3339,6 +3439,7 @@ class LinkerManagerDialog extends ComfyDialog {
             hfUseApiSearchInput,
             hfUseComfyOrgFallbackInput,
             hfUseBraveFallbackInput,
+            ...sourceEnabledInputs,
         ].filter(Boolean);
 
         const setStatus = (text, mode = '') => {
@@ -3389,7 +3490,7 @@ class LinkerManagerDialog extends ComfyDialog {
         bindVisibilityToggle(hfInput, hfToggle);
         bindVisibilityToggle(braveInput, braveToggle);
         setStatus('Saved only on this machine.');
-        setVisibleSection('ml-options-section-civitai');
+        setVisibleSection('ml-options-section-sources');
 
         trackedInputs.forEach((input) => {
             const eventName = input.type === 'checkbox' ? 'change' : 'input';
@@ -3424,6 +3525,18 @@ class LinkerManagerDialog extends ComfyDialog {
                 localStorage.setItem('modelLinker.hfUseComfyOrgFallback', hfUseComfyOrgFallbackInput?.checked ? 'true' : 'false');
                 localStorage.setItem('modelLinker.hfUseBraveFallback', hfUseBraveFallbackInput?.checked ? 'true' : 'false');
                 localStorage.setItem('modelLinker.civitaiCandidateLimit', `${civitaiCandidateLimit}`);
+                if (sourceEnabledInputs.length && !sourceEnabledInputs.some(input => input.checked)) {
+                    const localInput = sourceEnabledInputs.find(input => input.dataset.source === 'local');
+                    if (localInput) {
+                        localInput.checked = true;
+                    }
+                }
+                sourceEnabledInputs.forEach((input) => {
+                    const key = input.dataset.storageKey;
+                    if (key) {
+                        localStorage.setItem(key, input.checked ? 'true' : 'false');
+                    }
+                });
                 if (civitaiLimitInput) {
                     civitaiLimitInput.value = `${civitaiCandidateLimit}`;
                 }
@@ -4798,15 +4911,7 @@ class LinkerManagerDialog extends ComfyDialog {
     }
 
     renderMissingSourcesSummary(missing = {}) {
-        const sourceItems = [
-            { source: 'local' },
-            { source: 'huggingface' },
-            { source: 'civitai' },
-            { source: 'civarchive' }
-        ];
-        if (this.isSourceAvailable('lora_manager_archive')) {
-            sourceItems.push({ source: 'lora_manager_archive' });
-        }
+        const sourceItems = this.getEnabledSearchSources().map(source => ({ source }));
 
         return sourceItems.map(item => {
             const status = this.getMissingSourceStatus(missing, item.source);
@@ -6103,7 +6208,11 @@ class LinkerManagerDialog extends ComfyDialog {
         let filename = missing.original_path?.split('/').pop()?.split('\\').pop() || '';
         let category = missing.category || '';
         const state = this.getSearchState(missing);
-        const selectedSource = state.selectedSource || 'all';
+        let selectedSource = state.selectedSource || 'all';
+        if (selectedSource !== 'all' && !this.isSearchSourceUsable(selectedSource)) {
+            selectedSource = 'all';
+            state.selectedSource = 'all';
+        }
         const selectedSourceLabel = this.getSearchSourceLabel(selectedSource);
         const sourceIds = this.getSearchSourcesForSelection(selectedSource, missing);
         
