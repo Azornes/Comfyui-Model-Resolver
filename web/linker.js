@@ -3802,10 +3802,11 @@ class LinkerManagerDialog extends ComfyDialog {
             const orig = (r.original_path || '').toString();
             const rmId = `queue-remove-${i}`;
             html += `<div class="ml-queue-item">`;
-            html += `<div class="ml-queue-item-title">${nodeLabel} #${r.node_id}</div>`;
-            html += `<div class="ml-queue-item-meta">Original: <code>${orig}</code></div>`;
-            html += `<div class="ml-queue-item-selection">Selected: <code>${label}</code></div>`;
+            html += `<div class="ml-queue-item-title">${this.escapeHtml(nodeLabel)} #${this.escapeHtml(String(r.node_id))}</div>`;
+            html += `<div class="ml-queue-item-meta"><span>Original</span><code>${this.escapeHtml(orig)}</code></div>`;
+            html += `<div class="ml-queue-item-selection"><span>Selected</span><code>${this.escapeHtml(label)}</code></div>`;
             html += `<div class="ml-queue-item-actions"><button id="${rmId}" class="ml-btn ml-btn-secondary ml-btn-sm">Remove</button></div>`;
+            html += `</div>`;
         }
         html += '</div>';
         this.queueList.innerHTML = html;
