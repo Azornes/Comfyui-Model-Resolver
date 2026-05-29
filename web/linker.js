@@ -38,6 +38,7 @@ class LinkerManagerDialog extends ComfyDialog {
         this.lastDockContainer = null;
         this.pendingDockToSidebar = false;
         this.sidebarTabId = "comfyui-model-linker";
+        this.sidebarOpenModeStorageKey = "model_linker_sidebar_open_mode";
         this.dockButton = null;
         this.undockButton = null;
         this._floatingRectBeforeDock = null;
@@ -2180,6 +2181,25 @@ class LinkerManagerDialog extends ComfyDialog {
         el.style.transform = 'translate(-50%, -50%)';
     }
 
+    rememberSidebarOpenMode(mode) {
+        try {
+            localStorage.setItem(this.sidebarOpenModeStorageKey, mode === 'floating' ? 'floating' : 'docked');
+        } catch (e) {}
+    }
+
+    shouldOpenFromSidebarFloating() {
+        try {
+            return localStorage.getItem(this.sidebarOpenModeStorageKey) === 'floating';
+        } catch (e) {
+            return false;
+        }
+    }
+
+    isVisible() {
+        if (!this.element?.isConnected) return false;
+        return getComputedStyle(this.element).display !== 'none';
+    }
+
     dockTo(container) {
         if (!container || !this.element) return;
 
@@ -2195,6 +2215,7 @@ class LinkerManagerDialog extends ComfyDialog {
         this.dockContainer = container;
         this.lastDockContainer = container;
         this.pendingDockToSidebar = false;
+        this.rememberSidebarOpenMode('docked');
         this.backdrop.style.display = 'none';
         container.classList.add('ml-sidebar-dock-panel');
         this.element.classList.add('ml-is-docked');
@@ -2209,6 +2230,7 @@ class LinkerManagerDialog extends ComfyDialog {
     dockToSidebar() {
         if (this.docked) return;
 
+        this.rememberSidebarOpenMode('docked');
         this.pendingDockToSidebar = true;
 
         if (this.isUsableDockContainer(this.lastDockContainer)) {
@@ -2251,6 +2273,15 @@ class LinkerManagerDialog extends ComfyDialog {
         return rect.width > 0 && rect.height > 0;
     }
 
+    trySetSidebarStateProperty(target, property, value) {
+        try {
+            if (!(property in target)) return false;
+            return Reflect.set(target, property, value);
+        } catch (error) {
+            return false;
+        }
+    }
+
     tryOpenComfySidebarState() {
         const extensionManager = app.extensionManager;
         let opened = false;
@@ -2279,12 +2310,11 @@ class LinkerManagerDialog extends ComfyDialog {
                     candidate.setActiveSidebarTabId(this.sidebarTabId);
                     opened = true;
                 }
-                if ('activeSidebarTabId' in candidate) {
-                    candidate.activeSidebarTabId = this.sidebarTabId;
+                if (this.trySetSidebarStateProperty(candidate, 'activeSidebarTabId', this.sidebarTabId)) {
                     opened = true;
                 }
             } catch (error) {
-                console.debug('Model Linker: Sidebar state open attempt failed.', error);
+                // Sidebar internals differ between ComfyUI versions; unsupported state APIs are ignored.
             }
         }
 
@@ -2368,16 +2398,14 @@ class LinkerManagerDialog extends ComfyDialog {
                     candidate.setActiveSidebarTabId(null);
                     closed = true;
                 }
-                if ('activeSidebarTabId' in candidate) {
-                    candidate.activeSidebarTabId = null;
-                    closed = true;
-                }
-                if ('activeSidebarTab' in candidate && typeof candidate.activeSidebarTab !== 'function') {
-                    candidate.activeSidebarTab = null;
+                if (
+                    this.trySetSidebarStateProperty(candidate, 'activeSidebarTabId', null) ||
+                    this.trySetSidebarStateProperty(candidate, 'activeSidebarTab', null)
+                ) {
                     closed = true;
                 }
             } catch (error) {
-                console.debug('Model Linker: Sidebar state close attempt failed.', error);
+                // Sidebar internals differ between ComfyUI versions; unsupported state APIs are ignored.
             }
         }
 
@@ -4247,6 +4275,7 @@ class LinkerManagerDialog extends ComfyDialog {
     }
     
     close() {
+        this.rememberSidebarOpenMode(this.docked ? 'docked' : 'floating');
         this._hidePreview?.();
         this.hideTooltip();
         this.backdrop.style.display = "none";
@@ -6596,6 +6625,8 @@ class ModelLinker {
         const sidebarRegistered = this.registerSidebarButton();
         if (!sidebarRegistered) {
             await this.registerTopbarButton();
+        } else {
+            this.attachSidebarButtonToggleHandler();
         }
     }
 
@@ -6628,11 +6659,76 @@ class ModelLinker {
         }
     }
 
+    attachSidebarButtonToggleHandler() {
+        window.__modelLinkerSidebarToggleOwner = this;
+        if (window.__modelLinkerSidebarToggleHandlerAttached) return;
+
+        window.__modelLinkerSidebarToggleHandlerAttached = true;
+        window.__modelLinkerSidebarToggleHandler = (event) => {
+            window.__modelLinkerSidebarToggleOwner?.handleSidebarButtonClick(event);
+        };
+        document.addEventListener('click', window.__modelLinkerSidebarToggleHandler, true);
+    }
+
+    handleSidebarButtonClick(event) {
+        const target = event.target instanceof Element ? event.target : null;
+        const button = target?.closest(`.${this.sidebarTabId}-tab-button`);
+        if (!(button instanceof HTMLElement)) return;
+        if (!this.dialog?.isVisible()) return;
+
+        const wasDocked = this.dialog.docked;
+        this.dialog.close();
+
+        if (!wasDocked) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation?.();
+
+            requestAnimationFrame(() => {
+                if (this.isSidebarButtonActive(button)) {
+                    button.click();
+                }
+            });
+        }
+    }
+
+    isSidebarButtonActive(button) {
+        return button.matches([
+            '[aria-pressed="true"]',
+            '[aria-selected="true"]',
+            '[data-active="true"]',
+            '[data-selected="true"]',
+            '.active',
+            '.is-active',
+            '.selected',
+            '.p-highlight'
+        ].join(','));
+    }
+
     renderSidebarPanel(element) {
-        element.replaceChildren();
         element.style.height = "100%";
         element.classList.add("ml-sidebar-dock-panel");
 
+        if (!this.dialog) {
+            this.dialog = new LinkerManagerDialog();
+            window.modelLinkerDialog = this.dialog;
+        }
+
+        if (this.dialog.shouldOpenFromSidebarFloating()) {
+            if (this.dialog.isVisible() && !this.dialog.docked) {
+                this.dialog.close();
+                this.dialog.closeComfySidebar(element);
+                return;
+            }
+
+            this.openLinkerManager({
+                forceFloating: true,
+                closeSidebarContainer: element,
+            });
+            return;
+        }
+
+        element.replaceChildren();
         this.openLinkerManager({ dockContainer: element });
     }
 
@@ -7083,12 +7179,19 @@ class ModelLinker {
                 this.dialog = new LinkerManagerDialog();
                 window.modelLinkerDialog = this.dialog;
             }
-            if (options.dockContainer) {
+            if (options.dockContainer && !options.forceFloating) {
                 await this.dialog.showDocked(options.dockContainer, options.workflow || null);
                 return;
             }
 
-            await this.dialog.show(options.workflow || null);
+            const wasDocked = this.dialog.docked;
+            const showPromise = this.dialog.show(options.workflow || null);
+
+            if (options.closeSidebarContainer && !wasDocked) {
+                this.dialog.closeComfySidebar(options.closeSidebarContainer);
+            }
+
+            await showPromise;
         } catch (error) {
             console.error("🔗 Model Linker: Error creating/showing dialog:", error);
             alert("Error opening Model Linker: " + error.message);
