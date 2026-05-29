@@ -175,7 +175,7 @@
 
 #model-linker-body {
     display: flex;
-    gap: var(--ml-spacing-12);
+    gap: 0;
     padding: 8px 6px 6px;
     flex: 1;
     min-height: 0;
@@ -197,17 +197,40 @@
     max-width: 70%;
     display: flex;
     flex-direction: column;
-    padding-left: var(--ml-spacing-12);
-    border-left: 1px solid var(--border-color);
+    padding-left: var(--ml-spacing-10);
+    border-left: 0;
 }
 
 #model-linker-splitter {
-    width: var(--ml-spacing-6);
-    min-width: var(--ml-spacing-6);
-    opacity: 0.4;
+    position: relative;
+    width: 10px;
+    min-width: 10px;
+    opacity: 1;
     cursor: col-resize;
-    background: var(--border-color);
-    border-radius: var(--ml-spacing-3);
+    background: var(--ml-bg, #121212);
+    border-left: 1px solid rgba(255, 255, 255, 0.075);
+    border-right: 1px solid rgba(255, 255, 255, 0.075);
+    border-radius: 0;
+}
+
+#model-linker-splitter::before {
+    content: "";
+    position: absolute;
+    top: 16px;
+    bottom: 16px;
+    left: 50%;
+    width: 2px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.13);
+    transform: translateX(-50%);
+    transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+#model-linker-splitter:hover::before,
+#model-linker-splitter:focus-visible::before,
+#model-linker-body.ml-is-resizing-queue #model-linker-splitter::before {
+    background: rgba(114, 211, 138, 0.78);
+    box-shadow: 0 0 0 3px rgba(114, 211, 138, 0.12);
 }
 
 #queue-toggle-icon {

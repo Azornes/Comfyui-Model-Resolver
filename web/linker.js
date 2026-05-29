@@ -3451,6 +3451,7 @@ class LinkerManagerDialog extends ComfyDialog {
         const nextTabButton = this.getTabButton(nextTab);
         if (nextTab === this.activeTab && nextTabButton?.classList.contains('ml-tab-active')) {
             this.hideTooltip();
+            this.updateQueueVisibility();
             return;
         }
 
@@ -3459,6 +3460,7 @@ class LinkerManagerDialog extends ComfyDialog {
         this.hideTooltip();
         this.animateTabContentTransition();
         this.updateTabButtonStates();
+        this.updateQueueVisibility();
 
         if (this.activeTab === 'missing') {
             if (this.contentElement) {
@@ -3467,13 +3469,6 @@ class LinkerManagerDialog extends ComfyDialog {
             this.downloadAllButton.style.display = 'inline-flex';
             this.autoResolveButton.style.display = 'inline-flex';
             this.applyPendingBtn.style.display = 'inline-flex';
-            // Show queue panel
-            if (this.queueElement && !this.queueCollapsed) {
-                this.queueElement.style.display = '';
-            }
-            if (this.splitterElement) {
-                this.splitterElement.style.display = '';
-            }
             this.loadWorkflowData();
         } else if (this.activeTab === 'loaded') {
             if (this.contentElement) {
@@ -3482,13 +3477,6 @@ class LinkerManagerDialog extends ComfyDialog {
             this.downloadAllButton.style.display = 'none';
             this.autoResolveButton.style.display = 'none';
             this.applyPendingBtn.style.display = 'none';
-            // Hide queue panel in loaded models tab
-            if (this.queueElement) {
-                this.queueElement.style.display = 'none';
-            }
-            if (this.splitterElement) {
-                this.splitterElement.style.display = 'none';
-            }
             this.loadLoadedModels();
         } else {
             if (this.contentElement) {
@@ -3497,12 +3485,6 @@ class LinkerManagerDialog extends ComfyDialog {
             this.downloadAllButton.style.display = 'none';
             this.autoResolveButton.style.display = 'none';
             this.applyPendingBtn.style.display = 'none';
-            if (this.queueElement) {
-                this.queueElement.style.display = 'none';
-            }
-            if (this.splitterElement) {
-                this.splitterElement.style.display = 'none';
-            }
             this.displayOptions();
         }
     }
@@ -3950,22 +3932,35 @@ class LinkerManagerDialog extends ComfyDialog {
 
     setQueueCollapsed(collapsed) {
         this.queueCollapsed = !!collapsed;
-        if (!this.queueElement || !this.splitterElement) return;
         if (this.queueCollapsed) {
-            this.queueElement.style.display = 'none';
-            this.splitterElement.style.display = 'none';
             try { localStorage.setItem('model_linker_queue_collapsed', '1'); } catch (e) { }
         } else {
-            this.queueElement.style.display = '';
-            this.splitterElement.style.display = '';
             try { localStorage.setItem('model_linker_queue_collapsed', '0'); } catch (e) { }
         }
+        this.updateQueueVisibility();
         this.updateQueuePanel();
+    }
+
+    updateQueueVisibility() {
+        const isMissingTab = this.activeTab === 'missing';
+        const showQueuePanel = isMissingTab && !this.queueCollapsed;
+
+        if (this.queueElement) {
+            this.queueElement.style.display = showQueuePanel ? '' : 'none';
+        }
+        if (this.splitterElement) {
+            this.splitterElement.style.display = showQueuePanel ? '' : 'none';
+        }
+        if (this.queueToggleIcon) {
+            this.queueToggleIcon.style.display = isMissingTab ? '' : 'none';
+        }
+
         this.updateQueueToggleIcon();
     }
 
     updateQueueToggleIcon() {
         if (!this.queueToggleIcon) return;
+        this.queueToggleIcon.style.display = this.activeTab === 'missing' ? '' : 'none';
         if (this.queueCollapsed) {
             this.queueToggleIcon.textContent = '⮞';
             this.setTooltip(this.queueToggleIcon, 'Show queued selections');
@@ -3983,6 +3978,7 @@ class LinkerManagerDialog extends ComfyDialog {
             const body = document.getElementById('model-linker-body');
             const bodyRect = body ? body.getBoundingClientRect() : { width: window.innerWidth };
             this._splitDragging = true;
+            body?.classList.add('ml-is-resizing-queue');
             this._splitStart = {
                 x: e.clientX,
                 startWidth: rect.width,
@@ -4011,6 +4007,7 @@ class LinkerManagerDialog extends ComfyDialog {
     endSplitDrag() {
         if (!this._splitDragging) return;
         this._splitDragging = false;
+        document.getElementById('model-linker-body')?.classList.remove('ml-is-resizing-queue');
         document.removeEventListener('mousemove', this._onSplitMove);
         try {
             const rect = this.queueElement.getBoundingClientRect();
@@ -4244,6 +4241,8 @@ class LinkerManagerDialog extends ComfyDialog {
         this.attachDragHandleIfNeeded();
 
         this.activeTab = this.restoreActiveTab();
+        this.updateTabButtonStates();
+        this.updateQueueVisibility();
 
         if (this.activeTab === 'missing') {
             await this.loadWorkflowData(workflow);
