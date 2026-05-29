@@ -509,10 +509,6 @@
     display: none;
 }
 
-#model-linker-modal.ml-is-docked .ml-window-btn--fullscreen {
-    display: none;
-}
-
 @keyframes ml-slide-down {
     from {
         opacity: 0;

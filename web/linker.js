@@ -33,6 +33,7 @@ class LinkerManagerDialog extends ComfyDialog {
         this.activeTabStorageKey = 'model_linker_active_tab';
         this.activeTab = this.restoreActiveTab();  // Default tab
         this.fullscreen = false;
+        this.returnToDockedAfterFullscreen = false;
         this.docked = false;
         this.dockContainer = null;
         this.lastDockContainer = null;
@@ -2419,8 +2420,12 @@ class LinkerManagerDialog extends ComfyDialog {
     }
 
     setFullScreen(enable) {
+        const shouldReturnToDocked = !enable && this.returnToDockedAfterFullscreen;
         if (enable && this.docked) {
+            this.returnToDockedAfterFullscreen = true;
             this.undockToFloating({ persist: false });
+        } else if (enable) {
+            this.returnToDockedAfterFullscreen = false;
         }
 
         this.fullscreen = !!enable;
@@ -2449,6 +2454,7 @@ class LinkerManagerDialog extends ComfyDialog {
             }
             try { localStorage.setItem('model_linker_modal_fullscreen', '1'); } catch (e) {}
         } else {
+            this.returnToDockedAfterFullscreen = false;
             // Restore centered sizing
             el.style.maxWidth = '100vw';
             el.style.maxHeight = '100vh';
@@ -2488,6 +2494,10 @@ class LinkerManagerDialog extends ComfyDialog {
             }
             this.ensureModalHandleInViewport({ persist: true });
             try { localStorage.setItem('model_linker_modal_fullscreen', '0'); } catch (e) {}
+
+            if (shouldReturnToDocked) {
+                this.dockToSidebar();
+            }
         }
     }
 
