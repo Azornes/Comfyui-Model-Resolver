@@ -889,15 +889,14 @@ class LinkerManagerDialog extends ComfyDialog {
             for (let matchIndex = 0; matchIndex < sortedMatches.length; matchIndex++) {
                 const match = sortedMatches[matchIndex];
                 const buttonId = `resolve-${missingIndex}-${missing.node_id}-${missing.widget_index}-${matchIndex}`;
-                const matchPath = match.model?.relative_path || match.filename || '';
-                const formattedPath = this.formatPath(matchPath, 45);
+                const matchPath = match.model?.relative_path || match.model?.path || match.path || match.filename || '';
                 const isBestMatch = matchIndex === 0 && match.confidence >= 95;
                 const contextModel = this.buildContextMenuModelData(match.model || {}, match.filename || '');
                 const modelData = encodeURIComponent(JSON.stringify(contextModel));
 
                 html += `<div class="ml-match-row ${isBestMatch ? 'ml-best-match' : ''}" data-model="${modelData}" oncontextmenu="window.MLOpenContextMenu(event, this)">`;
                 html += this.getConfidenceBadge(match.confidence);
-                html += `<span class="ml-match-filename" data-tooltip="${this.escapeHtml(formattedPath.full)}">${formattedPath.display}</span>`;
+                html += `<span class="ml-match-filename" data-tooltip="${this.escapeHtml(matchPath)}">${this.escapeHtml(matchPath)}</span>`;
                 html += `<span class="ml-match-status ${match.confidence === 100 ? 'ml-match-status-exact' : 'ml-match-status-partial'}">${match.confidence === 100 ? 'Exact' : 'Partial'}</span>`;
                 html += `<button id="${buttonId}" class="ml-btn ml-btn-secondary ml-btn-sm ml-btn-icon-only ml-local-link-btn" data-tooltip="Link this local match" aria-label="Link this local match">`;
                 html += getSvgIcon('link');
@@ -919,9 +918,10 @@ class LinkerManagerDialog extends ComfyDialog {
                     const altBtnId = `resolve-alt-${missingIndex}-${missing.node_id}-${missing.widget_index}-${mIdx}`;
                     const contextModel = this.buildContextMenuModelData(match.model || {}, match.filename || '');
                     const modelData = encodeURIComponent(JSON.stringify(contextModel));
+                    const matchPath = match.model?.relative_path || match.model?.path || match.path || match.filename || '';
                     html += `<div class="ml-match-row" data-model="${modelData}" oncontextmenu="window.MLOpenContextMenu(event, this)">`;
                     html += this.getConfidenceBadge(match.confidence);
-                    html += `<span class="ml-match-filename" data-tooltip="${this.escapeHtml(match.path || match.filename)}">${match.filename || match.path?.split(/[/\\]/).pop()}</span>`;
+                    html += `<span class="ml-match-filename" data-tooltip="${this.escapeHtml(matchPath)}">${this.escapeHtml(matchPath)}</span>`;
                     html += `<span class="ml-match-status ml-match-status-partial">Partial</span>`;
                     html += `<button id="${altBtnId}" class="ml-btn ml-btn-secondary ml-btn-sm ml-btn-icon-only ml-local-link-btn" data-tooltip="Link this local match" aria-label="Link this local match">${getSvgIcon('link')}</button>`;
                     html += `</div>`;
@@ -4950,6 +4950,7 @@ class LinkerManagerDialog extends ComfyDialog {
     wireMissingModelDetail(container, missing, missingIndex) {
         this.wireLocalMatchButtons(container, missing, missingIndex);
         this.wireDownloadSearchPanel(container, missing);
+        this.updateSelectedBarForMissing(missing);
 
         const locateId = `locate-${missing.node_id}-${missing.widget_index}`;
         const locateBtn = container.querySelector(`#${locateId}`);
