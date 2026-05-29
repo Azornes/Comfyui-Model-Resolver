@@ -4438,28 +4438,25 @@ class LinkerManagerDialog extends ComfyDialog {
         const centerX = rect[0] + (rect[2] || 0) / 2;
         const centerY = rect[1] + (rect[3] || 0) / 2;
         const startScale = Number.isFinite(ds.scale) && ds.scale > 0 ? ds.scale : 1;
-        const dpr = window.devicePixelRatio || 1;
-        const canvasWidth = htmlCanvas.width || htmlCanvas.clientWidth || 0;
-        const canvasHeight = htmlCanvas.height || htmlCanvas.clientHeight || 0;
+        const locateViewport = this.getLocateViewport(htmlCanvas);
+        const viewportWidth = locateViewport.width;
+        const viewportHeight = locateViewport.height;
 
-        if (!canvasWidth || !canvasHeight) return false;
+        if (!viewportWidth || !viewportHeight) return false;
 
-        const viewportWidth = canvasWidth / dpr;
-        const viewportHeight = canvasHeight / dpr;
         const nodeWidth = Math.max(rect[2] || 0, 1);
         const nodeHeight = Math.max(rect[3] || 0, 1);
-        const paddingX = 140;
-        const paddingY = 96;
+        const paddingX = 36;
+        const paddingY = 32;
+        const maxLocateScale = 2.5;
         const fitScaleX = viewportWidth / (nodeWidth + (paddingX * 2));
         const fitScaleY = viewportHeight / (nodeHeight + (paddingY * 2));
-        const targetScale = Math.max(0.15, Math.min(1, fitScaleX, fitScaleY));
+        const targetScale = Math.max(0.15, Math.min(maxLocateScale, fitScaleX, fitScaleY));
 
         const getCenteredOffset = (scale) => {
-            const viewWidth = canvasWidth / (scale * dpr);
-            const viewHeight = canvasHeight / (scale * dpr);
             return {
-                x: -centerX + (viewWidth / 2),
-                y: -centerY + (viewHeight / 2)
+                x: -centerX + (locateViewport.centerX / scale),
+                y: -centerY + (locateViewport.centerY / scale)
             };
         };
 
@@ -4499,6 +4496,84 @@ class LinkerManagerDialog extends ComfyDialog {
 
         this._locateAnimationFrame = requestAnimationFrame(tick);
         return true;
+    }
+
+    getLocateViewport(htmlCanvas) {
+        const canvasRect = htmlCanvas.getBoundingClientRect?.();
+        const dpr = window.devicePixelRatio || 1;
+        const canvasWidth = canvasRect?.width || htmlCanvas.clientWidth || ((htmlCanvas.width || 0) / dpr);
+        const canvasHeight = canvasRect?.height || htmlCanvas.clientHeight || ((htmlCanvas.height || 0) / dpr);
+        const viewport = {
+            left: 0,
+            top: 0,
+            right: canvasWidth,
+            bottom: canvasHeight
+        };
+
+        if (this.docked && canvasRect?.width && canvasRect?.height) {
+            const obstructionElement = this.dockContainer instanceof HTMLElement
+                ? this.dockContainer
+                : this.element;
+            const obstructionRect = obstructionElement?.getBoundingClientRect?.();
+            if (obstructionRect?.width && obstructionRect?.height) {
+                this.subtractDockedObstructionFromLocateViewport(viewport, canvasRect, obstructionRect);
+            }
+        }
+
+        const width = Math.max(1, viewport.right - viewport.left);
+        const height = Math.max(1, viewport.bottom - viewport.top);
+        return {
+            width,
+            height,
+            centerX: viewport.left + (width / 2),
+            centerY: viewport.top + (height / 2)
+        };
+    }
+
+    subtractDockedObstructionFromLocateViewport(viewport, canvasRect, obstructionRect) {
+        const obstruction = {
+            left: Math.max(0, obstructionRect.left - canvasRect.left),
+            top: Math.max(0, obstructionRect.top - canvasRect.top),
+            right: Math.min(canvasRect.width, obstructionRect.right - canvasRect.left),
+            bottom: Math.min(canvasRect.height, obstructionRect.bottom - canvasRect.top)
+        };
+        const overlapWidth = obstruction.right - obstruction.left;
+        const overlapHeight = obstruction.bottom - obstruction.top;
+        if (overlapWidth <= 0 || overlapHeight <= 0) return;
+
+        const coversMostHeight = overlapHeight >= canvasRect.height * 0.5;
+        const coversMostWidth = overlapWidth >= canvasRect.width * 0.5;
+        const edgeTolerance = 2;
+
+        if (coversMostHeight) {
+            if (obstruction.left <= edgeTolerance) {
+                viewport.left = Math.min(viewport.right, Math.max(viewport.left, obstruction.right));
+                return;
+            }
+            if (obstruction.right >= canvasRect.width - edgeTolerance) {
+                viewport.right = Math.max(viewport.left, Math.min(viewport.right, obstruction.left));
+                return;
+            }
+
+            const leftSpace = obstruction.left - viewport.left;
+            const rightSpace = viewport.right - obstruction.right;
+            if (rightSpace >= leftSpace) {
+                viewport.left = Math.min(viewport.right, Math.max(viewport.left, obstruction.right));
+            } else {
+                viewport.right = Math.max(viewport.left, Math.min(viewport.right, obstruction.left));
+            }
+            return;
+        }
+
+        if (coversMostWidth) {
+            if (obstruction.top <= edgeTolerance) {
+                viewport.top = Math.min(viewport.bottom, Math.max(viewport.top, obstruction.bottom));
+                return;
+            }
+            if (obstruction.bottom >= canvasRect.height - edgeTolerance) {
+                viewport.bottom = Math.max(viewport.top, Math.min(viewport.bottom, obstruction.top));
+            }
+        }
     }
 
     /**
