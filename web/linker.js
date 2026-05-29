@@ -4274,12 +4274,18 @@ class LinkerManagerDialog extends ComfyDialog {
         ].join(','));
     }
     
-    close() {
+    close({ collapseSidebar = true } = {}) {
+        const wasDocked = this.docked;
+        const dockContainer = this.dockContainer;
         this.rememberSidebarOpenMode(this.docked ? 'docked' : 'floating');
         this._hidePreview?.();
         this.hideTooltip();
         this.backdrop.style.display = "none";
         this.element.style.display = "none";
+
+        if (wasDocked && collapseSidebar) {
+            this.closeComfySidebar(dockContainer);
+        }
     }
 
     /**
@@ -6753,7 +6759,7 @@ class ModelLinker {
         if (!this.dialog?.isVisible()) return;
 
         const wasDocked = this.dialog.docked;
-        this.dialog.close();
+        this.dialog.close({ collapseSidebar: false });
 
         if (!wasDocked) {
             event.preventDefault();
