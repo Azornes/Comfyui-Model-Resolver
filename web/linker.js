@@ -4059,7 +4059,6 @@ class LinkerManagerDialog extends ComfyDialog {
             id: "model-linker-splitter",
             ondragstart: (e) => e.preventDefault()
         });
-        this.setTooltip(this.splitterElement, "Drag to resize panels");
 
         body.appendChild(this.contentElement);
         body.appendChild(this.splitterElement);
@@ -4335,6 +4334,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 startWidth: rect.width,
                 containerWidth: bodyRect.width
             };
+            this._lastSplitDragApply = 0;
             this._prevUserSelect = document.body.style.userSelect;
             document.body.style.userSelect = 'none';
             this._onSplitMove = (ev) => this.onSplitDrag(ev);
@@ -4352,18 +4352,36 @@ class LinkerManagerDialog extends ComfyDialog {
         const maxW = Math.max(minW, Math.floor(this._splitStart.containerWidth - 360));
         if (newW < minW) newW = minW;
         if (newW > maxW) newW = maxW;
-        this.queueElement.style.width = `${Math.round(newW)}px`;
+        this._pendingSplitWidth = Math.round(newW);
+        const now = performance.now();
+        if (this._lastSplitDragApply && now - this._lastSplitDragApply < 33) return;
+        this._lastSplitDragApply = now;
+        if (this._splitDragFrame) return;
+        this._splitDragFrame = requestAnimationFrame(() => {
+            this._splitDragFrame = null;
+            if (!this._splitDragging || !this.queueElement || !this._pendingSplitWidth) return;
+            this.queueElement.style.width = `${this._pendingSplitWidth}px`;
+        });
     }
 
     endSplitDrag() {
         if (!this._splitDragging) return;
         this._splitDragging = false;
+        if (this._splitDragFrame) {
+            cancelAnimationFrame(this._splitDragFrame);
+            this._splitDragFrame = null;
+        }
+        if (this.queueElement && this._pendingSplitWidth) {
+            this.queueElement.style.width = `${this._pendingSplitWidth}px`;
+        }
         document.getElementById('model-linker-body')?.classList.remove('ml-is-resizing-queue');
         document.removeEventListener('mousemove', this._onSplitMove);
         try {
             const rect = this.queueElement.getBoundingClientRect();
             localStorage.setItem('model_linker_split_w', String(Math.round(rect.width)));
         } catch (e) { }
+        this._pendingSplitWidth = null;
+        this._lastSplitDragApply = 0;
         try { document.body.style.userSelect = this._prevUserSelect || ''; } catch (e) { }
     }
 
@@ -5206,7 +5224,7 @@ class LinkerManagerDialog extends ComfyDialog {
         const splitStyle = Number.isFinite(savedDetailWidth) && savedDetailWidth > 0
             ? `--ml-missing-detail-track:${savedDetailWidth}px;`
             : '';
-        const listStyle = `${splitStyle}--ml-missing-model-col:${listLayout.modelPx}px;--ml-missing-type-col:${listLayout.typePx}px;`;
+        const listStyle = `--ml-missing-model-col:${listLayout.modelPx}px;--ml-missing-type-col:${listLayout.typePx}px;`;
 
         let html = `
             <div class="ml-missing-browser" style="${listStyle}">
@@ -5275,8 +5293,8 @@ class LinkerManagerDialog extends ComfyDialog {
         html += `
                     </div>
                 </section>
-                <div class="ml-missing-browser-splitter" role="separator" aria-orientation="vertical" aria-label="Resize missing model panes" tabindex="0" data-tooltip="Drag to resize panes"></div>
-                <section class="ml-missing-detail-pane" aria-label="Missing model details">
+                <div class="ml-missing-browser-splitter" role="separator" aria-orientation="vertical" aria-label="Resize missing model panes" tabindex="0"></div>
+                <section class="ml-missing-detail-pane" aria-label="Missing model details" style="${splitStyle}">
                     ${detailMissing ? this.renderMissingModel(detailMissing, detailIndex) : this.renderStatusMessage('Select a missing model to inspect details.', 'info')}
                 </section>
             </div>
@@ -5338,7 +5356,7 @@ class LinkerManagerDialog extends ComfyDialog {
         });
 
         splitter.addEventListener('dblclick', () => {
-            browser.style.removeProperty('--ml-missing-detail-track');
+            browser.querySelector('.ml-missing-detail-pane')?.style.removeProperty('--ml-missing-detail-track');
             try {
                 localStorage.removeItem(this.missingBrowserSplitStorageKey);
             } catch (e) {}
@@ -5380,9 +5398,12 @@ class LinkerManagerDialog extends ComfyDialog {
         this._missingBrowserSplitDragging = true;
         this._missingBrowserSplitStart = {
             x: event.clientX,
-            width: detailPane.getBoundingClientRect().width
+            width: detailPane.getBoundingClientRect().width,
+            bounds: this.getMissingBrowserSplitBounds(browser)
         };
+        this._lastMissingBrowserSplitApply = 0;
         this._missingBrowserSplitBrowser = browser;
+        this._missingBrowserSplitDetailPane = detailPane;
         this._missingBrowserPrevUserSelect = document.body.style.userSelect;
         this._missingBrowserPrevCursor = document.body.style.cursor;
         document.body.style.userSelect = 'none';
@@ -5399,7 +5420,17 @@ class LinkerManagerDialog extends ComfyDialog {
         if (!this._missingBrowserSplitDragging || !this._missingBrowserSplitStart || !this._missingBrowserSplitBrowser) return;
 
         const nextWidth = this._missingBrowserSplitStart.width - (event.clientX - this._missingBrowserSplitStart.x);
-        this.setMissingBrowserDetailWidth(this._missingBrowserSplitBrowser, nextWidth);
+        const bounds = this._missingBrowserSplitStart.bounds;
+        this._pendingMissingBrowserSplitWidth = Math.round(Math.max(bounds.min, Math.min(bounds.max, nextWidth)));
+        const now = performance.now();
+        if (this._lastMissingBrowserSplitApply && now - this._lastMissingBrowserSplitApply < 33) return;
+        this._lastMissingBrowserSplitApply = now;
+        if (this._missingBrowserSplitFrame) return;
+        this._missingBrowserSplitFrame = requestAnimationFrame(() => {
+            this._missingBrowserSplitFrame = null;
+            if (!this._missingBrowserSplitDragging || !this._missingBrowserSplitDetailPane || !this._pendingMissingBrowserSplitWidth) return;
+            this._missingBrowserSplitDetailPane.style.setProperty('--ml-missing-detail-track', `${this._pendingMissingBrowserSplitWidth}px`);
+        });
     }
 
     endMissingBrowserSplitDrag() {
@@ -5407,9 +5438,22 @@ class LinkerManagerDialog extends ComfyDialog {
 
         this._missingBrowserSplitDragging = false;
         document.removeEventListener('mousemove', this._onMissingBrowserSplitMove);
+        if (this._missingBrowserSplitFrame) {
+            cancelAnimationFrame(this._missingBrowserSplitFrame);
+            this._missingBrowserSplitFrame = null;
+        }
+        if (this._missingBrowserSplitDetailPane && this._pendingMissingBrowserSplitWidth) {
+            this._missingBrowserSplitDetailPane.style.setProperty('--ml-missing-detail-track', `${this._pendingMissingBrowserSplitWidth}px`);
+            try {
+                localStorage.setItem(this.missingBrowserSplitStorageKey, String(this._pendingMissingBrowserSplitWidth));
+            } catch (e) {}
+        }
         this._missingBrowserSplitBrowser?.classList.remove('is-resizing');
         this._missingBrowserSplitBrowser = null;
+        this._missingBrowserSplitDetailPane = null;
         this._missingBrowserSplitStart = null;
+        this._pendingMissingBrowserSplitWidth = null;
+        this._lastMissingBrowserSplitApply = 0;
         try {
             document.body.style.userSelect = this._missingBrowserPrevUserSelect || '';
             document.body.style.cursor = this._missingBrowserPrevCursor || '';
@@ -5426,7 +5470,9 @@ class LinkerManagerDialog extends ComfyDialog {
     setMissingBrowserDetailWidth(browser, width, { persist = true } = {}) {
         const bounds = this.getMissingBrowserSplitBounds(browser);
         const nextWidth = Math.round(Math.max(bounds.min, Math.min(bounds.max, width)));
-        browser.style.setProperty('--ml-missing-detail-track', `${nextWidth}px`);
+        const detailPane = browser.querySelector('.ml-missing-detail-pane');
+        const target = detailPane instanceof HTMLElement ? detailPane : browser;
+        target.style.setProperty('--ml-missing-detail-track', `${nextWidth}px`);
 
         if (persist) {
             try {

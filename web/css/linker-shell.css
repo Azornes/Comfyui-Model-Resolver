@@ -188,6 +188,7 @@
     overflow-y: auto;
     flex: 1;
     min-height: 0;
+    contain: layout paint style;
     background: var(--ml-bg, #222);
 }
 
@@ -199,7 +200,14 @@
     flex-direction: column;
     padding-left: 0;
     border-left: 0;
+    contain: layout paint style;
     background: var(--ml-bg, #121212);
+}
+
+#model-linker-body.ml-is-resizing-queue #model-linker-content,
+#model-linker-body.ml-is-resizing-queue #model-linker-queue {
+    pointer-events: none;
+    user-select: none;
 }
 
 #model-linker-splitter {
