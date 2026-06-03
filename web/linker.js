@@ -4347,10 +4347,10 @@ class LinkerManagerDialog extends ComfyDialog {
         this.splitterElement.style.display = '';
         document.getElementById('model-linker-body')?.classList.add('ml-queue-preview-collapsed');
         this.queueElement.style.display = 'none';
-        this.queueElement.style.width = '56px';
+        this.queueElement.style.width = '0px';
         this.startSplitDrag(
             { clientX: startX, preventDefault: () => {} },
-            { startWidth: 56, edgeOpen: true, previousCursor, startCollapsedPreview: true }
+            { startWidth: 0, edgeOpen: true, previousCursor, startCollapsedPreview: true }
         );
     }
 
@@ -4387,7 +4387,7 @@ class LinkerManagerDialog extends ComfyDialog {
         if (!this._splitDragging || !this._splitStart || !this.queueElement) return;
         const dx = e.clientX - this._splitStart.x;
         let newW = this._splitStart.startWidth - dx;
-        const minW = 56;
+        const minW = this._splitEdgeOpen ? 0 : 56;
         const maxW = Math.max(minW, Math.floor(this._splitStart.containerWidth - 360));
         if (newW < minW) newW = minW;
         if (newW > maxW) newW = maxW;
