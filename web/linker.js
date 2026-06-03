@@ -4021,10 +4021,10 @@ class LinkerManagerDialog extends ComfyDialog {
         const copySectionId = 'ml-copy-' + Date.now();
         html += `
             </div>
-            <div id="${copySectionId}" class="ml-copy-section" data-ml-active="${activeString.replace(/'/g, "\\'")}" data-ml-inactive="${inactiveString.replace(/'/g, "\\'")}" data-ml-all="${allString.replace(/'/g, "\\'")}">
+            <div id="${copySectionId}" class="ml-copy-section" data-ml-active="${this.escapeHtml(activeString)}" data-ml-inactive="${this.escapeHtml(inactiveString)}" data-ml-all="${this.escapeHtml(allString)}">
                 <div class="ml-copy-label" id="${copySectionId}-label">Copy all:</div>
                 <div class="ml-copy-row">
-                    <code class="ml-copy-code" id="${copySectionId}-code">${allString}</code>
+                    <code class="ml-copy-code" id="${copySectionId}-code">${this.escapeHtml(allString)}</code>
                     <button class="ml-btn ml-btn-secondary" onclick="window.MLCopyCode('${copySectionId}', this)">Copy</button>
                 </div>
             </div>
