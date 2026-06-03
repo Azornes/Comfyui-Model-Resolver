@@ -363,13 +363,6 @@
     pointer-events: none;
     user-select: none;
 }
-.ml-missing-browser.is-resizing .ml-missing-source-dot {
-    filter: none;
-}
-.ml-missing-browser.is-resizing .ml-missing-source-dot::before,
-.ml-missing-browser.is-resizing .ml-missing-source-dot::after {
-    display: none;
-}
 .ml-missing-list-toolbar {
     display: flex;
     align-items: center;
@@ -3070,6 +3063,35 @@
     display: block;
     width: 15px;
     height: 15px;
+}
+.ml-options-provider-icon-civitai svg path:nth-of-type(1),
+#model-linker-modal .ml-options-provider-icon-civitai svg path:nth-of-type(1) {
+    fill: transparent;
+    stroke: rgba(255,255,255,0.2);
+    stroke-width: 3;
+}
+.ml-options-provider-icon-civitai svg path:nth-of-type(2),
+.ml-options-provider-icon-civitai svg path:nth-of-type(3),
+#model-linker-modal .ml-options-provider-icon-civitai svg path:nth-of-type(2),
+#model-linker-modal .ml-options-provider-icon-civitai svg path:nth-of-type(3) {
+    fill: #ffffff;
+}
+.ml-options-provider-icon-huggingface svg path,
+#model-linker-modal .ml-options-provider-icon-huggingface svg path {
+    fill: #ffffff;
+    stroke: rgba(0,0,0,0.42);
+    stroke-width: 1.4;
+    paint-order: stroke fill;
+    vector-effect: non-scaling-stroke;
+}
+.ml-options-provider-icon-huggingface svg path:nth-of-type(3),
+.ml-options-provider-icon-huggingface svg path:nth-of-type(4),
+.ml-options-provider-icon-huggingface svg path:nth-of-type(5),
+#model-linker-modal .ml-options-provider-icon-huggingface svg path:nth-of-type(3),
+#model-linker-modal .ml-options-provider-icon-huggingface svg path:nth-of-type(4),
+#model-linker-modal .ml-options-provider-icon-huggingface svg path:nth-of-type(5) {
+    fill: #202024;
+    stroke: rgba(255,255,255,0.22);
 }
 .ml-options-nav-meta,
 #model-linker-modal .ml-options-nav-meta {

@@ -3479,14 +3479,14 @@ class LinkerManagerDialog extends ComfyDialog {
                             <div class="ml-options-nav">
                                 <button type="button" class="ml-options-nav-btn" data-target="ml-options-section-civitai">
                                     <span class="ml-options-nav-main">
-                                        <span class="ml-options-nav-icon" aria-hidden="true">${getSvgIcon('database')}</span>
+                                        <span class="ml-options-nav-icon ml-options-provider-icon ml-options-provider-icon-civitai" aria-hidden="true">${getSvgIcon('civitai')}</span>
                                         <span>CivitAI</span>
                                     </span>
                                     <span class="ml-options-nav-meta">02</span>
                                 </button>
                                 <button type="button" class="ml-options-nav-btn" data-target="ml-options-section-hf">
                                     <span class="ml-options-nav-main">
-                                        <span class="ml-options-nav-icon" aria-hidden="true">${getSvgIcon('globe')}</span>
+                                        <span class="ml-options-nav-icon ml-options-provider-icon ml-options-provider-icon-huggingface" aria-hidden="true">${getSvgIcon('huggingface')}</span>
                                         <span>HuggingFace</span>
                                     </span>
                                     <span class="ml-options-nav-meta">03</span>
