@@ -7362,6 +7362,14 @@ class LinkerManagerDialog extends ComfyDialog {
 
         if (popular) {
             const popularFilename = popular.filename || missing.original_path?.split('/').pop()?.split('\\').pop() || '';
+            const popularSize = popular.size
+                || (
+                    modelListResult
+                    && modelListResult.filename
+                    && modelListResult.filename.toLowerCase() === popularFilename.toLowerCase()
+                        ? modelListResult.size
+                        : ''
+                );
             addRow({
                 sourceKey: 'popular',
                 sourceLabel: 'Popular',
@@ -7369,7 +7377,7 @@ class LinkerManagerDialog extends ComfyDialog {
                 filename: popularFilename,
                 secondary: popular.name && popular.name !== popularFilename ? popularFilename : '',
                 match: this.getSearchResultMatchDisplay(popular, 'Known', 'strong'),
-                size: this.formatSearchResultSize(popular),
+                size: this.formatSearchResultSize({ ...popular, size: popularSize }),
                 downloadUrl: popular.url,
                 downloadFilename: popularFilename,
                 category: popular.directory || missing.category,
@@ -7563,8 +7571,8 @@ class LinkerManagerDialog extends ComfyDialog {
     }
 
     /**
-     * Extract model card URL from a download URL
-     * HuggingFace: https://huggingface.co/Owner/Repo/resolve/main/file.safetensors -> https://huggingface.co/Owner/Repo
+     * Extract model page URL from a download URL
+     * HuggingFace file: https://huggingface.co/Owner/Repo/resolve/main/file.safetensors -> https://huggingface.co/Owner/Repo/blob/main/file.safetensors
      * CivitAI: https://civitai.com/api/download/models/123?type=Model -> https://civitai.com/models/123
      */
     getModelCardUrl(downloadUrl) {
@@ -7573,7 +7581,14 @@ class LinkerManagerDialog extends ComfyDialog {
         try {
             // HuggingFace URLs
             if (downloadUrl.includes('huggingface.co')) {
-                // Extract owner/repo from URL
+                const fileMatch = downloadUrl.match(/huggingface\.co\/([^\/]+\/[^\/]+)\/(?:resolve|blob)\/([^\/]+)\/(.+)$/);
+                if (fileMatch) {
+                    const repo = fileMatch[1];
+                    const revision = fileMatch[2];
+                    const filePath = fileMatch[3].split(/[?#]/)[0];
+                    return `https://huggingface.co/${repo}/blob/${revision}/${filePath}`;
+                }
+
                 const match = downloadUrl.match(/huggingface\.co\/([^\/]+\/[^\/]+)/);
                 if (match) {
                     return `https://huggingface.co/${match[1]}`;

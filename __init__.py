@@ -259,12 +259,21 @@ class ModelLinkerExtension:
                                 # 1. Check popular models (always exact match)
                                 popular_info = get_popular_model_url(filename)
                                 if popular_info:
+                                    popular_model_list_result = search_model_list(
+                                        filename, exact_only=True
+                                    )
                                     missing["download_source"] = {
                                         "source": "popular",
                                         "url": popular_info.get("url"),
                                         "filename": filename,
                                         "type": popular_info.get("type"),
                                         "directory": popular_info.get("directory"),
+                                        "size": (
+                                            popular_model_list_result.get("size")
+                                            if popular_model_list_result
+                                            else None
+                                        )
+                                        or popular_info.get("size"),
                                         "match_type": "exact",
                                     }
                                     continue
@@ -954,14 +963,6 @@ class ModelLinkerExtension:
                             )
                             popular_info = get_popular_model_url(filename)
                             log_search_result("popular", popular_info)
-                            if popular_info:
-                                source_results["popular"] = {
-                                    "source": "popular",
-                                    "filename": filename,
-                                    **popular_info,
-                                }
-                                source_found = True
-
                             model_list_result = search_model_list(filename)
                             log_search_result(
                                 "model_list",
@@ -972,6 +973,24 @@ class ModelLinkerExtension:
                                     else None
                                 },
                             )
+                            if popular_info:
+                                popular_result = {
+                                    "source": "popular",
+                                    "filename": filename,
+                                    **popular_info,
+                                }
+                                if (
+                                    model_list_result
+                                    and model_list_result.get("filename", "").lower()
+                                    == filename.lower()
+                                    and model_list_result.get("size")
+                                ):
+                                    popular_result["size"] = model_list_result.get(
+                                        "size"
+                                    )
+                                source_results["popular"] = popular_result
+                                source_found = True
+
                             if model_list_result:
                                 confidence = model_list_result.get("confidence", 0)
                                 if is_urn and confidence >= 70:
