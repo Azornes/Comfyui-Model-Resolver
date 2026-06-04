@@ -1581,6 +1581,10 @@ class LinkerManagerDialog extends ComfyDialog {
             .replace(/'/g, '&#39;');
     }
 
+    escapeJsString(value) {
+        return this.escapeHtml(JSON.stringify(String(value ?? '')));
+    }
+
     truncateText(value, maxLength = 160) {
         const text = String(value ?? '').trim();
         if (!text) return '';
@@ -3936,14 +3940,26 @@ class LinkerManagerDialog extends ComfyDialog {
         const inactiveString = buildCategoryStrings('inactive');
         const allString = buildCategoryStrings('all');
 
-        const self = this;
+        const copyIcon = getSvgIcon('copy', 'currentColor', 'ml-copy-btn-icon');
+        const stripModelExtension = (value) => String(value || 'Unknown').replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx|gguf)$/i, '');
+        const modelToken = (model, category) => {
+            const fullName = model.name || model.original_path?.split(/[\/\\]/).pop() || 'Unknown';
+            const name = stripModelExtension(fullName);
+            const strength = model.strength !== null && model.strength !== undefined ? model.strength.toFixed(2) : '1.00';
+            return `<${this.getCategoryTokenName(category)}:${name}:${strength}>`;
+        };
+        const copyButtonHtml = (text, extraClass = '') => `
+            <button class="ml-btn-filter ml-btn-copy-compact ${extraClass}" onclick="window.MLCopy(${this.escapeJsString(text)}, this)">
+                ${copyIcon}<span>Copy</span>
+            </button>`;
+        const countText = (count, label) => `${count} ${label}${count === 1 ? '' : 's'}`;
         
         let html = `
             <div class="ml-loaded-models-header">
-                <h3 class="ml-loaded-models-title">${total} Model${total > 1 ? 's' : ''} in Workflow</h3>
-                <p class="ml-loaded-models-subtitle">LoraManager / LoraLoaderV2 nodes distinguish active/inactive</p>
-            </div>
-            <div class="ml-loaded-filters">
+                <div class="ml-loaded-title-block">
+                    <h3 class="ml-loaded-models-title">Loaded Models <span class="ml-loaded-total">${total}</span></h3>
+                    <p class="ml-loaded-models-subtitle">${countText(activeCount, 'active')} / ${countText(inactiveCount, 'inactive')}</p>
+                </div>
                 <div class="ml-loaded-filter-row">
                     <button class="ml-btn-filter active" id="filter-all" onclick="window.MLFilterSwitch('all')">All (${activeCount + inactiveCount})</button>
                     <button class="ml-btn-filter" id="filter-active" onclick="window.MLFilterSwitch('active')">Active (${activeCount})</button>
@@ -3957,26 +3973,28 @@ class LinkerManagerDialog extends ComfyDialog {
             const displayName = this.getCategoryDisplayName(category);
             const hasActive = modelsObj.active.length > 0;
             const hasInactive = modelsObj.inactive.length > 0;
+            const sectionTotal = modelsObj.active.length + modelsObj.inactive.length;
             
             html += `<div class="ml-model-section" data-ml-filter="all" data-ml-active="${hasActive}" data-ml-inactive="${hasInactive}">`;
             
-            // Add category header
             html += `<div class="ml-model-section-header">
-                <span class="ml-model-section-title">${displayName.toUpperCase()}</span>
+                <div class="ml-model-section-heading">
+                    <span class="ml-model-section-title">${this.escapeHtml(displayName.toUpperCase())}</span>
+                    <span class="ml-model-section-total">${countText(sectionTotal, 'model')}</span>
+                </div>
+                <div class="ml-model-section-counts">
+                    ${hasActive ? `<span class="ml-model-count-pill is-active">${countText(modelsObj.active.length, 'active')}</span>` : ''}
+                    ${hasInactive ? `<span class="ml-model-count-pill is-inactive">${countText(modelsObj.inactive.length, 'inactive')}</span>` : ''}
+                </div>
             </div>`;
             
             if (hasActive) {
-                const activeStr = modelsObj.active.map(m => {
-                    const fullName = m.name || m.original_path?.split(/[\/\\]/).pop() || 'Unknown';
-                    let name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx|gguf)$/i, '');
-                    const strength = m.strength !== null && m.strength !== undefined ? m.strength.toFixed(2) : '1.00';
-                    return `<${this.getCategoryTokenName(category)}:${name}:${strength}>`;
-                }).join(' ');
+                const activeStr = modelsObj.active.map(m => modelToken(m, category)).join(' ');
                 
-                html += `<div class="ml-model-group">
+                html += `<div class="ml-model-group ml-model-group-active">
                     <div class="ml-model-group-head">
-                        <span class="ml-model-group-label ml-model-group-label-active">● ACTIVE</span>
-                        <button class="ml-btn ml-btn-sm ml-btn-copy-compact" onclick="window.MLCopy('${activeStr.replace(/'/g, "\\'")}', this)">Copy</button>
+                        <span class="ml-model-group-label ml-model-group-label-active"><span class="ml-model-group-dot"></span>Active <span class="ml-model-group-count">${modelsObj.active.length}</span></span>
+                        ${copyButtonHtml(activeStr)}
                     </div>
                     <div class="ml-model-chip-list">`;
                 
@@ -3985,23 +4003,18 @@ class LinkerManagerDialog extends ComfyDialog {
                     const name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx|gguf)$/i, '');
                     const strength = model.strength !== null && model.strength !== undefined ? model.strength.toFixed(2) : null;
                     const modelData = encodeURIComponent(JSON.stringify(model));
-                    html += `<span class="ml-model-chip" data-model="${modelData}" oncontextmenu="window.MLOpenContextMenu(event, this)">${name}${strength !== null ? `<span class="ml-model-chip-strength">${strength}</span>` : ''}</span>`;
+                    html += `<span class="ml-model-chip" data-model="${modelData}" oncontextmenu="window.MLOpenContextMenu(event, this)">${this.escapeHtml(name)}${strength !== null ? `<span class="ml-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
                 }
                 html += `</div></div>`;
             }
             
             if (hasInactive) {
-                const inactiveStr = modelsObj.inactive.map(m => {
-                    const fullName = m.name || m.original_path?.split(/[\/\\]/).pop() || 'Unknown';
-                    let name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx|gguf)$/i, '');
-                    const strength = m.strength !== null && m.strength !== undefined ? m.strength.toFixed(2) : '1.00';
-                    return `<${this.getCategoryTokenName(category)}:${name}:${strength}>`;
-                }).join(' ');
+                const inactiveStr = modelsObj.inactive.map(m => modelToken(m, category)).join(' ');
                 
-                html += `<div>
+                html += `<div class="ml-model-group ml-model-group-inactive">
                     <div class="ml-model-group-head">
-                        <span class="ml-model-group-label ml-model-group-label-inactive">○ INACTIVE</span>
-                        <button class="ml-btn ml-btn-sm ml-btn-copy-compact is-muted" onclick="window.MLCopy('${inactiveStr.replace(/'/g, "\\'")}', this)">Copy</button>
+                        <span class="ml-model-group-label ml-model-group-label-inactive"><span class="ml-model-group-dot"></span>Inactive <span class="ml-model-group-count">${modelsObj.inactive.length}</span></span>
+                        ${copyButtonHtml(inactiveStr, 'is-muted')}
                     </div>
                     <div class="ml-model-chip-list ml-model-chip-list-inactive">`;
                 
@@ -4010,7 +4023,7 @@ class LinkerManagerDialog extends ComfyDialog {
                     const name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx|gguf)$/i, '');
                     const strength = model.strength !== null && model.strength !== undefined ? model.strength.toFixed(2) : null;
                     const modelData = encodeURIComponent(JSON.stringify(model));
-                    html += `<span class="ml-model-chip" data-model="${modelData}" oncontextmenu="window.MLOpenContextMenu(event, this)">${name}${strength !== null ? `<span class="ml-model-chip-strength">${strength}</span>` : ''}</span>`;
+                    html += `<span class="ml-model-chip" data-model="${modelData}" oncontextmenu="window.MLOpenContextMenu(event, this)">${this.escapeHtml(name)}${strength !== null ? `<span class="ml-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
                 }
                 html += `</div></div>`;
             }
@@ -4021,12 +4034,20 @@ class LinkerManagerDialog extends ComfyDialog {
         const copySectionId = 'ml-copy-' + Date.now();
         html += `
             </div>
-            <div id="${copySectionId}" class="ml-copy-section" data-ml-active="${this.escapeHtml(activeString)}" data-ml-inactive="${this.escapeHtml(inactiveString)}" data-ml-all="${this.escapeHtml(allString)}">
-                <div class="ml-copy-label" id="${copySectionId}-label">Copy all:</div>
-                <div class="ml-copy-row">
-                    <code class="ml-copy-code" id="${copySectionId}-code">${this.escapeHtml(allString)}</code>
-                    <button class="ml-btn ml-btn-secondary" onclick="window.MLCopyCode('${copySectionId}', this)">Copy</button>
+            <div id="${copySectionId}" class="ml-copy-section" data-ml-active="${this.escapeHtml(activeString)}" data-ml-inactive="${this.escapeHtml(inactiveString)}" data-ml-all="${this.escapeHtml(allString)}" data-ml-active-count="${activeCount}" data-ml-inactive-count="${inactiveCount}" data-ml-all-count="${activeCount + inactiveCount}">
+                <div class="ml-copy-toolbar">
+                    <div class="ml-copy-heading">
+                        <div class="ml-copy-label" id="${copySectionId}-label">Copy all</div>
+                        <div class="ml-copy-meta" id="${copySectionId}-meta">${countText(activeCount + inactiveCount, 'token')}</div>
+                    </div>
+                    <div class="ml-copy-actions">
+                        <button type="button" class="ml-btn-filter ml-copy-mode active" data-ml-copy-mode="all" onclick="window.MLSetCopyMode('${copySectionId}', 'all', this)">All</button>
+                        <button type="button" class="ml-btn-filter ml-copy-mode" data-ml-copy-mode="active" onclick="window.MLSetCopyMode('${copySectionId}', 'active', this)">Active</button>
+                        <button type="button" class="ml-btn-filter ml-copy-mode" data-ml-copy-mode="inactive" onclick="window.MLSetCopyMode('${copySectionId}', 'inactive', this)">Inactive</button>
+                        <button class="ml-btn-filter ml-copy-main-btn" onclick="window.MLCopyCode('${copySectionId}', this)">${copyIcon}<span>Copy</span></button>
+                    </div>
                 </div>
+                <code class="ml-copy-code" id="${copySectionId}-code">${this.escapeHtml(allString)}</code>
             </div>
         `;
 
@@ -8036,6 +8057,44 @@ window.MLToggleHidden = function(id, trigger, collapsedText, expandedText) {
     }
 };
 
+window.MLSetCopyMode = function(sectionId, mode) {
+    const section = document.getElementById(sectionId);
+    if (!section) return;
+
+    const normalizedMode = ['all', 'active', 'inactive'].includes(mode) ? mode : 'all';
+    const codeEl = section.querySelector('.ml-copy-code');
+    const labelEl = section.querySelector('.ml-copy-label');
+    const metaEl = section.querySelector('.ml-copy-meta');
+    const dataKey = normalizedMode === 'all' ? 'mlAll' : normalizedMode === 'active' ? 'mlActive' : 'mlInactive';
+    const countKey = normalizedMode === 'all' ? 'mlAllCount' : normalizedMode === 'active' ? 'mlActiveCount' : 'mlInactiveCount';
+    const labelMap = {
+        all: 'Copy all',
+        active: 'Copy active',
+        inactive: 'Copy inactive'
+    };
+
+    if (codeEl) codeEl.textContent = section.dataset[dataKey] || '';
+    if (labelEl) labelEl.textContent = labelMap[normalizedMode];
+    if (metaEl) {
+        const count = Number(section.dataset[countKey] || 0);
+        metaEl.textContent = `${count} token${count === 1 ? '' : 's'}`;
+    }
+
+    section.querySelectorAll('.ml-copy-mode').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.mlCopyMode === normalizedMode);
+    });
+};
+
+window.MLSetCopyButtonFeedback = function(btn, text) {
+    if (!btn) return;
+    const originalHtml = btn.dataset.mlOriginalHtml || btn.innerHTML;
+    btn.dataset.mlOriginalHtml = originalHtml;
+    btn.textContent = text;
+    setTimeout(() => {
+        if (btn.isConnected) btn.innerHTML = originalHtml;
+    }, 1500);
+};
+
 window.MLFilterSwitch = function(filter) {
     const filterBtn = document.getElementById('filter-' + filter);
     if (!filterBtn) return;
@@ -8049,10 +8108,8 @@ window.MLFilterSwitch = function(filter) {
         const hasActive = s.getAttribute('data-ml-active') === 'true';
         const hasInactive = s.getAttribute('data-ml-inactive') === 'true';
         
-        // Get child divs: category header, active section, inactive section
-        const childDivs = Array.from(s.children).filter(c => c.tagName === 'DIV');
-        const activeSection = childDivs[1];
-        const inactiveSection = childDivs[2];
+        const activeSection = s.querySelector('.ml-model-group-active');
+        const inactiveSection = s.querySelector('.ml-model-group-inactive');
         
         if (filter === 'all') {
             s.style.display = 'block';
@@ -8071,27 +8128,13 @@ window.MLFilterSwitch = function(filter) {
     
     const copySection = document.querySelector('[id^="ml-copy-"]');
     if (copySection) {
-        const codeEl = copySection.querySelector('code');
-        const labelEl = copySection.querySelector('div');
-        
-        if (filter === 'all') {
-            codeEl.textContent = copySection.dataset.mlAll;
-            labelEl.textContent = 'Copy all:';
-        } else if (filter === 'active') {
-            codeEl.textContent = copySection.dataset.mlActive;
-            labelEl.textContent = 'Copy active:';
-        } else if (filter === 'inactive') {
-            codeEl.textContent = copySection.dataset.mlInactive;
-            labelEl.textContent = 'Copy inactive:';
-        }
+        window.MLSetCopyMode(copySection.id, filter);
     }
 };
 
 window.MLCopy = function(text, btn) {
     navigator.clipboard.writeText(text).then(() => {
-        const orig = btn.textContent;
-        btn.textContent = '✓';
-        setTimeout(() => btn.textContent = orig, 1500);
+        window.MLSetCopyButtonFeedback(btn, 'Copied');
     });
 };
 
@@ -8099,9 +8142,7 @@ window.MLCopyCode = function(sectionId, btn) {
     const section = document.getElementById(sectionId);
     const codeEl = section.querySelector('code');
     navigator.clipboard.writeText(codeEl.textContent).then(() => {
-        const orig = btn.textContent;
-        btn.textContent = '✓ Copied!';
-        setTimeout(() => btn.textContent = orig, 1500);
+        window.MLSetCopyButtonFeedback(btn, 'Copied');
     });
 };
 
