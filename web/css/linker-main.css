@@ -3372,6 +3372,10 @@
     font-weight: 700;
     color: var(--ml-text);
 }
+.ml-options-comfyui-icon svg,
+.ml-options-comfyui-icon svg path {
+    fill: currentColor;
+}
 .ml-options-db-summary {
     display: grid;
     gap: 1px;

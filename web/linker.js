@@ -632,14 +632,14 @@ class LinkerManagerDialog extends ComfyDialog {
     getSearchSourceIconName(sourceKey) {
         const icons = {
             popular: 'star',
-            'model-list': 'database',
+            'model-list': 'comfyui',
             huggingface: 'huggingface',
             civitai: 'civitai',
             civarchive: 'civarchive',
             'lora-archive': 'loraManager',
             lora_manager_archive: 'loraManager',
             'lora-manager-archive': 'loraManager',
-            local: 'database',
+            local: 'comfyui',
             'workflow-url': 'link',
             workflow: 'link',
             online: 'globe'
@@ -3740,7 +3740,7 @@ class LinkerManagerDialog extends ComfyDialog {
                                 </button>
                                 <button type="button" class="ml-options-nav-btn" data-target="ml-options-section-local-db">
                                     <span class="ml-options-nav-main">
-                                        <span class="ml-options-nav-icon" aria-hidden="true">${getSvgIcon('database')}</span>
+                                        <span class="ml-options-nav-icon ml-options-comfyui-icon" aria-hidden="true">${getSvgIcon('comfyui')}</span>
                                         <span>Local Database</span>
                                     </span>
                                     <span class="ml-options-nav-meta">02</span>
