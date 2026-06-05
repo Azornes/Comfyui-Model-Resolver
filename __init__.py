@@ -1,4 +1,4 @@
-﻿"""
+"""
 @author: Model Resolver Team
 @title: ComfyUI Model Resolver
 @nickname: Model Resolver
@@ -1602,6 +1602,67 @@ class ModelResolverExtension:
                             f"Model Resolver subfolders error: {e}", exc_info=True
                         )
                         return web.json_response({"error": str(e)}, status=500)
+
+            # ==================== SETTINGS (server-side persistence) ====================
+
+            import os as _os
+            import json as _json
+
+            _SETTINGS_FILE = _os.path.join(
+                _os.path.dirname(_os.path.abspath(__file__)),
+                "model_resolver_settings.json",
+            )
+
+            # Keys that contain sensitive credentials – stored in the file but
+            # never logged.
+            _CREDENTIAL_KEYS = {
+                "civitai_key",
+                "civitai_session_token",
+                "hf_token",
+                "brave_search_api_key",
+            }
+
+            def _load_settings() -> dict:
+                try:
+                    if _os.path.isfile(_SETTINGS_FILE):
+                        with open(_SETTINGS_FILE, "r", encoding="utf-8") as f:
+                            data = _json.load(f)
+                            if isinstance(data, dict):
+                                return data
+                except Exception as exc:
+                    self.logger.warning(f"Model Resolver: could not read settings file: {exc}")
+                return {}
+
+            def _save_settings(payload: dict) -> None:
+                # Merge with existing settings so we never lose keys not sent
+                # by the current request.
+                current = _load_settings()
+                current.update({k: v for k, v in payload.items() if k})
+                with open(_SETTINGS_FILE, "w", encoding="utf-8") as f:
+                    _json.dump(current, f, indent=2, ensure_ascii=False)
+
+            @routes.get("/model_resolver/settings")
+            async def get_settings_route(request):
+                """Return persisted settings (API keys, preferences)."""
+                try:
+                    data = await asyncio.to_thread(_load_settings)
+                    return web.json_response(data)
+                except Exception as e:
+                    self.logger.error(f"Model Resolver settings GET error: {e}", exc_info=True)
+                    return web.json_response({"error": str(e)}, status=500)
+
+            @routes.post("/model_resolver/settings")
+            async def save_settings_route(request):
+                """Persist settings (API keys, preferences) to disk."""
+                try:
+                    payload = await request.json()
+                    if not isinstance(payload, dict):
+                        return web.json_response({"error": "Expected JSON object"}, status=400)
+                    await asyncio.to_thread(_save_settings, payload)
+                    return web.json_response({"success": True})
+                except Exception as e:
+                    self.logger.error(f"Model Resolver settings POST error: {e}", exc_info=True)
+                    return web.json_response({"error": str(e)}, status=500)
 
             self.routes_setup = True
             self.logger.info("Model Resolver: API routes registered successfully")

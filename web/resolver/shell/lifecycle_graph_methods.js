@@ -1,4 +1,4 @@
-﻿import { app } from "../../../../../scripts/app.js";
+import { app } from "../../../../../scripts/app.js";
 import { api } from "../../../../../scripts/api.js";
 import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
@@ -22,6 +22,13 @@ export const lifecycleGraphMethods = {
 
         // Update button state in case there are active downloads
         this.updateDownloadAllButtonState();
+
+        // On first open: load settings from server so tokens are available on
+        // every browser without re-entering them.
+        if (!this._serverSettingsLoaded) {
+            this._serverSettingsLoaded = true;
+            await this.loadSettingsFromServer();
+        }
 
         // Ensure all models are loaded for dropdown
         await this.ensureCapabilitiesLoaded();
