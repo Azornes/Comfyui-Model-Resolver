@@ -33,6 +33,10 @@ class LinkerManagerDialog extends ComfyDialog {
         this.cachedAnalysisData = null;
         this.cachedWorkflowSignature = null;
         this.selectedMissingModelKey = null;
+        this.batchSelectedMissingKeys = new Set();
+        this.lastBatchSelectedMissingKey = null;
+        this.activeFooterMenu = null;
+        this.batchSearchRunning = false;
         this.boundHandleOutsideClick = this.handleOutsideClick.bind(this);
         this.activeTabStorageKey = 'model_linker_active_tab';
         this.activeTab = this.restoreActiveTab();  // Default tab
@@ -124,6 +128,8 @@ class LinkerManagerDialog extends ComfyDialog {
         // Add click listener to hide context menu when clicking outside
         this.boundHandleContextMenuClick = (e) => this.handleContextMenuOutsideClick(e);
         document.addEventListener('click', this.boundHandleContextMenuClick);
+        this.boundHandleFooterMenuClick = (e) => this.handleFooterMenuOutsideClick(e);
+        document.addEventListener('click', this.boundHandleFooterMenuClick);
         window.addEventListener('resize', this._boundHandleViewportResize);
     }
     
@@ -2569,6 +2575,211 @@ class LinkerManagerDialog extends ComfyDialog {
             this.close();
         }
     }
+
+    handleFooterMenuOutsideClick(e) {
+        if (!this.activeFooterMenu) return;
+        if (e.target?.closest?.('.ml-footer-menu-wrap')) return;
+        this.closeFooterMenus();
+    }
+
+    closeFooterMenus() {
+        this.activeFooterMenu = null;
+        this.footerMenus?.forEach?.((menu, name) => {
+            menu.classList.remove('is-open');
+            const button = this.footerMenuButtons?.get?.(name);
+            button?.setAttribute('aria-expanded', 'false');
+        });
+    }
+
+    setMissingFooterControlsVisible(visible) {
+        const display = visible ? 'inline-flex' : 'none';
+        [
+            this.selectMenuWrap,
+            this.searchMenuWrap,
+            this.queueExactButton,
+            this.applyPendingBtn,
+            this.autoResolveButton,
+            this.downloadMenuWrap
+        ].forEach(element => {
+            if (element) element.style.display = display;
+        });
+        if (!visible) {
+            this.closeFooterMenus();
+        }
+    }
+
+    toggleFooterMenu(name) {
+        const menu = this.footerMenus?.get?.(name);
+        const button = this.footerMenuButtons?.get?.(name);
+        if (!menu || !button) return;
+
+        const shouldOpen = this.activeFooterMenu !== name;
+        this.closeFooterMenus();
+        if (shouldOpen) {
+            this.activeFooterMenu = name;
+            menu.classList.add('is-open');
+            button.setAttribute('aria-expanded', 'true');
+        }
+    }
+
+    syncBatchSelectionForMissingModels(missingModels = this.missingModels || []) {
+        if (!(this.batchSelectedMissingKeys instanceof Set)) {
+            this.batchSelectedMissingKeys = new Set();
+        }
+
+        const validKeys = new Set(missingModels.map(missing => this.getMissingModelKey(missing)));
+        for (const key of Array.from(this.batchSelectedMissingKeys)) {
+            if (!validKeys.has(key)) {
+                this.batchSelectedMissingKeys.delete(key);
+            }
+        }
+        if (this.lastBatchSelectedMissingKey && !validKeys.has(this.lastBatchSelectedMissingKey)) {
+            this.lastBatchSelectedMissingKey = null;
+        }
+    }
+
+    getSelectedMissingModels() {
+        const selectedKeys = this.batchSelectedMissingKeys || new Set();
+        return (this.missingModels || []).filter(missing => selectedKeys.has(this.getMissingModelKey(missing)));
+    }
+
+    getMissingWithExactLocalMatches(missingModels = this.missingModels || []) {
+        return missingModels.filter(missing => this.getBestLocalMatch(missing, 100));
+    }
+
+    getMissingWithoutExactLocalMatches(missingModels = this.missingModels || []) {
+        return missingModels.filter(missing => !this.getBestLocalMatch(missing, 100));
+    }
+
+    getMissingWithPartialLocalMatches(missingModels = this.missingModels || []) {
+        return missingModels.filter(missing => {
+            const bestMatch = this.getBestLocalMatch(missing, 70);
+            return bestMatch && Number(bestMatch.confidence || 0) < 100;
+        });
+    }
+
+    getMissingWithoutLocalMatches(missingModels = this.missingModels || []) {
+        return missingModels.filter(missing => !this.getBestLocalMatch(missing, 70));
+    }
+
+    getMissingWithDownloadSources(missingModels = this.missingModels || []) {
+        return missingModels.filter(missing => this.getBestDownloadSourceForMissing(missing));
+    }
+
+    getMissingWithoutDownloadSources(missingModels = this.missingModels || []) {
+        return missingModels.filter(missing => !this.getBestDownloadSourceForMissing(missing));
+    }
+
+    getSearchedMissingModels(missingModels = this.missingModels || []) {
+        return missingModels.filter(missing => this.hasRenderableSearchState(this.getSearchState(missing)));
+    }
+
+    getUnsearchedMissingModels(missingModels = this.missingModels || []) {
+        return missingModels.filter(missing => !this.hasRenderableSearchState(this.getSearchState(missing)));
+    }
+
+    selectBatchMissingModels(mode) {
+        const missingModels = this.missingModels || [];
+        if (!missingModels.length) {
+            this.showNotification('No missing models to select.', 'info');
+            return;
+        }
+
+        if (!(this.batchSelectedMissingKeys instanceof Set)) {
+            this.batchSelectedMissingKeys = new Set();
+        }
+
+        if (mode === 'none') {
+            this.batchSelectedMissingKeys.clear();
+        } else if (mode === 'invert') {
+            const nextSelection = new Set();
+            for (const missing of missingModels) {
+                const key = this.getMissingModelKey(missing);
+                if (!this.batchSelectedMissingKeys.has(key)) {
+                    nextSelection.add(key);
+                }
+            }
+            this.batchSelectedMissingKeys = nextSelection;
+        } else {
+            let models = missingModels;
+            if (mode === 'exact') {
+                models = this.getMissingWithExactLocalMatches(missingModels);
+            } else if (mode === 'no_exact') {
+                models = this.getMissingWithoutExactLocalMatches(missingModels);
+            } else if (mode === 'partial') {
+                models = this.getMissingWithPartialLocalMatches(missingModels);
+            } else if (mode === 'no_local') {
+                models = this.getMissingWithoutLocalMatches(missingModels);
+            } else if (mode === 'downloadable') {
+                models = this.getMissingWithDownloadSources(missingModels);
+            } else if (mode === 'no_download') {
+                models = this.getMissingWithoutDownloadSources(missingModels);
+            } else if (mode === 'searched') {
+                models = this.getSearchedMissingModels(missingModels);
+            } else if (mode === 'unsearched') {
+                models = this.getUnsearchedMissingModels(missingModels);
+            }
+            this.batchSelectedMissingKeys = new Set(models.map(missing => this.getMissingModelKey(missing)));
+        }
+
+        this.refreshBatchSelectionUi();
+        this.updateBatchFooterButtons();
+        this.closeFooterMenus();
+    }
+
+    refreshBatchSelectionUi() {
+        const selectedKeys = this.batchSelectedMissingKeys || new Set();
+        this.contentElement?.querySelectorAll?.('.ml-missing-list-row')?.forEach(row => {
+            const key = row.getAttribute('data-missing-key');
+            const selected = selectedKeys.has(key);
+            row.classList.toggle('is-batch-selected', selected);
+            const checkbox = row.querySelector('.ml-missing-row-check');
+            if (checkbox) {
+                checkbox.checked = selected;
+            }
+        });
+        this.updateBatchSelectAllCheckbox();
+    }
+
+    updateBatchSelectAllCheckbox() {
+        const checkbox = this.contentElement?.querySelector?.('.ml-missing-select-all-check');
+        if (!checkbox) return;
+
+        const totalCount = (this.missingModels || []).length;
+        const selectedCount = this.getSelectedMissingModels().length;
+        checkbox.checked = totalCount > 0 && selectedCount === totalCount;
+        checkbox.indeterminate = selectedCount > 0 && selectedCount < totalCount;
+        checkbox.disabled = totalCount === 0;
+    }
+
+    setBatchSelectionForKey(key, selected) {
+        if (!key) return;
+        if (!(this.batchSelectedMissingKeys instanceof Set)) {
+            this.batchSelectedMissingKeys = new Set();
+        }
+        if (selected) {
+            this.batchSelectedMissingKeys.add(key);
+        } else {
+            this.batchSelectedMissingKeys.delete(key);
+        }
+    }
+
+    applyBatchSelectionRange(sortedMissingModels, fromKey, toKey, selected) {
+        const models = sortedMissingModels || this.missingModels || [];
+        const fromIndex = models.findIndex(missing => this.getMissingModelKey(missing) === fromKey);
+        const toIndex = models.findIndex(missing => this.getMissingModelKey(missing) === toKey);
+
+        if (fromIndex < 0 || toIndex < 0) {
+            this.setBatchSelectionForKey(toKey, selected);
+            return;
+        }
+
+        const start = Math.min(fromIndex, toIndex);
+        const end = Math.max(fromIndex, toIndex);
+        for (let index = start; index <= end; index += 1) {
+            this.setBatchSelectionForKey(this.getMissingModelKey(models[index]), selected);
+        }
+    }
     
     createHeader() {
         // Create tabs
@@ -4242,25 +4453,19 @@ class LinkerManagerDialog extends ComfyDialog {
             if (this.contentElement) {
                 this.contentElement.style.overflowY = 'auto';
             }
-            this.downloadAllButton.style.display = 'inline-flex';
-            this.autoResolveButton.style.display = 'inline-flex';
-            this.applyPendingBtn.style.display = 'inline-flex';
+            this.setMissingFooterControlsVisible(true);
             this.loadWorkflowData();
         } else if (this.activeTab === 'loaded') {
             if (this.contentElement) {
                 this.contentElement.style.overflowY = 'auto';
             }
-            this.downloadAllButton.style.display = 'none';
-            this.autoResolveButton.style.display = 'none';
-            this.applyPendingBtn.style.display = 'none';
+            this.setMissingFooterControlsVisible(false);
             this.loadLoadedModels();
         } else {
             if (this.contentElement) {
                 this.contentElement.style.overflowY = 'hidden';
             }
-            this.downloadAllButton.style.display = 'none';
-            this.autoResolveButton.style.display = 'none';
-            this.applyPendingBtn.style.display = 'none';
+            this.setMissingFooterControlsVisible(false);
             this.displayOptions();
         }
     }
@@ -5038,9 +5243,118 @@ class LinkerManagerDialog extends ComfyDialog {
         this.setTooltip(this.applyPendingBtn, tooltip);
         this.applyPendingBtn.setAttribute('aria-disabled', String(isEmpty));
         this.applyPendingBtn.classList.toggle('ml-btn-is-disabled', isEmpty);
+        this.updateBatchFooterButtons();
+    }
+
+    updateBatchFooterButtons() {
+        const missingModels = this.missingModels || [];
+        const selectedCount = this.getSelectedMissingModels().length;
+        const totalCount = missingModels.length;
+        const pendingCount = this.pendingResolutions?.length || 0;
+        const activeCount = Object.keys(this.activeDownloads || {}).length;
+        const downloadableSelected = this.getMissingWithDownloadSources(this.getSelectedMissingModels()).length;
+        const downloadableAll = this.getMissingWithDownloadSources(missingModels).length;
+
+        if (this.selectMenuButton) {
+            this.selectMenuButton.textContent = `Select (${selectedCount}/${totalCount})`;
+            this.selectMenuButton.classList.toggle('ml-btn-is-disabled', totalCount === 0);
+        }
+        if (this.searchMenuButton) {
+            this.searchMenuButton.textContent = this.batchSearchRunning ? 'Searching...' : 'Search';
+            this.searchMenuButton.classList.toggle('ml-btn-is-disabled', totalCount === 0 || this.batchSearchRunning);
+        }
+        if (this.downloadMenuButton) {
+            const label = activeCount > 0 ? `Cancel Downloads (${activeCount})` : 'Download';
+            this.downloadMenuButton.textContent = label;
+            this.downloadMenuButton.classList.toggle('ml-btn-danger', activeCount > 0);
+            this.downloadMenuButton.classList.toggle('ml-btn-download', activeCount === 0);
+            this.downloadMenuButton.classList.toggle('ml-btn-is-disabled', activeCount === 0 && downloadableAll === 0);
+            this.setTooltip(
+                this.downloadMenuButton,
+                activeCount > 0
+                    ? `Cancel ${activeCount} active download${activeCount > 1 ? 's' : ''}.`
+                    : `${downloadableSelected || downloadableAll} missing model${(downloadableSelected || downloadableAll) === 1 ? '' : 's'} currently have download sources.`
+            );
+        }
+        if (this.applyPendingBtn) {
+            this.applyPendingBtn.textContent = `Apply Selected (${pendingCount})`;
+        }
+    }
+
+    createFooterMenu(name, label, items = [], buttonClass = 'ml-btn-secondary') {
+        const button = $el(`button.ml-btn.${buttonClass}.ml-footer-btn.ml-footer-menu-button`, {
+            type: 'button',
+            'aria-haspopup': 'menu',
+            'aria-expanded': 'false',
+            onclick: (event) => {
+                event.stopPropagation();
+                if (button.classList.contains('ml-btn-is-disabled')) {
+                    if (name === 'search' && this.batchSearchRunning) {
+                        this.showNotification('Batch search is already running.', 'info');
+                    } else if (name === 'download') {
+                        this.showNotification('No missing models have downloadable sources yet.', 'info');
+                    } else {
+                        this.showNotification('No missing models available.', 'info');
+                    }
+                    return;
+                }
+                this.toggleFooterMenu(name);
+            }
+        }, [$el("span", { textContent: label })]);
+
+        const menu = $el("div.ml-footer-menu", { role: 'menu' }, items.map(item => (
+            item === 'divider'
+                ? $el("div.ml-footer-menu-divider", {})
+                : $el("button.ml-footer-menu-item", {
+                    type: 'button',
+                    role: 'menuitem',
+                    onclick: (event) => {
+                        event.stopPropagation();
+                        item.action();
+                    }
+                }, [$el("span", { textContent: item.label })])
+        )));
+
+        this.footerMenuButtons.set(name, button);
+        this.footerMenus.set(name, menu);
+
+        return $el("div.ml-footer-menu-wrap", {}, [button, menu]);
     }
     
     createFooter() {
+        this.footerMenus = new Map();
+        this.footerMenuButtons = new Map();
+
+        const selectMenu = this.createFooterMenu('select', 'Select (0/0)', [
+            { label: 'Select All', action: () => this.selectBatchMissingModels('all') },
+            { label: 'Select None', action: () => this.selectBatchMissingModels('none') },
+            { label: 'Invert Selection', action: () => this.selectBatchMissingModels('invert') },
+            'divider',
+            { label: 'Select Exact Local', action: () => this.selectBatchMissingModels('exact') },
+            { label: 'Select No Exact Local', action: () => this.selectBatchMissingModels('no_exact') },
+            { label: 'Select Partial Local', action: () => this.selectBatchMissingModels('partial') },
+            { label: 'Select No Local Match', action: () => this.selectBatchMissingModels('no_local') },
+            'divider',
+            { label: 'Select With Download Source', action: () => this.selectBatchMissingModels('downloadable') },
+            { label: 'Select Without Download Source', action: () => this.selectBatchMissingModels('no_download') },
+            'divider',
+            { label: 'Select Searched', action: () => this.selectBatchMissingModels('searched') },
+            { label: 'Select Unsearched', action: () => this.selectBatchMissingModels('unsearched') }
+        ]);
+        this.selectMenuButton = this.footerMenuButtons.get('select');
+        this.selectMenuWrap = selectMenu;
+
+        const searchMenu = this.createFooterMenu('search', 'Search', [
+            { label: 'Search Selected', action: () => this.searchMissingBatch('selected', 'all') },
+            { label: 'Search All Missing', action: () => this.searchMissingBatch('all', 'all') },
+            { label: 'Search Unsearched', action: () => this.searchMissingBatch('unsearched', 'all') },
+            'divider',
+            { label: 'Selected: CivitAI', action: () => this.searchMissingBatch('selected', 'civitai') },
+            { label: 'Selected: HuggingFace', action: () => this.searchMissingBatch('selected', 'huggingface') }
+        ]);
+        this.searchMenuButton = this.footerMenuButtons.get('search');
+        this.searchMenuWrap = searchMenu;
+
         // Store reference to download all button so we can update its text
         this.downloadAllButton = $el("button.ml-btn.ml-btn-download.ml-footer-btn", {
             "data-tooltip": "Download every missing model that has a known download source.",
@@ -5060,6 +5374,12 @@ class LinkerManagerDialog extends ComfyDialog {
             $el("span.ml-btn-icon", { textContent: "🔗" }),
             $el("span", { textContent: " Auto-Link 100%" })
         ]);
+        this.queueExactButton = $el("button.ml-btn.ml-btn-secondary.ml-footer-btn", {
+            type: 'button',
+            onclick: () => this.queueExactLocalMatchesBatch('selected')
+        }, [
+            $el("span", { textContent: "Queue Exact" })
+        ]);
         
         // Apply pending resolutions button
         this.applyPendingBtn = $el("button.ml-btn.ml-btn-primary.ml-footer-btn", {
@@ -5076,17 +5396,34 @@ class LinkerManagerDialog extends ComfyDialog {
         this.applyPendingBtn.classList.add('ml-btn-is-disabled');
         this.downloadAllButton.setAttribute('aria-label', 'Download all missing models');
         this.autoResolveButton.setAttribute('aria-label', 'Auto-link all 100 percent local matches');
+        this.queueExactButton.setAttribute('aria-label', 'Queue exact local matches');
         this.applyPendingBtn.setAttribute('aria-label', 'Apply selected model links');
         this.applyPendingBtn.setAttribute('aria-disabled', 'true');
 
         this.setTooltip(this.downloadAllButton, 'Download every missing model that has a known download source.');
         this.setTooltip(this.autoResolveButton, 'Automatically link all missing models with a 100% local match.');
+        this.setTooltip(this.queueExactButton, 'Queue exact local matches for the selected rows, or all exact matches if nothing is selected.');
         this.setTooltip(this.applyPendingBtn, 'Apply the model links you selected from local matches or search results.');
+
+        const downloadMenu = this.createFooterMenu('download', 'Download', [
+            { label: 'Download Selected', action: () => this.downloadMissingBatch('selected') },
+            { label: 'Download All With Sources', action: () => this.downloadMissingBatch('all') },
+            'divider',
+            { label: 'Cancel Downloads', action: () => { this.closeFooterMenus(); this.cancelAllDownloads(); } }
+        ], 'ml-btn-download');
+        this.downloadMenuButton = this.footerMenuButtons.get('download');
+        this.downloadMenuWrap = downloadMenu;
+        this.downloadAllButton = this.downloadMenuButton;
+        this.downloadAllButton.setAttribute('aria-label', 'Download missing models');
+        this.setTooltip(this.downloadAllButton, 'Download selected models or all missing models with known download sources.');
         
         return $el("div.ml-footer", {}, [
-            this.autoResolveButton,
+            selectMenu,
+            searchMenu,
+            this.queueExactButton,
             this.applyPendingBtn,
-            this.downloadAllButton
+            this.autoResolveButton,
+            downloadMenu
         ]);
     }
 
@@ -5147,6 +5484,10 @@ class LinkerManagerDialog extends ComfyDialog {
      */
     updateDownloadAllButtonState() {
         if (!this.downloadAllButton) return;
+        if (this.downloadMenuButton && this.downloadAllButton === this.downloadMenuButton) {
+            this.updateBatchFooterButtons();
+            return;
+        }
         
         const activeCount = Object.keys(this.activeDownloads).length;
         if (activeCount > 0) {
@@ -5837,6 +6178,9 @@ class LinkerManagerDialog extends ComfyDialog {
                         </div>
                     </div>
                     <div class="ml-missing-list-head">
+                        <span class="ml-missing-head-select">
+                            <input type="checkbox" class="ml-missing-select-all-check" aria-label="Select or deselect all missing models">
+                        </span>
                         <span>#</span>
                         <span>Missing Model</span>
                         <span>Type</span>
@@ -5850,6 +6194,7 @@ class LinkerManagerDialog extends ComfyDialog {
         missingModels.forEach((missing, index) => {
             const key = this.getMissingModelKey(missing);
             const isSelected = key === selectedKey;
+            const isBatchSelected = this.batchSelectedMissingKeys?.has(key);
             const filename = this.getMissingFilename(missing);
             const formattedFilename = this.formatFilename(filename, 46);
             const bestMatch = this.getBestLocalMatch(missing, 70);
@@ -5867,8 +6212,11 @@ class LinkerManagerDialog extends ComfyDialog {
 
             html += `
                 <div role="button" tabindex="0"
-                    class="ml-missing-list-row ${isSelected ? 'is-selected' : ''}"
+                    class="ml-missing-list-row ${isSelected ? 'is-selected' : ''} ${isBatchSelected ? 'is-batch-selected' : ''}"
                     data-missing-key="${this.escapeHtml(key)}">
+                    <span class="ml-missing-row-select">
+                        <input type="checkbox" class="ml-missing-row-check" data-ml-no-drag="1" aria-label="Select ${this.escapeHtml(filename)}" ${isBatchSelected ? 'checked' : ''}>
+                    </span>
                     <span class="ml-missing-row-index">${index + 1}</span>
                     <span class="ml-missing-row-model">
                         <span class="ml-missing-row-name" data-tooltip="${this.escapeHtml(filename)}">${this.escapeHtml(formattedFilename.display)}</span>
@@ -5908,7 +6256,53 @@ class LinkerManagerDialog extends ComfyDialog {
             this.displayMissingModels(container, data);
         };
 
+        const selectAllCheckbox = container.querySelector('.ml-missing-select-all-check');
+        if (selectAllCheckbox) {
+            this.updateBatchSelectAllCheckbox();
+            selectAllCheckbox.addEventListener('click', (event) => {
+                event.stopPropagation();
+            });
+            selectAllCheckbox.addEventListener('change', () => {
+                const shouldSelectAll = selectAllCheckbox.checked;
+                this.batchSelectedMissingKeys = shouldSelectAll
+                    ? new Set((sortedMissingModels || []).map(missing => this.getMissingModelKey(missing)))
+                    : new Set();
+                this.lastBatchSelectedMissingKey = null;
+                this.refreshBatchSelectionUi();
+                this.updateBatchFooterButtons();
+            });
+        }
+
         container.querySelectorAll('.ml-missing-list-row').forEach(row => {
+            const checkbox = row.querySelector('.ml-missing-row-check');
+            if (checkbox) {
+                checkbox.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    checkbox.dataset.shiftClick = event.shiftKey ? '1' : '0';
+                });
+                checkbox.addEventListener('change', (event) => {
+                    const key = row.dataset.missingKey;
+                    if (!key) return;
+                    const selected = checkbox.checked;
+                    const isShiftRange = event.shiftKey || checkbox.dataset.shiftClick === '1';
+
+                    if (isShiftRange && this.lastBatchSelectedMissingKey) {
+                        this.applyBatchSelectionRange(
+                            sortedMissingModels,
+                            this.lastBatchSelectedMissingKey,
+                            key,
+                            selected
+                        );
+                    } else {
+                        this.setBatchSelectionForKey(key, selected);
+                    }
+
+                    this.lastBatchSelectedMissingKey = key;
+                    this.refreshBatchSelectionUi();
+                    this.updateBatchFooterButtons();
+                });
+            }
+
             row.addEventListener('click', (event) => {
                 const clickedLocate = event.target instanceof Element && event.target.closest('.ml-missing-row-locate');
                 if (clickedLocate) return;
@@ -6205,6 +6599,7 @@ class LinkerManagerDialog extends ComfyDialog {
         const missingModels = data.missing_models || [];
         const totalMissing = data.total_missing || 0;
         this.missingModels = missingModels;
+        this.syncBatchSelectionForMissingModels(missingModels);
         
         // Check if there are active downloads
         const activeCount = Object.keys(this.activeDownloads).length;
@@ -6215,13 +6610,14 @@ class LinkerManagerDialog extends ComfyDialog {
         );
         
         // Show/hide Auto-Link button based on whether 100% matches exist
+        this.setMissingFooterControlsVisible(totalMissing > 0 || activeCount > 0);
         if (this.autoResolveButton) {
             this.autoResolveButton.style.display = hasAny100Match ? 'inline-flex' : 'none';
         }
         
         // Hide download all button if no missing models
         if (this.downloadAllButton) {
-            this.downloadAllButton.style.display = totalMissing > 0 ? 'inline-flex' : 'none';
+            this.downloadAllButton.style.display = (totalMissing > 0 || activeCount > 0) ? 'inline-flex' : 'none';
         }
 
         if (totalMissing === 0 && activeCount === 0) {
@@ -6291,6 +6687,7 @@ class LinkerManagerDialog extends ComfyDialog {
         );
         this.wireMissingModelsBrowser(container, data, sortedMissingModels);
         this.scheduleInitialUrnLocalMatchRefresh(sortedMissingModels, container, data);
+        this.updateBatchFooterButtons();
     }
 
     renderMissingModel(missing, missingIndex = 0) {
@@ -6737,6 +7134,191 @@ class LinkerManagerDialog extends ComfyDialog {
             console.error('Model Linker: Error in downloadAllMissing:', error);
             this.showNotification('Error starting downloads: ' + error.message, 'error');
         }
+    }
+
+    getBestDownloadSourceForMissing(missing) {
+        if (!missing) return null;
+
+        if (missing.download_source?.url) {
+            return {
+                ...missing.download_source,
+                directory: missing.download_source.directory || missing.download_source.category || missing.category || 'checkpoints'
+            };
+        }
+
+        const state = this.searchResultCache.get(this.getMissingSearchKey(missing));
+        const results = state?.results || {};
+        const filename = missing.original_path?.split('/').pop()?.split('\\').pop() || '';
+        const first = (value) => Array.isArray(value) ? value[0] : value;
+        const candidates = [
+            {
+                source: 'popular',
+                result: first(results.popular),
+                urlKey: 'url',
+                filenameKey: 'filename',
+                categoryKey: 'directory'
+            },
+            {
+                source: 'model_list',
+                result: first(results.model_list),
+                urlKey: 'url',
+                filenameKey: 'filename',
+                categoryKey: 'directory'
+            },
+            {
+                source: 'huggingface',
+                result: first(results.huggingface),
+                urlKey: 'url',
+                filenameKey: 'filename'
+            },
+            {
+                source: 'civarchive',
+                result: first(results.civarchive),
+                urlKey: 'download_url',
+                filenameKey: 'filename'
+            },
+            {
+                source: 'lora_manager_archive',
+                result: first(results.lora_manager_archive),
+                urlKey: 'download_url',
+                filenameKey: 'filename'
+            },
+            {
+                source: 'civitai',
+                result: first(results.civitai),
+                urlKey: 'download_url',
+                filenameKey: 'filename'
+            }
+        ];
+
+        for (const candidate of candidates) {
+            const result = candidate.result;
+            const url = result?.[candidate.urlKey];
+            if (!url) continue;
+
+            return {
+                source: candidate.source,
+                url,
+                filename: result[candidate.filenameKey] || missing.civitai_info?.expected_filename || filename,
+                directory: result[candidate.categoryKey] || result.directory || result.category || missing.category || 'checkpoints',
+                model_url: result.url || result.model_url || this.getModelCardUrl(url),
+                name: result.name || result.repo_id || result.repo || result.filename || filename,
+                size: result.size,
+                type: result.type || missing.category
+            };
+        }
+
+        return null;
+    }
+
+    getBatchSearchTargets(mode) {
+        const missingModels = this.missingModels || [];
+        if (mode === 'selected') {
+            return this.getSelectedMissingModels();
+        }
+        if (mode === 'unsearched') {
+            return missingModels.filter(missing => !this.hasRenderableSearchState(this.getSearchState(missing)));
+        }
+        return missingModels;
+    }
+
+    async searchMissingBatch(mode = 'selected', source = 'all') {
+        if (this.batchSearchRunning) {
+            this.showNotification('Batch search is already running.', 'info');
+            return;
+        }
+
+        const targets = this.getBatchSearchTargets(mode);
+        if (!targets.length) {
+            this.showNotification(mode === 'selected' ? 'No missing models selected.' : 'No missing models to search.', 'info');
+            this.closeFooterMenus();
+            return;
+        }
+
+        this.batchSearchRunning = true;
+        this.updateBatchFooterButtons();
+        this.closeFooterMenus();
+        this.showNotification(`Searching ${targets.length} missing model${targets.length > 1 ? 's' : ''}...`, 'info');
+
+        let completed = 0;
+        let failed = 0;
+        try {
+            for (const missing of targets) {
+                const state = this.getSearchState(missing);
+                state.selectedSource = source || 'all';
+                try {
+                    await this.searchOnline(missing);
+                } catch (error) {
+                    failed += 1;
+                    console.error('Model Linker: batch search item failed:', error);
+                }
+                completed += 1;
+                this.updateBatchFooterButtons();
+            }
+        } finally {
+            this.batchSearchRunning = false;
+            this.persistSearchStateForActiveWorkflow();
+            this.updateBatchFooterButtons();
+        }
+
+        const suffix = failed ? `, ${failed} failed` : '';
+        this.showNotification(`Finished search for ${completed} model${completed === 1 ? '' : 's'}${suffix}.`, failed ? 'error' : 'success');
+    }
+
+    async downloadMissingBatch(mode = 'selected') {
+        const targets = mode === 'selected'
+            ? this.getSelectedMissingModels()
+            : (this.missingModels || []);
+
+        if (!targets.length) {
+            this.showNotification(mode === 'selected' ? 'No missing models selected.' : 'No missing models to download.', 'info');
+            this.closeFooterMenus();
+            return;
+        }
+
+        const toDownload = [];
+        for (const missing of targets) {
+            if (this.getBestLocalMatch(missing, 100)) continue;
+            const source = this.getBestDownloadSourceForMissing(missing);
+            if (!source?.url) continue;
+            missing.download_source = source;
+            toDownload.push(missing);
+        }
+
+        if (!toDownload.length) {
+            this.showNotification('No selected models have downloadable sources.', 'info');
+            this.closeFooterMenus();
+            return;
+        }
+
+        this.closeFooterMenus();
+        this.showNotification(`Starting ${toDownload.length} download${toDownload.length > 1 ? 's' : ''}...`, 'info');
+        for (const missing of toDownload) {
+            await this.downloadModel(missing);
+        }
+        this.updateDownloadAllButtonState();
+        this.updateBatchFooterButtons();
+    }
+
+    queueExactLocalMatchesBatch(mode = 'selected') {
+        const selected = this.getSelectedMissingModels();
+        const targets = mode === 'selected' && selected.length ? selected : (this.missingModels || []);
+        let queued = 0;
+
+        for (const missing of targets) {
+            const match = this.getBestLocalMatch(missing, 100);
+            if (!match?.model) continue;
+            this.queueResolution(missing, match.model);
+            queued += 1;
+        }
+
+        this.closeFooterMenus();
+        if (!queued) {
+            this.showNotification('No exact local matches found to queue.', 'info');
+            return;
+        }
+        this.showNotification(`Queued ${queued} exact local match${queued === 1 ? '' : 'es'}.`, 'success');
+        this.updateBatchFooterButtons();
     }
 
     /**

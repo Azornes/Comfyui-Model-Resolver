@@ -559,7 +559,7 @@
 .ml-missing-list-head,
 #model-linker-modal .ml-missing-list-row {
     display: grid;
-    grid-template-columns: 22px minmax(170px, var(--ml-missing-model-col, 280px)) minmax(66px, var(--ml-missing-type-col, 112px)) minmax(150px, 1fr) 58px 106px;
+    grid-template-columns: 38px 22px minmax(170px, var(--ml-missing-model-col, 280px)) minmax(66px, var(--ml-missing-type-col, 112px)) minmax(150px, 1fr) 58px 106px;
     align-items: center;
     gap: 8px;
 }
@@ -602,6 +602,30 @@
 #model-linker-modal .ml-missing-list-row.is-selected {
     background: linear-gradient(90deg, rgba(114,211,138,0.12) 0%, rgba(114,211,138,0.055) 42%, rgba(114,211,138,0.018) 100%);
     box-shadow: inset 3px 0 0 rgba(114,211,138,0.92), inset 0 0 0 1px rgba(114,211,138,0.12);
+}
+.ml-missing-list-row.is-batch-selected {
+    background: rgba(78,161,255,0.055);
+}
+.ml-missing-list-row.is-selected.is-batch-selected {
+    background: linear-gradient(90deg, rgba(114,211,138,0.13) 0%, rgba(78,161,255,0.065) 58%, rgba(78,161,255,0.025) 100%);
+}
+.ml-missing-row-select {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.ml-missing-head-select {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.ml-missing-select-all-check,
+.ml-missing-row-check {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    accent-color: #72d38a;
+    cursor: pointer;
 }
 .ml-missing-row-index {
     display: block;
@@ -893,8 +917,13 @@
         display: none;
     }
     #model-linker-modal .ml-missing-list-row {
-        grid-template-columns: 18px minmax(0, 1fr);
+        grid-template-columns: 24px 18px minmax(0, 1fr);
         gap: 7px;
+    }
+    .ml-missing-row-select {
+        grid-row: 1 / span 4;
+        align-self: start;
+        margin-top: 1px;
     }
     .ml-missing-row-index {
         grid-row: 1 / span 4;
@@ -907,7 +936,7 @@
     .ml-missing-row-best,
     .ml-missing-row-match,
     .ml-missing-row-sources {
-        grid-column: 2;
+        grid-column: 3;
     }
 }
 
@@ -2343,6 +2372,83 @@
     border-radius: 6px;
     line-height: 1;
     backdrop-filter: none;
+}
+.ml-footer-menu-wrap {
+    position: relative;
+    display: inline-flex;
+}
+.ml-footer-menu-button {
+    justify-content: center;
+}
+.ml-footer-menu-button::after {
+    content: "\25BE";
+    margin-left: 7px;
+    font-size: 10px;
+    opacity: 0.68;
+}
+.ml-footer-menu {
+    display: none;
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 8px);
+    min-width: 212px;
+    max-height: min(420px, calc(100vh - 140px));
+    overflow-y: auto;
+    padding: 5px;
+    border: 1px solid rgba(255,255,255,0.105);
+    border-radius: 8px;
+    background: rgba(31,31,35,0.98);
+    box-shadow: 0 18px 38px rgba(0,0,0,0.34);
+    z-index: var(--ml-z-dropdown, 10020);
+}
+.ml-footer-menu.is-open {
+    display: grid;
+    gap: 2px;
+}
+.ml-footer-menu-item {
+    min-height: 30px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--ml-text);
+    font: inherit;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+}
+#model-linker-modal .ml-footer-menu .ml-footer-menu-item {
+    width: 100%;
+    min-height: 30px;
+    margin: 0;
+    padding: 0 10px;
+    appearance: none;
+    -webkit-appearance: none;
+    border: 0 !important;
+    border-radius: 6px;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: var(--ml-text);
+    font: inherit;
+    font-size: 12px;
+    line-height: 1.25;
+    text-align: left;
+    justify-content: flex-start;
+}
+.ml-footer-menu-item:hover,
+.ml-footer-menu-item:focus-visible {
+    outline: none;
+    background: rgba(255,255,255,0.07);
+}
+#model-linker-modal .ml-footer-menu .ml-footer-menu-item:hover,
+#model-linker-modal .ml-footer-menu .ml-footer-menu-item:focus-visible {
+    outline: none;
+    background: rgba(255,255,255,0.07) !important;
+}
+.ml-footer-menu-divider {
+    height: 1px;
+    margin: 4px 2px;
+    background: rgba(255,255,255,0.08);
 }
 .ml-btn.ml-footer-btn,
 .ml-btn.ml-btn-primary.ml-footer-btn,
