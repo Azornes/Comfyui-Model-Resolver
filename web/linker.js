@@ -5030,13 +5030,21 @@ class LinkerManagerDialog extends ComfyDialog {
     updateApplyPendingButton() {
         if (!this.applyPendingBtn) return;
         const count = this.pendingResolutions?.length || 0;
+        const isEmpty = count === 0;
+        const tooltip = count > 0
+            ? `Apply ${count} queued model link${count > 1 ? 's' : ''} to the current workflow.`
+            : 'Apply the model links you selected from local matches or search results.';
         this.applyPendingBtn.textContent = `Apply Selected (${count})`;
-        this.applyPendingBtn.disabled = count === 0;
+        this.setTooltip(this.applyPendingBtn, tooltip);
+        this.applyPendingBtn.setAttribute('aria-disabled', String(isEmpty));
+        this.applyPendingBtn.classList.toggle('ml-btn-is-disabled', isEmpty);
     }
     
     createFooter() {
         // Store reference to download all button so we can update its text
         this.downloadAllButton = $el("button.ml-btn.ml-btn-download.ml-footer-btn", {
+            "data-tooltip": "Download every missing model that has a known download source.",
+            "aria-label": "Download all missing models",
             onclick: () => this.handleDownloadAllClick()
         }, [
             $el("span.ml-btn-icon", { textContent: "☁" }),
@@ -5045,6 +5053,8 @@ class LinkerManagerDialog extends ComfyDialog {
         
         // Auto-resolve button (secondary style)
         this.autoResolveButton = $el("button.ml-btn.ml-btn-secondary.ml-footer-btn", {
+            "data-tooltip": "Automatically link all missing models with a 100% local match.",
+            "aria-label": "Auto-link all 100 percent local matches",
             onclick: () => this.autoResolve100Percent()
         }, [
             $el("span.ml-btn-icon", { textContent: "🔗" }),
@@ -5054,9 +5064,24 @@ class LinkerManagerDialog extends ComfyDialog {
         // Apply pending resolutions button
         this.applyPendingBtn = $el("button.ml-btn.ml-btn-primary.ml-footer-btn", {
             id: "apply-pending-resolutions",
+            "data-tooltip": "Apply the model links you selected from local matches or search results.",
+            "aria-label": "Apply selected model links",
+            "aria-disabled": "true",
             textContent: "Apply Selected (0)",
-            onclick: () => this.applyPendingResolutions()
+            onclick: () => {
+                if ((this.pendingResolutions?.length || 0) === 0) return;
+                this.applyPendingResolutions();
+            }
         });
+        this.applyPendingBtn.classList.add('ml-btn-is-disabled');
+        this.downloadAllButton.setAttribute('aria-label', 'Download all missing models');
+        this.autoResolveButton.setAttribute('aria-label', 'Auto-link all 100 percent local matches');
+        this.applyPendingBtn.setAttribute('aria-label', 'Apply selected model links');
+        this.applyPendingBtn.setAttribute('aria-disabled', 'true');
+
+        this.setTooltip(this.downloadAllButton, 'Download every missing model that has a known download source.');
+        this.setTooltip(this.autoResolveButton, 'Automatically link all missing models with a 100% local match.');
+        this.setTooltip(this.applyPendingBtn, 'Apply the model links you selected from local matches or search results.');
         
         return $el("div.ml-footer", {}, [
             this.autoResolveButton,
@@ -5126,10 +5151,20 @@ class LinkerManagerDialog extends ComfyDialog {
         const activeCount = Object.keys(this.activeDownloads).length;
         if (activeCount > 0) {
             this.downloadAllButton.innerHTML = `<span class="ml-btn-icon">✕</span> Cancel All (${activeCount})`;
+            this.downloadAllButton.setAttribute(
+                'data-tooltip',
+                `Cancel ${activeCount} active download${activeCount > 1 ? 's' : ''}.`
+            );
+            this.downloadAllButton.setAttribute('aria-label', 'Cancel all active downloads');
             this.downloadAllButton.classList.remove('ml-btn-download');
             this.downloadAllButton.classList.add('ml-btn-danger');
         } else {
             this.downloadAllButton.innerHTML = `<span class="ml-btn-icon">☁</span> Download All Missing`;
+            this.downloadAllButton.setAttribute(
+                'data-tooltip',
+                'Download every missing model that has a known download source.'
+            );
+            this.downloadAllButton.setAttribute('aria-label', 'Download all missing models');
             this.downloadAllButton.classList.remove('ml-btn-danger');
             this.downloadAllButton.classList.add('ml-btn-download');
         }

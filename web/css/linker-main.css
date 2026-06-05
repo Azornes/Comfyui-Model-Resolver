@@ -2371,6 +2371,16 @@
     box-shadow: none;
     cursor: not-allowed;
 }
+.ml-btn.ml-footer-btn.ml-btn-is-disabled,
+.ml-btn.ml-btn-primary.ml-footer-btn.ml-btn-is-disabled,
+.ml-btn.ml-btn-download.ml-footer-btn.ml-btn-is-disabled {
+    opacity: 1;
+    color: rgba(255,255,255,0.34);
+    background: rgba(255,255,255,0.016);
+    border-color: rgba(255,255,255,0.055);
+    box-shadow: none;
+    cursor: not-allowed;
+}
 
 /* Tabs */
 .ml-tabs {
