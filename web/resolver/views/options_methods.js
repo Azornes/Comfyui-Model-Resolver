@@ -717,34 +717,68 @@ export const optionsMethods = {
                 const civitaiCandidateLimit = Number.isFinite(civitaiCandidateLimitRaw)
                     ? Math.min(20, Math.max(1, civitaiCandidateLimitRaw))
                     : 5;
-                localStorage.setItem('ModelResolver.civitaiApiKey', civitaiInput?.value || '');
-                localStorage.setItem('ModelResolver.civitaiSessionToken', civitaiSessionInput?.value || '');
-                localStorage.setItem('ModelResolver.civitaiUseTrpcSearch', civitaiUseTrpcSearchInput?.checked ? 'true' : 'false');
-                localStorage.setItem('ModelResolver.civitaiUseHtmlFallback', civitaiUseHtmlFallbackInput?.checked ? 'true' : 'false');
-                localStorage.setItem('ModelResolver.huggingFaceToken', hfInput?.value || '');
-                localStorage.setItem('ModelResolver.braveSearchApiKey', braveInput?.value || '');
-                localStorage.setItem('ModelResolver.hfUseApiSearch', hfUseApiSearchInput?.checked ? 'true' : 'false');
-                localStorage.setItem('ModelResolver.hfUseComfyOrgFallback', hfUseComfyOrgFallbackInput?.checked ? 'true' : 'false');
-                localStorage.setItem('ModelResolver.hfUseBraveFallback', hfUseBraveFallbackInput?.checked ? 'true' : 'false');
-                localStorage.setItem('ModelResolver.civitaiCandidateLimit', `${civitaiCandidateLimit}`);
+
+                // Collect source-enabled flags
+                const sourceEnabled = {};
                 if (sourceEnabledInputs.length && !sourceEnabledInputs.some(input => input.checked)) {
                     const localInput = sourceEnabledInputs.find(input => input.dataset.source === 'local');
-                    if (localInput) {
-                        localInput.checked = true;
-                    }
+                    if (localInput) localInput.checked = true;
                 }
                 sourceEnabledInputs.forEach((input) => {
                     const key = input.dataset.storageKey;
                     if (key) {
-                        localStorage.setItem(key, input.checked ? 'true' : 'false');
+                        sourceEnabled[key] = input.checked;
                     }
                 });
-                if (civitaiLimitInput) {
-                    civitaiLimitInput.value = `${civitaiCandidateLimit}`;
+
+                const newSettings = {
+                    civitai_key:                 civitaiInput?.value || '',
+                    civitai_session_token:        civitaiSessionInput?.value || '',
+                    civitai_use_trpc_search:      Boolean(civitaiUseTrpcSearchInput?.checked),
+                    civitai_use_html_fallback:    Boolean(civitaiUseHtmlFallbackInput?.checked),
+                    civitai_candidate_limit:      civitaiCandidateLimit,
+                    hf_token:                     hfInput?.value || '',
+                    hf_use_api_search:            Boolean(hfUseApiSearchInput?.checked),
+                    hf_use_comfy_org_fallback:    Boolean(hfUseComfyOrgFallbackInput?.checked),
+                    hf_use_brave_fallback:        Boolean(hfUseBraveFallbackInput?.checked),
+                    brave_search_api_key:         braveInput?.value || '',
+                    search_source_enabled:        sourceEnabled,
+                };
+
+                // 1. Write to localStorage (fast local cache)
+                localStorage.setItem('ModelResolver.civitaiApiKey',          newSettings.civitai_key);
+                localStorage.setItem('ModelResolver.civitaiSessionToken',    newSettings.civitai_session_token);
+                localStorage.setItem('ModelResolver.civitaiUseTrpcSearch',   newSettings.civitai_use_trpc_search ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.civitaiUseHtmlFallback', newSettings.civitai_use_html_fallback ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.huggingFaceToken',       newSettings.hf_token);
+                localStorage.setItem('ModelResolver.braveSearchApiKey',      newSettings.brave_search_api_key);
+                localStorage.setItem('ModelResolver.hfUseApiSearch',         newSettings.hf_use_api_search ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.hfUseComfyOrgFallback',  newSettings.hf_use_comfy_org_fallback ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.hfUseBraveFallback',     newSettings.hf_use_brave_fallback ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.civitaiCandidateLimit',  `${civitaiCandidateLimit}`);
+                Object.entries(sourceEnabled).forEach(([key, val]) => {
+                    localStorage.setItem(key, val ? 'true' : 'false');
+                });
+                if (civitaiLimitInput) civitaiLimitInput.value = `${civitaiCandidateLimit}`;
+
+                // 2. Persist to server (survives new browsers / profiles)
+                try {
+                    setStatus('Saving…', '');
+                    const resp = await api.fetchApi('/model_resolver/settings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(newSettings),
+                    });
+                    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                    setStatus('Saved on this machine (all browsers).', 'is-saved');
+                    this.showNotification('Options saved', 'success');
+                } catch (err) {
+                    console.warn('Model Resolver: could not save settings to server, kept locally only.', err);
+                    setStatus('Saved locally only (server write failed).', 'is-saved');
+                    this.showNotification('Options saved locally only', 'warning');
                 }
+
                 await this.clearSearchCaches();
-                setStatus('Options saved locally.', 'is-saved');
-                this.showNotification('Options saved and search cache cleared', 'success');
             });
         }
 

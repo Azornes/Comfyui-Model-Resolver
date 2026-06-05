@@ -484,6 +484,55 @@ export const downloadTargetMethods = {
         };
     },
 
+    /**
+     * Fetch settings saved on the server and sync them into localStorage.
+     * Call this once when the dialog initialises so every browser gets the
+     * same tokens without the user having to re-enter them.
+     */
+    async loadSettingsFromServer() {
+        try {
+            const resp = await api.fetchApi('/model_resolver/settings');
+            if (!resp.ok) return;
+            const data = await resp.json();
+            if (!data || typeof data !== 'object') return;
+
+            // Helper: write to localStorage only when the value from server is
+            // non-empty, so we don't overwrite a key the user already has locally.
+            const sync = (localKey, serverValue) => {
+                if (serverValue !== undefined && serverValue !== null && serverValue !== '') {
+                    localStorage.setItem(localKey, serverValue);
+                }
+            };
+
+            sync('ModelResolver.civitaiApiKey',          data.civitai_key);
+            sync('ModelResolver.civitaiSessionToken',    data.civitai_session_token);
+            sync('ModelResolver.huggingFaceToken',       data.hf_token);
+            sync('ModelResolver.braveSearchApiKey',      data.brave_search_api_key);
+
+            if (data.civitai_use_trpc_search !== undefined)
+                localStorage.setItem('ModelResolver.civitaiUseTrpcSearch',   data.civitai_use_trpc_search ? 'true' : 'false');
+            if (data.civitai_use_html_fallback !== undefined)
+                localStorage.setItem('ModelResolver.civitaiUseHtmlFallback', data.civitai_use_html_fallback ? 'true' : 'false');
+            if (data.hf_use_api_search !== undefined)
+                localStorage.setItem('ModelResolver.hfUseApiSearch',         data.hf_use_api_search ? 'true' : 'false');
+            if (data.hf_use_comfy_org_fallback !== undefined)
+                localStorage.setItem('ModelResolver.hfUseComfyOrgFallback',  data.hf_use_comfy_org_fallback ? 'true' : 'false');
+            if (data.hf_use_brave_fallback !== undefined)
+                localStorage.setItem('ModelResolver.hfUseBraveFallback',     data.hf_use_brave_fallback ? 'true' : 'false');
+            if (data.civitai_candidate_limit !== undefined)
+                localStorage.setItem('ModelResolver.civitaiCandidateLimit',  `${data.civitai_candidate_limit}`);
+
+            // Source-enabled flags stored as a nested object
+            if (data.search_source_enabled && typeof data.search_source_enabled === 'object') {
+                Object.entries(data.search_source_enabled).forEach(([key, val]) => {
+                    if (key) localStorage.setItem(key, val ? 'true' : 'false');
+                });
+            }
+        } catch (err) {
+            console.warn('Model Resolver: could not load settings from server, using localStorage only.', err);
+        }
+    },
+
     async clearSearchCaches() {
         for (const state of this.searchResultCache.values()) {
             state.activeSearchRunId = null;
