@@ -5,14 +5,14 @@
  */
 
 import { app } from "../../../scripts/app.js";
-import { ModelResolver as ModelResolverClass } from "./resolver/model_resolver.js";
+import { ModelResolver } from "./resolver/model_resolver.js";
 import { registerGlobalHelpers } from "./resolver/globals.js";
 
 registerGlobalHelpers();
 
-const modelResolver = new ModelResolverClass();
+const ModelResolver = new ModelResolver();
 
 app.registerExtension({
     name: "Model Resolver",
-    setup: modelResolver.setup
+    setup: ModelResolver.setup
 });
