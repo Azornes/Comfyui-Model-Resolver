@@ -947,9 +947,16 @@ export const resolveDownloadMethods = {
                         ? data.searched_sources
                         : [source];
                     responseSources.forEach(responseSource => attemptedSources.add(responseSource));
+                    const sourceErrors = data.source_errors && typeof data.source_errors === 'object'
+                        ? data.source_errors
+                        : {};
+                    const sourceError = sourceErrors[source]
+                        || responseSources.map(responseSource => sourceErrors[responseSource]).find(Boolean)
+                        || null;
 
                     const found = this.hasSearchResults(data);
                     anyFound = anyFound || found;
+                    hadError = hadError || Boolean(sourceError);
                     state.results = this.mergeSearchResults(state.results, data, {
                         searchedAt: new Date().toISOString(),
                         forceRefresh: Boolean(forceSearch)
@@ -958,9 +965,10 @@ export const resolveDownloadMethods = {
                     state.lastAttemptFound = anyFound;
                     this.clearSearchProgressTimer(searchRunId, source);
                     this.setSourceProgress(state, source, {
-                        status: found ? 'found' : 'none',
+                        status: sourceError ? 'error' : (found ? 'found' : 'none'),
                         percent: 100,
-                        message: found ? 'Found' : 'No match'
+                        message: sourceError ? 'Error' : (found ? 'Found' : 'No match'),
+                        error: sourceError || null
                     }, missing, { workflowKey });
 
                     if (data.civitai) {

@@ -139,6 +139,9 @@ export const searchPanelMethods = {
      */
     mergeSearchResults(existingResults = {}, newResults = {}, { searchedAt = null, forceRefresh = false } = {}) {
         const searchedSources = new Set(Array.isArray(newResults.searched_sources) ? newResults.searched_sources : []);
+        const sourceErrors = newResults.source_errors && typeof newResults.source_errors === 'object'
+            ? newResults.source_errors
+            : {};
         const pickResult = (source) => {
             if (newResults[source]) {
                 const existingTimestamp = this.getSearchResultTimestamp(existingResults[source]);
@@ -152,7 +155,9 @@ export const searchPanelMethods = {
             }
             const sourceWasSearched = searchedSources.has(source)
                 || (searchedSources.has('local') && (source === 'popular' || source === 'model_list'));
-            if (forceRefresh && sourceWasSearched) {
+            const sourceHadError = sourceErrors[source]
+                || (sourceErrors.local && (source === 'popular' || source === 'model_list'));
+            if (forceRefresh && sourceWasSearched && !sourceHadError) {
                 return null;
             }
             return existingResults[source] || null;
@@ -575,7 +580,7 @@ export const searchPanelMethods = {
                 const statusClass = String(status).replace(/[^a-z0-9_-]/gi, '');
                 const label = this.getSearchSourceLabel(source);
                 const statusLabel = progress?.message || statusLabels[status] || status;
-                const title = `${label}: ${statusLabel}`;
+                const title = `${label}: ${progress?.error || statusLabel}`;
                 html += `
                     <div class="mr-search-progress-item mr-search-progress-${statusClass}" data-tooltip="${this.escapeHtml(title)}">
                         <span class="mr-search-progress-source">${this.escapeHtml(label)}</span>
@@ -599,8 +604,9 @@ export const searchPanelMethods = {
             const statusLabel = status === 'running'
                 ? `Searching... ${Math.round(safePercent)}%`
                 : (progress?.message || statusLabels[status] || status);
+            const title = progress?.error ? ` data-tooltip="${this.escapeHtml(`${label}: ${progress.error}`)}"` : '';
             html += `
-                <div class="mr-search-progress-item mr-search-progress-${statusClass}">
+                <div class="mr-search-progress-item mr-search-progress-${statusClass}"${title}>
                     <div class="mr-search-progress-head">
                         <span>${this.escapeHtml(label)}</span>
                         <span>${this.escapeHtml(statusLabel)}</span>

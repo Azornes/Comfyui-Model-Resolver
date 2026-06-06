@@ -12,6 +12,7 @@ from .core.log_system.log_funcs import (
     log_info,
     log_error,
     log_exception,
+    log_warn,
 )
 
 # Web directory for JavaScript interface
@@ -118,6 +119,7 @@ class ModelResolverExtension:
                     clear_search_cache as clear_civitai_search_cache,
                 )
                 from .core.sources.civarchive import (
+                    CivArchiveSearchError,
                     is_civarchive_available,
                     search_civarchive_for_file,
                     resolve_civarchive_model_version,
@@ -985,6 +987,7 @@ class ModelResolverExtension:
                             "lora_manager_archive": None,
                             "found": False,
                             "searched_sources": sorted(normalized_sources),
+                            "source_errors": {},
                         }
 
                         def current_search_timestamp():
@@ -1254,45 +1257,52 @@ class ModelResolverExtension:
                             log_info(
                                 f"Search source [civarchive] start: filename={filename}, category={category}, is_urn={is_urn}"
                             )
-                            if is_urn:
-                                model_id = data.get("model_id")
-                                version_id = data.get("version_id")
-                                if model_id and version_id:
-                                    civarchive_result = resolve_civarchive_model_version(
-                                        model_id,
-                                        version_id,
-                                        query=filename,
+                            try:
+                                if is_urn:
+                                    model_id = data.get("model_id")
+                                    version_id = data.get("version_id")
+                                    if model_id and version_id:
+                                        civarchive_result = resolve_civarchive_model_version(
+                                            model_id,
+                                            version_id,
+                                            query=filename,
+                                        )
+                                        log_search_result(
+                                            "civarchive/urn",
+                                            civarchive_result,
+                                            {
+                                                "model_id": model_id,
+                                                "version_id": version_id,
+                                            },
+                                        )
+                                        if civarchive_result:
+                                            source_results["civarchive"] = civarchive_result
+                                            source_found = True
+                                    else:
+                                        log_search_result(
+                                            "civarchive/urn",
+                                            None,
+                                            {
+                                                "model_id": model_id,
+                                                "version_id": version_id,
+                                            },
+                                        )
+                                else:
+                                    civarchive_result = search_civarchive_for_file(
+                                        filename,
+                                        model_type=category,
+                                        limit=civarchive_candidate_limit,
                                     )
-                                    log_search_result(
-                                        "civarchive/urn",
-                                        civarchive_result,
-                                        {
-                                            "model_id": model_id,
-                                            "version_id": version_id,
-                                        },
-                                    )
+                                    log_search_result("civarchive", civarchive_result)
                                     if civarchive_result:
                                         source_results["civarchive"] = civarchive_result
                                         source_found = True
-                                else:
-                                    log_search_result(
-                                        "civarchive/urn",
-                                        None,
-                                        {
-                                            "model_id": model_id,
-                                            "version_id": version_id,
-                                        },
-                                    )
-                            else:
-                                civarchive_result = search_civarchive_for_file(
-                                    filename,
-                                    model_type=category,
-                                    limit=civarchive_candidate_limit,
-                                )
-                                log_search_result("civarchive", civarchive_result)
-                                if civarchive_result:
-                                    source_results["civarchive"] = civarchive_result
-                                    source_found = True
+                            except CivArchiveSearchError as e:
+                                error_message = f"CivArchive search failed: {e}"
+                                log_warn(error_message)
+                                source_results["source_errors"] = {
+                                    "civarchive": error_message
+                                }
 
                             return source_results, source_found
 
@@ -1352,6 +1362,9 @@ class ModelResolverExtension:
                             *search_tasks
                         ):
                             for source_key, source_result in source_results.items():
+                                if source_key == "source_errors":
+                                    results["source_errors"].update(source_result or {})
+                                    continue
                                 if source_result:
                                     results[source_key] = source_result
                             if source_found:

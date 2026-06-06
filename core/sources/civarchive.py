@@ -61,6 +61,10 @@ CIVARCHIVE_TYPE_MAP = {
 }
 
 
+class CivArchiveSearchError(Exception):
+    """Raised when CivArchive cannot complete a search request."""
+
+
 def clear_search_cache():
     """Clear cached CivArchive search results."""
     _search_cache.clear()
@@ -165,13 +169,13 @@ def _search_page(
         )
     except Exception as e:
         log_warn(f"CivArchive search request failed: query={query}, error={e}")
-        return []
+        raise CivArchiveSearchError(str(e)) from e
 
     if response.status_code != 200:
         log_warn(
             f"CivArchive search returned {response.status_code}: query={query}"
         )
-        return []
+        raise CivArchiveSearchError(f"HTTP {response.status_code}")
 
     next_data = _extract_next_data(response.text)
     results = (
@@ -820,6 +824,8 @@ def search_civarchive_for_file(
 
             if best_match:
                 break
+    except CivArchiveSearchError:
+        raise
     except Exception as e:
         log_exception(f"CivArchive search error for {normalized_filename}: {e}")
         return None
