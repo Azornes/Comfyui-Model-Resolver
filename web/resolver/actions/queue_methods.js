@@ -607,6 +607,7 @@ export const queueMethods = {
             'aria-expanded': 'false',
             onclick: (event) => {
                 event.stopPropagation();
+                this.hideTooltip?.();
                 if (button.classList.contains('mr-btn-is-disabled')) {
                     if (name === 'download') {
                         this.showNotification('No missing models have downloadable sources yet.', 'info');

@@ -159,6 +159,10 @@ export const searchPanelMethods = {
     showTooltip(target) {
         if (!target || !this.tooltipElement) return;
         this.normalizeTooltipTarget(target);
+        if (target.matches?.('.mr-footer-menu-button[aria-expanded="true"]')) {
+            this.hideTooltip();
+            return;
+        }
         const text = target.getAttribute('data-tooltip');
         if (!text) return;
 
