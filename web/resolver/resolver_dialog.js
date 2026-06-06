@@ -1,4 +1,4 @@
-﻿import { $el, ComfyDialog } from "../../../../scripts/ui.js";
+import { $el, ComfyDialog } from "../../../../scripts/ui.js";
 import { dialogShellMethods } from "./shell/dialog_shell_methods.js";
 import { lifecycleGraphMethods } from "./shell/lifecycle_graph_methods.js";
 import { workflowStateMethods } from "./shell/workflow_state_methods.js";
@@ -21,6 +21,7 @@ export class ResolverManagerDialog extends ComfyDialog {
         this.allModels = null; // list of all available models for dropdown
         this.downloadDirectories = null;
         this.capabilities = null;
+        this.baseModels = null;
         this.downloadSubfolders = new Map();
         this.downloadTargetSelections = new Map(); // missing model key -> user/suggested download target
         this.pendingResolutions = [];
@@ -85,21 +86,21 @@ export class ResolverManagerDialog extends ComfyDialog {
             $el("div.mr-context-menu-item", {
                 onclick: () => this.handleContextMenuAction('showInfo')
             }, [
-                $el("span.mr-context-menu-item-icon", { textContent: "ℹ" }),
+                $el("span.mr-context-menu-item-icon", { textContent: "?" }),
                 $el("span", { textContent: "Show Info" })
             ]),
             $el("div.mr-context-menu-divider"),
             $el("div.mr-context-menu-item", {
                 onclick: () => this.handleContextMenuAction('civitai')
             }, [
-                $el("span.mr-context-menu-item-icon", { textContent: "🌐" }),
+                $el("span.mr-context-menu-item-icon", { textContent: "??" }),
                 $el("span", { textContent: "Open in CivitAI" })
             ]),
             $el("div.mr-context-menu-divider"),
             $el("div.mr-context-menu-item", {
                 onclick: () => this.handleContextMenuAction('openFolder')
             }, [
-                $el("span.mr-context-menu-item-icon", { textContent: "📁" }),
+                $el("span.mr-context-menu-item-icon", { textContent: "??" }),
                 $el("span", { textContent: "Open Containing Folder" })
             ])
         ]);

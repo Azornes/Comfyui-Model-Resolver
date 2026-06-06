@@ -1,0 +1,627 @@
+{
+  "base_models": [
+    {
+      "name": "Z-Image",
+      "aliases": [
+        "zimage",
+        "z image",
+        "z-image",
+        "z_image",
+        "zImageTurbo",
+        "z image turbo"
+      ]
+    },
+    {
+      "name": "Pony",
+      "aliases": [
+        "pony",
+        "ponyxl",
+        "pony diffusion",
+        "pony realism"
+      ]
+    },
+    {
+      "name": "Illustrious",
+      "aliases": [
+        "illustrious",
+        "illustriousxl",
+        "illustrious xl"
+      ]
+    },
+    {
+      "name": "SDXL 1.0",
+      "aliases": [
+        "sdxl",
+        "sdxl10",
+        "sdxl 1.0",
+        "stable diffusion xl",
+        "sdxl100",
+        "sdxl1"
+      ]
+    },
+    {
+      "name": "SD 1.5",
+      "aliases": [
+        "sd15",
+        "sd 1.5",
+        "sd1.5",
+        "stable diffusion 1.5",
+        "sd1",
+        "stablediffusion15"
+      ]
+    },
+    {
+      "name": "Flux.1 D",
+      "aliases": [
+        "flux",
+        "flux1",
+        "flux.1",
+        "flux dev",
+        "flux.1 d",
+        "flux1d",
+        "fluxdev"
+      ]
+    },
+    {
+      "name": "Flux.1 S",
+      "aliases": [
+        "flux schnell",
+        "flux.1 s",
+        "flux1s",
+        "fluxschnell"
+      ]
+    },
+    {
+      "name": "Qwen Image",
+      "aliases": [
+        "qwen image",
+        "qwenimage",
+        "qwen-image"
+      ]
+    },
+    {
+      "name": "Hunyuan 1",
+      "aliases": [
+        "hunyuan",
+        "hunyuan1"
+      ]
+    },
+    {
+      "name": "WAN Video",
+      "aliases": [
+        "wan",
+        "wan video",
+        "wanvideo"
+      ]
+    },
+    {
+      "name": "NoobAI",
+      "aliases": [
+        "noobai",
+        "noob ai"
+      ]
+    },
+    {
+      "name": "HiDream",
+      "aliases": [
+        "hidream",
+        "hi dream"
+      ]
+    },
+    {
+      "name": "Anima",
+      "aliases": [
+        "anima"
+      ]
+    },
+    {
+      "name": "AuraFlow",
+      "aliases": [
+        "auraflow"
+      ]
+    },
+    {
+      "name": "Chroma",
+      "aliases": [
+        "chroma"
+      ]
+    },
+    {
+      "name": "CogVideoX",
+      "aliases": [
+        "cogvideox"
+      ]
+    },
+    {
+      "name": "Ernie",
+      "aliases": [
+        "ernie"
+      ]
+    },
+    {
+      "name": "Flux.1 Krea",
+      "aliases": [
+        "Flux.1 Krea",
+        "flux 1 krea"
+      ]
+    },
+    {
+      "name": "Flux.1 Kontext",
+      "aliases": [
+        "Flux.1 Kontext",
+        "flux 1 kontext"
+      ]
+    },
+    {
+      "name": "Flux.2 D",
+      "aliases": [
+        "Flux.2 D",
+        "flux 2 d",
+        "flux.2"
+      ]
+    },
+    {
+      "name": "Flux.2 Klein 9B",
+      "aliases": [
+        "Flux.2 Klein 9B",
+        "flux 2 klein 9b"
+      ]
+    },
+    {
+      "name": "Flux.2 Klein 9B-base",
+      "aliases": [
+        "Flux.2 Klein 9B-base",
+        "flux 2 klein 9b base"
+      ]
+    },
+    {
+      "name": "Flux.2 Klein 4B",
+      "aliases": [
+        "Flux.2 Klein 4B",
+        "flux 2 klein 4b"
+      ]
+    },
+    {
+      "name": "Flux.2 Klein 4B-base",
+      "aliases": [
+        "Flux.2 Klein 4B-base",
+        "flux 2 klein 4b base"
+      ]
+    },
+    {
+      "name": "Grok",
+      "aliases": [
+        "grok"
+      ]
+    },
+    {
+      "name": "HappyHorse",
+      "aliases": [
+        "happyhorse"
+      ]
+    },
+    {
+      "name": "HiDream-O1",
+      "aliases": [
+        "HiDream-O1",
+        "hidream o1"
+      ]
+    },
+    {
+      "name": "Hunyuan Video",
+      "aliases": [
+        "hunyuan video"
+      ]
+    },
+    {
+      "name": "Imagen4",
+      "aliases": [
+        "imagen4"
+      ]
+    },
+    {
+      "name": "Kolors",
+      "aliases": [
+        "kolors"
+      ]
+    },
+    {
+      "name": "Krea 2",
+      "aliases": [
+        "krea",
+        "krea 2"
+      ]
+    },
+    {
+      "name": "LTXV",
+      "aliases": [
+        "ltxv"
+      ]
+    },
+    {
+      "name": "LTXV2",
+      "aliases": [
+        "ltxv2"
+      ]
+    },
+    {
+      "name": "LTXV 2.3",
+      "aliases": [
+        "LTXV 2.3",
+        "ltxv 2 3"
+      ]
+    },
+    {
+      "name": "Lens",
+      "aliases": [
+        "lens"
+      ]
+    },
+    {
+      "name": "Lumina",
+      "aliases": [
+        "lumina"
+      ]
+    },
+    {
+      "name": "MAI",
+      "aliases": [
+        "mai"
+      ]
+    },
+    {
+      "name": "Mochi",
+      "aliases": [
+        "mochi"
+      ]
+    },
+    {
+      "name": "Nano Banana",
+      "aliases": [
+        "nano",
+        "nano banana"
+      ]
+    },
+    {
+      "name": "ODOR",
+      "aliases": [
+        "odor"
+      ]
+    },
+    {
+      "name": "OpenAI",
+      "aliases": [
+        "openai"
+      ]
+    },
+    {
+      "name": "Upscaler",
+      "aliases": [
+        "upscaler"
+      ]
+    },
+    {
+      "name": "Other",
+      "aliases": [
+        "other"
+      ]
+    },
+    {
+      "name": "PixArt a",
+      "aliases": [
+        "pixart",
+        "pixart a"
+      ]
+    },
+    {
+      "name": "PixArt E",
+      "aliases": [
+        "pixart e"
+      ]
+    },
+    {
+      "name": "Playground v2",
+      "aliases": [
+        "playground",
+        "playground v2"
+      ]
+    },
+    {
+      "name": "Pony V7",
+      "aliases": [
+        "pony v7"
+      ]
+    },
+    {
+      "name": "Qwen",
+      "aliases": [
+        "qwen"
+      ]
+    },
+    {
+      "name": "Qwen 2",
+      "aliases": [
+        "qwen 2"
+      ]
+    },
+    {
+      "name": "Stable Cascade",
+      "aliases": [
+        "stable cascade"
+      ]
+    },
+    {
+      "name": "SD 1.4",
+      "aliases": [
+        "SD 1.4",
+        "sd 1 4"
+      ]
+    },
+    {
+      "name": "SD 1.5 LCM",
+      "aliases": [
+        "SD 1.5 LCM",
+        "sd 1 5 lcm"
+      ]
+    },
+    {
+      "name": "SD 1.5 Hyper",
+      "aliases": [
+        "SD 1.5 Hyper",
+        "sd 1 5 hyper"
+      ]
+    },
+    {
+      "name": "SD 2.0",
+      "aliases": [
+        "SD 2.0",
+        "sd 2 0"
+      ]
+    },
+    {
+      "name": "SD 2.0 768",
+      "aliases": [
+        "SD 2.0 768",
+        "sd 2 0 768"
+      ]
+    },
+    {
+      "name": "SD 2.1",
+      "aliases": [
+        "SD 2.1",
+        "sd 2 1"
+      ]
+    },
+    {
+      "name": "SD 2.1 768",
+      "aliases": [
+        "SD 2.1 768",
+        "sd 2 1 768"
+      ]
+    },
+    {
+      "name": "SD 2.1 Unclip",
+      "aliases": [
+        "SD 2.1 Unclip",
+        "sd 2 1 unclip"
+      ]
+    },
+    {
+      "name": "SD 3",
+      "aliases": [
+        "sd 3"
+      ]
+    },
+    {
+      "name": "SD 3.5",
+      "aliases": [
+        "SD 3.5",
+        "sd 3 5"
+      ]
+    },
+    {
+      "name": "SD 3.5 Large",
+      "aliases": [
+        "SD 3.5 Large",
+        "sd 3 5 large"
+      ]
+    },
+    {
+      "name": "SD 3.5 Large Turbo",
+      "aliases": [
+        "SD 3.5 Large Turbo",
+        "sd 3 5 large turbo"
+      ]
+    },
+    {
+      "name": "SD 3.5 Medium",
+      "aliases": [
+        "SD 3.5 Medium",
+        "sd 3 5 medium"
+      ]
+    },
+    {
+      "name": "SDXL 0.9",
+      "aliases": [
+        "SDXL 0.9",
+        "sdxl 0 9"
+      ]
+    },
+    {
+      "name": "SDXL 1.0 LCM",
+      "aliases": [
+        "SDXL 1.0 LCM",
+        "sdxl 1 0 lcm"
+      ]
+    },
+    {
+      "name": "SDXL Lightning",
+      "aliases": [
+        "sdxl lightning"
+      ]
+    },
+    {
+      "name": "SDXL Hyper",
+      "aliases": [
+        "sdxl hyper"
+      ]
+    },
+    {
+      "name": "SDXL Turbo",
+      "aliases": [
+        "sdxl turbo"
+      ]
+    },
+    {
+      "name": "SDXL Distilled",
+      "aliases": [
+        "sdxl distilled"
+      ]
+    },
+    {
+      "name": "Seedream",
+      "aliases": [
+        "seedream"
+      ]
+    },
+    {
+      "name": "SVD",
+      "aliases": [
+        "svd"
+      ]
+    },
+    {
+      "name": "SVD XT",
+      "aliases": [
+        "svd xt"
+      ]
+    },
+    {
+      "name": "Sora 2",
+      "aliases": [
+        "sora",
+        "sora 2"
+      ]
+    },
+    {
+      "name": "Veo 3",
+      "aliases": [
+        "veo",
+        "veo 3"
+      ]
+    },
+    {
+      "name": "Wan Video 1.3B t2v",
+      "aliases": [
+        "Wan Video 1.3B t2v",
+        "wan video 1 3b t2v"
+      ]
+    },
+    {
+      "name": "Wan Video 14B t2v",
+      "aliases": [
+        "wan video 14b t2v"
+      ]
+    },
+    {
+      "name": "Wan Video 14B i2v 480p",
+      "aliases": [
+        "wan video 14b i2v 480p"
+      ]
+    },
+    {
+      "name": "Wan Video 14B i2v 720p",
+      "aliases": [
+        "wan video 14b i2v 720p"
+      ]
+    },
+    {
+      "name": "Wan Video 2.2 TI2V-5B",
+      "aliases": [
+        "Wan Video 2.2 TI2V-5B",
+        "wan video 2 2 ti2v 5b"
+      ]
+    },
+    {
+      "name": "Wan Video 2.2 I2V-A14B",
+      "aliases": [
+        "Wan Video 2.2 I2V-A14B",
+        "wan video 2 2 i2v a14b"
+      ]
+    },
+    {
+      "name": "Wan Video 2.2 T2V-A14B",
+      "aliases": [
+        "Wan Video 2.2 T2V-A14B",
+        "wan video 2 2 t2v a14b"
+      ]
+    },
+    {
+      "name": "Wan Video 2.5 T2V",
+      "aliases": [
+        "Wan Video 2.5 T2V",
+        "wan video 2 5 t2v"
+      ]
+    },
+    {
+      "name": "Wan Video 2.5 I2V",
+      "aliases": [
+        "Wan Video 2.5 I2V",
+        "wan video 2 5 i2v"
+      ]
+    },
+    {
+      "name": "Wan Image 2.7",
+      "aliases": [
+        "Wan Image 2.7",
+        "wan image 2 7"
+      ]
+    },
+    {
+      "name": "Wan Video 2.7",
+      "aliases": [
+        "Wan Video 2.7",
+        "wan video 2 7"
+      ]
+    },
+    {
+      "name": "ZImageBase",
+      "aliases": [
+        "zimagebase"
+      ]
+    },
+    {
+      "name": "Vidu Q1",
+      "aliases": [
+        "vidu",
+        "vidu q1"
+      ]
+    },
+    {
+      "name": "Hailuo by MiniMax",
+      "aliases": [
+        "hailuo",
+        "hailuo by minimax"
+      ]
+    },
+    {
+      "name": "Kling",
+      "aliases": [
+        "kling"
+      ]
+    },
+    {
+      "name": "Seedance",
+      "aliases": [
+        "seedance"
+      ]
+    },
+    {
+      "name": "ACE Audio",
+      "aliases": [
+        "ace",
+        "ace audio"
+      ]
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-﻿"""
+"""
 LoRA Manager Archive Source Module
 
 Search archived CivitAI metadata stored by comfyui-lora-manager.
@@ -151,6 +151,34 @@ def _calculate_confidence(
         best = max(best, candidate_score)
 
     return round(best * 100, 1)
+
+
+def _normalize_base_model(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+
+
+def _base_model_matches(candidate: str, preferred: Optional[str]) -> bool:
+    preferred_norm = _normalize_base_model(preferred or "")
+    if not preferred_norm:
+        return True
+
+    candidate_norm = _normalize_base_model(candidate or "")
+    if not candidate_norm:
+        return False
+
+    from .popular import load_base_model_aliases
+    aliases = load_base_model_aliases()
+    preferred_tokens = aliases.get(preferred_norm, [preferred_norm])
+    return any(
+        token and (token in candidate_norm or candidate_norm in token)
+        for token in preferred_tokens
+    )
+
+
+def _base_model_score(candidate: str, preferred: Optional[str]) -> float:
+    if not preferred:
+        return 0.0
+    return 1000.0 if _base_model_matches(candidate, preferred) else -1000.0
 
 
 def _extract_search_tokens(query: str) -> Dict[str, List[str]]:
@@ -513,7 +541,10 @@ def _build_result_from_row(
 
 
 def search_lora_manager_archive(
-    query: str, model_type: Optional[str] = None, limit: int = 10
+    query: str,
+    model_type: Optional[str] = None,
+    base_model_context: Optional[str] = None,
+    limit: int = 10,
 ) -> List[Dict[str, Any]]:
     """
     Search the local comfyui-lora-manager CivitAI archive by model name.
@@ -531,7 +562,10 @@ def search_lora_manager_archive(
         return []
 
     normalized_type = _normalize_model_type(model_type)
-    cache_key = f"search::{normalized_query.lower()}::{normalized_type}::{limit}"
+    base_model_key = _normalize_base_model(base_model_context or "")
+    cache_key = (
+        f"search::{normalized_query.lower()}::{normalized_type}::{base_model_key}::{limit}"
+    )
     if cache_key in _search_cache:
         return list(_search_cache[cache_key])
 
@@ -562,22 +596,27 @@ def search_lora_manager_archive(
             )
             if confidence < 40:
                 continue
-            scored_candidates.append((confidence, row))
+            rank = confidence + _base_model_score(
+                row["base_model"], base_model_context
+            )
+            scored_candidates.append((rank, confidence, row))
 
         scored_candidates.sort(
             key=lambda item: (
                 item[0],
-                1 if item[1]["version_name"] else 0,
+                item[1],
+                1 if item[2]["version_name"] else 0,
             ),
             reverse=True,
         )
         selected_version_ids = [
-            row["version_id"] for _, row in scored_candidates[: max(limit * 3, limit)]
+            row["version_id"]
+            for _, _, row in scored_candidates[: max(limit * 3, limit)]
         ]
         full_rows = _load_full_rows_for_versions(conn, selected_version_ids)
 
         results = []
-        for _, candidate_row in scored_candidates:
+        for _, _, candidate_row in scored_candidates:
             version_id = candidate_row["version_id"]
             full_row = full_rows.get(version_id)
             if not full_row:
@@ -585,10 +624,15 @@ def search_lora_manager_archive(
             result = _build_result_from_row(conn, full_row, normalized_query)
             if not result or result["confidence"] < 40:
                 continue
+            if base_model_context and not _base_model_matches(
+                result.get("base_model"), base_model_context
+            ):
+                continue
             results.append(result)
 
         results.sort(
             key=lambda item: (
+                _base_model_score(item.get("base_model"), base_model_context),
                 item.get("confidence", 0),
                 1 if item.get("match_type") == "exact" else 0,
             ),
@@ -611,6 +655,7 @@ def search_lora_manager_archive(
 def search_lora_manager_archive_for_file(
     filename: str,
     model_type: Optional[str] = None,
+    base_model_context: Optional[str] = None,
     exact_only: bool = False,
     limit: int = 10,
 ) -> Optional[Dict[str, Any]]:
@@ -621,29 +666,43 @@ def search_lora_manager_archive_for_file(
     if not search_query:
         return None
 
+    base_model_key = _normalize_base_model(base_model_context or "")
     cache_key = (
-        f"file::{filename.lower()}::{_normalize_model_type(model_type)}::{exact_only}::{limit}"
+        f"file::{filename.lower()}::{_normalize_model_type(model_type)}::{base_model_key}::{exact_only}::{limit}"
     )
     if cache_key in _search_cache:
         return _search_cache[cache_key]
 
     candidates = search_lora_manager_archive(
-        search_query, model_type=model_type, limit=limit
+        search_query,
+        model_type=model_type,
+        base_model_context=base_model_context,
+        limit=limit,
     )
     best_match = None
     best_confidence = 0.0
+    best_rank = -9999.0
 
     for candidate in candidates:
         candidate_filename = candidate.get("filename", "")
         confidence = _calculate_confidence(filename, candidate.get("name", ""), candidate.get("version_name", ""), candidate_filename)
         if exact_only and confidence < 100.0:
             continue
-        if confidence > best_confidence:
+        base_model_matches = _base_model_matches(
+            candidate.get("base_model"), base_model_context
+        )
+        if base_model_context and not base_model_matches:
+            continue
+        rank = confidence + _base_model_score(
+            candidate.get("base_model"), base_model_context
+        )
+        if rank > best_rank:
+            best_rank = rank
             best_confidence = confidence
             best_match = dict(candidate)
             best_match["confidence"] = confidence
             best_match["match_type"] = "exact" if confidence == 100.0 else "similar"
-        if confidence == 100.0:
+        if confidence == 100.0 and base_model_matches:
             break
 
     if best_match is None and exact_only:

@@ -50,7 +50,21 @@ export const downloadTargetMethods = {
         }
     },
 
+    async ensureBaseModelsLoaded() {
+        if (this.baseModels) return;
+        try {
+            const resp = await api.fetchApi('/model_resolver/base-models');
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            this.baseModels = data && typeof data === 'object' ? data : {};
+        } catch (e) {
+            console.warn('Model Resolver: could not load base-models config', e);
+            this.baseModels = {};
+        }
+    },
+
     isSourceAvailable(source) {
+
         if (!source || ['all', 'local', 'huggingface', 'civitai', 'civarchive'].includes(source)) {
             return true;
         }
@@ -675,11 +689,13 @@ export const downloadTargetMethods = {
         this.allModels = null;
         this.downloadDirectories = null;
         this.capabilities = null;
+        this.baseModels = null;
         this.downloadSubfolders.clear();
         this.downloadTargetSelections?.clear();
         this._analysisProgressToken = null;
 
         await this.ensureCapabilitiesLoaded();
+        await this.ensureBaseModelsLoaded();
         this.refreshMissingListStats?.();
         this.updateBatchFooterButtons?.();
         this.updateDownloadAllButtonState?.();

@@ -846,6 +846,7 @@ export const resolveDownloadMethods = {
         }
         const selectedSourceLabel = this.getSearchSourceLabel(selectedSource);
         const sourceIds = this.getSearchSourcesForSelection(selectedSource, missing);
+        const baseModelContext = this.getSearchBaseModelContext(missing);
 
         // For URNs, use the resolved file/model name for searching instead of the URN itself
         // and pass the URN type as category (CivitAI expects specific type names)
@@ -907,6 +908,7 @@ export const resolveDownloadMethods = {
             state.lastAttemptSources = sourceIds;
             state.lastAttemptFound = null;
             state.lastAttemptError = null;
+            state.lastAttemptBaseModelContext = baseModelContext;
             state.sourceProgress = {};
             for (const source of sourceIds) {
                 this.setSourceProgress(state, source, {
@@ -944,6 +946,7 @@ export const resolveDownloadMethods = {
                 filename,
                 category,
                 is_urn: isUrn,
+                base_model_context: baseModelContext,
                 civitai_session_token: tokens.civitai_session_token,
                 civitai_candidate_limit: tokens.civitai_candidate_limit,
                 civitai_use_trpc_search: tokens.civitai_use_trpc_search,
@@ -989,6 +992,9 @@ export const resolveDownloadMethods = {
                     console.log('Model Resolver: Search response:', JSON.stringify(data));
 
                     if (!this.isBackgroundSearchRunActive(workflowKey, missingSearchKey, searchRunId)) {
+                        return { source, stale: true };
+                    }
+                    if (baseModelContext !== this.getSearchBaseModelContext(missing)) {
                         return { source, stale: true };
                     }
 
@@ -1297,6 +1303,53 @@ export const resolveDownloadMethods = {
                 }
             });
             sourceSelect.addEventListener('blur', hideSourceList);
+            this.syncSearchSourceUi(missing, container);
+        }
+
+        const baseSelect = container.querySelector(`#search-base-select-${missing.node_id}-${missing.widget_index}`);
+        const baseList = container.querySelector(`#search-base-list-${missing.node_id}-${missing.widget_index}`);
+        if (baseSelect && baseList && baseSelect.dataset.mlSearchBaseBound !== 'true') {
+            baseSelect.dataset.mlSearchBaseBound = 'true';
+
+            const renderBaseOptions = () => {
+                const options = this.getKnownBaseModelOptions();
+                baseList.innerHTML = options
+                    .map(option => {
+                        const label = option.value === 'auto'
+                            ? this.getSearchBaseModelLabel('auto')
+                            : option.label;
+                        return `<div class="mr-download-target-option" data-value="${encodeURIComponent(option.value)}" data-label="${encodeURIComponent(label)}">${this.escapeHtml(label)}</div>`;
+                    })
+                    .join('');
+                baseList.style.display = 'block';
+                baseList.querySelectorAll('.mr-download-target-option').forEach(optionEl => {
+                    optionEl.addEventListener('mousedown', (event) => {
+                        event.preventDefault();
+                        const value = decodeURIComponent(optionEl.dataset.value || '');
+                        const label = decodeURIComponent(optionEl.dataset.label || optionEl.dataset.value || '');
+                        this.setDropdownValue(baseSelect, value, label);
+                        this.setSearchBaseModel(missing, value, container);
+                        baseList.style.display = 'none';
+                    });
+                });
+            };
+
+            const hideBaseList = () => {
+                setTimeout(() => {
+                    baseList.style.display = 'none';
+                }, 150);
+            };
+
+            this.enableWheelScrollChaining(baseList);
+            baseSelect.addEventListener('focus', () => renderBaseOptions());
+            baseSelect.addEventListener('click', () => renderBaseOptions());
+            baseSelect.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    renderBaseOptions();
+                }
+            });
+            baseSelect.addEventListener('blur', hideBaseList);
             this.syncSearchSourceUi(missing, container);
         }
 

@@ -1,4 +1,4 @@
-﻿import { app } from "../../../../../scripts/app.js";
+import { app } from "../../../../../scripts/app.js";
 import { api } from "../../../../../scripts/api.js";
 import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
@@ -29,6 +29,7 @@ export const searchPanelMethods = {
     createEmptySearchState() {
         return {
             selectedSource: 'all',
+            selectedBaseModel: 'auto',
             results: {
                 popular: null,
                 model_list: null,
@@ -38,11 +39,125 @@ export const searchPanelMethods = {
                 lora_manager_archive: null
             },
             lastAttemptSources: [],
+            lastAttemptBaseModelContext: '',
             lastAttemptFound: null,
             lastAttemptError: null,
             sourceProgress: {},
             activeSearchRunId: null
         };
+    },
+
+    getKnownBaseModelOptions() {
+        const baseModelsList = this.baseModels?.base_models;
+        if (Array.isArray(baseModelsList) && baseModelsList.length > 0) {
+            return [
+                { value: 'auto', label: 'Auto' },
+                { value: 'none', label: 'Any model' },
+                ...baseModelsList.map(m => ({ value: m.name, label: m.name }))
+            ];
+        }
+        // Fallback to hardcoded list
+        return [
+            { value: 'auto', label: 'Auto' },
+            { value: 'none', label: 'Any model' },
+            { value: 'Z-Image', label: 'Z-Image' },
+            { value: 'Pony', label: 'Pony' },
+            { value: 'Illustrious', label: 'Illustrious' },
+            { value: 'SDXL 1.0', label: 'SDXL 1.0' },
+            { value: 'SD 1.5', label: 'SD 1.5' },
+            { value: 'Flux.1 D', label: 'Flux.1 D' },
+            { value: 'Flux.1 S', label: 'Flux.1 S' },
+            { value: 'Qwen Image', label: 'Qwen Image' },
+            { value: 'Hunyuan 1', label: 'Hunyuan 1' },
+            { value: 'WAN Video', label: 'WAN Video' },
+            { value: 'NoobAI', label: 'NoobAI' },
+            { value: 'HiDream', label: 'HiDream' }
+        ];
+    },
+
+    normalizeBaseModelToken(value = '') {
+        return String(value || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '');
+    },
+
+    getBaseModelAliases() {
+        const baseModelsList = this.baseModels?.base_models;
+        if (Array.isArray(baseModelsList) && baseModelsList.length > 0) {
+            return baseModelsList.map(m => ({ value: m.name, aliases: m.aliases || [] }));
+        }
+        // Fallback to hardcoded list
+        return [
+            { value: 'Z-Image', aliases: ['zimage', 'z image', 'z-image', 'z_image', 'zImageTurbo', 'z image turbo'] },
+            { value: 'Pony', aliases: ['pony', 'ponyxl', 'pony diffusion', 'pony realism'] },
+            { value: 'Illustrious', aliases: ['illustrious', 'illustriousxl', 'illustrious xl'] },
+            { value: 'SDXL 1.0', aliases: ['sdxl', 'sdxl10', 'sdxl 1.0', 'stable diffusion xl'] },
+            { value: 'SD 1.5', aliases: ['sd15', 'sd 1.5', 'sd1.5', 'stable diffusion 1.5'] },
+            { value: 'Flux.1 D', aliases: ['flux', 'flux1', 'flux.1', 'flux dev', 'flux.1 d', 'flux1d'] },
+            { value: 'Flux.1 S', aliases: ['flux schnell', 'flux.1 s', 'flux1s'] },
+            { value: 'Qwen Image', aliases: ['qwen image', 'qwenimage', 'qwen-image'] },
+            { value: 'Hunyuan 1', aliases: ['hunyuan', 'hunyuan1'] },
+            { value: 'WAN Video', aliases: ['wan', 'wan video', 'wanvideo'] },
+            { value: 'NoobAI', aliases: ['noobai', 'noob ai'] },
+            { value: 'HiDream', aliases: ['hidream', 'hi dream'] }
+        ];
+    },
+
+    getWorkflowModelReferenceText() {
+        const workflow = this.getCurrentWorkflow?.();
+        if (!workflow) return '';
+        const values = [];
+        const visit = (value, key = '') => {
+            if (typeof value === 'string') {
+                if (/\.(safetensors|ckpt|pt|pth|bin|gguf|onnx)\b/i.test(value) || /model|checkpoint|unet|diffusion/i.test(key)) {
+                    values.push(value);
+                }
+                return;
+            }
+            if (Array.isArray(value)) {
+                value.forEach(item => visit(item, key));
+                return;
+            }
+            if (value && typeof value === 'object') {
+                Object.entries(value).forEach(([childKey, childValue]) => visit(childValue, childKey));
+            }
+        };
+        visit(workflow);
+        return values.join(' ');
+    },
+
+    getDominantWorkflowBaseModel() {
+        const text = this.getWorkflowModelReferenceText();
+        if (!text) return '';
+        const normalizedText = this.normalizeBaseModelToken(text);
+        let best = null;
+        for (const entry of this.getBaseModelAliases()) {
+            const score = entry.aliases.reduce((count, alias) => {
+                const token = this.normalizeBaseModelToken(alias);
+                return token && normalizedText.includes(token) ? count + 1 : count;
+            }, 0);
+            if (score > 0 && (!best || score > best.score)) {
+                best = { value: entry.value, score };
+            }
+        }
+        return best?.value || '';
+    },
+
+    getSearchBaseModelLabel(value = 'auto') {
+        if (value === 'auto') {
+            const detected = this.getDominantWorkflowBaseModel();
+            return detected ? `Auto (${detected})` : 'Auto';
+        }
+        const option = this.getKnownBaseModelOptions().find(item => item.value === value);
+        return option?.label || value || 'Auto';
+    },
+
+    getSearchBaseModelContext(missing = {}) {
+        const state = this.getSearchState(missing);
+        const selected = state.selectedBaseModel || 'auto';
+        if (selected === 'none') return '';
+        if (selected === 'auto') return this.getDominantWorkflowBaseModel();
+        return selected;
     },
 
     getBackgroundSearchJobKey(workflowKey, missingSearchKey) {
@@ -636,6 +751,15 @@ export const searchPanelMethods = {
             }
             this.setDropdownValue(selectEl, state.selectedSource, this.getSearchSourceLabel(state.selectedSource));
         }
+
+        const baseEl = container.querySelector(`#search-base-select-${missing.node_id}-${missing.widget_index}`);
+        if (baseEl) {
+            const options = this.getKnownBaseModelOptions();
+            if (!options.some(option => option.value === state.selectedBaseModel)) {
+                state.selectedBaseModel = 'auto';
+            }
+            this.setDropdownValue(baseEl, state.selectedBaseModel, this.getSearchBaseModelLabel(state.selectedBaseModel));
+        }
     },
 
     /**
@@ -646,6 +770,37 @@ export const searchPanelMethods = {
         state.selectedSource = source || 'all';
         this.persistSearchStateForActiveWorkflow();
         this.syncSearchSourceUi(missing, container);
+    },
+
+    setSearchBaseModel(missing, baseModel, container) {
+        const state = this.getSearchState(missing);
+        const nextBaseModel = baseModel || 'auto';
+        const changed = (state.selectedBaseModel || 'auto') !== nextBaseModel;
+        if (changed) {
+            this.clearSearchProgressTimers(state.activeSearchRunId);
+            state.results = this.createEmptySearchState().results;
+            state.lastAttemptSources = [];
+            state.lastAttemptBaseModelContext = '';
+            state.lastAttemptFound = null;
+            state.lastAttemptError = null;
+            state.sourceProgress = {};
+            state.activeSearchRunId = null;
+            const resultsDiv = container?.querySelector?.(`#search-results-${missing.node_id}-${missing.widget_index}`);
+            if (resultsDiv) {
+                resultsDiv.classList.remove('mr-is-visible');
+                resultsDiv.classList.add('mr-is-hidden');
+                resultsDiv.innerHTML = '';
+            }
+            const searchBtn = container?.querySelector?.(`#search-${missing.node_id}-${missing.widget_index}`);
+            if (searchBtn) {
+                searchBtn.disabled = false;
+                searchBtn.innerHTML = `${this.getSearchIconHtml()} ${this.hasSearchResultsForMissing(missing) ? 'Search Again' : 'Search'}`;
+            }
+        }
+        state.selectedBaseModel = nextBaseModel;
+        this.persistSearchStateForActiveWorkflow();
+        this.syncSearchSourceUi(missing, container);
+        this.refreshSearchUiForMissing?.(missing, state);
     },
 
     getDropdownValue(el) {
@@ -985,8 +1140,11 @@ export const searchPanelMethods = {
         const searchSourcesId = `search-sources-${missing.node_id}-${missing.widget_index}`;
         const searchSourceSelectId = `search-source-select-${missing.node_id}-${missing.widget_index}`;
         const searchSourceListId = `search-source-list-${missing.node_id}-${missing.widget_index}`;
+        const searchBaseSelectId = `search-base-select-${missing.node_id}-${missing.widget_index}`;
+        const searchBaseListId = `search-base-list-${missing.node_id}-${missing.widget_index}`;
         const state = this.getSearchState(missing);
         const selectedSource = state.selectedSource || 'all';
+        const selectedBaseModel = state.selectedBaseModel || 'auto';
         const buttonText = options.buttonText
             || (this.hasSearchResultsForMissing(missing) ? 'Search Again' : 'Search');
 
@@ -999,6 +1157,13 @@ export const searchPanelMethods = {
         html += `<div class="mr-download-target-wrap">`;
         html += `<input id="${searchSourceSelectId}" class="mr-download-target-input mr-search-source-select" type="text" readonly autocomplete="off" data-value="${this.escapeHtml(selectedSource)}" value="${this.escapeHtml(this.getSearchSourceLabel(selectedSource))}">`;
         html += `<div id="${searchSourceListId}" class="mr-download-target-list mr-search-source-list"></div>`;
+        html += `</div>`;
+        html += `</div>`;
+        html += `<div class="mr-search-source-picker mr-search-base-picker">`;
+        html += `<label class="mr-search-source-picker-label" for="${searchBaseSelectId}">Model</label>`;
+        html += `<div class="mr-download-target-wrap">`;
+        html += `<input id="${searchBaseSelectId}" class="mr-download-target-input mr-search-base-select" type="text" readonly autocomplete="off" data-value="${this.escapeHtml(selectedBaseModel)}" value="${this.escapeHtml(this.getSearchBaseModelLabel(selectedBaseModel))}">`;
+        html += `<div id="${searchBaseListId}" class="mr-download-target-list mr-search-base-list"></div>`;
         html += `</div>`;
         html += `</div>`;
         html += `</div>`;

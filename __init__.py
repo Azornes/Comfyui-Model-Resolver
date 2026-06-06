@@ -138,6 +138,52 @@ class ModelResolverExtension:
                 )
                 download_available = False
 
+            # ==================== BASE MODELS CONFIG ROUTE ====================
+
+            @routes.get("/model_resolver/base-models")
+            async def get_base_models(request):
+                """Return the base models config from metadata/base-models.json.
+                
+                Returns {base_models: [{name, aliases}]} so the frontend
+                dropdown can populate correctly via baseModels.base_models.
+                """
+                try:
+                    from .core.sources.popular import get_base_models_config
+                    data = get_base_models_config()
+                    return web.json_response(data)
+                except Exception as e:
+                    self.logger.error(
+                        f"Model Resolver base-models error: {e}", exc_info=True
+                    )
+                    return web.json_response({"error": str(e)}, status=500)
+
+            @routes.get("/model_resolver/base-models/status")
+            async def get_base_models_status_route(request):
+                """Get local and optional remote base models status."""
+                try:
+                    check_remote = request.query.get("check_remote") == "1"
+                    from .core.sources.popular import get_base_models_status
+                    status = await asyncio.to_thread(get_base_models_status, check_remote)
+                    return web.json_response(status)
+                except Exception as e:
+                    self.logger.error(
+                        f"Model Resolver base-models status error: {e}", exc_info=True
+                    )
+                    return web.json_response({"error": str(e)}, status=500)
+
+            @routes.post("/model_resolver/base-models/update")
+            async def update_base_models_route(request):
+                """Update base models list from CivitAI."""
+                try:
+                    from .core.sources.popular import update_base_models_from_remote
+                    status = await asyncio.to_thread(update_base_models_from_remote)
+                    return web.json_response(status)
+                except Exception as e:
+                    self.logger.error(
+                        f"Model Resolver base-models update error: {e}", exc_info=True
+                    )
+                    return web.json_response({"error": str(e)}, status=500)
+
             # ==================== ANALYZE ROUTES ====================
 
             @routes.post("/model_resolver/analyze")

@@ -261,6 +261,34 @@ def _calculate_filename_confidence(target_filename: str, candidate_filename: str
     return round(max(similarity, similarity_no_ext) * 100, 1)
 
 
+def _normalize_base_model(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+
+
+def _base_model_matches(candidate: str, preferred: Optional[str]) -> bool:
+    preferred_norm = _normalize_base_model(preferred or "")
+    if not preferred_norm:
+        return True
+
+    candidate_norm = _normalize_base_model(candidate or "")
+    if not candidate_norm:
+        return False
+
+    from .popular import load_base_model_aliases
+    aliases = load_base_model_aliases()
+    preferred_tokens = aliases.get(preferred_norm, [preferred_norm])
+    return any(
+        token and (token in candidate_norm or candidate_norm in token)
+        for token in preferred_tokens
+    )
+
+
+def _base_model_score(candidate: str, preferred: Optional[str]) -> float:
+    if not preferred:
+        return 0.0
+    return 1000.0 if _base_model_matches(candidate, preferred) else -1000.0
+
+
 def _find_matching_file_in_versions(
     versions: List[Dict[str, Any]],
     filename: str,
@@ -502,6 +530,7 @@ def _find_civitai_file_in_model(
     api_key: Optional[str] = None,
     exact_only: bool = False,
     preferred_version_id: Optional[int] = None,
+    base_model_context: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Load one CivitAI model and search all its versions for the requested file."""
     filename_lower = filename.lower()
@@ -554,7 +583,9 @@ def _find_civitai_file_in_model(
     if preferred_version_id is not None:
         resolved = resolve_urn(model_id, preferred_version_id, api_key)
         if resolved:
-            if resolved_version_matches(resolved):
+            if resolved_version_matches(resolved) and _base_model_matches(
+                resolved.get("base_model"), base_model_context
+            ):
                 return build_result_from_resolved_version(resolved, preferred_version_id)
 
     best_resolved_result = None
@@ -589,17 +620,22 @@ def _find_civitai_file_in_model(
 
         resolved = resolve_urn(model_id, version_id, api_key)
         if resolved:
-            if resolved_version_matches(resolved):
+            if resolved_version_matches(resolved) and _base_model_matches(
+                resolved.get("base_model"), base_model_context
+            ):
                 return build_result_from_resolved_version(resolved, version_id)
 
             if not exact_only:
                 expected_filename = resolved.get("expected_filename", "")
                 confidence = _calculate_filename_confidence(filename, expected_filename)
+                ranking_score = confidence + _base_model_score(
+                    resolved.get("base_model"), base_model_context
+                )
                 log_debug(
                     f"CivitAI resolved version confidence: model_id={model_id}, version_id={version_id}, expected_filename={expected_filename}, confidence={confidence}"
                 )
-                if confidence > best_resolved_confidence:
-                    best_resolved_confidence = confidence
+                if ranking_score > best_resolved_confidence:
+                    best_resolved_confidence = ranking_score
                     best_resolved_result = build_result_from_resolved_version(
                         resolved, version_id
                     )
@@ -639,7 +675,10 @@ def _find_civitai_file_in_model(
             log_info(
                 f"CivitAI version-list probable match: model_id={model_id}, version_id={result.get('version_id')}, filename={result.get('filename')}, confidence={result['confidence']}"
             )
-        return result
+        if _base_model_matches(result.get("base_model"), base_model_context):
+            return result
+        if not base_model_context:
+            return result
 
     return None
 
@@ -716,6 +755,7 @@ def search_civitai_for_file(
     api_key: Optional[str] = None,
     exact_only: bool = False,
     model_type: Optional[str] = None,
+    base_model_context: Optional[str] = None,
     session_token: Optional[str] = None,
     candidate_limit: int = DEFAULT_CIVITAI_CANDIDATE_LIMIT,
     use_trpc_search: bool = True,
@@ -739,9 +779,10 @@ def search_civitai_for_file(
     candidate_limit = max(1, min(int(candidate_limit), MAX_CIVITAI_CANDIDATE_LIMIT))
     session_key = "session" if session_token else "anon"
     model_type_key = str(model_type or "").lower()
+    base_model_key = _normalize_base_model(base_model_context or "")
     methods_key = f"trpc{int(bool(use_trpc_search))}_html{int(bool(use_html_fallback))}"
     cache_key = (
-        f"civit_{filename}_exact{exact_only}_type{model_type_key}_session{session_key}_limit{candidate_limit}_{methods_key}"
+        f"civit_{filename}_exact{exact_only}_type{model_type_key}_base{base_model_key}_session{session_key}_limit{candidate_limit}_{methods_key}"
     )
     if cache_key in _search_cache:
         log_debug(f"CivitAI search cache hit for {filename} (exact_only={exact_only})")
@@ -798,6 +839,7 @@ def search_civitai_for_file(
                 api_key=api_key,
                 exact_only=exact_only,
                 preferred_version_id=version_id,
+                base_model_context=base_model_context,
             )
             if result:
                 confidence = float(result.get("confidence") or 0.0)

@@ -1822,7 +1822,7 @@
 }
 .mr-search-source-bar {
     display: grid;
-    grid-template-columns: auto minmax(178px, 1fr);
+    grid-template-columns: auto minmax(150px, 0.85fr) minmax(150px, 1fr);
     align-items: center;
     gap: 10px;
     margin-bottom: 0;
@@ -1863,7 +1863,8 @@
     text-transform: uppercase;
     white-space: nowrap;
 }
-.mr-search-source-select {
+.mr-search-source-select,
+.mr-search-base-select {
     width: 100%;
     height: var(--mr-download-control-height);
     min-height: var(--mr-download-control-height);
@@ -1878,16 +1879,19 @@
     appearance: none;
     box-sizing: border-box;
 }
-.mr-missing-browser .mr-search-source-select {
+.mr-missing-browser .mr-search-source-select,
+.mr-missing-browser .mr-search-base-select {
     background: var(--mr-missing-control-bg, rgba(255,255,255,0.035));
     border-color: var(--mr-missing-control-border, var(--mr-missing-line-strong, rgba(255,255,255,0.12)));
     border-radius: var(--mr-missing-control-radius, 7px);
 }
-.mr-missing-browser .mr-search-source-select:focus {
+.mr-missing-browser .mr-search-source-select:focus,
+.mr-missing-browser .mr-search-base-select:focus {
     border-color: var(--mr-missing-control-focus-border, rgba(114,211,138,0.4));
     box-shadow: 0 0 0 2px var(--mr-missing-control-focus-ring, rgba(114,211,138,0.12));
 }
-.mr-search-source-select:focus {
+.mr-search-source-select:focus,
+.mr-search-base-select:focus {
     border-color: rgba(114,211,138,0.4);
     box-shadow: 0 0 0 3px rgba(114,211,138,0.12);
 }
@@ -4362,6 +4366,7 @@
 }
 #model-resolver-modal .mr-missing-detail-pane .mr-combo-input,
 #model-resolver-modal .mr-missing-detail-pane .mr-search-source-select,
+#model-resolver-modal .mr-missing-detail-pane .mr-search-base-select,
 #model-resolver-modal .mr-missing-detail-pane .mr-download-target-input,
 #model-resolver-modal .mr-missing-detail-pane .mr-download-target-select {
     min-height: var(--mr-missing-field-height, 38px);
@@ -4374,6 +4379,7 @@
 }
 #model-resolver-modal .mr-missing-detail-pane .mr-combo-input:focus,
 #model-resolver-modal .mr-missing-detail-pane .mr-search-source-select:focus,
+#model-resolver-modal .mr-missing-detail-pane .mr-search-base-select:focus,
 #model-resolver-modal .mr-missing-detail-pane .mr-download-target-input:focus,
 #model-resolver-modal .mr-missing-detail-pane .mr-download-target-select:focus {
     background: var(--mr-missing-control-bg-hover, rgba(255,255,255,0.045));

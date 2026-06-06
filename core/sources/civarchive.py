@@ -486,6 +486,34 @@ def _calculate_confidence(
     return round(best * 100, 1)
 
 
+def _normalize_base_model(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+
+
+def _base_model_matches(candidate: str, preferred: Optional[str]) -> bool:
+    preferred_norm = _normalize_base_model(preferred or "")
+    if not preferred_norm:
+        return True
+
+    candidate_norm = _normalize_base_model(candidate or "")
+    if not candidate_norm:
+        return False
+
+    from .popular import load_base_model_aliases
+    aliases = load_base_model_aliases()
+    preferred_tokens = aliases.get(preferred_norm, [preferred_norm])
+    return any(
+        token and (token in candidate_norm or candidate_norm in token)
+        for token in preferred_tokens
+    )
+
+
+def _base_model_score(candidate: str, preferred: Optional[str]) -> float:
+    if not preferred:
+        return 0.0
+    return 1000.0 if _base_model_matches(candidate, preferred) else -1000.0
+
+
 def _build_result_from_payload(
     payload: Dict[str, Any],
     query: str = "",
@@ -751,6 +779,7 @@ def search_civarchive(
 def search_civarchive_for_file(
     filename: str,
     model_type: Optional[str] = None,
+    base_model_context: Optional[str] = None,
     exact_only: bool = False,
     limit: int = DEFAULT_CIVARCHIVE_CANDIDATE_LIMIT,
 ) -> Optional[Dict[str, Any]]:
@@ -762,8 +791,9 @@ def search_civarchive_for_file(
         return None
 
     limit = max(1, min(int(limit), MAX_CIVARCHIVE_CANDIDATE_LIMIT))
+    base_model_key = _normalize_base_model(base_model_context or "")
     cache_key = (
-        f"file::{normalized_filename.lower()}::{model_type or ''}::{exact_only}::{limit}"
+        f"file::{normalized_filename.lower()}::{model_type or ''}::{base_model_key}::{exact_only}::{limit}"
     )
     if cache_key in _search_cache:
         return _search_cache[cache_key]
@@ -780,6 +810,7 @@ def search_civarchive_for_file(
 
     best_match = None
     best_confidence = 0.0
+    best_rank = -9999.0
     seen = set()
 
     try:
@@ -810,19 +841,29 @@ def search_civarchive_for_file(
 
                 resolved["confidence"] = confidence
                 resolved["match_type"] = "exact" if confidence == 100.0 else "similar"
+                base_model_matches = _base_model_matches(
+                    resolved.get("base_model"), base_model_context
+                )
+                rank = confidence + _base_model_score(
+                    resolved.get("base_model"), base_model_context
+                )
 
-                if confidence > best_confidence:
+                if rank > best_rank:
+                    best_rank = rank
                     best_confidence = confidence
                     best_match = resolved
 
-                if confidence == 100.0:
+                if confidence == 100.0 and base_model_matches:
                     _search_cache[cache_key] = best_match
                     return best_match
 
                 if len(seen) >= limit:
                     break
 
-            if best_match:
+            if best_match and (
+                not base_model_context
+                or _base_model_matches(best_match.get("base_model"), base_model_context)
+            ):
                 break
     except CivArchiveSearchError:
         raise
@@ -831,6 +872,10 @@ def search_civarchive_for_file(
         return None
 
     if best_match and best_confidence < 40:
+        best_match = None
+    if best_match and base_model_context and not _base_model_matches(
+        best_match.get("base_model"), base_model_context
+    ):
         best_match = None
 
     _search_cache[cache_key] = best_match

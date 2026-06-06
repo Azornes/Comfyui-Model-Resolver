@@ -136,6 +136,35 @@ export const optionsMethods = {
                                     </div>
                                 </div>
                             </div>
+                            <div class="mr-options-section-head" style="margin-top: 24px;">
+                                <h4 class="mr-options-section-title">Base Models Support</h4>
+                            </div>
+                            <div class="mr-options-grid">
+                                <div class="mr-options-panel">
+                                    <div class="mr-options-stack">
+                                        <div class="mr-options-db-summary">
+                                            <div class="mr-options-db-row">
+                                                <span>Base Models</span>
+                                                <strong id="mr-options-base-models-count">Loading...</strong>
+                                            </div>
+                                            <div class="mr-options-db-row">
+                                                <span>Last update</span>
+                                                <strong id="mr-options-base-models-updated">Loading...</strong>
+                                            </div>
+                                            <div class="mr-options-db-row">
+                                                <span>Status</span>
+                                                <strong id="mr-options-base-models-state">Checking local file...</strong>
+                                            </div>
+                                        </div>
+                                        <div id="mr-options-base-models-message" class="mr-options-db-message">Base Models list maps new CivitAI models to local categories.</div>
+                                        <div class="mr-options-db-actions">
+                                            <button id="mr-options-base-models-check" type="button" class="mr-btn mr-btn-secondary">${getSvgIcon('refreshCw')} Check latest</button>
+                                            <button id="mr-options-base-models-update" type="button" class="mr-btn mr-btn-primary">${getSvgIcon('download')} Update Base Models</button>
+                                            <a class="mr-options-inline-link" href="https://civitai.com/api/v1/enums" target="_blank" rel="noopener noreferrer">Source</a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </section>
                         <section id="mr-options-section-civitai" class="mr-options-card mr-options-section">
                             <div class="mr-options-section-head">
@@ -353,6 +382,12 @@ export const optionsMethods = {
         const modelListMessageEl = this.contentElement.querySelector('#mr-options-model-list-message');
         const modelListCheckBtn = this.contentElement.querySelector('#mr-options-model-list-check');
         const modelListUpdateBtn = this.contentElement.querySelector('#mr-options-model-list-update');
+        const baseModelsCountEl = this.contentElement.querySelector('#mr-options-base-models-count');
+        const baseModelsUpdatedEl = this.contentElement.querySelector('#mr-options-base-models-updated');
+        const baseModelsStateEl = this.contentElement.querySelector('#mr-options-base-models-state');
+        const baseModelsMessageEl = this.contentElement.querySelector('#mr-options-base-models-message');
+        const baseModelsCheckBtn = this.contentElement.querySelector('#mr-options-base-models-check');
+        const baseModelsUpdateBtn = this.contentElement.querySelector('#mr-options-base-models-update');
         const hfIndexCountEl = this.contentElement.querySelector('#mr-options-hf-index-count');
         const hfIndexUpdatedEl = this.contentElement.querySelector('#mr-options-hf-index-updated');
         const hfIndexStateEl = this.contentElement.querySelector('#mr-options-hf-index-state');
@@ -395,6 +430,11 @@ export const optionsMethods = {
         const setModelListBusy = (busy) => {
             if (modelListCheckBtn) modelListCheckBtn.disabled = busy;
             if (modelListUpdateBtn) modelListUpdateBtn.disabled = busy;
+        };
+
+        const setBaseModelsBusy = (busy) => {
+            if (baseModelsCheckBtn) baseModelsCheckBtn.disabled = busy;
+            if (baseModelsUpdateBtn) baseModelsUpdateBtn.disabled = busy;
         };
 
         const setHfIndexBusy = (busy) => {
@@ -522,6 +562,89 @@ export const optionsMethods = {
                 this.showNotification('Local Database update failed', 'error');
             } finally {
                 setModelListBusy(false);
+            }
+        };
+
+        const renderBaseModelsStatus = (data = {}, checkedRemote = false) => {
+            if (baseModelsCountEl) {
+                baseModelsCountEl.textContent = Number.isFinite(Number(data.local_count))
+                    ? Number(data.local_count).toLocaleString()
+                    : '-';
+            }
+            if (baseModelsUpdatedEl) {
+                baseModelsUpdatedEl.textContent = formatOptionDate(data.local_updated_at);
+            }
+            if (baseModelsStateEl) {
+                if (checkedRemote && data.update_available) {
+                    baseModelsStateEl.textContent = 'Update available';
+                } else if (checkedRemote) {
+                    baseModelsStateEl.textContent = 'Up to date';
+                } else {
+                    baseModelsStateEl.textContent = data.local_updated_at ? 'Tracked' : 'Bundled';
+                }
+            }
+            if (baseModelsMessageEl) {
+                if (checkedRemote && data.update_available) {
+                    baseModelsMessageEl.textContent = `New base models are available from CivitAI.`;
+                } else if (checkedRemote) {
+                    baseModelsMessageEl.textContent = `Base Models list is current.`;
+                } else {
+                    baseModelsMessageEl.textContent = `Base Models list maps new CivitAI models to local categories.`;
+                }
+            }
+        };
+
+        const loadBaseModelsStatus = async (checkRemote = false) => {
+            try {
+                setBaseModelsBusy(true);
+                if (baseModelsStateEl) {
+                    baseModelsStateEl.textContent = checkRemote ? 'Checking CivitAI...' : 'Loading...';
+                }
+                const response = await api.fetchApi(`/model_resolver/base-models/status${checkRemote ? '?check_remote=1' : ''}`);
+                if (!response.ok) {
+                    throw new Error(`Status failed: ${response.status}`);
+                }
+                const data = await response.json();
+                renderBaseModelsStatus(data, checkRemote);
+                return data;
+            } catch (error) {
+                console.error('Model Resolver: base-models status error:', error);
+                if (baseModelsStateEl) baseModelsStateEl.textContent = 'Error';
+                if (baseModelsMessageEl) baseModelsMessageEl.textContent = error.message || 'Failed to read Base Models status.';
+                return null;
+            } finally {
+                setBaseModelsBusy(false);
+            }
+        };
+
+        const updateBaseModels = async () => {
+            try {
+                setBaseModelsBusy(true);
+                if (baseModelsStateEl) baseModelsStateEl.textContent = 'Updating...';
+                if (baseModelsMessageEl) baseModelsMessageEl.textContent = 'Downloading latest base models from CivitAI...';
+                const response = await api.fetchApi('/model_resolver/base-models/update', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || `Update failed: ${response.status}`);
+                }
+                await this.clearSearchCaches();
+                // Invalidate the in-memory cache so the base model dropdown
+                // reloads fresh data from the server next time it is opened.
+                this.baseModels = null;
+                await this.ensureBaseModelsLoaded();
+                renderBaseModelsStatus(data, false);
+                if (baseModelsStateEl) baseModelsStateEl.textContent = 'Updated';
+                if (baseModelsMessageEl) baseModelsMessageEl.textContent = `Base Models updated. ${Number(data.local_count || 0).toLocaleString()} base models loaded.`;
+                this.showNotification('Base Models updated', 'success');
+            } catch (error) {
+                console.error('Model Resolver: base-models update error:', error);
+                if (baseModelsStateEl) baseModelsStateEl.textContent = 'Error';
+                if (baseModelsMessageEl) baseModelsMessageEl.textContent = error.message || 'Failed to update Base Models.';
+                this.showNotification('Base Models update failed', 'error');
+            } finally {
+                setBaseModelsBusy(false);
             }
         };
 
@@ -683,6 +806,7 @@ export const optionsMethods = {
                 setVisibleSection(targetId);
                 if (targetId === 'mr-options-section-local-db') {
                     loadModelListStatus(false);
+                    loadBaseModelsStatus(false);
                 } else if (targetId === 'mr-options-section-hf') {
                     loadHfIndexStatus();
                 }
@@ -698,6 +822,18 @@ export const optionsMethods = {
         if (modelListUpdateBtn) {
             modelListUpdateBtn.addEventListener('click', () => {
                 updateModelList();
+            });
+        }
+
+        if (baseModelsCheckBtn) {
+            baseModelsCheckBtn.addEventListener('click', () => {
+                loadBaseModelsStatus(true);
+            });
+        }
+
+        if (baseModelsUpdateBtn) {
+            baseModelsUpdateBtn.addEventListener('click', () => {
+                updateBaseModels();
             });
         }
 
@@ -766,6 +902,7 @@ export const optionsMethods = {
         }
 
         loadModelListStatus(false);
+        loadBaseModelsStatus(false);
         loadHfIndexStatus();
 
         if (saveBtn) {

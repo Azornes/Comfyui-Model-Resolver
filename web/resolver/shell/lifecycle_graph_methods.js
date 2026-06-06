@@ -32,6 +32,7 @@ export const lifecycleGraphMethods = {
 
         // Ensure all models are loaded for dropdown
         await this.ensureCapabilitiesLoaded();
+        await this.ensureBaseModelsLoaded();
         await this.ensureAllModelsLoaded();
         await this.ensureDownloadDirectoriesLoaded();
 
