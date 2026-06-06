@@ -21,24 +21,116 @@ export const searchPanelMethods = {
     getSearchState(missing) {
         const key = this.getMissingSearchKey(missing);
         if (!this.searchResultCache.has(key)) {
-            this.searchResultCache.set(key, {
-                selectedSource: 'all',
-                results: {
-                    popular: null,
-                    model_list: null,
-                    huggingface: null,
-                    civitai: null,
-                    civarchive: null,
-                    lora_manager_archive: null
-                },
-                lastAttemptSources: [],
-                lastAttemptFound: null,
-                lastAttemptError: null,
-                sourceProgress: {},
-                activeSearchRunId: null
-            });
+            this.searchResultCache.set(key, this.createEmptySearchState());
         }
         return this.searchResultCache.get(key);
+    },
+
+    createEmptySearchState() {
+        return {
+            selectedSource: 'all',
+            results: {
+                popular: null,
+                model_list: null,
+                huggingface: null,
+                civitai: null,
+                civarchive: null,
+                lora_manager_archive: null
+            },
+            lastAttemptSources: [],
+            lastAttemptFound: null,
+            lastAttemptError: null,
+            sourceProgress: {},
+            activeSearchRunId: null
+        };
+    },
+
+    getBackgroundSearchJobKey(workflowKey, missingSearchKey) {
+        return `${workflowKey || 'workflow'}\n${missingSearchKey || 'missing'}`;
+    },
+
+    hasBackgroundSearchJob(workflowKey, missingSearchKey, runId = null) {
+        const job = this.backgroundSearchJobs?.get(
+            this.getBackgroundSearchJobKey(workflowKey, missingSearchKey)
+        );
+        if (!job) return false;
+        return !runId || job.runId === runId;
+    },
+
+    isBackgroundSearchRunActive(workflowKey, missingSearchKey, runId) {
+        return this.hasBackgroundSearchJob(workflowKey, missingSearchKey, runId);
+    },
+
+    getWorkflowSearchCache(workflowKey, { create = false } = {}) {
+        if (!workflowKey) return null;
+        let cache = this.workflowSearchResultCaches.get(workflowKey);
+        if (!cache && create) {
+            cache = new Map();
+            this.workflowSearchResultCaches.set(workflowKey, cache);
+        }
+        return cache || null;
+    },
+
+    getSearchStateForWorkflow(workflowKey, missing) {
+        if (!workflowKey || workflowKey === this.getWorkflowScopedQueueKey()) {
+            return this.getSearchState(missing);
+        }
+
+        const missingSearchKey = this.getMissingSearchKey(missing);
+        const cache = this.getWorkflowSearchCache(workflowKey, { create: true });
+        if (!cache.has(missingSearchKey)) {
+            cache.set(missingSearchKey, this.createEmptySearchState());
+        }
+        return cache.get(missingSearchKey);
+    },
+
+    persistSearchStateForWorkflow(workflowKey, missing, state) {
+        const missingSearchKey = this.getMissingSearchKey(missing);
+        if (!workflowKey || !missingSearchKey || !state) return;
+
+        const cache = this.getWorkflowSearchCache(workflowKey, { create: true });
+        cache.set(
+            missingSearchKey,
+            this.cloneSearchState(state, {
+                preserveActive: this.hasBackgroundSearchJob(
+                    workflowKey,
+                    missingSearchKey,
+                    state.activeSearchRunId
+                )
+            })
+        );
+
+        if (workflowKey === this.getWorkflowScopedQueueKey()) {
+            this.searchResultCache.set(missingSearchKey, state);
+        }
+    },
+
+    refreshSearchUiForMissing(missing, state = null, { workflowKey = this.getWorkflowScopedQueueKey() } = {}) {
+        if (!missing) return;
+        if (workflowKey && workflowKey !== this.getWorkflowScopedQueueKey()) return;
+
+        const currentState = state || this.searchResultCache.get(this.getMissingSearchKey(missing));
+        this.refreshMissingSourcesSummary(missing);
+        this.updateBatchFooterButtons?.();
+
+        if (!this.contentElement || this.activeTab !== 'missing') return;
+
+        const resultsId = `search-results-${missing.node_id}-${missing.widget_index}`;
+        const resultsDiv = this.contentElement.querySelector(`#${resultsId}`);
+        if (resultsDiv && currentState && this.hasRenderableSearchState(currentState)) {
+            resultsDiv.classList.remove('mr-is-hidden');
+            resultsDiv.classList.add('mr-is-visible');
+            this.displaySearchResults(missing, currentState, resultsDiv);
+        }
+
+        const searchBtn = this.contentElement.querySelector(`#search-${missing.node_id}-${missing.widget_index}`);
+        if (searchBtn && currentState) {
+            const isRunning = Boolean(currentState.activeSearchRunId);
+            searchBtn.disabled = isRunning;
+            searchBtn.innerHTML = isRunning
+                ? `${this.getSearchIconHtml()} Searching...`
+                : `${this.getSearchIconHtml()} Search Again`;
+        }
     },
 
     /**
@@ -255,7 +347,7 @@ export const searchPanelMethods = {
         return this.getEnabledSearchSources();
     },
 
-    setSourceProgress(state, source, patch = {}, missing = null) {
+    setSourceProgress(state, source, patch = {}, missing = null, { workflowKey = this.getWorkflowScopedQueueKey() } = {}) {
         state.sourceProgress = {
             ...(state.sourceProgress || {}),
             [source]: {
@@ -263,7 +355,7 @@ export const searchPanelMethods = {
                 ...patch
             }
         };
-        if (missing) {
+        if (missing && workflowKey === this.getWorkflowScopedQueueKey()) {
             this.refreshMissingSourcesSummary(missing);
         }
     },
@@ -336,11 +428,15 @@ export const searchPanelMethods = {
         }
     },
 
-    startEstimatedSearchProgress(state, missing, container, source, runId) {
+    startEstimatedSearchProgress(state, missing, container, source, runId, { workflowKey = this.getWorkflowScopedQueueKey() } = {}) {
         this.clearSearchProgressTimer(runId, source);
 
         const tick = () => {
-            if (state.activeSearchRunId !== runId) {
+            const missingSearchKey = this.getMissingSearchKey(missing);
+            if (
+                state.activeSearchRunId !== runId
+                && !this.isBackgroundSearchRunActive(workflowKey, missingSearchKey, runId)
+            ) {
                 this.clearSearchProgressTimer(runId, source);
                 return;
             }
@@ -358,8 +454,9 @@ export const searchPanelMethods = {
             );
 
             if (percent > (Number(progress.percent) || 0) + 0.2) {
-                this.setSourceProgress(state, source, { percent });
-                this.displaySearchResults(missing, state, container);
+                this.setSourceProgress(state, source, { percent }, missing, { workflowKey });
+                this.persistSearchStateForWorkflow(workflowKey, missing, state);
+                this.refreshSearchUiForMissing(missing, state, { workflowKey });
             }
         };
 
@@ -369,6 +466,23 @@ export const searchPanelMethods = {
             this.getSearchProgressTimerKey(runId, source),
             timer
         );
+    },
+
+    reconnectActiveSearchProgress(missingModels = this.missingModels || []) {
+        for (const missing of missingModels || []) {
+            const state = this.searchResultCache.get(this.getMissingSearchKey(missing));
+            const runId = state?.activeSearchRunId;
+            if (!runId) continue;
+
+            for (const [source, progress] of Object.entries(state.sourceProgress || {})) {
+                if (progress?.status !== 'running') continue;
+                const timerKey = this.getSearchProgressTimerKey(runId, source);
+                if (!this.searchProgressTimers.has(timerKey)) {
+                    this.startEstimatedSearchProgress(state, missing, null, source, runId);
+                }
+            }
+            this.refreshSearchUiForMissing(missing, state);
+        }
     },
 
     hasActiveSearchProgress(state = {}) {

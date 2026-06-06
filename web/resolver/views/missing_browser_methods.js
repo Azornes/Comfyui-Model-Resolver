@@ -731,6 +731,7 @@ export const missingBrowserMethods = {
         );
         this.wireMissingModelsBrowser(container, data, sortedMissingModels);
         this.scheduleInitialUrnLocalMatchRefresh(sortedMissingModels, container, data);
+        this.reconnectActiveSearchProgress(sortedMissingModels);
         this.updateBatchFooterButtons();
     },
 

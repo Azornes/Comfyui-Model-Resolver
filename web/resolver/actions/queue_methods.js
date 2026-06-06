@@ -538,7 +538,7 @@ export const queueMethods = {
                 this.savePendingQueueForActiveWorkflow();
                 this.updateApplyPendingButton();
                 this.updateQueuePanel();
-                await this.loadWorkflowData(data.workflow);
+                await this.loadWorkflowData(data.workflow, { force: true });
             } else {
                 this.showNotification('Failed to apply selections: ' + (data.error || 'Unknown error'), 'error');
             }

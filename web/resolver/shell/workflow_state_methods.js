@@ -111,7 +111,72 @@ export const workflowStateMethods = {
         this.updateQueueVisibility?.();
     },
 
-    cloneSearchState(state = {}) {
+    cloneAnalysisData(data = null) {
+        if (!data) return null;
+        try {
+            return JSON.parse(JSON.stringify(data));
+        } catch (error) {
+            console.warn('Model Resolver: failed to clone analysis data', error);
+            return data;
+        }
+    },
+
+    saveAnalysisCacheForActiveWorkflow() {
+        const key = this.getWorkflowScopedQueueKey();
+        if (!key) return;
+
+        if (this.cachedWorkflowSignature && this.cachedAnalysisData) {
+            this.workflowAnalysisCaches.set(key, {
+                signature: this.cachedWorkflowSignature,
+                data: this.cloneAnalysisData(this.cachedAnalysisData)
+            });
+        } else {
+            this.workflowAnalysisCaches.delete(key);
+        }
+    },
+
+    restoreAnalysisCacheForActiveWorkflow() {
+        const key = this.getWorkflowScopedQueueKey();
+        const saved = key ? this.workflowAnalysisCaches.get(key) : null;
+        this.cachedWorkflowSignature = saved?.signature || null;
+        this.cachedAnalysisData = saved?.data
+            ? this.cloneAnalysisData(saved.data)
+            : null;
+    },
+
+    saveLoadedModelsCacheForActiveWorkflow() {
+        const key = this.getWorkflowScopedQueueKey();
+        if (!key) return;
+
+        if (this.cachedLoadedModelsSignature && this.cachedLoadedModelsData) {
+            this.workflowLoadedModelCaches.set(key, {
+                signature: this.cachedLoadedModelsSignature,
+                data: this.cloneAnalysisData(this.cachedLoadedModelsData)
+            });
+        } else {
+            this.workflowLoadedModelCaches.delete(key);
+        }
+    },
+
+    restoreLoadedModelsCacheForActiveWorkflow() {
+        const key = this.getWorkflowScopedQueueKey();
+        const saved = key ? this.workflowLoadedModelCaches.get(key) : null;
+        this.cachedLoadedModelsSignature = saved?.signature || null;
+        this.cachedLoadedModelsData = saved?.data
+            ? this.cloneAnalysisData(saved.data)
+            : null;
+    },
+
+    invalidateLoadedModelsCacheForActiveWorkflow() {
+        const key = this.getWorkflowScopedQueueKey();
+        this.cachedLoadedModelsSignature = null;
+        this.cachedLoadedModelsData = null;
+        if (key) {
+            this.workflowLoadedModelCaches.delete(key);
+        }
+    },
+
+    cloneSearchState(state = {}, { preserveActive = false } = {}) {
         let clone = {};
         try {
             clone = JSON.parse(JSON.stringify(state || {}));
@@ -128,25 +193,36 @@ export const workflowStateMethods = {
         clone.lastAttemptFound = clone.lastAttemptFound ?? null;
         clone.lastAttemptError = clone.lastAttemptError || null;
         clone.sourceProgress = clone.sourceProgress || {};
-        clone.activeSearchRunId = null;
+        clone.activeSearchRunId = preserveActive ? (clone.activeSearchRunId || null) : null;
 
-        for (const progress of Object.values(clone.sourceProgress)) {
-            if (!progress || (progress.status !== 'pending' && progress.status !== 'running')) continue;
-            progress.status = 'error';
-            progress.percent = 100;
-            progress.message = 'Search interrupted';
+        if (!preserveActive) {
+            for (const progress of Object.values(clone.sourceProgress)) {
+                if (!progress || (progress.status !== 'pending' && progress.status !== 'running')) continue;
+                progress.status = 'error';
+                progress.percent = 100;
+                progress.message = 'Search interrupted';
+            }
         }
 
         return clone;
     },
 
-    cloneSearchResultCache(cache = this.searchResultCache) {
+    cloneSearchResultCache(cache = this.searchResultCache, { preserveActive = false, workflowKey = null } = {}) {
         const cloned = new Map();
-        for (const [key, state] of cache.entries()) {
+        for (const [missingSearchKey, state] of cache.entries()) {
             if (!this.isPersistableSearchState(state)) {
                 continue;
             }
-            cloned.set(key, this.cloneSearchState(state));
+            const preserveEntryActive = Boolean(
+                preserveActive
+                && workflowKey
+                && state?.activeSearchRunId
+                && this.hasBackgroundSearchJob?.(workflowKey, missingSearchKey, state.activeSearchRunId)
+            );
+            cloned.set(
+                missingSearchKey,
+                this.cloneSearchState(state, { preserveActive: preserveEntryActive })
+            );
         }
         return cloned;
     },
@@ -157,16 +233,17 @@ export const workflowStateMethods = {
         if (this.hasSearchResults(state?.results || {})) return true;
 
         const progressEntries = Object.values(state?.sourceProgress || {});
-        return progressEntries.some(progress => (
-            progress?.status && progress.status !== 'pending' && progress.status !== 'running'
-        ));
+        return Boolean(state?.activeSearchRunId) || progressEntries.some(progress => progress?.status);
     },
 
     saveSearchCacheForActiveWorkflow() {
         const key = this.getWorkflowScopedQueueKey();
         if (!key) return;
 
-        const cloned = this.cloneSearchResultCache();
+        const cloned = this.cloneSearchResultCache(this.searchResultCache, {
+            preserveActive: true,
+            workflowKey: key
+        });
         if (cloned.size) {
             this.workflowSearchResultCaches.set(key, cloned);
         } else {
@@ -177,7 +254,9 @@ export const workflowStateMethods = {
     restoreSearchCacheForActiveWorkflow() {
         const key = this.getWorkflowScopedQueueKey();
         const saved = key ? this.workflowSearchResultCaches.get(key) : null;
-        this.searchResultCache = saved ? this.cloneSearchResultCache(saved) : new Map();
+        this.searchResultCache = saved
+            ? this.cloneSearchResultCache(saved, { preserveActive: true, workflowKey: key })
+            : new Map();
     },
 
     persistSearchStateForActiveWorkflow() {
@@ -205,19 +284,28 @@ export const workflowStateMethods = {
         }
 
         this.savePendingQueueForActiveWorkflow();
+        this.saveAnalysisCacheForActiveWorkflow();
+        this.saveLoadedModelsCacheForActiveWorkflow();
         this.saveSearchCacheForActiveWorkflow();
         this.clearWorkflowScopedState();
         this.activeWorkflowRouteKey = nextRoute;
         this.activeWorkflowSignature = nextSignature;
         this.restorePendingQueueForActiveWorkflow();
+        this.restoreAnalysisCacheForActiveWorkflow();
+        this.restoreLoadedModelsCacheForActiveWorkflow();
         this.restoreSearchCacheForActiveWorkflow();
     },
 
     clearWorkflowScopedState() {
+        const key = this.getWorkflowScopedQueueKey();
         this.cachedWorkflowSignature = null;
         this.cachedAnalysisData = null;
-        for (const state of this.searchResultCache.values()) {
-            state.activeSearchRunId = null;
+        this.cachedLoadedModelsSignature = null;
+        this.cachedLoadedModelsData = null;
+        for (const [missingSearchKey, state] of this.searchResultCache.entries()) {
+            if (!this.hasBackgroundSearchJob?.(key, missingSearchKey, state.activeSearchRunId)) {
+                state.activeSearchRunId = null;
+            }
         }
         this.clearAllSearchProgressTimers();
         this.searchResultCache.clear();
@@ -287,11 +375,15 @@ export const workflowStateMethods = {
         });
 
         this.savePendingQueueForActiveWorkflow();
+        this.saveAnalysisCacheForActiveWorkflow();
+        this.saveLoadedModelsCacheForActiveWorkflow();
         this.saveSearchCacheForActiveWorkflow();
         this.clearWorkflowScopedState();
         this.activeWorkflowRouteKey = currentRoute;
         this.activeWorkflowSignature = signature;
         this.restorePendingQueueForActiveWorkflow();
+        this.restoreAnalysisCacheForActiveWorkflow();
+        this.restoreLoadedModelsCacheForActiveWorkflow();
         this.restoreSearchCacheForActiveWorkflow();
 
         if (this.activeTab === 'missing') {

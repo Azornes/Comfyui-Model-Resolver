@@ -64,10 +64,8 @@ export const tabsLoadedMethods = {
         }
     },
 
-    async loadLoadedModels(workflow = null) {
+    async loadLoadedModels(workflow = null, { force = false } = {}) {
         if (!this.contentElement) return;
-
-        this.contentElement.innerHTML = '<p>Loading loaded models...</p>';
 
         try {
             workflow = workflow || this.getCurrentWorkflow();
@@ -76,6 +74,19 @@ export const tabsLoadedMethods = {
                 return;
             }
             this.syncWorkflowScopedQueue(workflow);
+
+            const workflowSignature = this.getWorkflowSignature(workflow);
+            if (
+                !force &&
+                workflowSignature &&
+                this.cachedLoadedModelsSignature === workflowSignature &&
+                this.cachedLoadedModelsData
+            ) {
+                this.displayLoadedModels(this.contentElement, this.cachedLoadedModelsData);
+                return;
+            }
+
+            this.contentElement.innerHTML = '<p>Loading loaded models...</p>';
 
             const response = await api.fetchApi('/model_resolver/loaded', {
                 method: 'POST',
@@ -88,6 +99,9 @@ export const tabsLoadedMethods = {
             }
 
             const data = await response.json();
+            this.cachedLoadedModelsSignature = workflowSignature;
+            this.cachedLoadedModelsData = data;
+            this.saveLoadedModelsCacheForActiveWorkflow();
             this.displayLoadedModels(this.contentElement, data);
 
         } catch (error) {

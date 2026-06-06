@@ -65,7 +65,7 @@ export const resolveDownloadMethods = {
 
                 // Reload dialog using the updated workflow from API response
                 // This ensures we're analyzing the correct updated workflow
-                await this.loadWorkflowData(data.workflow);
+                await this.loadWorkflowData(data.workflow, { force: true });
             } else {
                 this.showNotification('Failed to resolve model: ' + (data.error || 'Unknown error'), 'error');
             }
@@ -156,7 +156,7 @@ export const resolveDownloadMethods = {
 
                 // Reload dialog using the updated workflow from API response (if dialog is visible)
                 if (this.contentElement) {
-                    await this.loadWorkflowData(resolveData.workflow);
+                    await this.loadWorkflowData(resolveData.workflow, { force: true });
                 }
 
                 // Return the updated workflow for callers who need it
@@ -341,14 +341,15 @@ export const resolveDownloadMethods = {
         this.closeFooterMenus();
         this.showNotification(`Searching ${targets.length} missing model${targets.length > 1 ? 's' : ''}...`, 'info');
 
+        const batchWorkflowKey = this.getWorkflowScopedQueueKey();
         let completed = 0;
         let failed = 0;
         try {
             for (const missing of targets) {
-                const state = this.getSearchState(missing);
+                const state = this.getSearchStateForWorkflow(batchWorkflowKey, missing);
                 state.selectedSource = source || 'all';
                 try {
-                    await this.searchOnline(missing);
+                    await this.searchOnline(missing, { workflowKey: batchWorkflowKey });
                 } catch (error) {
                     failed += 1;
                     console.error('Model Resolver: batch search item failed:', error);
@@ -431,7 +432,7 @@ export const resolveDownloadMethods = {
             const workflow = this.getCurrentWorkflow();
             if (!workflow) {
                 // Just reload the UI to show updated state
-                await this.loadWorkflowData();
+                await this.loadWorkflowData(null, { force: true });
                 return;
             }
 
@@ -444,7 +445,7 @@ export const resolveDownloadMethods = {
 
             if (!analyzeResponse.ok) {
                 // Just reload UI
-                await this.loadWorkflowData();
+                await this.loadWorkflowData(null, { force: true });
                 return;
             }
 
@@ -459,7 +460,7 @@ export const resolveDownloadMethods = {
 
             if (!targetMissing) {
                 // Model no longer missing - already resolved or workflow changed
-                await this.loadWorkflowData();
+                await this.loadWorkflowData(null, { force: true });
                 return;
             }
 
@@ -503,19 +504,19 @@ export const resolveDownloadMethods = {
                         await this.updateWorkflowInComfyUI(resolveData.workflow);
                         const count = resolutions.length;
                         this.showNotification(`✓ Auto-resolved: ${downloadedFilename} (${count} reference${count > 1 ? 's' : ''})`, 'success');
-                        await this.loadWorkflowData(resolveData.workflow);
+                        await this.loadWorkflowData(resolveData.workflow, { force: true });
                         return;
                     }
                 }
             }
 
             // If we couldn't auto-resolve, just reload the UI
-            await this.loadWorkflowData();
+            await this.loadWorkflowData(null, { force: true });
 
         } catch (error) {
             console.error('Model Resolver: Error auto-resolving after download:', error);
             // Still reload UI even on error
-            await this.loadWorkflowData();
+            await this.loadWorkflowData(null, { force: true });
         }
     },
 
@@ -754,15 +755,22 @@ export const resolveDownloadMethods = {
     /**
      * Search online for a model
      */
-    async searchOnline(missing) {
+    async searchOnline(missing, { workflowKey = this.getWorkflowScopedQueueKey() } = {}) {
         let filename = missing.original_path?.split('/').pop()?.split('\\').pop() || '';
         let category = missing.category || '';
-        const state = this.getSearchState(missing);
+        const state = this.getSearchStateForWorkflow(workflowKey, missing);
+        const missingSearchKey = this.getMissingSearchKey(missing);
+        const backgroundJobKey = this.getBackgroundSearchJobKey(workflowKey, missingSearchKey);
+        const activeJob = this.backgroundSearchJobs?.get(backgroundJobKey);
+        if (activeJob?.promise) {
+            this.refreshSearchUiForMissing(missing, state, { workflowKey });
+            return activeJob.promise;
+        }
         let selectedSource = state.selectedSource || 'all';
         if (selectedSource !== 'all' && !this.isSearchSourceUsable(selectedSource)) {
             selectedSource = 'all';
             state.selectedSource = 'all';
-            this.persistSearchStateForActiveWorkflow();
+            this.persistSearchStateForWorkflow(workflowKey, missing, state);
         }
         const selectedSourceLabel = this.getSearchSourceLabel(selectedSource);
         const sourceIds = this.getSearchSourcesForSelection(selectedSource, missing);
@@ -798,8 +806,13 @@ export const resolveDownloadMethods = {
 
         const isUrn = missing.is_urn || false;
         const resultsId = `search-results-${missing.node_id}-${missing.widget_index}`;
-        const resultsDiv = this.contentElement?.querySelector(`#${resultsId}`);
-        const searchBtn = this.contentElement?.querySelector(`#search-${missing.node_id}-${missing.widget_index}`);
+        const canUpdateCurrentWorkflow = workflowKey === this.getWorkflowScopedQueueKey();
+        const resultsDiv = canUpdateCurrentWorkflow
+            ? this.contentElement?.querySelector(`#${resultsId}`)
+            : null;
+        const searchBtn = canUpdateCurrentWorkflow
+            ? this.contentElement?.querySelector(`#search-${missing.node_id}-${missing.widget_index}`)
+            : null;
         let searchRunId = null;
 
         try {
@@ -809,6 +822,15 @@ export const resolveDownloadMethods = {
 
             this.clearSearchProgressTimers(state.activeSearchRunId);
             searchRunId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+            const backgroundJob = {
+                workflowKey,
+                missingSearchKey,
+                runId: searchRunId,
+                missing,
+                startedAt: Date.now(),
+                promise: null
+            };
+            this.backgroundSearchJobs.set(backgroundJobKey, backgroundJob);
             state.activeSearchRunId = searchRunId;
             state.lastAttemptSources = sourceIds;
             state.lastAttemptFound = null;
@@ -820,9 +842,9 @@ export const resolveDownloadMethods = {
                     percent: 6,
                     startedAt: Date.now(),
                     estimateMs: this.getSearchSourceEstimateMs(source, isUrn)
-                }, missing);
+                }, missing, { workflowKey });
             }
-            this.persistSearchStateForActiveWorkflow();
+            this.persistSearchStateForWorkflow(workflowKey, missing, state);
 
             if (searchBtn) {
                 searchBtn.disabled = true;
@@ -839,7 +861,8 @@ export const resolveDownloadMethods = {
                     missing,
                     resultsDiv,
                     source,
-                    searchRunId
+                    searchRunId,
+                    { workflowKey }
                 );
             }
 
@@ -892,7 +915,7 @@ export const resolveDownloadMethods = {
                     const data = await response.json();
                     console.log('Model Resolver: Search response:', JSON.stringify(data));
 
-                    if (state.activeSearchRunId !== searchRunId) {
+                    if (!this.isBackgroundSearchRunActive(workflowKey, missingSearchKey, searchRunId)) {
                         return { source, stale: true };
                     }
 
@@ -911,7 +934,7 @@ export const resolveDownloadMethods = {
                         status: found ? 'found' : 'none',
                         percent: 100,
                         message: found ? 'Found' : 'No match'
-                    }, missing);
+                    }, missing, { workflowKey });
 
                     if (data.civitai) {
                         missing.civitai_search_result = {
@@ -934,13 +957,13 @@ export const resolveDownloadMethods = {
                         };
                     }
 
-                    this.displaySearchResults(missing, state, resultsDiv);
-                    this.persistSearchStateForActiveWorkflow();
+                    this.persistSearchStateForWorkflow(workflowKey, missing, state);
+                    this.refreshSearchUiForMissing(missing, state, { workflowKey });
                     this.applySearchResultSuggestion(missing);
                     return { source, data };
                 } catch (error) {
                     console.error(`Model Resolver: Search error for ${source}:`, error);
-                    if (state.activeSearchRunId !== searchRunId) {
+                    if (!this.isBackgroundSearchRunActive(workflowKey, missingSearchKey, searchRunId)) {
                         return { source, stale: true, error };
                     }
 
@@ -953,45 +976,54 @@ export const resolveDownloadMethods = {
                         status: 'error',
                         percent: 100,
                         message: error.message || 'Error'
-                    }, missing);
-                    this.displaySearchResults(missing, state, resultsDiv);
-                    this.persistSearchStateForActiveWorkflow();
+                    }, missing, { workflowKey });
+                    this.persistSearchStateForWorkflow(workflowKey, missing, state);
+                    this.refreshSearchUiForMissing(missing, state, { workflowKey });
                     return { source, error };
                 }
             });
 
+            const currentJob = this.backgroundSearchJobs.get(backgroundJobKey);
+            if (currentJob?.runId === searchRunId) {
+                currentJob.promise = Promise.all(searchPromises);
+            }
             await Promise.all(searchPromises);
             this.clearSearchProgressTimers(searchRunId);
 
-            if (state.activeSearchRunId === searchRunId) {
+            if (this.isBackgroundSearchRunActive(workflowKey, missingSearchKey, searchRunId)) {
                 state.activeSearchRunId = null;
                 state.lastAttemptSources = attemptedSources.size ? Array.from(attemptedSources) : sourceIds;
                 state.lastAttemptFound = anyFound;
                 state.lastAttemptError = hadError && !anyFound
                     ? 'Search finished with errors. Check source statuses above.'
                     : null;
-                this.displaySearchResults(missing, state, resultsDiv);
-                this.persistSearchStateForActiveWorkflow();
+                this.persistSearchStateForWorkflow(workflowKey, missing, state);
+                this.refreshSearchUiForMissing(missing, state, { workflowKey });
             }
 
         } catch (error) {
             console.error('Model Resolver: Search error:', error);
             this.clearSearchProgressTimers(searchRunId);
             state.lastAttemptError = error.message;
-            this.persistSearchStateForActiveWorkflow();
+            this.persistSearchStateForWorkflow(workflowKey, missing, state);
             if (resultsDiv) {
                 resultsDiv.innerHTML = this.renderStatusMessage(`Search failed: ${error.message}`, 'error');
             }
         } finally {
-            if (!searchRunId || state.activeSearchRunId === searchRunId) {
+            if (!searchRunId || this.isBackgroundSearchRunActive(workflowKey, missingSearchKey, searchRunId)) {
                 this.clearSearchProgressTimers(searchRunId);
                 state.activeSearchRunId = null;
+            }
+            const currentJob = this.backgroundSearchJobs?.get(backgroundJobKey);
+            if (currentJob?.runId === searchRunId) {
+                this.backgroundSearchJobs.delete(backgroundJobKey);
             }
             if (searchBtn) {
                 searchBtn.disabled = false;
                 searchBtn.innerHTML = `${this.getSearchIconHtml()} Search Again`;
             }
-            this.persistSearchStateForActiveWorkflow();
+            this.persistSearchStateForWorkflow(workflowKey, missing, state);
+            this.refreshSearchUiForMissing(missing, state, { workflowKey });
         }
     },
 

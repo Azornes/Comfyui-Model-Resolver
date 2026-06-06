@@ -112,7 +112,7 @@ export const lifecycleGraphMethods = {
     /**
      * Load workflow data and display missing models
      */
-    async loadWorkflowData(workflow = null) {
+    async loadWorkflowData(workflow = null, { force = false } = {}) {
         if (!this.contentElement) return;
 
         // Show loading state
@@ -130,7 +130,11 @@ export const lifecycleGraphMethods = {
             this.syncWorkflowScopedQueue(workflow);
 
             const workflowSignature = this.getWorkflowSignature(workflow);
+            if (force) {
+                this.invalidateLoadedModelsCacheForActiveWorkflow();
+            }
             if (
+                !force &&
                 workflowSignature &&
                 this.cachedWorkflowSignature === workflowSignature &&
                 this.cachedAnalysisData
@@ -166,6 +170,7 @@ export const lifecycleGraphMethods = {
             const data = await response.json();
             this.cachedWorkflowSignature = workflowSignature;
             this.cachedAnalysisData = data;
+            this.saveAnalysisCacheForActiveWorkflow();
             this.displayMissingModels(this.contentElement, data);
 
             // Reconnect any active downloads to their new progress divs
