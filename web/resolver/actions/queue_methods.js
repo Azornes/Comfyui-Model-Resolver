@@ -69,22 +69,26 @@ export const queueMethods = {
     },
 
     createQueuePanel() {
+        this.queueTitle = $el("div#queue-title.mr-queue-title", { textContent: "Queued Selections (0)" });
+        this.queueToggleButton = $el("button", {
+            id: "queue-toggle",
+            className: "mr-btn mr-btn-secondary mr-btn-sm",
+            textContent: "Collapse",
+            onclick: () => this.toggleQueueCollapsed()
+        });
+        this.queueClearButton = $el("button", {
+            id: "queue-clear",
+            className: "mr-btn mr-btn-secondary mr-btn-sm",
+            textContent: "Clear All",
+            onclick: () => this.clearAllQueued()
+        });
+
         // Header row with title and clear button
         this.queueHeader = $el("div.mr-queue-header", {}, [
-            $el("div#queue-title.mr-queue-title", { textContent: "Queued Selections (0)" }),
+            this.queueTitle,
             $el("div.mr-queue-actions", {}, [
-                $el("button", {
-                    id: "queue-toggle",
-                    className: "mr-btn mr-btn-secondary mr-btn-sm",
-                    textContent: "Collapse",
-                    onclick: () => this.toggleQueueCollapsed()
-                }),
-                $el("button", {
-                    id: "queue-clear",
-                    className: "mr-btn mr-btn-secondary mr-btn-sm",
-                    textContent: "Clear All",
-                    onclick: () => this.clearAllQueued()
-                })
+                this.queueToggleButton,
+                this.queueClearButton
             ])
         ]);
 
@@ -101,9 +105,9 @@ export const queueMethods = {
         if (!this.queueList || !this.queueHeader) return;
         const list = Array.isArray(this.pendingResolutions) ? this.pendingResolutions : [];
         // Update title count
-        const title = this.queueHeader.querySelector('#queue-title');
+        const title = this.queueTitle || this.queueHeader.querySelector('#queue-title');
         if (title) title.textContent = `Queued Selections (${list.length})`;
-        const toggleBtn = this.queueHeader.querySelector('#queue-toggle');
+        const toggleBtn = this.queueToggleButton || this.queueHeader.querySelector('#queue-toggle');
         if (toggleBtn) toggleBtn.textContent = this.queueCollapsed ? 'Expand' : 'Collapse';
 
         if (!list.length) {
