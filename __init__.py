@@ -890,6 +890,7 @@ class ModelResolverExtension:
                         data = await request.json()
                         filename = data.get("filename", "")
                         category = data.get("category", "")
+                        base_model_context = data.get("base_model_context", "")
                         civitai_candidate_limit_raw = data.get(
                             "civitai_candidate_limit", 5
                         )
@@ -1028,7 +1029,7 @@ class ModelResolverExtension:
                             )
 
                         log_info(
-                            f"Search request: filename={filename}, category={category}, is_urn={is_urn}, model_id={data.get('model_id')}, version_id={data.get('version_id')}, sources={sorted(normalized_sources)}, force_search={force_search}, civitai_candidate_limit={civitai_candidate_limit}, civarchive_candidate_limit={civarchive_candidate_limit}"
+                            f"Search request: filename={filename}, category={category}, is_urn={is_urn}, model_id={data.get('model_id')}, version_id={data.get('version_id')}, sources={sorted(normalized_sources)}, base_model_context={repr(base_model_context)}, force_search={force_search}, civitai_candidate_limit={civitai_candidate_limit}, civarchive_candidate_limit={civarchive_candidate_limit}"
                         )
 
                         results = {
@@ -1291,6 +1292,7 @@ class ModelResolverExtension:
                                 civitai_result = search_civitai_for_file(
                                     filename,
                                     model_type=category,
+                                    base_model_context=base_model_context or None,
                                     session_token=civitai_session_token or None,
                                     candidate_limit=civitai_candidate_limit,
                                     use_trpc_search=civitai_use_trpc_search,
@@ -1344,6 +1346,7 @@ class ModelResolverExtension:
                                     civarchive_result = search_civarchive_for_file(
                                         filename,
                                         model_type=category,
+                                        base_model_context=base_model_context or None,
                                         limit=civarchive_candidate_limit,
                                     )
                                     log_search_result("civarchive", civarchive_result)
@@ -1367,6 +1370,7 @@ class ModelResolverExtension:
                                 search_lora_manager_archive_for_file(
                                     filename,
                                     model_type=category,
+                                    base_model_context=base_model_context or None,
                                 )
                             )
                             log_search_result(
