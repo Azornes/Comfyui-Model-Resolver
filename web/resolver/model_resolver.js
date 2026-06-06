@@ -246,8 +246,9 @@ export class ModelResolver {
 
             const target = event.target instanceof Element ? event.target : null;
             if (target?.closest('#model-resolver-modal, .model-resolver-backdrop')) return;
+            if (!owner.isLikelyWorkflowTabClickTarget(target)) return;
 
-            owner.handleActiveWorkflowRouteChange('document-click');
+            owner.handleActiveWorkflowRouteChange('workflow-tab-click');
         };
         const focusHandler = () => {
             window.__ModelResolverWorkflowChangeOwner?.handleActiveWorkflowRouteChange('window-focus');
@@ -275,6 +276,28 @@ export class ModelResolver {
             { target: window, event: 'focus', handler: focusHandler },
             { target: document, event: 'visibilitychange', handler: visibilityHandler }
         ];
+    }
+
+    isLikelyWorkflowTabClickTarget(target) {
+        if (!(target instanceof Element)) return false;
+
+        const tab = target.closest([
+            '[data-workflow-id]',
+            '[data-workflow-name]',
+            '[data-tab-id*="workflow" i]',
+            '[aria-controls*="workflow" i]',
+            '[class*="workflow"][class*="tab" i]',
+            '[class*="tab"][class*="workflow" i]',
+            '[class*="workflow"][class*="item" i]'
+        ].join(','));
+        if (tab) return true;
+
+        const roleTab = target.closest('[role="tab"]');
+        if (!roleTab) return false;
+
+        const text = roleTab.textContent?.trim() || '';
+        const aria = roleTab.getAttribute('aria-label') || roleTab.getAttribute('title') || '';
+        return /workflow|unsaved|untitled/i.test(`${text} ${aria}`);
     }
 
     handleActiveWorkflowRouteChange(reason = 'workflow-change') {

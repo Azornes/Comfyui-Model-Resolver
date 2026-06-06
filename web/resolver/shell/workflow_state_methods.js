@@ -6,11 +6,59 @@ export const workflowStateMethods = {
     getWorkflowSignature(workflow) {
         if (!workflow) return null;
         try {
-            return JSON.stringify(workflow);
+            return JSON.stringify(this.getWorkflowSignatureData(workflow));
         } catch (error) {
             console.warn('Model Resolver: workflow signature generation failed', error);
             return null;
         }
+    },
+
+    getWorkflowSignatureData(workflow) {
+        const normalizeNode = (node = {}) => ({
+            id: node.id,
+            type: node.type,
+            mode: node.mode,
+            flags: node.flags,
+            inputs: Array.isArray(node.inputs)
+                ? node.inputs.map(input => ({
+                    name: input?.name,
+                    type: input?.type,
+                    link: input?.link
+                }))
+                : [],
+            outputs: Array.isArray(node.outputs)
+                ? node.outputs.map(output => ({
+                    name: output?.name,
+                    type: output?.type,
+                    links: output?.links || []
+                }))
+                : [],
+            widgets_values: node.widgets_values || [],
+            properties: node.properties || {}
+        });
+
+        const normalizeDefinition = (definition = {}) => ({
+            nodes: Array.isArray(definition.nodes)
+                ? definition.nodes.map(normalizeNode).sort((a, b) => String(a.id).localeCompare(String(b.id)))
+                : [],
+            links: definition.links || []
+        });
+
+        const definitions = workflow.definitions && typeof workflow.definitions === 'object'
+            ? Object.fromEntries(
+                Object.entries(workflow.definitions)
+                    .sort(([a], [b]) => String(a).localeCompare(String(b)))
+                    .map(([key, definition]) => [key, normalizeDefinition(definition)])
+            )
+            : {};
+
+        return {
+            nodes: Array.isArray(workflow.nodes)
+                ? workflow.nodes.map(normalizeNode).sort((a, b) => String(a.id).localeCompare(String(b.id)))
+                : [],
+            links: workflow.links || [],
+            definitions
+        };
     },
 
     getActiveWorkflowRouteKey() {
@@ -217,14 +265,8 @@ export const workflowStateMethods = {
         const routeChanged = currentRoute !== this.activeWorkflowRouteKey;
         const signatureChanged = signature && signature !== this.activeWorkflowSignature;
         const graphStillLooksOld = routeChanged && previousSignature && signature === previousSignature;
-        const possiblePendingGraphSwitch = (
-            reason === 'document-click' &&
-            previousSignature &&
-            signature === previousSignature
-        );
-        const maxAttempts = possiblePendingGraphSwitch ? 3 : 8;
 
-        if ((!signature || graphStillLooksOld || possiblePendingGraphSwitch) && attempt < maxAttempts) {
+        if ((!signature || graphStillLooksOld) && attempt < 8) {
             setTimeout(() => {
                 this.refreshForActiveWorkflowChange({
                     reason,
