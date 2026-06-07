@@ -13,6 +13,7 @@ import { queueMethods } from "./actions/queue_methods.js";
 import { resolveDownloadMethods } from "./actions/resolve_download_methods.js";
 import { selectionMethods } from "./actions/selection_methods.js";
 import { renderFormatMethods } from "./utils/render_format_methods.js";
+import { getSvgIcon } from "../utils/icon_utils.js";
 export class ResolverManagerDialog extends ComfyDialog {
     constructor() {
         super();
@@ -86,21 +87,27 @@ export class ResolverManagerDialog extends ComfyDialog {
             $el("div.mr-context-menu-item", {
                 onclick: () => this.handleContextMenuAction('showInfo')
             }, [
-                $el("span.mr-context-menu-item-icon", { textContent: "?" }),
+                $el("span.mr-context-menu-item-icon", {
+                    innerHTML: getSvgIcon('eye', 'currentColor', 'mr-context-menu-item-svg')
+                }),
                 $el("span", { textContent: "Show Info" })
             ]),
             $el("div.mr-context-menu-divider"),
             $el("div.mr-context-menu-item", {
                 onclick: () => this.handleContextMenuAction('civitai')
             }, [
-                $el("span.mr-context-menu-item-icon", { textContent: "??" }),
+                $el("span.mr-context-menu-item-icon", {
+                    innerHTML: getSvgIcon('civitai', 'currentColor', 'mr-context-menu-item-svg')
+                }),
                 $el("span", { textContent: "Open in CivitAI" })
             ]),
             $el("div.mr-context-menu-divider"),
             $el("div.mr-context-menu-item", {
                 onclick: () => this.handleContextMenuAction('openFolder')
             }, [
-                $el("span.mr-context-menu-item-icon", { textContent: "??" }),
+                $el("span.mr-context-menu-item-icon", {
+                    innerHTML: getSvgIcon('folderOpen', 'currentColor', 'mr-context-menu-item-svg')
+                }),
                 $el("span", { textContent: "Open Containing Folder" })
             ])
         ]);

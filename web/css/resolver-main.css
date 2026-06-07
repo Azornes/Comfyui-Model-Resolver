@@ -2871,9 +2871,19 @@
     background: rgba(255,255,255,0.1);
 }
 .mr-context-menu-item-icon {
-    font-size: 14px;
     width: 20px;
-    text-align: center;
+    height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: currentColor;
+    flex: 0 0 20px;
+}
+.mr-context-menu-item-icon svg,
+.mr-context-menu-item-svg {
+    width: 14px;
+    height: 14px;
+    display: block;
 }
 .mr-context-menu-divider {
     height: 1px;
