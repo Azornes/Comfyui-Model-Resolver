@@ -102,6 +102,24 @@ export const searchPanelMethods = {
         return '';
     },
 
+    resolveBaseModelAliasFromPath(path = '') {
+        const text = String(path || '').trim();
+        if (!text) return '';
+
+        const parts = text
+            .split(/[\\/]+/)
+            .map(part => part.trim())
+            .filter(Boolean);
+        const directoryParts = parts.filter(part => !/\.(safetensors|ckpt|pt|pth|bin|gguf|onnx)$/i.test(part));
+
+        for (const part of directoryParts.slice(0, 3)) {
+            const exact = this.resolveBaseModelAlias(part);
+            if (exact) return exact;
+        }
+
+        return '';
+    },
+
     getBaseModelAliases() {
         const baseModelsList = this.baseModels?.base_models;
         if (Array.isArray(baseModelsList) && baseModelsList.length > 0) {
@@ -172,12 +190,21 @@ export const searchPanelMethods = {
         const primaryScores = new Map();
         const secondaryScores = new Map();
         for (const missing of this.missingModels || []) {
-            const baseModel = missing?.civitai_info?.base_model
-                || missing?.download_source?.base_model
+            const baseModel = missing?.civitai_info?.base_model || '';
+            const bestMatch = this.getBestLocalMatch?.(missing, 95);
+            const matchPath = bestMatch?.model?.relative_path
+                || bestMatch?.model?.path
+                || bestMatch?.path
+                || bestMatch?.filename
                 || '';
-            const canonical = this.resolveBaseModelAlias(baseModel);
+            const localBaseModel = this.resolveBaseModelAliasFromPath(matchPath);
+            const canonical = this.resolveBaseModelAlias(baseModel)
+                || localBaseModel
+                || this.resolveBaseModelAlias(missing?.download_source?.base_model || '');
             if (!canonical) continue;
-            const weight = this.getMissingBaseModelWeight(missing);
+            const confidence = Number(bestMatch?.confidence || 0);
+            const localMatchBoost = confidence >= 100 ? 1 : 0;
+            const weight = this.getMissingBaseModelWeight(missing) + localMatchBoost;
             const scores = weight >= 8 ? primaryScores : secondaryScores;
             scores.set(canonical, (scores.get(canonical) || 0) + weight);
         }
