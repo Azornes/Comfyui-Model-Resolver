@@ -2899,7 +2899,7 @@
     width: 100vw;
     height: 100vh;
     background: rgba(0, 0, 0, 0.6);
-    z-index: var(--mr-z-tooltip);
+    z-index: var(--mr-z-info-dialog);
     display: flex;
     align-items: center;
     justify-content: center;
