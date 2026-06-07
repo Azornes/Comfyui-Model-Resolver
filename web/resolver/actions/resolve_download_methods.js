@@ -1244,6 +1244,19 @@ export const resolveDownloadMethods = {
                 }
             });
         });
+
+        const detailsBtns = container.querySelectorAll('.search-show-details-btn');
+        detailsBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                try {
+                    const model = JSON.parse(decodeURIComponent(btn.dataset.model || ''));
+                    this.showSourceModelDetails(model);
+                } catch (error) {
+                    console.error('Model Resolver: failed to open model details:', error);
+                    this.showNotification?.('Failed to open model details.', 'error');
+                }
+            });
+        });
     },
 
     wireDownloadSearchPanel(container, missing) {
@@ -1488,7 +1501,13 @@ export const resolveDownloadMethods = {
                 downloadFilename: archiveFilename,
                 category: missing.category,
                 openUrl: civarchiveResult.url,
-                searchedAt: this.getSearchResultTimestamp(civarchiveResult)
+                searchedAt: this.getSearchResultTimestamp(civarchiveResult),
+                detailsContext: {
+                    ...civarchiveResult,
+                    details_source: 'civarchive',
+                    missing_key: this.getMissingModelKey(missing),
+                    category: missing.category
+                }
             });
         }
 
@@ -1529,7 +1548,15 @@ export const resolveDownloadMethods = {
                 downloadFilename,
                 category: missing.category,
                 openUrl: modelUrl,
-                searchedAt: this.getSearchResultTimestamp(civitaiResult)
+                searchedAt: this.getSearchResultTimestamp(civitaiResult),
+                detailsContext: {
+                    ...civitaiResult,
+                    name: modelName,
+                    filename: downloadFilename,
+                    details_source: 'civitai',
+                    missing_key: this.getMissingModelKey(missing),
+                    category: missing.category
+                }
             });
         }
 

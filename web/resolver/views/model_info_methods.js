@@ -23,6 +23,14 @@ export const modelInfoMethods = {
         if (!this.contextMenu) return;
 
         this._contextMenuModel = model;
+        const canShowMore = this.canShowSourceDetails(model);
+        const isDownloadTableContext = model?.context_scope === 'download_table';
+        const hasLocalPath = Boolean(model?.path || model?.resolved_path);
+        this.setContextMenuItemVisible('showInfo', !isDownloadTableContext);
+        this.setContextMenuItemVisible('showMore', canShowMore);
+        this.setContextMenuItemVisible('openFolder', !isDownloadTableContext && hasLocalPath);
+        this.setContextMenuDividerVisible('source', !isDownloadTableContext || canShowMore);
+        this.setContextMenuDividerVisible('folder', !isDownloadTableContext && hasLocalPath);
 
         // Position the menu
         this.contextMenu.style.left = `${x}px`;
@@ -63,7 +71,48 @@ export const modelInfoMethods = {
             this.openContainingFolder(model);
         } else if (action === 'showInfo') {
             this.showModelInfo(model);
+        } else if (action === 'showMore') {
+            this.showSourceModelDetails(model);
         }
+    },
+
+    setContextMenuItemVisible(action, visible) {
+        if (!this.contextMenu) return;
+        const className = `mr-context-menu-action-${String(action).replace(/[A-Z]/g, match => `-${match.toLowerCase()}`)}`;
+        this.contextMenu.querySelectorAll(`[data-menu-action="${action}"], .${className}`).forEach(item => {
+            item.hidden = !visible;
+            item.classList.toggle('mr-context-menu-hidden', !visible);
+            if (visible) {
+                item.style.removeProperty('display');
+            } else {
+                item.style.setProperty('display', 'none', 'important');
+            }
+        });
+    },
+
+    setContextMenuDividerVisible(name, visible) {
+        if (!this.contextMenu) return;
+        this.contextMenu.querySelectorAll(`[data-menu-divider="${name}"], .mr-context-menu-divider-${name}`).forEach(item => {
+            item.hidden = !visible;
+            item.classList.toggle('mr-context-menu-hidden', !visible);
+            if (visible) {
+                item.style.removeProperty('display');
+            } else {
+                item.style.setProperty('display', 'none', 'important');
+            }
+        });
+    },
+
+    canShowSourceDetails(model = {}) {
+        const source = String(model.details_source || model.source || '').toLowerCase();
+        return model?.context_scope === 'download_table'
+            && ['civitai', 'civarchive'].includes(source)
+            && Boolean(model.model_id || model.modelId);
+    },
+
+    getMissingByKey(key = '') {
+        if (!key) return null;
+        return (this.missingModels || []).find(missing => this.getMissingModelKey?.(missing) === key) || null;
     },
 
     async openContainingFolder(model) {
@@ -1053,6 +1102,357 @@ export const modelInfoMethods = {
         }
 
         target.remove();
+    },
+
+    async showSourceModelDetails(model = {}) {
+        if (!this.canShowSourceDetails(model)) {
+            this.showNotification?.('No detailed source page is available for this model.', 'info');
+            return;
+        }
+
+        this.closeSourceModelDetails();
+
+        const details = document.createElement('div');
+        details.className = 'mr-model-details-backdrop';
+        details._sourceModel = model;
+        details.innerHTML = this.renderSourceModelDetailsLoading(model);
+        document.body.appendChild(details);
+        this.bindSourceModelDetailsEvents(details);
+
+        try {
+            const tokens = this.getStoredTokens?.() || {};
+            const response = await api.fetchApi('/model_resolver/model-details', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    source: model.details_source || model.source,
+                    model_id: model.model_id || model.modelId,
+                    version_id: model.version_id || model.versionId,
+                    civitai_key: tokens.civitai_key || ''
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Details request failed: ${response.status}`);
+            }
+
+            const data = await response.json();
+            details._detailsData = data;
+            details._selectedVersionId = String(data.selected_version?.id || data.version_id || '');
+            details.innerHTML = this.renderSourceModelDetails(data, model);
+            this.bindSourceModelDetailsEvents(details);
+            this.bindTooltips(details);
+        } catch (error) {
+            console.error('Model Resolver: model details error:', error);
+            details.innerHTML = this.renderSourceModelDetailsError(error);
+            this.bindSourceModelDetailsEvents(details);
+        }
+    },
+
+    closeSourceModelDetails() {
+        document.querySelectorAll('.mr-model-details-backdrop').forEach(element => element.remove());
+    },
+
+    renderSourceModelDetailsLoading(model = {}) {
+        const title = model.name || model.model_name || model.filename || 'Model details';
+        return `
+            <div class="mr-model-details-shell">
+                <div class="mr-model-details-topbar">
+                    <button type="button" class="mr-model-details-icon-btn" data-action="close" aria-label="Close">${getSvgIcon('x')}</button>
+                    <div class="mr-model-details-title">
+                        <h2>${this.escapeHtml(title)}</h2>
+                        <span>${this.escapeHtml(model.details_source || model.source || '')}</span>
+                    </div>
+                </div>
+                <div class="mr-model-details-loading">Loading model details...</div>
+            </div>
+        `;
+    },
+
+    renderSourceModelDetailsError(error) {
+        return `
+            <div class="mr-model-details-shell">
+                <div class="mr-model-details-topbar">
+                    <button type="button" class="mr-model-details-icon-btn" data-action="close" aria-label="Close">${getSvgIcon('x')}</button>
+                    <div class="mr-model-details-title">
+                        <h2>Model details</h2>
+                        <span>Error</span>
+                    </div>
+                </div>
+                <div class="mr-model-details-loading mr-model-details-error">
+                    ${this.escapeHtml(error?.message || 'Failed to load model details.')}
+                </div>
+            </div>
+        `;
+    },
+
+    renderSourceModelDetails(data = {}, contextModel = {}) {
+        const versions = Array.isArray(data.versions) ? data.versions : [];
+        const selectedVersionId = String(data.selected_version?.id || data.version_id || versions[0]?.id || '');
+        const selectedVersion = versions.find(version => String(version.id) === selectedVersionId) || data.selected_version || versions[0] || {};
+        const images = (Array.isArray(selectedVersion.images) && selectedVersion.images.length ? selectedVersion.images : data.images || []).filter(img => img?.url).slice(0, 12);
+        const imageOffset = Math.max(0, Math.min(Number(data._detailsImageOffset || 0), Math.max(0, images.length - 1)));
+        const visibleImages = images.length <= 2
+            ? images.map((image, index) => ({ image, index }))
+            : [0, 1].map(step => {
+                const index = (imageOffset + step) % images.length;
+                return { image: images[index], index };
+            });
+        const stats = data.stats || {};
+        const versionStats = selectedVersion.stats || {};
+        const tags = Array.isArray(data.tags) ? data.tags.slice(0, 12) : [];
+        const trainedWords = this.normalizeTrainedWords(selectedVersion.trained_words || []);
+        const description = data.description || selectedVersion.description || '';
+        const sanitizedDescription = description ? this.sanitizeDescriptionHtml(description) : '';
+        const source = data.source || contextModel.details_source || contextModel.source || '';
+        const creator = data.creator || {};
+        const creatorName = creator.username || creator.name || '';
+
+        const statItems = [
+            ['Downloads', stats.downloadCount || stats.downloads || versionStats.downloadCount || versionStats.downloads],
+            ['Thumbs Up', stats.thumbsUpCount || versionStats.thumbsUpCount],
+            ['Rating', stats.rating || versionStats.rating],
+            ['Published', selectedVersion.published_at ? this.formatDetailsDate(selectedVersion.published_at) : '']
+        ].filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== '');
+
+        return `
+            <div class="mr-model-details-shell">
+                <div class="mr-model-details-topbar">
+                    <button type="button" class="mr-model-details-icon-btn" data-action="close" aria-label="Close">${getSvgIcon('x')}</button>
+                    <div class="mr-model-details-title">
+                        <h2>${this.escapeHtml(data.name || contextModel.name || 'Model')}</h2>
+                        <span>${this.escapeHtml([source, data.type, creatorName].filter(Boolean).join(' / '))}</span>
+                    </div>
+                    <div class="mr-model-details-actions">
+                        ${data.version_url || data.url ? `<a class="mr-model-details-action" href="${this.escapeHtml(data.version_url || data.url)}" target="_blank" rel="noopener noreferrer">${getSvgIcon('externalLink')} Open page</a>` : ''}
+                    </div>
+                </div>
+                <div class="mr-model-details-main">
+                    <section class="mr-model-details-content">
+                        <div class="mr-model-details-version-tabs">
+                            ${versions.map(version => `
+                                <button type="button" class="mr-model-details-version-tab ${String(version.id) === selectedVersionId ? 'is-active' : ''}" data-version-id="${this.escapeHtml(version.id)}">
+                                    <span>${this.escapeHtml(version.name || `Version ${version.id || ''}`)}</span>
+                                    ${version.base_model ? `<small>${this.escapeHtml(version.base_model)}</small>` : ''}
+                                </button>
+                            `).join('')}
+                        </div>
+                        <div class="mr-model-details-gallery ${visibleImages.length === 1 ? 'is-single' : ''}">
+                            ${images.length > 2 ? `<button type="button" class="mr-model-details-gallery-nav is-left" data-gallery-direction="-1" aria-label="Previous images">&lsaquo;</button>` : ''}
+                            ${images.length ? visibleImages.map(({ image, index }) => `
+                                <button type="button" class="mr-model-details-image" data-image-index="${index}">
+                                    <img src="${this.escapeHtml(image.url)}" alt="Example image" loading="lazy">
+                                    ${this.renderSourceModelImageMeta(image)}
+                                </button>
+                            `).join('') : '<div class="mr-model-details-empty">No example images available.</div>'}
+                            ${images.length > 2 ? `<button type="button" class="mr-model-details-gallery-nav is-right" data-gallery-direction="1" aria-label="Next images">&rsaquo;</button>` : ''}
+                        </div>
+                        <div class="mr-model-details-description">
+                            <h3>About</h3>
+                            ${sanitizedDescription ? sanitizedDescription : '<p>No description available.</p>'}
+                        </div>
+                    </section>
+                    <aside class="mr-model-details-side">
+                        <section class="mr-model-details-panel">
+                            <h3>Details</h3>
+                            <div class="mr-model-details-kv">
+                                <div><span>Type</span><strong>${this.escapeHtml(data.type || '-')}</strong></div>
+                                <div><span>Base Model</span><strong>${this.escapeHtml(selectedVersion.base_model || '-')}</strong></div>
+                                <div><span>Version</span><strong>${this.escapeHtml(selectedVersion.name || selectedVersion.id || '-')}</strong></div>
+                                ${statItems.map(([label, value]) => `<div><span>${this.escapeHtml(label)}</span><strong>${this.escapeHtml(value)}</strong></div>`).join('')}
+                            </div>
+                            ${tags.length ? `<div class="mr-model-details-tags">${tags.map(tag => `<span>${this.escapeHtml(tag)}</span>`).join('')}</div>` : ''}
+                        </section>
+                        ${trainedWords.length ? `
+                            <section class="mr-model-details-panel">
+                                <h3>Trained Words</h3>
+                                <div class="mr-model-details-tags">${trainedWords.map(word => `<span>${this.escapeHtml(word)}</span>`).join('')}</div>
+                            </section>
+                        ` : ''}
+                        <section class="mr-model-details-panel">
+                            <h3>Download Variants</h3>
+                            <div class="mr-model-details-files">
+                                ${this.renderSourceModelDetailsFiles(selectedVersion, data, contextModel)}
+                            </div>
+                        </section>
+                    </aside>
+                </div>
+            </div>
+        `;
+    },
+
+    renderSourceModelDetailsFiles(version = {}, data = {}, contextModel = {}) {
+        const files = Array.isArray(version.files) ? version.files.filter(file => file?.download_url) : [];
+        if (!files.length) {
+            return '<div class="mr-model-details-empty">No downloadable files available for this version.</div>';
+        }
+
+        return files.map((file, index) => {
+            const payload = {
+                source: data.source || contextModel.details_source || contextModel.source,
+                model_id: data.model_id || contextModel.model_id,
+                version_id: version.id || data.version_id || contextModel.version_id,
+                name: data.name || contextModel.name,
+                version_name: version.name || '',
+                type: data.type || contextModel.type,
+                filename: file.name || contextModel.filename || data.name || 'model',
+                download_url: file.download_url,
+                url: version.url || data.version_url || data.url,
+                size: file.size,
+                base_model: version.base_model || contextModel.base_model,
+                tags: data.tags || [],
+                match_type: 'selected',
+                confidence: 100
+            };
+            return `
+                <div class="mr-model-details-file ${file.primary ? 'is-primary' : ''}">
+                    <div>
+                        <strong>${this.escapeHtml(file.name || `File ${index + 1}`)}</strong>
+                        <span>${this.escapeHtml([file.type, this.formatSearchResultSize(file), file.sha256 ? `SHA256 ${String(file.sha256).slice(0, 10)}` : ''].filter(Boolean).join(' / '))}</span>
+                    </div>
+                    <button type="button" class="mr-btn mr-btn-primary mr-model-details-use" data-selection="${this.escapeHtml(encodeURIComponent(JSON.stringify(payload)))}">
+                        Use this version
+                    </button>
+                </div>
+            `;
+        }).join('');
+    },
+
+    renderSourceModelImageMeta(image = {}) {
+        const stats = image.stats || {};
+        const metaItems = [
+            ['Like', image.likeCount || image.likes || stats.likeCount || stats.likes],
+            ['Love', image.heartCount || image.reactions || stats.heartCount],
+            ['Comments', image.commentCount || stats.commentCount],
+            ['Buzz', image.buzzCount || stats.buzzCount]
+        ].filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== '');
+
+        if (!metaItems.length) return '';
+
+        return `
+            <span class="mr-model-details-image-meta">
+                ${metaItems.map(([label, value]) => `<span>${this.escapeHtml(label)} ${this.escapeHtml(value)}</span>`).join('')}
+            </span>
+        `;
+    },
+
+    bindSourceModelDetailsEvents(details) {
+        if (!details) return;
+        if (details.dataset.modelDetailsBound === 'true') return;
+        details.dataset.modelDetailsBound = 'true';
+        details.addEventListener('click', (event) => {
+            if (event.target === details) {
+                this.closeSourceModelDetails();
+                return;
+            }
+
+            const actionEl = event.target.closest('[data-action]');
+            if (actionEl?.dataset.action === 'close') {
+                this.closeSourceModelDetails();
+                return;
+            }
+
+            const versionTab = event.target.closest('.mr-model-details-version-tab');
+            if (versionTab && details.contains(versionTab)) {
+                details._selectedVersionId = String(versionTab.dataset.versionId || '');
+                const data = details._detailsData;
+                if (data) {
+                    data.selected_version = (data.versions || []).find(version => String(version.id) === details._selectedVersionId) || data.selected_version;
+                    data._detailsImageOffset = 0;
+                    details.innerHTML = this.renderSourceModelDetails(data, details._sourceModel || {});
+                    this.bindTooltips(details);
+                }
+                return;
+            }
+
+            const galleryNav = event.target.closest('.mr-model-details-gallery-nav');
+            if (galleryNav && details.contains(galleryNav)) {
+                const data = details._detailsData || {};
+                const version = data.selected_version || {};
+                const images = (Array.isArray(version.images) && version.images.length ? version.images : data.images || []).filter(img => img?.url);
+                if (images.length <= 2) return;
+
+                const direction = Number(galleryNav.dataset.galleryDirection || 1);
+                const current = Number(data._detailsImageOffset || 0);
+                data._detailsImageOffset = (current + direction + images.length) % images.length;
+                details.innerHTML = this.renderSourceModelDetails(data, details._sourceModel || {});
+                this.bindTooltips(details);
+                return;
+            }
+
+            const imageBtn = event.target.closest('.mr-model-details-image');
+            if (imageBtn && details.contains(imageBtn)) {
+                const data = details._detailsData || {};
+                const version = data.selected_version || {};
+                const images = (Array.isArray(version.images) && version.images.length ? version.images : data.images || []).filter(img => img?.url);
+                const index = parseInt(imageBtn.dataset.imageIndex || '0', 10);
+                this.openInfoImagePreview(images, Number.isNaN(index) ? 0 : index);
+                return;
+            }
+
+            const useBtn = event.target.closest('.mr-model-details-use');
+            if (useBtn && details.contains(useBtn)) {
+                try {
+                    const selection = JSON.parse(decodeURIComponent(useBtn.dataset.selection || ''));
+                    this.applySourceModelDetailsSelection(selection, details._sourceModel || {});
+                    this.closeSourceModelDetails();
+                } catch (error) {
+                    console.error('Model Resolver: failed to apply model detail selection:', error);
+                    this.showNotification?.('Failed to select this model version.', 'error');
+                }
+            }
+        });
+    },
+
+    applySourceModelDetailsSelection(selection = {}, contextModel = {}) {
+        const missing = this.getMissingByKey(contextModel.missing_key || contextModel.missingKey || '');
+        if (!missing || !selection.download_url) {
+            this.showNotification?.('Cannot apply this version to the current missing model.', 'error');
+            return;
+        }
+
+        const sourceKey = String(selection.source || contextModel.details_source || contextModel.source || '').toLowerCase();
+        const sourceResult = {
+            source: sourceKey,
+            model_id: selection.model_id,
+            version_id: selection.version_id,
+            name: selection.name,
+            version_name: selection.version_name,
+            type: selection.type,
+            filename: selection.filename,
+            url: selection.url,
+            download_url: selection.download_url,
+            size: selection.size,
+            base_model: selection.base_model,
+            tags: selection.tags || [],
+            match_type: selection.match_type || 'selected',
+            confidence: selection.confidence || 100,
+            searchedAt: new Date().toISOString()
+        };
+
+        missing.download_source = {
+            ...sourceResult,
+            url: sourceResult.download_url,
+            model_url: sourceResult.url,
+            directory: missing.category || 'checkpoints'
+        };
+
+        const state = this.getSearchState?.(missing);
+        if (state?.results && sourceKey) {
+            state.results[sourceKey] = sourceResult;
+        }
+
+        this.refreshSearchUiForMissing?.(missing, state || null);
+        this.updateBatchFooterButtons?.();
+        this.persistSearchStateForActiveWorkflow?.();
+        this.showNotification?.(`Selected ${selection.filename || selection.name || 'model version'}.`, 'success');
+    },
+
+    formatDetailsDate(value) {
+        if (!value) return '';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return String(value);
+        return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
     },
 
     /**

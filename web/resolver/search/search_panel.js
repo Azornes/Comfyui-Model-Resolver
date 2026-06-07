@@ -1038,14 +1038,14 @@ export const searchPanelMethods = {
             'Size'.length
         );
         const maxActions = rows.reduce((max, row) => {
-            const count = (row.downloadUrl ? 1 : 0) + (row.openUrl ? 1 : 0);
+            const count = (row.detailsContext ? 1 : 0) + (row.downloadUrl ? 1 : 0) + (row.openUrl ? 1 : 0);
             return Math.max(max, count);
         }, 1);
 
         const sourcePx = Math.max(118, textWidth('x'.repeat(maxSourceLabel), 6, 34, 100) + 52);
         const matchPx = textWidth('x'.repeat(maxMatchLabel), 7, 34, 76) + 22;
-        const sizePx = textWidth('x'.repeat(maxSizeLabel), 6.5, 28, 72) + 22;
-        const actionsPx = Math.max(60, (maxActions * 24) + (Math.max(0, maxActions - 1) * 6) + 22);
+        const sizePx = textWidth('x'.repeat(maxSizeLabel), 6.5, 42, 88) + 30;
+        const actionsPx = Math.max(96, (maxActions * 28) + (Math.max(0, maxActions - 1) * 8) + 26);
         const modelMinPx = 210;
         const tableMinPx = Math.ceil(sourcePx + matchPx + sizePx + actionsPx + modelMinPx);
 
@@ -1130,7 +1130,20 @@ export const searchPanelMethods = {
             downloadFilename,
             category: downloadSource.directory || downloadSource.category || missing.category || 'checkpoints',
             openUrl: modelUrl,
-            searchedAt: this.getSearchResultTimestamp(downloadSource)
+            searchedAt: this.getSearchResultTimestamp(downloadSource),
+            detailsContext: ['civitai', 'civarchive'].includes(String(source).toLowerCase())
+                ? {
+                    ...downloadSource,
+                    source,
+                    details_source: String(source).toLowerCase(),
+                    model_id: downloadSource.model_id,
+                    version_id: downloadSource.version_id,
+                    name: modelName,
+                    filename: downloadFilename,
+                    missing_key: this.getMissingModelKey(missing),
+                    category: missing.category
+                }
+                : null
         };
     },
 
@@ -1201,8 +1214,31 @@ export const searchPanelMethods = {
             const openUrl = row.openUrl || '';
             const downloadFilename = row.downloadFilename || row.filename || row.model || 'model';
             const category = row.category || '';
+            const detailsContext = row.detailsContext && (row.detailsContext.model_id || row.detailsContext.modelId)
+                ? {
+                    ...row.detailsContext,
+                    model_id: row.detailsContext.model_id || row.detailsContext.modelId,
+                    version_id: row.detailsContext.version_id || row.detailsContext.versionId,
+                    name: row.detailsContext.name || rawModel,
+                    filename: row.detailsContext.filename || downloadFilename,
+                    category: row.detailsContext.category || category,
+                    context_scope: 'download_table'
+                }
+                : null;
+            const detailsData = detailsContext
+                ? encodeURIComponent(JSON.stringify(detailsContext))
+                : '';
 
             let actions = '';
+            if (detailsContext) {
+                actions += `
+                    <button type="button"
+                        class="search-show-details-btn mr-search-result-action-btn"
+                        data-tooltip="Show more"
+                        aria-label="Show more details"
+                        data-model="${this.escapeHtml(detailsData)}">${getSvgIcon('eye')}</button>
+                `;
+            }
             if (downloadUrl) {
                 actions += `
                     <button type="button" class="search-download-btn mr-search-result-action-btn"
@@ -1230,7 +1266,7 @@ export const searchPanelMethods = {
                 <tr>
                     <td>${sourcePill}</td>
                     <td>
-                        <div class="mr-search-result-model" data-tooltip="${modelTitle}">
+                        <div class="mr-search-result-model" data-tooltip="${modelTitle}" ${detailsData ? `data-model="${this.escapeHtml(detailsData)}" oncontextmenu="window.MLOpenContextMenu(event, this)"` : ''}>
                             <span>${modelHtml}</span>
                             ${secondary || filename ? `<small>${secondary || filename}</small>` : ''}
                         </div>

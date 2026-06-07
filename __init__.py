@@ -113,6 +113,7 @@ class ModelResolverExtension:
                     search_civitai_for_file,
                     search_civitai,
                     get_civitai_download_url,
+                    get_civitai_model_details,
                     resolve_urn,
                     check_civitai_api_key,
                     check_civitai_session_token,
@@ -123,6 +124,7 @@ class ModelResolverExtension:
                     is_civarchive_available,
                     search_civarchive_for_file,
                     resolve_civarchive_model_version,
+                    get_civarchive_model_details,
                     clear_search_cache as clear_civarchive_search_cache,
                 )
                 from .core.sources.lora_manager_archive import (
@@ -848,6 +850,75 @@ class ModelResolverExtension:
                 except Exception as e:
                     self.logger.error(
                         f"Model Resolver civitai-search error: {e}", exc_info=True
+                    )
+                    return web.json_response({"error": str(e)}, status=500)
+
+            @routes.post("/model_resolver/model-details")
+            async def model_details(request):
+                """Return normalized full model details for sources that expose model pages."""
+                try:
+                    data = await request.json()
+                    source = str(data.get("source", "")).strip().lower()
+                    model_id = data.get("model_id")
+                    version_id = data.get("version_id")
+                    civitai_key = data.get("civitai_key", "")
+
+                    if not download_available:
+                        return web.json_response(
+                            {"error": "Download providers are not available"}, status=503
+                        )
+
+                    try:
+                        model_id = (
+                            int(model_id)
+                            if model_id is not None and str(model_id).strip()
+                            else None
+                        )
+                    except (TypeError, ValueError):
+                        model_id = None
+
+                    try:
+                        version_id = (
+                            int(version_id)
+                            if version_id is not None and str(version_id).strip()
+                            else None
+                        )
+                    except (TypeError, ValueError):
+                        version_id = None
+
+                    if source not in {"civitai", "civarchive"}:
+                        return web.json_response(
+                            {"error": "Unsupported model details source"}, status=400
+                        )
+                    if not model_id:
+                        return web.json_response(
+                            {"error": "model_id is required"}, status=400
+                        )
+
+                    if source == "civitai":
+                        details = await asyncio.to_thread(
+                            get_civitai_model_details,
+                            model_id,
+                            version_id,
+                            civitai_key or None,
+                        )
+                    else:
+                        details = await asyncio.to_thread(
+                            get_civarchive_model_details,
+                            model_id,
+                            version_id,
+                        )
+
+                    if not details:
+                        return web.json_response(
+                            {"error": "Model details not found"}, status=404
+                        )
+
+                    return web.json_response(details)
+
+                except Exception as e:
+                    self.logger.error(
+                        f"Model Resolver model-details error: {e}", exc_info=True
                     )
                     return web.json_response({"error": str(e)}, status=500)
 

@@ -86,7 +86,8 @@ export class ResolverManagerDialog extends ComfyDialog {
         this.contextMenu = $el("div.mr-context-menu", {
             parent: document.body
         }, [
-            $el("div.mr-context-menu-item", {
+            $el("div.mr-context-menu-item.mr-context-menu-action-show-info", {
+                "data-menu-action": "showInfo",
                 onclick: () => this.handleContextMenuAction('showInfo')
             }, [
                 $el("span.mr-context-menu-item-icon", {
@@ -94,8 +95,20 @@ export class ResolverManagerDialog extends ComfyDialog {
                 }),
                 $el("span", { textContent: "Show Info" })
             ]),
-            $el("div.mr-context-menu-divider"),
-            $el("div.mr-context-menu-item", {
+            $el("div.mr-context-menu-item.mr-context-menu-action-show-more", {
+                "data-menu-action": "showMore",
+                onclick: () => this.handleContextMenuAction('showMore')
+            }, [
+                $el("span.mr-context-menu-item-icon", {
+                    innerHTML: getSvgIcon('database', 'currentColor', 'mr-context-menu-item-svg')
+                }),
+                $el("span", { textContent: "Show More" })
+            ]),
+            $el("div.mr-context-menu-divider.mr-context-menu-divider-source", {
+                "data-menu-divider": "source"
+            }),
+            $el("div.mr-context-menu-item.mr-context-menu-action-civitai", {
+                "data-menu-action": "civitai",
                 onclick: () => this.handleContextMenuAction('civitai')
             }, [
                 $el("span.mr-context-menu-item-icon", {
@@ -103,8 +116,11 @@ export class ResolverManagerDialog extends ComfyDialog {
                 }),
                 $el("span", { textContent: "Open in CivitAI" })
             ]),
-            $el("div.mr-context-menu-divider"),
-            $el("div.mr-context-menu-item", {
+            $el("div.mr-context-menu-divider.mr-context-menu-divider-folder", {
+                "data-menu-divider": "folder"
+            }),
+            $el("div.mr-context-menu-item.mr-context-menu-action-open-folder", {
+                "data-menu-action": "openFolder",
                 onclick: () => this.handleContextMenuAction('openFolder')
             }, [
                 $el("span.mr-context-menu-item-icon", {

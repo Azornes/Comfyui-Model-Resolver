@@ -454,6 +454,234 @@ def _collect_download_urls(file_info: Dict[str, Any]) -> List[str]:
     return non_civitai_urls + civitai_urls
 
 
+def _normalize_archive_image(image: Dict[str, Any]) -> Dict[str, Any]:
+    meta = image.get("meta") if isinstance(image.get("meta"), dict) else {}
+    return {
+        "url": image.get("url") or image.get("imageUrl") or image.get("src"),
+        "civitaiUrl": image.get("civitaiUrl") or image.get("postUrl"),
+        "seed": image.get("seed") or meta.get("seed"),
+        "steps": image.get("steps") or meta.get("steps"),
+        "cfg": image.get("cfg") or meta.get("cfg"),
+        "sampler": image.get("sampler") or meta.get("sampler"),
+        "model": image.get("model") or meta.get("model") or meta.get("Model"),
+        "positive": image.get("positive") or image.get("prompt") or meta.get("prompt"),
+        "negative": image.get("negative") or meta.get("negative_prompt") or meta.get("negativePrompt"),
+        "width": image.get("width") or meta.get("width"),
+        "height": image.get("height") or meta.get("height"),
+        "metadata": meta,
+    }
+
+
+def _normalize_archive_file(file_info: Dict[str, Any], model_id: Optional[int], version_id: Optional[int]) -> Dict[str, Any]:
+    transformed = _transform_file_entry(file_info)
+    download_urls = _collect_download_urls(transformed)
+    hashes = transformed.get("hashes") if isinstance(transformed.get("hashes"), dict) else {}
+    return {
+        "id": transformed.get("id"),
+        "name": transformed.get("name"),
+        "type": transformed.get("type"),
+        "size": _size_kb_to_bytes(transformed.get("sizeKB")),
+        "download_url": download_urls[0] if download_urls else transformed.get("downloadUrl"),
+        "download_urls": download_urls,
+        "primary": bool(transformed.get("primary")),
+        "sha256": transformed.get("sha256") or hashes.get("SHA256") or hashes.get("sha256"),
+        "hashes": hashes,
+        "model_id": model_id or transformed.get("modelId"),
+        "version_id": version_id or transformed.get("modelVersionId"),
+    }
+
+
+def _normalize_archive_version(
+    version: Dict[str, Any],
+    context: Dict[str, Any],
+    top_files: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    model_id = _coerce_int(context.get("id") or version.get("modelId"))
+    version_id = _coerce_int(version.get("id"))
+    files = _extract_version_files(version, top_files or [])
+    normalized_files = [
+        _normalize_archive_file(file_info, model_id, version_id)
+        for file_info in files
+        if isinstance(file_info, dict)
+    ]
+    raw_images = version.get("images") or []
+    if not isinstance(raw_images, list):
+        raw_images = [raw_images]
+    images = [
+        _normalize_archive_image(image)
+        for image in raw_images
+        if isinstance(image, dict) and (image.get("url") or image.get("imageUrl") or image.get("src"))
+    ]
+    trained_words = version.get("trainedWords") or version.get("trigger") or []
+    if isinstance(trained_words, str):
+        trained_words = [trained_words]
+    elif not isinstance(trained_words, list):
+        trained_words = []
+    return {
+        "id": version_id,
+        "name": version.get("name") or "",
+        "base_model": version.get("baseModel"),
+        "published_at": version.get("publishedAt") or version.get("createdAt"),
+        "updated_at": version.get("updatedAt"),
+        "description": version.get("description") or "",
+        "trained_words": trained_words,
+        "stats": version.get("stats") or {},
+        "files": normalized_files,
+        "images": images,
+        "url": f"{CIVARCHIVE_BASE_URL}/models/{model_id}?modelVersionId={version_id}" if model_id and version_id else "",
+    }
+
+
+def get_civarchive_model_details(
+    model_id: int,
+    version_id: Optional[int] = None,
+) -> Optional[Dict[str, Any]]:
+    """Fetch and normalize full CivArchive model details for the resolver UI."""
+    if not model_id:
+        return None
+
+    params = {"modelVersionId": version_id} if version_id is not None else None
+    payload = _request_json(f"/models/{model_id}", params=params, timeout=25)
+    if not payload and version_id:
+        resolved = resolve_civarchive_model_version(model_id, version_id)
+        if not resolved:
+            return None
+        fallback_version = {
+            "id": resolved.get("version_id"),
+            "name": resolved.get("version_name"),
+            "baseModel": resolved.get("base_model"),
+            "trainedWords": resolved.get("trained_words", []),
+            "images": resolved.get("images", []),
+            "files": [
+                {
+                    "name": resolved.get("filename"),
+                    "type": resolved.get("type"),
+                    "downloadUrl": resolved.get("download_url"),
+                    "sizeKB": (resolved.get("size") or 0) / 1024 if resolved.get("size") else None,
+                    "primary": True,
+                }
+            ],
+        }
+        context = {
+            "id": model_id,
+            "name": resolved.get("name"),
+            "type": resolved.get("type"),
+            "tags": resolved.get("tags", []),
+            "creator": resolved.get("creator", {}),
+            "platform": resolved.get("platform"),
+        }
+        selected = _normalize_archive_version(fallback_version, context)
+        return {
+            "source": "civarchive",
+            "model_id": model_id,
+            "version_id": selected.get("id"),
+            "name": context.get("name") or "",
+            "type": context.get("type") or "",
+            "description": "",
+            "tags": context.get("tags") or [],
+            "stats": {},
+            "creator": context.get("creator") or {},
+            "platform": context.get("platform"),
+            "url": f"{CIVARCHIVE_BASE_URL}/models/{model_id}",
+            "version_url": selected.get("url"),
+            "versions": [selected],
+            "selected_version": selected,
+            "images": selected.get("images", []),
+        }
+    if not payload:
+        return None
+
+    data = _normalize_payload(payload)
+    model_block = data.get("model") if isinstance(data.get("model"), dict) else data
+    context = {k: v for k, v in model_block.items() if k not in {"version", "versions", "modelVersions", "files"}}
+    context.setdefault("id", model_id)
+
+    raw_versions = (
+        model_block.get("modelVersions")
+        or model_block.get("versions")
+        or data.get("modelVersions")
+        or data.get("versions")
+        or []
+    )
+    if not isinstance(raw_versions, list):
+        raw_versions = [raw_versions]
+    if not raw_versions and isinstance(model_block.get("version"), dict):
+        raw_versions = [model_block.get("version")]
+
+    top_files = data.get("files") or model_block.get("files") or []
+    if not isinstance(top_files, list):
+        top_files = [top_files]
+
+    active_version = model_block.get("version") if isinstance(model_block.get("version"), dict) else {}
+    active_version_id = _coerce_int(active_version.get("id"))
+    hydrated_versions: List[Dict[str, Any]] = []
+    hydration_cache: Dict[int, Dict[str, Any]] = {}
+
+    for version_summary in raw_versions:
+        if not isinstance(version_summary, dict):
+            continue
+
+        current_id = _coerce_int(version_summary.get("id"))
+        full_version = None
+        if current_id and active_version_id and current_id == active_version_id:
+            full_version = {**version_summary, **active_version}
+        elif current_id:
+            cached = hydration_cache.get(current_id)
+            if cached is None:
+                version_payload = _request_json(
+                    f"/models/{model_id}",
+                    params={"modelVersionId": current_id},
+                    timeout=25,
+                )
+                version_data = _normalize_payload(version_payload or {})
+                version_model = (
+                    version_data.get("model")
+                    if isinstance(version_data.get("model"), dict)
+                    else version_data
+                )
+                cached = (
+                    version_model.get("version")
+                    if isinstance(version_model.get("version"), dict)
+                    else {}
+                )
+                hydration_cache[current_id] = cached
+            if cached:
+                full_version = {**version_summary, **cached}
+
+        hydrated_versions.append(full_version or version_summary)
+
+    versions = [
+        _normalize_archive_version(version, context, top_files)
+        for version in hydrated_versions
+        if isinstance(version, dict)
+    ]
+    selected = next((version for version in versions if version_id and str(version.get("id")) == str(version_id)), None)
+    if not selected and versions:
+        selected = versions[0]
+
+    return {
+        "source": "civarchive",
+        "model_id": model_id,
+        "version_id": selected.get("id") if selected else version_id,
+        "name": context.get("name") or context.get("modelName") or "",
+        "type": context.get("type") or "",
+        "description": context.get("description") or "",
+        "tags": context.get("tags") or [],
+        "stats": context.get("stats") or {},
+        "creator": context.get("creator") or {
+            "username": context.get("creator_username") or context.get("username"),
+            "name": context.get("creator_name"),
+            "url": context.get("creator_url"),
+        },
+        "platform": context.get("platform") or context.get("platform_name"),
+        "url": f"{CIVARCHIVE_BASE_URL}/models/{model_id}",
+        "version_url": selected.get("url") if selected else f"{CIVARCHIVE_BASE_URL}/models/{model_id}",
+        "versions": versions,
+        "selected_version": selected,
+        "images": selected.get("images", []) if selected else [],
+    }
+
+
 def _calculate_confidence(
     query: str,
     model_name: str = "",

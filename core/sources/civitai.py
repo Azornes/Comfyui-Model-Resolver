@@ -964,6 +964,106 @@ def search_civitai(
     return results
 
 
+def _normalize_civitai_file(
+    file_info: Dict[str, Any],
+    model_id: Optional[int],
+    version_id: Optional[int],
+    api_key: Optional[str] = None,
+) -> Dict[str, Any]:
+    hashes = file_info.get("hashes") if isinstance(file_info.get("hashes"), dict) else {}
+    return {
+        "id": file_info.get("id"),
+        "name": file_info.get("name") or file_info.get("filename"),
+        "type": file_info.get("type"),
+        "size": file_info.get("sizeKB", 0) * 1024 if file_info.get("sizeKB") else file_info.get("size"),
+        "download_url": file_info.get("downloadUrl") or (
+            get_civitai_download_url(version_id, api_key) if version_id else None
+        ),
+        "primary": bool(file_info.get("primary", False)),
+        "sha256": file_info.get("sha256") or hashes.get("SHA256") or hashes.get("sha256"),
+        "hashes": hashes,
+        "model_id": model_id,
+        "version_id": version_id,
+    }
+
+
+def get_civitai_model_details(
+    model_id: int,
+    version_id: Optional[int] = None,
+    api_key: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Fetch and normalize full CivitAI model details for the resolver UI."""
+    if not model_id:
+        return None
+
+    headers = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    response = requests.get(
+        f"{CIVITAI_API_URL}/models/{model_id}",
+        headers=headers,
+        timeout=20,
+    )
+    if response.status_code != 200:
+        log_warn(f"CivitAI model details returned {response.status_code}: model_id={model_id}")
+        return None
+
+    data = response.json()
+    versions = data.get("modelVersions") or []
+    normalized_versions = []
+    selected_version = None
+
+    for version in versions:
+        if not isinstance(version, dict):
+            continue
+
+        current_version_id = version.get("id")
+        files = [
+            _normalize_civitai_file(file_info, model_id, current_version_id, api_key)
+            for file_info in (version.get("files") or [])
+            if isinstance(file_info, dict)
+        ]
+        normalized = {
+            "id": current_version_id,
+            "name": version.get("name") or "",
+            "base_model": version.get("baseModel"),
+            "published_at": version.get("publishedAt"),
+            "updated_at": version.get("updatedAt"),
+            "description": version.get("description") or "",
+            "trained_words": _extract_trained_words(version),
+            "clip_skip": version.get("clipSkip"),
+            "stats": version.get("stats") or {},
+            "files": files,
+            "images": _extract_model_images(version),
+            "url": f"https://civitai.com/models/{model_id}?modelVersionId={current_version_id}",
+        }
+        normalized_versions.append(normalized)
+        if version_id and str(current_version_id) == str(version_id):
+            selected_version = normalized
+
+    if not selected_version and normalized_versions:
+        selected_version = normalized_versions[0]
+
+    selected_images = selected_version.get("images", []) if selected_version else []
+    return {
+        "source": "civitai",
+        "model_id": model_id,
+        "version_id": selected_version.get("id") if selected_version else version_id,
+        "name": data.get("name") or "",
+        "type": data.get("type") or "",
+        "description": data.get("description") or "",
+        "tags": data.get("tags") or [],
+        "stats": data.get("stats") or {},
+        "creator": data.get("creator") or {},
+        "url": f"https://civitai.com/models/{model_id}",
+        "version_url": selected_version.get("url") if selected_version else f"https://civitai.com/models/{model_id}",
+        "versions": normalized_versions,
+        "selected_version": selected_version,
+        "images": selected_images,
+    }
+
+
 def search_civitai_by_hash(
     hash_value: str, api_key: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
