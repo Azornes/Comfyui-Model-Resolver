@@ -3785,25 +3785,47 @@
 }
 .mr-model-details-gallery {
     position: relative;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 18px;
-    align-items: stretch;
-    min-height: 420px;
-    height: min(640px, calc(100vh - 190px));
+    min-height: 440px;
+    height: min(660px, calc(100vh - 190px));
     margin-top: 2px;
+    overflow: hidden;
 }
 .mr-model-details-gallery.is-single {
-    grid-template-columns: minmax(280px, 520px);
-    justify-content: center;
+    max-width: 560px;
+    margin-left: auto;
+    margin-right: auto;
+}
+.mr-model-details-gallery-strip {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-behavior: smooth;
+    scrollbar-width: none;
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+    padding: 0 2px;
+}
+.mr-model-details-gallery-strip::-webkit-scrollbar {
+    display: none;
+}
+.mr-model-details-gallery-strip.is-dragging {
+    cursor: grabbing;
+    scroll-behavior: auto;
 }
 .mr-model-details-image {
     position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 100%;
-    height: 100%;
+    flex: 0 0 min(var(--mr-image-width, 330px), 82vw);
+    width: min(var(--mr-image-width, 330px), 82vw);
+    height: min(var(--mr-image-height, 430px), 100%);
     min-width: 0;
     min-height: 0;
     margin: 0;
@@ -3813,6 +3835,10 @@
     background: #101114;
     overflow: hidden;
     cursor: zoom-in;
+    aspect-ratio: var(--mr-image-ratio, 0.72);
+}
+.mr-model-details-gallery-strip.is-dragging .mr-model-details-image {
+    cursor: grabbing;
 }
 .mr-model-details-image img {
     display: block;
@@ -4015,12 +4041,12 @@
         font-size: 18px;
     }
     .mr-model-details-gallery {
-        grid-template-columns: 1fr;
         min-height: 360px;
         height: min(560px, calc(100vh - 170px));
     }
-    .mr-model-details-gallery .mr-model-details-image + .mr-model-details-image {
-        display: none;
+    .mr-model-details-image {
+        flex-basis: min(var(--mr-image-width, 330px), 88vw);
+        width: min(var(--mr-image-width, 330px), 88vw);
     }
     .mr-model-details-file {
         grid-template-columns: 1fr;

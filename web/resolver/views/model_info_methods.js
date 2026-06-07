@@ -1191,13 +1191,6 @@ export const modelInfoMethods = {
         const selectedVersionId = String(data.selected_version?.id || data.version_id || versions[0]?.id || '');
         const selectedVersion = versions.find(version => String(version.id) === selectedVersionId) || data.selected_version || versions[0] || {};
         const images = (Array.isArray(selectedVersion.images) && selectedVersion.images.length ? selectedVersion.images : data.images || []).filter(img => img?.url).slice(0, 12);
-        const imageOffset = Math.max(0, Math.min(Number(data._detailsImageOffset || 0), Math.max(0, images.length - 1)));
-        const visibleImages = images.length <= 2
-            ? images.map((image, index) => ({ image, index }))
-            : [0, 1].map(step => {
-                const index = (imageOffset + step) % images.length;
-                return { image: images[index], index };
-            });
         const stats = data.stats || {};
         const versionStats = selectedVersion.stats || {};
         const tags = Array.isArray(data.tags) ? data.tags.slice(0, 12) : [];
@@ -1237,15 +1230,17 @@ export const modelInfoMethods = {
                                 </button>
                             `).join('')}
                         </div>
-                        <div class="mr-model-details-gallery ${visibleImages.length === 1 ? 'is-single' : ''}">
-                            ${images.length > 2 ? `<button type="button" class="mr-model-details-gallery-nav is-left" data-gallery-direction="-1" aria-label="Previous images">&lsaquo;</button>` : ''}
-                            ${images.length ? visibleImages.map(({ image, index }) => `
-                                <button type="button" class="mr-model-details-image" data-image-index="${index}">
-                                    <img src="${this.escapeHtml(image.url)}" alt="Example image" loading="lazy">
-                                    ${this.renderSourceModelImageMeta(image)}
-                                </button>
-                            `).join('') : '<div class="mr-model-details-empty">No example images available.</div>'}
-                            ${images.length > 2 ? `<button type="button" class="mr-model-details-gallery-nav is-right" data-gallery-direction="1" aria-label="Next images">&rsaquo;</button>` : ''}
+                        <div class="mr-model-details-gallery ${images.length === 1 ? 'is-single' : ''}">
+                            ${images.length > 1 ? `<button type="button" class="mr-model-details-gallery-nav is-left" data-gallery-direction="-1" aria-label="Previous images">&lsaquo;</button>` : ''}
+                            <div class="mr-model-details-gallery-strip">
+                                ${images.length ? images.map((image, index) => `
+                                    <button type="button" class="mr-model-details-image" style="${this.getSourceModelImageSizingStyle(image)}" data-image-index="${index}">
+                                        <img src="${this.escapeHtml(image.url)}" alt="Example image" loading="lazy" draggable="false">
+                                        ${this.renderSourceModelImageMeta(image)}
+                                    </button>
+                                `).join('') : '<div class="mr-model-details-empty">No example images available.</div>'}
+                            </div>
+                            ${images.length > 1 ? `<button type="button" class="mr-model-details-gallery-nav is-right" data-gallery-direction="1" aria-label="Next images">&rsaquo;</button>` : ''}
                         </div>
                         <div class="mr-model-details-description">
                             <h3>About</h3>
@@ -1336,6 +1331,28 @@ export const modelInfoMethods = {
         `;
     },
 
+    getSourceModelImageSizingStyle(image = {}) {
+        const width = Number(image.width || image.metadata?.width || 0);
+        const height = Number(image.height || image.metadata?.height || 0);
+        const ratio = width > 0 && height > 0 ? width / height : 0.72;
+        const clampedRatio = Math.max(0.48, Math.min(1.85, ratio));
+        const preferredHeight = Math.max(
+            320,
+            Math.min(
+                560,
+                Math.round(430 + Math.max(0, 1 - clampedRatio) * 150 - Math.max(0, clampedRatio - 1) * 70)
+            )
+        );
+        let preferredWidth = Math.round(preferredHeight * clampedRatio);
+        if (preferredWidth < 220) {
+            preferredWidth = 220;
+        } else if (preferredWidth > 640) {
+            preferredWidth = 640;
+        }
+        const adjustedHeight = Math.round(preferredWidth / clampedRatio);
+        return `--mr-image-ratio:${clampedRatio.toFixed(3)}; --mr-image-width:${preferredWidth}px; --mr-image-height:${adjustedHeight}px;`;
+    },
+
     bindSourceModelDetailsEvents(details) {
         if (!details) return;
         if (details.dataset.modelDetailsBound === 'true') return;
@@ -1358,7 +1375,6 @@ export const modelInfoMethods = {
                 const data = details._detailsData;
                 if (data) {
                     data.selected_version = (data.versions || []).find(version => String(version.id) === details._selectedVersionId) || data.selected_version;
-                    data._detailsImageOffset = 0;
                     details.innerHTML = this.renderSourceModelDetails(data, details._sourceModel || {});
                     this.bindTooltips(details);
                 }
@@ -1367,21 +1383,21 @@ export const modelInfoMethods = {
 
             const galleryNav = event.target.closest('.mr-model-details-gallery-nav');
             if (galleryNav && details.contains(galleryNav)) {
-                const data = details._detailsData || {};
-                const version = data.selected_version || {};
-                const images = (Array.isArray(version.images) && version.images.length ? version.images : data.images || []).filter(img => img?.url);
-                if (images.length <= 2) return;
-
+                const strip = galleryNav.closest('.mr-model-details-gallery')?.querySelector('.mr-model-details-gallery-strip');
+                if (!strip) return;
                 const direction = Number(galleryNav.dataset.galleryDirection || 1);
-                const current = Number(data._detailsImageOffset || 0);
-                data._detailsImageOffset = (current + direction + images.length) % images.length;
-                details.innerHTML = this.renderSourceModelDetails(data, details._sourceModel || {});
-                this.bindTooltips(details);
+                strip.scrollBy({
+                    left: direction * Math.max(260, Math.round(strip.clientWidth * 0.82)),
+                    behavior: 'smooth'
+                });
                 return;
             }
 
             const imageBtn = event.target.closest('.mr-model-details-image');
             if (imageBtn && details.contains(imageBtn)) {
+                if (details._detailsGalleryDraggedUntil && Date.now() < details._detailsGalleryDraggedUntil) {
+                    return;
+                }
                 const data = details._detailsData || {};
                 const version = data.selected_version || {};
                 const images = (Array.isArray(version.images) && version.images.length ? version.images : data.images || []).filter(img => img?.url);
@@ -1401,6 +1417,40 @@ export const modelInfoMethods = {
                     this.showNotification?.('Failed to select this model version.', 'error');
                 }
             }
+        });
+
+        details.addEventListener('pointerdown', (event) => {
+            const strip = event.target.closest?.('.mr-model-details-gallery-strip');
+            if (!strip || !details.contains(strip) || event.button > 0) return;
+
+            const startX = event.clientX;
+            const startScrollLeft = strip.scrollLeft;
+            let moved = false;
+            strip.classList.add('is-dragging');
+            strip.setPointerCapture?.(event.pointerId);
+
+            const onPointerMove = (moveEvent) => {
+                const delta = moveEvent.clientX - startX;
+                if (Math.abs(delta) > 4) {
+                    moved = true;
+                    details._detailsGalleryDraggedUntil = Date.now() + 250;
+                }
+                strip.scrollLeft = startScrollLeft - delta;
+            };
+
+            const finishDrag = () => {
+                strip.classList.remove('is-dragging');
+                strip.removeEventListener('pointermove', onPointerMove);
+                strip.removeEventListener('pointerup', finishDrag);
+                strip.removeEventListener('pointercancel', finishDrag);
+                if (moved) {
+                    details._detailsGalleryDraggedUntil = Date.now() + 250;
+                }
+            };
+
+            strip.addEventListener('pointermove', onPointerMove);
+            strip.addEventListener('pointerup', finishDrag, { once: true });
+            strip.addEventListener('pointercancel', finishDrag, { once: true });
         });
     },
 
