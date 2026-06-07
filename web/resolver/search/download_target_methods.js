@@ -588,6 +588,7 @@ export const downloadTargetMethods = {
             hf_use_api_search: localStorage.getItem('ModelResolver.hfUseApiSearch') !== 'false',
             hf_use_comfy_org_fallback: localStorage.getItem('ModelResolver.hfUseComfyOrgFallback') !== 'false',
             hf_use_brave_fallback: localStorage.getItem('ModelResolver.hfUseBraveFallback') !== 'false',
+            auto_fill_base_model: localStorage.getItem('ModelResolver.autoFillBaseModel') !== 'false',
             civitai_candidate_limit,
             search_source_enabled
         };
@@ -628,6 +629,8 @@ export const downloadTargetMethods = {
                 localStorage.setItem('ModelResolver.hfUseComfyOrgFallback',  data.hf_use_comfy_org_fallback ? 'true' : 'false');
             if (data.hf_use_brave_fallback !== undefined)
                 localStorage.setItem('ModelResolver.hfUseBraveFallback',     data.hf_use_brave_fallback ? 'true' : 'false');
+            if (data.auto_fill_base_model !== undefined)
+                localStorage.setItem('ModelResolver.autoFillBaseModel',      data.auto_fill_base_model ? 'true' : 'false');
             if (data.civitai_candidate_limit !== undefined)
                 localStorage.setItem('ModelResolver.civitaiCandidateLimit',  `${data.civitai_candidate_limit}`);
 

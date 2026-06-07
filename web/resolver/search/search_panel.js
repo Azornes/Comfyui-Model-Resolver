@@ -29,7 +29,7 @@ export const searchPanelMethods = {
     createEmptySearchState() {
         return {
             selectedSource: 'all',
-            selectedBaseModel: 'auto',
+            selectedBaseModel: this.getDefaultSearchBaseModel(),
             results: {
                 popular: null,
                 model_list: null,
@@ -45,6 +45,14 @@ export const searchPanelMethods = {
             sourceProgress: {},
             activeSearchRunId: null
         };
+    },
+
+    isAutoFillBaseModelEnabled() {
+        return localStorage.getItem('ModelResolver.autoFillBaseModel') !== 'false';
+    },
+
+    getDefaultSearchBaseModel() {
+        return this.isAutoFillBaseModelEnabled() ? 'auto' : 'none';
     },
 
     getKnownBaseModelOptions() {
@@ -250,7 +258,7 @@ export const searchPanelMethods = {
 
     getSearchBaseModelContext(missing = {}) {
         const state = this.getSearchState(missing);
-        const selected = state.selectedBaseModel || 'auto';
+        const selected = state.selectedBaseModel || this.getDefaultSearchBaseModel();
         if (selected === 'none') return '';
         if (selected === 'auto') return this.getDominantWorkflowBaseModel();
         return selected;
@@ -852,7 +860,7 @@ export const searchPanelMethods = {
         if (baseEl) {
             const options = this.getKnownBaseModelOptions();
             if (!options.some(option => option.value === state.selectedBaseModel)) {
-                state.selectedBaseModel = 'auto';
+                state.selectedBaseModel = this.getDefaultSearchBaseModel();
             }
             this.setDropdownValue(baseEl, state.selectedBaseModel, this.getSearchBaseModelLabel(state.selectedBaseModel));
         }
@@ -870,8 +878,8 @@ export const searchPanelMethods = {
 
     setSearchBaseModel(missing, baseModel, container) {
         const state = this.getSearchState(missing);
-        const nextBaseModel = baseModel || 'auto';
-        const changed = (state.selectedBaseModel || 'auto') !== nextBaseModel;
+        const nextBaseModel = baseModel || this.getDefaultSearchBaseModel();
+        const changed = (state.selectedBaseModel || this.getDefaultSearchBaseModel()) !== nextBaseModel;
         if (changed) {
             this.clearSearchProgressTimers(state.activeSearchRunId);
             state.results = this.createEmptySearchState().results;
@@ -1250,7 +1258,7 @@ export const searchPanelMethods = {
         const searchBaseListId = `search-base-list-${missing.node_id}-${missing.widget_index}`;
         const state = this.getSearchState(missing);
         const selectedSource = state.selectedSource || 'all';
-        const selectedBaseModel = state.selectedBaseModel || 'auto';
+        const selectedBaseModel = state.selectedBaseModel || this.getDefaultSearchBaseModel();
         const buttonText = options.buttonText
             || (this.hasSearchResultsForMissing(missing) ? 'Search Again' : 'Search');
 

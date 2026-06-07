@@ -58,6 +58,18 @@ export const optionsMethods = {
                             </div>
                         </div>
                         <div class="mr-options-sidebar-group">
+                            <div class="mr-options-sidebar-label">Search</div>
+                            <div class="mr-options-nav">
+                                <button type="button" class="mr-options-nav-btn" data-target="mr-options-section-search">
+                                    <span class="mr-options-nav-main">
+                                        <span class="mr-options-nav-icon" aria-hidden="true">${getSvgIcon('search')}</span>
+                                        <span>Defaults</span>
+                                    </span>
+                                    <span class="mr-options-nav-meta">03</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mr-options-sidebar-group">
                             <div class="mr-options-sidebar-label">Providers</div>
                             <div class="mr-options-nav">
                                 <button type="button" class="mr-options-nav-btn" data-target="mr-options-section-civitai">
@@ -65,14 +77,14 @@ export const optionsMethods = {
                                         <span class="mr-options-nav-icon mr-options-provider-icon mr-options-provider-icon-civitai" aria-hidden="true">${getSvgIcon('civitai')}</span>
                                         <span>CivitAI</span>
                                     </span>
-                                    <span class="mr-options-nav-meta">03</span>
+                                    <span class="mr-options-nav-meta">04</span>
                                 </button>
                                 <button type="button" class="mr-options-nav-btn" data-target="mr-options-section-hf">
                                     <span class="mr-options-nav-main">
                                         <span class="mr-options-nav-icon mr-options-provider-icon mr-options-provider-icon-huggingface" aria-hidden="true">${getSvgIcon('huggingface')}</span>
                                         <span>HuggingFace</span>
                                     </span>
-                                    <span class="mr-options-nav-meta">04</span>
+                                    <span class="mr-options-nav-meta">05</span>
                                 </button>
                             </div>
                         </div>
@@ -84,7 +96,7 @@ export const optionsMethods = {
                                         <span class="mr-options-nav-icon" aria-hidden="true">${getSvgIcon('database')}</span>
                                         <span>Maintenance</span>
                                     </span>
-                                    <span class="mr-options-nav-meta">05</span>
+                                    <span class="mr-options-nav-meta">06</span>
                                 </button>
                             </div>
                         </div>
@@ -102,6 +114,26 @@ export const optionsMethods = {
                                 <div class="mr-options-panel">
                                     <div class="mr-options-toggle-list">
                                         ${sourceDefaultsRows}
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                        <section id="mr-options-section-search" class="mr-options-card mr-options-section is-hidden">
+                            <div class="mr-options-section-head">
+                                <h4 class="mr-options-section-title">Search Defaults</h4>
+                            </div>
+                            <div class="mr-options-grid">
+                                <div class="mr-options-panel">
+                                    <div class="mr-options-toggle-list">
+                                        <label class="mr-options-toggle-row">
+                                            <div class="mr-options-toggle-copy">
+                                                <span class="mr-options-toggle-title">Auto-fill model filter <span class="mr-tooltip-badge" data-tooltip="When enabled, new searches use Auto with the detected workflow base model. When disabled, new searches start with Any model, and Auto remains available in the model dropdown.">?</span></span>
+                                            </div>
+                                            <span class="mr-options-toggle-control">
+                                                <input id="mr-options-auto-fill-base-model" class="mr-options-switch-input" type="checkbox" ${tokens.auto_fill_base_model ? 'checked' : ''}>
+                                                <span class="mr-options-switch"></span>
+                                            </span>
+                                        </label>
                                     </div>
                                 </div>
                             </div>
@@ -369,6 +401,7 @@ export const optionsMethods = {
         const hfUseApiSearchInput = this.contentElement.querySelector('#mr-options-hf-use-api-search');
         const hfUseComfyOrgFallbackInput = this.contentElement.querySelector('#mr-options-hf-use-comfy-org-fallback');
         const hfUseBraveFallbackInput = this.contentElement.querySelector('#mr-options-hf-use-brave-fallback');
+        const autoFillBaseModelInput = this.contentElement.querySelector('#mr-options-auto-fill-base-model');
         const hfTokenCheckBtn = this.contentElement.querySelector('#mr-options-hf-token-check');
         const hfTokenCheckStatus = this.contentElement.querySelector('#mr-options-hf-token-check-status');
         const braveKeyCheckBtn = this.contentElement.querySelector('#mr-options-brave-key-check');
@@ -408,6 +441,7 @@ export const optionsMethods = {
             hfUseApiSearchInput,
             hfUseComfyOrgFallbackInput,
             hfUseBraveFallbackInput,
+            autoFillBaseModelInput,
             ...sourceEnabledInputs,
         ].filter(Boolean);
 
@@ -935,6 +969,7 @@ export const optionsMethods = {
                     hf_use_api_search:            Boolean(hfUseApiSearchInput?.checked),
                     hf_use_comfy_org_fallback:    Boolean(hfUseComfyOrgFallbackInput?.checked),
                     hf_use_brave_fallback:        Boolean(hfUseBraveFallbackInput?.checked),
+                    auto_fill_base_model:          Boolean(autoFillBaseModelInput?.checked),
                     brave_search_api_key:         braveInput?.value || '',
                     search_source_enabled:        sourceEnabled,
                 };
@@ -949,6 +984,7 @@ export const optionsMethods = {
                 localStorage.setItem('ModelResolver.hfUseApiSearch',         newSettings.hf_use_api_search ? 'true' : 'false');
                 localStorage.setItem('ModelResolver.hfUseComfyOrgFallback',  newSettings.hf_use_comfy_org_fallback ? 'true' : 'false');
                 localStorage.setItem('ModelResolver.hfUseBraveFallback',     newSettings.hf_use_brave_fallback ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.autoFillBaseModel',      newSettings.auto_fill_base_model ? 'true' : 'false');
                 localStorage.setItem('ModelResolver.civitaiCandidateLimit',  `${civitaiCandidateLimit}`);
                 Object.entries(sourceEnabled).forEach(([key, val]) => {
                     localStorage.setItem(key, val ? 'true' : 'false');

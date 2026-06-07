@@ -186,7 +186,7 @@ export const workflowStateMethods = {
         }
 
         clone.selectedSource = clone.selectedSource || 'all';
-        clone.selectedBaseModel = clone.selectedBaseModel || 'auto';
+        clone.selectedBaseModel = clone.selectedBaseModel || this.getDefaultSearchBaseModel?.() || 'auto';
         clone.results = this.mergeSearchResults({}, clone.results || {});
         clone.lastAttemptSources = Array.isArray(clone.lastAttemptSources)
             ? clone.lastAttemptSources
@@ -231,7 +231,8 @@ export const workflowStateMethods = {
 
     isPersistableSearchState(state = {}) {
         if ((state?.selectedSource || 'all') !== 'all') return true;
-        if ((state?.selectedBaseModel || 'auto') !== 'auto') return true;
+        const defaultBaseModel = this.getDefaultSearchBaseModel?.() || 'auto';
+        if ((state?.selectedBaseModel || defaultBaseModel) !== defaultBaseModel) return true;
         if (state?.lastAttemptError) return true;
         if (this.hasSearchResults(state?.results || {})) return true;
 
