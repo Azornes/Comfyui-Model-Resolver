@@ -1236,7 +1236,7 @@ export const searchPanelMethods = {
                         class="search-show-details-btn mr-search-result-action-btn"
                         data-tooltip="Show more"
                         aria-label="Show more details"
-                        data-model="${this.escapeHtml(detailsData)}">${getSvgIcon('eye')}</button>
+                        data-model="${this.escapeHtml(detailsData)}">${getSvgIcon('moreCircle')}</button>
                 `;
             }
             if (downloadUrl) {
@@ -1255,7 +1255,7 @@ export const searchPanelMethods = {
                         class="search-open-page-btn mr-search-result-action-btn"
                         data-tooltip="Open model page"
                         aria-label="Open model page"
-                        data-url="${this.escapeHtml(openUrl)}">${getSvgIcon('externalLink')}</button>
+                        data-url="${this.escapeHtml(openUrl)}">${getSvgIcon('globe')}</button>
                 `;
             }
             if (!actions) {
