@@ -276,11 +276,14 @@ def _base_model_matches(candidate: str, preferred: Optional[str]) -> bool:
 
     from .popular import load_base_model_aliases
     aliases = load_base_model_aliases()
+    # Exact alias membership check - avoids false positives from substring matching
+    # e.g. prevents "zimage" (Z-Image alias) from matching "zimagebase" (ZImageBase)
     preferred_tokens = aliases.get(preferred_norm, [preferred_norm])
-    return any(
-        token and (token in candidate_norm or candidate_norm in token)
-        for token in preferred_tokens
-    )
+    if candidate_norm in preferred_tokens:
+        return True
+    # Symmetric check: if preferred is an alias of candidate's model family
+    candidate_tokens = aliases.get(candidate_norm, [candidate_norm])
+    return preferred_norm in candidate_tokens
 
 
 def _base_model_score(candidate: str, preferred: Optional[str]) -> float:
