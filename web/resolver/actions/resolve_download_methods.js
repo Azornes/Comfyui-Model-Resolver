@@ -1181,6 +1181,7 @@ export const resolveDownloadMethods = {
                 if (downloadEl && data.civitai?.download_url) {
                     if (missing) {
                         this.applyCivitaiUrnResult(missing, data.civitai);
+                        this.refreshSearchBaseModelLabels?.();
                         const downloadParent = downloadEl.parentElement;
                         downloadEl.outerHTML = this.renderKnownDownloadPanel(missing, missing.download_source);
                         this.wireDownloadSearchPanel(downloadParent || this.contentElement, missing);

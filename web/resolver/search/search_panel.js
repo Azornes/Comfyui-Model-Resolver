@@ -81,6 +81,27 @@ export const searchPanelMethods = {
             .replace(/[^a-z0-9]+/g, '');
     },
 
+    resolveBaseModelAlias(value = '') {
+        const token = this.normalizeBaseModelToken(value);
+        if (!token) return '';
+        for (const entry of this.getBaseModelAliases()) {
+            const aliases = [entry.value, ...(entry.aliases || [])];
+            if (aliases.some(alias => this.normalizeBaseModelToken(alias) === token)) {
+                return entry.value;
+            }
+        }
+        for (const entry of this.getBaseModelAliases()) {
+            const aliases = [entry.value, ...(entry.aliases || [])];
+            if (aliases.some(alias => {
+                const aliasToken = this.normalizeBaseModelToken(alias);
+                return aliasToken && (aliasToken.includes(token) || token.includes(aliasToken));
+            })) {
+                return entry.value;
+            }
+        }
+        return '';
+    },
+
     getBaseModelAliases() {
         const baseModelsList = this.baseModels?.base_models;
         if (Array.isArray(baseModelsList) && baseModelsList.length > 0) {
@@ -109,6 +130,9 @@ export const searchPanelMethods = {
         const values = [];
         const visit = (value, key = '') => {
             if (typeof value === 'string') {
+                if (/^urn:/i.test(value.trim())) {
+                    return;
+                }
                 if (/\.(safetensors|ckpt|pt|pth|bin|gguf|onnx)\b/i.test(value) || /model|checkpoint|unet|diffusion/i.test(key)) {
                     values.push(value);
                 }
@@ -126,7 +150,52 @@ export const searchPanelMethods = {
         return values.join(' ');
     },
 
+    getMissingBaseModelWeight(missing = {}) {
+        const category = String(missing.category || '').toLowerCase();
+        const nodeType = String(missing.node_type || '').toLowerCase();
+        if (
+            category.includes('checkpoint')
+            || category.includes('diffusion')
+            || category.includes('unet')
+            || nodeType.includes('checkpoint')
+            || nodeType.includes('unet')
+        ) {
+            return 8;
+        }
+        if (category.includes('lora') || nodeType.includes('lora')) {
+            return 2;
+        }
+        return 1;
+    },
+
+    getResolvedWorkflowBaseModelScores() {
+        const primaryScores = new Map();
+        const secondaryScores = new Map();
+        for (const missing of this.missingModels || []) {
+            const baseModel = missing?.civitai_info?.base_model
+                || missing?.download_source?.base_model
+                || '';
+            const canonical = this.resolveBaseModelAlias(baseModel);
+            if (!canonical) continue;
+            const weight = this.getMissingBaseModelWeight(missing);
+            const scores = weight >= 8 ? primaryScores : secondaryScores;
+            scores.set(canonical, (scores.get(canonical) || 0) + weight);
+        }
+        return primaryScores.size ? primaryScores : secondaryScores;
+    },
+
     getDominantWorkflowBaseModel() {
+        const resolvedScores = this.getResolvedWorkflowBaseModelScores();
+        if (resolvedScores.size) {
+            let bestResolved = null;
+            for (const [value, score] of resolvedScores.entries()) {
+                if (!bestResolved || score > bestResolved.score) {
+                    bestResolved = { value, score };
+                }
+            }
+            if (bestResolved) return bestResolved.value;
+        }
+
         const text = this.getWorkflowModelReferenceText();
         if (!text) return '';
         const normalizedText = this.normalizeBaseModelToken(text);
@@ -811,6 +880,16 @@ export const searchPanelMethods = {
         if (!el) return;
         el.dataset.value = value || '';
         el.value = label || value || '';
+    },
+
+    refreshSearchBaseModelLabels(container = this.contentElement) {
+        if (!container) return;
+        container.querySelectorAll?.('.mr-search-base-select').forEach((baseEl) => {
+            const value = baseEl.dataset?.value || 'auto';
+            if (value === 'auto') {
+                this.setDropdownValue(baseEl, value, this.getSearchBaseModelLabel(value));
+            }
+        });
     },
 
     normalizeVersionName(versionName) {
