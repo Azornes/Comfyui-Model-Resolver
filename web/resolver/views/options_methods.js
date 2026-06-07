@@ -50,7 +50,7 @@ export const optionsMethods = {
                                 </button>
                                 <button type="button" class="mr-options-nav-btn" data-target="mr-options-section-local-db">
                                     <span class="mr-options-nav-main">
-                                        <span class="mr-options-nav-icon mr-options-comfyui-icon" aria-hidden="true">${getSvgIcon('comfyui')}</span>
+                                        <span class="mr-options-nav-icon" aria-hidden="true">${getSvgIcon('database')}</span>
                                         <span>Local Database</span>
                                     </span>
                                     <span class="mr-options-nav-meta">02</span>
@@ -93,7 +93,7 @@ export const optionsMethods = {
                             <div class="mr-options-nav">
                                 <button type="button" class="mr-options-nav-btn" data-target="mr-options-section-maintenance">
                                     <span class="mr-options-nav-main">
-                                        <span class="mr-options-nav-icon" aria-hidden="true">${getSvgIcon('database')}</span>
+                                        <span class="mr-options-nav-icon" aria-hidden="true">${getSvgIcon('wrench')}</span>
                                         <span>Maintenance</span>
                                     </span>
                                     <span class="mr-options-nav-meta">06</span>
