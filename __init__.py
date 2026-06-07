@@ -629,6 +629,9 @@ class ModelResolverExtension:
                                             strength = 1.0
                                     break
 
+                        if ref.get("strength") is not None:
+                            strength = ref.get("strength")
+
                         # For text-based lora loaders (LoraLoaderV2, LoraManager), get strength from ref
                         if ref.get("is_lora_v2"):
                             strength = ref.get("strength")

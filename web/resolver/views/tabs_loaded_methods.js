@@ -129,17 +129,9 @@ export const tabsLoadedMethods = {
                 byCategory[cat] = { active: [], inactive: [] };
             }
 
-            // Determine if model is active or inactive
-            // For LoraLoaderV2/LoraManager: check model.active field
-            // For other nodes: check model.connected field (false means not connected or bypassed)
-            let isActive = true;
-            if (model.is_lora_v2) {
-                // For text-based lora loaders, check both active flag AND connected status
-                isActive = model.active !== false && model.connected !== false;
-            } else {
-                // For regular nodes, check connected status
-                isActive = model.connected !== false;
-            }
+            // Some loaders expose per-model enablement, e.g. LoraManager's
+            // active flag and rgthree Power Lora Loader's on flag.
+            const isActive = model.active !== false && model.connected !== false;
 
             if (isActive) {
                 byCategory[cat].active.push(model);

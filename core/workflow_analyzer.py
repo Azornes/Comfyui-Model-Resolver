@@ -393,21 +393,32 @@ def get_node_model_info(
                         full_path = None
                         exists = False
 
-                    model_refs.append(
-                        {
-                            "node_id": node_id,
-                            "node_type": node_type,
-                            "widget_index": idx,
-                            "original_path": value_str,
-                            "node_title": node_title,
-                            "category": category,
-                            "full_path": full_path,
-                            "exists": exists,
-                            "is_urn": False,
-                            "connected": is_active,
-                            "nested_key": nested_key,  # Track nested key for updates
-                        }
-                    )
+                    ref = {
+                        "node_id": node_id,
+                        "node_type": node_type,
+                        "widget_index": idx,
+                        "original_path": value_str,
+                        "node_title": node_title,
+                        "category": category,
+                        "full_path": full_path,
+                        "exists": exists,
+                        "is_urn": False,
+                        "connected": is_active,
+                        "nested_key": nested_key,  # Track nested key for updates
+                    }
+
+                    if nested_key == "lora":
+                        strength = value.get("strength")
+                        if strength is not None:
+                            try:
+                                ref["strength"] = float(strength)
+                            except (TypeError, ValueError):
+                                pass
+
+                        if isinstance(value.get("on"), bool):
+                            ref["active"] = value.get("on")
+
+                    model_refs.append(ref)
             continue
 
         value_str = str(value).strip()
