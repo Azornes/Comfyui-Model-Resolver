@@ -886,6 +886,9 @@ class ModelResolverExtension:
                     except (TypeError, ValueError):
                         version_id = None
 
+                    if source == "lora_manager_archive":
+                        source = "civitai"
+
                     if source not in {"civitai", "civarchive"}:
                         return web.json_response(
                             {"error": "Unsupported model details source"}, status=400

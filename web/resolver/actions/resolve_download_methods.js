@@ -1541,7 +1541,14 @@ export const resolveDownloadMethods = {
                 downloadFilename: archiveFilename,
                 category: missing.category,
                 openUrl: loraManagerArchiveResult.url || this.getModelCardUrl(loraManagerArchiveResult.download_url),
-                searchedAt: this.getSearchResultTimestamp(loraManagerArchiveResult)
+                searchedAt: this.getSearchResultTimestamp(loraManagerArchiveResult),
+                detailsContext: {
+                    ...loraManagerArchiveResult,
+                    source: 'lora_manager_archive',
+                    details_source: 'lora_manager_archive',
+                    missing_key: this.getMissingModelKey(missing),
+                    category: missing.category
+                }
             });
         }
 

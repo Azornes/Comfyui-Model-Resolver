@@ -107,7 +107,7 @@ export const modelInfoMethods = {
     canShowSourceDetails(model = {}) {
         const source = String(model.details_source || model.source || '').toLowerCase();
         return model?.context_scope === 'download_table'
-            && ['civitai', 'civarchive'].includes(source)
+            && ['civitai', 'civarchive', 'lora_manager_archive'].includes(source)
             && Boolean(model.model_id || model.modelId);
     },
 
