@@ -3734,7 +3734,7 @@
     min-width: 0;
     min-height: 0;
     overflow-y: auto;
-    padding: 16px 18px 34px;
+    padding: 12px 18px 28px;
 }
 .mr-model-details-side {
     min-width: 0;
@@ -3748,7 +3748,7 @@
     display: flex;
     gap: 7px;
     overflow-x: auto;
-    padding-bottom: 12px;
+    padding-bottom: 8px;
 }
 .mr-model-details-version-tab {
     display: inline-grid;
@@ -3786,9 +3786,9 @@
 }
 .mr-model-details-gallery {
     position: relative;
-    min-height: 440px;
-    height: min(660px, calc(100vh - 190px));
-    margin-top: 2px;
+    min-height: 320px;
+    height: min(520px, calc(100vh - 270px));
+    margin-top: 0;
     overflow: hidden;
 }
 .mr-model-details-gallery.is-single {
@@ -3798,7 +3798,7 @@
 }
 .mr-model-details-gallery-strip {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 16px;
     width: 100%;
     height: 100%;
@@ -3899,8 +3899,8 @@
     right: 12px;
 }
 .mr-model-details-description {
-    margin-top: 16px;
-    padding-top: 14px;
+    margin-top: 10px;
+    padding-top: 10px;
     border-top: 1px solid rgba(255,255,255,0.08);
     color: #cfd1d8;
     font-size: 13px;
@@ -4197,8 +4197,8 @@
         font-size: 18px;
     }
     .mr-model-details-gallery {
-        min-height: 360px;
-        height: min(560px, calc(100vh - 170px));
+        min-height: 300px;
+        height: min(480px, calc(100vh - 230px));
     }
     .mr-model-details-image {
         flex-basis: min(var(--mr-image-width, 330px), 88vw);
