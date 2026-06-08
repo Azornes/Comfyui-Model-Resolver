@@ -1447,9 +1447,13 @@ export const modelInfoMethods = {
                                 };
                                 const meta = this.getSourceModelMirrorMeta(mirror, mirror._index === 0);
                                 const isDead = this.isSourceModelMirrorDead(mirror);
-                                const title = isDead ? 'Likely dead link' : 'Download file';
-                                const actionIcon = getSvgIcon(isDead ? 'skull' : 'download');
-                                const rowClass = isDead ? ' is-dead' : '';
+                                const isGated = this.isSourceModelMirrorGated(mirror);
+                                const title = isDead ? 'Likely dead link' : (isGated ? 'Gated Download' : 'Download file');
+                                const actionIcon = getSvgIcon(isDead ? 'skull' : (isGated ? 'shield' : 'download'));
+                                const rowClass = [
+                                    isDead ? 'is-dead' : '',
+                                    isGated && !isDead ? 'is-gated' : ''
+                                ].filter(Boolean).map(value => ` ${value}`).join('');
                                 const payloadData = this.escapeHtml(encodeURIComponent(JSON.stringify(payload)));
                                 return `
                                     <button type="button"
@@ -1495,6 +1499,10 @@ export const modelInfoMethods = {
         return Boolean(mirror.is_dead || mirror.isDead || mirror.deleted_at || mirror.deletedAt);
     },
 
+    isSourceModelMirrorGated(mirror = {}) {
+        return Boolean(mirror.is_gated || mirror.isGated || mirror.gated);
+    },
+
     getSourceModelMirrorHost(url = '') {
         try {
             return new URL(url).hostname.replace(/^www\./, '');
@@ -1518,7 +1526,7 @@ export const modelInfoMethods = {
             isDefault ? 'Default' : '',
             this.isSourceModelMirrorDead(mirror) ? 'Likely dead' : '',
             host,
-            mirror.is_gated ? 'Gated' : '',
+            this.isSourceModelMirrorGated(mirror) ? 'Gated' : '',
             mirror.is_paid ? 'Paid' : '',
             mirror.sha256 ? `SHA256 ${String(mirror.sha256).slice(0, 10)}` : ''
         ].filter(Boolean);

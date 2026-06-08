@@ -4095,6 +4095,14 @@
     border-color: rgba(248,113,113,0.74);
     background: rgba(153,27,27,0.54);
 }
+.mr-model-details-mirror.is-gated {
+    border-color: rgba(202,138,4,0.62);
+    background: rgba(113,63,18,0.38);
+}
+.mr-model-details-mirror.is-gated:hover {
+    border-color: rgba(250,204,21,0.7);
+    background: rgba(133,77,14,0.56);
+}
 .mr-model-details-mirror-info {
     min-width: 0;
 }
@@ -4119,6 +4127,9 @@
 .mr-model-details-mirror.is-dead .mr-model-details-mirror-info small {
     color: rgba(254,202,202,0.72);
 }
+.mr-model-details-mirror.is-gated .mr-model-details-mirror-info small {
+    color: rgba(254,240,138,0.72);
+}
 .mr-model-details-mirror-action {
     display: inline-flex;
     align-items: center;
@@ -4133,6 +4144,9 @@
 }
 .mr-model-details-mirror.is-dead .mr-model-details-mirror-action {
     color: #f87171;
+}
+.mr-model-details-mirror.is-gated .mr-model-details-mirror-action {
+    color: #facc15;
 }
 .mr-model-details-use {
     min-height: 31px;
