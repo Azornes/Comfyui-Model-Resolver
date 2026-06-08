@@ -28,6 +28,7 @@ export const modelInfoMethods = {
         const hasLocalPath = Boolean(model?.path || model?.resolved_path);
         this.setContextMenuItemVisible('showInfo', !isDownloadTableContext);
         this.setContextMenuItemVisible('showMore', canShowMore);
+        this.setContextMenuItemVisible('civitai', !isDownloadTableContext);
         this.setContextMenuItemVisible('openFolder', !isDownloadTableContext && hasLocalPath);
         this.setContextMenuDividerVisible('source', !isDownloadTableContext || canShowMore);
         this.setContextMenuDividerVisible('folder', !isDownloadTableContext && hasLocalPath);
@@ -144,6 +145,12 @@ export const modelInfoMethods = {
     async openInCivitAI(model) {
         if (!model) return;
 
+        const directUrl = this.getKnownCivitaiModelUrl(model);
+        if (directUrl) {
+            window.open(directUrl, '_blank');
+            return;
+        }
+
         const name = model.name || model.original_path?.split(/[\/\\]/).pop() || '';
         if (!name) return;
 
@@ -180,6 +187,27 @@ export const modelInfoMethods = {
             const searchUrl = `https://civitai.com/search?q=${encodeURIComponent(searchName)}`;
             window.open(searchUrl, '_blank');
         }
+    },
+
+    getKnownCivitaiModelUrl(model = {}) {
+        const candidates = [
+            model.model_url,
+            model.workflow_model_url,
+            model.openUrl,
+            model.url
+        ];
+        for (const url of candidates) {
+            const value = String(url || '');
+            if (/^https:\/\/(?:www\.)?civitai\.com\/models\/\d+/i.test(value)) {
+                return value;
+            }
+        }
+        const modelId = model.model_id || model.modelId;
+        const versionId = model.version_id || model.versionId;
+        if (modelId) {
+            return `https://civitai.com/models/${modelId}${versionId ? `?modelVersionId=${versionId}` : ''}`;
+        }
+        return '';
     },
 
     /**

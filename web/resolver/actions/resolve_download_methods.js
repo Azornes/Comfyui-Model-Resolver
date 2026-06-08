@@ -572,7 +572,7 @@ export const resolveDownloadMethods = {
                 );
             }
             if (downloadBtn) {
-                downloadBtn.textContent = '✓ Done';
+                this.restoreDownloadButtonReadyState(downloadBtn);
             }
 
         } catch (error) {
@@ -731,9 +731,7 @@ export const resolveDownloadMethods = {
                     progressDiv.innerHTML = this.renderStatusMessage('Download complete. Checking local matches...', 'success');
                 }
                 if (downloadBtn) {
-                    downloadBtn.textContent = '✓ Done';
-                    downloadBtn.classList.remove('mr-is-success-action');
-                    downloadBtn.classList.add('mr-btn-primary');
+                    this.restoreDownloadButtonReadyState(downloadBtn);
                 }
                 delete this.activeDownloads[downloadId];
                 this.updateDownloadAllButtonState();
@@ -798,6 +796,17 @@ export const resolveDownloadMethods = {
             delete this.activeDownloads[downloadId];
             this.updateDownloadAllButtonState();
         }
+    },
+
+    restoreDownloadButtonReadyState(downloadBtn) {
+        if (!downloadBtn) return;
+        downloadBtn.disabled = false;
+        downloadBtn.classList.remove('mr-is-success-action', 'mr-btn-primary');
+        if (downloadBtn.classList.contains('search-download-btn')) {
+            downloadBtn.innerHTML = getSvgIcon('download');
+            return;
+        }
+        downloadBtn.innerHTML = '<span class="mr-btn-icon">☁</span> Download';
     },
 
     /**

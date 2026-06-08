@@ -1503,13 +1503,15 @@ export const searchPanelMethods = {
             model_id: missing.download_source?.model_id || ids.modelId,
             version_id: missing.download_source?.version_id || ids.versionId,
             base_model: missing.civitai_info?.base_model || missing.download_source?.base_model,
-            tags: missing.civitai_info?.tags || missing.download_source?.tags || []
+            tags: missing.civitai_info?.tags || missing.download_source?.tags || [],
+            searchedAt: missing.download_source?.searchedAt || missing.download_source?.searched_at
         };
     },
 
     applyCivitaiUrnResult(missing, civitai = {}) {
         if (!missing || !civitai) return;
         const ids = this.getUrnIds(missing);
+        const searchedAt = civitai.searchedAt || civitai.searched_at || new Date().toISOString();
         missing.civitai_info = {
             model_name: civitai.name,
             version_name: civitai.version_name,
@@ -1531,7 +1533,8 @@ export const searchPanelMethods = {
             version_id: civitai.version_id || ids.versionId,
             model_url: civitai.url || `https://civitai.com/models/${ids.modelId}?modelVersionId=${ids.versionId}`,
             base_model: civitai.base_model,
-            tags: civitai.tags || []
+            tags: civitai.tags || [],
+            searchedAt
         };
     },
 

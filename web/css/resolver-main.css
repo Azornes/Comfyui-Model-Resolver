@@ -3753,10 +3753,11 @@
 .mr-model-details-version-tab {
     display: inline-grid;
     gap: 2px;
-    min-width: 118px;
+    flex: 0 0 auto;
+    min-width: max-content;
     max-width: 230px;
     min-height: 38px;
-    padding: 6px 10px;
+    padding: 6px 11px;
     border: 1px solid rgba(255,255,255,0.11);
     border-radius: 6px;
     background: rgba(255,255,255,0.06);
