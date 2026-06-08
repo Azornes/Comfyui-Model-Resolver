@@ -94,6 +94,69 @@ def _size_kb_to_bytes(value: Any) -> Optional[int]:
         return None
 
 
+def _size_value_to_bytes(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return int(value) if value > 0 else None
+    if not isinstance(value, str):
+        return None
+
+    text = value.strip()
+    if not text:
+        return None
+    match = re.search(r"([\d.,]+)\s*(tb|gb|mb|kb|b)?", text, flags=re.IGNORECASE)
+    if not match:
+        return None
+    try:
+        number = float(match.group(1).replace(",", ""))
+    except ValueError:
+        return None
+    unit = (match.group(2) or "b").lower()
+    multipliers = {
+        "tb": 1024 ** 4,
+        "gb": 1024 ** 3,
+        "mb": 1024 ** 2,
+        "kb": 1024,
+        "b": 1,
+    }
+    return int(number * multipliers.get(unit, 1))
+
+
+def _extract_file_size_bytes(file_info: Dict[str, Any]) -> Optional[int]:
+    if not isinstance(file_info, dict):
+        return None
+
+    for key in ("sizeKB", "size_kb"):
+        size = _size_kb_to_bytes(file_info.get(key))
+        if size:
+            return size
+
+    for key in ("sizeBytes", "size_bytes", "fileSize", "file_size", "bytes"):
+        size = _size_value_to_bytes(file_info.get(key))
+        if size:
+            return size
+
+    raw_size = file_info.get("size")
+    if isinstance(raw_size, str):
+        size = _size_value_to_bytes(raw_size)
+        if size:
+            return size
+    elif isinstance(raw_size, (int, float)) and raw_size > 100_000_000:
+        return int(raw_size)
+
+    mirrors = file_info.get("mirrors") or []
+    if not isinstance(mirrors, list):
+        mirrors = [mirrors]
+    for mirror in mirrors:
+        if isinstance(mirror, dict):
+            size = _extract_file_size_bytes(mirror)
+            if size:
+                return size
+
+    return None
+
+
 def _normalize_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(payload, dict):
         return {}
@@ -348,6 +411,13 @@ def _mirror_from_top_file(file_data: Dict[str, Any]) -> Optional[Dict[str, Any]]
         "model_id": file_data.get("model_id") or file_data.get("modelId"),
         "model_version_id": file_data.get("model_version_id")
         or file_data.get("modelVersionId"),
+        "sizeKB": file_data.get("sizeKB") or file_data.get("size_kb"),
+        "sizeBytes": file_data.get("sizeBytes")
+        or file_data.get("size_bytes")
+        or file_data.get("fileSize")
+        or file_data.get("file_size")
+        or file_data.get("bytes"),
+        "size": file_data.get("size"),
         "deletedAt": file_data.get("deletedAt") or file_data.get("deleted_at"),
         "is_dead": file_data.get("is_dead")
         or file_data.get("isDead")
@@ -387,7 +457,13 @@ def _transform_file_entry(file_data: Dict[str, Any]) -> Dict[str, Any]:
         "id": file_data.get("id"),
         "name": name,
         "type": file_data.get("type"),
-        "sizeKB": file_data.get("sizeKB"),
+        "sizeKB": file_data.get("sizeKB") or file_data.get("size_kb"),
+        "sizeBytes": file_data.get("sizeBytes")
+        or file_data.get("size_bytes")
+        or file_data.get("fileSize")
+        or file_data.get("file_size")
+        or file_data.get("bytes"),
+        "size": file_data.get("size"),
         "downloadUrl": download_url,
         "primary": bool(file_data.get("primary", file_data.get("is_primary", False))),
         "mirrors": transformed_mirrors,
@@ -432,7 +508,13 @@ def _merge_top_file_mirrors(
                     "id": top_file.get("id"),
                     "name": mirror.get("filename"),
                     "type": top_file.get("type") or "Model",
-                    "sizeKB": top_file.get("sizeKB"),
+                    "sizeKB": top_file.get("sizeKB") or top_file.get("size_kb"),
+                    "sizeBytes": top_file.get("sizeBytes")
+                    or top_file.get("size_bytes")
+                    or top_file.get("fileSize")
+                    or top_file.get("file_size")
+                    or top_file.get("bytes"),
+                    "size": top_file.get("size"),
                     "downloadUrl": mirror.get("url"),
                     "primary": True,
                     "mirrors": [mirror],
@@ -460,6 +542,10 @@ def _merge_top_file_mirrors(
         mirror_url = mirror.get("url")
         if mirror_url and not any(existing.get("url") == mirror_url for existing in mirrors):
             mirrors.append(mirror)
+        if not _extract_file_size_bytes(target):
+            target_size_bytes = _extract_file_size_bytes(top_file)
+            if target_size_bytes:
+                target["sizeBytes"] = target_size_bytes
 
     return files
 
@@ -621,7 +707,7 @@ def _normalize_archive_file(file_info: Dict[str, Any], model_id: Optional[int], 
         "id": transformed.get("id"),
         "name": transformed.get("name"),
         "type": transformed.get("type"),
-        "size": _size_kb_to_bytes(transformed.get("sizeKB")),
+        "size": _extract_file_size_bytes(transformed),
         "download_url": download_urls[0] if download_urls else transformed.get("downloadUrl"),
         "download_urls": download_urls,
         "primary": bool(transformed.get("primary")),
@@ -956,7 +1042,7 @@ def _build_result_from_payload(
         "url": civarchive_url,
         "download_url": download_urls[0],
         "download_urls": download_urls,
-        "size": _size_kb_to_bytes(selected_file.get("sizeKB")),
+        "size": _extract_file_size_bytes(selected_file),
         "base_model": version.get("baseModel") or version.get("base_model") or version.get("baseModelType"),
         "tags": tags,
         "trained_words": trained_words,
