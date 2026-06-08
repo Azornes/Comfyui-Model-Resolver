@@ -1114,6 +1114,12 @@ export const searchPanelMethods = {
         );
         const modelName = modelParts.name || downloadFilename;
         const fullModelName = this.getVersionedModelName(modelName, modelParts.version);
+        const baseModel = downloadSource.base_model || missing.civitai_info?.base_model || '';
+        const secondaryParts = [
+            sourceSecondary,
+            fullModelName && fullModelName !== downloadFilename ? downloadFilename : '',
+            baseModel
+        ].filter(Boolean);
 
         return {
             sourceKey,
@@ -1121,7 +1127,7 @@ export const searchPanelMethods = {
             model: modelName,
             version: modelParts.version,
             filename: downloadFilename,
-            secondary: sourceSecondary || (fullModelName && fullModelName !== downloadFilename ? downloadFilename : ''),
+            secondary: secondaryParts.join(' / '),
             match: isFromWorkflow
                 ? { label: 'Provided', className: 'strong' }
                 : this.getSearchResultMatchDisplay(downloadSource, 'Known', 'strong'),

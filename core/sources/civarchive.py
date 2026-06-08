@@ -8,6 +8,7 @@ import html
 import json
 import os
 import re
+import time
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, urljoin, urlparse
 
@@ -122,20 +123,34 @@ def _request_json(
     timeout: int = 20,
 ) -> Optional[Dict[str, Any]]:
     url = f"{CIVARCHIVE_API_URL}{path}"
-    try:
-        response = requests.get(
-            url,
-            params={k: v for k, v in (params or {}).items() if v is not None},
-            headers=REQUEST_HEADERS,
-            timeout=timeout,
-        )
-    except Exception as e:
-        log_warn(f"CivArchive API request failed: path={path}, error={e}")
-        return None
+    response = None
+    request_params = {k: v for k, v in (params or {}).items() if v is not None}
+    for attempt in range(2):
+        try:
+            response = requests.get(
+                url,
+                params=request_params,
+                headers=REQUEST_HEADERS,
+                timeout=timeout,
+            )
+        except Exception as e:
+            log_warn(f"CivArchive API request failed: path={path}, error={e}")
+            return None
 
-    if response.status_code != 200:
+        if response.status_code != 429 or attempt == 1:
+            break
+
+        retry_after = response.headers.get("Retry-After")
+        try:
+            delay = float(retry_after) if retry_after else 1.2
+        except (TypeError, ValueError):
+            delay = 1.2
+        time.sleep(max(0.5, min(delay, 3.0)))
+
+    if response is None or response.status_code != 200:
+        status = response.status_code if response is not None else "no-response"
         log_debug(
-            f"CivArchive API returned {response.status_code}: path={path}, params={params}"
+            f"CivArchive API returned {status}: path={path}, params={params}"
         )
         return None
 
@@ -144,6 +159,50 @@ def _request_json(
     except Exception as e:
         log_warn(f"CivArchive API JSON parse failed: path={path}, error={e}")
         return None
+
+
+def _extract_model_payload_from_page(
+    model_id: int,
+    version_id: Optional[int] = None,
+    timeout: int = 20,
+) -> Optional[Dict[str, Any]]:
+    params = {"modelVersionId": version_id} if version_id is not None else None
+    try:
+        response = requests.get(
+            f"{CIVARCHIVE_BASE_URL}/models/{model_id}",
+            params=params,
+            headers=REQUEST_HEADERS,
+            timeout=timeout,
+        )
+    except Exception as e:
+        log_warn(f"CivArchive model page request failed: model_id={model_id}, error={e}")
+        return None
+
+    if response.status_code != 200:
+        log_debug(
+            f"CivArchive model page returned {response.status_code}: model_id={model_id}, version_id={version_id}"
+        )
+        return None
+
+    next_data = _extract_next_data(response.text)
+    page_props = next_data.get("props", {}).get("pageProps", {})
+    if isinstance(page_props.get("data"), dict):
+        return page_props["data"]
+    if isinstance(page_props.get("model"), dict):
+        return page_props["model"]
+    return page_props if isinstance(page_props, dict) and page_props else None
+
+
+def _request_model_payload(
+    model_id: int,
+    version_id: Optional[int] = None,
+    timeout: int = 20,
+) -> Optional[Dict[str, Any]]:
+    params = {"modelVersionId": version_id} if version_id is not None else None
+    payload = _request_json(f"/models/{model_id}", params=params, timeout=timeout)
+    if payload:
+        return payload
+    return _extract_model_payload_from_page(model_id, version_id, timeout=timeout)
 
 
 def _search_page(
@@ -290,6 +349,11 @@ def _mirror_from_top_file(file_data: Dict[str, Any]) -> Optional[Dict[str, Any]]
         "model_version_id": file_data.get("model_version_id")
         or file_data.get("modelVersionId"),
         "deletedAt": file_data.get("deletedAt") or file_data.get("deleted_at"),
+        "is_dead": file_data.get("is_dead")
+        or file_data.get("isDead")
+        or file_data.get("likelyDead")
+        or file_data.get("likely_dead")
+        or file_data.get("dead"),
         "is_gated": file_data.get("is_gated"),
         "is_paid": file_data.get("is_paid"),
     }
@@ -454,6 +518,81 @@ def _collect_download_urls(file_info: Dict[str, Any]) -> List[str]:
     return non_civitai_urls + civitai_urls
 
 
+def _normalize_archive_mirrors(file_info: Dict[str, Any]) -> List[Dict[str, Any]]:
+    mirrors = file_info.get("mirrors") or []
+    if not isinstance(mirrors, list):
+        mirrors = [mirrors]
+
+    normalized: List[Dict[str, Any]] = []
+    seen_urls = set()
+    for mirror in mirrors:
+        if not isinstance(mirror, dict):
+            continue
+        url = _normalize_download_url(mirror.get("url"))
+        if not url or url in seen_urls:
+            continue
+        seen_urls.add(url)
+        sha256 = mirror.get("sha256") or mirror.get("hash")
+        deleted_at = mirror.get("deletedAt") or mirror.get("deleted_at")
+        is_dead = bool(
+            deleted_at
+            or mirror.get("is_dead")
+            or mirror.get("isDead")
+            or mirror.get("likelyDead")
+            or mirror.get("likely_dead")
+            or mirror.get("dead")
+            or str(mirror.get("status") or "").lower() in {"dead", "deleted", "unavailable", "missing"}
+        )
+        normalized.append(
+            {
+                "url": url,
+                "source": mirror.get("source") or mirror.get("platform"),
+                "filename": mirror.get("filename") or mirror.get("name") or file_info.get("name"),
+                "sha256": sha256,
+                "hash": sha256,
+                "deleted_at": deleted_at,
+                "is_dead": is_dead,
+                "is_gated": mirror.get("is_gated"),
+                "is_paid": mirror.get("is_paid"),
+            }
+        )
+
+    download_url = _normalize_download_url(file_info.get("downloadUrl"))
+    if download_url and download_url not in seen_urls:
+        normalized.append(
+            {
+                "url": download_url,
+                "source": file_info.get("source") or file_info.get("platform"),
+                "filename": file_info.get("name") or file_info.get("filename"),
+                "sha256": file_info.get("sha256"),
+                "hash": file_info.get("sha256"),
+                "deleted_at": file_info.get("deletedAt") or file_info.get("deleted_at"),
+                "is_dead": bool(
+                    file_info.get("deletedAt")
+                    or file_info.get("deleted_at")
+                    or file_info.get("is_dead")
+                    or file_info.get("isDead")
+                    or file_info.get("likelyDead")
+                    or file_info.get("likely_dead")
+                    or file_info.get("dead")
+                    or str(file_info.get("status") or "").lower() in {"dead", "deleted", "unavailable", "missing"}
+                ),
+                "is_gated": file_info.get("is_gated"),
+                "is_paid": file_info.get("is_paid"),
+            }
+        )
+
+    non_civitai = [
+        mirror for mirror in normalized
+        if not str(mirror.get("url") or "").startswith(CIVITAI_DOWNLOAD_URL_PREFIXES)
+    ]
+    civitai = [
+        mirror for mirror in normalized
+        if str(mirror.get("url") or "").startswith(CIVITAI_DOWNLOAD_URL_PREFIXES)
+    ]
+    return non_civitai + civitai
+
+
 def _normalize_archive_image(image: Dict[str, Any]) -> Dict[str, Any]:
     meta = image.get("meta") if isinstance(image.get("meta"), dict) else {}
     return {
@@ -476,6 +615,8 @@ def _normalize_archive_file(file_info: Dict[str, Any], model_id: Optional[int], 
     transformed = _transform_file_entry(file_info)
     download_urls = _collect_download_urls(transformed)
     hashes = transformed.get("hashes") if isinstance(transformed.get("hashes"), dict) else {}
+    metadata = transformed.get("metadata") if isinstance(transformed.get("metadata"), dict) else {}
+    mirrors = _normalize_archive_mirrors(transformed)
     return {
         "id": transformed.get("id"),
         "name": transformed.get("name"),
@@ -486,6 +627,9 @@ def _normalize_archive_file(file_info: Dict[str, Any], model_id: Optional[int], 
         "primary": bool(transformed.get("primary")),
         "sha256": transformed.get("sha256") or hashes.get("SHA256") or hashes.get("sha256"),
         "hashes": hashes,
+        "metadata": metadata,
+        "mirrors": mirrors,
+        "mirror_count": len(mirrors),
         "model_id": model_id or transformed.get("modelId"),
         "version_id": version_id or transformed.get("modelVersionId"),
     }
@@ -520,7 +664,7 @@ def _normalize_archive_version(
     return {
         "id": version_id,
         "name": version.get("name") or "",
-        "base_model": version.get("baseModel"),
+        "base_model": version.get("baseModel") or version.get("base_model") or version.get("baseModelType"),
         "published_at": version.get("publishedAt") or version.get("createdAt"),
         "updated_at": version.get("updatedAt"),
         "description": version.get("description") or "",
@@ -540,8 +684,7 @@ def get_civarchive_model_details(
     if not model_id:
         return None
 
-    params = {"modelVersionId": version_id} if version_id is not None else None
-    payload = _request_json(f"/models/{model_id}", params=params, timeout=25)
+    payload = _request_model_payload(model_id, version_id, timeout=25)
     if not payload and version_id:
         resolved = resolve_civarchive_model_version(model_id, version_id)
         if not resolved:
@@ -615,40 +758,16 @@ def get_civarchive_model_details(
     active_version = model_block.get("version") if isinstance(model_block.get("version"), dict) else {}
     active_version_id = _coerce_int(active_version.get("id"))
     hydrated_versions: List[Dict[str, Any]] = []
-    hydration_cache: Dict[int, Dict[str, Any]] = {}
 
     for version_summary in raw_versions:
         if not isinstance(version_summary, dict):
             continue
 
         current_id = _coerce_int(version_summary.get("id"))
-        full_version = None
         if current_id and active_version_id and current_id == active_version_id:
-            full_version = {**version_summary, **active_version}
-        elif current_id:
-            cached = hydration_cache.get(current_id)
-            if cached is None:
-                version_payload = _request_json(
-                    f"/models/{model_id}",
-                    params={"modelVersionId": current_id},
-                    timeout=25,
-                )
-                version_data = _normalize_payload(version_payload or {})
-                version_model = (
-                    version_data.get("model")
-                    if isinstance(version_data.get("model"), dict)
-                    else version_data
-                )
-                cached = (
-                    version_model.get("version")
-                    if isinstance(version_model.get("version"), dict)
-                    else {}
-                )
-                hydration_cache[current_id] = cached
-            if cached:
-                full_version = {**version_summary, **cached}
-
-        hydrated_versions.append(full_version or version_summary)
+            hydrated_versions.append({**version_summary, **active_version})
+        else:
+            hydrated_versions.append(version_summary)
 
     versions = [
         _normalize_archive_version(version, context, top_files)
@@ -838,7 +957,7 @@ def _build_result_from_payload(
         "download_url": download_urls[0],
         "download_urls": download_urls,
         "size": _size_kb_to_bytes(selected_file.get("sizeKB")),
-        "base_model": version.get("baseModel"),
+        "base_model": version.get("baseModel") or version.get("base_model") or version.get("baseModelType"),
         "tags": tags,
         "trained_words": trained_words,
         "images": version.get("images", []),
@@ -885,7 +1004,7 @@ def resolve_civarchive_model_version(
         return None
 
     params = {"modelVersionId": version_id} if version_id is not None else None
-    payload = _request_json(f"/models/{model_id}", params=params)
+    payload = _request_model_payload(model_id, version_id)
     if not payload:
         return None
 

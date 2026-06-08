@@ -1488,13 +1488,18 @@ export const resolveDownloadMethods = {
         if (civarchiveResult && civarchiveResult.download_url) {
             const archiveFilename = civarchiveResult.filename || missing.original_path?.split('/').pop()?.split('\\').pop() || '';
             const archiveName = civarchiveResult.name || archiveFilename || 'Model';
+            const archiveSecondary = [
+                archiveName && archiveName !== archiveFilename ? archiveFilename : '',
+                civarchiveResult.platform || '',
+                civarchiveResult.base_model || ''
+            ].filter(Boolean).join(' / ');
             addRow({
                 sourceKey: 'civarchive',
                 sourceLabel: 'CivArchive',
                 model: archiveName,
                 version: civarchiveResult.version_name || '',
                 filename: archiveFilename,
-                secondary: archiveName && archiveName !== archiveFilename ? archiveFilename : (civarchiveResult.platform || civarchiveResult.base_model || ''),
+                secondary: archiveSecondary,
                 match: this.getSearchResultMatchDisplay(civarchiveResult),
                 size: this.formatSearchResultSize(civarchiveResult),
                 downloadUrl: civarchiveResult.download_url,
@@ -1535,13 +1540,17 @@ export const resolveDownloadMethods = {
             const modelUrl = civitaiResult.url || (civitaiResult.model_id ? `https://civitai.com/models/${civitaiResult.model_id}${civitaiResult.version_id ? `?modelVersionId=${civitaiResult.version_id}` : ''}` : '');
             const downloadFilename = missing.civitai_info?.expected_filename || civitaiResult.filename || civitaiResult.name;
             const modelName = missing.civitai_info?.model_name || civitaiResult.name || downloadFilename || 'Model';
+            const civitaiSecondary = [
+                civitaiResult.type || '',
+                civitaiResult.base_model || missing.civitai_info?.base_model || ''
+            ].filter(Boolean).join(' / ');
             addRow({
                 sourceKey: 'civitai',
                 sourceLabel: 'CivitAI',
                 model: modelName,
                 version: missing.civitai_info?.version_name || civitaiResult.version_name || '',
                 filename: downloadFilename,
-                secondary: civitaiResult.type || civitaiResult.base_model || '',
+                secondary: civitaiSecondary,
                 match: this.getSearchResultMatchDisplay(civitaiResult),
                 size: this.formatSearchResultSize(civitaiResult),
                 downloadUrl: civitaiResult.download_url,

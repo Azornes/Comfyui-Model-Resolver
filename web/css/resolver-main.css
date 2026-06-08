@@ -3975,6 +3975,9 @@
     border-radius: 7px;
     background: rgba(255,255,255,0.04);
 }
+.mr-model-details-file > .mr-model-details-mirrors {
+    grid-column: 1 / -1;
+}
 .mr-model-details-file.is-primary {
     border-color: rgba(114,211,138,0.28);
     background: rgba(114,211,138,0.08);
@@ -3997,11 +4000,149 @@
     color: rgba(255,255,255,0.58);
     font-size: 11px;
 }
+.mr-model-details-file-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 7px;
+}
+.mr-model-details-file-badges span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 20px;
+    max-width: 100%;
+    padding: 2px 6px;
+    border-radius: 5px;
+    background: rgba(255,255,255,0.075);
+    color: rgba(255,255,255,0.78);
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 1;
+}
+.mr-model-details-mirrors {
+    display: grid;
+    gap: 10px;
+    margin-top: 2px;
+    padding-top: 9px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+}
+.mr-model-details-mirrors-title {
+    color: rgba(255,255,255,0.62);
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0;
+    text-transform: uppercase;
+}
+.mr-model-details-mirror-group {
+    display: grid;
+    gap: 7px;
+}
+.mr-model-details-mirror-group-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    color: rgba(255,255,255,0.56);
+    font-size: 11px;
+    font-weight: 800;
+}
+.mr-model-details-mirror-platform-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+}
+.mr-model-details-mirror-platform-icon svg {
+    width: 18px;
+    height: 18px;
+}
+.mr-model-details-mirror-list {
+    display: grid;
+    gap: 6px;
+    padding-left: 25px;
+}
+.mr-model-details-mirror {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    min-width: 0;
+    width: 100%;
+    min-height: 48px;
+    padding: 9px 10px;
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 6px;
+    background: rgba(0,0,0,0.15);
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    transition: background 120ms ease, border-color 120ms ease;
+}
+.mr-model-details-mirror:hover {
+    border-color: rgba(255,255,255,0.13);
+    background: rgba(255,255,255,0.07);
+}
+.mr-model-details-mirror.is-dead {
+    border-color: rgba(185,28,28,0.58);
+    background: rgba(127,29,29,0.36);
+}
+.mr-model-details-mirror.is-dead:hover {
+    border-color: rgba(248,113,113,0.74);
+    background: rgba(153,27,27,0.54);
+}
+.mr-model-details-mirror-info {
+    min-width: 0;
+}
+.mr-model-details-mirror-info strong,
+.mr-model-details-mirror-info small {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.mr-model-details-mirror-info strong {
+    color: #f0f0f2;
+    font-size: 11px;
+    font-weight: 800;
+}
+.mr-model-details-mirror-info small {
+    margin-top: 3px;
+    color: rgba(255,255,255,0.42);
+    font-size: 10px;
+}
+.mr-model-details-mirror.is-dead .mr-model-details-mirror-info small {
+    color: rgba(254,202,202,0.72);
+}
+.mr-model-details-mirror-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    color: rgba(255,255,255,0.56);
+}
+.mr-model-details-mirror-action svg {
+    width: 17px;
+    height: 17px;
+}
+.mr-model-details-mirror.is-dead .mr-model-details-mirror-action {
+    color: #f87171;
+}
 .mr-model-details-use {
     min-height: 31px;
     padding: 0 10px;
     border-radius: 6px;
     font-size: 11px;
+}
+.mr-model-details-mirror.mr-model-details-use {
+    min-height: 48px;
+    padding: 9px 10px;
+    font-size: inherit;
 }
 .mr-model-details-loading {
     display: flex;
@@ -4050,6 +4191,12 @@
     }
     .mr-model-details-file {
         grid-template-columns: 1fr;
+    }
+    .mr-model-details-mirror {
+        grid-template-columns: 1fr;
+    }
+    .mr-model-details-mirror-list {
+        padding-left: 0;
     }
 }
 

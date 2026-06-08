@@ -1186,6 +1186,47 @@ export const modelInfoMethods = {
         `;
     },
 
+    async fetchSourceModelDetailsVersion(details, versionId) {
+        if (!details?._detailsData || !versionId) return;
+
+        try {
+            const data = details._detailsData;
+            const tokens = this.getStoredTokens?.() || {};
+            const response = await api.fetchApi('/model_resolver/model-details', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    source: data.source || details._sourceModel?.details_source || details._sourceModel?.source,
+                    model_id: data.model_id || details._sourceModel?.model_id || details._sourceModel?.modelId,
+                    version_id: versionId,
+                    civitai_key: tokens.civitai_key || ''
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Version details request failed: ${response.status}`);
+            }
+
+            const fresh = await response.json();
+            const freshVersion = fresh.selected_version;
+            if (!freshVersion?.id) return;
+
+            data.versions = (data.versions || []).map(version =>
+                String(version.id) === String(freshVersion.id)
+                    ? { ...version, ...freshVersion }
+                    : version
+            );
+            data.selected_version = data.versions.find(version => String(version.id) === String(freshVersion.id)) || freshVersion;
+            if (String(details._selectedVersionId || '') !== String(freshVersion.id)) return;
+
+            details.innerHTML = this.renderSourceModelDetails(data, details._sourceModel || {});
+            this.bindTooltips(details);
+        } catch (error) {
+            console.error('Model Resolver: failed to fetch source model version details:', error);
+            this.showNotification?.('Failed to load this model version.', 'error');
+        }
+    },
+
     renderSourceModelDetails(data = {}, contextModel = {}) {
         const versions = Array.isArray(data.versions) ? data.versions : [];
         const selectedVersionId = String(data.selected_version?.id || data.version_id || versions[0]?.id || '');
@@ -1283,6 +1324,8 @@ export const modelInfoMethods = {
         }
 
         return files.map((file, index) => {
+            const fileMeta = this.getSourceModelFileMeta(file);
+            const mirrors = this.getSourceModelMirrors(file);
             const payload = {
                 source: data.source || contextModel.details_source || contextModel.source,
                 model_id: data.model_id || contextModel.model_id,
@@ -1299,18 +1342,181 @@ export const modelInfoMethods = {
                 match_type: 'selected',
                 confidence: 100
             };
+            const mirrorList = mirrors.length > 1
+                ? this.renderSourceModelMirrors(mirrors, payload)
+                : '';
             return `
                 <div class="mr-model-details-file ${file.primary ? 'is-primary' : ''}">
                     <div>
                         <strong>${this.escapeHtml(file.name || `File ${index + 1}`)}</strong>
-                        <span>${this.escapeHtml([file.type, this.formatSearchResultSize(file), file.sha256 ? `SHA256 ${String(file.sha256).slice(0, 10)}` : ''].filter(Boolean).join(' / '))}</span>
+                        <span>${this.escapeHtml(fileMeta.summary)}</span>
+                        ${fileMeta.badges.length ? `<div class="mr-model-details-file-badges">${fileMeta.badges.map(badge => `<span>${this.escapeHtml(badge)}</span>`).join('')}</div>` : ''}
                     </div>
                     <button type="button" class="mr-btn mr-btn-primary mr-model-details-use" data-selection="${this.escapeHtml(encodeURIComponent(JSON.stringify(payload)))}">
                         Use this version
                     </button>
+                    ${mirrorList}
                 </div>
             `;
         }).join('');
+    },
+
+    getSourceModelMirrors(file = {}) {
+        const mirrors = Array.isArray(file.mirrors)
+            ? file.mirrors.filter(mirror => mirror?.url)
+            : [];
+        const downloadUrls = Array.isArray(file.download_urls) ? file.download_urls.filter(Boolean) : [];
+        const seen = new Set();
+        const normalized = [];
+
+        for (const mirror of mirrors) {
+            const url = String(mirror.url || '');
+            if (!url || seen.has(url)) continue;
+            seen.add(url);
+            normalized.push({
+                ...mirror,
+                url,
+                filename: mirror.filename || file.name,
+                is_dead: Boolean(mirror.is_dead || mirror.isDead || mirror.deleted_at || mirror.deletedAt)
+            });
+        }
+
+        for (const url of downloadUrls) {
+            const value = String(url || '');
+            if (!value || seen.has(value)) continue;
+            seen.add(value);
+            normalized.push({
+                url: value,
+                filename: file.name,
+                source: this.getSourceModelMirrorHost(value),
+                is_dead: false
+            });
+        }
+
+        return normalized;
+    },
+
+    renderSourceModelMirrors(mirrors = [], basePayload = {}) {
+        if (!mirrors.length) return '';
+        const groups = this.groupSourceModelMirrors(mirrors);
+        return `
+            <div class="mr-model-details-mirrors">
+                <div class="mr-model-details-mirrors-title">Mirrors</div>
+                ${groups.map(group => `
+                    <div class="mr-model-details-mirror-group">
+                        <div class="mr-model-details-mirror-group-title">
+                            <span class="mr-model-details-mirror-platform-icon">${this.getSourceModelMirrorIcon(group.label)}</span>
+                            <span>${this.escapeHtml(group.label)} (${group.items.length} ${group.items.length === 1 ? 'mirror' : 'mirrors'})</span>
+                        </div>
+                        <div class="mr-model-details-mirror-list">
+                            ${group.items.map((mirror) => {
+                                const payload = {
+                                    ...basePayload,
+                                    download_url: mirror.url,
+                                    filename: mirror.filename || basePayload.filename,
+                                    mirror_source: mirror.source || this.getSourceModelMirrorHost(mirror.url),
+                                    mirror_index: mirror._index
+                                };
+                                const meta = this.getSourceModelMirrorMeta(mirror, mirror._index === 0);
+                                const isDead = this.isSourceModelMirrorDead(mirror);
+                                const title = isDead ? 'Likely dead link' : 'Download file';
+                                const actionIcon = getSvgIcon(isDead ? 'skull' : 'download');
+                                const rowClass = isDead ? ' is-dead' : '';
+                                const payloadData = this.escapeHtml(encodeURIComponent(JSON.stringify(payload)));
+                                return `
+                                    <button type="button"
+                                        class="mr-model-details-mirror${rowClass} mr-model-details-use"
+                                        title="${this.escapeHtml(title)}"
+                                        data-tooltip="${this.escapeHtml(title)}"
+                                        data-selection="${payloadData}">
+                                        <div class="mr-model-details-mirror-info">
+                                            <strong>${this.escapeHtml(mirror.filename || basePayload.filename || 'Download mirror')}</strong>
+                                            ${meta ? `<small>${this.escapeHtml(meta)}</small>` : ''}
+                                        </div>
+                                        <span class="mr-model-details-mirror-action" aria-hidden="true">${actionIcon}</span>
+                                    </button>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    },
+
+    groupSourceModelMirrors(mirrors = []) {
+        const groups = new Map();
+        mirrors.forEach((mirror, index) => {
+            const label = this.getSourceModelMirrorSourceLabel(mirror, index);
+            if (!groups.has(label)) {
+                groups.set(label, { label, items: [] });
+            }
+            groups.get(label).items.push({ ...mirror, _index: index });
+        });
+        return Array.from(groups.values());
+    },
+
+    getSourceModelMirrorIcon(label = '') {
+        const normalized = String(label || '').toLowerCase();
+        if (normalized.includes('huggingface')) return getSvgIcon('huggingface');
+        if (normalized.includes('civitai')) return getSvgIcon('civitai');
+        return getSvgIcon('globe');
+    },
+
+    isSourceModelMirrorDead(mirror = {}) {
+        return Boolean(mirror.is_dead || mirror.isDead || mirror.deleted_at || mirror.deletedAt);
+    },
+
+    getSourceModelMirrorHost(url = '') {
+        try {
+            return new URL(url).hostname.replace(/^www\./, '');
+        } catch (error) {
+            return '';
+        }
+    },
+
+    getSourceModelMirrorSourceLabel(mirror = {}, index = 0) {
+        const source = String(mirror.source || '').trim();
+        if (source) return source;
+        const host = this.getSourceModelMirrorHost(mirror.url || '');
+        if (host.includes('huggingface.co')) return 'HuggingFace';
+        if (host.includes('civitai.com')) return 'CivitAI';
+        return host || `Mirror ${index + 1}`;
+    },
+
+    getSourceModelMirrorMeta(mirror = {}, isDefault = false) {
+        const host = this.getSourceModelMirrorHost(mirror.url || '');
+        const meta = [
+            isDefault ? 'Default' : '',
+            this.isSourceModelMirrorDead(mirror) ? 'Likely dead' : '',
+            host,
+            mirror.is_gated ? 'Gated' : '',
+            mirror.is_paid ? 'Paid' : '',
+            mirror.sha256 ? `SHA256 ${String(mirror.sha256).slice(0, 10)}` : ''
+        ].filter(Boolean);
+        return meta.join(' / ');
+    },
+
+    getSourceModelFileMeta(file = {}) {
+        const metadata = file.metadata && typeof file.metadata === 'object' ? file.metadata : {};
+        const mirrorCount = Array.isArray(file.mirrors) && file.mirrors.length
+            ? file.mirrors.length
+            : file.mirror_count;
+        const badges = [
+            file.primary ? 'Primary' : '',
+            file.type || '',
+            metadata.format || '',
+            metadata.size || '',
+            metadata.fp || '',
+            mirrorCount ? `${mirrorCount} mirrors` : '',
+            file.id ? `ID ${file.id}` : ''
+        ].filter(Boolean);
+        const summary = [
+            this.formatSearchResultSize(file),
+            file.sha256 ? `SHA256 ${String(file.sha256).slice(0, 10)}` : ''
+        ].filter(Boolean).join(' / ') || 'Downloadable file';
+
+        return { badges, summary };
     },
 
     renderSourceModelImageMeta(image = {}) {
@@ -1374,9 +1580,14 @@ export const modelInfoMethods = {
                 details._selectedVersionId = String(versionTab.dataset.versionId || '');
                 const data = details._detailsData;
                 if (data) {
-                    data.selected_version = (data.versions || []).find(version => String(version.id) === details._selectedVersionId) || data.selected_version;
+                    const selected = (data.versions || []).find(version => String(version.id) === details._selectedVersionId) || data.selected_version;
+                    data.selected_version = selected;
                     details.innerHTML = this.renderSourceModelDetails(data, details._sourceModel || {});
                     this.bindTooltips(details);
+
+                    if (selected?.id && (!Array.isArray(selected.files) || !selected.files.length)) {
+                        this.fetchSourceModelDetailsVersion(details, selected.id);
+                    }
                 }
                 return;
             }
@@ -1462,6 +1673,7 @@ export const modelInfoMethods = {
         }
 
         const sourceKey = String(selection.source || contextModel.details_source || contextModel.source || '').toLowerCase();
+        const selectedBaseModel = selection.base_model || contextModel.base_model || '';
         const sourceResult = {
             source: sourceKey,
             model_id: selection.model_id,
@@ -1473,7 +1685,7 @@ export const modelInfoMethods = {
             url: selection.url,
             download_url: selection.download_url,
             size: selection.size,
-            base_model: selection.base_model,
+            base_model: selectedBaseModel,
             tags: selection.tags || [],
             match_type: selection.match_type || 'selected',
             confidence: selection.confidence || 100,
@@ -1491,8 +1703,24 @@ export const modelInfoMethods = {
         if (state?.results && sourceKey) {
             state.results[sourceKey] = sourceResult;
         }
+        missing.civitai_info = {
+            ...(missing.civitai_info || {}),
+            model_name: selection.name || missing.civitai_info?.model_name,
+            version_name: selection.version_name || missing.civitai_info?.version_name,
+            expected_filename: selection.filename || missing.civitai_info?.expected_filename,
+            base_model: selectedBaseModel || missing.civitai_info?.base_model,
+            tags: selection.tags || missing.civitai_info?.tags || []
+        };
+        if (selectedBaseModel) {
+            const canonicalBaseModel = this.resolveBaseModelAlias?.(selectedBaseModel) || selectedBaseModel;
+            if (state) {
+                state.selectedBaseModel = canonicalBaseModel;
+                state.lastAttemptBaseModelContext = canonicalBaseModel;
+            }
+        }
 
         this.refreshSearchUiForMissing?.(missing, state || null);
+        this.refreshSearchBaseModelLabels?.();
         this.updateBatchFooterButtons?.();
         this.persistSearchStateForActiveWorkflow?.();
         this.showNotification?.(`Selected ${selection.filename || selection.name || 'model version'}.`, 'success');
