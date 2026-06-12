@@ -235,6 +235,74 @@ export const downloadTargetMethods = {
         return this.downloadSubfolders.get(this.normalizeDownloadCategory(category)) || [];
     },
 
+    getDownloadTargetBaseDirectory(category = '') {
+        const normalizedCategory = this.normalizeDownloadCategory(category);
+        return this.downloadDirectories?.[normalizedCategory] || '';
+    },
+
+    joinLocalPath(basePath = '', relativePath = '') {
+        const base = String(basePath || '').replace(/[\/\\]+$/, '');
+        const relative = String(relativePath || '').replace(/^[\/\\]+/, '');
+        if (!base) return relative;
+        if (!relative) return base;
+        const separator = base.includes('\\') ? '\\' : '/';
+        return `${base}${separator}${relative}`;
+    },
+
+    getDownloadTargetFolderContext(category = '', subfolder = '') {
+        const normalizedCategory = this.normalizeDownloadCategory(category);
+        const baseDirectory = this.getDownloadTargetBaseDirectory(normalizedCategory);
+        if (!baseDirectory) return null;
+
+        const cleanSubfolder = String(subfolder || '').trim();
+        const folderPath = cleanSubfolder
+            ? this.joinLocalPath(baseDirectory, cleanSubfolder)
+            : baseDirectory;
+        return {
+            context_scope: 'download_folder',
+            name: cleanSubfolder || this.getCategoryDisplayName(normalizedCategory),
+            path: folderPath,
+            resolved_path: folderPath,
+            folder_path: folderPath,
+            download_directory: folderPath,
+            category: normalizedCategory
+        };
+    },
+
+    setDownloadFolderContextTarget(element, contextMenuModel = null, tooltip = 'Right-click to open this folder') {
+        if (!element) return;
+        if (contextMenuModel) {
+            element.dataset.model = encodeURIComponent(JSON.stringify(contextMenuModel));
+            element.dataset.tooltip = tooltip;
+            element.classList.add('mr-download-folder-context');
+            element.oncontextmenu = (event) => {
+                window.MLOpenContextMenu?.(event, element);
+            };
+        } else {
+            delete element.dataset.model;
+            delete element.dataset.tooltip;
+            element.classList.remove('mr-download-folder-context');
+            element.oncontextmenu = null;
+        }
+    },
+
+    syncDownloadTargetFolderContext(categoryEl, subfolderEl) {
+        if (!categoryEl) return;
+        const category = this.normalizeDownloadCategory(this.getDropdownValue(categoryEl) || 'checkpoints');
+        const subfolder = (subfolderEl?.value || '').trim();
+
+        this.setDownloadFolderContextTarget(
+            categoryEl,
+            this.getDownloadTargetFolderContext(category, ''),
+            'Right-click to open this model folder'
+        );
+        this.setDownloadFolderContextTarget(
+            subfolderEl,
+            subfolder ? this.getDownloadTargetFolderContext(category, subfolder) : null,
+            'Right-click to open this subfolder'
+        );
+    },
+
     isAutoFillSubfolderEnabled() {
         return localStorage.getItem('ModelResolver.autoFillSubfolder') !== 'false';
     },
@@ -455,6 +523,7 @@ export const downloadTargetMethods = {
                 subfolder: suggestion,
                 subfolderTouched: false
             });
+            this.syncDownloadTargetFolderContext(categoryEl, subfolderEl);
         }
     },
 
@@ -476,6 +545,7 @@ export const downloadTargetMethods = {
             subfolder: suggestion,
             subfolderTouched: true
         });
+        this.syncDownloadTargetFolderContext(categoryEl, subfolderEl);
     },
 
     applySearchResultSuggestion(missing) {
@@ -646,6 +716,7 @@ export const downloadTargetMethods = {
                 });
                 listEl.innerHTML = '';
                 listEl.style.display = 'none';
+                this.syncDownloadTargetFolderContext(categoryEl, subfolderEl);
                 this.applySuggestedDownloadSubfolder(missing, categoryEl, subfolderEl);
             });
         };
@@ -666,6 +737,7 @@ export const downloadTargetMethods = {
                     subfolder: value,
                     subfolderTouched: true
                 });
+                this.syncDownloadTargetFolderContext(categoryEl, subfolderEl);
             });
         };
 
@@ -698,6 +770,7 @@ export const downloadTargetMethods = {
                 subfolder: subfolderEl.value,
                 subfolderTouched: true
             });
+            this.syncDownloadTargetFolderContext(categoryEl, subfolderEl);
             populateSubfolderOptions(subfolderEl.value);
         });
 
@@ -717,6 +790,7 @@ export const downloadTargetMethods = {
             });
         }
 
+        this.syncDownloadTargetFolderContext(categoryEl, subfolderEl);
         this.applySuggestedDownloadSubfolder(missing, categoryEl, subfolderEl);
     },
 
