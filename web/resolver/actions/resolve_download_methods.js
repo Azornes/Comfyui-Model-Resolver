@@ -916,6 +916,7 @@ export const resolveDownloadMethods = {
         const progressDiv = this.contentElement?.querySelector(`#${progressId}`);
         const downloadBtn = this.contentElement?.querySelector(`#${this.getDownloadButtonElementId(missing)}`);
         const tokens = this.getStoredTokens();
+        const workflowKey = this.getWorkflowScopedQueueKey?.() || '';
 
         try {
             this.rememberDownloadSnapshotForMissing(missing, {
@@ -985,7 +986,8 @@ export const resolveDownloadMethods = {
                 downloadPath: data.path || '',
                 downloadDirectory: data.directory || '',
                 baseDirectory,
-                sourceUrl: source.url
+                sourceUrl: source.url,
+                workflowKey
             };
             const snapshot = this.rememberDownloadUiState(
                 downloadId,
@@ -1002,6 +1004,7 @@ export const resolveDownloadMethods = {
 
             // Update the Download All button state
             this.updateDownloadAllButtonState();
+            this.updateQueuePanel?.();
             this.renderDownloadSnapshot(downloadId, snapshot);
 
             this.pollDownloadProgress(downloadId);
@@ -1030,6 +1033,7 @@ export const resolveDownloadMethods = {
                 downloadBtn.classList.remove('mr-is-success-action', 'mr-btn-primary');
                 downloadBtn.innerHTML = '<span class="mr-btn-icon">☁</span> Retry';
             }
+            this.updateQueuePanel?.();
             this.showNotification('Download failed: ' + error.message, 'error');
         }
     },
@@ -1055,6 +1059,7 @@ export const resolveDownloadMethods = {
 
             if (progress.status === 'downloading' || progress.status === 'starting') {
                 this.renderDownloadSnapshot(downloadId, snapshot, { progressDiv, downloadBtn });
+                this.updateQueuePanel?.();
 
                 // Continue polling
                 setTimeout(() => this.pollDownloadProgress(downloadId), 1000);
@@ -1069,6 +1074,7 @@ export const resolveDownloadMethods = {
                 this.renderDownloadSnapshot(downloadId, completedSnapshot, { progressDiv, downloadBtn });
                 delete this.activeDownloads[downloadId];
                 this.updateDownloadAllButtonState();
+                this.updateQueuePanel?.();
                 this.showNotification(`Downloaded: ${progress.filename}`, 'success', {
                     contextMenuModel: downloadFolderContext
                 });
@@ -1096,6 +1102,7 @@ export const resolveDownloadMethods = {
                 this.renderDownloadSnapshot(downloadId, errorSnapshot, { progressDiv, downloadBtn });
                 delete this.activeDownloads[downloadId];
                 this.updateDownloadAllButtonState();
+                this.updateQueuePanel?.();
 
             } else if (progress.status === 'cancelled') {
                 const cancelledSnapshot = this.rememberDownloadUiState(downloadId, info, progress, {
@@ -1106,6 +1113,7 @@ export const resolveDownloadMethods = {
                 this.renderDownloadSnapshot(downloadId, cancelledSnapshot, { progressDiv, downloadBtn });
                 delete this.activeDownloads[downloadId];
                 this.updateDownloadAllButtonState();
+                this.updateQueuePanel?.();
                 this.showNotification('Download cancelled', 'info');
 
             } else {
@@ -1133,6 +1141,7 @@ export const resolveDownloadMethods = {
             }
             delete this.activeDownloads[downloadId];
             this.updateDownloadAllButtonState();
+            this.updateQueuePanel?.();
         }
     },
 
@@ -1174,6 +1183,7 @@ export const resolveDownloadMethods = {
                     }
                 );
                 this.renderDownloadSnapshot(downloadId, snapshot);
+                this.updateQueuePanel?.();
             }
 
         } catch (error) {
@@ -1948,6 +1958,7 @@ export const resolveDownloadMethods = {
         const progressDiv = this.contentElement?.querySelector(`#${progressId}`);
         const tokens = this.getStoredTokens();
         const targetSelection = this.getDownloadTargetSelection(missing, category || missing.category || 'checkpoints');
+        const workflowKey = this.getWorkflowScopedQueueKey?.() || '';
 
         try {
             this.rememberDownloadSnapshotForMissing(missing, {
@@ -2014,7 +2025,8 @@ export const resolveDownloadMethods = {
                 downloadPath: data.path || '',
                 downloadDirectory: data.directory || '',
                 baseDirectory: targetSelection.baseDirectory || '',
-                sourceUrl: url
+                sourceUrl: url,
+                workflowKey
             };
             const snapshot = this.rememberDownloadUiState(
                 downloadId,
@@ -2031,6 +2043,7 @@ export const resolveDownloadMethods = {
 
             // Update the Download All button state
             this.updateDownloadAllButtonState();
+            this.updateQueuePanel?.();
             this.renderDownloadSnapshot(downloadId, snapshot);
 
             this.pollDownloadProgress(downloadId);
@@ -2057,6 +2070,7 @@ export const resolveDownloadMethods = {
             btn.disabled = false;
             btn.classList.remove('mr-is-success-action', 'mr-btn-primary');
             btn.textContent = 'Retry';
+            this.updateQueuePanel?.();
             this.showNotification('Download failed: ' + error.message, 'error');
         }
     },

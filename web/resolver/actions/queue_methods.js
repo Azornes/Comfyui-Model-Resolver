@@ -69,6 +69,7 @@ export const queueMethods = {
     },
 
     createQueuePanel() {
+        this.queuePanelActiveTab = this.queuePanelActiveTab || 'queued';
         this.queueTitle = $el("div#queue-title.mr-queue-title", { textContent: "Queued Selections (0)" });
         this.queueToggleButton = $el("button", {
             id: "queue-toggle",
@@ -83,6 +84,28 @@ export const queueMethods = {
             onclick: () => this.clearAllQueued()
         });
 
+        this.queueQueuedTabButton = $el("button.mr-queue-tab.is-active", {
+            type: "button",
+            "data-tab": "queued",
+            role: "tab",
+            textContent: "Queued (0)",
+            onclick: () => this.setQueuePanelTab('queued')
+        });
+        this.queueDownloadsTabButton = $el("button.mr-queue-tab", {
+            type: "button",
+            "data-tab": "downloads",
+            role: "tab",
+            textContent: "Downloads (0)",
+            onclick: () => this.setQueuePanelTab('downloads')
+        });
+        this.queueTabs = $el("div.mr-queue-tabs", {
+            role: "tablist",
+            "aria-label": "Queue panel views"
+        }, [
+            this.queueQueuedTabButton,
+            this.queueDownloadsTabButton
+        ]);
+
         // Header row with title and clear button
         this.queueHeader = $el("div.mr-queue-header", {}, [
             this.queueTitle,
@@ -96,20 +119,60 @@ export const queueMethods = {
         this.queueList = $el("div#queue-list.mr-queue-list");
 
         const panel = $el("div.mr-queue-panel", {}, [
-            $el("div.mr-queue-stack", {}, [this.queueHeader, this.queueList])
+            $el("div.mr-queue-stack", {}, [this.queueHeader, this.queueTabs, this.queueList])
         ]);
         return panel;
+    },
+
+    setQueuePanelTab(tab) {
+        const nextTab = tab === 'downloads' ? 'downloads' : 'queued';
+        if (this.queuePanelActiveTab === nextTab) return;
+        this.queuePanelActiveTab = nextTab;
+        this.updateQueuePanel();
     },
 
     updateQueuePanel() {
         if (!this.queueList || !this.queueHeader) return;
         const list = Array.isArray(this.pendingResolutions) ? this.pendingResolutions : [];
+        const downloads = this.getActiveQueuePanelDownloads();
+        const activeTab = this.queuePanelActiveTab === 'downloads' ? 'downloads' : 'queued';
         // Update title count
         const title = this.queueTitle || this.queueHeader.querySelector('#queue-title');
-        if (title) title.textContent = `Queued Selections (${list.length})`;
+        if (title) {
+            title.textContent = activeTab === 'downloads'
+                ? `Downloads (${downloads.length})`
+                : `Queued Selections (${list.length})`;
+        }
         const toggleBtn = this.queueToggleButton || this.queueHeader.querySelector('#queue-toggle');
         if (toggleBtn) toggleBtn.textContent = this.queueCollapsed ? 'Expand' : 'Collapse';
+        const clearBtn = this.queueClearButton || this.queueHeader.querySelector('#queue-clear');
+        if (clearBtn) clearBtn.style.display = activeTab === 'queued' ? '' : 'none';
+        this.updateQueuePanelTabs(list.length, downloads.length, activeTab);
 
+        if (activeTab === 'downloads') {
+            this.renderQueueDownloads(downloads);
+            return;
+        }
+
+        this.renderQueuedSelections(list);
+    },
+
+    updateQueuePanelTabs(queueCount, downloadCount, activeTab) {
+        const queuedTab = this.queueQueuedTabButton || this.queueTabs?.querySelector?.('.mr-queue-tab[data-tab="queued"]');
+        const downloadsTab = this.queueDownloadsTabButton || this.queueTabs?.querySelector?.('.mr-queue-tab[data-tab="downloads"]');
+        if (queuedTab) {
+            queuedTab.textContent = `Queued (${queueCount})`;
+            queuedTab.classList.toggle('is-active', activeTab === 'queued');
+            queuedTab.setAttribute('aria-selected', activeTab === 'queued' ? 'true' : 'false');
+        }
+        if (downloadsTab) {
+            downloadsTab.textContent = `Downloads (${downloadCount})`;
+            downloadsTab.classList.toggle('is-active', activeTab === 'downloads');
+            downloadsTab.setAttribute('aria-selected', activeTab === 'downloads' ? 'true' : 'false');
+        }
+    },
+
+    renderQueuedSelections(list) {
         if (!list.length) {
             this.queueList.innerHTML = '<div class="mr-queue-empty">No selections queued.</div>';
             return;
@@ -140,6 +203,98 @@ export const queueMethods = {
                 btn.addEventListener('click', () => this.removeQueuedByIndex(i));
             }
         }
+    },
+
+    getActiveQueuePanelDownloads() {
+        const entries = Object.entries(this.activeDownloads || {});
+        if (!entries.length) return [];
+
+        const workflowKey = this.getWorkflowScopedQueueKey?.() || '';
+        const visibleMissingKeys = new Set(
+            (this.missingModels || [])
+                .filter(Boolean)
+                .map(missing => this.getDownloadStateKey?.(missing) || this.getMissingModelKey(missing))
+        );
+
+        return entries
+            .filter(([, info]) => {
+                if (!info?.missing) return false;
+                if (workflowKey && info.workflowKey) {
+                    return info.workflowKey === workflowKey;
+                }
+                if (visibleMissingKeys.size) {
+                    const missingKey = this.getDownloadStateKey?.(info.missing) || this.getMissingModelKey(info.missing);
+                    return visibleMissingKeys.has(missingKey);
+                }
+                return true;
+            })
+            .map(([downloadId, info]) => ({ downloadId, info }));
+    },
+
+    getActiveQueuePanelDownloadIds() {
+        return this.getActiveQueuePanelDownloads().map(({ downloadId }) => downloadId);
+    },
+
+    renderQueueDownloads(downloads) {
+        if (!downloads.length) {
+            this.queueList.innerHTML = '<div class="mr-queue-empty">No active downloads.</div>';
+            return;
+        }
+
+        let html = '<div class="mr-queue-items mr-download-queue-items">';
+        for (const { downloadId, info } of downloads) {
+            const progress = info.lastProgress || {};
+            const percent = Math.max(0, Math.min(100, Number(progress.progress) || 0));
+            const filename = progress.filename
+                || info.filename
+                || info.missing?.download_source?.filename
+                || info.missing?.original_path?.split(/[\/\\]/).pop()
+                || 'model';
+            const category = this.getCategoryDisplayName?.(info.category || info.missing?.category || '') || info.category || '';
+            const nodeLabel = info.missing?.subgraph_name || info.missing?.node_type || (info.missing?.subgraph_id ? 'Subgraph' : 'Node');
+            const downloaded = this.formatBytes(progress.downloaded || 0);
+            const total = progress.total_size ? this.formatBytes(progress.total_size) : '';
+            const speed = progress.speed ? `${this.formatBytes(progress.speed)}/s` : '';
+            const status = progress.status || info.lastStatus || 'starting';
+            const statusLabel = status === 'downloading'
+                ? `${Math.round(percent)}%`
+                : (status === 'starting' ? 'Starting' : status.replace(/_/g, ' '));
+            const sizeText = total ? `${downloaded} / ${total}` : downloaded;
+            const targetPath = progress.directory || info.downloadDirectory || info.downloadPath || '';
+            const targetLabel = targetPath ? targetPath.split(/[\/\\]/).filter(Boolean).pop() || targetPath : '';
+            const contextModel = this.getDownloadFolderContext?.(progress, info);
+            const contextData = contextModel
+                ? ` data-model="${this.escapeHtml(encodeURIComponent(JSON.stringify(contextModel)))}" oncontextmenu="window.MLOpenContextMenu(event, this)" data-tooltip="Right-click to open download folder"`
+                : '';
+
+            html += `<div class="mr-queue-item mr-download-queue-item"${contextData}>`;
+            html += `<div class="mr-queue-item-title mr-download-queue-title">`;
+            html += `<span data-tooltip="${this.escapeHtml(filename)}">${this.escapeHtml(filename)}</span>`;
+            html += `<span class="mr-download-queue-status">${this.escapeHtml(statusLabel)}</span>`;
+            html += `</div>`;
+            html += `<div class="mr-queue-item-meta"><span>Model</span><code>${this.escapeHtml(nodeLabel)} #${this.escapeHtml(String(info.missing?.node_id ?? ''))}</code></div>`;
+            if (category) {
+                html += `<div class="mr-queue-item-meta"><span>Type</span><code>${this.escapeHtml(category)}</code></div>`;
+            }
+            if (targetLabel) {
+                html += `<div class="mr-queue-item-meta"><span>Folder</span><code data-tooltip="${this.escapeHtml(targetPath)}">${this.escapeHtml(targetLabel)}</code></div>`;
+            }
+            html += `<div class="mr-download-queue-progress">`;
+            html += `<div class="mr-progress-bar"><div class="mr-progress-fill" style="width: ${percent}%;"></div></div>`;
+            html += `<div class="mr-progress-text"><span>${this.escapeHtml(sizeText)}</span><span>${this.escapeHtml(speed)}</span></div>`;
+            html += `</div>`;
+            html += `<div class="mr-queue-item-actions"><button type="button" class="mr-btn mr-btn-danger mr-btn-sm mr-download-queue-cancel" data-download-id="${this.escapeHtml(downloadId)}">Cancel</button></div>`;
+            html += `</div>`;
+        }
+        html += '</div>';
+        this.queueList.innerHTML = html;
+
+        this.queueList.querySelectorAll('.mr-download-queue-cancel').forEach(button => {
+            button.addEventListener('click', () => {
+                const downloadId = button.dataset.downloadId;
+                if (downloadId) this.cancelDownload(downloadId);
+            });
+        });
     },
 
     // Remove queued by index
@@ -291,10 +446,10 @@ export const queueMethods = {
         this.queueToggleIcon.removeAttribute('title');
         if (this.queueCollapsed) {
             this.queueToggleIcon.classList.add('is-collapsed');
-            this.queueToggleIcon.setAttribute('aria-label', 'Show queued selections');
+            this.queueToggleIcon.setAttribute('aria-label', 'Show queue and downloads panel');
         } else {
             this.queueToggleIcon.classList.remove('is-collapsed');
-            this.queueToggleIcon.setAttribute('aria-label', 'Hide queued selections');
+            this.queueToggleIcon.setAttribute('aria-label', 'Hide queue and downloads panel');
         }
     },
 
@@ -572,7 +727,7 @@ export const queueMethods = {
         const selectedCount = this.getSelectedMissingModels().length;
         const totalCount = missingModels.length;
         const pendingCount = this.pendingResolutions?.length || 0;
-        const activeCount = Object.keys(this.activeDownloads || {}).length;
+        const activeCount = this.getActiveQueuePanelDownloads().length;
         const downloadableSelected = this.getMissingWithDownloadSources(this.getSelectedMissingModels()).length;
         const downloadableAll = this.getMissingWithDownloadSources(missingModels).length;
 
@@ -635,8 +790,8 @@ export const queueMethods = {
 
     getActiveDownloadMissingModels() {
         const activeKeys = new Set(
-            Object.values(this.activeDownloads || {})
-                .map(info => info?.missing)
+            this.getActiveQueuePanelDownloads()
+                .map(({ info }) => info?.missing)
                 .filter(Boolean)
                 .map(missing => this.getMissingModelKey(missing))
         );
@@ -955,7 +1110,7 @@ export const queueMethods = {
      * Handle click on Download All / Cancel All button
      */
     handleDownloadAllClick() {
-        if (Object.keys(this.activeDownloads).length > 0) {
+        if (this.getActiveQueuePanelDownloadIds().length > 0) {
             // Cancel all active downloads
             this.cancelAllDownloads();
         } else {
@@ -968,7 +1123,7 @@ export const queueMethods = {
      * Cancel all active downloads
      */
     async cancelAllDownloads() {
-        const downloadIds = Object.keys(this.activeDownloads);
+        const downloadIds = this.getActiveQueuePanelDownloadIds();
         if (downloadIds.length === 0) return;
 
         this.showNotification(`Cancelling ${downloadIds.length} download${downloadIds.length > 1 ? 's' : ''}...`, 'info');
@@ -994,7 +1149,7 @@ export const queueMethods = {
             return;
         }
 
-        const activeCount = Object.keys(this.activeDownloads).length;
+        const activeCount = this.getActiveQueuePanelDownloadIds().length;
         if (activeCount > 0) {
             this.downloadAllButton.innerHTML = `<span class="mr-btn-icon">✕</span> Cancel All (${activeCount})`;
             this.downloadAllButton.setAttribute(
