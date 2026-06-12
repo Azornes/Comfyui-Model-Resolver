@@ -268,8 +268,19 @@ export const downloadTargetMethods = {
             .replace(/[^a-z0-9]+/g, '');
     },
 
-    getSuggestedCivitaiSubfolder(missing, category, folders = []) {
-        if ((category || '').toLowerCase() !== 'loras' || !folders.length) {
+    getFolderSuggestionEntries(folders = []) {
+        return folders.map(folder => {
+            const segments = String(folder || '').split(/[\/\\]/).filter(Boolean);
+            return {
+                value: folder,
+                segments,
+                normalizedSegments: segments.map(segment => this.normalizeFolderToken(segment))
+            };
+        });
+    },
+
+    getSuggestedLoraSubfolder(missing, category, folderEntries = []) {
+        if (this.normalizeDownloadCategory(category) !== 'loras' || !folderEntries.length) {
             return '';
         }
 
@@ -296,15 +307,6 @@ export const downloadTargetMethods = {
         const normalizedBase = this.normalizeFolderToken(baseModel);
         if (!normalizedBase) return '';
 
-        const folderEntries = folders.map(folder => {
-            const segments = String(folder || '').split(/[\/\\]/).filter(Boolean);
-            return {
-                value: folder,
-                segments,
-                normalizedSegments: segments.map(segment => this.normalizeFolderToken(segment))
-            };
-        });
-
         const baseMatches = folderEntries.filter(entry => entry.normalizedSegments[0] === normalizedBase);
         if (!baseMatches.length) return '';
 
@@ -326,19 +328,126 @@ export const downloadTargetMethods = {
         return exactBase?.value || '';
     },
 
-    async applySuggestedCivitaiSubfolder(missing, categoryEl, subfolderEl) {
+    getSuggestedModelSubfolderCandidates(missing = {}) {
+        const source = missing.download_source || {};
+        const civitaiInfo = missing.civitai_info || {};
+        const civitaiSearch = missing.civitai_search_result || {};
+        const rawValues = [
+            source.filename,
+            source.name,
+            source.model_name,
+            source.path,
+            civitaiInfo.expected_filename,
+            civitaiInfo.model_name,
+            civitaiSearch.filename,
+            civitaiSearch.name,
+            civitaiSearch.model_name,
+            missing.original_path,
+            missing.name
+        ].filter(Boolean);
+        const candidates = [];
+        const ignoredTokens = new Set([
+            'model',
+            'models',
+            'checkpoint',
+            'checkpoints',
+            'diffusion',
+            'diffusionmodel',
+            'diffusionmodels',
+            'unet',
+            'fp8',
+            'fp16',
+            'bf16',
+            'f16',
+            'f32',
+            'scaled',
+            'ema',
+            'pruned',
+            'safetensors',
+            'ckpt',
+            'bin',
+            'pt',
+            'pth',
+            'gguf'
+        ]);
+        const addCandidate = (value) => {
+            const normalized = this.normalizeFolderToken(value);
+            if (!normalized || ignoredTokens.has(normalized) || normalized.length < 3) return;
+            if (!candidates.some(candidate => candidate.normalized === normalized)) {
+                candidates.push({
+                    value: String(value || '').trim(),
+                    normalized
+                });
+            }
+        };
+
+        for (const value of rawValues) {
+            const text = String(value || '').trim();
+            if (!text) continue;
+            const pathParts = text.split(/[\/\\]/).filter(Boolean);
+            if (pathParts.length > 1) {
+                pathParts.slice(0, -1).forEach(addCandidate);
+                addCandidate(pathParts.slice(0, -1).join('/'));
+            }
+
+            const filename = pathParts[pathParts.length - 1] || text;
+            const stem = filename.replace(/\.[^.]+$/, '');
+            addCandidate(stem);
+
+            const tokens = stem
+                .split(/[^A-Za-z0-9]+/)
+                .map(token => token.trim())
+                .filter(Boolean);
+            if (tokens.length) {
+                addCandidate(tokens[0]);
+                if (tokens.length > 1) {
+                    addCandidate(tokens.slice(0, 2).join(' '));
+                }
+            }
+
+            addCandidate(text);
+        }
+
+        return candidates;
+    },
+
+    getSuggestedExistingSubfolderByModelName(missing, folderEntries = []) {
+        if (!folderEntries.length) return '';
+        const candidates = this.getSuggestedModelSubfolderCandidates(missing);
+        if (!candidates.length) return '';
+
+        const findMatch = (predicate) => {
+            for (const candidate of candidates) {
+                const match = folderEntries.find(entry => predicate(entry, candidate));
+                if (match) return match.value;
+            }
+            return '';
+        };
+
+        return findMatch((entry, candidate) => this.normalizeFolderToken(entry.value) === candidate.normalized)
+            || findMatch((entry, candidate) => entry.normalizedSegments[0] === candidate.normalized)
+            || findMatch((entry, candidate) => entry.normalizedSegments.some(segment => segment === candidate.normalized));
+    },
+
+    getSuggestedDownloadSubfolder(missing, category, folders = []) {
+        const folderEntries = this.getFolderSuggestionEntries(folders);
+        return this.getSuggestedLoraSubfolder(missing, category, folderEntries)
+            || this.getSuggestedExistingSubfolderByModelName(missing, folderEntries);
+    },
+
+    async applySuggestedDownloadSubfolder(missing, categoryEl, subfolderEl) {
         if (!this.isAutoFillSubfolderEnabled()) return;
         if (!categoryEl || !subfolderEl || subfolderEl.value.trim()) return;
         const saved = this.getSavedDownloadTargetSelection(missing);
         if (saved?.subfolderTouched) return;
 
-        const category = this.getDropdownValue(categoryEl);
+        const category = this.normalizeDownloadCategory(this.getDropdownValue(categoryEl));
         await this.ensureDownloadSubfoldersLoaded(category);
         const latestSaved = this.getSavedDownloadTargetSelection(missing);
         if (latestSaved?.subfolderTouched || subfolderEl.value.trim()) return;
 
         const folders = this.getAvailableSubfolders(category);
-        const suggestion = this.getSuggestedCivitaiSubfolder(missing, category, folders);
+        const suggestion = this.getSuggestedDownloadSubfolder(missing, category, folders);
         if (suggestion) {
             subfolderEl.value = suggestion;
             this.saveDownloadTargetSelection(missing, {
@@ -349,13 +458,13 @@ export const downloadTargetMethods = {
         }
     },
 
-    async forceSuggestedCivitaiSubfolder(missing, categoryEl, subfolderEl) {
+    async forceSuggestedDownloadSubfolder(missing, categoryEl, subfolderEl) {
         if (!categoryEl || !subfolderEl) return;
 
-        const category = this.getDropdownValue(categoryEl);
+        const category = this.normalizeDownloadCategory(this.getDropdownValue(categoryEl));
         await this.ensureDownloadSubfoldersLoaded(category);
         const folders = this.getAvailableSubfolders(category);
-        const suggestion = this.getSuggestedCivitaiSubfolder(missing, category, folders);
+        const suggestion = this.getSuggestedDownloadSubfolder(missing, category, folders);
         if (!suggestion) {
             this.showNotification?.('No subfolder suggestion available for this model.', 'info');
             return;
@@ -373,7 +482,7 @@ export const downloadTargetMethods = {
         const categoryEl = this.contentElement?.querySelector(`#download-category-${missing.node_id}-${missing.widget_index}`);
         const subfolderEl = this.contentElement?.querySelector(`#download-subfolder-${missing.node_id}-${missing.widget_index}`);
         if (!categoryEl || !subfolderEl) return;
-        this.applySuggestedCivitaiSubfolder(missing, categoryEl, subfolderEl);
+        this.applySuggestedDownloadSubfolder(missing, categoryEl, subfolderEl);
     },
 
     async ensureDownloadSubfoldersLoaded(category = '') {
@@ -537,7 +646,7 @@ export const downloadTargetMethods = {
                 });
                 listEl.innerHTML = '';
                 listEl.style.display = 'none';
-                this.applySuggestedCivitaiSubfolder(missing, categoryEl, subfolderEl);
+                this.applySuggestedDownloadSubfolder(missing, categoryEl, subfolderEl);
             });
         };
 
@@ -599,7 +708,7 @@ export const downloadTargetMethods = {
             suggestBtn.addEventListener('click', async () => {
                 suggestBtn.disabled = true;
                 try {
-                    await this.forceSuggestedCivitaiSubfolder(missing, categoryEl, subfolderEl);
+                    await this.forceSuggestedDownloadSubfolder(missing, categoryEl, subfolderEl);
                     listEl.innerHTML = '';
                     listEl.style.display = 'none';
                 } finally {
@@ -608,7 +717,7 @@ export const downloadTargetMethods = {
             });
         }
 
-        this.applySuggestedCivitaiSubfolder(missing, categoryEl, subfolderEl);
+        this.applySuggestedDownloadSubfolder(missing, categoryEl, subfolderEl);
     },
 
     getStoredTokens() {

@@ -136,7 +136,7 @@ export const optionsMethods = {
                                         </label>
                                         <label class="mr-options-toggle-row">
                                             <div class="mr-options-toggle-copy">
-                                                <span class="mr-options-toggle-title">Auto-fill subfolder <span class="mr-tooltip-badge" data-tooltip="When enabled, Model Resolver fills a suggested LoRA subfolder when it can infer one from CivitAI metadata and your existing folders. When disabled, the field stays empty unless you click Suggest.">?</span></span>
+                                                <span class="mr-options-toggle-title">Auto-fill subfolder <span class="mr-tooltip-badge" data-tooltip="When enabled, Model Resolver fills a suggested subfolder from model metadata, filename patterns, and your existing folders. When disabled, the field stays empty unless you click Suggest.">?</span></span>
                                             </div>
                                             <span class="mr-options-toggle-control">
                                                 <input id="mr-options-auto-fill-subfolder" class="mr-options-switch-input" type="checkbox" ${tokens.auto_fill_subfolder ? 'checked' : ''}>

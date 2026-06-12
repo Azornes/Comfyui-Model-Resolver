@@ -1924,32 +1924,11 @@ class ModelResolverExtension:
                 async def get_subfolders(request):
                     """Get known subfolders for a category using ComfyUI folder_paths."""
                     try:
+                        import os
                         import folder_paths
 
                         raw_category = (request.match_info.get("category") or "").strip()
-                        category_map = {
-                            "checkpoint": "checkpoints",
-                            "checkpoints": "checkpoints",
-                            "lora": "loras",
-                            "loras": "loras",
-                            "vae": "vae",
-                            "controlnet": "controlnet",
-                            "clip": "clip",
-                            "clip_vision": "clip_vision",
-                            "upscaler": "upscale_models",
-                            "upscale_models": "upscale_models",
-                            "embeddings": "embeddings",
-                            "embedding": "embeddings",
-                            "diffusion_model": "diffusion_models",
-                            "diffusion_models": "diffusion_models",
-                            "unet": "diffusion_models",
-                            "text_encoders": "text_encoders",
-                            "text_encoder": "text_encoders",
-                            "ipadapter": "ipadapter",
-                            "ip-adapter": "ipadapter",
-                            "default": "upscale_models",
-                        }
-                        category = category_map.get(raw_category.lower(), raw_category.lower())
+                        category = normalize_download_category(raw_category)
 
                         if not category or category == "unknown":
                             return web.json_response([])
@@ -1973,6 +1952,21 @@ class ModelResolverExtension:
                             for part in parts[:-1]:
                                 current = f"{current}\\{part}" if current else part
                                 subfolders.add(current)
+
+                        for base_dir in folder_paths.get_folder_paths(category) or []:
+                            if not base_dir or not os.path.isdir(base_dir):
+                                continue
+                            for root, dirs, _files in os.walk(base_dir):
+                                rel_root = os.path.relpath(root, base_dir)
+                                for dirname in dirs:
+                                    rel_path = (
+                                        dirname
+                                        if rel_root in ("", ".")
+                                        else os.path.join(rel_root, dirname)
+                                    )
+                                    subfolders.add(
+                                        os.path.normpath(rel_path).replace(os.sep, "\\")
+                                    )
 
                         return web.json_response(sorted(subfolders))
                     except Exception as e:
