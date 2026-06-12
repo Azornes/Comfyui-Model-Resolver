@@ -2902,6 +2902,10 @@
     margin: 4px 0;
 }
 
+.mr-download-folder-context {
+    cursor: context-menu;
+}
+
 /* Model Info Dialog (similar to rgthree's RgthreeLoraInfoDialog) */
 .mr-info-dialog-backdrop {
     position: fixed;

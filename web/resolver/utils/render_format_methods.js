@@ -100,7 +100,7 @@ export const renderFormatMethods = {
      * @param {string} type - 'error' | 'success' | 'info' | 'warning'
      * @returns {string} HTML for status message
      */
-    renderStatusMessage(message, type = 'info') {
+    renderStatusMessage(message, type = 'info', options = {}) {
         const icons = {
             error: '⚠',
             success: '✓',
@@ -108,9 +108,20 @@ export const renderFormatMethods = {
             warning: '⚡'
         };
         const icon = icons[type] || icons.info;
+        const contextMenuModel = options?.contextMenuModel || null;
+        const contextMenuTooltip = options?.contextMenuTooltip || 'Right-click to open download folder';
+        const contextMenuData = contextMenuModel
+            ? this.escapeHtml(encodeURIComponent(JSON.stringify(contextMenuModel)))
+            : '';
+        const contextMenuAttrs = contextMenuData
+            ? ` data-model="${contextMenuData}" oncontextmenu="window.MLOpenContextMenu(event, this)" data-tooltip="${this.escapeHtml(contextMenuTooltip)}"`
+            : '';
+        const className = contextMenuData
+            ? `mr-status mr-status-${type} mr-download-folder-context`
+            : `mr-status mr-status-${type}`;
 
         return `
-            <div class="mr-status mr-status-${type}">
+            <div class="${className}"${contextMenuAttrs}>
                 <span class="mr-status-icon">${icon}</span>
                 <span>${message}</span>
             </div>

@@ -914,9 +914,20 @@ export const missingBrowserMethods = {
     /**
      * Show a notification banner (similar to ComfyUI's "Reconnecting" banner)
      */
-    showNotification(message, type = 'success') {
+    showNotification(message, type = 'success', options = {}) {
         // Build children array, filtering out nulls
         const children = [];
+        const contextMenuModel = options?.contextMenuModel || null;
+        const notificationProps = {
+            className: `mr-notification mr-notification--${type}${contextMenuModel ? ' mr-download-folder-context' : ''}`
+        };
+
+        if (contextMenuModel) {
+            notificationProps["data-model"] = encodeURIComponent(JSON.stringify(contextMenuModel));
+            notificationProps.oncontextmenu = (event) => {
+                window.MLOpenContextMenu?.(event, event.currentTarget);
+            };
+        }
 
         if (type === 'success') {
             children.push($el("span", {
@@ -936,9 +947,7 @@ export const missingBrowserMethods = {
         }
 
         // Create notification banner
-        const notification = $el("div", {
-            className: `mr-notification mr-notification--${type}`
-        }, [
+        const notification = $el("div", notificationProps, [
             ...children,
             $el("span", {
                 textContent: message

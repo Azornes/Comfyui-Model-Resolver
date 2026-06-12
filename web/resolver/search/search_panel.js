@@ -1332,12 +1332,23 @@ export const searchPanelMethods = {
         rightText = '',
         actionClass = '',
         actionText = '',
-        actionDataAttr = ''
+        actionDataAttr = '',
+        contextMenuModel = null,
+        contextMenuTooltip = 'Right-click to open download folder'
     } = {}) {
         const safePercent = Math.max(0, Math.min(100, Number(percent) || 0));
         const actionAttr = actionDataAttr ? ` ${actionDataAttr}` : '';
+        const contextMenuData = contextMenuModel
+            ? this.escapeHtml(encodeURIComponent(JSON.stringify(contextMenuModel)))
+            : '';
+        const contextMenuAttrs = contextMenuData
+            ? ` data-model="${contextMenuData}" oncontextmenu="window.MLOpenContextMenu(event, this)" data-tooltip="${this.escapeHtml(contextMenuTooltip)}"`
+            : '';
+        const containerClass = contextMenuData
+            ? 'mr-progress-container mr-download-folder-context'
+            : 'mr-progress-container';
         return `
-            <div class="mr-progress-container">
+            <div class="${containerClass}"${contextMenuAttrs}>
                 <div class="mr-progress-row">
                     <div class="mr-progress-bar mr-progress-bar-grow">
                         <div class="mr-progress-fill" style="width: ${safePercent}%;"></div>

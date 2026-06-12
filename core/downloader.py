@@ -194,6 +194,8 @@ def download_file(
             "total_size": 0,
             "downloaded": 0,
             "filename": os.path.basename(dest_path),
+            "path": dest_path,
+            "directory": os.path.dirname(dest_path),
             "url": url,
             "error": None,
             "speed": 0,  # bytes per second
@@ -496,6 +498,10 @@ def start_background_download(
         download_id for tracking progress
     """
     download_id = generate_download_id()
+    initial_directory = get_download_directory(category) or ""
+    if initial_directory and subfolder:
+        initial_directory = os.path.join(initial_directory, subfolder)
+    initial_path = os.path.join(initial_directory, filename) if initial_directory else ""
 
     # Pre-initialize progress dict so it's always available for polling
     # even if download fails before download_file is called
@@ -506,6 +512,8 @@ def start_background_download(
             "total_size": 0,
             "downloaded": 0,
             "filename": filename,
+            "path": initial_path,
+            "directory": initial_directory,
             "url": url,
             "error": None,
             "speed": 0,
@@ -525,6 +533,11 @@ def start_background_download(
                         download_progress[download_id]["error"] = result.get(
                             "error", "Download failed"
                         )
+                        if result.get("path"):
+                            download_progress[download_id]["path"] = result["path"]
+                            download_progress[download_id]["directory"] = os.path.dirname(
+                                result["path"]
+                            )
         except Exception as e:
             # Ensure any exception is captured and logged
             with download_lock:
@@ -534,6 +547,8 @@ def start_background_download(
                     "total_size": 0,
                     "downloaded": 0,
                     "filename": filename,
+                    "path": "",
+                    "directory": "",
                     "url": url,
                     "error": str(e),
                     "speed": 0,

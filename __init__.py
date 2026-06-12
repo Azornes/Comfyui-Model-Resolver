@@ -1773,6 +1773,24 @@ class ModelResolverExtension:
                                     f"{'&' if '?' in url else '?'}token={civitai_key}"
                                 )
 
+                        target_directory = ""
+                        target_path = ""
+                        try:
+                            import os as _download_os
+
+                            target_directory = get_download_directory(category) or ""
+                            if target_directory and subfolder:
+                                target_directory = _download_os.path.join(
+                                    target_directory, subfolder
+                                )
+                            if target_directory:
+                                target_path = _download_os.path.join(
+                                    target_directory, filename
+                                )
+                        except Exception:
+                            target_directory = ""
+                            target_path = ""
+
                         # Start background download
                         download_id = start_background_download(
                             url=url,
@@ -1788,6 +1806,8 @@ class ModelResolverExtension:
                                 "download_id": download_id,
                                 "filename": filename,
                                 "category": category,
+                                "path": target_path,
+                                "directory": target_directory,
                             }
                         )
 

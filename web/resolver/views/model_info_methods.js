@@ -25,13 +25,20 @@ export const modelInfoMethods = {
         this._contextMenuModel = model;
         const canShowMore = this.canShowSourceDetails(model);
         const isDownloadTableContext = model?.context_scope === 'download_table';
-        const hasLocalPath = Boolean(model?.path || model?.resolved_path);
-        this.setContextMenuItemVisible('showInfo', !isDownloadTableContext);
+        const isDownloadFolderContext = model?.context_scope === 'download_folder';
+        const hasLocalPath = Boolean(model?.folder_path || model?.download_directory || model?.directory || model?.path || model?.resolved_path);
+        const showOpenFolder = !isDownloadTableContext && hasLocalPath;
+        this.setContextMenuItemVisible('showInfo', !isDownloadTableContext && !isDownloadFolderContext);
         this.setContextMenuItemVisible('showMore', canShowMore);
-        this.setContextMenuItemVisible('civitai', !isDownloadTableContext);
-        this.setContextMenuItemVisible('openFolder', !isDownloadTableContext && hasLocalPath);
-        this.setContextMenuDividerVisible('source', !isDownloadTableContext || canShowMore);
-        this.setContextMenuDividerVisible('folder', !isDownloadTableContext && hasLocalPath);
+        this.setContextMenuItemVisible('civitai', !isDownloadTableContext && !isDownloadFolderContext);
+        this.setContextMenuItemVisible('openFolder', showOpenFolder);
+        this.setContextMenuDividerVisible('source', (!isDownloadTableContext && !isDownloadFolderContext) || canShowMore);
+        this.setContextMenuDividerVisible('folder', showOpenFolder && !isDownloadFolderContext);
+
+        const openFolderLabel = this.contextMenu.querySelector('.mr-context-menu-action-open-folder span:last-child');
+        if (openFolderLabel) {
+            openFolderLabel.textContent = isDownloadFolderContext ? 'Open Download Folder' : 'Open Containing Folder';
+        }
 
         // Position the menu
         this.contextMenu.style.left = `${x}px`;
@@ -117,7 +124,7 @@ export const modelInfoMethods = {
     },
 
     async openContainingFolder(model) {
-        const path = model?.path || model?.resolved_path || '';
+        const path = model?.folder_path || model?.download_directory || model?.directory || model?.path || model?.resolved_path || '';
         if (!path) {
             this.showNotification('No local file path available', 'error');
             return;
