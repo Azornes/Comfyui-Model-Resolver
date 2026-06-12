@@ -35,6 +35,34 @@ SPEED_HISTORY_SIZE = 5  # Number of samples for smoothing
 CHUNK_SIZE = 1024 * 1024  # 1MB chunks for faster downloads
 CLI_LOG_INTERVAL = 5  # Log progress to CLI every N seconds
 
+# Map common category names to folder_paths keys. "unet" is legacy in ComfyUI;
+# new diffusion/UNet/transformer files should download into diffusion_models.
+CATEGORY_MAP = {
+    "checkpoint": "checkpoints",
+    "checkpoints": "checkpoints",
+    "lora": "loras",
+    "loras": "loras",
+    "vae": "vae",
+    "controlnet": "controlnet",
+    "clip": "clip",
+    "clip_vision": "clip_vision",
+    "upscaler": "upscale_models",
+    "upscale_models": "upscale_models",
+    "embeddings": "embeddings",
+    "embedding": "embeddings",
+    "diffusion_model": "diffusion_models",
+    "diffusion_models": "diffusion_models",
+    "unet": "diffusion_models",
+    "latent_upscale_model": "latent_upscale_models",
+    "latent_upscale_models": "latent_upscale_models",
+    "text_encoders": "text_encoders",
+    "text_encoder": "text_encoders",
+    "ipadapter": "ipadapter",
+    "ip_adapter": "ipadapter",
+    # Legacy/unsupported categories map to checkpoints as fallback
+    "default": "upscale_models",  # Model list uses "default" for upscalers
+}
+
 
 def format_bytes(bytes_value: int) -> str:
     """Format bytes to human readable string (e.g., 1.5 GB)."""
@@ -47,6 +75,23 @@ def format_bytes(bytes_value: int) -> str:
         bytes_value /= k
         i += 1
     return f"{bytes_value:.1f} {sizes[i]}"
+
+
+def normalize_download_category(category: str) -> str:
+    """Return the canonical ComfyUI folder_paths key for a download category."""
+    token = (
+        str(category or "")
+        .strip()
+        .lower()
+        .replace("\\", "_")
+        .replace("/", "_")
+        .replace("-", "_")
+        .replace(" ", "_")
+    )
+    while "__" in token:
+        token = token.replace("__", "_")
+    token = token.strip("_")
+    return CATEGORY_MAP.get(token, token or "checkpoints")
 
 
 def get_download_directory(category: str) -> Optional[str]:
@@ -70,33 +115,7 @@ def get_download_directory(category: str) -> Optional[str]:
         except ImportError:
             return None
 
-    # Map common category names to folder_paths keys
-    category_map = {
-        "checkpoint": "checkpoints",
-        "checkpoints": "checkpoints",
-        "lora": "loras",
-        "loras": "loras",
-        "vae": "vae",
-        "controlnet": "controlnet",
-        "clip": "clip",
-        "clip_vision": "clip_vision",
-        "upscaler": "upscale_models",
-        "upscale_models": "upscale_models",
-        "embeddings": "embeddings",
-        "embedding": "embeddings",
-        "diffusion_models": "diffusion_models",
-        "unet": "diffusion_models",
-        "latent_upscale_model": "latent_upscale_models",
-        "latent_upscale_models": "latent_upscale_models",
-        "text_encoders": "text_encoders",
-        "text_encoder": "text_encoders",
-        "ipadapter": "ipadapter",
-        "ip-adapter": "ipadapter",
-        # Legacy/unsupported categories map to checkpoints as fallback
-        "default": "upscale_models",  # Model list uses "default" for upscalers
-    }
-
-    folder_key = category_map.get(category.lower(), category.lower())
+    folder_key = normalize_download_category(category)
 
     def _normalize(path_value: str) -> str:
         return os.path.normcase(os.path.abspath(path_value))
@@ -107,11 +126,35 @@ def get_download_directory(category: str) -> Optional[str]:
         except Exception:
             return False
 
-    def _choose_preferred_path(paths: List[str]) -> Optional[str]:
+    def _choose_preferred_path(paths: List[str], preferred_key: str = "") -> Optional[str]:
         if not paths:
             return None
 
         comfy_root = os.path.dirname(os.path.abspath(getattr(folder_paths, "__file__", "")))
+
+        def _basename(path_value: str) -> str:
+            return os.path.basename(os.path.normpath(path_value)).lower()
+
+        def _prefer_redirected(candidate_paths: List[str]) -> Optional[str]:
+            if not candidate_paths:
+                return None
+            if comfy_root:
+                redirected_paths = [path for path in candidate_paths if not _is_within(path, comfy_root)]
+                if redirected_paths:
+                    return redirected_paths[0]
+            return candidate_paths[0]
+
+        if preferred_key == "diffusion_models":
+            canonical_paths = [path for path in paths if _basename(path) == "diffusion_models"]
+            preferred_path = _prefer_redirected(canonical_paths)
+            if preferred_path:
+                return preferred_path
+
+            non_legacy_paths = [path for path in paths if _basename(path) != "unet"]
+            preferred_path = _prefer_redirected(non_legacy_paths)
+            if preferred_path:
+                return preferred_path
+
         if comfy_root:
             redirected_paths = [path for path in paths if not _is_within(path, comfy_root)]
             if redirected_paths:
@@ -122,7 +165,7 @@ def get_download_directory(category: str) -> Optional[str]:
     try:
         paths = folder_paths.get_folder_paths(folder_key)
         if paths:
-            return _choose_preferred_path(paths)
+            return _choose_preferred_path(paths, folder_key)
 
         # If category not found, try to get any models directory as fallback
         all_names = folder_paths.get_folder_names()
@@ -130,7 +173,7 @@ def get_download_directory(category: str) -> Optional[str]:
             # Fall back to first available directory
             fallback_paths = folder_paths.get_folder_paths(all_names[0])
             if fallback_paths:
-                return _choose_preferred_path(fallback_paths)
+                return _choose_preferred_path(fallback_paths, all_names[0])
     except Exception as e:
         log_debug(f"Could not get folder path for {folder_key}: {e}")
 

@@ -89,6 +89,7 @@ class ModelResolverExtension:
                     get_all_progress,
                     cancel_download,
                     get_download_directory,
+                    normalize_download_category,
                 )
                 from .core.sources.popular import (
                     get_popular_model_url,
@@ -759,6 +760,9 @@ class ModelResolverExtension:
                                 "checkpoints": "checkpoints",
                                 "vae": "vae",
                                 "controlnet": "controlnet",
+                                "diffusion_model": "diffusion_models",
+                                "diffusion_models": "diffusion_models",
+                                "unet": "diffusion_models",
                                 "upscale_models": "upscale_models",
                             }
                             folder_type = category_map.get(
@@ -1741,6 +1745,7 @@ class ModelResolverExtension:
                         url = data.get("url", "")
                         filename = data.get("filename", "")
                         category = data.get("category", "checkpoints")
+                        category = normalize_download_category(category)
                         subfolder = data.get("subfolder", "")
 
                         if not url:
@@ -1935,6 +1940,7 @@ class ModelResolverExtension:
                             "upscale_models": "upscale_models",
                             "embeddings": "embeddings",
                             "embedding": "embeddings",
+                            "diffusion_model": "diffusion_models",
                             "diffusion_models": "diffusion_models",
                             "unet": "diffusion_models",
                             "text_encoders": "text_encoders",

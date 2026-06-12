@@ -30,7 +30,17 @@ export const downloadTargetMethods = {
             const resp = await api.fetchApi('/model_resolver/directories');
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const directories = await resp.json();
-            this.downloadDirectories = directories && typeof directories === 'object' ? directories : {};
+            if (directories && typeof directories === 'object') {
+                this.downloadDirectories = Object.entries(directories).reduce((acc, [key, value]) => {
+                    const normalizedKey = this.normalizeDownloadCategory(key);
+                    if (normalizedKey && !acc[normalizedKey]) {
+                        acc[normalizedKey] = value;
+                    }
+                    return acc;
+                }, {});
+            } else {
+                this.downloadDirectories = {};
+            }
         } catch (e) {
             console.warn('Model Resolver: could not load download directories', e);
             this.downloadDirectories = {};
@@ -71,7 +81,31 @@ export const downloadTargetMethods = {
         return Boolean(this.capabilities?.sources?.[source]);
     },
 
+    normalizeDownloadCategory(category = '') {
+        const token = String(category || '')
+            .trim()
+            .toLowerCase()
+            .replace(/[\/\\\s-]+/g, '_')
+            .replace(/_+/g, '_')
+            .replace(/^_|_$/g, '');
+        const categoryMap = {
+            checkpoint: 'checkpoints',
+            lora: 'loras',
+            embedding: 'embeddings',
+            upscaler: 'upscale_models',
+            unet: 'diffusion_models',
+            diffusion_model: 'diffusion_models',
+            diffusion_models: 'diffusion_models',
+            text_encoder: 'text_encoders',
+            text_encoders: 'text_encoders',
+            ip_adapter: 'ipadapter',
+            'default': 'upscale_models'
+        };
+        return categoryMap[token] || token || 'checkpoints';
+    },
+
     getCategoryDisplayName(category = '') {
+        category = this.normalizeDownloadCategory(category);
         const displayNames = {
             'checkpoints': 'checkpoint',
             'loras': 'lora',
@@ -80,7 +114,7 @@ export const downloadTargetMethods = {
             'embeddings': 'embedding',
             'upscale_models': 'upscale_model',
             'latent_upscale_models': 'latent_upscale_model',
-            'diffusion_models': 'unet',
+            'diffusion_models': 'diffusion_models',
             'text_encoders': 'text encoders',
             'clip': 'clip',
             'clip_vision': 'clip_vision',
@@ -159,6 +193,7 @@ export const downloadTargetMethods = {
     },
 
     getCategoryTokenName(category = '') {
+        category = this.normalizeDownloadCategory(category);
         const tokenNames = {
             'checkpoints': 'checkpoint',
             'loras': 'lora',
@@ -167,7 +202,7 @@ export const downloadTargetMethods = {
             'embeddings': 'embedding',
             'upscale_models': 'upscale_model',
             'latent_upscale_models': 'latent_upscale_model',
-            'diffusion_models': 'unet',
+            'diffusion_models': 'diffusion_model',
             'text_encoders': 'text_encoders',
             'clip': 'clip',
             'clip_vision': 'clip_vision',
@@ -179,10 +214,10 @@ export const downloadTargetMethods = {
     getDownloadCategoryOptions(defaultCategory = 'checkpoints') {
         const directories = this.downloadDirectories || {};
         const keys = Object.keys(directories);
-        const preferred = defaultCategory || 'checkpoints';
+        const preferred = this.normalizeDownloadCategory(defaultCategory || 'checkpoints');
         const ordered = [
             preferred,
-            ...keys.filter(key => key !== preferred)
+            ...keys.map(key => this.normalizeDownloadCategory(key)).filter(key => key !== preferred)
         ].filter((value, index, arr) => value && arr.indexOf(value) === index);
 
         return ordered.length > 0 ? ordered : [preferred];
@@ -197,7 +232,7 @@ export const downloadTargetMethods = {
     },
 
     getAvailableSubfolders(category = '') {
-        return this.downloadSubfolders.get((category || '').toLowerCase()) || [];
+        return this.downloadSubfolders.get(this.normalizeDownloadCategory(category)) || [];
     },
 
     isAutoFillSubfolderEnabled() {
@@ -342,7 +377,7 @@ export const downloadTargetMethods = {
     },
 
     async ensureDownloadSubfoldersLoaded(category = '') {
-        const key = (category || '').trim().toLowerCase();
+        const key = this.normalizeDownloadCategory(category);
         if (!key) return [];
         if (key === 'unknown') {
             this.downloadSubfolders.set(key, []);
@@ -373,7 +408,7 @@ export const downloadTargetMethods = {
         const categoryListId = `download-category-list-${missing.node_id}-${missing.widget_index}`;
         const subfolderListId = `download-subfolder-list-${missing.node_id}-${missing.widget_index}`;
         const saved = this.getSavedDownloadTargetSelection(missing);
-        const selectedCategory = saved?.category || defaultCategory || 'checkpoints';
+        const selectedCategory = this.normalizeDownloadCategory(saved?.category || defaultCategory || 'checkpoints');
         const selectedSubfolder = saved ? saved.subfolder || '' : '';
 
         let html = `<div class="mr-download-target">`;
@@ -399,7 +434,7 @@ export const downloadTargetMethods = {
     getDownloadTargetSelection(missing, fallbackCategory = 'checkpoints') {
         const categoryEl = this.contentElement?.querySelector(`#download-category-${missing.node_id}-${missing.widget_index}`);
         const subfolderEl = this.contentElement?.querySelector(`#download-subfolder-${missing.node_id}-${missing.widget_index}`);
-        const category = this.getDropdownValue(categoryEl) || fallbackCategory || 'checkpoints';
+        const category = this.normalizeDownloadCategory(this.getDropdownValue(categoryEl) || fallbackCategory || 'checkpoints');
         const subfolder = (subfolderEl?.value || '').trim();
         this.saveDownloadTargetSelection(missing, {
             category,
