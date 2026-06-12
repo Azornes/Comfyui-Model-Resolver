@@ -297,19 +297,12 @@
 
 .mr-queue-header {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: center;
-    gap: var(--mr-spacing-10);
-    min-height: 44px;
-    margin-bottom: 0;
-    padding: 0 0 10px;
-}
-
-.mr-queue-title {
-    color: var(--mr-text, #f3f3f3);
-    font-size: 14px;
-    font-weight: 700;
-    line-height: 1.25;
+    gap: var(--mr-spacing-6);
+    min-height: 36px;
+    margin: 0;
+    padding: 6px 0 8px;
 }
 
 .mr-queue-actions {
@@ -317,46 +310,71 @@
     gap: var(--mr-spacing-6);
 }
 
-.mr-queue-tabs {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 4px;
-    margin-bottom: 8px;
-    padding: 3px;
-    background: rgba(255, 255, 255, 0.045);
-    border: 1px solid rgba(255, 255, 255, 0.075);
-    border-radius: 6px;
+.mr-queue-tabs.mr-tabs {
+    align-self: stretch;
+    flex: 0 0 auto;
+    height: 34px;
+    margin: 0 0 -1px;
+    padding: 0 4px;
+    overflow: visible;
+    background: #1f1f1f;
+    --mr-tab-active-bg: #111;
+    --mr-tab-corner-size: 12px;
 }
 
-.mr-queue-tab {
+.mr-queue-tab.mr-tab {
+    flex: 1 1 0;
     min-width: 0;
-    height: 28px;
-    padding: 0 8px;
-    overflow: hidden;
-    color: var(--mr-text-muted, #b1b1b1);
-    font-size: 12px;
+    height: 32px;
+    min-height: 32px;
+    padding: 0 12px 5px;
     font-weight: 700;
-    line-height: 28px;
-    text-align: center;
+}
+
+.mr-queue-tab.mr-tab .mr-tab-label {
+    min-width: 0;
+    overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    background: transparent;
-    border: 0;
-    border-radius: 4px;
-    cursor: pointer;
 }
 
-.mr-queue-tab:hover,
-.mr-queue-tab:focus-visible {
-    color: var(--mr-text, #f3f3f3);
-    background: rgba(255, 255, 255, 0.06);
-    outline: none;
+.mr-queue-tab.mr-tab:not(.mr-tab-active):hover,
+.mr-queue-tab.mr-tab:not(.mr-tab-active):focus,
+.mr-queue-tab.mr-tab:not(.mr-tab-active):active {
+    padding: 0 12px 5px !important;
 }
 
-.mr-queue-tab.is-active {
-    color: #f5fff6;
-    background: rgba(114, 211, 138, 0.18);
-    box-shadow: inset 0 0 0 1px rgba(114, 211, 138, 0.24);
+.mr-queue-tab.mr-tab:not(.mr-tab-active)::after {
+    inset: 2px 5px 6px;
+}
+
+.mr-queue-tab.mr-tab:not(.mr-tab-active) + .mr-queue-tab.mr-tab:not(.mr-tab-active)::before {
+    top: 8px;
+    bottom: 13px;
+}
+
+.mr-queue-tab.mr-tab.mr-tab-active {
+    height: 32px;
+    min-height: 32px;
+    padding: 0 12px 5px;
+}
+
+.mr-queue-tab.mr-tab.mr-tab-active::before,
+.mr-queue-tab.mr-tab.mr-tab-active::after {
+    width: 12px;
+    height: 12px;
+}
+
+.mr-queue-tab.mr-tab.mr-tab-active::before {
+    left: -10px;
+    -webkit-mask: radial-gradient(circle at 0 0, transparent 10px, #000 10px);
+    mask: radial-gradient(circle at 0 0, transparent 10px, #000 10px);
+}
+
+.mr-queue-tab.mr-tab.mr-tab-active::after {
+    right: -10px;
+    -webkit-mask: radial-gradient(circle at 100% 0, transparent 10px, #000 10px);
+    mask: radial-gradient(circle at 100% 0, transparent 10px, #000 10px);
 }
 
 .mr-queue-list {

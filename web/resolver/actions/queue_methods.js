@@ -70,13 +70,6 @@ export const queueMethods = {
 
     createQueuePanel() {
         this.queuePanelActiveTab = this.queuePanelActiveTab || 'queued';
-        this.queueTitle = $el("div#queue-title.mr-queue-title", { textContent: "Queued Selections (0)" });
-        this.queueToggleButton = $el("button", {
-            id: "queue-toggle",
-            className: "mr-btn mr-btn-secondary mr-btn-sm",
-            textContent: "Collapse",
-            onclick: () => this.toggleQueueCollapsed()
-        });
         this.queueClearButton = $el("button", {
             id: "queue-clear",
             className: "mr-btn mr-btn-secondary mr-btn-sm",
@@ -84,21 +77,19 @@ export const queueMethods = {
             onclick: () => this.clearAllQueued()
         });
 
-        this.queueQueuedTabButton = $el("button.mr-queue-tab.is-active", {
+        this.queueQueuedTabButton = $el("button.mr-tab.mr-queue-tab.mr-tab-active", {
             type: "button",
             "data-tab": "queued",
             role: "tab",
-            textContent: "Queued (0)",
             onclick: () => this.setQueuePanelTab('queued')
-        });
-        this.queueDownloadsTabButton = $el("button.mr-queue-tab", {
+        }, [$el("span.mr-tab-label", { textContent: "Queued (0)" })]);
+        this.queueDownloadsTabButton = $el("button.mr-tab.mr-queue-tab", {
             type: "button",
             "data-tab": "downloads",
             role: "tab",
-            textContent: "Downloads (0)",
             onclick: () => this.setQueuePanelTab('downloads')
-        });
-        this.queueTabs = $el("div.mr-queue-tabs", {
+        }, [$el("span.mr-tab-label", { textContent: "Downloads (0)" })]);
+        this.queueTabs = $el("div.mr-tabs.mr-queue-tabs", {
             role: "tablist",
             "aria-label": "Queue panel views"
         }, [
@@ -106,20 +97,15 @@ export const queueMethods = {
             this.queueDownloadsTabButton
         ]);
 
-        // Header row with title and clear button
         this.queueHeader = $el("div.mr-queue-header", {}, [
-            this.queueTitle,
-            $el("div.mr-queue-actions", {}, [
-                this.queueToggleButton,
-                this.queueClearButton
-            ])
+            this.queueClearButton
         ]);
 
         // Scrollable list
         this.queueList = $el("div#queue-list.mr-queue-list");
 
         const panel = $el("div.mr-queue-panel", {}, [
-            $el("div.mr-queue-stack", {}, [this.queueHeader, this.queueTabs, this.queueList])
+            $el("div.mr-queue-stack", {}, [this.queueTabs, this.queueHeader, this.queueList])
         ]);
         return panel;
     },
@@ -136,17 +122,10 @@ export const queueMethods = {
         const list = Array.isArray(this.pendingResolutions) ? this.pendingResolutions : [];
         const downloads = this.getActiveQueuePanelDownloads();
         const activeTab = this.queuePanelActiveTab === 'downloads' ? 'downloads' : 'queued';
-        // Update title count
-        const title = this.queueTitle || this.queueHeader.querySelector('#queue-title');
-        if (title) {
-            title.textContent = activeTab === 'downloads'
-                ? `Downloads (${downloads.length})`
-                : `Queued Selections (${list.length})`;
-        }
-        const toggleBtn = this.queueToggleButton || this.queueHeader.querySelector('#queue-toggle');
-        if (toggleBtn) toggleBtn.textContent = this.queueCollapsed ? 'Expand' : 'Collapse';
         const clearBtn = this.queueClearButton || this.queueHeader.querySelector('#queue-clear');
-        if (clearBtn) clearBtn.style.display = activeTab === 'queued' ? '' : 'none';
+        const showActions = activeTab === 'queued';
+        this.queueHeader.style.display = showActions ? '' : 'none';
+        if (clearBtn) clearBtn.style.display = showActions ? '' : 'none';
         this.updateQueuePanelTabs(list.length, downloads.length, activeTab);
 
         if (activeTab === 'downloads') {
@@ -160,14 +139,22 @@ export const queueMethods = {
     updateQueuePanelTabs(queueCount, downloadCount, activeTab) {
         const queuedTab = this.queueQueuedTabButton || this.queueTabs?.querySelector?.('.mr-queue-tab[data-tab="queued"]');
         const downloadsTab = this.queueDownloadsTabButton || this.queueTabs?.querySelector?.('.mr-queue-tab[data-tab="downloads"]');
+        const setTabLabel = (tab, label) => {
+            const labelEl = tab?.querySelector?.('.mr-tab-label');
+            if (labelEl) {
+                labelEl.textContent = label;
+            } else if (tab) {
+                tab.textContent = label;
+            }
+        };
         if (queuedTab) {
-            queuedTab.textContent = `Queued (${queueCount})`;
-            queuedTab.classList.toggle('is-active', activeTab === 'queued');
+            setTabLabel(queuedTab, `Queued (${queueCount})`);
+            queuedTab.classList.toggle('mr-tab-active', activeTab === 'queued');
             queuedTab.setAttribute('aria-selected', activeTab === 'queued' ? 'true' : 'false');
         }
         if (downloadsTab) {
-            downloadsTab.textContent = `Downloads (${downloadCount})`;
-            downloadsTab.classList.toggle('is-active', activeTab === 'downloads');
+            setTabLabel(downloadsTab, `Downloads (${downloadCount})`);
+            downloadsTab.classList.toggle('mr-tab-active', activeTab === 'downloads');
             downloadsTab.setAttribute('aria-selected', activeTab === 'downloads' ? 'true' : 'false');
         }
     },
