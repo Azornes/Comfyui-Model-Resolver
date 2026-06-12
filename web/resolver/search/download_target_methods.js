@@ -506,6 +506,12 @@ export const downloadTargetMethods = {
                 .filter(Boolean);
             if (tokens.length) {
                 addCandidate(tokens[0]);
+                for (const token of tokens) {
+                    const familyMatch = token.match(/^([A-Za-z]{3,})(?=\d)/);
+                    if (familyMatch) {
+                        addCandidate(familyMatch[1]);
+                    }
+                }
                 if (tokens.length > 1) {
                     addCandidate(tokens.slice(0, 2).join(' '));
                 }
