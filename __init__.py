@@ -760,6 +760,10 @@ class ModelResolverExtension:
                                 "checkpoints": "checkpoints",
                                 "vae": "vae",
                                 "controlnet": "controlnet",
+                                "clip": "text_encoders",
+                                "clips": "text_encoders",
+                                "text_encoder": "text_encoders",
+                                "text_encoders": "text_encoders",
                                 "diffusion_model": "diffusion_models",
                                 "diffusion_models": "diffusion_models",
                                 "unet": "diffusion_models",
@@ -1747,6 +1751,7 @@ class ModelResolverExtension:
                         category = data.get("category", "checkpoints")
                         category = normalize_download_category(category)
                         subfolder = data.get("subfolder", "")
+                        base_directory = data.get("base_directory", "")
 
                         if not url:
                             return web.json_response(
@@ -1783,7 +1788,9 @@ class ModelResolverExtension:
                         try:
                             import os as _download_os
 
-                            target_directory = get_download_directory(category) or ""
+                            target_directory = (
+                                get_download_directory(category, base_directory) or ""
+                            )
                             if target_directory and subfolder:
                                 target_directory = _download_os.path.join(
                                     target_directory, subfolder
@@ -1803,6 +1810,7 @@ class ModelResolverExtension:
                             category=category,
                             headers=headers if headers else None,
                             subfolder=subfolder,
+                            base_directory=base_directory,
                         )
 
                         return web.json_response(
@@ -1940,22 +1948,72 @@ class ModelResolverExtension:
                             )
                             return web.json_response([])
 
-                        subfolders = set()
+                        subfolders = {}
+
+                        def add_subfolder(rel_path, base_dir=""):
+                            rel_path = os.path.normpath(str(rel_path or "")).replace(
+                                os.sep, "\\"
+                            )
+                            if not rel_path or rel_path == ".":
+                                return
+                            base_dir = os.path.abspath(base_dir) if base_dir else ""
+                            key = (rel_path.lower(), os.path.normcase(base_dir))
+                            base_label = (
+                                os.path.basename(os.path.normpath(base_dir))
+                                if base_dir
+                                else ""
+                            )
+                            label = (
+                                f"{rel_path} ({base_label})" if base_label else rel_path
+                            )
+                            subfolders[key] = {
+                                "value": rel_path,
+                                "label": label,
+                                "base_directory": base_dir,
+                            }
+
+                        base_dirs = [
+                            base_dir
+                            for base_dir in (folder_paths.get_folder_paths(category) or [])
+                            if base_dir and os.path.isdir(base_dir)
+                        ]
+
+                        def find_base_dir(full_path):
+                            if not full_path:
+                                return ""
+                            full_path = os.path.abspath(full_path)
+                            for base_dir in base_dirs:
+                                base_abs = os.path.abspath(base_dir)
+                                try:
+                                    if (
+                                        os.path.commonpath([full_path, base_abs])
+                                        == base_abs
+                                    ):
+                                        return base_abs
+                                except Exception:
+                                    continue
+                            return ""
+
                         filenames = folder_paths.get_filename_list(category) or []
                         for rel_path in filenames:
                             if not isinstance(rel_path, str):
                                 continue
+                            base_dir = ""
+                            try:
+                                base_dir = find_base_dir(
+                                    folder_paths.get_full_path(category, rel_path)
+                                )
+                            except Exception:
+                                base_dir = ""
                             parts = [p for p in rel_path.replace("/", "\\").split("\\") if p]
                             if len(parts) <= 1:
                                 continue
                             current = ""
                             for part in parts[:-1]:
                                 current = f"{current}\\{part}" if current else part
-                                subfolders.add(current)
+                                add_subfolder(current, base_dir)
 
-                        for base_dir in folder_paths.get_folder_paths(category) or []:
-                            if not base_dir or not os.path.isdir(base_dir):
-                                continue
+                        for base_dir in base_dirs:
                             for root, dirs, _files in os.walk(base_dir):
                                 rel_root = os.path.relpath(root, base_dir)
                                 for dirname in dirs:
@@ -1964,11 +2022,17 @@ class ModelResolverExtension:
                                         if rel_root in ("", ".")
                                         else os.path.join(rel_root, dirname)
                                     )
-                                    subfolders.add(
-                                        os.path.normpath(rel_path).replace(os.sep, "\\")
-                                    )
+                                    add_subfolder(rel_path, base_dir)
 
-                        return web.json_response(sorted(subfolders))
+                        return web.json_response(
+                            sorted(
+                                subfolders.values(),
+                                key=lambda item: (
+                                    item.get("value", "").lower(),
+                                    item.get("base_directory", "").lower(),
+                                ),
+                            )
+                        )
                     except Exception as e:
                         self.logger.error(
                             f"Model Resolver subfolders error: {e}", exc_info=True

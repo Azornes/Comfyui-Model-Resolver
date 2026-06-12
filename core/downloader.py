@@ -35,8 +35,8 @@ SPEED_HISTORY_SIZE = 5  # Number of samples for smoothing
 CHUNK_SIZE = 1024 * 1024  # 1MB chunks for faster downloads
 CLI_LOG_INTERVAL = 5  # Log progress to CLI every N seconds
 
-# Map common category names to folder_paths keys. "unet" is legacy in ComfyUI;
-# new diffusion/UNet/transformer files should download into diffusion_models.
+# Map common category names to folder_paths keys. "unet" and "clip" are legacy
+# in ComfyUI; new files should download into diffusion_models/text_encoders.
 CATEGORY_MAP = {
     "checkpoint": "checkpoints",
     "checkpoints": "checkpoints",
@@ -44,7 +44,8 @@ CATEGORY_MAP = {
     "loras": "loras",
     "vae": "vae",
     "controlnet": "controlnet",
-    "clip": "clip",
+    "clip": "text_encoders",
+    "clips": "text_encoders",
     "clip_vision": "clip_vision",
     "upscaler": "upscale_models",
     "upscale_models": "upscale_models",
@@ -94,12 +95,13 @@ def normalize_download_category(category: str) -> str:
     return CATEGORY_MAP.get(token, token or "checkpoints")
 
 
-def get_download_directory(category: str) -> Optional[str]:
+def get_download_directory(category: str, preferred_base_directory: str = "") -> Optional[str]:
     """
     Get the appropriate download directory for a model category.
 
     Args:
         category: Model category (e.g., 'checkpoints', 'loras', 'vae')
+        preferred_base_directory: Optional configured base directory to use
 
     Returns:
         Absolute path to the download directory, or None if not found
@@ -155,6 +157,17 @@ def get_download_directory(category: str) -> Optional[str]:
             if preferred_path:
                 return preferred_path
 
+        if preferred_key == "text_encoders":
+            canonical_paths = [path for path in paths if _basename(path) == "text_encoders"]
+            preferred_path = _prefer_redirected(canonical_paths)
+            if preferred_path:
+                return preferred_path
+
+            non_legacy_paths = [path for path in paths if _basename(path) != "clip"]
+            preferred_path = _prefer_redirected(non_legacy_paths)
+            if preferred_path:
+                return preferred_path
+
         if comfy_root:
             redirected_paths = [path for path in paths if not _is_within(path, comfy_root)]
             if redirected_paths:
@@ -165,6 +178,11 @@ def get_download_directory(category: str) -> Optional[str]:
     try:
         paths = folder_paths.get_folder_paths(folder_key)
         if paths:
+            if preferred_base_directory:
+                preferred_normalized = _normalize(preferred_base_directory)
+                for path in paths:
+                    if _normalize(path) == preferred_normalized:
+                        return path
             return _choose_preferred_path(paths, folder_key)
 
         # If category not found, try to get any models directory as fallback
@@ -451,6 +469,7 @@ def download_model(
     download_id: Optional[str] = None,
     headers: Optional[Dict[str, str]] = None,
     subfolder: str = "",
+    base_directory: str = "",
 ) -> Dict[str, Any]:
     """
     Download a model to the appropriate directory.
@@ -462,6 +481,7 @@ def download_model(
         download_id: Optional download ID (generated if not provided)
         headers: Optional HTTP headers
         subfolder: Optional subfolder within category directory
+        base_directory: Optional configured base directory to use
 
     Returns:
         Result dictionary
@@ -470,7 +490,7 @@ def download_model(
         download_id = generate_download_id()
 
     # Get destination directory
-    dest_dir = get_download_directory(category)
+    dest_dir = get_download_directory(category, base_directory)
     if not dest_dir:
         return {
             "success": False,
@@ -533,6 +553,7 @@ def start_background_download(
     category: str,
     headers: Optional[Dict[str, str]] = None,
     subfolder: str = "",
+    base_directory: str = "",
 ) -> str:
     """
     Start a download in a background thread.
@@ -541,7 +562,7 @@ def start_background_download(
         download_id for tracking progress
     """
     download_id = generate_download_id()
-    initial_directory = get_download_directory(category) or ""
+    initial_directory = get_download_directory(category, base_directory) or ""
     if initial_directory and subfolder:
         initial_directory = os.path.join(initial_directory, subfolder)
     initial_path = os.path.join(initial_directory, filename) if initial_directory else ""
@@ -566,7 +587,7 @@ def start_background_download(
     def run_download():
         try:
             result = download_model(
-                url, filename, category, download_id, headers, subfolder
+                url, filename, category, download_id, headers, subfolder, base_directory
             )
             if not result.get("success"):
                 # Mark as error if download failed

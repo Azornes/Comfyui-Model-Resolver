@@ -48,7 +48,7 @@ URN_TYPE_MAP = {
     "embedding": "embeddings",
     "hypernetwork": "hypernetworks",
     "controlnet": "controlnet",
-    "clip": "clip",
+    "clip": "text_encoders",
     "clip_vision": "clip_vision",
 }
 

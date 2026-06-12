@@ -659,6 +659,7 @@ export const resolveDownloadMethods = {
         const targetSelection = this.getDownloadTargetSelection(missing, source.directory || missing.category || 'checkpoints');
         const category = targetSelection.category;
         const subfolder = targetSelection.subfolder;
+        const baseDirectory = targetSelection.baseDirectory || '';
         const progressId = `download-progress-${missing.node_id}-${missing.widget_index}`;
         const progressDiv = this.contentElement?.querySelector(`#${progressId}`);
         const downloadBtn = this.contentElement?.querySelector(`#download-${missing.node_id}-${missing.widget_index}`);
@@ -693,6 +694,7 @@ export const resolveDownloadMethods = {
                     filename: filename,
                     category: category,
                     subfolder: subfolder,
+                    base_directory: baseDirectory,
                     hf_token: tokens.hf_token,
                     civitai_key: tokens.civitai_key
                 })
@@ -716,7 +718,8 @@ export const resolveDownloadMethods = {
                 category,
                 filename,
                 downloadPath: data.path || '',
-                downloadDirectory: data.directory || ''
+                downloadDirectory: data.directory || '',
+                baseDirectory
             };
 
             // Update the Download All button state
@@ -1706,6 +1709,7 @@ export const resolveDownloadMethods = {
                     filename,
                     category: targetSelection.category,
                     subfolder: targetSelection.subfolder,
+                    base_directory: targetSelection.baseDirectory || '',
                     hf_token: tokens.hf_token,
                     civitai_key: tokens.civitai_key
                 })
@@ -1729,7 +1733,8 @@ export const resolveDownloadMethods = {
                 category: targetSelection.category,
                 filename,
                 downloadPath: data.path || '',
-                downloadDirectory: data.directory || ''
+                downloadDirectory: data.directory || '',
+                baseDirectory: targetSelection.baseDirectory || ''
             };
 
             // Update the Download All button state
