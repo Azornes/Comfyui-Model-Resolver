@@ -1,0 +1,68 @@
+name: Feature Request
+description: Suggest an improvement for Model Resolver
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Before submitting
+      options:
+        - label: I am using the latest version of ComfyUI Model Resolver.
+          required: true
+        - label: I checked the README and existing issues for a similar feature request.
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Feature area
+      options:
+        - Missing model detection
+        - Local model matching
+        - Online search source
+        - Download manager
+        - Workflow relinking or apply behavior
+        - Supported nodes or model types
+        - Settings or credentials
+        - Loaded models inspector
+        - UI or UX
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Explain the workflow limitation, pain point, or missing capability.
+      placeholder: |
+        Example: Model Resolver can find the missing LoRA online, but I need an option to choose a different target folder before downloading.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe how the feature should work in ComfyUI.
+      placeholder: |
+        1. Open the Model Resolver dialog.
+        2. Select a missing model.
+        3. Choose a target folder from a dropdown.
+        4. Start the download.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Mention workarounds or other approaches you tried.
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: Examples, links, or screenshots
+      description: Add workflows, node examples, model sources, screenshots, or references that clarify the request.

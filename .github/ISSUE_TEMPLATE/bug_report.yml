@@ -1,0 +1,144 @@
+name: Bug Report
+description: Report a problem with Model Resolver
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Prerequisites
+      options:
+        - label: I am running the latest version of ComfyUI.
+          required: true
+        - label: I am running the latest version of ComfyUI frontend.
+          required: true
+        - label: I am running the latest version of ComfyUI Model Resolver.
+          required: true
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      description: Which part of Model Resolver is failing?
+      options:
+        - Missing model detection
+        - Local fuzzy matching
+        - Online search
+        - CivitAI download
+        - HuggingFace download
+        - CivArchive or Lora Manager archive download
+        - Workflow update or relinking
+        - Loaded models inspector
+        - Settings, tokens, or connection tests
+        - Browser UI
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the problem clearly. Include screenshots or a short recording if the issue is visual.
+      placeholder: |
+        Example: Model Resolver detects a missing LoRA, but clicking Download starts the task and then fails with a 403 error.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Attach the workflow JSON or PNG when possible, especially for detection or relinking issues.
+      placeholder: |
+        1. Start ComfyUI with Model Resolver installed.
+        2. Load a workflow that references a missing checkpoint or LoRA.
+        3. Open the Model Resolver dialog.
+        4. Search locally or online / click Download / click Apply.
+        5. See the error.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Impact
+      options:
+        - Crashes ComfyUI
+        - Prevents workflow execution
+        - Cannot resolve or download required models
+        - Resolves to the wrong model or path
+        - UI issue only
+        - Minor inconvenience
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Model or node involved
+      description: Name the missing model, model type, or loader node if relevant.
+      placeholder: "e.g. checkpoint.safetensors, LoRA, VAELoader, Power Lora Loader"
+
+  - type: dropdown
+    id: install_method
+    attributes:
+      label: Installation method
+      options:
+        - ComfyUI-Manager
+        - Manual git clone
+        - Portable ComfyUI package
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: browser
+    attributes:
+      label: Browser
+      options:
+        - Chrome / Chromium
+        - Edge
+        - Firefox
+        - Brave
+        - Safari
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: versions
+    attributes:
+      label: Environment
+      description: Include versions and platform details.
+      placeholder: |
+        OS:
+        Python:
+        ComfyUI commit/version:
+        ComfyUI frontend version:
+        Model Resolver commit/version:
+        GPU:
+    validations:
+      required: true
+
+  - type: textarea
+    id: console_errors
+    attributes:
+      label: Browser console errors
+      description: Paste red errors from the browser developer console if present.
+      render: javascript
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: ComfyUI terminal logs
+      description: Paste relevant server logs, download errors, tracebacks, or resolver log output.
+      render: shell
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Add anything else that could help reproduce or diagnose the issue.

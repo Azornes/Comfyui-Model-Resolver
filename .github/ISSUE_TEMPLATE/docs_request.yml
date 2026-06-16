@@ -1,0 +1,48 @@
+name: Documentation Request
+description: Suggest improvements or additions to the Model Resolver documentation
+title: "[Docs]: "
+labels: ["documentation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for README or documentation improvements. For bugs or new behavior, use the Bug Report or Feature Request template instead.
+
+  - type: dropdown
+    id: doc_area
+    attributes:
+      label: Documentation area
+      options:
+        - Installation
+        - ComfyUI-Manager setup
+        - Manual setup
+        - Configuration and credentials
+        - CivitAI or HuggingFace downloads
+        - Missing model detection
+        - Local matching and relinking
+        - Supported nodes and model types
+        - Troubleshooting
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: current_issue
+    attributes:
+      label: What is wrong or missing?
+      description: Describe the confusing, outdated, incomplete, or missing documentation.
+      placeholder: "Example: The README mentions HuggingFace tokens, but does not explain where to configure them in ComfyUI."
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggested_content
+    attributes:
+      label: Suggested improvement
+      description: Provide concrete wording, examples, screenshots, or a description of what should be added.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add links, affected setup details, or examples of user confusion.
