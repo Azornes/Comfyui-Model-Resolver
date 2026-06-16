@@ -116,10 +116,11 @@ export const lifecycleGraphMethods = {
     async loadWorkflowData(workflow = null, { force = false } = {}) {
         if (!this.contentElement) return;
 
-        const loadToken = `missing-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        this._workflowDataLoadToken = loadToken;
+        this._workflowDataLoadToken = null;
+        let loadToken = null;
         const shouldRenderMissingModels = () => (
             this.activeTab === 'missing' &&
+            loadToken &&
             this._workflowDataLoadToken === loadToken &&
             this.contentElement
         );
@@ -132,15 +133,18 @@ export const lifecycleGraphMethods = {
             }
 
             if (!workflow) {
-                if (this._workflowDataLoadToken === loadToken) {
-                    this._analysisProgressToken = null;
-                }
+                this._analysisProgressToken = null;
                 if (shouldRenderMissingModels()) {
+                    this.contentElement.innerHTML = '<p>No workflow loaded. Please load a workflow first.</p>';
+                } else if (this.activeTab === 'missing' && this.contentElement) {
                     this.contentElement.innerHTML = '<p>No workflow loaded. Please load a workflow first.</p>';
                 }
                 return;
             }
             this.syncWorkflowScopedQueue(workflow);
+
+            loadToken = `missing-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            this._workflowDataLoadToken = loadToken;
 
             const workflowSignature = this.getWorkflowSignature(workflow);
             if (force) {
@@ -200,11 +204,13 @@ export const lifecycleGraphMethods = {
             }
 
         } catch (error) {
-            if (this._workflowDataLoadToken === loadToken) {
+            if (!loadToken || this._workflowDataLoadToken === loadToken) {
                 this._analysisProgressToken = null;
             }
             console.error('Model Resolver: Error loading workflow data:', error);
             if (shouldRenderMissingModels()) {
+                this.contentElement.innerHTML = `<p class="mr-error-text">Error: ${error.message}</p>`;
+            } else if (!loadToken && this.activeTab === 'missing' && this.contentElement) {
                 this.contentElement.innerHTML = `<p class="mr-error-text">Error: ${error.message}</p>`;
             }
         }

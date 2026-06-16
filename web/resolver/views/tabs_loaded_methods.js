@@ -73,10 +73,11 @@ export const tabsLoadedMethods = {
     async loadLoadedModels(workflow = null, { force = false } = {}) {
         if (!this.contentElement) return;
 
-        const loadToken = `loaded-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        this._loadedModelsLoadToken = loadToken;
+        this._loadedModelsLoadToken = null;
+        let loadToken = null;
         const shouldRenderLoadedModels = () => (
             this.activeTab === 'loaded' &&
+            loadToken &&
             this._loadedModelsLoadToken === loadToken &&
             this.contentElement
         );
@@ -86,10 +87,15 @@ export const tabsLoadedMethods = {
             if (!workflow) {
                 if (shouldRenderLoadedModels()) {
                     this.contentElement.innerHTML = '<p>No workflow loaded. Please load a workflow first.</p>';
+                } else if (this.activeTab === 'loaded' && this.contentElement) {
+                    this.contentElement.innerHTML = '<p>No workflow loaded. Please load a workflow first.</p>';
                 }
                 return;
             }
             this.syncWorkflowScopedQueue(workflow);
+
+            loadToken = `loaded-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            this._loadedModelsLoadToken = loadToken;
 
             const workflowSignature = this.getWorkflowSignature(workflow);
             if (
@@ -131,6 +137,8 @@ export const tabsLoadedMethods = {
         } catch (error) {
             console.error('Model Resolver: Error loading loaded models:', error);
             if (shouldRenderLoadedModels()) {
+                this.contentElement.innerHTML = `<p class="mr-error-text">Error: ${error.message}</p>`;
+            } else if (!loadToken && this.activeTab === 'loaded' && this.contentElement) {
                 this.contentElement.innerHTML = `<p class="mr-error-text">Error: ${error.message}</p>`;
             }
         }

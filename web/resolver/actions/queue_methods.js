@@ -387,7 +387,7 @@ export const queueMethods = {
         this.pendingIndex = new Map();
         for (let i = 0; i < this.pendingResolutions.length; i++) {
             const r = this.pendingResolutions[i];
-            const key = `${r.node_id}:${r.widget_index}:${r.subgraph_id || ''}:${r.is_top_level ? 'T' : 'F'}`;
+            const key = this.getResolutionQueueKey(r);
             this.pendingIndex.set(key, i);
         }
     },
@@ -406,6 +406,77 @@ export const queueMethods = {
         }
         this.updateQueueVisibility();
         this.updateQueuePanel();
+    },
+
+    getResolutionQueueKey(resolution = {}) {
+        const nodeId = resolution.node_id ?? '';
+        const widgetIndex = resolution.widget_index ?? '';
+        const subgraphId = resolution.subgraph_id || '';
+        const scope = resolution.is_top_level !== false ? 'T' : 'F';
+        return `${nodeId}:${widgetIndex}:${subgraphId}:${scope}`;
+    },
+
+    getResolutionNodeRefs(missing = {}) {
+        const refs = Array.isArray(missing.all_node_refs) && missing.all_node_refs.length
+            ? missing.all_node_refs
+            : [missing];
+
+        return refs.map(ref => ({
+            node_id: ref.node_id,
+            node_type: ref.node_type,
+            node_title: ref.node_title,
+            widget_index: ref.widget_index,
+            original_path: ref.original_path,
+            name: ref.name,
+            category: ref.category,
+            subgraph_id: ref.subgraph_id,
+            subgraph_name: ref.subgraph_name,
+            is_top_level: ref.is_top_level,
+            is_lora_v2: ref.is_lora_v2,
+            nested_key: ref.nested_key
+        }));
+    },
+
+    expandPendingResolutionsForApply(list = this.pendingResolutions || []) {
+        const expanded = [];
+        const seen = new Set();
+
+        for (const resolution of Array.isArray(list) ? list : []) {
+            const { node_refs, all_node_refs, ...baseResolution } = resolution || {};
+            const refs = Array.isArray(node_refs) && node_refs.length
+                ? node_refs
+                : (Array.isArray(all_node_refs) && all_node_refs.length ? all_node_refs : [resolution]);
+
+            for (const ref of refs.filter(Boolean)) {
+                const item = {
+                    ...baseResolution,
+                    node_id: ref.node_id ?? baseResolution.node_id,
+                    widget_index: ref.widget_index ?? baseResolution.widget_index,
+                    category: ref.category || baseResolution.category,
+                    subgraph_id: ref.subgraph_id ?? baseResolution.subgraph_id,
+                    is_top_level: ref.is_top_level ?? baseResolution.is_top_level,
+                    is_lora_v2: ref.is_lora_v2 ?? baseResolution.is_lora_v2,
+                    original_lora_name: ref.name || ref.original_path || baseResolution.original_lora_name || baseResolution.name || baseResolution.original_path,
+                    nested_key: ref.nested_key ?? baseResolution.nested_key,
+                    original_path: ref.original_path || baseResolution.original_path,
+                    node_type: ref.node_type || baseResolution.node_type,
+                    node_label: ref.subgraph_name || ref.node_type || baseResolution.node_label
+                };
+                const itemKey = [
+                    item.node_id ?? '',
+                    item.widget_index ?? '',
+                    item.subgraph_id || '',
+                    item.is_top_level !== false ? 'T' : 'F',
+                    item.nested_key || '',
+                    item.original_lora_name || item.original_path || ''
+                ].join(':');
+                if (seen.has(itemKey)) continue;
+                seen.add(itemKey);
+                expanded.push(item);
+            }
+        }
+
+        return expanded;
     },
 
     updateQueueVisibility() {
@@ -628,11 +699,15 @@ export const queueMethods = {
             original_path: missing.original_path,
             subgraph_id: missing.subgraph_id,
             is_top_level: missing.is_top_level,
+            is_lora_v2: missing.is_lora_v2,
+            original_lora_name: missing.name || missing.original_path,
+            nested_key: missing.nested_key,
+            node_refs: this.getResolutionNodeRefs(missing),
             node_type: missing.node_type,
             node_label: missing.subgraph_name || missing.node_type
         };
 
-        const key = `${resolution.node_id}:${resolution.widget_index}:${resolution.subgraph_id || ''}:${resolution.is_top_level ? 'T' : 'F'}`;
+        const key = this.getResolutionQueueKey(resolution);
         if (this.pendingIndex.has(key)) {
             // replace existing selection for this slot
             const idx = this.pendingIndex.get(key);
@@ -660,6 +735,12 @@ export const queueMethods = {
         }
 
         try {
+            const appliedSelections = this.clonePendingResolutions?.(list) || JSON.parse(JSON.stringify(list));
+            const applyResolutions = this.expandPendingResolutionsForApply(appliedSelections);
+            if (!applyResolutions.length) {
+                this.showNotification('No valid selections to apply', 'error');
+                return;
+            }
             const workflow = this.getCurrentWorkflow();
             if (!workflow) {
                 this.showNotification('No workflow loaded', 'error');
@@ -669,22 +750,32 @@ export const queueMethods = {
             const response = await api.fetchApi('/model_resolver/resolve', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ workflow, resolutions: list })
+                body: JSON.stringify({ workflow, resolutions: applyResolutions })
             });
 
             if (!response.ok) throw new Error(`API error: ${response.status}`);
 
             const data = await response.json();
             if (data.success) {
+                const optimisticData = this.getOptimisticAnalysisDataAfterApply(appliedSelections);
                 await this.updateWorkflowInComfyUI(data.workflow);
-                this.showNotification(`✓ Linked ${list.length} selection${list.length>1?'s':''}`, 'success');
-                // Clear queue and refresh analysis
+
                 this.pendingResolutions = [];
                 this.pendingIndex = new Map();
                 this.savePendingQueueForActiveWorkflow();
+                this.syncWorkflowScopedQueue?.(data.workflow);
+
                 this.updateApplyPendingButton();
                 this.updateQueuePanel();
-                await this.loadWorkflowData(data.workflow, { force: true });
+
+                this.applyOptimisticAnalysisData(optimisticData, data.workflow);
+
+                const selectionCount = appliedSelections.length;
+                const refText = applyResolutions.length > selectionCount
+                    ? ` (${applyResolutions.length} references)`
+                    : '';
+                this.showNotification(`✓ Linked ${selectionCount} selection${selectionCount > 1 ? 's' : ''}${refText}`, 'success');
+                this.refreshAnalysisInBackground(data.workflow, this.getWorkflowSignature(data.workflow));
             } else {
                 this.showNotification('Failed to apply selections: ' + (data.error || 'Unknown error'), 'error');
             }
@@ -754,7 +845,7 @@ export const queueMethods = {
         const pending = Array.isArray(this.pendingResolutions) ? this.pendingResolutions : [];
         if (!pending.length) return [];
 
-        const pendingKeys = new Set(pending.map(resolution => this.getMissingModelKey(resolution)));
+        const pendingKeys = new Set(pending.map(resolution => this.getResolutionQueueKey(resolution)));
         return (this.missingModels || []).filter(missing => pendingKeys.has(this.getMissingModelKey(missing)));
     },
 
@@ -785,6 +876,80 @@ export const queueMethods = {
         if (!activeKeys.size) return [];
 
         return (this.missingModels || []).filter(missing => activeKeys.has(this.getMissingModelKey(missing)));
+    },
+
+    getOptimisticAnalysisDataAfterApply(appliedSelections = []) {
+        const missingModels = Array.isArray(this.missingModels) ? this.missingModels : [];
+        const appliedKeys = new Set(
+            (Array.isArray(appliedSelections) ? appliedSelections : [])
+                .map(selection => this.getResolutionQueueKey(selection))
+        );
+        if (!appliedKeys.size) return null;
+
+        const sourceData = this.cachedAnalysisData || {
+            missing_models: missingModels,
+            total_missing: missingModels.length
+        };
+        const sourceMissing = Array.isArray(sourceData.missing_models)
+            ? sourceData.missing_models
+            : missingModels;
+        const nextMissing = sourceMissing.filter(missing => !appliedKeys.has(this.getMissingModelKey(missing)));
+
+        return {
+            ...sourceData,
+            missing_models: nextMissing,
+            total_missing: nextMissing.length
+        };
+    },
+
+    applyOptimisticAnalysisData(data, workflow = null) {
+        if (!data) return false;
+
+        const workflowSignature = this.getWorkflowSignature(workflow || this.getCurrentWorkflow());
+        if (workflowSignature) {
+            this.cachedWorkflowSignature = workflowSignature;
+        }
+        this.cachedAnalysisData = this.cloneAnalysisData?.(data) || data;
+        this.saveAnalysisCacheForActiveWorkflow?.();
+
+        if (this.activeTab === 'missing' && this.contentElement) {
+            this.displayMissingModels(this.contentElement, data);
+            this.reconnectActiveDownloads?.();
+        } else {
+            this.missingModels = Array.isArray(data.missing_models) ? data.missing_models : [];
+            this.updateBatchFooterButtons?.();
+        }
+
+        return true;
+    },
+
+    refreshAnalysisInBackground(workflow, expectedSignature = null) {
+        if (!workflow) return;
+
+        const signature = expectedSignature || this.getWorkflowSignature(workflow);
+        api.fetchApi('/model_resolver/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ workflow })
+        })
+            .then(response => {
+                if (!response.ok) throw new Error(`API error: ${response.status}`);
+                return response.json();
+            })
+            .then(data => {
+                if (signature && this.activeWorkflowSignature !== signature) return;
+                this.cachedWorkflowSignature = signature || this.cachedWorkflowSignature;
+                this.cachedAnalysisData = data;
+                this.saveAnalysisCacheForActiveWorkflow?.();
+
+                if (this.activeTab === 'missing' && this.contentElement && !this._analysisProgressToken) {
+                    this.displayMissingModels(this.contentElement, data);
+                    this.reconnectActiveDownloads?.();
+                }
+            })
+            .catch(error => {
+                console.warn('Model Resolver: background analysis refresh failed:', error);
+            });
     },
 
     previewFooterMenuModels(models = []) {
