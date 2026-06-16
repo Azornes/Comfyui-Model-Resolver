@@ -1104,9 +1104,10 @@ export const searchPanelMethods = {
         const sourceSecondary = isFromWorkflow && sourceLabels[source] && source !== 'workflow'
             ? sourceLabels[source]
             : '';
-        const modelUrl = downloadSource.model_url
+        const rawModelUrl = downloadSource.model_url
             || downloadSource.workflow_model_url
-            || this.getModelCardUrl(downloadSource.url);
+            || downloadSource.url;
+        const modelUrl = this.getModelCardUrl(rawModelUrl) || rawModelUrl;
         const versionName = downloadSource.version_name || missing.civitai_info?.version_name || '';
         const modelParts = this.getModelVersionParts(
             downloadSource.name || missing.civitai_info?.model_name || '',

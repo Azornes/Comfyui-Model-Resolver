@@ -296,13 +296,14 @@ export const resolveDownloadMethods = {
             const result = candidate.result;
             const url = result?.[candidate.urlKey];
             if (!url) continue;
+            const rawModelUrl = result.model_url || result.url || url;
 
             return {
                 source: candidate.source,
                 url,
                 filename: result[candidate.filenameKey] || missing.civitai_info?.expected_filename || filename,
                 directory: result[candidate.categoryKey] || result.directory || result.category || missing.category || 'checkpoints',
-                model_url: result.url || result.model_url || this.getModelCardUrl(url),
+                model_url: this.getModelCardUrl(rawModelUrl) || rawModelUrl,
                 name: result.name || result.repo_id || result.repo || result.filename || filename,
                 size: result.size,
                 type: result.type || missing.category
@@ -696,15 +697,34 @@ export const resolveDownloadMethods = {
             const percent = Number(progress.progress);
             downloadBtn.disabled = true;
             downloadBtn.classList.remove('mr-is-success-action', 'mr-btn-primary');
-            downloadBtn.textContent = Number.isFinite(percent) && percent > 0 ? `${Math.round(percent)}%` : 'Starting...';
+            const label = Number.isFinite(percent) && percent > 0 ? `Downloading ${Math.round(percent)}%` : 'Starting download...';
+            if (downloadBtn.classList.contains('search-download-btn')) {
+                downloadBtn.innerHTML = getSvgIcon('download');
+                downloadBtn.setAttribute('data-tooltip', label);
+                downloadBtn.setAttribute('aria-label', label);
+            } else {
+                downloadBtn.textContent = Number.isFinite(percent) && percent > 0 ? `${Math.round(percent)}%` : 'Starting...';
+            }
         } else if (status === 'cancelling') {
             downloadBtn.disabled = true;
             downloadBtn.classList.remove('mr-is-success-action', 'mr-btn-primary');
-            downloadBtn.textContent = 'Cancelling...';
+            if (downloadBtn.classList.contains('search-download-btn')) {
+                downloadBtn.innerHTML = getSvgIcon('download');
+                downloadBtn.setAttribute('data-tooltip', 'Cancelling download...');
+                downloadBtn.setAttribute('aria-label', 'Cancelling download');
+            } else {
+                downloadBtn.textContent = 'Cancelling...';
+            }
         } else if (status === 'error' || status === 'refresh_error') {
             downloadBtn.disabled = false;
             downloadBtn.classList.remove('mr-is-success-action', 'mr-btn-primary');
-            downloadBtn.textContent = 'Retry';
+            if (downloadBtn.classList.contains('search-download-btn')) {
+                downloadBtn.innerHTML = getSvgIcon('download');
+                downloadBtn.setAttribute('data-tooltip', 'Retry download');
+                downloadBtn.setAttribute('aria-label', 'Retry download');
+            } else {
+                downloadBtn.textContent = 'Retry';
+            }
         } else {
             this.restoreDownloadButtonReadyState(downloadBtn);
         }
@@ -1151,6 +1171,8 @@ export const resolveDownloadMethods = {
         downloadBtn.classList.remove('mr-is-success-action', 'mr-btn-primary');
         if (downloadBtn.classList.contains('search-download-btn')) {
             downloadBtn.innerHTML = getSvgIcon('download');
+            downloadBtn.setAttribute('data-tooltip', 'Download');
+            downloadBtn.setAttribute('aria-label', 'Download');
             return;
         }
         downloadBtn.innerHTML = '<span class="mr-btn-icon">☁</span> Download';
@@ -1976,7 +1998,13 @@ export const resolveDownloadMethods = {
 
             btn.disabled = true;
             btn.classList.remove('mr-is-success-action', 'mr-btn-primary');
-            btn.textContent = 'Starting...';
+            if (btn.classList.contains('search-download-btn')) {
+                btn.innerHTML = getSvgIcon('download');
+                btn.setAttribute('data-tooltip', 'Starting download...');
+                btn.setAttribute('aria-label', 'Starting download');
+            } else {
+                btn.textContent = 'Starting...';
+            }
 
             if (progressDiv) {
                 progressDiv.classList.remove('mr-is-hidden');
@@ -2069,7 +2097,13 @@ export const resolveDownloadMethods = {
             }
             btn.disabled = false;
             btn.classList.remove('mr-is-success-action', 'mr-btn-primary');
-            btn.textContent = 'Retry';
+            if (btn.classList.contains('search-download-btn')) {
+                btn.innerHTML = getSvgIcon('download');
+                btn.setAttribute('data-tooltip', 'Retry download');
+                btn.setAttribute('aria-label', 'Retry download');
+            } else {
+                btn.textContent = 'Retry';
+            }
             this.updateQueuePanel?.();
             this.showNotification('Download failed: ' + error.message, 'error');
         }

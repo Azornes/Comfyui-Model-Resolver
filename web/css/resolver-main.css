@@ -2060,7 +2060,8 @@
     justify-content: flex-end;
     gap: 8px;
     min-height: 24px;
-    min-width: 96px;
+    min-width: 0;
+    width: 100%;
 }
 #model-resolver-modal .mr-search-result-action-btn {
     display: inline-flex;
