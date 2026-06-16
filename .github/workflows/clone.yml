@@ -75,18 +75,23 @@ jobs:
             ```markdown' >> CLONE.md
             echo "[![GitHub Clones]($shields$url&logo=github)]($repo)" >> CLONE.md
             echo '
-            ```
+            ```' >> CLONE.md
+            echo "[![GitHub Clones]($shields$url&logo=github)]($repo)" >> CLONE.md
+            echo '
 
             **HTML**
             ```html' >> CLONE.md
             echo "<a href='$repo'><img alt='GitHub Clones' src='$shields$url&logo=github'></a>" >> CLONE.md
             echo '
-            ```
+            ```' >> CLONE.md
+            echo "<a href='$repo'><img alt='GitHub Clones' src='$shields$url&logo=github'></a>" >> CLONE.md
+            echo '
 
             **HTML (for-the-badge)**
             ```html' >> CLONE.md
             echo "<a href='$repo'><img alt='GitHub Clones' src='$shields_for_the_badge$url&logo=github&style=for-the-badge'></a>" >> CLONE.md
             echo '```' >> CLONE.md
+            echo "<a href='$repo'><img alt='GitHub Clones' src='$shields_for_the_badge$url&logo=github&style=for-the-badge'></a>" >> CLONE.md
             
             git add CLONE.md
             git config --global user.name "GitHub Action"
