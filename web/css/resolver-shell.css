@@ -523,6 +523,14 @@
     text-overflow: ellipsis;
 }
 
+.mr-selected-actions {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: var(--mr-spacing-8);
+    margin-left: auto;
+}
+
 .mr-inline-note-link {
     cursor: pointer;
     color: var(--mr-accent-blue);

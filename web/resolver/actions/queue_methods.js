@@ -343,17 +343,28 @@ export const queueMethods = {
 
         // Build selected bar content
         const label = selection.resolved_model?.relative_path || selection.resolved_model?.filename || selection.resolved_path || '';
-        const resolveBtnId = `selected-remove-${nodeId}-${widgetIndex}`;
+        const applyBtnId = `selected-apply-${nodeId}-${widgetIndex}`;
+        const removeBtnId = `selected-remove-${nodeId}-${widgetIndex}`;
 
         selectedBar.innerHTML = `<div class="mr-selected-bar-inner">`;
         selectedBar.innerHTML += `<span class="mr-selected-label">✓ Selected:</span>`;
         selectedBar.innerHTML += `<code class="mr-selected-code">${label}</code>`;
-        selectedBar.innerHTML += `<button id="${resolveBtnId}" class="mr-btn mr-btn-secondary mr-btn-sm">Remove</button>`;
+        selectedBar.innerHTML += `<span class="mr-selected-actions">`;
+        selectedBar.innerHTML += `<button id="${applyBtnId}" class="mr-btn mr-btn-primary mr-btn-sm" data-tooltip="Apply this selected local match to the workflow.">Apply</button>`;
+        selectedBar.innerHTML += `<button id="${removeBtnId}" class="mr-btn mr-btn-secondary mr-btn-sm">Remove</button>`;
+        selectedBar.innerHTML += `</span>`;
         selectedBar.innerHTML += `</div>`;
         selectedBar.style.display = 'block';
 
+        const applyBtn = selectedBar.querySelector(`#${applyBtnId}`);
+        if (applyBtn) {
+            applyBtn.addEventListener('click', () => {
+                this.applyQueuedByKey(key, applyBtn);
+            });
+        }
+
         // Wire remove button - use key-based removal
-        const removeBtn = selectedBar.querySelector(`#${resolveBtnId}`);
+        const removeBtn = selectedBar.querySelector(`#${removeBtnId}`);
         if (removeBtn) {
             removeBtn.addEventListener('click', () => {
                 this.removeQueuedByKey(key);
@@ -725,10 +736,39 @@ export const queueMethods = {
     },
 
     /**
-     * Apply all pending resolutions in batch
+     * Apply one queued resolution from the selected bar.
      */
-    async applyPendingResolutions() {
-        const list = this.pendingResolutions || [];
+    async applyQueuedByKey(key, button = null) {
+        if (!key || !this.pendingIndex.has(key)) {
+            this.showNotification('Selected match is no longer queued.', 'error');
+            return;
+        }
+
+        const idx = this.pendingIndex.get(key);
+        const selection = this.pendingResolutions?.[idx];
+        if (!selection) {
+            this.showNotification('Selected match is no longer queued.', 'error');
+            return;
+        }
+
+        if (button) {
+            button.disabled = true;
+            button.classList.add('mr-btn-is-disabled');
+            button.textContent = 'Applying...';
+        }
+
+        try {
+            await this.applyPendingResolutionList([selection], { clearAll: false });
+        } finally {
+            if (button?.isConnected) {
+                button.disabled = false;
+                button.classList.remove('mr-btn-is-disabled');
+                button.textContent = 'Apply';
+            }
+        }
+    },
+
+    async applyPendingResolutionList(list, { clearAll = false } = {}) {
         if (!list.length) {
             this.showNotification('No selections queued', 'error');
             return;
@@ -760,11 +800,19 @@ export const queueMethods = {
                 const optimisticData = this.getOptimisticAnalysisDataAfterApply(appliedSelections);
                 await this.updateWorkflowInComfyUI(data.workflow);
 
-                this.pendingResolutions = [];
-                this.pendingIndex = new Map();
+                const appliedKeys = new Set(appliedSelections.map(selection => this.getResolutionQueueKey(selection)));
+                const remainingSelections = clearAll
+                    ? []
+                    : (this.pendingResolutions || []).filter(selection => !appliedKeys.has(this.getResolutionQueueKey(selection)));
+
+                this.pendingResolutions = remainingSelections;
+                this.rebuildPendingIndex();
                 this.savePendingQueueForActiveWorkflow();
                 this.syncWorkflowScopedQueue?.(data.workflow);
 
+                this.pendingResolutions = remainingSelections;
+                this.rebuildPendingIndex();
+                this.savePendingQueueForActiveWorkflow();
                 this.updateApplyPendingButton();
                 this.updateQueuePanel();
 
@@ -783,6 +831,14 @@ export const queueMethods = {
             console.error('Model Resolver: applyPendingResolutions error', e);
             this.showNotification('Error applying selections: ' + e.message, 'error');
         }
+    },
+
+    /**
+     * Apply all pending resolutions in batch
+     */
+    async applyPendingResolutions() {
+        const list = this.pendingResolutions || [];
+        await this.applyPendingResolutionList(list, { clearAll: true });
     },
 
     updateApplyPendingButton() {

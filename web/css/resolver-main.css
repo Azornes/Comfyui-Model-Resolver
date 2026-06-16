@@ -5390,11 +5390,15 @@
     font-size: 11px;
     white-space: nowrap;
 }
+#model-resolver-modal .mr-missing-detail-pane .mr-selected-actions {
+    gap: 8px;
+    margin-left: auto;
+}
 #model-resolver-modal .mr-missing-detail-pane .model-resolver-selected .mr-btn {
     min-height: var(--mr-missing-search-button-height, 34px);
     height: var(--mr-missing-search-button-height, 34px);
     padding: 0 12px;
-    margin-left: auto;
+    margin-left: 0;
     background: var(--mr-missing-control-bg, rgba(255,255,255,0.035));
     border-color: var(--mr-missing-control-border, rgba(255,255,255,0.105));
     border-radius: var(--mr-missing-control-radius, 7px);
@@ -5407,6 +5411,16 @@
     background: var(--mr-missing-control-bg-hover, rgba(255,255,255,0.06));
     border-color: var(--mr-missing-control-border-hover, rgba(255,255,255,0.17));
     color: var(--mr-text);
+}
+#model-resolver-modal .mr-missing-detail-pane .model-resolver-selected .mr-btn-primary {
+    background: rgba(47, 128, 237, 0.18);
+    border-color: rgba(47, 128, 237, 0.34);
+    color: #dbeafe;
+}
+#model-resolver-modal .mr-missing-detail-pane .model-resolver-selected .mr-btn-primary:hover:not(:disabled) {
+    background: rgba(47, 128, 237, 0.26);
+    border-color: rgba(47, 128, 237, 0.48);
+    color: #ffffff;
 }
 #model-resolver-modal .mr-missing-detail-pane .mr-search-progress-list-compact {
     gap: 7px;
