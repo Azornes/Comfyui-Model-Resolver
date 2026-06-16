@@ -248,7 +248,11 @@ export class ModelResolver {
             if (target?.closest('#model-resolver-modal, .model-resolver-backdrop')) return;
             if (!owner.isLikelyWorkflowTabClickTarget(target)) return;
 
-            owner.handleActiveWorkflowRouteChange('workflow-tab-click');
+            setTimeout(() => {
+                if (window.__ModelResolverWorkflowChangeOwner === owner) {
+                    owner.handleActiveWorkflowRouteChange('workflow-tab-click');
+                }
+            }, 0);
         };
         const focusHandler = () => {
             window.__ModelResolverWorkflowChangeOwner?.handleActiveWorkflowRouteChange('window-focus');

@@ -75,6 +75,8 @@ export class ResolverManagerDialog extends ComfyDialog {
         this.activeWorkflowRouteKey = this.getActiveWorkflowRouteKey();
         this.activeWorkflowSignature = null;
         this._workflowRefreshTimer = null;
+        this._workflowRefreshRetryTimer = null;
+        this._workflowRefreshGeneration = 0;
         this._workflowRefreshExpectedRoute = null;
         this._workflowRefreshPreviousSignature = null;
         this._boundHandleViewportResize = () => this.scheduleModalViewportClamp(true);
