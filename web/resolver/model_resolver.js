@@ -81,7 +81,7 @@ export class ModelResolver {
             registerSidebarTab.call(app.extensionManager, {
                 id: this.sidebarTabId,
                 icon: "mdi mdi-link-variant",
-                title: "Model Resolver",
+                title: "Resolver",
                 tooltip: this.openTooltip,
                 type: "custom",
                 render: (element) => this.renderSidebarPanel(element),

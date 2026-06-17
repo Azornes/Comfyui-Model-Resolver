@@ -70,6 +70,7 @@ NODE_TYPE_TO_CATEGORY_HINTS = {
     "Lora Stacker (LoraManager)": "loras",  # LoraManager Stacker node
     "Power Lora Loader (rgthree)": "loras",  # rgthree's Power Lora Loader
     "UNETLoader": "diffusion_models",
+    "LoaderGGUF": "diffusion_models",
     "LatentUpscaleModelLoader": "latent_upscale_models",
     "DualCLIPLoader": "text_encoders",
     "ControlNetLoader": "controlnet",
@@ -91,6 +92,7 @@ MODEL_WIDGET_NAME_TO_CATEGORY = {
     "checkpoint": "checkpoints",
     "model_name": "diffusion_models",
     "unet_name": "diffusion_models",
+    "gguf_name": "diffusion_models",
     "vae_name": "vae",
     "clip_name": "text_encoders",
     "clip_name1": "text_encoders",
