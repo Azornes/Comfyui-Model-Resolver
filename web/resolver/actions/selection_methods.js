@@ -39,6 +39,7 @@ export const selectionMethods = {
         ].forEach(element => {
             if (element) element.style.display = display;
         });
+        this.updateFooterStarLayout?.();
         if (!visible) {
             this.closeFooterMenus();
         }

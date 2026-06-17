@@ -1156,6 +1156,43 @@ export const queueMethods = {
         }
     },
 
+    updateFooterStarLayout() {
+        if (!this.footerElement || !this.footerStarLink || !this.footerActions) return;
+
+        this.footerElement.classList.toggle('mr-footer-is-missing', this.activeTab === 'missing');
+        this.footerStarLink.classList.remove('mr-footer-star-hidden');
+
+        if (this.activeTab !== 'missing') return;
+
+        const footerStyle = getComputedStyle(this.footerElement);
+        const footerWidth = (this.footerElement.clientWidth || 0)
+            - (parseFloat(footerStyle.paddingLeft) || 0)
+            - (parseFloat(footerStyle.paddingRight) || 0);
+        if (footerWidth <= 0) return;
+
+        const actionItems = Array.from(this.footerActions.children || []).filter((element) => {
+            const style = getComputedStyle(element);
+            return style.display !== 'none' && style.visibility !== 'hidden';
+        });
+        if (!actionItems.length) return;
+
+        const gap = parseFloat(footerStyle.columnGap || footerStyle.gap || '0') || 0;
+        const actionsStyle = getComputedStyle(this.footerActions);
+        const actionGap = parseFloat(actionsStyle.columnGap || actionsStyle.gap || '0') || 0;
+        const actionsWidth = actionItems.reduce((total, element) => {
+            return total + element.getBoundingClientRect().width;
+        }, 0) + (Math.max(0, actionItems.length - 1) * actionGap);
+        const requiredWidth = this.footerStarLink.scrollWidth + actionsWidth + gap;
+        this.footerStarLink.classList.toggle('mr-footer-star-hidden', requiredWidth > footerWidth);
+    },
+
+    bindFooterStarLayoutObserver() {
+        if (this._footerStarResizeObserver || !this.footerElement || typeof ResizeObserver === 'undefined') return;
+        this._footerStarResizeObserver = new ResizeObserver(() => this.updateFooterStarLayout());
+        this._footerStarResizeObserver.observe(this.footerElement);
+        this._footerStarResizeObserver.observe(this.footerActions);
+    },
+
     createFooter() {
         this.footerMenus = new Map();
         this.footerMenuButtons = new Map();
@@ -1287,12 +1324,34 @@ export const queueMethods = {
         this.downloadAllButton.setAttribute('aria-label', 'Download missing models');
         this.setTooltip(this.downloadAllButton, 'Download selected models or all missing models with known download sources.');
 
-        return $el("div.mr-footer", {}, [
+        const starLink = $el("a.mr-footer-star-link", {
+            href: "https://github.com/Azornes/Comfyui-Model-Resolver",
+            target: "_blank",
+            rel: "noopener noreferrer",
+            ariaLabel: "Star the Model Resolver repository on GitHub"
+        }, [
+            $el("span.mr-footer-star-icon", {
+                innerHTML: getSvgIcon('star', 'currentColor', 'mr-footer-star-svg')
+            }),
+            $el("span.mr-footer-star-text", {
+                innerHTML: 'If this tool helps you, please consider <span>starring</span> the repository.'
+            })
+        ]);
+
+        this.footerStarLink = starLink;
+        this.footerActions = $el("div.mr-footer-actions", {}, [
             selectMenu,
             searchMenu,
             linkMenu,
             downloadMenu
         ]);
+        this.footerElement = $el("div.mr-footer", {}, [
+            starLink,
+            this.footerActions
+        ]);
+        this.bindFooterStarLayoutObserver();
+        queueMicrotask(() => this.updateFooterStarLayout());
+        return this.footerElement;
     },
 
     animateTabContentTransition() {
