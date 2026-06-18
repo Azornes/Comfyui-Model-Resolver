@@ -45,11 +45,13 @@ URN_TYPE_MAP = {
     "vae": "vae",
     "upscaler": "upscale_models",
     "upscale_model": "upscale_models",
+    "latent_upscale_model": "latent_upscale_models",
     "embedding": "embeddings",
     "hypernetwork": "hypernetworks",
     "controlnet": "controlnet",
     "clip": "text_encoders",
     "clip_vision": "clip_vision",
+    "diffusers": "diffusers",
 }
 
 URN_REGEX = re.compile(r"^urn:air:([^:]+):([^:]+):([^:]+):(\d+)@(\d+)$")
@@ -60,16 +62,23 @@ URN_REGEX = re.compile(r"^urn:air:([^:]+):([^:]+):([^:]+):(\d+)@(\d+)$")
 NODE_TYPE_TO_CATEGORY_HINTS = {
     "CheckpointLoaderSimple": "checkpoints",
     "CheckpointLoader": "checkpoints",
+    "DiffusersLoader": "diffusers",
     "unCLIPCheckpointLoader": "checkpoints",
     "ImageOnlyCheckpointLoader": "checkpoints",
     "VAELoader": "vae",
     "VAELoaderKJ": "vae",
     "LoraLoader": "loras",
     "LoraLoaderModelOnly": "loras",
+    "LoraLoaderBypass": "loras",
+    "LoraLoaderBypassModelOnly": "loras",
     "LoraLoaderV2": "loras",
     "Lora Loader (LoraManager)": "loras",  # LoraManager custom node
     "Lora Stacker (LoraManager)": "loras",  # LoraManager Stacker node
     "Power Lora Loader (rgthree)": "loras",  # rgthree's Power Lora Loader
+    "CreateHookLora": "loras",
+    "CreateHookLoraModelOnly": "loras",
+    "CreateHookModelAsLora": "checkpoints",
+    "CreateHookModelAsLoraModelOnly": "checkpoints",
     "UNETLoader": "diffusion_models",
     "LoaderGGUF": "diffusion_models",
     "LoaderGGUFAdvanced": "diffusion_models",
@@ -82,16 +91,32 @@ NODE_TYPE_TO_CATEGORY_HINTS = {
     "ClipLoaderGGUF": "text_encoders",
     "DualCLIPLoaderGGUF": "text_encoders",
     "DualClipLoaderGGUF": "text_encoders",
+    "TripleCLIPLoader": "text_encoders",
+    "TripleClipLoader": "text_encoders",
     "TripleCLIPLoaderGGUF": "text_encoders",
     "TripleClipLoaderGGUF": "text_encoders",
+    "QuadrupleCLIPLoader": "text_encoders",
+    "QuadrupleClipLoader": "text_encoders",
     "QuadrupleCLIPLoaderGGUF": "text_encoders",
     "QuadrupleClipLoaderGGUF": "text_encoders",
     "ControlNetLoader": "controlnet",
     "DiffControlNetLoader": "controlnet",
     "ControlNetLoaderAdvanced": "controlnet",
+    "ACN_ControlNetLoaderAdvanced": "controlnet",
+    "ACN_DiffControlNetLoaderAdvanced": "controlnet",
     "CLIPVisionLoader": "clip_vision",
     "StyleModelLoader": "style_models",
+    "GLIGENLoader": "gligen",
     "UpscaleModelLoader": "upscale_models",
+    "AudioEncoderLoader": "audio_encoders",
+    "LoadBackgroundRemovalModel": "background_removal",
+    "LoadDA3Model": "geometry_estimation",
+    "FrameInterpolationModelLoader": "frame_interpolation",
+    "LoadMediaPipeFaceLandmarker": "detection",
+    "ModelPatchLoader": "model_patches",
+    "LoadMoGeModel": "geometry_estimation",
+    "PhotoMakerLoader": "photomaker",
+    "OpticalFlowLoader": "optical_flow",
     "HypernetworkLoader": "hypernetworks",
     "EmbeddingLoader": "embeddings",
     # LTX-Video nodes
@@ -106,12 +131,19 @@ NODE_TYPE_TO_CATEGORY_HINTS = {
 NODE_TYPE_MODEL_WIDGET_CATEGORIES = {
     "CheckpointLoaderSimple": {0: "checkpoints"},
     "CheckpointLoader": {1: "checkpoints"},
+    "DiffusersLoader": {0: "diffusers"},
     "unCLIPCheckpointLoader": {0: "checkpoints"},
     "ImageOnlyCheckpointLoader": {0: "checkpoints"},
     "VAELoader": {0: "vae"},
     "VAELoaderKJ": {0: "vae"},
     "LoraLoader": {0: "loras"},
     "LoraLoaderModelOnly": {0: "loras"},
+    "LoraLoaderBypass": {0: "loras"},
+    "LoraLoaderBypassModelOnly": {0: "loras"},
+    "CreateHookLora": {0: "loras"},
+    "CreateHookLoraModelOnly": {0: "loras"},
+    "CreateHookModelAsLora": {0: "checkpoints"},
+    "CreateHookModelAsLoraModelOnly": {0: "checkpoints"},
     "UNETLoader": {0: "diffusion_models"},
     "LoaderGGUF": {0: "diffusion_models"},
     "LoaderGGUFAdvanced": {0: "diffusion_models"},
@@ -124,6 +156,16 @@ NODE_TYPE_MODEL_WIDGET_CATEGORIES = {
     "ClipLoaderGGUF": {0: "text_encoders"},
     "DualCLIPLoaderGGUF": {0: "text_encoders", 1: "text_encoders"},
     "DualClipLoaderGGUF": {0: "text_encoders", 1: "text_encoders"},
+    "TripleCLIPLoader": {
+        0: "text_encoders",
+        1: "text_encoders",
+        2: "text_encoders",
+    },
+    "TripleClipLoader": {
+        0: "text_encoders",
+        1: "text_encoders",
+        2: "text_encoders",
+    },
     "TripleCLIPLoaderGGUF": {
         0: "text_encoders",
         1: "text_encoders",
@@ -133,6 +175,18 @@ NODE_TYPE_MODEL_WIDGET_CATEGORIES = {
         0: "text_encoders",
         1: "text_encoders",
         2: "text_encoders",
+    },
+    "QuadrupleCLIPLoader": {
+        0: "text_encoders",
+        1: "text_encoders",
+        2: "text_encoders",
+        3: "text_encoders",
+    },
+    "QuadrupleClipLoader": {
+        0: "text_encoders",
+        1: "text_encoders",
+        2: "text_encoders",
+        3: "text_encoders",
     },
     "QuadrupleCLIPLoaderGGUF": {
         0: "text_encoders",
@@ -149,9 +203,21 @@ NODE_TYPE_MODEL_WIDGET_CATEGORIES = {
     "ControlNetLoader": {0: "controlnet"},
     "DiffControlNetLoader": {0: "controlnet"},
     "ControlNetLoaderAdvanced": {0: "controlnet"},
+    "ACN_ControlNetLoaderAdvanced": {0: "controlnet"},
+    "ACN_DiffControlNetLoaderAdvanced": {0: "controlnet"},
     "CLIPVisionLoader": {0: "clip_vision"},
     "StyleModelLoader": {0: "style_models"},
+    "GLIGENLoader": {0: "gligen"},
     "UpscaleModelLoader": {0: "upscale_models"},
+    "AudioEncoderLoader": {0: "audio_encoders"},
+    "LoadBackgroundRemovalModel": {0: "background_removal"},
+    "LoadDA3Model": {0: "geometry_estimation"},
+    "FrameInterpolationModelLoader": {0: "frame_interpolation"},
+    "LoadMediaPipeFaceLandmarker": {0: "detection"},
+    "ModelPatchLoader": {0: "model_patches"},
+    "LoadMoGeModel": {0: "geometry_estimation"},
+    "PhotoMakerLoader": {0: "photomaker"},
+    "OpticalFlowLoader": {0: "optical_flow"},
     "HypernetworkLoader": {0: "hypernetworks"},
     "EmbeddingLoader": {0: "embeddings"},
     "LTXVAudioVAELoader": {0: "checkpoints"},
@@ -176,11 +242,35 @@ MODEL_WIDGET_NAME_TO_CATEGORY = {
     "clip_name4": "text_encoders",
     "clip_vision_name": "clip_vision",
     "lora_name": "loras",
+    "existing_lora": "loras",
     "control_net_name": "controlnet",
     "cnet": "controlnet",
     "style_model_name": "style_models",
     "upscale_model_name": "upscale_models",
+    "gligen_name": "gligen",
+    "audio_encoder_name": "audio_encoders",
+    "bg_removal_name": "background_removal",
+    "photomaker_model_name": "photomaker",
+    "text_encoder": "text_encoders",
     "hypernetwork_name": "hypernetworks",
+}
+
+MODEL_OUTPUT_TYPE_TO_CATEGORY = {
+    "UPSCALE_MODEL": "upscale_models",
+    "LATENT_UPSCALE_MODEL": "latent_upscale_models",
+    "CONTROL_NET": "controlnet",
+    "CLIP_VISION": "clip_vision",
+    "STYLE_MODEL": "style_models",
+    "GLIGEN": "gligen",
+    "AUDIO_ENCODER": "audio_encoders",
+    "BACKGROUND_REMOVAL": "background_removal",
+    "DA3_MODEL": "geometry_estimation",
+    "MOGE_MODEL": "geometry_estimation",
+    "INTERP_MODEL": "frame_interpolation",
+    "FACE_DETECTION_MODEL": "detection",
+    "MODEL_PATCH": "model_patches",
+    "PHOTOMAKER": "photomaker",
+    "OPTICAL_FLOW": "optical_flow",
 }
 
 # Keys within dict-type widget values that contain model file references.
@@ -202,7 +292,17 @@ NESTED_MODEL_KEYS = {
     "model_name": "diffusion_models",
     "unet_name": "diffusion_models",
     "gguf_name": "diffusion_models",
+    "gligen_name": "gligen",
+    "audio_encoder_name": "audio_encoders",
+    "bg_removal_name": "background_removal",
+    "photomaker_model_name": "photomaker",
+    "text_encoder": "text_encoders",
 }
+
+
+def normalize_widget_name(value: Any) -> str:
+    return re.sub(r"[_\s-]+", "_", str(value or "").strip().lower()).strip("_")
+
 
 MODEL_WIDGET_PLACEHOLDERS = {
     "",
@@ -253,7 +353,7 @@ def get_widget_category_hint(node: Dict[str, Any], widget_index: int) -> Optiona
                     candidates.append(str(widget).strip())
 
     for candidate in candidates:
-        category = MODEL_WIDGET_NAME_TO_CATEGORY.get(candidate)
+        category = MODEL_WIDGET_NAME_TO_CATEGORY.get(normalize_widget_name(candidate))
         if category:
             return category
 
@@ -265,6 +365,23 @@ def get_node_model_widget_category_hint(
 ) -> Optional[str]:
     """Return the model category for known model selector widget indices."""
     return NODE_TYPE_MODEL_WIDGET_CATEGORIES.get(node_type, {}).get(widget_index)
+
+
+def get_node_output_category_hint(node: Dict[str, Any]) -> Optional[str]:
+    """Return a model category hint from strongly typed loader outputs."""
+    outputs = node.get("outputs", [])
+    if not isinstance(outputs, list):
+        return None
+
+    for output in outputs:
+        if not isinstance(output, dict):
+            continue
+        for key in ("type", "name", "label"):
+            token = str(output.get(key, "") or "").strip().upper()
+            category = MODEL_OUTPUT_TYPE_TO_CATEGORY.get(token)
+            if category:
+                return category
+    return None
 
 
 def is_placeholder_model_value(value: Any) -> bool:
@@ -608,12 +725,21 @@ def get_node_model_info(
 
     # Get category hints for this node type
     category_hint = NODE_TYPE_TO_CATEGORY_HINTS.get(node_type)
+    output_category_hint = get_node_output_category_hint(node)
+    has_single_widget_value = len(widgets_values) == 1
 
     # For each widget value, check if it looks like a model file or URN
     for idx, value in enumerate(widgets_values):
         widget_category_hint = get_widget_category_hint(node, idx)
         indexed_category_hint = get_node_model_widget_category_hint(node_type, idx)
-        model_widget_category_hint = widget_category_hint or indexed_category_hint
+        output_widget_category_hint = (
+            output_category_hint
+            if (indexed_category_hint or widget_category_hint or has_single_widget_value)
+            else None
+        )
+        model_widget_category_hint = (
+            indexed_category_hint or output_widget_category_hint or widget_category_hint
+        )
         effective_category_hint = model_widget_category_hint or category_hint
         categories_to_try_for_widget = (
             [effective_category_hint] if effective_category_hint else None
@@ -689,8 +815,7 @@ def get_node_model_info(
         if urn_match:
             base, typ, provider, model_id, version_id = urn_match.groups()
             category = (
-                category_hint
-                or widget_category_hint
+                effective_category_hint
                 or URN_TYPE_MAP.get(typ.lower(), "unknown")
             )
 

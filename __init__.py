@@ -780,6 +780,28 @@ class ModelResolverExtension:
                                 "diffusion_models": "diffusion_models",
                                 "unet": "diffusion_models",
                                 "upscale_models": "upscale_models",
+                                "upscale_model": "upscale_models",
+                                "latent_upscale_model": "latent_upscale_models",
+                                "latent_upscale_models": "latent_upscale_models",
+                                "style_model": "style_models",
+                                "style_models": "style_models",
+                                "gligen": "gligen",
+                                "diffusers": "diffusers",
+                                "vae_approx": "vae_approx",
+                                "audio_encoder": "audio_encoders",
+                                "audio_encoders": "audio_encoders",
+                                "background_removal": "background_removal",
+                                "background_removal_model": "background_removal",
+                                "frame_interpolation": "frame_interpolation",
+                                "frame_interpolation_model": "frame_interpolation",
+                                "geometry_estimation": "geometry_estimation",
+                                "geometry_estimation_model": "geometry_estimation",
+                                "detection": "detection",
+                                "model_patch": "model_patches",
+                                "model_patches": "model_patches",
+                                "photomaker": "photomaker",
+                                "optical_flow": "optical_flow",
+                                "optical_flow_model": "optical_flow",
                             }
                             folder_type = category_map.get(
                                 category.lower(), category.lower()
@@ -1906,7 +1928,9 @@ class ModelResolverExtension:
                 async def get_directories(request):
                     """Get available model directories."""
                     try:
-                        categories = [
+                        import folder_paths
+
+                        preferred_categories = [
                             "checkpoints",
                             "loras",
                             "vae",
@@ -1920,6 +1944,20 @@ class ModelResolverExtension:
                             "ipadapter",
                             "sams",
                         ]
+                        skip_categories = {"custom_nodes", "configs"}
+                        categories = []
+                        for cat in [
+                            *preferred_categories,
+                            *folder_paths.folder_names_and_paths.keys(),
+                        ]:
+                            normalized_cat = normalize_download_category(cat)
+                            if (
+                                not normalized_cat
+                                or normalized_cat in skip_categories
+                                or normalized_cat in categories
+                            ):
+                                continue
+                            categories.append(normalized_cat)
 
                         directories = {}
                         for cat in categories:
