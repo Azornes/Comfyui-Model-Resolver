@@ -381,6 +381,44 @@ export const workflowStateMethods = {
         }
     },
 
+    cloneDownloadTargetSelections(selections = this.downloadTargetSelections) {
+        const cloned = new Map();
+        for (const [missingKey, selection] of (selections || new Map()).entries()) {
+            try {
+                cloned.set(missingKey, JSON.parse(JSON.stringify(selection || {})));
+            } catch (error) {
+                console.warn('Model Resolver: failed to clone download target selection', error);
+                cloned.set(missingKey, { ...(selection || {}) });
+            }
+        }
+        return cloned;
+    },
+
+    saveDownloadTargetSelectionsForActiveWorkflow() {
+        const key = this.getWorkflowScopedQueueKey();
+        if (!key) return;
+
+        const selections = this.downloadTargetSelections instanceof Map
+            ? this.downloadTargetSelections
+            : new Map();
+        if (selections.size) {
+            this.workflowDownloadTargetSelectionCaches.set(
+                key,
+                this.cloneDownloadTargetSelections(selections)
+            );
+        } else {
+            this.workflowDownloadTargetSelectionCaches.delete(key);
+        }
+    },
+
+    restoreDownloadTargetSelectionsForActiveWorkflow() {
+        const key = this.getWorkflowScopedQueueKey();
+        const saved = key ? this.workflowDownloadTargetSelectionCaches.get(key) : null;
+        this.downloadTargetSelections = saved
+            ? this.cloneDownloadTargetSelections(saved)
+            : new Map();
+    },
+
     cloneSearchState(state = {}, { preserveActive = false } = {}) {
         let clone = {};
         try {
@@ -496,6 +534,7 @@ export const workflowStateMethods = {
         this.saveAnalysisCacheForActiveWorkflow();
         this.saveLoadedModelsCacheForActiveWorkflow();
         this.saveSearchCacheForActiveWorkflow();
+        this.saveDownloadTargetSelectionsForActiveWorkflow();
         this.clearWorkflowScopedState();
         this.activeWorkflowRouteKey = nextRoute;
         this.activeWorkflowSignature = nextSignature;
@@ -503,6 +542,7 @@ export const workflowStateMethods = {
         this.restoreAnalysisCacheForActiveWorkflow();
         this.restoreLoadedModelsCacheForActiveWorkflow();
         this.restoreSearchCacheForActiveWorkflow();
+        this.restoreDownloadTargetSelectionsForActiveWorkflow();
     },
 
     clearWorkflowScopedState() {

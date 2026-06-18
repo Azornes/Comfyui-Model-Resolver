@@ -536,6 +536,129 @@ export const resolveDownloadMethods = {
         return next;
     },
 
+    cloneLocalMatches(matches = []) {
+        if (!Array.isArray(matches)) return [];
+        try {
+            return JSON.parse(JSON.stringify(matches));
+        } catch (error) {
+            console.warn('Model Resolver: failed to clone local matches', error);
+            return matches.map(match => ({ ...match }));
+        }
+    },
+
+    getLocalMatchIdentity(match = {}) {
+        const model = match.model || {};
+        return [
+            model.path || match.path || '',
+            model.relative_path || '',
+            model.filename || match.filename || '',
+            model.category || match.category || ''
+        ].map(value => String(value || '').trim().toLowerCase()).join('::');
+    },
+
+    mergeLocalMatches(existingMatches = [], restoredMatches = []) {
+        const merged = [];
+        const byIdentity = new Map();
+
+        const addMatch = (match) => {
+            if (!match || typeof match !== 'object') return;
+            const identity = this.getLocalMatchIdentity(match);
+            if (!identity.replace(/:/g, '')) return;
+
+            const previous = byIdentity.get(identity);
+            if (!previous || Number(match.confidence || 0) > Number(previous.confidence || 0)) {
+                byIdentity.set(identity, match);
+            }
+        };
+
+        existingMatches.forEach(addMatch);
+        restoredMatches.forEach(addMatch);
+
+        for (const match of byIdentity.values()) {
+            merged.push(match);
+        }
+
+        return merged.sort((a, b) => Number(b.confidence || 0) - Number(a.confidence || 0));
+    },
+
+    rememberDownloadedLocalMatchesForMissing(missing, matches = [], metadata = {}) {
+        if (!missing || !Array.isArray(matches)) return null;
+
+        const snapshot = this.rememberDownloadSnapshotForMissing(missing, {
+            localMatches: this.cloneLocalMatches(matches),
+            localMatchesMetadata: {
+                ...metadata,
+                updatedAt: Date.now()
+            }
+        });
+
+        this.persistLocalMatchesInAnalysisCache(missing, matches);
+        this.persistDownloadedLocalMatchSearchState(missing, matches, metadata);
+        return snapshot;
+    },
+
+    restoreDownloadedLocalMatchesForMissing(missing) {
+        if (!missing) return missing;
+
+        const snapshot = this.getDownloadProgressStore().get(this.getDownloadStateKey(missing));
+        const storedMatches = Array.isArray(snapshot?.localMatches) ? snapshot.localMatches : [];
+        if (!storedMatches.length) return missing;
+
+        const currentMatches = Array.isArray(missing.matches) ? missing.matches : [];
+        missing.matches = this.mergeLocalMatches(currentMatches, this.cloneLocalMatches(storedMatches));
+        return missing;
+    },
+
+    persistLocalMatchesInAnalysisCache(missing, matches = []) {
+        if (!missing || !Array.isArray(matches)) return;
+
+        const missingKey = this.getMissingModelKey(missing);
+        const patchAnalysisData = (data) => {
+            const list = data?.missing_models;
+            if (!Array.isArray(list)) return;
+
+            for (const item of list) {
+                if (this.getMissingModelKey(item) !== missingKey) continue;
+                item.matches = this.mergeLocalMatches(item.matches || [], matches);
+            }
+        };
+
+        patchAnalysisData(this.cachedAnalysisData);
+        const workflowKey = this.getWorkflowScopedQueueKey?.();
+        const cached = workflowKey ? this.workflowAnalysisCaches?.get(workflowKey) : null;
+        if (cached?.data) {
+            patchAnalysisData(cached.data);
+        }
+    },
+
+    persistDownloadedLocalMatchSearchState(missing, matches = [], metadata = {}) {
+        if (!missing || !Array.isArray(matches)) return;
+
+        const workflowKey = this.getWorkflowScopedQueueKey?.();
+        if (!workflowKey) return;
+
+        const state = this.getSearchStateForWorkflow?.(workflowKey, missing);
+        if (!state) return;
+
+        const hasRenderableMatch = matches.some(match => Number(match.confidence || 0) >= 70);
+        const hasExactMatch = matches.some(match => Number(match.confidence || 0) >= 100);
+        state.lastAttemptSources = Array.from(new Set([...(state.lastAttemptSources || []), 'local']));
+        state.lastAttemptFound = hasRenderableMatch || state.lastAttemptFound || false;
+        state.lastAttemptError = state.lastAttemptError || null;
+        state.sourceProgress = {
+            ...(state.sourceProgress || {}),
+            local: {
+                status: hasRenderableMatch ? 'found' : 'none',
+                percent: 100,
+                message: hasExactMatch ? 'Exact local match' : (hasRenderableMatch ? 'Local match' : 'No local match'),
+                updatedAt: Date.now(),
+                filename: metadata.targetFilename || metadata.filename || ''
+            }
+        };
+
+        this.persistSearchStateForWorkflow?.(workflowKey, missing, state);
+    },
+
     rememberDownloadUiState(downloadId, info, progress = {}, options = {}) {
         if (!info?.missing) return null;
 
@@ -779,6 +902,12 @@ export const resolveDownloadMethods = {
         const currentMissing = (this.missingModels || []).find(item => this.getMissingModelKey(item) === missingKey) || missing;
         currentMissing.matches = matches;
         missing.matches = matches;
+        this.rememberDownloadedLocalMatchesForMissing(currentMissing, matches, {
+            targetFilename,
+            category: category || missing.category || '',
+            downloadPath,
+            downloadDirectory
+        });
         this.allModels = null;
         this.invalidateLoadedModelsCacheForActiveWorkflow?.();
         this.refreshLocalMatchesUiForMissing(currentMissing);

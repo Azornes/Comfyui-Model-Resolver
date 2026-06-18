@@ -71,6 +71,14 @@ export const missingBrowserMethods = {
 
         if (source === 'local') {
             candidates.push(results.model_list, results.popular);
+            const bestLocalMatch = this.getBestLocalMatch(missing, 70);
+            if (bestLocalMatch) {
+                candidates.push({
+                    source: 'local_match',
+                    confidence: Number(bestLocalMatch.confidence || 0),
+                    match_type: Number(bestLocalMatch.confidence || 0) >= 100 ? 'exact' : 'similar'
+                });
+            }
         } else if (source === 'huggingface') {
             candidates.push(results.huggingface);
         } else if (source === 'civitai') {
@@ -653,7 +661,9 @@ export const missingBrowserMethods = {
      * Display missing models in the dialog
      */
     displayMissingModels(container, data) {
-        const missingModels = data.missing_models || [];
+        const missingModels = (data.missing_models || []).map(missing => (
+            this.restoreDownloadedLocalMatchesForMissing?.(missing) || missing
+        ));
         const totalMissing = data.total_missing || 0;
         this.missingModels = missingModels;
         this.syncBatchSelectionForMissingModels(missingModels);

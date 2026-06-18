@@ -365,6 +365,23 @@ export const downloadTargetMethods = {
         });
     },
 
+    getFirstSearchResult(result) {
+        return Array.isArray(result) ? (result[0] || null) : (result || null);
+    },
+
+    getCachedSearchSuggestionData(missing = {}) {
+        const state = this.searchResultCache?.get(this.getMissingSearchKey?.(missing));
+        const results = state?.results || {};
+        const merged = {};
+        for (const source of ['popular', 'model_list', 'huggingface', 'civitai', 'civarchive', 'lora_manager_archive']) {
+            const result = this.getFirstSearchResult(results[source]);
+            if (result && typeof result === 'object') {
+                Object.assign(merged, result);
+            }
+        }
+        return merged;
+    },
+
     normalizeFolderToken(value = '') {
         return String(value || '')
             .toLowerCase()
@@ -392,8 +409,10 @@ export const downloadTargetMethods = {
             return '';
         }
 
+        const searchSuggestion = this.getCachedSearchSuggestionData(missing);
         const civitaiData = {
             ...(missing?.civitai_info || {}),
+            ...(searchSuggestion || {}),
             ...(missing?.civitai_search_result || {}),
             ...(missing?.download_source || {})
         };
@@ -440,6 +459,7 @@ export const downloadTargetMethods = {
         const source = missing.download_source || {};
         const civitaiInfo = missing.civitai_info || {};
         const civitaiSearch = missing.civitai_search_result || {};
+        const searchSuggestion = this.getCachedSearchSuggestionData(missing);
         const rawValues = [
             source.filename,
             source.name,
@@ -450,6 +470,12 @@ export const downloadTargetMethods = {
             civitaiSearch.filename,
             civitaiSearch.name,
             civitaiSearch.model_name,
+            searchSuggestion.filename,
+            searchSuggestion.name,
+            searchSuggestion.model_name,
+            searchSuggestion.path,
+            searchSuggestion.repo_id,
+            searchSuggestion.repo,
             missing.original_path,
             missing.name
         ].filter(Boolean);
@@ -1010,6 +1036,7 @@ export const downloadTargetMethods = {
 
         this.workflowAnalysisCaches.clear();
         this.workflowLoadedModelCaches.clear();
+        this.workflowDownloadTargetSelectionCaches?.clear();
         this.cachedAnalysisData = null;
         this.cachedWorkflowSignature = null;
         this.cachedLoadedModelsData = null;
