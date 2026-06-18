@@ -39,6 +39,14 @@ CATEGORY_MAP = {
     "gligen": "gligen",
     "diffusers": "diffusers",
     "vae_approx": "vae_approx",
+    "sam": "sams",
+    "sam_model": "sams",
+    "sam_models": "sams",
+    "sams": "sams",
+    "ultralytics": "ultralytics",
+    "ultralytics_bbox": "ultralytics",
+    "ultralytics_segm": "ultralytics",
+    "yolo": "ultralytics",
     "audio_encoder": "audio_encoders",
     "audio_encoders": "audio_encoders",
     "background_removal": "background_removal",
@@ -64,6 +72,8 @@ DEFAULT_DOWNLOAD_PATH_TEMPLATES: Dict[str, str] = {
     "controlnet": "{base_model}",
     "vae": "",
     "upscale_models": "",
+    "sams": "",
+    "ultralytics": "",
 }
 
 DEFAULT_ROOT_KEYS = {
@@ -85,6 +95,8 @@ TEMPLATE_KEY_ALIASES = {
     "controlnet": ("controlnet", "control_net"),
     "vae": ("vae",),
     "upscale_models": ("upscale_models", "upscale_model", "upscaler"),
+    "sams": ("sams", "sam", "sam_model", "sam_models"),
+    "ultralytics": ("ultralytics", "ultralytics_bbox", "ultralytics_segm", "yolo"),
 }
 
 PRIORITY_TAGS = (

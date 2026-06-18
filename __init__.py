@@ -788,6 +788,14 @@ class ModelResolverExtension:
                                 "gligen": "gligen",
                                 "diffusers": "diffusers",
                                 "vae_approx": "vae_approx",
+                                "sam": "sams",
+                                "sam_model": "sams",
+                                "sam_models": "sams",
+                                "sams": "sams",
+                                "ultralytics": "ultralytics",
+                                "ultralytics_bbox": "ultralytics",
+                                "ultralytics_segm": "ultralytics",
+                                "yolo": "ultralytics",
                                 "audio_encoder": "audio_encoders",
                                 "audio_encoders": "audio_encoders",
                                 "background_removal": "background_removal",
@@ -1943,6 +1951,7 @@ class ModelResolverExtension:
                             "text_encoders",
                             "ipadapter",
                             "sams",
+                            "ultralytics",
                         ]
                         skip_categories = {"custom_nodes", "configs"}
                         categories = []

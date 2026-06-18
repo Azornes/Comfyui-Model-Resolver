@@ -122,6 +122,12 @@ export const downloadTargetMethods = {
             style_model: 'style_models',
             audio_encoder: 'audio_encoders',
             model_patch: 'model_patches',
+            sam: 'sams',
+            sam_model: 'sams',
+            sam_models: 'sams',
+            ultralytics_bbox: 'ultralytics',
+            ultralytics_segm: 'ultralytics',
+            yolo: 'ultralytics',
             background_removal_model: 'background_removal',
             frame_interpolation_model: 'frame_interpolation',
             geometry_estimation_model: 'geometry_estimation',
@@ -157,7 +163,9 @@ export const downloadTargetMethods = {
             'detection': 'detection',
             'model_patches': 'model patch',
             'photomaker': 'PhotoMaker',
-            'optical_flow': 'optical flow'
+            'optical_flow': 'optical flow',
+            'sams': 'SAM',
+            'ultralytics': 'Ultralytics'
         };
         return displayNames[category] || category || 'unknown';
     },
@@ -229,6 +237,13 @@ export const downloadTargetMethods = {
             model_patch: 'model',
             photomaker: 'clip-vision',
             optical_flow: 'image',
+            sams: 'controlnet',
+            sam: 'controlnet',
+            sam_model: 'controlnet',
+            ultralytics: 'controlnet',
+            ultralytics_bbox: 'controlnet',
+            ultralytics_segm: 'controlnet',
+            yolo: 'controlnet',
             image: 'image',
             images: 'image',
             mask: 'mask',
@@ -269,7 +284,9 @@ export const downloadTargetMethods = {
             'detection': 'detection',
             'model_patches': 'model_patch',
             'photomaker': 'photomaker',
-            'optical_flow': 'optical_flow'
+            'optical_flow': 'optical_flow',
+            'sams': 'sam_model',
+            'ultralytics': 'ultralytics'
         };
         return tokenNames[category] || category || 'unknown';
     },
@@ -298,7 +315,8 @@ export const downloadTargetMethods = {
             'photomaker',
             'optical_flow',
             'ipadapter',
-            'sams'
+            'sams',
+            'ultralytics'
         ];
     },
 
