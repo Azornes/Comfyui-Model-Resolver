@@ -8,6 +8,86 @@ export const optionsMethods = {
         this.contentElement.style.overflowY = 'hidden';
 
         const tokens = this.getStoredTokens();
+        const pathTemplateCategories = this.getDownloadPathTemplateCategoryDefinitions();
+        const defaultRootCategories = this.getDefaultRootCategoryDefinitions();
+        const pathTemplatePresets = this.getDownloadPathTemplatePresetDefinitions();
+        const pathTemplatePresetValues = new Set(pathTemplatePresets.map(preset => preset.value));
+        const renderPathModeOptions = (selectedValue) => {
+            const selected = this.normalizeDownloadPathMode(selectedValue);
+            const options = [
+                {
+                    value: 'suggested',
+                    label: 'Suggest existing folders',
+                    tooltip: 'Uses current Model Resolver behavior: it fills an existing matching folder when possible.'
+                },
+                {
+                    value: 'template',
+                    label: 'Use path templates',
+                    tooltip: 'Creates subfolders from template placeholders such as base model, author, tags, and model name.'
+                },
+                {
+                    value: 'manual',
+                    label: 'Manual only',
+                    tooltip: 'Leaves the subfolder field empty until you type or pick a folder.'
+                }
+            ];
+            return options
+                .map(option => `<option value="${option.value}" ${option.value === selected ? 'selected' : ''} title="${this.escapeHtml(option.tooltip)}">${this.escapeHtml(option.label)}</option>`)
+                .join('');
+        };
+        const renderTemplatePlaceholderBadges = () => ['{base_model}', '{author}', '{first_tag}', '{model_name}', '{version_name}']
+            .map(placeholder => `<span class="mr-options-placeholder-badge">${this.escapeHtml(placeholder)}</span>`)
+            .join('');
+        const renderPathTemplateRows = () => pathTemplateCategories
+            .map(category => {
+                const template = tokens.download_path_templates?.[category.key] ?? this.getDefaultDownloadPathTemplates()[category.key] ?? '';
+                const normalizedTemplate = this.normalizeDownloadPathTemplate(template);
+                const isPreset = pathTemplatePresetValues.has(normalizedTemplate);
+                const selectedValue = isPreset ? normalizedTemplate : 'custom';
+                const options = [
+                    ...pathTemplatePresets.map(preset => (
+                        `<option value="${this.escapeHtml(preset.value)}" ${preset.value === selectedValue ? 'selected' : ''}>${this.escapeHtml(preset.label)}</option>`
+                    )),
+                    `<option value="custom" ${selectedValue === 'custom' ? 'selected' : ''}>Custom template</option>`
+                ].join('');
+                const preview = this.calculateDownloadPathTemplateSubfolder(category.key, {
+                    base_model: 'Flux.1 D',
+                    tags: ['style', 'character'],
+                    author: 'example_author',
+                    model_name: 'Example Model',
+                    version_name: 'v1'
+                }) || '(flat folder)';
+
+                return `
+                    <div class="mr-options-template-row" data-template-category="${this.escapeHtml(category.key)}">
+                        <div class="mr-options-template-main">
+                            <label class="mr-options-label" for="mr-options-template-${this.escapeHtml(category.key)}">${this.escapeHtml(category.label)}</label>
+                            <select id="mr-options-template-${this.escapeHtml(category.key)}" class="mr-options-input mr-options-template-preset" data-template-category="${this.escapeHtml(category.key)}">
+                                ${options}
+                            </select>
+                        </div>
+                        <input class="mr-options-input mr-options-template-custom ${selectedValue === 'custom' ? '' : 'is-hidden'}" data-template-category="${this.escapeHtml(category.key)}" type="text" value="${this.escapeHtml(normalizedTemplate)}" placeholder="{base_model}/{author}/{first_tag}">
+                        <div class="mr-options-template-preview" data-template-preview="${this.escapeHtml(category.key)}"><span>Preview:</span> <code>${this.escapeHtml(preview)}</code></div>
+                    </div>
+                `;
+            })
+            .join('');
+        const renderDefaultRootRows = () => defaultRootCategories
+            .map(category => {
+                const value = tokens[category.settingKey] || '';
+                return `
+                    <div class="mr-options-template-row" data-root-category="${this.escapeHtml(category.key)}">
+                        <div class="mr-options-template-main">
+                            <label class="mr-options-label" for="mr-options-root-${this.escapeHtml(category.key)}">${this.escapeHtml(category.label)}</label>
+                            <select id="mr-options-root-${this.escapeHtml(category.key)}" class="mr-options-input mr-options-default-root" data-root-category="${this.escapeHtml(category.key)}" data-setting-key="${this.escapeHtml(category.settingKey)}" data-storage-key="${this.escapeHtml(category.storageKey)}" data-current-value="${this.escapeHtml(value)}">
+                                <option value="">Auto</option>
+                                ${value ? `<option value="${this.escapeHtml(value)}" selected>${this.escapeHtml(value)}</option>` : ''}
+                            </select>
+                        </div>
+                    </div>
+                `;
+            })
+            .join('');
         const sourceDefaultsRows = this.getSearchSourceDefinitions()
             .filter(def => this.isSourceAvailable(def.source))
             .map(def => {
@@ -59,12 +139,19 @@ export const optionsMethods = {
                                     </span>
                                     <span class="mr-options-nav-meta">01</span>
                                 </button>
+                                <button type="button" class="mr-options-nav-btn" data-target="mr-options-section-paths">
+                                    <span class="mr-options-nav-main">
+                                        <span class="mr-options-nav-icon" aria-hidden="true">${getSvgIcon('folderOpen')}</span>
+                                        <span>Paths</span>
+                                    </span>
+                                    <span class="mr-options-nav-meta">02</span>
+                                </button>
                                 <button type="button" class="mr-options-nav-btn" data-target="mr-options-section-local-db">
                                     <span class="mr-options-nav-main">
                                         <span class="mr-options-nav-icon" aria-hidden="true">${getSvgIcon('database')}</span>
                                         <span>Local Database</span>
                                     </span>
-                                    <span class="mr-options-nav-meta">02</span>
+                                    <span class="mr-options-nav-meta">03</span>
                                 </button>
                             </div>
                         </div>
@@ -76,7 +163,7 @@ export const optionsMethods = {
                                         <span class="mr-options-nav-icon" aria-hidden="true">${getSvgIcon('search')}</span>
                                         <span>Defaults</span>
                                     </span>
-                                    <span class="mr-options-nav-meta">03</span>
+                                    <span class="mr-options-nav-meta">04</span>
                                 </button>
                             </div>
                         </div>
@@ -88,14 +175,14 @@ export const optionsMethods = {
                                         <span class="mr-options-nav-icon mr-options-provider-icon mr-options-provider-icon-civitai" aria-hidden="true">${getSvgIcon('civitai')}</span>
                                         <span>CivitAI</span>
                                     </span>
-                                    <span class="mr-options-nav-meta">04</span>
+                                    <span class="mr-options-nav-meta">05</span>
                                 </button>
                                 <button type="button" class="mr-options-nav-btn" data-target="mr-options-section-hf">
                                     <span class="mr-options-nav-main">
                                         <span class="mr-options-nav-icon mr-options-provider-icon mr-options-provider-icon-huggingface" aria-hidden="true">${getSvgIcon('huggingface')}</span>
                                         <span>HuggingFace</span>
                                     </span>
-                                    <span class="mr-options-nav-meta">05</span>
+                                    <span class="mr-options-nav-meta">06</span>
                                 </button>
                             </div>
                         </div>
@@ -107,7 +194,7 @@ export const optionsMethods = {
                                         <span class="mr-options-nav-icon" aria-hidden="true">${getSvgIcon('wrench')}</span>
                                         <span>Maintenance</span>
                                     </span>
-                                    <span class="mr-options-nav-meta">06</span>
+                                    <span class="mr-options-nav-meta">07</span>
                                 </button>
                             </div>
                         </div>
@@ -125,6 +212,61 @@ export const optionsMethods = {
                                 <div class="mr-options-panel">
                                     <div class="mr-options-toggle-list">
                                         ${sourceDefaultsRows}
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                        <section id="mr-options-section-paths" class="mr-options-card mr-options-section is-hidden">
+                            <div class="mr-options-section-head">
+                                <h4 class="mr-options-section-title">Download Paths</h4>
+                            </div>
+                            <div class="mr-options-grid">
+                                <div class="mr-options-panel">
+                                    <div class="mr-options-stack">
+                                        <div class="mr-options-number-row mr-options-path-mode-row">
+                                            <div class="mr-options-number-copy">
+                                                <span class="mr-options-label">Subfolder fill mode <span class="mr-tooltip-badge" data-tooltip="Controls how Model Resolver fills the Subfolder field before a download. Manual edits in the download panel still win.">?</span></span>
+                                            </div>
+                                            <select id="mr-options-download-path-mode" class="mr-options-input">
+                                                ${renderPathModeOptions(tokens.download_path_mode)}
+                                            </select>
+                                        </div>
+                                        <div class="mr-options-subsection-head">
+                                            <h5 class="mr-options-subsection-title">Default Roots</h5>
+                                            <span class="mr-tooltip-badge" data-tooltip="Choose the root directory used by downloads for each model type. Auto keeps Model Resolver's existing folder choice.">?</span>
+                                        </div>
+                                        <div class="mr-options-template-list">
+                                            ${renderDefaultRootRows()}
+                                        </div>
+                                        <div class="mr-options-subsection-head mr-options-subsection-head-actions">
+                                            <div class="mr-options-subsection-title-wrap">
+                                                <h5 class="mr-options-subsection-title">Download Path Templates</h5>
+                                                <span class="mr-tooltip-badge" data-tooltip="Templates create subfolders under the selected root. Empty template means a flat folder.">?</span>
+                                            </div>
+                                            <button id="mr-options-detect-templates" type="button" class="mr-btn mr-btn-secondary mr-btn-sm">Detect from existing folders</button>
+                                        </div>
+                                        <div id="mr-options-template-detect-status" class="mr-options-template-detect-status">Scan your existing model folders and apply the most likely template presets.</div>
+                                        <div class="mr-options-placeholder-row">
+                                            <span>Available placeholders:</span>
+                                            ${renderTemplatePlaceholderBadges()}
+                                        </div>
+                                        <div class="mr-options-template-list">
+                                            ${renderPathTemplateRows()}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mr-options-panel">
+                                    <div class="mr-options-stack">
+                                        <div class="mr-options-mapping-section">
+                                            <div class="mr-options-mapping-head">
+                                                <label class="mr-options-label">Base Model Path Mappings <span class="mr-tooltip-badge" data-tooltip="Optional. Map a detected base model to a folder path, for example: Pony -> SDXL/Pony. These are applied to {base_model} and may include subfolders.">?</span></label>
+                                                <button id="mr-options-add-base-model-mapping" type="button" class="mr-btn mr-btn-primary mr-btn-sm">+ Add Mapping</button>
+                                            </div>
+                                            <div id="mr-options-base-model-mappings" class="mr-options-mapping-list"></div>
+                                        </div>
+                                        <div class="mr-options-db-message">
+                                            These settings only affect new downloads. The per-download Folder and Subfolder controls remain available for one-off overrides.
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -465,6 +607,14 @@ export const optionsMethods = {
         const hfUseBraveFallbackInput = this.contentElement.querySelector('#mr-options-hf-use-brave-fallback');
         const autoFillBaseModelInput = this.contentElement.querySelector('#mr-options-auto-fill-base-model');
         const autoFillSubfolderInput = this.contentElement.querySelector('#mr-options-auto-fill-subfolder');
+        const downloadPathModeInput = this.contentElement.querySelector('#mr-options-download-path-mode');
+        const defaultRootSelectInputs = Array.from(this.contentElement.querySelectorAll('.mr-options-default-root'));
+        const templatePresetInputs = Array.from(this.contentElement.querySelectorAll('.mr-options-template-preset'));
+        const templateCustomInputs = Array.from(this.contentElement.querySelectorAll('.mr-options-template-custom'));
+        const detectTemplatesBtn = this.contentElement.querySelector('#mr-options-detect-templates');
+        const templateDetectStatus = this.contentElement.querySelector('#mr-options-template-detect-status');
+        const baseModelMappingsContainer = this.contentElement.querySelector('#mr-options-base-model-mappings');
+        const addBaseModelMappingBtn = this.contentElement.querySelector('#mr-options-add-base-model-mapping');
         const frontendLogsEnabledInput = this.contentElement.querySelector('#mr-options-frontend-logs-enabled');
         const backendLogsEnabledInput = this.contentElement.querySelector('#mr-options-backend-logs-enabled');
         const frontendLogLevelInput = this.contentElement.querySelector('#mr-options-frontend-log-level');
@@ -510,6 +660,10 @@ export const optionsMethods = {
             hfUseBraveFallbackInput,
             autoFillBaseModelInput,
             autoFillSubfolderInput,
+            downloadPathModeInput,
+            ...defaultRootSelectInputs,
+            ...templatePresetInputs,
+            ...templateCustomInputs,
             frontendLogsEnabledInput,
             backendLogsEnabledInput,
             frontendLogLevelInput,
@@ -893,6 +1047,373 @@ export const optionsMethods = {
         bindVisibilityToggle(civitaiSessionInput, civitaiSessionToggle);
         bindVisibilityToggle(hfInput, hfToggle);
         bindVisibilityToggle(braveInput, braveToggle);
+
+        const pathPreviewMetadata = {
+            base_model: 'Flux.1 D',
+            tags: ['style', 'character'],
+            author: 'example_author',
+            model_name: 'Example Model',
+            version_name: 'v1'
+        };
+
+        const getTemplateInputValue = (categoryKey) => {
+            const select = templatePresetInputs.find(input => input.dataset.templateCategory === categoryKey);
+            const custom = templateCustomInputs.find(input => input.dataset.templateCategory === categoryKey);
+            if (!select) return '';
+            return select.value === 'custom' ? (custom?.value || '') : select.value;
+        };
+
+        const getBaseModelMappingChoices = () => {
+            const names = [];
+            const seen = new Set();
+            const addName = (value) => {
+                const name = String(value || '').trim();
+                if (!name || seen.has(name)) return;
+                seen.add(name);
+                names.push(name);
+            };
+
+            const baseModelsList = this.baseModels?.base_models;
+            if (Array.isArray(baseModelsList)) {
+                baseModelsList.forEach(model => addName(model?.name));
+            }
+            Object.keys(tokens.base_model_path_mappings || {}).forEach(addName);
+            return names.sort((a, b) => a.localeCompare(b));
+        };
+
+        const getBaseModelMappingRows = () => (
+            baseModelMappingsContainer
+                ? Array.from(baseModelMappingsContainer.querySelectorAll('.mr-options-mapping-row'))
+                : []
+        );
+
+        const collectBaseModelPathMappings = () => {
+            if (!baseModelMappingsContainer) {
+                return { ...(tokens.base_model_path_mappings || {}) };
+            }
+            return getBaseModelMappingRows().reduce((acc, row) => {
+                const baseModel = row.querySelector('.mr-options-mapping-base')?.value?.trim() || '';
+                const pathValue = row.querySelector('.mr-options-mapping-path')?.value?.trim() || '';
+                if (baseModel && pathValue) {
+                    acc[baseModel] = pathValue;
+                }
+                return acc;
+            }, {});
+        };
+
+        const renderBaseModelMappingOptions = (currentValue = '', currentRow = null) => {
+            const usedValues = new Set(
+                getBaseModelMappingRows()
+                    .filter(row => row !== currentRow)
+                    .map(row => row.querySelector('.mr-options-mapping-base')?.value?.trim() || '')
+                    .filter(Boolean)
+            );
+            const options = [
+                `<option value="">Select Base Model</option>`
+            ];
+            const choices = getBaseModelMappingChoices();
+            if (currentValue && !choices.includes(currentValue)) {
+                options.push(`<option value="${this.escapeHtml(currentValue)}" selected>${this.escapeHtml(currentValue)}</option>`);
+            }
+            choices.forEach((name) => {
+                if (usedValues.has(name) && name !== currentValue) return;
+                options.push(`<option value="${this.escapeHtml(name)}" ${name === currentValue ? 'selected' : ''}>${this.escapeHtml(name)}</option>`);
+            });
+            return options.join('');
+        };
+
+        const refreshBaseModelMappingOptions = () => {
+            getBaseModelMappingRows().forEach((row) => {
+                const select = row.querySelector('.mr-options-mapping-base');
+                if (!select) return;
+                const currentValue = select.value;
+                select.innerHTML = renderBaseModelMappingOptions(currentValue, row);
+                select.value = currentValue;
+            });
+        };
+
+        const addBaseModelMappingRow = (baseModel = '', pathValue = '') => {
+            if (!baseModelMappingsContainer) return;
+
+            const row = document.createElement('div');
+            row.className = 'mr-options-mapping-row';
+            row.innerHTML = `
+                <select class="mr-options-input mr-options-mapping-base">
+                    ${renderBaseModelMappingOptions(baseModel, row)}
+                </select>
+                <input class="mr-options-input mr-options-mapping-path" type="text" placeholder="Custom path (e.g., SDXL/Pony)" value="${this.escapeHtml(pathValue)}">
+                <button type="button" class="mr-options-mapping-remove" aria-label="Remove mapping" data-tooltip="Remove mapping">&times;</button>
+            `;
+
+            const baseSelect = row.querySelector('.mr-options-mapping-base');
+            const pathInput = row.querySelector('.mr-options-mapping-path');
+            const removeBtn = row.querySelector('.mr-options-mapping-remove');
+            const markChanged = () => {
+                setStatus('You have unsaved changes.', 'is-dirty');
+                refreshBaseModelMappingOptions();
+                syncAllTemplateControls();
+            };
+
+            baseSelect?.addEventListener('change', markChanged);
+            pathInput?.addEventListener('input', markChanged);
+            pathInput?.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    pathInput.blur();
+                }
+            });
+            removeBtn?.addEventListener('click', () => {
+                row.remove();
+                if (!getBaseModelMappingRows().length) {
+                    addBaseModelMappingRow('', '');
+                }
+                markChanged();
+            });
+
+            baseModelMappingsContainer.appendChild(row);
+            refreshBaseModelMappingOptions();
+            this.bindTooltips(row);
+        };
+
+        const renderBaseModelMappingRows = (mappings = {}) => {
+            if (!baseModelMappingsContainer) return;
+            baseModelMappingsContainer.innerHTML = '';
+            const entries = Object.entries(mappings || {});
+            if (!entries.length) {
+                addBaseModelMappingRow('', '');
+                return;
+            }
+            entries.forEach(([baseModel, pathValue]) => {
+                addBaseModelMappingRow(baseModel, pathValue);
+            });
+        };
+
+        const renderTemplatePreview = (template) => {
+            const mappings = collectBaseModelPathMappings();
+            const mappedBase = this.resolveBaseModelPathMapping(
+                pathPreviewMetadata.base_model,
+                mappings
+            );
+            const replacements = {
+                '{base_model}': this.sanitizeDownloadPathValue(mappedBase, 'Unknown Base Model'),
+                '{author}': this.sanitizeDownloadPathSegment(pathPreviewMetadata.author, 'Anonymous'),
+                '{first_tag}': this.sanitizeDownloadPathSegment(this.getPriorityDownloadTag(pathPreviewMetadata.tags), 'no tags'),
+                '{model_name}': this.sanitizeDownloadPathSegment(pathPreviewMetadata.model_name, 'Model'),
+                '{version_name}': this.sanitizeDownloadPathSegment(pathPreviewMetadata.version_name, '')
+            };
+            let formatted = this.normalizeDownloadPathTemplate(template);
+            Object.entries(replacements).forEach(([token, value]) => {
+                formatted = formatted.split(token).join(value);
+            });
+            formatted = formatted.replace(/\{[^{}]+\}/g, '');
+            return this.normalizeTemplateSubfolder(formatted) || '(flat folder)';
+        };
+
+        const syncTemplateControl = (categoryKey) => {
+            const select = templatePresetInputs.find(input => input.dataset.templateCategory === categoryKey);
+            const custom = templateCustomInputs.find(input => input.dataset.templateCategory === categoryKey);
+            const preview = this.contentElement.querySelector(`[data-template-preview="${categoryKey}"]`);
+            const useCustom = select?.value === 'custom';
+            if (custom) {
+                custom.classList.toggle('is-hidden', !useCustom);
+            }
+            if (preview) {
+                preview.innerHTML = `<span>Preview:</span> <code>${this.escapeHtml(renderTemplatePreview(getTemplateInputValue(categoryKey)))}</code>`;
+            }
+        };
+
+        const syncAllTemplateControls = () => {
+            pathTemplateCategories.forEach(category => syncTemplateControl(category.key));
+        };
+
+        const getDefaultRootContextPath = (select) => {
+            if (!select) return '';
+            const category = this.normalizeDownloadCategory(select.dataset.rootCategory || '');
+            const selectedValue = String(select.value || '').trim();
+            if (selectedValue) return selectedValue;
+            const directDownloadRoot = this.downloadDirectories?.[category] || '';
+            if (directDownloadRoot) return directDownloadRoot;
+            const rootOptions = this.downloadRootDirectories?.[category];
+            return Array.isArray(rootOptions) && rootOptions.length ? rootOptions[0] : '';
+        };
+
+        const getDefaultRootContextModel = (select) => {
+            const path = getDefaultRootContextPath(select);
+            if (!path) return null;
+            const category = this.normalizeDownloadCategory(select.dataset.rootCategory || '');
+            const label = select.closest('.mr-options-template-row')?.querySelector('.mr-options-label')?.textContent?.trim()
+                || this.getCategoryDisplayName(category);
+            return {
+                context_scope: 'download_root',
+                name: label,
+                path,
+                resolved_path: path,
+                folder_path: path,
+                download_directory: path,
+                category,
+                open_folder_label: 'Open Root Folder'
+            };
+        };
+
+        const syncDefaultRootContextTarget = (select) => {
+            if (!select) return;
+            const contextModel = getDefaultRootContextModel(select);
+            const tooltip = contextModel
+                ? `Right-click to open ${contextModel.name}`
+                : 'No root folder available';
+            this.setDownloadFolderContextTarget(select, contextModel, tooltip);
+            this.setDownloadFolderContextTarget(select.closest('.mr-options-template-row'), contextModel, tooltip);
+        };
+
+        const setTemplateControlValue = (categoryKey, template) => {
+            const select = templatePresetInputs.find(input => input.dataset.templateCategory === categoryKey);
+            const custom = templateCustomInputs.find(input => input.dataset.templateCategory === categoryKey);
+            if (!select) return false;
+            const normalizedTemplate = this.normalizeDownloadPathTemplate(template);
+            select.value = pathTemplatePresetValues.has(normalizedTemplate)
+                ? normalizedTemplate
+                : 'custom';
+            if (custom) {
+                custom.value = normalizedTemplate;
+            }
+            syncTemplateControl(categoryKey);
+            return true;
+        };
+
+        const setTemplateDetectStatus = (text, mode = '') => {
+            if (!templateDetectStatus) return;
+            templateDetectStatus.textContent = text;
+            templateDetectStatus.classList.remove('is-valid', 'is-invalid', 'is-pending');
+            if (mode) templateDetectStatus.classList.add(mode);
+        };
+
+        const applyDetectedPathTemplates = async () => {
+            if (!detectTemplatesBtn) return;
+            detectTemplatesBtn.disabled = true;
+            setTemplateDetectStatus('Scanning existing model folders...', 'is-pending');
+
+            try {
+                const resp = await api.fetchApi('/model_resolver/path-template-suggestions?force=1');
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                const categories = data?.categories && typeof data.categories === 'object'
+                    ? data.categories
+                    : {};
+                let appliedCount = 0;
+                let inspectedCount = 0;
+
+                pathTemplateCategories.forEach((category) => {
+                    const suggestion = categories[category.key];
+                    if (!suggestion) return;
+                    if (Number(suggestion.model_count || 0) > 0) {
+                        inspectedCount += 1;
+                    }
+                    if (suggestion.apply && setTemplateControlValue(category.key, suggestion.template || '')) {
+                        appliedCount += 1;
+                    }
+                });
+
+                let mappingCount = 0;
+                const detectedMappings = data?.base_model_path_mappings || {};
+                if (
+                    baseModelMappingsContainer &&
+                    detectedMappings &&
+                    typeof detectedMappings === 'object' &&
+                    !Array.isArray(detectedMappings)
+                ) {
+                    const currentMappings = collectBaseModelPathMappings();
+                    Object.entries(detectedMappings).forEach(([source, target]) => {
+                        const sourceKey = String(source || '').trim();
+                        const targetValue = String(target || '').trim();
+                        if (sourceKey && targetValue && !currentMappings[sourceKey]) {
+                            currentMappings[sourceKey] = targetValue;
+                            mappingCount += 1;
+                        }
+                    });
+                    if (mappingCount > 0) {
+                        renderBaseModelMappingRows(currentMappings);
+                    }
+                }
+
+                if (appliedCount > 0 || mappingCount > 0) {
+                    if (appliedCount > 0 && downloadPathModeInput) {
+                        downloadPathModeInput.value = 'template';
+                    }
+                    syncAllTemplateControls();
+                    setStatus('You have unsaved changes.', 'is-dirty');
+                    const mappingText = mappingCount
+                        ? ` Added ${mappingCount} base-model mapping${mappingCount === 1 ? '' : 's'}.`
+                        : '';
+                    setTemplateDetectStatus(
+                        appliedCount > 0
+                            ? `Detected ${appliedCount} template preset${appliedCount === 1 ? '' : 's'} from ${inspectedCount} model type${inspectedCount === 1 ? '' : 's'}.${mappingText}`
+                            : `Detected ${mappingCount} base-model mapping${mappingCount === 1 ? '' : 's'} from existing folders.`,
+                        'is-valid'
+                    );
+                    this.showNotification('Path templates detected. Review and save options.', 'success');
+                } else {
+                    setTemplateDetectStatus(
+                        'No confident folder pattern found. Existing template settings were not changed.',
+                        'is-invalid'
+                    );
+                    this.showNotification('No confident path template pattern found.', 'info');
+                }
+            } catch (error) {
+                console.error('Model Resolver: path template detection error:', error);
+                setTemplateDetectStatus(error.message || 'Template detection failed.', 'is-invalid');
+                this.showNotification('Path template detection failed', 'error');
+            } finally {
+                detectTemplatesBtn.disabled = false;
+            }
+        };
+
+        templatePresetInputs.forEach(input => {
+            input.addEventListener('change', () => syncTemplateControl(input.dataset.templateCategory));
+        });
+        templateCustomInputs.forEach(input => {
+            input.addEventListener('input', () => syncTemplateControl(input.dataset.templateCategory));
+        });
+        renderBaseModelMappingRows(tokens.base_model_path_mappings || {});
+        if (typeof this.ensureBaseModelsLoaded === 'function') {
+            this.ensureBaseModelsLoaded()
+                .then(() => {
+                    refreshBaseModelMappingOptions();
+                })
+                .catch((error) => {
+                    console.warn('Model Resolver: could not load base models for mapping options', error);
+                });
+        }
+        if (addBaseModelMappingBtn) {
+            addBaseModelMappingBtn.addEventListener('click', () => {
+                addBaseModelMappingRow('', '');
+                setStatus('You have unsaved changes.', 'is-dirty');
+            });
+        }
+        syncAllTemplateControls();
+
+        const populateDefaultRootSelects = async () => {
+            const roots = await this.ensureDownloadRootDirectoriesLoaded();
+            await this.ensureDownloadDirectoriesLoaded();
+            defaultRootSelectInputs.forEach((select) => {
+                const category = this.normalizeDownloadCategory(select.dataset.rootCategory || '');
+                const currentValue = select.value || select.dataset.currentValue || '';
+                const categoryRoots = Array.isArray(roots?.[category]) ? roots[category] : [];
+                const options = [
+                    { value: '', label: 'Auto' },
+                    ...categoryRoots.map(path => ({ value: path, label: path }))
+                ];
+                if (currentValue && !options.some(option => option.value === currentValue)) {
+                    options.push({ value: currentValue, label: `${currentValue} (not currently detected)` });
+                }
+                select.innerHTML = options
+                    .map(option => `<option value="${this.escapeHtml(option.value)}" ${option.value === currentValue ? 'selected' : ''}>${this.escapeHtml(option.label)}</option>`)
+                    .join('');
+                syncDefaultRootContextTarget(select);
+            });
+        };
+
+        populateDefaultRootSelects();
+
         setStatus('Saved only on this machine.');
         setVisibleSection('mr-options-section-sources');
 
@@ -900,6 +1421,12 @@ export const optionsMethods = {
             const eventName = input.type === 'checkbox' || input.tagName === 'SELECT' ? 'change' : 'input';
             input.addEventListener(eventName, () => {
                 setStatus('You have unsaved changes.', 'is-dirty');
+            });
+        });
+
+        defaultRootSelectInputs.forEach((select) => {
+            select.addEventListener('change', () => {
+                syncDefaultRootContextTarget(select);
             });
         });
 
@@ -952,6 +1479,12 @@ export const optionsMethods = {
         if (clearAllCacheBtn) {
             clearAllCacheBtn.addEventListener('click', () => {
                 clearAllCachesFromOptions();
+            });
+        }
+
+        if (detectTemplatesBtn) {
+            detectTemplatesBtn.addEventListener('click', () => {
+                applyDetectedPathTemplates();
             });
         }
 
@@ -1030,6 +1563,21 @@ export const optionsMethods = {
                         sourceEnabled[key] = input.checked;
                     }
                 });
+                const downloadPathTemplates = {};
+                pathTemplateCategories.forEach(category => {
+                    downloadPathTemplates[category.key] = this.normalizeDownloadPathTemplate(
+                        getTemplateInputValue(category.key)
+                    );
+                });
+                const baseModelPathMappings = collectBaseModelPathMappings();
+                const downloadPathMode = this.normalizeDownloadPathMode(downloadPathModeInput?.value || tokens.download_path_mode);
+                const defaultRootSettings = {};
+                defaultRootSelectInputs.forEach((select) => {
+                    const settingKey = select.dataset.settingKey;
+                    if (settingKey) {
+                        defaultRootSettings[settingKey] = select.value || '';
+                    }
+                });
 
                 const newSettings = {
                     civitai_key:                 civitaiInput?.value || '',
@@ -1043,6 +1591,10 @@ export const optionsMethods = {
                     hf_use_brave_fallback:        Boolean(hfUseBraveFallbackInput?.checked),
                     auto_fill_base_model:          Boolean(autoFillBaseModelInput?.checked),
                     auto_fill_subfolder:           Boolean(autoFillSubfolderInput?.checked),
+                    download_path_mode:            downloadPathMode,
+                    download_path_templates:       downloadPathTemplates,
+                    base_model_path_mappings:      baseModelPathMappings,
+                    ...defaultRootSettings,
                     frontend_logs_enabled:         Boolean(frontendLogsEnabledInput?.checked),
                     backend_logs_enabled:          Boolean(backendLogsEnabledInput?.checked),
                     frontend_log_level:            normalizeLogLevel(frontendLogLevelInput?.value || tokens.frontend_log_level),
@@ -1063,6 +1615,15 @@ export const optionsMethods = {
                 localStorage.setItem('ModelResolver.hfUseBraveFallback',     newSettings.hf_use_brave_fallback ? 'true' : 'false');
                 localStorage.setItem('ModelResolver.autoFillBaseModel',      newSettings.auto_fill_base_model ? 'true' : 'false');
                 localStorage.setItem('ModelResolver.autoFillSubfolder',      newSettings.auto_fill_subfolder ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.downloadPathMode',       newSettings.download_path_mode);
+                localStorage.setItem('ModelResolver.downloadPathTemplates',  JSON.stringify(newSettings.download_path_templates));
+                localStorage.setItem('ModelResolver.baseModelPathMappings',  JSON.stringify(newSettings.base_model_path_mappings));
+                defaultRootSelectInputs.forEach((select) => {
+                    const storageKey = select.dataset.storageKey;
+                    if (storageKey) {
+                        localStorage.setItem(storageKey, select.value || '');
+                    }
+                });
                 localStorage.setItem('ModelResolver.frontendLogsEnabled',    newSettings.frontend_logs_enabled ? 'true' : 'false');
                 localStorage.setItem('ModelResolver.backendLogsEnabled',     newSettings.backend_logs_enabled ? 'true' : 'false');
                 localStorage.setItem('ModelResolver.frontendLogLevel',       newSettings.frontend_log_level);
@@ -1091,6 +1652,8 @@ export const optionsMethods = {
                     this.showNotification('Options saved locally only', 'warning');
                 }
 
+                this.downloadRootDirectories = null;
+                this.downloadSubfolders?.clear();
                 await this.clearSearchCaches();
             });
         }

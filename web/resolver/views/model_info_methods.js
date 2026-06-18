@@ -26,18 +26,21 @@ export const modelInfoMethods = {
         const canShowMore = this.canShowSourceDetails(model);
         const isDownloadTableContext = model?.context_scope === 'download_table';
         const isDownloadFolderContext = model?.context_scope === 'download_folder';
+        const isDownloadRootContext = model?.context_scope === 'download_root';
+        const isFolderOnlyContext = isDownloadFolderContext || isDownloadRootContext;
         const hasLocalPath = Boolean(model?.folder_path || model?.download_directory || model?.directory || model?.path || model?.resolved_path);
         const showOpenFolder = !isDownloadTableContext && hasLocalPath;
-        this.setContextMenuItemVisible('showInfo', !isDownloadTableContext && !isDownloadFolderContext);
+        this.setContextMenuItemVisible('showInfo', !isDownloadTableContext && !isFolderOnlyContext);
         this.setContextMenuItemVisible('showMore', canShowMore);
-        this.setContextMenuItemVisible('civitai', !isDownloadTableContext && !isDownloadFolderContext);
+        this.setContextMenuItemVisible('civitai', !isDownloadTableContext && !isFolderOnlyContext);
         this.setContextMenuItemVisible('openFolder', showOpenFolder);
-        this.setContextMenuDividerVisible('source', (!isDownloadTableContext && !isDownloadFolderContext) || canShowMore);
-        this.setContextMenuDividerVisible('folder', showOpenFolder && !isDownloadFolderContext);
+        this.setContextMenuDividerVisible('source', (!isDownloadTableContext && !isFolderOnlyContext) || canShowMore);
+        this.setContextMenuDividerVisible('folder', showOpenFolder && !isFolderOnlyContext);
 
         const openFolderLabel = this.contextMenu.querySelector('.mr-context-menu-action-open-folder span:last-child');
         if (openFolderLabel) {
-            openFolderLabel.textContent = isDownloadFolderContext ? 'Open Download Folder' : 'Open Containing Folder';
+            openFolderLabel.textContent = model?.open_folder_label
+                || (isDownloadRootContext ? 'Open Root Folder' : isDownloadFolderContext ? 'Open Download Folder' : 'Open Containing Folder');
         }
 
         // Position the menu

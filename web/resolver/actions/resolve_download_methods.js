@@ -1114,6 +1114,7 @@ export const resolveDownloadMethods = {
                     category: category,
                     subfolder: subfolder,
                     base_directory: baseDirectory,
+                    path_metadata: this.getDownloadPathMetadata(missing, source),
                     hf_token: tokens.hf_token,
                     civitai_key: tokens.civitai_key
                 })
@@ -1751,7 +1752,15 @@ export const resolveDownloadMethods = {
                 const url = btn.dataset.url;
                 const filename = btn.dataset.filename;
                 const category = btn.dataset.category;
-                this.downloadFromSearch(missing, url, filename, category, btn);
+                let pathMetadata = null;
+                try {
+                    pathMetadata = btn.dataset.pathMetadata
+                        ? JSON.parse(decodeURIComponent(btn.dataset.pathMetadata))
+                        : null;
+                } catch (_error) {
+                    pathMetadata = null;
+                }
+                this.downloadFromSearch(missing, url, filename, category, btn, pathMetadata);
             });
         });
 
@@ -1933,6 +1942,9 @@ export const resolveDownloadMethods = {
         const rowKeys = new Set();
         const addRow = (row) => {
             if (!row) return;
+            if (!row.pathMetadata) {
+                row.pathMetadata = this.getDownloadPathMetadata(missing, row.detailsContext || row);
+            }
             const rowKey = `${row.sourceKey}:${row.downloadUrl || row.openUrl || `${row.model}:${row.filename}`}`;
             if (rowKeys.has(rowKey)) return;
             rowKeys.add(rowKey);
@@ -2108,7 +2120,7 @@ export const resolveDownloadMethods = {
     /**
      * Download from search results
      */
-    async downloadFromSearch(missing, url, filename, category, btn) {
+    async downloadFromSearch(missing, url, filename, category, btn, pathMetadata = null) {
         const progressId = this.getDownloadProgressElementId(missing);
         const progressDiv = this.contentElement?.querySelector(`#${progressId}`);
         const tokens = this.getStoredTokens();
@@ -2161,6 +2173,10 @@ export const resolveDownloadMethods = {
                     category: targetSelection.category,
                     subfolder: targetSelection.subfolder,
                     base_directory: targetSelection.baseDirectory || '',
+                    path_metadata: pathMetadata || this.getDownloadPathMetadata(missing, {
+                        filename,
+                        category: targetSelection.category
+                    }),
                     hf_token: tokens.hf_token,
                     civitai_key: tokens.civitai_key
                 })

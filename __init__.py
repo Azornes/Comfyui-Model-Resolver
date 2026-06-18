@@ -78,7 +78,15 @@ class ModelResolverExtension:
                     apply_resolution,
                     search_local_matches,
                 )
+                from .core.path_templates import infer_download_path_templates
                 from .core.scanner import get_model_files, invalidate_model_files_cache
+                from .core.settings import (
+                    bool_setting as resolver_bool_setting,
+                    get_default_root_for_category,
+                    load_settings as load_resolver_settings,
+                    resolve_download_subfolder,
+                    save_settings as save_resolver_settings,
+                )
             except ImportError as e:
                 self.logger.error(f"Model Resolver: Could not import core modules: {e}")
                 return False
@@ -1756,6 +1764,18 @@ class ModelResolverExtension:
                         category = normalize_download_category(category)
                         subfolder = data.get("subfolder", "")
                         base_directory = data.get("base_directory", "")
+                        path_metadata = data.get("path_metadata", {})
+                        if not isinstance(path_metadata, dict):
+                            path_metadata = {}
+                        settings = load_resolver_settings()
+                        if not base_directory:
+                            base_directory = get_default_root_for_category(category, settings)
+                        subfolder = resolve_download_subfolder(
+                            category,
+                            subfolder,
+                            path_metadata,
+                            settings,
+                        )
 
                         if not url:
                             return web.json_response(
@@ -1914,6 +1934,75 @@ class ModelResolverExtension:
                         )
                         return web.json_response({"error": str(e)}, status=500)
 
+                @routes.get("/model_resolver/root-directories")
+                async def get_root_directories(request):
+                    """Get configured ComfyUI root directories for path settings."""
+                    try:
+                        import os
+                        import folder_paths
+
+                        categories = [
+                            "loras",
+                            "checkpoints",
+                            "diffusion_models",
+                            "embeddings",
+                            "text_encoders",
+                            "vae",
+                            "upscale_models",
+                        ]
+                        roots = {}
+                        for cat in categories:
+                            folder_key = normalize_download_category(cat)
+                            candidate_keys = [folder_key]
+                            if folder_key == "diffusion_models":
+                                candidate_keys.append("unet")
+                            elif folder_key == "text_encoders":
+                                candidate_keys.append("clip")
+                            paths = []
+                            for candidate_key in candidate_keys:
+                                paths.extend(folder_paths.get_folder_paths(candidate_key) or [])
+                            normalized_paths = []
+                            seen = set()
+                            for path in paths:
+                                if not path:
+                                    continue
+                                path_abs = os.path.abspath(path)
+                                path_key = os.path.normcase(path_abs)
+                                if path_key in seen:
+                                    continue
+                                seen.add(path_key)
+                                normalized_paths.append(path_abs)
+                            roots[folder_key] = normalized_paths
+
+                        return web.json_response(roots)
+                    except Exception as e:
+                        self.logger.error(
+                            f"Model Resolver root directories error: {e}", exc_info=True
+                        )
+                        return web.json_response({"error": str(e)}, status=500)
+
+                @routes.get("/model_resolver/path-template-suggestions")
+                async def get_path_template_suggestions(request):
+                    """Infer path template presets from existing local model folders."""
+                    try:
+                        from .core.sources.popular import get_base_models_config
+
+                        force_rescan = request.query.get("force") == "1"
+                        models = await asyncio.to_thread(get_model_files, force_rescan)
+                        base_models_config = get_base_models_config()
+                        suggestions = await asyncio.to_thread(
+                            infer_download_path_templates,
+                            models,
+                            base_models_config,
+                        )
+                        return web.json_response(suggestions)
+                    except Exception as e:
+                        self.logger.error(
+                            f"Model Resolver path template suggestions error: {e}",
+                            exc_info=True,
+                        )
+                        return web.json_response({"error": str(e)}, status=500)
+
                 @routes.get("/model_resolver/capabilities")
                 async def get_capabilities(request):
                     """Get optional source capabilities available in this install."""
@@ -1946,7 +2035,15 @@ class ModelResolverExtension:
                             return web.json_response([])
 
                         known_categories = set(folder_paths.folder_names_and_paths.keys())
-                        if category not in known_categories:
+                        folder_keys = [category]
+                        if category == "diffusion_models":
+                            folder_keys.append("unet")
+                        elif category == "text_encoders":
+                            folder_keys.append("clip")
+                        available_folder_keys = [
+                            folder_key for folder_key in folder_keys if folder_key in known_categories
+                        ]
+                        if not available_folder_keys:
                             self.logger.debug(
                                 f"Model Resolver: skipping subfolder lookup for unknown category '{raw_category}' -> '{category}'"
                             )
@@ -1974,11 +2071,18 @@ class ModelResolverExtension:
                                 "base_directory": base_dir,
                             }
 
-                        base_dirs = [
-                            base_dir
-                            for base_dir in (folder_paths.get_folder_paths(category) or [])
-                            if base_dir and os.path.isdir(base_dir)
-                        ]
+                        base_dirs = []
+                        seen_base_dirs = set()
+                        for folder_key in available_folder_keys:
+                            for base_dir in folder_paths.get_folder_paths(folder_key) or []:
+                                if not base_dir or not os.path.isdir(base_dir):
+                                    continue
+                                base_abs = os.path.abspath(base_dir)
+                                base_key = os.path.normcase(base_abs)
+                                if base_key in seen_base_dirs:
+                                    continue
+                                seen_base_dirs.add(base_key)
+                                base_dirs.append(base_abs)
 
                         def find_base_dir(full_path):
                             if not full_path:
@@ -1996,24 +2100,25 @@ class ModelResolverExtension:
                                     continue
                             return ""
 
-                        filenames = folder_paths.get_filename_list(category) or []
-                        for rel_path in filenames:
-                            if not isinstance(rel_path, str):
-                                continue
-                            base_dir = ""
-                            try:
-                                base_dir = find_base_dir(
-                                    folder_paths.get_full_path(category, rel_path)
-                                )
-                            except Exception:
+                        for folder_key in available_folder_keys:
+                            filenames = folder_paths.get_filename_list(folder_key) or []
+                            for rel_path in filenames:
+                                if not isinstance(rel_path, str):
+                                    continue
                                 base_dir = ""
-                            parts = [p for p in rel_path.replace("/", "\\").split("\\") if p]
-                            if len(parts) <= 1:
-                                continue
-                            current = ""
-                            for part in parts[:-1]:
-                                current = f"{current}\\{part}" if current else part
-                                add_subfolder(current, base_dir)
+                                try:
+                                    base_dir = find_base_dir(
+                                        folder_paths.get_full_path(folder_key, rel_path)
+                                    )
+                                except Exception:
+                                    base_dir = ""
+                                parts = [p for p in rel_path.replace("/", "\\").split("\\") if p]
+                                if len(parts) <= 1:
+                                    continue
+                                current = ""
+                                for part in parts[:-1]:
+                                    current = f"{current}\\{part}" if current else part
+                                    add_subfolder(current, base_dir)
 
                         for base_dir in base_dirs:
                             for root, dirs, _files in os.walk(base_dir):
@@ -2065,47 +2170,6 @@ class ModelResolverExtension:
 
             # ==================== SETTINGS (server-side persistence) ====================
 
-            import os as _os
-            import json as _json
-
-            _SETTINGS_FILE = _os.path.join(
-                _os.path.dirname(_os.path.abspath(__file__)),
-                "model_resolver_settings.json",
-            )
-
-            # Keys that contain sensitive credentials – stored in the file but
-            # never logged.
-            _CREDENTIAL_KEYS = {
-                "civitai_key",
-                "civitai_session_token",
-                "hf_token",
-                "brave_search_api_key",
-            }
-
-            def _load_settings() -> dict:
-                try:
-                    if _os.path.isfile(_SETTINGS_FILE):
-                        with open(_SETTINGS_FILE, "r", encoding="utf-8") as f:
-                            data = _json.load(f)
-                            if isinstance(data, dict):
-                                return data
-                except Exception as exc:
-                    self.logger.warning(f"Model Resolver: could not read settings file: {exc}")
-                return {}
-
-            def _bool_setting(value, default: bool = True) -> bool:
-                if value is None:
-                    return default
-                if isinstance(value, bool):
-                    return value
-                if isinstance(value, str):
-                    normalized = value.strip().lower()
-                    if normalized in {"1", "true", "yes", "on"}:
-                        return True
-                    if normalized in {"0", "false", "no", "off"}:
-                        return False
-                return bool(value)
-
             def _log_level_setting(value, default: str = BACKEND_DEFAULT_LOG_LEVEL) -> LogLevel:
                 normalized = str(value or default or "INFO").strip().upper()
                 if hasattr(LogLevel, normalized):
@@ -2114,27 +2178,18 @@ class ModelResolverExtension:
                 return getattr(LogLevel, fallback, LogLevel.INFO)
 
             def _apply_backend_logging_settings(settings: dict) -> None:
-                enabled = _bool_setting(settings.get("backend_logs_enabled"), True)
+                enabled = resolver_bool_setting(settings.get("backend_logs_enabled"), True)
                 level = _log_level_setting(settings.get("backend_log_level"))
                 backend_log_controller.set_enabled(enabled)
                 backend_log_controller.set_global_level(level)
 
-            def _save_settings(payload: dict) -> dict:
-                # Merge with existing settings so we never lose keys not sent
-                # by the current request.
-                current = _load_settings()
-                current.update({k: v for k, v in payload.items() if k})
-                with open(_SETTINGS_FILE, "w", encoding="utf-8") as f:
-                    _json.dump(current, f, indent=2, ensure_ascii=False)
-                return current
-
-            _apply_backend_logging_settings(_load_settings())
+            _apply_backend_logging_settings(load_resolver_settings())
 
             @routes.get("/model_resolver/settings")
             async def get_settings_route(request):
                 """Return persisted settings (API keys, preferences)."""
                 try:
-                    data = await asyncio.to_thread(_load_settings)
+                    data = await asyncio.to_thread(load_resolver_settings)
                     return web.json_response(data)
                 except Exception as e:
                     self.logger.error(f"Model Resolver settings GET error: {e}", exc_info=True)
@@ -2147,7 +2202,7 @@ class ModelResolverExtension:
                     payload = await request.json()
                     if not isinstance(payload, dict):
                         return web.json_response({"error": "Expected JSON object"}, status=400)
-                    settings = await asyncio.to_thread(_save_settings, payload)
+                    settings = await asyncio.to_thread(save_resolver_settings, payload)
                     _apply_backend_logging_settings(settings)
                     return web.json_response({"success": True})
                 except Exception as e:

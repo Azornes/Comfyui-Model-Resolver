@@ -118,6 +118,11 @@ def get_download_directory(category: str, preferred_base_directory: str = "") ->
             return None
 
     folder_key = normalize_download_category(category)
+    folder_keys = [folder_key]
+    if folder_key == "diffusion_models":
+        folder_keys.append("unet")
+    elif folder_key == "text_encoders":
+        folder_keys.append("clip")
 
     def _normalize(path_value: str) -> str:
         return os.path.normcase(os.path.abspath(path_value))
@@ -176,7 +181,15 @@ def get_download_directory(category: str, preferred_base_directory: str = "") ->
         return paths[0]
 
     try:
-        paths = folder_paths.get_folder_paths(folder_key)
+        paths = []
+        seen_paths = set()
+        for candidate_key in folder_keys:
+            for path in folder_paths.get_folder_paths(candidate_key) or []:
+                path_key = _normalize(path)
+                if path_key in seen_paths:
+                    continue
+                seen_paths.add(path_key)
+                paths.append(path)
         if paths:
             if preferred_base_directory:
                 preferred_normalized = _normalize(preferred_base_directory)

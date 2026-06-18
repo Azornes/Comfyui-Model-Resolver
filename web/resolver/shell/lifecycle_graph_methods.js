@@ -157,6 +157,7 @@ export const lifecycleGraphMethods = {
                 this.cachedAnalysisData
             ) {
                 if (shouldRenderMissingModels()) {
+                    await this.ensureDownloadDirectoriesLoaded();
                     this.displayMissingModels(this.contentElement, this.cachedAnalysisData);
                     this.reconnectActiveDownloads();
                 }
@@ -197,6 +198,7 @@ export const lifecycleGraphMethods = {
                 this.saveAnalysisCacheForActiveWorkflow();
             }
             if (shouldRenderMissingModels()) {
+                await this.ensureDownloadDirectoriesLoaded();
                 this.displayMissingModels(this.contentElement, data);
 
                 // Reconnect any active downloads to their new progress divs

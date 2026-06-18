@@ -700,6 +700,22 @@ export const missingBrowserMethods = {
             return;
         }
 
+        if (!this.downloadDirectories) {
+            const renderToken = `download-dirs-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            this._downloadDirectoriesRenderToken = renderToken;
+            container.innerHTML = this.renderStatusMessage('Loading download folders...', 'info');
+            this.ensureDownloadDirectoriesLoaded?.().then(() => {
+                if (
+                    this._downloadDirectoriesRenderToken === renderToken &&
+                    this.activeTab === 'missing' &&
+                    container.isConnected
+                ) {
+                    this.displayMissingModels(container, data);
+                }
+            });
+            return;
+        }
+
         // Sort missing models: those with 100% confidence matches first, then others
         const sortedMissingModels = [...missingModels].sort((a, b) => {
             const aMatches = a.matches || [];

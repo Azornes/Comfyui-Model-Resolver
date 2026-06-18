@@ -21,6 +21,7 @@ export class ResolverManagerDialog extends ComfyDialog {
         this.missingModels = [];
         this.allModels = null; // list of all available models for dropdown
         this.downloadDirectories = null;
+        this.downloadRootDirectories = null;
         this.capabilities = null;
         this.baseModels = null;
         this.downloadSubfolders = new Map();

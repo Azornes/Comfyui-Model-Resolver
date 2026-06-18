@@ -62,6 +62,20 @@ export const downloadTargetMethods = {
         }
     },
 
+    async ensureDownloadRootDirectoriesLoaded() {
+        if (this.downloadRootDirectories) return this.downloadRootDirectories;
+        try {
+            const resp = await api.fetchApi('/model_resolver/root-directories');
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            this.downloadRootDirectories = data && typeof data === 'object' ? data : {};
+        } catch (e) {
+            console.warn('Model Resolver: could not load root directories', e);
+            this.downloadRootDirectories = {};
+        }
+        return this.downloadRootDirectories;
+    },
+
     async ensureBaseModelsLoaded() {
         if (this.baseModels) return;
         try {
@@ -215,9 +229,28 @@ export const downloadTargetMethods = {
         return tokenNames[category] || category || 'unknown';
     },
 
+    getDefaultDownloadCategoryKeys() {
+        return [
+            'checkpoints',
+            'loras',
+            'diffusion_models',
+            'text_encoders',
+            'vae',
+            'embeddings',
+            'upscale_models',
+            'controlnet',
+            'clip_vision',
+            'ipadapter',
+            'sams'
+        ];
+    },
+
     getDownloadCategoryOptions(defaultCategory = 'checkpoints') {
         const directories = this.downloadDirectories || {};
-        const keys = Object.keys(directories);
+        const keys = [
+            ...Object.keys(directories),
+            ...this.getDefaultDownloadCategoryKeys()
+        ];
         const preferred = this.normalizeDownloadCategory(defaultCategory || 'checkpoints');
         const ordered = [
             preferred,
@@ -272,7 +305,9 @@ export const downloadTargetMethods = {
 
     getDownloadTargetBaseDirectory(category = '') {
         const normalizedCategory = this.normalizeDownloadCategory(category);
-        return this.downloadDirectories?.[normalizedCategory] || '';
+        return this.getDefaultRootForCategory(normalizedCategory)
+            || this.downloadDirectories?.[normalizedCategory]
+            || '';
     },
 
     joinLocalPath(basePath = '', relativePath = '') {
@@ -339,7 +374,297 @@ export const downloadTargetMethods = {
         );
     },
 
+    normalizeDownloadPathMode(value = '') {
+        const mode = String(value || '').trim().toLowerCase();
+        return ['suggested', 'template', 'manual'].includes(mode) ? mode : 'suggested';
+    },
+
+    getDefaultDownloadPathTemplates() {
+        return {
+            loras: '{base_model}/{first_tag}',
+            checkpoints: '{base_model}',
+            embeddings: '{base_model}',
+            diffusion_models: '{base_model}',
+            text_encoders: '',
+            controlnet: '{base_model}',
+            vae: '',
+            upscale_models: ''
+        };
+    },
+
+    getDownloadPathTemplateCategoryDefinitions() {
+        return [
+            { key: 'loras', label: 'LoRAs' },
+            { key: 'checkpoints', label: 'Checkpoints' },
+            { key: 'embeddings', label: 'Embeddings' },
+            { key: 'diffusion_models', label: 'Diffusion models' },
+            { key: 'text_encoders', label: 'Text encoders' },
+            { key: 'controlnet', label: 'ControlNet' },
+            { key: 'vae', label: 'VAE' },
+            { key: 'upscale_models', label: 'Upscale models' }
+        ];
+    },
+
+    getDefaultRootCategoryDefinitions() {
+        return [
+            { key: 'loras', label: 'LoRA root', settingKey: 'default_lora_root', storageKey: 'ModelResolver.defaultLoraRoot' },
+            { key: 'checkpoints', label: 'Checkpoint root', settingKey: 'default_checkpoint_root', storageKey: 'ModelResolver.defaultCheckpointRoot' },
+            { key: 'diffusion_models', label: 'Diffusion model root', settingKey: 'default_unet_root', storageKey: 'ModelResolver.defaultUnetRoot' },
+            { key: 'embeddings', label: 'Embedding root', settingKey: 'default_embedding_root', storageKey: 'ModelResolver.defaultEmbeddingRoot' },
+            { key: 'text_encoders', label: 'Text encoder root', settingKey: 'default_text_encoder_root', storageKey: 'ModelResolver.defaultTextEncoderRoot' },
+            { key: 'vae', label: 'VAE root', settingKey: 'default_vae_root', storageKey: 'ModelResolver.defaultVaeRoot' },
+            { key: 'upscale_models', label: 'Upscale model root', settingKey: 'default_upscale_model_root', storageKey: 'ModelResolver.defaultUpscaleModelRoot' }
+        ];
+    },
+
+    getDownloadPathTemplatePresetDefinitions() {
+        return [
+            { value: '', label: 'Flat folder' },
+            { value: '{base_model}', label: 'By base model' },
+            { value: '{author}', label: 'By author' },
+            { value: '{first_tag}', label: 'By first tag' },
+            { value: '{base_model}/{first_tag}', label: 'Base model / first tag' },
+            { value: '{base_model}/{author}', label: 'Base model / author' },
+            { value: '{author}/{first_tag}', label: 'Author / first tag' },
+            { value: '{base_model}/{author}/{first_tag}', label: 'Base model / author / first tag' },
+            { value: '{base_model}/{model_name}', label: 'Base model / model name' },
+            { value: '{base_model}/{model_name}/{version_name}', label: 'Base model / model / version' }
+        ];
+    },
+
+    parseJsonObjectSetting(value, fallback = {}) {
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+            return { ...value };
+        }
+        if (typeof value !== 'string' || !value.trim()) {
+            return { ...fallback };
+        }
+        try {
+            const parsed = JSON.parse(value);
+            return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+                ? { ...parsed }
+                : { ...fallback };
+        } catch (_error) {
+            return { ...fallback };
+        }
+    },
+
+    normalizeDownloadPathTemplate(template = '') {
+        return String(template || '')
+            .replace(/\\/g, '/')
+            .split('/')
+            .map(part => part.trim())
+            .filter(part => part && part !== '.' && part !== '..')
+            .join('/');
+    },
+
+    getDownloadPathMode() {
+        return this.normalizeDownloadPathMode(localStorage.getItem('ModelResolver.downloadPathMode') || 'suggested');
+    },
+
+    getDownloadPathTemplates() {
+        const defaults = this.getDefaultDownloadPathTemplates();
+        const parsed = this.parseJsonObjectSetting(
+            localStorage.getItem('ModelResolver.downloadPathTemplates'),
+            defaults
+        );
+        const templates = { ...defaults };
+        Object.entries(parsed).forEach(([key, value]) => {
+            templates[this.normalizeDownloadCategory(key)] = this.normalizeDownloadPathTemplate(value);
+        });
+        return templates;
+    },
+
+    getBaseModelPathMappings() {
+        const parsed = this.parseJsonObjectSetting(localStorage.getItem('ModelResolver.baseModelPathMappings'), {});
+        return Object.entries(parsed).reduce((acc, [key, value]) => {
+            const source = String(key || '').trim();
+            const target = String(value || '').trim();
+            if (source && target) acc[source] = target;
+            return acc;
+        }, {});
+    },
+
+    normalizeBaseModelMappingKey(value = '') {
+        return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    },
+
+    resolveBaseModelPathMapping(baseModel = '', mappings = this.getBaseModelPathMappings()) {
+        const text = String(baseModel || '');
+        if (Object.prototype.hasOwnProperty.call(mappings, text)) {
+            return mappings[text];
+        }
+
+        const token = this.normalizeBaseModelMappingKey(text);
+        if (!token) return text;
+
+        const normalizedEntries = Object.entries(mappings)
+            .map(([key, value]) => ({
+                key,
+                token: this.normalizeBaseModelMappingKey(key),
+                value
+            }))
+            .filter(entry => entry.token);
+        const exact = normalizedEntries.find(entry => entry.token === token);
+        if (exact) return exact.value;
+
+        const partial = normalizedEntries
+            .sort((a, b) => b.token.length - a.token.length)
+            .find(entry => (
+                entry.token.length >= 4 &&
+                (token.startsWith(entry.token) || token.includes(entry.token) || entry.token.includes(token))
+            ));
+        return partial ? partial.value : text;
+    },
+
+    getDefaultRootSettings() {
+        return this.getDefaultRootCategoryDefinitions().reduce((acc, item) => {
+            acc[item.settingKey] = localStorage.getItem(item.storageKey) || '';
+            return acc;
+        }, {});
+    },
+
+    getDefaultRootForCategory(category = '') {
+        const normalizedCategory = this.normalizeDownloadCategory(category);
+        const definition = this.getDefaultRootCategoryDefinitions()
+            .find(item => this.normalizeDownloadCategory(item.key) === normalizedCategory);
+        return definition ? (localStorage.getItem(definition.storageKey) || '') : '';
+    },
+
+    formatBaseModelMappingsForInput(mappings = {}) {
+        return Object.entries(mappings || {})
+            .map(([key, value]) => `${key}=${value}`)
+            .join('\n');
+    },
+
+    parseBaseModelMappingsInput(value = '') {
+        const mappings = {};
+        String(value || '').split(/\r?\n/).forEach(line => {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('#')) return;
+            const separator = trimmed.includes('=>') ? '=>' : '=';
+            const index = trimmed.indexOf(separator);
+            if (index <= 0) return;
+            const key = trimmed.slice(0, index).trim();
+            const mapped = trimmed.slice(index + separator.length).trim();
+            if (key && mapped) mappings[key] = mapped;
+        });
+        return mappings;
+    },
+
+    sanitizeDownloadPathSegment(value = '', fallback = '') {
+        let text = String(value || '').trim() || fallback;
+        text = text
+            .replace(/[\\/]+/g, '_')
+            .replace(/[<>:"|?*\x00-\x1f]+/g, '_')
+            .replace(/\s+/g, ' ')
+            .replace(/^[\s.]+|[\s.]+$/g, '');
+        if (!text || text === '.' || text === '..') {
+            text = fallback;
+        }
+        return String(text || '').replace(/^[\s.]+|[\s.]+$/g, '');
+    },
+
+    sanitizeDownloadPathValue(value = '', fallback = '') {
+        return this.normalizeTemplateSubfolder(value)
+            || this.sanitizeDownloadPathSegment(value, fallback);
+    },
+
+    normalizeTemplateSubfolder(value = '') {
+        return String(value || '')
+            .replace(/\\/g, '/')
+            .split('/')
+            .map(part => this.sanitizeDownloadPathSegment(part))
+            .filter(part => part && part !== '.' && part !== '..')
+            .join('/');
+    },
+
+    getPriorityDownloadTag(tags = []) {
+        const list = Array.isArray(tags)
+            ? tags.map(tag => String(tag || '').trim()).filter(Boolean)
+            : String(tags || '').split(/[,;]+/).map(tag => tag.trim()).filter(Boolean);
+        if (!list.length) return 'no tags';
+        const priorityTags = ['concept', 'style', 'character', 'clothing', 'pose', 'object', 'vehicle', 'artist', 'celebrity'];
+        const normalize = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+        for (const priority of priorityTags) {
+            const match = list.find(tag => normalize(tag) === normalize(priority));
+            if (match) return match;
+        }
+        return list[0];
+    },
+
+    getDownloadPathMetadata(missing = {}, source = {}) {
+        const sourceData = source && typeof source === 'object' ? source : {};
+        const searchSuggestion = this.getCachedSearchSuggestionData(missing);
+        const merged = {
+            ...(missing?.civitai_info || {}),
+            ...(missing?.civitai_search_result || {}),
+            ...(missing?.download_source || {}),
+            ...(searchSuggestion || {}),
+            ...sourceData
+        };
+        const repoId = merged.repo_id || merged.repo || '';
+        const filename = merged.downloadFilename
+            || merged.filename
+            || merged.file_name
+            || missing.original_path?.split('/').pop()?.split('\\').pop()
+            || '';
+        const modelName = merged.model_name || merged.model || merged.name || filename.replace(/\.[^.]+$/, '') || '';
+        const creator = merged.creator
+            || (merged.creator_username ? { username: merged.creator_username } : null)
+            || (merged.username ? { username: merged.username } : null)
+            || null;
+        const author = merged.author
+            || merged.creator_username
+            || merged.username
+            || (repoId && String(repoId).includes('/') ? String(repoId).split('/')[0] : '');
+        return {
+            filename,
+            name: modelName,
+            model_name: modelName,
+            version_name: merged.version_name || merged.versionName || merged.version || '',
+            base_model: merged.base_model || merged.baseModel || '',
+            tags: Array.isArray(merged.tags) ? merged.tags : [],
+            creator,
+            author,
+            repo_id: repoId,
+            category: merged.category || missing.category || ''
+        };
+    },
+
+    calculateDownloadPathTemplateSubfolder(category = '', metadata = {}) {
+        const templates = this.getDownloadPathTemplates();
+        const normalizedCategory = this.normalizeDownloadCategory(category);
+        const template = templates[normalizedCategory] || '';
+        if (!template) return '';
+
+        const mappings = this.getBaseModelPathMappings();
+        const baseModel = metadata.base_model || metadata.baseModel || 'Unknown Base Model';
+        const mappedBaseModel = this.resolveBaseModelPathMapping(baseModel, mappings);
+        const creator = metadata.creator && typeof metadata.creator === 'object'
+            ? (metadata.creator.username || metadata.creator.name || '')
+            : (typeof metadata.creator === 'string' ? metadata.creator : '');
+        const author = metadata.author
+            || creator
+            || (metadata.repo_id && String(metadata.repo_id).includes('/') ? String(metadata.repo_id).split('/')[0] : '')
+            || 'Anonymous';
+        const replacements = {
+            '{base_model}': this.sanitizeDownloadPathValue(mappedBaseModel, 'Unknown Base Model'),
+            '{author}': this.sanitizeDownloadPathSegment(author, 'Anonymous'),
+            '{first_tag}': this.sanitizeDownloadPathSegment(this.getPriorityDownloadTag(metadata.tags), 'no tags'),
+            '{model_name}': this.sanitizeDownloadPathSegment(metadata.model_name || metadata.name || metadata.filename?.replace(/\.[^.]+$/, '') || 'Model', 'Model'),
+            '{version_name}': this.sanitizeDownloadPathSegment(metadata.version_name || metadata.versionName || metadata.version || '', '')
+        };
+        let formatted = template;
+        Object.entries(replacements).forEach(([token, value]) => {
+            formatted = formatted.split(token).join(value);
+        });
+        formatted = formatted.replace(/\{[^{}]+\}/g, '');
+        return this.normalizeTemplateSubfolder(formatted);
+    },
+
     isAutoFillSubfolderEnabled() {
+        if (this.getDownloadPathMode() === 'manual') return false;
         return localStorage.getItem('ModelResolver.autoFillSubfolder') !== 'false';
     },
 
@@ -570,6 +895,20 @@ export const downloadTargetMethods = {
     },
 
     getSuggestedDownloadSubfolder(missing, category, folders = []) {
+        const mode = this.getDownloadPathMode();
+        if (mode === 'manual') {
+            return null;
+        }
+        if (mode === 'template') {
+            const value = this.calculateDownloadPathTemplateSubfolder(
+                category,
+                this.getDownloadPathMetadata(missing, { category })
+            );
+            return value
+                ? { value, label: `${value} (template)`, baseDirectory: '' }
+                : null;
+        }
+
         const folderEntries = this.getFolderSuggestionEntries(folders);
         return this.getSuggestedLoraSubfolder(missing, category, folderEntries)
             || this.getSuggestedExistingSubfolderByModelName(missing, folderEntries);
@@ -914,7 +1253,11 @@ export const downloadTargetMethods = {
             frontend_log_level: storedFrontendLogLevel || DEFAULT_FRONTEND_LOG_LEVEL,
             backend_log_level: storedBackendLogLevel || 'DEBUG',
             civitai_candidate_limit,
-            search_source_enabled
+            search_source_enabled,
+            download_path_mode: this.getDownloadPathMode(),
+            download_path_templates: this.getDownloadPathTemplates(),
+            base_model_path_mappings: this.getBaseModelPathMappings(),
+            ...this.getDefaultRootSettings()
         };
     },
 
@@ -970,6 +1313,17 @@ export const downloadTargetMethods = {
                 localStorage.setItem('ModelResolver.autoFillBaseModel',      data.auto_fill_base_model ? 'true' : 'false');
             if (data.auto_fill_subfolder !== undefined)
                 localStorage.setItem('ModelResolver.autoFillSubfolder',      data.auto_fill_subfolder ? 'true' : 'false');
+            if (data.download_path_mode !== undefined)
+                localStorage.setItem('ModelResolver.downloadPathMode',       this.normalizeDownloadPathMode(data.download_path_mode));
+            if (data.download_path_templates !== undefined)
+                localStorage.setItem('ModelResolver.downloadPathTemplates',  JSON.stringify(data.download_path_templates || {}));
+            if (data.base_model_path_mappings !== undefined)
+                localStorage.setItem('ModelResolver.baseModelPathMappings',  JSON.stringify(data.base_model_path_mappings || {}));
+            this.getDefaultRootCategoryDefinitions().forEach((item) => {
+                if (data[item.settingKey] !== undefined) {
+                    localStorage.setItem(item.storageKey, String(data[item.settingKey] || ''));
+                }
+            });
             if (data.civitai_candidate_limit !== undefined)
                 localStorage.setItem('ModelResolver.civitaiCandidateLimit',  `${data.civitai_candidate_limit}`);
             if (data.frontend_logs_enabled !== undefined)
@@ -1043,6 +1397,7 @@ export const downloadTargetMethods = {
         this.cachedLoadedModelsSignature = null;
         this.allModels = null;
         this.downloadDirectories = null;
+        this.downloadRootDirectories = null;
         this.capabilities = null;
         this.baseModels = null;
         this.downloadSubfolders.clear();

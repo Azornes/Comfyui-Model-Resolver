@@ -1141,6 +1141,13 @@ export const searchPanelMethods = {
             category: downloadSource.directory || downloadSource.category || missing.category || 'checkpoints',
             openUrl: modelUrl,
             searchedAt: this.getSearchResultTimestamp(downloadSource),
+            pathMetadata: this.getDownloadPathMetadata(missing, {
+                ...downloadSource,
+                filename: downloadFilename,
+                model: modelName,
+                version: modelParts.version,
+                category: downloadSource.directory || downloadSource.category || missing.category || 'checkpoints'
+            }),
             detailsContext: ['civitai', 'civarchive'].includes(String(source).toLowerCase())
                 ? {
                     ...downloadSource,
@@ -1238,6 +1245,9 @@ export const searchPanelMethods = {
             const detailsData = detailsContext
                 ? encodeURIComponent(JSON.stringify(detailsContext))
                 : '';
+            const pathMetadata = row.pathMetadata
+                ? encodeURIComponent(JSON.stringify(row.pathMetadata))
+                : '';
 
             let actions = '';
             if (detailsContext) {
@@ -1256,7 +1266,8 @@ export const searchPanelMethods = {
                         aria-label="Download ${this.escapeHtml(downloadFilename)}"
                         data-url="${this.escapeHtml(downloadUrl)}"
                         data-filename="${this.escapeHtml(downloadFilename)}"
-                        data-category="${this.escapeHtml(category)}">${getSvgIcon('download')}</button>
+                        data-category="${this.escapeHtml(category)}"
+                        data-path-metadata="${this.escapeHtml(pathMetadata)}">${getSvgIcon('download')}</button>
                 `;
             }
             if (openUrl) {
