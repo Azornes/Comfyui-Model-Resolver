@@ -1421,7 +1421,7 @@ export const resolveDownloadMethods = {
      */
     async searchOnline(missing, { workflowKey = this.getWorkflowScopedQueueKey(), forceSearch = false } = {}) {
         let filename = missing.original_path?.split('/').pop()?.split('\\').pop() || '';
-        let category = missing.category || '';
+        let category = missing.category || this.getNodeTypeDownloadCategory?.(missing.node_type) || '';
         const state = this.getSearchStateForWorkflow(workflowKey, missing);
         const missingSearchKey = this.getMissingSearchKey(missing);
         const backgroundJobKey = this.getBackgroundSearchJobKey(workflowKey, missingSearchKey);
@@ -2083,6 +2083,7 @@ export const resolveDownloadMethods = {
 
         if (popular) {
             const popularFilename = popular.filename || missing.original_path?.split('/').pop()?.split('\\').pop() || '';
+            const missingCategory = this.getMissingDownloadCategory?.(missing, 'checkpoints') || missing.category || 'checkpoints';
             const popularSize = popular.size
                 || (
                     modelListResult
@@ -2101,13 +2102,14 @@ export const resolveDownloadMethods = {
                 size: this.formatSearchResultSize({ ...popular, size: popularSize }),
                 downloadUrl: popular.url,
                 downloadFilename: popularFilename,
-                category: popular.directory || missing.category,
+                category: popular.directory || missingCategory,
                 openUrl: this.getModelCardUrl(popular.url),
                 searchedAt: this.getSearchResultTimestamp(popular)
             });
         }
 
         if (modelListResult && modelListResult.url) {
+            const missingCategory = this.getMissingDownloadCategory?.(missing, 'checkpoints') || missing.category || 'checkpoints';
             addRow({
                 sourceKey: 'model-list',
                 sourceLabel: 'Local Database',
@@ -2118,7 +2120,7 @@ export const resolveDownloadMethods = {
                 size: this.formatSearchResultSize(modelListResult),
                 downloadUrl: modelListResult.url,
                 downloadFilename: modelListResult.filename,
-                category: modelListResult.directory || missing.category,
+                category: modelListResult.directory || missingCategory,
                 openUrl: this.getModelCardUrl(modelListResult.url),
                 searchedAt: this.getSearchResultTimestamp(modelListResult)
             });
@@ -2127,6 +2129,7 @@ export const resolveDownloadMethods = {
         if (hfResult && hfResult.url) {
             const hfRepo = hfResult.repo_id || hfResult.repo || '';
             const hfModelUrl = hfRepo ? `https://huggingface.co/${hfRepo}` : this.getModelCardUrl(hfResult.url);
+            const missingCategory = this.getMissingDownloadCategory?.(missing, 'checkpoints') || missing.category || 'checkpoints';
             addRow({
                 sourceKey: 'huggingface',
                 sourceLabel: 'HuggingFace',
@@ -2137,7 +2140,7 @@ export const resolveDownloadMethods = {
                 size: this.formatSearchResultSize(hfResult),
                 downloadUrl: hfResult.url,
                 downloadFilename: hfResult.filename,
-                category: missing.category,
+                category: missingCategory,
                 openUrl: hfModelUrl,
                 searchedAt: this.getSearchResultTimestamp(hfResult)
             });
@@ -2146,6 +2149,10 @@ export const resolveDownloadMethods = {
         if (civarchiveResult && civarchiveResult.download_url) {
             const archiveFilename = civarchiveResult.filename || missing.original_path?.split('/').pop()?.split('\\').pop() || '';
             const archiveName = civarchiveResult.name || archiveFilename || 'Model';
+            const archiveCategory = this.getSourceResultDownloadCategory?.(
+                civarchiveResult,
+                this.getMissingDownloadCategory?.(missing, 'checkpoints') || 'checkpoints'
+            ) || this.getMissingDownloadCategory?.(missing, 'checkpoints') || 'checkpoints';
             const archiveSecondary = [
                 archiveName && archiveName !== archiveFilename ? archiveFilename : '',
                 civarchiveResult.platform || '',
@@ -2162,14 +2169,14 @@ export const resolveDownloadMethods = {
                 size: this.formatSearchResultSize(civarchiveResult),
                 downloadUrl: civarchiveResult.download_url,
                 downloadFilename: archiveFilename,
-                category: missing.category,
+                category: archiveCategory,
                 openUrl: civarchiveResult.url,
                 searchedAt: this.getSearchResultTimestamp(civarchiveResult),
                 detailsContext: {
                     ...civarchiveResult,
                     details_source: 'civarchive',
                     missing_key: this.getMissingModelKey(missing),
-                    category: missing.category
+                    category: archiveCategory
                 }
             });
         }
@@ -2177,6 +2184,10 @@ export const resolveDownloadMethods = {
         if (loraManagerArchiveResult && loraManagerArchiveResult.download_url) {
             const archiveFilename = loraManagerArchiveResult.filename || missing.original_path?.split('/').pop()?.split('\\').pop() || '';
             const archiveName = loraManagerArchiveResult.name || archiveFilename;
+            const archiveCategory = this.getSourceResultDownloadCategory?.(
+                loraManagerArchiveResult,
+                this.getMissingDownloadCategory?.(missing, 'loras') || 'loras'
+            ) || this.getMissingDownloadCategory?.(missing, 'loras') || 'loras';
             addRow({
                 sourceKey: 'lora-archive',
                 sourceLabel: 'LoRA Archive',
@@ -2188,7 +2199,7 @@ export const resolveDownloadMethods = {
                 size: this.formatSearchResultSize(loraManagerArchiveResult),
                 downloadUrl: loraManagerArchiveResult.download_url || '',
                 downloadFilename: archiveFilename,
-                category: missing.category,
+                category: archiveCategory,
                 openUrl: loraManagerArchiveResult.url || this.getModelCardUrl(loraManagerArchiveResult.download_url),
                 searchedAt: this.getSearchResultTimestamp(loraManagerArchiveResult),
                 detailsContext: {
@@ -2196,15 +2207,19 @@ export const resolveDownloadMethods = {
                     source: 'lora_manager_archive',
                     details_source: 'lora_manager_archive',
                     missing_key: this.getMissingModelKey(missing),
-                    category: missing.category
+                    category: archiveCategory
                 }
             });
         }
 
         if (civitaiResult && civitaiResult.download_url) {
             const modelUrl = civitaiResult.url || (civitaiResult.model_id ? `https://civitai.com/models/${civitaiResult.model_id}${civitaiResult.version_id ? `?modelVersionId=${civitaiResult.version_id}` : ''}` : '');
-            const downloadFilename = missing.civitai_info?.expected_filename || civitaiResult.filename || civitaiResult.name;
-            const modelName = missing.civitai_info?.model_name || civitaiResult.name || downloadFilename || 'Model';
+            const downloadFilename = civitaiResult.filename || missing.civitai_info?.expected_filename || civitaiResult.name;
+            const modelName = civitaiResult.name || missing.civitai_info?.model_name || downloadFilename || 'Model';
+            const civitaiCategory = this.getSourceResultDownloadCategory?.(
+                civitaiResult,
+                this.getMissingDownloadCategory?.(missing, 'checkpoints') || 'checkpoints'
+            ) || this.getMissingDownloadCategory?.(missing, 'checkpoints') || 'checkpoints';
             const civitaiSecondary = [
                 civitaiResult.type || '',
                 civitaiResult.base_model || missing.civitai_info?.base_model || ''
@@ -2213,14 +2228,14 @@ export const resolveDownloadMethods = {
                 sourceKey: 'civitai',
                 sourceLabel: 'CivitAI',
                 model: modelName,
-                version: missing.civitai_info?.version_name || civitaiResult.version_name || '',
+                version: civitaiResult.version_name || missing.civitai_info?.version_name || '',
                 filename: downloadFilename,
                 secondary: civitaiSecondary,
                 match: this.getSearchResultMatchDisplay(civitaiResult),
                 size: this.formatSearchResultSize(civitaiResult),
                 downloadUrl: civitaiResult.download_url,
                 downloadFilename,
-                category: missing.category,
+                category: civitaiCategory,
                 openUrl: modelUrl,
                 searchedAt: this.getSearchResultTimestamp(civitaiResult),
                 detailsContext: {
@@ -2229,7 +2244,7 @@ export const resolveDownloadMethods = {
                     filename: downloadFilename,
                     details_source: 'civitai',
                     missing_key: this.getMissingModelKey(missing),
-                    category: missing.category
+                    category: civitaiCategory
                 }
             });
         }

@@ -109,6 +109,8 @@ export const downloadTargetMethods = {
             checkpoint: 'checkpoints',
             lora: 'loras',
             embedding: 'embeddings',
+            textualinversion: 'embeddings',
+            textual_inversion: 'embeddings',
             upscaler: 'upscale_models',
             unet: 'diffusion_models',
             diffusion_model: 'diffusion_models',
@@ -136,6 +138,128 @@ export const downloadTargetMethods = {
             'default': 'upscale_models'
         };
         return categoryMap[token] || token || 'checkpoints';
+    },
+
+    getKnownDownloadCategorySet() {
+        const directories = this.downloadDirectories || {};
+        return new Set([
+            ...Object.keys(directories),
+            ...this.getDefaultDownloadCategoryKeys()
+        ].map(key => this.normalizeDownloadCategory(key)).filter(Boolean));
+    },
+
+    getSourceResultDownloadCategory(source = {}, fallbackCategory = '') {
+        const sourceData = source && typeof source === 'object' ? source : {};
+        const knownCategories = this.getKnownDownloadCategorySet();
+        const candidates = [
+            sourceData.model_type,
+            sourceData.modelType,
+            sourceData.type,
+            sourceData.category,
+            sourceData.directory,
+            fallbackCategory
+        ];
+
+        for (const candidate of candidates) {
+            if (candidate === undefined || candidate === null || String(candidate).trim() === '') continue;
+            const normalized = this.normalizeDownloadCategory(candidate);
+            if (normalized && knownCategories.has(normalized)) {
+                return normalized;
+            }
+        }
+
+        const defaultCategory = this.normalizeDownloadCategory('checkpoints');
+        return knownCategories.has(defaultCategory)
+            ? defaultCategory
+            : this.normalizeDownloadCategory(fallbackCategory || 'checkpoints');
+    },
+
+    getNodeTypeDownloadCategory(nodeType = '') {
+        const normalizedNodeType = String(nodeType || '').trim();
+        const exactMap = {
+            CheckpointLoaderSimple: 'checkpoints',
+            CheckpointLoader: 'checkpoints',
+            UNETLoader: 'diffusion_models',
+            UNETLoaderAdvanced: 'diffusion_models',
+            VAELoader: 'vae',
+            VAELoaderKJ: 'vae',
+            LoraLoader: 'loras',
+            LoraLoaderModelOnly: 'loras',
+            LoraLoaderBypass: 'loras',
+            LoraLoaderBypassModelOnly: 'loras',
+            LoraLoaderV2: 'loras',
+            ControlNetLoader: 'controlnet',
+            CLIPLoader: 'text_encoders',
+            DualCLIPLoader: 'text_encoders',
+            TripleCLIPLoader: 'text_encoders',
+            UpscaleModelLoader: 'upscale_models',
+            LTXVAudioVAELoader: 'checkpoints',
+            LowVRAMAudioVAELoader: 'checkpoints'
+        };
+        if (exactMap[normalizedNodeType]) {
+            return exactMap[normalizedNodeType];
+        }
+
+        const token = normalizedNodeType.toLowerCase();
+        if (!token) return '';
+        if (token.includes('lora')) return 'loras';
+        if (token.includes('vae')) return 'vae';
+        if (token.includes('checkpoint')) return 'checkpoints';
+        if (token.includes('unet') || token.includes('diffusion')) return 'diffusion_models';
+        if (token.includes('controlnet')) return 'controlnet';
+        if (token.includes('upscale')) return 'upscale_models';
+        if (token.includes('embedding') || token.includes('textualinversion')) return 'embeddings';
+        if (token.includes('clip')) return 'text_encoders';
+        return '';
+    },
+
+    getMissingNodeTypeDownloadCategory(missing = {}) {
+        return this.getNodeTypeDownloadCategory(missing.locate_node_type)
+            || this.getNodeTypeDownloadCategory(missing.promoted_inner_node_type)
+            || this.getNodeTypeDownloadCategory(missing.node_type)
+            || '';
+    },
+
+    shouldPreserveSavedDownloadCategory(missing = {}, saved = {}, inferredCategory = '') {
+        if (!saved?.categoryTouched) return false;
+        if (saved.category === undefined || saved.category === null || String(saved.category).trim() === '') return false;
+        const savedCategory = this.normalizeDownloadCategory(saved.category || '');
+        if (!savedCategory) return false;
+
+        const nodeCategory = this.getMissingNodeTypeDownloadCategory(missing);
+        const rawMissingCategory = missing.category || missing.directory || '';
+        const missingCategory = rawMissingCategory ? this.normalizeDownloadCategory(rawMissingCategory) : '';
+        const strongInferredCategory = nodeCategory || (missingCategory && missingCategory !== 'checkpoints' ? missingCategory : '');
+        const inferred = this.normalizeDownloadCategory(inferredCategory || nodeCategory || '');
+        if (
+            savedCategory === 'checkpoints'
+            && inferred
+            && inferred !== 'checkpoints'
+            && strongInferredCategory
+        ) {
+            return false;
+        }
+        return true;
+    },
+
+    getMissingDownloadCategory(missing = {}, fallbackCategory = 'checkpoints') {
+        const knownCategories = this.getKnownDownloadCategorySet();
+        const candidates = [
+            this.getMissingNodeTypeDownloadCategory(missing),
+            missing.category,
+            missing.directory,
+            fallbackCategory
+        ];
+
+        for (const candidate of candidates) {
+            if (candidate === undefined || candidate === null || String(candidate).trim() === '') continue;
+            const normalized = this.normalizeDownloadCategory(candidate);
+            if (normalized && knownCategories.has(normalized)) {
+                return normalized;
+            }
+        }
+
+        return this.normalizeDownloadCategory(fallbackCategory || 'checkpoints');
     },
 
     getCategoryDisplayName(category = '') {
@@ -845,8 +969,19 @@ export const downloadTargetMethods = {
     },
 
     getDownloadTargetKey(missing = {}) {
-        return this.getMissingModelKey?.(missing)
+        const baseKey = this.getMissingModelKey?.(missing)
             || `${missing.node_id}:${missing.widget_index}:${missing.subgraph_id || ''}:${missing.is_top_level !== false ? 'T' : 'F'}`;
+        const modelIdentity = [
+            missing.original_path,
+            missing.expected_filename,
+            missing.name,
+            missing.workflow_url
+        ].find(value => value !== undefined && value !== null && String(value).trim());
+        if (!modelIdentity) {
+            return baseKey;
+        }
+        const identityKey = encodeURIComponent(String(modelIdentity).trim()).slice(0, 240);
+        return `${baseKey}:${identityKey}`;
     },
 
     getSavedDownloadTargetSelection(missing = {}) {
@@ -874,10 +1009,39 @@ export const downloadTargetMethods = {
         const state = this.searchResultCache?.get(this.getMissingSearchKey?.(missing));
         const results = state?.results || {};
         const merged = {};
+        const hasObjectValues = (value) => (
+            value
+            && typeof value === 'object'
+            && !Array.isArray(value)
+            && Object.keys(value).length > 0
+        );
+        const mergeSuggestionValue = (key, value) => {
+            if (value === undefined || value === null || value === '') return;
+            if (Array.isArray(value)) {
+                if (value.length > 0) {
+                    merged[key] = value;
+                }
+                return;
+            }
+            if (typeof value === 'object') {
+                if (hasObjectValues(value)) {
+                    merged[key] = value;
+                }
+                return;
+            }
+            merged[key] = value;
+        };
+
         for (const source of ['popular', 'model_list', 'huggingface', 'civitai', 'civarchive', 'lora_manager_archive']) {
             const result = this.getFirstSearchResult(results[source]);
             if (result && typeof result === 'object') {
-                Object.assign(merged, result);
+                Object.entries(result).forEach(([key, value]) => {
+                    mergeSuggestionValue(key, value);
+                });
+                merged.category = this.getSourceResultDownloadCategory(
+                    result,
+                    merged.category || missing.category || ''
+                );
             }
         }
         return merged;
@@ -961,7 +1125,21 @@ export const downloadTargetMethods = {
         const civitaiInfo = missing.civitai_info || {};
         const civitaiSearch = missing.civitai_search_result || {};
         const searchSuggestion = this.getCachedSearchSuggestionData(missing);
+        const localMatches = Array.isArray(missing.matches) ? missing.matches : [];
+        const bestLocalMatch = localMatches
+            .filter(match => match && typeof match === 'object')
+            .sort((a, b) => Number(b.confidence || 0) - Number(a.confidence || 0))[0] || null;
+        const bestLocalModel = bestLocalMatch?.model || {};
+        const bestLocalPath = bestLocalModel.relative_path
+            || bestLocalModel.path
+            || bestLocalMatch?.path
+            || '';
+        const bestLocalFilename = bestLocalModel.filename
+            || bestLocalMatch?.filename
+            || '';
         const rawValues = [
+            bestLocalPath,
+            bestLocalFilename,
             source.filename,
             source.name,
             source.model_name,
@@ -1070,36 +1248,96 @@ export const downloadTargetMethods = {
             || findMatch((entry, candidate) => entry.normalizedSegments.some(segment => segment === candidate.normalized));
     },
 
+    getTemplateSubfolderSuggestionFromMetadata(missing = {}, category = '') {
+        const normalizedCategory = this.normalizeDownloadCategory(category);
+        const template = this.getDownloadPathTemplates()[normalizedCategory] || '';
+        if (!template) return null;
+
+        const metadata = this.getDownloadPathMetadata(missing, { category: normalizedCategory });
+        const tags = Array.isArray(metadata.tags)
+            ? metadata.tags.filter(Boolean)
+            : String(metadata.tags || '').split(/[,;]+/).map(tag => tag.trim()).filter(Boolean);
+        const creator = metadata.creator && typeof metadata.creator === 'object'
+            ? (metadata.creator.username || metadata.creator.name || '')
+            : (typeof metadata.creator === 'string' ? metadata.creator : '');
+        const author = metadata.author
+            || creator
+            || (metadata.repo_id && String(metadata.repo_id).includes('/') ? String(metadata.repo_id).split('/')[0] : '');
+        const modelName = metadata.model_name
+            || metadata.name
+            || metadata.filename?.replace(/\.[^.]+$/, '')
+            || '';
+        const versionName = metadata.version_name || metadata.versionName || metadata.version || '';
+
+        const requirements = [
+            [template.includes('{base_model}'), Boolean(metadata.base_model || metadata.baseModel)],
+            [template.includes('{first_tag}'), tags.length > 0],
+            [template.includes('{author}'), Boolean(author)],
+            [template.includes('{model_name}'), Boolean(modelName)],
+            [template.includes('{version_name}'), Boolean(versionName)]
+        ];
+        if (requirements.some(([required, available]) => required && !available)) {
+            return null;
+        }
+
+        const value = this.calculateDownloadPathTemplateSubfolder(normalizedCategory, metadata);
+        return value
+            ? { value, label: `${value} (metadata)`, baseDirectory: '' }
+            : null;
+    },
+
+    getSuggestedDownloadCategory(missing = {}, fallbackCategory = 'checkpoints') {
+        const searchSuggestion = this.getCachedSearchSuggestionData(missing);
+        return this.getSourceResultDownloadCategory(
+            searchSuggestion || {},
+            this.getMissingDownloadCategory(missing, fallbackCategory || 'checkpoints')
+        );
+    },
+
     getSuggestedDownloadSubfolder(missing, category, folders = []) {
         const mode = this.getDownloadPathMode();
         if (mode === 'manual') {
             return null;
         }
-        if (mode === 'template') {
-            const value = this.calculateDownloadPathTemplateSubfolder(
-                category,
-                this.getDownloadPathMetadata(missing, { category })
-            );
-            return value
-                ? { value, label: `${value} (template)`, baseDirectory: '' }
-                : null;
-        }
 
         const folderEntries = this.getFolderSuggestionEntries(folders);
+        if (mode === 'template') {
+            return this.getTemplateSubfolderSuggestionFromMetadata(missing, category)
+                || this.getSuggestedLoraSubfolder(missing, category, folderEntries)
+                || this.getSuggestedExistingSubfolderByModelName(missing, folderEntries);
+        }
+
         return this.getSuggestedLoraSubfolder(missing, category, folderEntries)
-            || this.getSuggestedExistingSubfolderByModelName(missing, folderEntries);
+            || this.getSuggestedExistingSubfolderByModelName(missing, folderEntries)
+            || this.getTemplateSubfolderSuggestionFromMetadata(missing, category);
     },
 
     async applySuggestedDownloadSubfolder(missing, categoryEl, subfolderEl) {
         if (!this.isAutoFillSubfolderEnabled()) return;
-        if (!categoryEl || !subfolderEl || subfolderEl.value.trim()) return;
+        if (!categoryEl || !subfolderEl) return;
         const saved = this.getSavedDownloadTargetSelection(missing);
         if (saved?.subfolderTouched) return;
 
-        const category = this.normalizeDownloadCategory(this.getDropdownValue(categoryEl));
+        let category = this.normalizeDownloadCategory(this.getDropdownValue(categoryEl));
+        const suggestedCategory = this.getSuggestedDownloadCategory(missing, category);
+        const preserveSavedCategory = this.shouldPreserveSavedDownloadCategory(missing, saved, category);
+        if (suggestedCategory && suggestedCategory !== category && !preserveSavedCategory) {
+            category = suggestedCategory;
+            this.setDropdownValue(categoryEl, category, this.getCategoryDisplayName(category));
+            subfolderEl.value = '';
+            subfolderEl.dataset.baseDirectory = '';
+            this.saveDownloadTargetSelection(missing, {
+                category,
+                subfolder: '',
+                subfolderBaseDirectory: '',
+                categoryTouched: false,
+                subfolderTouched: false
+            });
+            this.syncDownloadTargetFolderContext(categoryEl, subfolderEl);
+        }
         await this.ensureDownloadSubfoldersLoaded(category);
         const latestSaved = this.getSavedDownloadTargetSelection(missing);
-        if (latestSaved?.subfolderTouched || subfolderEl.value.trim()) return;
+        if (latestSaved?.subfolderTouched) return;
 
         const folders = this.getAvailableSubfolders(category);
         const suggestion = this.getSuggestedDownloadSubfolder(missing, category, folders);
@@ -1119,21 +1357,38 @@ export const downloadTargetMethods = {
     async forceSuggestedDownloadSubfolder(missing, categoryEl, subfolderEl) {
         if (!categoryEl || !subfolderEl) return;
 
-        const category = this.normalizeDownloadCategory(this.getDropdownValue(categoryEl));
+        const saved = this.getSavedDownloadTargetSelection(missing);
+        const originalCategory = this.normalizeDownloadCategory(this.getDropdownValue(categoryEl));
+        let category = originalCategory;
+        const suggestedCategory = this.getSuggestedDownloadCategory(missing, category);
+        const preserveSavedCategory = this.shouldPreserveSavedDownloadCategory(missing, saved, originalCategory);
+        if (suggestedCategory && suggestedCategory !== category && !preserveSavedCategory) {
+            category = suggestedCategory;
+        }
         await this.ensureDownloadSubfoldersLoaded(category);
-        const folders = this.getAvailableSubfolders(category);
-        const suggestion = this.getSuggestedDownloadSubfolder(missing, category, folders);
+        let folders = this.getAvailableSubfolders(category);
+        let suggestion = this.getSuggestedDownloadSubfolder(missing, category, folders);
+
+        if (!suggestion && suggestedCategory && suggestedCategory !== category) {
+            category = suggestedCategory;
+            await this.ensureDownloadSubfoldersLoaded(category);
+            folders = this.getAvailableSubfolders(category);
+            suggestion = this.getSuggestedDownloadSubfolder(missing, category, folders);
+        }
+
         if (!suggestion) {
             this.showNotification?.('No subfolder suggestion available for this model.', 'info');
             return;
         }
 
+        this.setDropdownValue(categoryEl, category, this.getCategoryDisplayName(category));
         subfolderEl.value = suggestion.value || '';
         subfolderEl.dataset.baseDirectory = suggestion.baseDirectory || '';
         this.saveDownloadTargetSelection(missing, {
             category,
             subfolder: suggestion.value || '',
             subfolderBaseDirectory: suggestion.baseDirectory || '',
+            categoryTouched: Boolean(preserveSavedCategory && category === originalCategory),
             subfolderTouched: true
         });
         this.syncDownloadTargetFolderContext(categoryEl, subfolderEl);
@@ -1178,9 +1433,14 @@ export const downloadTargetMethods = {
         const categoryListId = `download-category-list-${missing.node_id}-${missing.widget_index}`;
         const subfolderListId = `download-subfolder-list-${missing.node_id}-${missing.widget_index}`;
         const saved = this.getSavedDownloadTargetSelection(missing);
-        const selectedCategory = this.normalizeDownloadCategory(saved?.category || defaultCategory || 'checkpoints');
-        const selectedSubfolder = saved ? saved.subfolder || '' : '';
-        const selectedSubfolderBaseDirectory = saved ? saved.subfolderBaseDirectory || '' : '';
+        const inferredCategory = this.getMissingDownloadCategory(missing, defaultCategory || 'checkpoints');
+        const preserveSavedCategory = this.shouldPreserveSavedDownloadCategory(missing, saved, inferredCategory);
+        const selectedCategory = this.normalizeDownloadCategory(
+            preserveSavedCategory ? (saved.category || inferredCategory) : inferredCategory
+        );
+        const preserveSavedSubfolder = Boolean(saved?.subfolderTouched);
+        const selectedSubfolder = preserveSavedSubfolder ? saved.subfolder || '' : '';
+        const selectedSubfolderBaseDirectory = preserveSavedSubfolder ? saved.subfolderBaseDirectory || '' : '';
 
         let html = `<div class="mr-download-target">`;
         html += `<div class="mr-download-target-grid">`;
@@ -1205,7 +1465,10 @@ export const downloadTargetMethods = {
     getDownloadTargetSelection(missing, fallbackCategory = 'checkpoints') {
         const categoryEl = this.contentElement?.querySelector(`#download-category-${missing.node_id}-${missing.widget_index}`);
         const subfolderEl = this.contentElement?.querySelector(`#download-subfolder-${missing.node_id}-${missing.widget_index}`);
-        const category = this.normalizeDownloadCategory(this.getDropdownValue(categoryEl) || fallbackCategory || 'checkpoints');
+        const category = this.normalizeDownloadCategory(
+            this.getDropdownValue(categoryEl)
+            || this.getMissingDownloadCategory(missing, fallbackCategory || 'checkpoints')
+        );
         const subfolder = (subfolderEl?.value || '').trim();
         const subfolderBaseDirectory = subfolder ? subfolderEl?.dataset.baseDirectory || '' : '';
         this.saveDownloadTargetSelection(missing, {
@@ -1310,6 +1573,7 @@ export const downloadTargetMethods = {
                     category: value,
                     subfolder: '',
                     subfolderBaseDirectory: '',
+                    categoryTouched: true,
                     subfolderTouched: false
                 });
                 subfolderEl.dataset.baseDirectory = '';

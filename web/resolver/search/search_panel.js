@@ -1196,6 +1196,10 @@ export const searchPanelMethods = {
         const modelName = modelParts.name || downloadFilename;
         const fullModelName = this.getVersionedModelName(modelName, modelParts.version);
         const baseModel = downloadSource.base_model || missing.civitai_info?.base_model || '';
+        const rowCategory = this.getSourceResultDownloadCategory?.(
+            downloadSource,
+            downloadSource.directory || downloadSource.category || this.getMissingDownloadCategory?.(missing, 'checkpoints') || 'checkpoints'
+        ) || downloadSource.directory || downloadSource.category || this.getMissingDownloadCategory?.(missing, 'checkpoints') || 'checkpoints';
         const secondaryParts = [
             sourceSecondary,
             fullModelName && fullModelName !== downloadFilename ? downloadFilename : '',
@@ -1206,7 +1210,7 @@ export const searchPanelMethods = {
             filename: downloadFilename,
             model: modelName,
             version: modelParts.version,
-            category: downloadSource.directory || downloadSource.category || missing.category || 'checkpoints'
+            category: rowCategory
         });
         const rowDetailsContext = ['civitai', 'civarchive'].includes(String(source).toLowerCase())
             ? {
@@ -1218,7 +1222,7 @@ export const searchPanelMethods = {
                 name: modelName,
                 filename: downloadFilename,
                 missing_key: this.getMissingModelKey(missing),
-                category: missing.category
+                category: rowCategory
             }
             : null;
 
@@ -1235,7 +1239,7 @@ export const searchPanelMethods = {
             size: this.formatSearchResultSize(downloadSource),
             downloadUrl: downloadSource.url,
             downloadFilename,
-            category: downloadSource.directory || downloadSource.category || missing.category || 'checkpoints',
+            category: rowCategory,
             openUrl: modelUrl,
             searchedAt: this.getSearchResultTimestamp(downloadSource),
             pathMetadata: rowPathMetadata,
@@ -1244,10 +1248,10 @@ export const searchPanelMethods = {
                 filename: downloadFilename,
                 model: modelName,
                 version: modelParts.version,
-                category: downloadSource.directory || downloadSource.category || missing.category || 'checkpoints'
+                category: rowCategory
             }, {
                 filename: downloadFilename,
-                category: downloadSource.directory || downloadSource.category || missing.category || 'checkpoints',
+                category: rowCategory,
                 url: downloadSource.url,
                 openUrl: modelUrl,
                 pathMetadata: rowPathMetadata
@@ -1261,7 +1265,7 @@ export const searchPanelMethods = {
         html += this.renderSearchControls(missing, { buttonText: 'Search Again' });
         html += this.renderDownloadTargetControls(
             missing,
-            downloadSource.directory || downloadSource.category || missing.category || 'checkpoints'
+            downloadSource.directory || downloadSource.category || this.getMissingDownloadCategory?.(missing, 'checkpoints') || 'checkpoints'
         );
         html += `</div>`;
 
