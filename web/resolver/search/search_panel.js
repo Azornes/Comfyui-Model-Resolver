@@ -268,16 +268,25 @@ export const searchPanelMethods = {
         return `${workflowKey || 'workflow'}\n${missingSearchKey || 'missing'}`;
     },
 
-    hasBackgroundSearchJob(workflowKey, missingSearchKey, runId = null) {
-        const job = this.backgroundSearchJobs?.get(
+    getBackgroundSearchJob(workflowKey, missingSearchKey) {
+        return this.backgroundSearchJobs?.get(
             this.getBackgroundSearchJobKey(workflowKey, missingSearchKey)
-        );
+        ) || null;
+    },
+
+    hasBackgroundSearchJob(workflowKey, missingSearchKey, runId = null) {
+        const job = this.getBackgroundSearchJob(workflowKey, missingSearchKey);
         if (!job) return false;
         return !runId || job.runId === runId;
     },
 
     isBackgroundSearchRunActive(workflowKey, missingSearchKey, runId) {
         return this.hasBackgroundSearchJob(workflowKey, missingSearchKey, runId);
+    },
+
+    isSearchSourceCancelled(workflowKey, missingSearchKey, runId, source) {
+        const job = this.getBackgroundSearchJob(workflowKey, missingSearchKey);
+        return Boolean(job?.runId === runId && job.cancelledSources?.has(source));
     },
 
     getWorkflowSearchCache(workflowKey, { create = false } = {}) {
@@ -789,7 +798,8 @@ export const searchPanelMethods = {
             running: 'Searching...',
             found: 'Found',
             none: 'No match',
-            error: 'Error'
+            error: 'Error',
+            cancelled: 'Cancelled'
         };
 
         if (isCompact) {
@@ -816,6 +826,7 @@ export const searchPanelMethods = {
             const status = progress?.status || 'pending';
             const statusClass = String(status).replace(/[^a-z0-9_-]/gi, '');
             const label = this.getSearchSourceLabel(source);
+            const canCancel = state.activeSearchRunId && (status === 'pending' || status === 'running');
             const percent = status === 'pending'
                 ? 0
                 : (status === 'running' ? progress?.percent : 100);
@@ -824,11 +835,15 @@ export const searchPanelMethods = {
                 ? `Searching... ${Math.round(safePercent)}%`
                 : (progress?.message || statusLabels[status] || status);
             const title = progress?.error ? ` data-tooltip="${this.escapeHtml(`${label}: ${progress.error}`)}"` : '';
+            const cancelButton = canCancel
+                ? `<button type="button" class="mr-search-result-action-btn mr-search-progress-cancel" data-source="${this.escapeHtml(source)}" data-run-id="${this.escapeHtml(state.activeSearchRunId)}" data-tooltip="Cancel ${this.escapeHtml(label)} search" aria-label="Cancel ${this.escapeHtml(label)} search">${getSvgIcon('x')}</button>`
+                : '';
             html += `
                 <div class="mr-search-progress-item mr-search-progress-${statusClass}"${title}>
                     <div class="mr-search-progress-head">
-                        <span>${this.escapeHtml(label)}</span>
-                        <span>${this.escapeHtml(statusLabel)}</span>
+                        <span class="mr-search-progress-source">${this.escapeHtml(label)}</span>
+                        <span class="mr-search-progress-status">${this.escapeHtml(statusLabel)}</span>
+                        ${cancelButton}
                     </div>
                     <div class="mr-search-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${safePercent}">
                         <div class="mr-search-progress-fill" style="width: ${safePercent}%;"></div>
@@ -838,6 +853,61 @@ export const searchPanelMethods = {
         }
         html += '</div>';
         return html;
+    },
+
+    wireSearchProgressCancelButtons(container, missing, state = null, { workflowKey = this.getWorkflowScopedQueueKey() } = {}) {
+        if (!container || !missing) return;
+        container.querySelectorAll?.('.mr-search-progress-cancel').forEach(button => {
+            if (button.dataset.mlCancelSearchBound === '1') return;
+            button.dataset.mlCancelSearchBound = '1';
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const source = button.dataset.source || '';
+                const runId = button.dataset.runId || state?.activeSearchRunId || '';
+                this.cancelSearchSource(missing, source, runId, { workflowKey });
+            });
+        });
+    },
+
+    cancelSearchSource(missing, source, runId = '', { workflowKey = this.getWorkflowScopedQueueKey() } = {}) {
+        if (!missing || !source || !runId) return false;
+
+        const missingSearchKey = this.getMissingSearchKey(missing);
+        const state = this.getSearchStateForWorkflow(workflowKey, missing);
+        const job = this.getBackgroundSearchJob(workflowKey, missingSearchKey);
+        if (!state || state.activeSearchRunId !== runId || !job || job.runId !== runId) return false;
+
+        job.cancelledSources = job.cancelledSources || new Set();
+        job.cancelledSources.add(source);
+        const controller = job.sourceControllers?.get(source);
+        if (controller && !controller.signal?.aborted) {
+            controller.abort();
+        }
+
+        this.clearSearchProgressTimer(runId, source);
+        this.setSourceProgress(state, source, {
+            status: 'cancelled',
+            percent: 100,
+            message: 'Cancelled',
+            error: null
+        }, missing, { workflowKey });
+
+        const hasRunningSources = Object.entries(state.sourceProgress || {}).some(([entrySource, progress]) => (
+            entrySource !== source
+            && (progress?.status === 'pending' || progress?.status === 'running')
+            && !job.cancelledSources?.has(entrySource)
+        ));
+
+        if (!hasRunningSources) {
+            state.activeSearchRunId = null;
+            this.clearSearchProgressTimers(runId);
+            this.backgroundSearchJobs?.delete(this.getBackgroundSearchJobKey(workflowKey, missingSearchKey));
+        }
+
+        this.persistSearchStateForWorkflow(workflowKey, missing, state);
+        this.refreshSearchUiForMissing(missing, state, { workflowKey });
+        return true;
     },
 
     /**

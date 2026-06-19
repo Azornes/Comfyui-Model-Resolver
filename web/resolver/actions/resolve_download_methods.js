@@ -1486,6 +1486,8 @@ export const resolveDownloadMethods = {
                 runId: searchRunId,
                 missing,
                 startedAt: Date.now(),
+                sourceControllers: new Map(),
+                cancelledSources: new Set(),
                 promise: null
             };
             this.backgroundSearchJobs.set(backgroundJobKey, backgroundJob);
@@ -1559,15 +1561,31 @@ export const resolveDownloadMethods = {
                     is_urn: sourceIsUrn,
                     sources: [source]
                 };
+                const sourceController = typeof AbortController !== 'undefined'
+                    ? new AbortController()
+                    : null;
+                const currentJob = this.backgroundSearchJobs.get(backgroundJobKey);
+                if (sourceController && currentJob?.runId === searchRunId) {
+                    currentJob.sourceControllers?.set(source, sourceController);
+                }
 
                 try {
+                    if (this.isSearchSourceCancelled?.(workflowKey, missingSearchKey, searchRunId, source)) {
+                        return { source, cancelled: true };
+                    }
+
                     log.debug('Model Resolver: Search request:', JSON.stringify(searchData));
 
-                    const response = await api.fetchApi('/model_resolver/search', {
+                    const requestOptions = {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(searchData)
-                    });
+                    };
+                    if (sourceController) {
+                        requestOptions.signal = sourceController.signal;
+                    }
+
+                    const response = await api.fetchApi('/model_resolver/search', requestOptions);
 
                     if (!response.ok) {
                         throw new Error(`Search failed: ${response.status}`);
@@ -1578,6 +1596,9 @@ export const resolveDownloadMethods = {
 
                     if (!this.isBackgroundSearchRunActive(workflowKey, missingSearchKey, searchRunId)) {
                         return { source, stale: true };
+                    }
+                    if (this.isSearchSourceCancelled?.(workflowKey, missingSearchKey, searchRunId, source)) {
+                        return { source, cancelled: true };
                     }
                     if (baseModelContext !== this.getSearchBaseModelContext(missing)) {
                         return { source, stale: true };
@@ -1637,6 +1658,13 @@ export const resolveDownloadMethods = {
                     this.applySearchResultSuggestion(missing);
                     return { source, data };
                 } catch (error) {
+                    const wasCancelled = error?.name === 'AbortError'
+                        || this.isSearchSourceCancelled?.(workflowKey, missingSearchKey, searchRunId, source);
+                    if (wasCancelled) {
+                        this.clearSearchProgressTimer(searchRunId, source);
+                        return { source, cancelled: true };
+                    }
+
                     console.error(`Model Resolver: Search error for ${source}:`, error);
                     if (!this.isBackgroundSearchRunActive(workflowKey, missingSearchKey, searchRunId)) {
                         return { source, stale: true, error };
@@ -1655,6 +1683,11 @@ export const resolveDownloadMethods = {
                     this.persistSearchStateForWorkflow(workflowKey, missing, state);
                     this.refreshSearchUiForMissing(missing, state, { workflowKey });
                     return { source, error };
+                } finally {
+                    const cleanupJob = this.backgroundSearchJobs.get(backgroundJobKey);
+                    if (cleanupJob?.runId === searchRunId) {
+                        cleanupJob.sourceControllers?.delete(source);
+                    }
                 }
             });
 
@@ -1992,11 +2025,13 @@ export const resolveDownloadMethods = {
         if (!hasResults) {
             if (hasActiveProgress) {
                 container.innerHTML = progressHtml;
+                this.wireSearchProgressCancelButtons?.(container, missing, state);
                 return;
             }
 
             if (state?.lastAttemptError) {
                 container.innerHTML = `${progressHtml}${this.renderStatusMessage(state.lastAttemptError, 'error')}`;
+                this.wireSearchProgressCancelButtons?.(container, missing, state);
                 return;
             }
 
@@ -2004,6 +2039,7 @@ export const resolveDownloadMethods = {
                 'No matches found online for this model.',
                 'warning'
             );
+            this.wireSearchProgressCancelButtons?.(container, missing, state);
             return;
         }
 
@@ -2192,6 +2228,7 @@ export const resolveDownloadMethods = {
         const html = `${progressHtml}${statusHtml}${this.renderSearchResultsTable(rows)}`;
         container.innerHTML = html;
 
+        this.wireSearchProgressCancelButtons?.(container, missing, state);
         this.wireSearchDownloadButtons(container, missing);
     },
 

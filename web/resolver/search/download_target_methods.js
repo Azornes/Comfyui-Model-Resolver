@@ -1531,6 +1531,13 @@ export const downloadTargetMethods = {
             state.activeSearchRunId = null;
         }
         this.clearAllSearchProgressTimers();
+        for (const job of this.backgroundSearchJobs?.values?.() || []) {
+            for (const controller of job.sourceControllers?.values?.() || []) {
+                try {
+                    controller.abort();
+                } catch (error) { /* ignore abort cleanup failures */ }
+            }
+        }
         this.backgroundSearchJobs?.clear();
         this.searchResultCache.clear();
         this.workflowSearchResultCaches.clear();
