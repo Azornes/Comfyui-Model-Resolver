@@ -122,6 +122,18 @@ export class ResolverManagerDialog extends ComfyDialog {
                 }),
                 $el("span", { textContent: "Open in CivitAI" })
             ]),
+            $el("div.mr-context-menu-divider.mr-context-menu-divider-workflow", {
+                "data-menu-divider": "workflow"
+            }),
+            $el("div.mr-context-menu-item.mr-context-menu-action-switch-workflow", {
+                "data-menu-action": "switchWorkflow",
+                onclick: () => this.handleContextMenuAction('switchWorkflow')
+            }, [
+                $el("span.mr-context-menu-item-icon", {
+                    innerHTML: getSvgIcon('internalLink', 'currentColor', 'mr-context-menu-item-svg')
+                }),
+                $el("span", { textContent: "Switch to Workflow" })
+            ]),
             $el("div.mr-context-menu-divider.mr-context-menu-divider-folder", {
                 "data-menu-divider": "folder"
             }),

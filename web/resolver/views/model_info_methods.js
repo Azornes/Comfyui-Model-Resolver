@@ -27,15 +27,20 @@ export const modelInfoMethods = {
         const isDownloadTableContext = model?.context_scope === 'download_table';
         const isDownloadFolderContext = model?.context_scope === 'download_folder';
         const isDownloadRootContext = model?.context_scope === 'download_root';
+        const isDownloadQueueContext = model?.context_scope === 'download_queue';
         const isFolderOnlyContext = isDownloadFolderContext || isDownloadRootContext;
+        const isSourceModelContext = !isDownloadTableContext && !isFolderOnlyContext && !isDownloadQueueContext;
         const hasLocalPath = Boolean(model?.folder_path || model?.download_directory || model?.directory || model?.path || model?.resolved_path);
         const showOpenFolder = !isDownloadTableContext && hasLocalPath;
-        this.setContextMenuItemVisible('showInfo', !isDownloadTableContext && !isFolderOnlyContext);
+        const showSwitchWorkflow = isDownloadQueueContext && Boolean(this.canSwitchToDownloadWorkflow?.(model));
+        this.setContextMenuItemVisible('showInfo', isSourceModelContext);
         this.setContextMenuItemVisible('showMore', canShowMore);
-        this.setContextMenuItemVisible('civitai', !isDownloadTableContext && !isFolderOnlyContext);
+        this.setContextMenuItemVisible('civitai', isSourceModelContext);
+        this.setContextMenuItemVisible('switchWorkflow', showSwitchWorkflow);
         this.setContextMenuItemVisible('openFolder', showOpenFolder);
-        this.setContextMenuDividerVisible('source', (!isDownloadTableContext && !isFolderOnlyContext) || canShowMore);
-        this.setContextMenuDividerVisible('folder', showOpenFolder && !isFolderOnlyContext);
+        this.setContextMenuDividerVisible('source', isSourceModelContext || canShowMore);
+        this.setContextMenuDividerVisible('workflow', showSwitchWorkflow && (isSourceModelContext || canShowMore));
+        this.setContextMenuDividerVisible('folder', showOpenFolder && (isSourceModelContext || canShowMore || showSwitchWorkflow));
 
         const openFolderLabel = this.contextMenu.querySelector('.mr-context-menu-action-open-folder span:last-child');
         if (openFolderLabel) {
@@ -80,6 +85,8 @@ export const modelInfoMethods = {
             this.openInCivitAI(model);
         } else if (action === 'openFolder') {
             this.openContainingFolder(model);
+        } else if (action === 'switchWorkflow') {
+            this.switchToDownloadWorkflow(model);
         } else if (action === 'showInfo') {
             this.showModelInfo(model);
         } else if (action === 'showMore') {

@@ -196,26 +196,547 @@ export const queueMethods = {
         const entries = Object.entries(this.activeDownloads || {});
         if (!entries.length) return [];
 
-        const workflowKey = this.getWorkflowScopedQueueKey?.() || '';
-        const visibleMissingKeys = new Set(
-            (this.missingModels || [])
-                .filter(Boolean)
-                .map(missing => this.getDownloadStateKey?.(missing) || this.getMissingModelKey(missing))
-        );
-
         return entries
-            .filter(([, info]) => {
-                if (!info?.missing) return false;
-                if (workflowKey && info.workflowKey) {
-                    return info.workflowKey === workflowKey;
-                }
-                if (visibleMissingKeys.size) {
-                    const missingKey = this.getDownloadStateKey?.(info.missing) || this.getMissingModelKey(info.missing);
-                    return visibleMissingKeys.has(missingKey);
-                }
-                return true;
-            })
+            .filter(([, info]) => Boolean(info?.missing))
             .map(([downloadId, info]) => ({ downloadId, info }));
+    },
+
+    getWorkflowLabelFromRouteKey(routeKey = '') {
+        const rawRoute = String(routeKey || '').split('\n')[0].trim();
+        if (!rawRoute) return '';
+
+        const decodeLabel = (value = '') => {
+            try {
+                return decodeURIComponent(String(value || '').replace(/\+/g, ' '));
+            } catch (error) {
+                return String(value || '');
+            }
+        };
+        const cleanRoutePart = (value = '') => this.cleanWorkflowLabel?.(decodeLabel(value)) || decodeLabel(value).trim();
+        const commonRouteParts = new Set(['', '#', '/', 'workflow', 'workflows', 'view', 'tab', 'tabs', 'graph', 'graphs']);
+
+        try {
+            const base = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : 'http://localhost';
+            const url = new URL(rawRoute, base);
+            const candidates = [
+                url.searchParams.get('workflow'),
+                url.searchParams.get('workflowName'),
+                url.searchParams.get('workflow_name'),
+                url.searchParams.get('name'),
+                url.searchParams.get('filename'),
+                url.searchParams.get('file'),
+                url.hash ? new URLSearchParams(url.hash.includes('?') ? url.hash.slice(url.hash.indexOf('?') + 1) : '').get('workflow') : '',
+                url.hash ? new URLSearchParams(url.hash.includes('?') ? url.hash.slice(url.hash.indexOf('?') + 1) : '').get('workflowName') : '',
+                url.hash ? new URLSearchParams(url.hash.includes('?') ? url.hash.slice(url.hash.indexOf('?') + 1) : '').get('name') : ''
+            ];
+            const found = candidates.map(cleanRoutePart).find(Boolean);
+            if (found) return found;
+        } catch (error) { /* fall through to manual route parsing */ }
+
+        try {
+            const hash = rawRoute.startsWith('#') ? rawRoute.slice(1) : rawRoute;
+            const paramsText = hash.includes('?') ? hash.slice(hash.indexOf('?') + 1) : hash.replace(/^\?/, '');
+            const params = new URLSearchParams(paramsText);
+            const candidates = [
+                params.get('workflow'),
+                params.get('workflowName'),
+                params.get('workflow_name'),
+                params.get('name'),
+                params.get('filename'),
+                params.get('file'),
+                params.get('workflowId'),
+                params.get('workflow_id'),
+                params.get('tab'),
+                params.get('id')
+            ];
+            const found = candidates.map(cleanRoutePart).find(Boolean);
+            if (found) return found;
+        } catch (error) { /* fall through to readable route */ }
+
+        const withoutQuery = rawRoute.split('?')[0].split('&')[0];
+        const parts = withoutQuery
+            .replace(/^#/, '')
+            .split(/[\\/]/)
+            .map(part => cleanRoutePart(part))
+            .filter(part => !commonRouteParts.has(part.toLowerCase()));
+        if (parts.length) return parts[parts.length - 1];
+
+        return cleanRoutePart(rawRoute
+            .replace(/^#\/?/, '')
+            .replace(/^\?/, '')
+            .replace(/[?&](workflow|workflowName|workflow_name|name|filename|file|workflowId|workflow_id|tab|id)=/i, ' ')
+            .replace(/[=&]+/g, ' '));
+    },
+
+    cleanWorkflowLabel(label = '') {
+        return String(label || '')
+            .replace(/[\r\n\t]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .replace(/^[*•\s]+|[×✕✖*•\s]+$/g, '')
+            .trim();
+    },
+
+    getWorkflowTabActiveSelectors() {
+        return [
+            '[data-workflow-name][aria-selected="true"]',
+            '[data-workflow-name].active',
+            '[data-workflow-name].selected',
+            '[data-workflow-id][aria-selected="true"]',
+            '[data-workflow-id][data-active="true"]',
+            '[data-workflow-id].active',
+            '[data-workflow-id].selected',
+            '[data-tab-id*="workflow" i][aria-selected="true"]',
+            '[data-tab-id*="workflow" i][data-active="true"]',
+            '[class*="workflow" i][class*="tab" i].active',
+            '[class*="workflow" i][class*="tab" i].selected',
+            '[class*="workflow" i][class*="tab" i].p-highlight',
+            '[class*="workflow" i][class*="tab" i].p-tab-active',
+            '[class*="tab" i][class*="workflow" i].active',
+            '[class*="tab" i][class*="workflow" i].selected',
+            '[class*="tab" i][class*="workflow" i].p-highlight',
+            '[class*="tab" i][class*="workflow" i].p-tab-active',
+            '[role="tab"][aria-selected="true"]',
+            '[role="tab"][data-active="true"]',
+            '[role="tab"].active',
+            '[role="tab"].selected',
+            '[role="tab"].p-highlight',
+            '[role="tab"].p-tab-active'
+        ];
+    },
+
+    getWorkflowTabSearchSelectors() {
+        return [
+            '[data-workflow-name]',
+            '[data-workflow-id]',
+            '[data-tab-id*="workflow" i]',
+            '[aria-controls*="workflow" i]',
+            '[class*="workflow" i][class*="tab" i]',
+            '[class*="tab" i][class*="workflow" i]',
+            '[role="tab"]'
+        ];
+    },
+
+    getWorkflowTabElementClassText(element) {
+        return String(element?.getAttribute?.('class') || '');
+    },
+
+    getWorkflowTabElementIdentity(element) {
+        if (!element) return null;
+
+        const workflowTabId = String(
+            element.getAttribute?.('data-workflow-id')
+            || element.dataset?.workflowId
+            || element.getAttribute?.('data-tab-id')
+            || element.dataset?.tabId
+            || ''
+        ).trim();
+        const workflowTabName = String(
+            element.getAttribute?.('data-workflow-name')
+            || element.dataset?.workflowName
+            || element.getAttribute?.('data-tab-title')
+            || element.dataset?.tabTitle
+            || ''
+        ).trim();
+        const workflowTabAriaControls = String(element.getAttribute?.('aria-controls') || '').trim();
+        const title = String(element.getAttribute?.('title') || '').trim();
+        const ariaLabel = String(element.getAttribute?.('aria-label') || '').trim();
+        const workflowTabText = this.cleanWorkflowLabel(element.textContent || '');
+        const workflowLabel = this.cleanWorkflowLabel(workflowTabName || title || ariaLabel || workflowTabText);
+
+        return {
+            element,
+            workflowLabel,
+            workflowTabId,
+            workflowTabName,
+            workflowTabAriaControls,
+            workflowTabText,
+            workflowTabTitle: title,
+            workflowTabAriaLabel: ariaLabel
+        };
+    },
+
+    isLikelyWorkflowTabElement(element, label = '') {
+        if (!element) return false;
+        if (element.closest?.('#model-resolver-modal, .model-resolver-backdrop')) return false;
+
+        const attrText = [
+            element.getAttribute?.('data-workflow-id') || '',
+            element.getAttribute?.('data-workflow-name') || '',
+            element.getAttribute?.('data-tab-id') || '',
+            element.getAttribute?.('aria-controls') || '',
+            element.getAttribute?.('title') || '',
+            element.getAttribute?.('aria-label') || '',
+            this.getWorkflowTabElementClassText(element)
+        ].join(' ');
+
+        if (/workflow|untitled|unsaved|\.json/i.test(`${label} ${attrText}`)) return true;
+        if (element.hasAttribute?.('data-workflow-id') || element.hasAttribute?.('data-workflow-name')) return true;
+        if (element.matches?.('[role="tab"]')) {
+            const normalized = this.cleanWorkflowLabel(label).toLowerCase();
+            if (!normalized) return false;
+            if (/^(queued|downloads|missing|loaded|options|settings|queue|history|logs|console|manager)$/i.test(normalized)) {
+                return false;
+            }
+            return true;
+        }
+
+        return false;
+    },
+
+    isWorkflowTabElementActive(element) {
+        if (!element) return false;
+        const classList = element.classList;
+        return element.getAttribute?.('aria-selected') === 'true'
+            || element.getAttribute?.('data-active') === 'true'
+            || classList?.contains('active')
+            || classList?.contains('selected')
+            || classList?.contains('p-highlight')
+            || classList?.contains('p-tab-active');
+    },
+
+    findActiveWorkflowTabElement() {
+        if (typeof document === 'undefined') return null;
+
+        for (const selector of this.getWorkflowTabActiveSelectors()) {
+            let elements = [];
+            try {
+                elements = Array.from(document.querySelectorAll(selector));
+            } catch (error) {
+                continue;
+            }
+
+            for (const element of elements) {
+                const identity = this.getWorkflowTabElementIdentity(element);
+                if (!identity?.workflowLabel && !identity?.workflowTabId && !identity?.workflowTabName) continue;
+                if (!this.isLikelyWorkflowTabElement(element, identity.workflowLabel)) continue;
+                return identity;
+            }
+        }
+
+        return null;
+    },
+
+    getActiveWorkflowTabContext() {
+        const activeTab = this.findActiveWorkflowTabElement?.();
+        const routeKey = this.getActiveWorkflowRouteKey?.() || this.activeWorkflowRouteKey || '';
+        const workflow = this.getCurrentWorkflow?.();
+        const workflowSignature = this.activeWorkflowSignature || (workflow ? this.getWorkflowSignature?.(workflow) : '') || '';
+        const fallbackLabel = this.getWorkflowLabelFromComfyState?.()
+            || activeTab?.workflowLabel
+            || this.getWorkflowLabelFromRouteKey?.(routeKey)
+            || 'Current workflow';
+
+        return {
+            workflowRouteKey: routeKey,
+            workflowSignature,
+            workflowLabel: activeTab?.workflowLabel || fallbackLabel,
+            workflowTabId: activeTab?.workflowTabId || '',
+            workflowTabName: activeTab?.workflowTabName || '',
+            workflowTabAriaControls: activeTab?.workflowTabAriaControls || '',
+            workflowTabText: activeTab?.workflowTabText || ''
+        };
+    },
+
+    getWorkflowLabelFromComfyState() {
+        const candidates = [];
+        try {
+            const activeWorkflow = app?.workflowManager?.activeWorkflow
+                || app?.workflowManager?.workflow
+                || app?.ui?.workflow?.activeWorkflow
+                || app?.canvas?.workflow;
+            candidates.push(
+                activeWorkflow?.name,
+                activeWorkflow?.title,
+                activeWorkflow?.filename,
+                activeWorkflow?.path?.split?.(/[\\/]/)?.pop?.(),
+                activeWorkflow?.workflow?.name,
+                activeWorkflow?.workflow?.title
+            );
+        } catch (error) { /* ignore unavailable Comfy internals */ }
+
+        for (const candidate of candidates) {
+            const label = this.cleanWorkflowLabel(candidate);
+            if (label) return label;
+        }
+        return '';
+    },
+
+    getWorkflowLabelFromActiveTabElement() {
+        return this.findActiveWorkflowTabElement?.()?.workflowLabel || '';
+    },
+
+    getActiveWorkflowDownloadLabel() {
+        const stateLabel = this.getWorkflowLabelFromComfyState?.();
+        if (stateLabel) return stateLabel;
+
+        const tabLabel = this.getWorkflowLabelFromActiveTabElement?.();
+        if (tabLabel) return tabLabel;
+
+        const routeKey = this.getActiveWorkflowRouteKey?.() || this.activeWorkflowRouteKey || '';
+        const routeLabel = this.getWorkflowLabelFromRouteKey(routeKey);
+        return routeLabel || 'Current workflow';
+    },
+
+    getDownloadWorkflowLabel(info = {}) {
+        return info.workflowLabel
+            || this.getWorkflowLabelFromRouteKey(info.workflowRouteKey || '')
+            || this.getWorkflowLabelFromRouteKey(info.workflowKey || '')
+            || this.getActiveWorkflowDownloadLabel?.()
+            || 'Unknown workflow';
+    },
+
+    getWorkflowContextRouteKey(context = {}) {
+        const direct = context.workflow_route_key || context.workflowRouteKey || '';
+        if (direct) return String(direct).split('\n')[0].trim();
+
+        const key = context.workflow_key || context.workflowKey || '';
+        return String(key || '').split('\n')[0].trim();
+    },
+
+    isUsableWorkflowRouteKey(routeKey = '') {
+        const normalized = String(routeKey || '').trim();
+        return Boolean(normalized && normalized !== '#');
+    },
+
+    getWorkflowContextSignature(context = {}) {
+        const direct = context.workflow_signature || context.workflowSignature || '';
+        if (direct) return String(direct).trim();
+
+        const key = context.workflow_key || context.workflowKey || '';
+        const parts = String(key || '').split('\n').map(part => part.trim()).filter(Boolean);
+        return parts.length > 1 ? parts.slice(1).join('\n') : '';
+    },
+
+    getWorkflowContextLabel(context = {}) {
+        return this.cleanWorkflowLabel(
+            context.workflow_label
+            || context.workflowLabel
+            || context.workflow_tab_name
+            || context.workflowTabName
+            || context.workflow_tab_text
+            || context.workflowTabText
+            || this.getWorkflowLabelFromRouteKey?.(this.getWorkflowContextRouteKey(context))
+            || ''
+        );
+    },
+
+    getDownloadWorkflowRuntimeContext(context = {}) {
+        const downloadId = context.download_id || context.downloadId || '';
+        const info = downloadId ? this.activeDownloads?.[downloadId] : null;
+        if (!info) return context;
+
+        return {
+            ...context,
+            workflowRouteKey: context.workflowRouteKey || context.workflow_route_key || info.workflowRouteKey || '',
+            workflow_route_key: context.workflow_route_key || context.workflowRouteKey || info.workflowRouteKey || '',
+            workflowKey: context.workflowKey || info.workflowKey || '',
+            workflowLabel: context.workflowLabel || context.workflow_label || info.workflowLabel || '',
+            workflow_label: context.workflow_label || context.workflowLabel || info.workflowLabel || '',
+            workflowSignature: context.workflowSignature || info.workflowSignature || '',
+            workflowTabId: context.workflowTabId || context.workflow_tab_id || info.workflowTabId || '',
+            workflow_tab_id: context.workflow_tab_id || context.workflowTabId || info.workflowTabId || '',
+            workflowTabName: context.workflowTabName || context.workflow_tab_name || info.workflowTabName || '',
+            workflow_tab_name: context.workflow_tab_name || context.workflowTabName || info.workflowTabName || '',
+            workflowTabAriaControls: context.workflowTabAriaControls || context.workflow_tab_aria_controls || info.workflowTabAriaControls || '',
+            workflow_tab_aria_controls: context.workflow_tab_aria_controls || context.workflowTabAriaControls || info.workflowTabAriaControls || '',
+            workflowTabText: context.workflowTabText || context.workflow_tab_text || info.workflowTabText || '',
+            workflow_tab_text: context.workflow_tab_text || context.workflowTabText || info.workflowTabText || ''
+        };
+    },
+
+    canSwitchToDownloadWorkflow(context = {}) {
+        context = this.getDownloadWorkflowRuntimeContext(context);
+        const label = this.getWorkflowContextLabel(context);
+        const hasSpecificLabel = Boolean(label && !/^(current workflow|unknown workflow|workflow)$/i.test(label));
+        return Boolean(
+            this.isUsableWorkflowRouteKey(this.getWorkflowContextRouteKey(context))
+            || this.getWorkflowContextSignature(context)
+            || hasSpecificLabel
+            || context.workflow_tab_id
+            || context.workflowTabId
+            || context.workflow_tab_aria_controls
+            || context.workflowTabAriaControls
+        );
+    },
+
+    isDownloadWorkflowActive(context = {}) {
+        context = this.getDownloadWorkflowRuntimeContext(context);
+        const routeKey = this.getWorkflowContextRouteKey(context);
+        const currentRoute = this.getActiveWorkflowRouteKey?.() || this.activeWorkflowRouteKey || '';
+        if (this.isUsableWorkflowRouteKey(routeKey) && currentRoute && routeKey === currentRoute) return true;
+
+        const signature = this.getWorkflowContextSignature(context);
+        const currentSignature = this.activeWorkflowSignature || this.getWorkflowSignature?.(this.getCurrentWorkflow?.()) || '';
+        if (signature && currentSignature && signature === currentSignature) return true;
+
+        const activeTab = this.findActiveWorkflowTabElement?.();
+        if (activeTab) {
+            const targetTabId = String(context.workflow_tab_id || context.workflowTabId || '').trim();
+            const targetTabName = String(context.workflow_tab_name || context.workflowTabName || '').trim();
+            const targetAriaControls = String(context.workflow_tab_aria_controls || context.workflowTabAriaControls || '').trim();
+            if (targetTabId && targetTabId === activeTab.workflowTabId) return true;
+            if (targetTabName && targetTabName === activeTab.workflowTabName) return true;
+            if (targetAriaControls && targetAriaControls === activeTab.workflowTabAriaControls) return true;
+        }
+
+        const label = this.cleanWorkflowLabel(this.getWorkflowContextLabel(context)).toLowerCase();
+        const activeLabel = this.cleanWorkflowLabel(this.getActiveWorkflowDownloadLabel?.()).toLowerCase();
+        return Boolean(label && activeLabel && label === activeLabel);
+    },
+
+    getDownloadQueueContext(progress = {}, info = {}, workflowLabel = '', downloadId = '') {
+        const folderContext = this.getDownloadFolderContext?.(progress, info) || null;
+        const missing = info?.missing || {};
+        const label = workflowLabel || this.getDownloadWorkflowLabel?.(info) || '';
+        const context = {
+            ...(folderContext || {}),
+            context_scope: 'download_queue',
+            download_id: downloadId,
+            open_folder_label: folderContext ? 'Open Download Folder' : '',
+            name: folderContext?.name || progress?.filename || info?.filename || missing?.original_path?.split(/[\/\\]/).pop() || 'Download',
+            workflow_label: label,
+            workflow_route_key: info.workflowRouteKey || this.getWorkflowContextRouteKey(info) || '',
+            workflow_tab_id: info.workflowTabId || '',
+            workflow_tab_name: info.workflowTabName || '',
+            workflow_tab_aria_controls: info.workflowTabAriaControls || '',
+            workflow_tab_text: info.workflowTabText || '',
+            node_id: missing.locate_node_id ?? missing.node_id ?? '',
+            widget_index: missing.widget_index ?? '',
+            subgraph_id: missing.locate_subgraph_id || missing.subgraph_id || '',
+            is_top_level: missing.locate_is_top_level ?? missing.is_top_level ?? true
+        };
+
+        return (folderContext || this.canSwitchToDownloadWorkflow(context)) ? context : null;
+    },
+
+    getWorkflowTabComparisonValues(identity = {}, element = null) {
+        if (!identity) return [];
+        return [
+            identity.workflowLabel,
+            identity.workflowTabId,
+            identity.workflowTabName,
+            identity.workflowTabAriaControls,
+            identity.workflowTabText,
+            identity.workflowTabTitle,
+            identity.workflowTabAriaLabel,
+            element?.getAttribute?.('href') || '',
+            element?.getAttribute?.('data-route') || '',
+            element?.getAttribute?.('data-path') || ''
+        ].map(value => String(value || '').trim()).filter(Boolean);
+    },
+
+    findWorkflowTabForDownload(context = {}) {
+        if (typeof document === 'undefined') return null;
+
+        context = this.getDownloadWorkflowRuntimeContext(context);
+        const routeKey = this.getWorkflowContextRouteKey(context);
+        const routeLabel = this.getWorkflowLabelFromRouteKey?.(routeKey) || '';
+        const labelTargets = new Set([
+            this.getWorkflowContextLabel(context),
+            routeLabel,
+            context.workflow_tab_text,
+            context.workflowTabText,
+            context.workflow_tab_name,
+            context.workflowTabName
+        ].map(value => this.cleanWorkflowLabel(value).toLowerCase()).filter(Boolean));
+        const idTargets = new Set([
+            context.workflow_tab_id,
+            context.workflowTabId,
+            context.workflow_tab_aria_controls,
+            context.workflowTabAriaControls
+        ].map(value => String(value || '').trim().toLowerCase()).filter(Boolean));
+        const routeTarget = String(routeKey || '').trim().toLowerCase();
+        const seen = new Set();
+        let bestMatch = null;
+
+        for (const selector of this.getWorkflowTabSearchSelectors()) {
+            let elements = [];
+            try {
+                elements = Array.from(document.querySelectorAll(selector));
+            } catch (error) {
+                continue;
+            }
+
+            for (const element of elements) {
+                if (!element || seen.has(element)) continue;
+                seen.add(element);
+
+                const identity = this.getWorkflowTabElementIdentity(element);
+                if (!identity || !this.isLikelyWorkflowTabElement(element, identity.workflowLabel)) continue;
+
+                const values = this.getWorkflowTabComparisonValues(identity, element);
+                const normalizedValues = values.map(value => this.cleanWorkflowLabel(value).toLowerCase()).filter(Boolean);
+                const rawValues = values.map(value => String(value || '').trim().toLowerCase()).filter(Boolean);
+                let score = 0;
+
+                for (const value of rawValues) {
+                    if (idTargets.has(value)) score += 100;
+                    if (routeTarget && value.includes(routeTarget)) score += 70;
+                }
+
+                for (const value of normalizedValues) {
+                    if (labelTargets.has(value)) score += 80;
+                    for (const target of labelTargets) {
+                        if (target && value !== target && (value.includes(target) || target.includes(value))) score += 25;
+                    }
+                }
+
+                if (this.isWorkflowTabElementActive(element)) score += 5;
+
+                if (score > (bestMatch?.score || 0)) {
+                    bestMatch = { element, score };
+                }
+            }
+        }
+
+        return bestMatch?.score > 0 ? bestMatch.element : null;
+    },
+
+    switchToDownloadWorkflow(context = {}) {
+        context = this.getDownloadWorkflowRuntimeContext(context);
+        if (!this.canSwitchToDownloadWorkflow(context)) {
+            this.showNotification('No workflow information available for this download', 'error');
+            return false;
+        }
+
+        const label = this.getWorkflowContextLabel(context) || 'workflow';
+        if (this.isDownloadWorkflowActive(context)) {
+            this.showNotification(`Already on workflow: ${label}`, 'info');
+            return true;
+        }
+
+        const tab = this.findWorkflowTabForDownload(context);
+        if (tab) {
+            try {
+                tab.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+                tab.click();
+                setTimeout(() => {
+                    window.dispatchEvent?.(new Event('model-resolver-active-workflowchange'));
+                }, 30);
+                this.showNotification(`Switched to workflow: ${label}`, 'success');
+                return true;
+            } catch (error) {
+                console.warn('Model Resolver: failed to switch workflow tab', error);
+            }
+        }
+
+        const routeKey = this.getWorkflowContextRouteKey(context);
+        const currentRoute = this.getActiveWorkflowRouteKey?.() || '';
+        if (this.isUsableWorkflowRouteKey(routeKey) && routeKey !== currentRoute && typeof window !== 'undefined') {
+            try {
+                window.location.hash = routeKey.startsWith('#') ? routeKey : `#${routeKey.replace(/^#/, '')}`;
+                setTimeout(() => {
+                    window.dispatchEvent?.(new Event('model-resolver-active-workflowchange'));
+                }, 30);
+                this.showNotification(`Switched to workflow: ${label}`, 'success');
+                return true;
+            } catch (error) {
+                console.warn('Model Resolver: failed to switch workflow route', error);
+            }
+        }
+
+        this.showNotification(`Could not find workflow tab: ${label}. It may be closed.`, 'error');
+        return false;
     },
 
     getActiveQueuePanelDownloadIds() {
@@ -249,9 +770,14 @@ export const queueMethods = {
             const sizeText = total ? `${downloaded} / ${total}` : downloaded;
             const targetPath = progress.directory || info.downloadDirectory || info.downloadPath || '';
             const targetLabel = targetPath ? targetPath.split(/[\/\\]/).filter(Boolean).pop() || targetPath : '';
-            const contextModel = this.getDownloadFolderContext?.(progress, info);
+            const workflowLabel = this.getDownloadWorkflowLabel?.(info) || 'Unknown workflow';
+            const contextModel = this.getDownloadQueueContext?.(progress, info, workflowLabel, downloadId);
+            const hasFolderAction = Boolean(contextModel?.folder_path || contextModel?.download_directory || contextModel?.directory || contextModel?.path || contextModel?.resolved_path);
+            const contextTooltip = hasFolderAction
+                ? 'Right-click for workflow and download folder actions'
+                : 'Right-click to switch to workflow';
             const contextData = contextModel
-                ? ` data-model="${this.escapeHtml(encodeURIComponent(JSON.stringify(contextModel)))}" oncontextmenu="window.MLOpenContextMenu(event, this)" data-tooltip="Right-click to open download folder"`
+                ? ` data-model="${this.escapeHtml(encodeURIComponent(JSON.stringify(contextModel)))}" oncontextmenu="window.MLOpenContextMenu(event, this)" data-tooltip="${this.escapeHtml(contextTooltip)}"`
                 : '';
 
             html += `<div class="mr-queue-item mr-download-queue-item"${contextData}>`;
@@ -260,6 +786,7 @@ export const queueMethods = {
             html += `<span class="mr-download-queue-status">${this.escapeHtml(statusLabel)}</span>`;
             html += `</div>`;
             html += `<div class="mr-queue-item-meta"><span>Model</span><code>${this.escapeHtml(nodeLabel)} #${this.escapeHtml(String(info.missing?.node_id ?? ''))}</code></div>`;
+            html += `<div class="mr-queue-item-meta"><span>Workflow</span><code data-tooltip="${this.escapeHtml(workflowLabel)}">${this.escapeHtml(workflowLabel)}</code></div>`;
             if (category) {
                 html += `<div class="mr-queue-item-meta"><span>Type</span><code>${this.escapeHtml(category)}</code></div>`;
             }

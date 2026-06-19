@@ -672,6 +672,14 @@ export const resolveDownloadMethods = {
             downloadDirectory: progress.directory || info.downloadDirectory || '',
             baseDirectory: info.baseDirectory || '',
             sourceUrl: info.sourceUrl || '',
+            workflowKey: info.workflowKey || '',
+            workflowRouteKey: info.workflowRouteKey || '',
+            workflowLabel: info.workflowLabel || this.getWorkflowLabelFromRouteKey?.(info.workflowRouteKey || '') || '',
+            workflowSignature: info.workflowSignature || '',
+            workflowTabId: info.workflowTabId || '',
+            workflowTabName: info.workflowTabName || '',
+            workflowTabAriaControls: info.workflowTabAriaControls || '',
+            workflowTabText: info.workflowTabText || '',
             progress: {
                 ...progress,
                 status,
@@ -1076,7 +1084,15 @@ export const resolveDownloadMethods = {
         const progressDiv = this.contentElement?.querySelector(`#${progressId}`);
         const downloadBtn = this.contentElement?.querySelector(`#${this.getDownloadButtonElementId(missing)}`);
         const tokens = this.getStoredTokens();
+        const workflowContext = this.getActiveWorkflowTabContext?.() || {};
         const workflowKey = this.getWorkflowScopedQueueKey?.() || '';
+        const workflowRouteKey = workflowContext.workflowRouteKey || this.getActiveWorkflowRouteKey?.() || this.activeWorkflowRouteKey || '';
+        const workflowLabel = workflowContext.workflowLabel || this.getActiveWorkflowDownloadLabel?.() || 'Current workflow';
+        const workflowSignature = workflowContext.workflowSignature || this.activeWorkflowSignature || '';
+        const workflowTabId = workflowContext.workflowTabId || '';
+        const workflowTabName = workflowContext.workflowTabName || '';
+        const workflowTabAriaControls = workflowContext.workflowTabAriaControls || '';
+        const workflowTabText = workflowContext.workflowTabText || '';
 
         try {
             this.rememberDownloadSnapshotForMissing(missing, {
@@ -1087,6 +1103,14 @@ export const resolveDownloadMethods = {
                 downloadDirectory: '',
                 baseDirectory,
                 sourceUrl: source.url,
+                workflowKey,
+                workflowRouteKey,
+                workflowLabel,
+                workflowSignature,
+                workflowTabId,
+                workflowTabName,
+                workflowTabAriaControls,
+                workflowTabText,
                 progress: { status: 'starting', progress: 0, filename },
                 status: 'starting',
                 isActive: true
@@ -1157,7 +1181,14 @@ export const resolveDownloadMethods = {
                 downloadDirectory: data.directory || '',
                 baseDirectory,
                 sourceUrl: source.url,
-                workflowKey
+                workflowKey,
+                workflowRouteKey,
+                workflowLabel,
+                workflowSignature,
+                workflowTabId,
+                workflowTabName,
+                workflowTabAriaControls,
+                workflowTabText
             };
             const snapshot = this.rememberDownloadUiState(
                 downloadId,
@@ -1189,6 +1220,14 @@ export const resolveDownloadMethods = {
                 downloadDirectory: '',
                 baseDirectory,
                 sourceUrl: source.url,
+                workflowKey,
+                workflowRouteKey,
+                workflowLabel,
+                workflowSignature,
+                workflowTabId,
+                workflowTabName,
+                workflowTabAriaControls,
+                workflowTabText,
                 progress: { status: 'error', filename, error: error.message },
                 status: 'error',
                 message: error.message,
@@ -2164,7 +2203,15 @@ export const resolveDownloadMethods = {
         const progressDiv = this.contentElement?.querySelector(`#${progressId}`);
         const tokens = this.getStoredTokens();
         const targetSelection = this.getDownloadTargetSelection(missing, category || missing.category || 'checkpoints');
+        const workflowContext = this.getActiveWorkflowTabContext?.() || {};
         const workflowKey = this.getWorkflowScopedQueueKey?.() || '';
+        const workflowRouteKey = workflowContext.workflowRouteKey || this.getActiveWorkflowRouteKey?.() || this.activeWorkflowRouteKey || '';
+        const workflowLabel = workflowContext.workflowLabel || this.getActiveWorkflowDownloadLabel?.() || 'Current workflow';
+        const workflowSignature = workflowContext.workflowSignature || this.activeWorkflowSignature || '';
+        const workflowTabId = workflowContext.workflowTabId || '';
+        const workflowTabName = workflowContext.workflowTabName || '';
+        const workflowTabAriaControls = workflowContext.workflowTabAriaControls || '';
+        const workflowTabText = workflowContext.workflowTabText || '';
         const resolvedPathMetadata = pathMetadata || this.getDownloadPathMetadata(missing, {
             filename,
             category: targetSelection.category
@@ -2197,6 +2244,14 @@ export const resolveDownloadMethods = {
                 downloadDirectory: '',
                 baseDirectory: targetSelection.baseDirectory || '',
                 sourceUrl: url,
+                workflowKey,
+                workflowRouteKey,
+                workflowLabel,
+                workflowSignature,
+                workflowTabId,
+                workflowTabName,
+                workflowTabAriaControls,
+                workflowTabText,
                 progress: { status: 'starting', progress: 0, filename },
                 status: 'starting',
                 isActive: true
@@ -2262,7 +2317,14 @@ export const resolveDownloadMethods = {
                 downloadDirectory: data.directory || '',
                 baseDirectory: targetSelection.baseDirectory || '',
                 sourceUrl: url,
-                workflowKey
+                workflowKey,
+                workflowRouteKey,
+                workflowLabel,
+                workflowSignature,
+                workflowTabId,
+                workflowTabName,
+                workflowTabAriaControls,
+                workflowTabText
             };
             const snapshot = this.rememberDownloadUiState(
                 downloadId,
@@ -2294,6 +2356,14 @@ export const resolveDownloadMethods = {
                 downloadDirectory: '',
                 baseDirectory: targetSelection.baseDirectory || '',
                 sourceUrl: url,
+                workflowKey,
+                workflowRouteKey,
+                workflowLabel,
+                workflowSignature,
+                workflowTabId,
+                workflowTabName,
+                workflowTabAriaControls,
+                workflowTabText,
                 progress: { status: 'error', filename, error: error.message },
                 status: 'error',
                 message: error.message,
