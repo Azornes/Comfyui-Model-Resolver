@@ -8,10 +8,11 @@ export const downloadTargetMethods = {
     /**
      * Ensure all models are loaded for the dropdown.
      */
-    async ensureAllModelsLoaded() {
-        if (this.allModels && this.allModels.length) return;
+    async ensureAllModelsLoaded(options = {}) {
+        const force = options === true || Boolean(options?.force);
+        if (!force && this.allModels && this.allModels.length) return;
         try {
-            const resp = await api.fetchApi('/model_resolver/models');
+            const resp = await api.fetchApi(`/model_resolver/models${force ? '?force=1' : ''}`);
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const models = await resp.json();
             const list = Array.isArray(models) ? models : [];

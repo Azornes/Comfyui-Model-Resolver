@@ -218,7 +218,7 @@ export const missingBrowserMethods = {
         }
 
         return {
-            modelPx: clamp(modelPx, 180, 430),
+            modelPx: clamp(modelPx, 180, 820),
             typePx: clamp(typePx, 66, 120)
         };
     },
@@ -255,7 +255,7 @@ export const missingBrowserMethods = {
                                 <span class="mr-missing-stat mr-missing-stat-none">${stats.none} no match</span>
                             </div>
                             <button id="mr-refresh-missing-analysis" type="button" class="mr-btn mr-btn-secondary mr-btn-sm mr-missing-refresh-btn" data-tooltip="Re-analyze workflow and refresh local matches">
-                                ${getSvgIcon('refreshCw')} Refresh
+                                <span class="mr-refresh-spin-target">${getSvgIcon('refreshCw')}</span> Refresh
                             </button>
                         </div>
                     </div>
@@ -278,7 +278,6 @@ export const missingBrowserMethods = {
             const isSelected = key === selectedKey;
             const isBatchSelected = this.batchSelectedMissingKeys?.has(key);
             const filename = this.getMissingFilename(missing);
-            const formattedFilename = this.formatFilename(filename, 46);
             const bestMatch = this.getBestLocalMatch(missing, 70);
             const confidence = bestMatch ? Number(bestMatch.confidence || 0) : 0;
             const matchName = bestMatch?.model?.relative_path || bestMatch?.filename || bestMatch?.path || '';
@@ -302,7 +301,7 @@ export const missingBrowserMethods = {
                     </span>
                     <span class="mr-missing-row-index">${index + 1}</span>
                     <span class="mr-missing-row-model">
-                        <span class="mr-missing-row-name" data-tooltip="${this.escapeHtml(filename)}">${this.escapeHtml(formattedFilename.display)}</span>
+                        <span class="mr-missing-row-name" data-tooltip="${this.escapeHtml(filename)}">${this.escapeHtml(filename)}</span>
                         ${rowNodeHtml}
                     </span>
                     <span class="mr-missing-row-type ${typeColorClass}">${this.escapeHtml(typeLabel)}</span>
@@ -598,17 +597,62 @@ export const missingBrowserMethods = {
         const comboInput = container.querySelector(`#combo-input-${comboId}`);
         const comboList = container.querySelector(`#combo-list-${comboId}`);
         const comboRefresh = container.querySelector(`#combo-refresh-${comboId}`);
+        const comboSection = comboInput?.closest('.mr-combo-section')
+            || comboList?.closest('.mr-combo-section')
+            || comboRefresh?.closest('.mr-combo-section');
 
         if (comboList) {
             this.enableWheelScrollChaining(comboList);
         }
 
-        const allModels = Array.isArray(this.allModels) ? this.allModels : [];
+        const getAllModels = () => Array.isArray(this.allModels) ? this.allModels : [];
         const buildLabel = (m) => `${m.category ? m.category + ': ' : ''}${m.relative_path || m.filename || ''}`;
         const getFolder = (m) => m.path || m.base_directory || '';
+        let comboListPointerActive = false;
+        let outsideComboPointerHandler = null;
+        const isInsideCombo = (target) => (
+            Boolean(target) && (
+                Boolean(comboSection?.contains(target))
+                || Boolean(comboInput?.contains(target))
+                || Boolean(comboList?.contains(target))
+                || Boolean(comboRefresh?.contains(target))
+            )
+        );
+        const stopOutsideComboPointerListener = () => {
+            if (!outsideComboPointerHandler) return;
+            window.removeEventListener('pointerdown', outsideComboPointerHandler, true);
+            outsideComboPointerHandler = null;
+        };
+        const startOutsideComboPointerListener = () => {
+            if (outsideComboPointerHandler) return;
+            outsideComboPointerHandler = (event) => {
+                if (!comboList?.isConnected) {
+                    stopOutsideComboPointerListener();
+                    return;
+                }
+                if (isInsideCombo(event.target)) {
+                    return;
+                }
+                hideComboList();
+            };
+            window.addEventListener('pointerdown', outsideComboPointerHandler, true);
+        };
+        const showComboList = () => {
+            if (!comboList) return;
+            comboList.classList.remove('mr-is-hidden');
+            comboList.classList.add('mr-is-visible');
+            startOutsideComboPointerListener();
+        };
+        const hideComboList = () => {
+            if (!comboList) return;
+            comboList.classList.remove('mr-is-visible');
+            comboList.classList.add('mr-is-hidden');
+            stopOutsideComboPointerListener();
+        };
 
         const populateComboOptions = (filterText, highlightIdx = -1) => {
             if (!comboList) return;
+            const allModels = getAllModels();
             const f = (filterText || '').toLowerCase();
             const filtered = f
                 ? allModels.filter(m => buildLabel(m).toLowerCase().includes(f))
@@ -639,6 +683,7 @@ export const missingBrowserMethods = {
                         const chosenModel = allModels[idx];
                         if (chosenModel) {
                             this.queueResolution(missing, chosenModel);
+                            hideComboList();
                         }
                     }
                 });
@@ -646,6 +691,16 @@ export const missingBrowserMethods = {
         };
 
         if (comboList) {
+            comboList.addEventListener('pointerdown', () => {
+                comboListPointerActive = true;
+                const releaseComboPointer = () => {
+                    setTimeout(() => {
+                        comboListPointerActive = false;
+                    }, 0);
+                };
+                window.addEventListener('pointerup', releaseComboPointer, { once: true, capture: true });
+                window.addEventListener('pointercancel', releaseComboPointer, { once: true, capture: true });
+            }, { capture: true });
             populateComboOptions('');
         }
 
@@ -655,27 +710,40 @@ export const missingBrowserMethods = {
             }, 200);
             comboInput.addEventListener('input', debouncedFilter);
             comboInput.addEventListener('focus', () => {
-                if (comboList) {
-                    comboList.classList.remove('mr-is-hidden');
-                    comboList.classList.add('mr-is-visible');
-                }
+                showComboList();
                 populateComboOptions(comboInput.value);
             });
             comboInput.addEventListener('blur', () => {
                 setTimeout(() => {
-                    if (comboList) {
-                        comboList.classList.remove('mr-is-visible');
-                        comboList.classList.add('mr-is-hidden');
+                    if (!comboList) return;
+                    if (comboListPointerActive || comboList.matches(':hover')) {
+                        return;
                     }
+                    hideComboList();
                 }, 200);
             });
         }
 
         if (comboRefresh) {
             comboRefresh.addEventListener('click', async () => {
-                this.allModels = null;
-                await this.ensureAllModelsLoaded();
-                populateComboOptions(comboInput?.value || '');
+                const minRefreshFeedback = new Promise(resolve => setTimeout(resolve, 420));
+                const refreshAnimation = this.startRefreshButtonAnimation(comboRefresh);
+                try {
+                    comboRefresh.disabled = true;
+                    comboRefresh.classList.add('mr-btn-is-disabled', 'mr-is-refreshing');
+                    this.allModels = null;
+                    await this.ensureAllModelsLoaded({ force: true });
+                    await minRefreshFeedback;
+                    populateComboOptions(comboInput?.value || '');
+                } catch (error) {
+                    await minRefreshFeedback;
+                    console.warn('Model Resolver: could not refresh local model list', error);
+                    this.showNotification('Failed to refresh local model list', 'error');
+                } finally {
+                    refreshAnimation?.cancel();
+                    comboRefresh.disabled = false;
+                    comboRefresh.classList.remove('mr-btn-is-disabled', 'mr-is-refreshing');
+                }
             });
         }
 
@@ -688,6 +756,29 @@ export const missingBrowserMethods = {
         }
 
         this.restoreDownloadProgressForMissing?.(missing);
+    },
+
+    startRefreshButtonAnimation(button) {
+        if (!button) return null;
+
+        const target = button.querySelector('.mr-refresh-spin-target') || button.querySelector('svg');
+        if (!target || typeof target.animate !== 'function') return null;
+
+        const existing = target.getAnimations?.() || [];
+        existing.forEach(animation => animation.cancel());
+        target.style.transformOrigin = 'center';
+
+        return target.animate(
+            [
+                { transform: 'rotate(0deg)' },
+                { transform: 'rotate(360deg)' }
+            ],
+            {
+                duration: 620,
+                easing: 'linear',
+                iterations: Infinity
+            }
+        );
     },
 
     /**
@@ -803,23 +894,27 @@ export const missingBrowserMethods = {
     async refreshMissingAnalysis(button = null) {
         if (button?.disabled) return;
 
+        const minRefreshFeedback = new Promise(resolve => setTimeout(resolve, 420));
+        const refreshAnimation = this.startRefreshButtonAnimation(button);
         try {
             if (button) {
                 button.disabled = true;
-                button.classList.add('mr-btn-is-disabled');
+                button.classList.add('mr-btn-is-disabled', 'mr-is-refreshing');
             }
 
             this.showNotification('Refreshing missing models and local matches...', 'info');
             this.allModels = null;
             this.invalidateLoadedModelsCacheForActiveWorkflow?.();
+            await minRefreshFeedback;
             await this.loadWorkflowData(null, { force: true });
         } catch (error) {
             console.error('Model Resolver: missing analysis refresh failed:', error);
             this.showNotification('Refresh failed: ' + error.message, 'error');
         } finally {
             if (button) {
+                refreshAnimation?.cancel();
                 button.disabled = false;
-                button.classList.remove('mr-btn-is-disabled');
+                button.classList.remove('mr-btn-is-disabled', 'mr-is-refreshing');
             }
         }
     },
@@ -835,8 +930,7 @@ export const missingBrowserMethods = {
         const perfectMatches = filteredMatches.filter(m => m.confidence === 100);
         const otherMatches = filteredMatches.filter(m => m.confidence < 100 && m.confidence >= 70);
 
-        // Format the missing filename for display
-        const missingFilename = this.formatFilename(missing.original_path, 60);
+        const missingFilename = this.getMissingFilename(missing);
 
         // Determine node info for the chip
         const nodeDisplay = this.getMissingNodeDisplay(missing);
@@ -850,7 +944,7 @@ export const missingBrowserMethods = {
         html += `<div class="mr-card-title-wrap">`;
 
         const titleMetaParts = [];
-        let titlePrimaryHtml = `<span class="mr-card-title-primary" data-tooltip="${this.escapeHtml(missingFilename.full)}">${missingFilename.display}</span>`;
+        let titlePrimaryHtml = `<span class="mr-card-title-primary" data-tooltip="${this.escapeHtml(missingFilename)}">${this.escapeHtml(missingFilename)}</span>`;
         let titleSecondaryHtml = '';
 
         const modelId = missing.urn_model_id || missing.urn?.model_id;
@@ -859,7 +953,7 @@ export const missingBrowserMethods = {
         const urnLoadingId = `urn-loading-${missing.node_id}-${missing.widget_index}`;
 
         if (missing.is_urn) {
-            titleMetaParts.push(`<span class="mr-card-title-eyebrow" data-tooltip="${this.escapeHtml(missingFilename.full)}">${missingFilename.display}</span>`);
+            titleMetaParts.push(`<span class="mr-card-title-eyebrow" data-tooltip="${this.escapeHtml(missingFilename)}">${this.escapeHtml(missingFilename)}</span>`);
         }
 
         if (missing.is_urn && !missing.civitai_info) {
@@ -923,7 +1017,7 @@ export const missingBrowserMethods = {
         html += `<div class="mr-combo-row">`;
         html += `<label class="mr-combo-label">Model</label>`;
         html += `<input id="combo-input-${comboId}" class="mr-combo-input" type="text" placeholder="Type to filter local models...">`;
-        html += `<button id="combo-refresh-${comboId}" type="button" aria-label="Reload local model list" data-tooltip="Reload local model list" class="mr-btn mr-btn-secondary mr-btn-sm mr-btn-icon-only mr-combo-refresh-btn">${getSvgIcon('refreshCw', 'currentColor', 'mr-combo-refresh-icon')}</button>`;
+        html += `<button id="combo-refresh-${comboId}" type="button" aria-label="Reload local model list" data-tooltip="Reload local model list" class="mr-btn mr-btn-secondary mr-btn-sm mr-btn-icon-only mr-combo-refresh-btn"><span class="mr-refresh-spin-target">${getSvgIcon('refreshCw', 'currentColor', 'mr-combo-refresh-icon')}</span></button>`;
         html += `</div>`;
         html += `<div id="combo-list-${comboId}" class="mr-combo-list"></div>`;
         html += `</div>`;

@@ -113,7 +113,7 @@ export const lifecycleGraphMethods = {
     /**
      * Load workflow data and display missing models
      */
-    async loadWorkflowData(workflow = null, { force = false } = {}) {
+    async loadWorkflowData(workflow = null, { force = false, forceRescan = force } = {}) {
         if (!this.contentElement) return;
 
         this._workflowDataLoadToken = null;
@@ -180,7 +180,7 @@ export const lifecycleGraphMethods = {
             const response = await api.fetchApi('/model_resolver/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ workflow, analysis_id: analysisId })
+                body: JSON.stringify({ workflow, analysis_id: analysisId, force_rescan: Boolean(forceRescan) })
             });
             if (this._analysisProgressToken === analysisId) {
                 this._analysisProgressToken = null;

@@ -176,7 +176,7 @@ export const queueMethods = {
             html += `<div class="mr-queue-item-title">${this.escapeHtml(nodeLabel)} #${this.escapeHtml(String(r.node_id))}</div>`;
             html += `<div class="mr-queue-item-meta"><span>Original</span><code>${this.escapeHtml(orig)}</code></div>`;
             html += `<div class="mr-queue-item-selection"><span>Selected</span><code>${this.escapeHtml(label)}</code></div>`;
-            html += `<div class="mr-queue-item-actions"><button id="${rmId}" class="mr-btn mr-btn-secondary mr-btn-sm">Remove</button></div>`;
+            html += `<div class="mr-queue-item-actions"><button id="${rmId}" class="mr-btn mr-btn-danger mr-btn-sm">Remove</button></div>`;
             html += `</div>`;
         }
         html += '</div>';
@@ -338,20 +338,49 @@ export const queueMethods = {
         if (!selection) {
             selectedBar.style.display = 'none';
             selectedBar.innerHTML = '';
+            selectedBar.removeAttribute('data-model');
+            selectedBar.removeAttribute('data-tooltip');
+            selectedBar.oncontextmenu = null;
             return;
         }
 
         // Build selected bar content
         const label = selection.resolved_model?.relative_path || selection.resolved_model?.filename || selection.resolved_path || '';
+        const selectedPath = selection.resolved_model?.path || selection.resolved_path || '';
+        const selectedContext = selectedPath
+            ? {
+                context_scope: 'download_folder',
+                open_folder_label: 'Open Containing Folder',
+                name: selection.resolved_model?.filename || label,
+                path: selectedPath,
+                resolved_path: selectedPath,
+                category: selection.category,
+                original_path: selection.original_path
+            }
+            : null;
+        const selectedContextAttrs = selectedContext
+            ? ` data-model="${this.escapeHtml(encodeURIComponent(JSON.stringify(selectedContext)))}" oncontextmenu="window.MLOpenContextMenu(event, this)" data-tooltip="Right-click to open containing folder"`
+            : '';
+        if (selectedContext) {
+            selectedBar.dataset.model = encodeURIComponent(JSON.stringify(selectedContext));
+            selectedBar.dataset.tooltip = 'Right-click to open containing folder';
+            selectedBar.oncontextmenu = (event) => {
+                window.MLOpenContextMenu?.(event, selectedBar);
+            };
+        } else {
+            selectedBar.removeAttribute('data-model');
+            selectedBar.removeAttribute('data-tooltip');
+            selectedBar.oncontextmenu = null;
+        }
         const applyBtnId = `selected-apply-${nodeId}-${widgetIndex}`;
         const removeBtnId = `selected-remove-${nodeId}-${widgetIndex}`;
 
-        selectedBar.innerHTML = `<div class="mr-selected-bar-inner">`;
+        selectedBar.innerHTML = `<div class="mr-selected-bar-inner"${selectedContextAttrs}>`;
         selectedBar.innerHTML += `<span class="mr-selected-label">✓ Selected:</span>`;
-        selectedBar.innerHTML += `<code class="mr-selected-code">${label}</code>`;
+        selectedBar.innerHTML += `<code class="mr-selected-code">${this.escapeHtml(label)}</code>`;
         selectedBar.innerHTML += `<span class="mr-selected-actions">`;
         selectedBar.innerHTML += `<button id="${applyBtnId}" class="mr-btn mr-btn-primary mr-btn-sm" data-tooltip="Apply this selected local match to the workflow.">Apply</button>`;
-        selectedBar.innerHTML += `<button id="${removeBtnId}" class="mr-btn mr-btn-secondary mr-btn-sm">Remove</button>`;
+        selectedBar.innerHTML += `<button id="${removeBtnId}" class="mr-btn mr-btn-danger mr-btn-sm">Remove</button>`;
         selectedBar.innerHTML += `</span>`;
         selectedBar.innerHTML += `</div>`;
         selectedBar.style.display = 'block';

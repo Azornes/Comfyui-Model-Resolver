@@ -326,6 +326,7 @@ def analyze_and_find_matches(
     similarity_threshold: float = 0.0,
     max_matches_per_model: int = 10,
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+    force_rescan: bool = False,
 ) -> Dict[str, Any]:
     """
     Main entry point: analyze workflow and find matches for missing models.
@@ -334,6 +335,7 @@ def analyze_and_find_matches(
         workflow_json: Complete workflow JSON dictionary
         similarity_threshold: Minimum similarity score (0.0 to 1.0) for matches
         max_matches_per_model: Maximum number of matches to return per missing model
+        force_rescan: If True, bypass the short-lived local model scan cache
 
     Returns:
         Dictionary with analysis results:
@@ -389,7 +391,7 @@ def analyze_and_find_matches(
 
     # Analyze workflow to find all model references
     # Get available models
-    available_models = get_model_files()
+    available_models = get_model_files(force_rescan=force_rescan)
     available_models_by_category = {}
     for model in available_models:
         model_category = model.get("category", "")

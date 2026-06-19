@@ -207,6 +207,12 @@ class ModelResolverExtension:
                     data = await request.json()
                     workflow_json = data.get("workflow")
                     analysis_id = str(data.get("analysis_id") or "").strip()
+                    force_rescan = data.get("force_rescan", False)
+                    force_rescan = (
+                        force_rescan
+                        if isinstance(force_rescan, bool)
+                        else str(force_rescan).lower() in {"1", "true", "yes"}
+                    )
 
                     if not workflow_json:
                         return web.json_response(
@@ -240,6 +246,7 @@ class ModelResolverExtension:
                         0.0,
                         10,
                         update_analysis_progress if analysis_id else None,
+                        force_rescan=force_rescan,
                     )
 
                     # Filter out LoraManager lorAs that already exist locally (exists=True)
@@ -529,7 +536,12 @@ class ModelResolverExtension:
             async def get_models(request):
                 """Get list of all available models."""
                 try:
-                    models = get_model_files()
+                    force_rescan = str(
+                        request.query.get("force")
+                        or request.query.get("force_rescan")
+                        or ""
+                    ).lower() in {"1", "true", "yes"}
+                    models = get_model_files(force_rescan=force_rescan)
                     return web.json_response(models)
                 except Exception as e:
                     self.logger.error(

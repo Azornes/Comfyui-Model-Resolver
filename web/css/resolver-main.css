@@ -1011,6 +1011,7 @@
     font-weight: 700;
     color: var(--mr-text);
     margin: 0;
+    min-width: 0;
     word-break: break-word;
     letter-spacing: -0.01em;
 }
@@ -1024,7 +1025,10 @@
 }
 .mr-card-title-primary {
     display: block;
+    min-width: 0;
     color: var(--mr-text-soft);
+    overflow-wrap: anywhere;
+    word-break: normal;
 }
 .mr-card-title-secondary {
     display: block;
@@ -1576,6 +1580,33 @@
     outline: none;
     border-color: var(--mr-missing-control-focus-border, rgba(114,211,138,0.30));
     box-shadow: 0 0 0 2px var(--mr-missing-control-focus-ring, rgba(114,211,138,0.08));
+}
+@keyframes mr-refresh-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+.mr-refresh-spin-target,
+#model-resolver-modal .mr-refresh-spin-target {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 0;
+}
+.mr-btn.mr-is-refreshing > svg,
+#model-resolver-modal .mr-btn.mr-is-refreshing > svg,
+.mr-btn.mr-is-refreshing .mr-refresh-spin-target,
+#model-resolver-modal .mr-btn.mr-is-refreshing .mr-refresh-spin-target {
+    animation: mr-refresh-spin 0.62s linear infinite;
+    transform-origin: center;
+}
+@media (prefers-reduced-motion: reduce) {
+    .mr-btn.mr-is-refreshing > svg,
+    #model-resolver-modal .mr-btn.mr-is-refreshing > svg,
+    .mr-btn.mr-is-refreshing .mr-refresh-spin-target,
+    #model-resolver-modal .mr-btn.mr-is-refreshing .mr-refresh-spin-target {
+        animation: mr-refresh-spin 0.9s linear 1;
+    }
 }
 .mr-btn-primary,
 #model-resolver-modal .mr-btn-primary {
@@ -4591,6 +4622,10 @@
     width: 14px;
     height: 14px;
 }
+#model-resolver-modal .mr-options-shell .mr-btn.mr-btn-primary,
+#model-resolver-modal .mr-options-shell .mr-btn.mr-btn-primary:hover:not(:disabled) {
+    color: #101010;
+}
 .mr-options-field {
     display: flex;
     flex-direction: column;
@@ -5688,6 +5723,16 @@
 #model-resolver-modal .mr-missing-detail-pane .model-resolver-selected .mr-btn-primary:hover:not(:disabled) {
     background: rgba(47, 128, 237, 0.26);
     border-color: rgba(47, 128, 237, 0.48);
+    color: #ffffff;
+}
+#model-resolver-modal .mr-missing-detail-pane .model-resolver-selected .mr-btn-danger {
+    background: rgba(239, 68, 68, 0.16);
+    border-color: rgba(239, 68, 68, 0.34);
+    color: #fee2e2;
+}
+#model-resolver-modal .mr-missing-detail-pane .model-resolver-selected .mr-btn-danger:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.24);
+    border-color: rgba(239, 68, 68, 0.48);
     color: #ffffff;
 }
 #model-resolver-modal .mr-missing-detail-pane .mr-search-progress-list-compact {
