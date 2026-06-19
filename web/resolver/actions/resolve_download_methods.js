@@ -1284,6 +1284,7 @@ export const resolveDownloadMethods = {
                     isActive: false
                 });
                 this.renderDownloadSnapshot(downloadId, completedSnapshot, { progressDiv, downloadBtn });
+                this.rememberCompletedDownloadHistory?.(downloadId, info, progress);
                 delete this.activeDownloads[downloadId];
                 this.updateDownloadAllButtonState();
                 this.updateQueuePanel?.();

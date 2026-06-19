@@ -70,6 +70,8 @@ export const queueMethods = {
 
     createQueuePanel() {
         this.queuePanelActiveTab = this.queuePanelActiveTab || 'queued';
+        this.queueDownloadsActiveTab = this.queueDownloadsActiveTab || 'active';
+        this.loadDownloadHistory?.();
         this.queueClearButton = $el("button", {
             id: "queue-clear",
             className: "mr-btn mr-btn-secondary mr-btn-sm",
@@ -117,10 +119,18 @@ export const queueMethods = {
         this.updateQueuePanel();
     },
 
+    setQueueDownloadsTab(tab) {
+        const nextTab = tab === 'history' ? 'history' : 'active';
+        if (this.queueDownloadsActiveTab === nextTab) return;
+        this.queueDownloadsActiveTab = nextTab;
+        this.updateQueuePanel();
+    },
+
     updateQueuePanel() {
         if (!this.queueList || !this.queueHeader) return;
         const list = Array.isArray(this.pendingResolutions) ? this.pendingResolutions : [];
         const downloads = this.getActiveQueuePanelDownloads();
+        const history = this.getDownloadHistory();
         const activeTab = this.queuePanelActiveTab === 'downloads' ? 'downloads' : 'queued';
         const clearBtn = this.queueClearButton || this.queueHeader.querySelector('#queue-clear');
         const showActions = activeTab === 'queued';
@@ -129,7 +139,7 @@ export const queueMethods = {
         this.updateQueuePanelTabs(list.length, downloads.length, activeTab);
 
         if (activeTab === 'downloads') {
-            this.renderQueueDownloads(downloads);
+            this.renderDownloadsPanel(downloads, history);
             return;
         }
 
@@ -743,10 +753,191 @@ export const queueMethods = {
         return this.getActiveQueuePanelDownloads().map(({ downloadId }) => downloadId);
     },
 
+    loadDownloadHistory() {
+        if (this._downloadHistoryLoaded) return this.downloadHistory || [];
+        this._downloadHistoryLoaded = true;
+        try {
+            const raw = localStorage.getItem(this.downloadHistoryStorageKey || 'model_resolver_download_history');
+            const parsed = raw ? JSON.parse(raw) : [];
+            this.downloadHistory = Array.isArray(parsed)
+                ? parsed.filter(item => item && typeof item === 'object')
+                : [];
+        } catch (error) {
+            console.warn('Model Resolver: failed to load download history', error);
+            this.downloadHistory = [];
+        }
+        return this.downloadHistory;
+    },
+
+    getDownloadHistory() {
+        if (!this._downloadHistoryLoaded) {
+            this.loadDownloadHistory();
+        }
+        return Array.isArray(this.downloadHistory) ? this.downloadHistory : [];
+    },
+
+    saveDownloadHistory() {
+        const history = this.getDownloadHistory().slice(0, this.downloadHistoryLimit || 200);
+        this.downloadHistory = history;
+        try {
+            localStorage.setItem(
+                this.downloadHistoryStorageKey || 'model_resolver_download_history',
+                JSON.stringify(history)
+            );
+        } catch (error) {
+            console.warn('Model Resolver: failed to save download history', error);
+        }
+    },
+
+    getDownloadHistoryIdentity(entry = {}) {
+        return [
+            entry.path || '',
+            entry.filename || '',
+            entry.category || '',
+            entry.sourceUrl || ''
+        ].map(value => String(value || '').trim().toLowerCase()).join('::');
+    },
+
+    addDownloadHistoryEntry(entry = {}) {
+        if (!entry || !entry.filename) return null;
+
+        const history = this.getDownloadHistory();
+        const identity = this.getDownloadHistoryIdentity(entry);
+        const filtered = identity
+            ? history.filter(item => this.getDownloadHistoryIdentity(item) !== identity)
+            : history;
+        const nextEntry = {
+            ...entry,
+            id: entry.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            completedAt: entry.completedAt || new Date().toISOString()
+        };
+        this.downloadHistory = [nextEntry, ...filtered].slice(0, this.downloadHistoryLimit || 200);
+        this.saveDownloadHistory();
+        this.updateQueuePanel?.();
+        return nextEntry;
+    },
+
+    rememberCompletedDownloadHistory(downloadId, info = {}, progress = {}) {
+        const missing = info?.missing || {};
+        const filename = progress.filename
+            || info.filename
+            || missing.download_source?.filename
+            || missing.original_path?.split(/[\/\\]/).pop()
+            || '';
+        if (!filename) return null;
+
+        const directory = progress.directory || info.downloadDirectory || '';
+        const path = progress.path || info.downloadPath || '';
+        const category = info.category || missing.category || progress.category || '';
+        const workflowLabel = this.getDownloadWorkflowLabel?.(info) || info.workflowLabel || '';
+        const nodeLabel = missing.subgraph_name || missing.node_type || (missing.subgraph_id ? 'Subgraph' : 'Node');
+        const status = progress.already_exists ? 'already_exists' : 'completed';
+        return this.addDownloadHistoryEntry({
+            downloadId,
+            filename,
+            category,
+            categoryLabel: this.getCategoryDisplayName?.(category) || category,
+            nodeLabel,
+            nodeId: missing.node_id ?? '',
+            widgetIndex: missing.widget_index ?? '',
+            workflowLabel,
+            workflowRouteKey: info.workflowRouteKey || '',
+            workflowTabId: info.workflowTabId || '',
+            workflowTabName: info.workflowTabName || '',
+            path,
+            directory,
+            sourceUrl: info.sourceUrl || missing.download_source?.url || '',
+            totalSize: progress.total_size || progress.size || 0,
+            status,
+            statusLabel: status === 'already_exists' ? 'Already downloaded' : 'Downloaded',
+            message: progress.message || '',
+            completedAt: new Date().toISOString()
+        });
+    },
+
+    formatDownloadHistoryTime(value = '') {
+        if (!value) return '';
+        try {
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return '';
+            return date.toLocaleString(undefined, {
+                month: 'short',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        } catch (error) {
+            return '';
+        }
+    },
+
+    getDownloadHistoryFolderContext(entry = {}) {
+        const targetPath = entry.directory || entry.path || '';
+        if (!targetPath) return null;
+        return {
+            context_scope: 'download_folder',
+            open_folder_label: 'Open Download Folder',
+            name: entry.filename || 'Download',
+            path: targetPath,
+            resolved_path: targetPath,
+            folder_path: entry.directory || targetPath,
+            download_directory: entry.directory || '',
+            download_path: entry.path || '',
+            category: entry.category || ''
+        };
+    },
+
+    renderDownloadsPanel(downloads = [], history = this.getDownloadHistory()) {
+        const activeSubTab = this.queueDownloadsActiveTab === 'history' ? 'history' : 'active';
+        const activeSelected = activeSubTab === 'active';
+        let html = '<div class="mr-downloads-panel">';
+        html += '<div class="mr-tabs mr-queue-tabs mr-downloads-subtabs" role="tablist" aria-label="Downloads views">';
+        html += `<button type="button" class="mr-tab mr-queue-tab mr-downloads-subtab${activeSelected ? ' mr-tab-active' : ''}" data-downloads-tab="active" aria-selected="${activeSelected ? 'true' : 'false'}"><span class="mr-tab-label">Active (${downloads.length})</span></button>`;
+        html += `<button type="button" class="mr-tab mr-queue-tab mr-downloads-subtab${!activeSelected ? ' mr-tab-active' : ''}" data-downloads-tab="history" aria-selected="${!activeSelected ? 'true' : 'false'}"><span class="mr-tab-label">History (${history.length})</span></button>`;
+        html += '</div>';
+        html += activeSelected
+            ? this.renderQueueDownloadsHtml(downloads)
+            : this.renderDownloadHistoryHtml(history);
+        html += '</div>';
+
+        this.queueList.innerHTML = html;
+        this.wireDownloadsPanelControls();
+    },
+
+    wireDownloadsPanelControls() {
+        this.queueList.querySelectorAll('.mr-downloads-subtab').forEach(button => {
+            button.addEventListener('click', () => {
+                this.setQueueDownloadsTab(button.dataset.downloadsTab || 'active');
+            });
+        });
+
+        this.queueList.querySelectorAll('.mr-download-queue-cancel').forEach(button => {
+            button.addEventListener('click', () => {
+                const downloadId = button.dataset.downloadId;
+                if (downloadId) this.cancelDownload(downloadId);
+            });
+        });
+
+        const clearHistoryButton = this.queueList.querySelector('.mr-download-history-clear');
+        if (clearHistoryButton) {
+            clearHistoryButton.addEventListener('click', () => this.clearDownloadHistory());
+        }
+    },
+
     renderQueueDownloads(downloads) {
+        this.queueList.innerHTML = this.renderQueueDownloadsHtml(downloads);
+
+        this.queueList.querySelectorAll('.mr-download-queue-cancel').forEach(button => {
+            button.addEventListener('click', () => {
+                const downloadId = button.dataset.downloadId;
+                if (downloadId) this.cancelDownload(downloadId);
+            });
+        });
+    },
+
+    renderQueueDownloadsHtml(downloads) {
         if (!downloads.length) {
-            this.queueList.innerHTML = '<div class="mr-queue-empty">No active downloads.</div>';
-            return;
+            return '<div class="mr-queue-empty">No active downloads.</div>';
         }
 
         let html = '<div class="mr-queue-items mr-download-queue-items">';
@@ -801,14 +992,61 @@ export const queueMethods = {
             html += `</div>`;
         }
         html += '</div>';
-        this.queueList.innerHTML = html;
+        return html;
+    },
 
-        this.queueList.querySelectorAll('.mr-download-queue-cancel').forEach(button => {
-            button.addEventListener('click', () => {
-                const downloadId = button.dataset.downloadId;
-                if (downloadId) this.cancelDownload(downloadId);
-            });
-        });
+    renderDownloadHistoryHtml(history = []) {
+        if (!history.length) {
+            return '<div class="mr-queue-empty">No downloaded models in history yet.</div>';
+        }
+
+        let html = '<div class="mr-download-history-toolbar"><button type="button" class="mr-btn mr-btn-secondary mr-btn-sm mr-download-history-clear">Clear History</button></div>';
+        html += '<div class="mr-queue-items mr-download-history-items">';
+        for (const entry of history) {
+            const filename = entry.filename || 'model';
+            const workflowLabel = entry.workflowLabel || 'Unknown workflow';
+            const category = entry.categoryLabel || this.getCategoryDisplayName?.(entry.category || '') || entry.category || '';
+            const nodeText = entry.nodeId !== '' && entry.nodeId !== undefined
+                ? `${entry.nodeLabel || 'Node'} #${entry.nodeId}`
+                : (entry.nodeLabel || '');
+            const targetPath = entry.directory || entry.path || '';
+            const targetLabel = targetPath ? targetPath.split(/[\/\\]/).filter(Boolean).pop() || targetPath : '';
+            const timeLabel = this.formatDownloadHistoryTime(entry.completedAt);
+            const sizeLabel = entry.totalSize ? this.formatBytes(entry.totalSize) : '';
+            const statusLabel = entry.statusLabel || (entry.status === 'already_exists' ? 'Already downloaded' : 'Downloaded');
+            const contextModel = this.getDownloadHistoryFolderContext(entry);
+            const contextData = contextModel
+                ? ` data-model="${this.escapeHtml(encodeURIComponent(JSON.stringify(contextModel)))}" oncontextmenu="window.MLOpenContextMenu(event, this)" data-tooltip="Right-click to open download folder"`
+                : '';
+
+            html += `<div class="mr-queue-item mr-download-history-item"${contextData}>`;
+            html += `<div class="mr-queue-item-title mr-download-queue-title">`;
+            html += `<span data-tooltip="${this.escapeHtml(filename)}">${this.escapeHtml(filename)}</span>`;
+            html += `<span class="mr-download-history-status">${this.escapeHtml(statusLabel)}</span>`;
+            html += `</div>`;
+            if (nodeText) {
+                html += `<div class="mr-queue-item-meta"><span>Model</span><code>${this.escapeHtml(nodeText)}</code></div>`;
+            }
+            html += `<div class="mr-queue-item-meta"><span>Workflow</span><code data-tooltip="${this.escapeHtml(workflowLabel)}">${this.escapeHtml(workflowLabel)}</code></div>`;
+            if (category) {
+                html += `<div class="mr-queue-item-meta"><span>Type</span><code>${this.escapeHtml(category)}</code></div>`;
+            }
+            if (targetLabel) {
+                html += `<div class="mr-queue-item-meta"><span>Folder</span><code data-tooltip="${this.escapeHtml(targetPath)}">${this.escapeHtml(targetLabel)}</code></div>`;
+            }
+            if (sizeLabel || timeLabel) {
+                html += `<div class="mr-queue-item-meta"><span>Done</span><code>${this.escapeHtml([timeLabel, sizeLabel].filter(Boolean).join(' | '))}</code></div>`;
+            }
+            html += `</div>`;
+        }
+        html += '</div>';
+        return html;
+    },
+
+    clearDownloadHistory() {
+        this.downloadHistory = [];
+        this.saveDownloadHistory();
+        this.updateQueuePanel();
     },
 
     // Remove queued by index

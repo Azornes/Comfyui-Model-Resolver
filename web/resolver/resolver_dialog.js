@@ -34,8 +34,12 @@ export class ResolverManagerDialog extends ComfyDialog {
         this.workflowSearchResultCaches = new Map(); // workflow key -> search results by missing model
         this.workflowDownloadTargetSelectionCaches = new Map(); // workflow key -> suggested/user download folders
         this.activeDownloads = {};  // Track active downloads
+        this.downloadHistoryStorageKey = 'model_resolver_download_history';
+        this.downloadHistoryLimit = 200;
+        this.downloadHistory = [];
         this.downloadProgressByMissingKey = new Map(); // missing model key -> last known download UI state
         this.queuePanelActiveTab = 'queued';
+        this.queueDownloadsActiveTab = 'active';
         this.searchResultCache = new Map();
         this.backgroundSearchJobs = new Map();
         this.searchProgressTimers = new Map();
