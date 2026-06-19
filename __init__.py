@@ -1809,6 +1809,12 @@ class ModelResolverExtension:
                         path_metadata = data.get("path_metadata", {})
                         if not isinstance(path_metadata, dict):
                             path_metadata = {}
+                        download_metadata = data.get("download_metadata") or data.get(
+                            "metadata", {}
+                        )
+                        if not isinstance(download_metadata, dict):
+                            download_metadata = {}
+                        download_metadata = dict(download_metadata)
                         settings = load_resolver_settings()
                         if not base_directory:
                             base_directory = get_default_root_for_category(category, settings)
@@ -1849,6 +1855,92 @@ class ModelResolverExtension:
                                     f"{'&' if '?' in url else '?'}token={civitai_key}"
                                 )
 
+                        def _first_metadata_value(*values):
+                            for value in values:
+                                if value is None:
+                                    continue
+                                if isinstance(value, str) and not value.strip():
+                                    continue
+                                return value
+                            return ""
+
+                        def _metadata_int(value):
+                            try:
+                                return int(value)
+                            except (TypeError, ValueError):
+                                return None
+
+                        inferred_source = ""
+                        if "civitai.com" in url:
+                            inferred_source = "civitai"
+                        elif "huggingface.co" in url:
+                            inferred_source = "huggingface"
+
+                        download_metadata.setdefault("filename", filename)
+                        download_metadata.setdefault("category", category)
+                        download_metadata.setdefault("download_url", url)
+                        download_metadata.setdefault("source_url", url)
+                        download_metadata.setdefault("path_metadata", path_metadata)
+                        download_metadata.setdefault(
+                            "source",
+                            _first_metadata_value(
+                                download_metadata.get("details_source"),
+                                path_metadata.get("source"),
+                                inferred_source,
+                            ),
+                        )
+
+                        model_id = _metadata_int(
+                            _first_metadata_value(
+                                download_metadata.get("model_id"),
+                                download_metadata.get("modelId"),
+                                path_metadata.get("model_id"),
+                            )
+                        )
+                        version_id = _metadata_int(
+                            _first_metadata_value(
+                                download_metadata.get("version_id"),
+                                download_metadata.get("versionId"),
+                                path_metadata.get("version_id"),
+                            )
+                        )
+                        source_name = str(
+                            _first_metadata_value(
+                                download_metadata.get("details_source"),
+                                download_metadata.get("source"),
+                            )
+                        ).lower()
+                        try:
+                            if (
+                                source_name == "civitai"
+                                and model_id
+                                and not download_metadata.get("civitai_details")
+                            ):
+                                details = await asyncio.to_thread(
+                                    get_civitai_model_details,
+                                    model_id,
+                                    version_id,
+                                    data.get("civitai_key", ""),
+                                )
+                                if details:
+                                    download_metadata["civitai_details"] = details
+                            elif (
+                                source_name == "civarchive"
+                                and model_id
+                                and not download_metadata.get("civitai_details")
+                            ):
+                                details = await asyncio.to_thread(
+                                    get_civarchive_model_details,
+                                    model_id,
+                                    version_id,
+                                )
+                                if details:
+                                    download_metadata["civitai_details"] = details
+                        except Exception as metadata_error:
+                            self.logger.warning(
+                                f"Model metadata lookup failed: {metadata_error}"
+                            )
+
                         target_directory = ""
                         target_path = ""
                         try:
@@ -1877,6 +1969,7 @@ class ModelResolverExtension:
                             headers=headers if headers else None,
                             subfolder=subfolder,
                             base_directory=base_directory,
+                            metadata=download_metadata,
                         )
 
                         return web.json_response(

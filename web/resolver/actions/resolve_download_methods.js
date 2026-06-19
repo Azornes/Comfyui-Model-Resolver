@@ -1104,6 +1104,14 @@ export const resolveDownloadMethods = {
                 });
             }
 
+            const pathMetadata = this.getDownloadPathMetadata(missing, source);
+            const downloadMetadata = this.getDownloadMetadata(missing, source, {
+                filename,
+                category,
+                url: source.url,
+                pathMetadata
+            });
+
             // Start download
             const response = await api.fetchApi('/model_resolver/download', {
                 method: 'POST',
@@ -1114,7 +1122,8 @@ export const resolveDownloadMethods = {
                     category: category,
                     subfolder: subfolder,
                     base_directory: baseDirectory,
-                    path_metadata: this.getDownloadPathMetadata(missing, source),
+                    path_metadata: pathMetadata,
+                    download_metadata: downloadMetadata,
                     hf_token: tokens.hf_token,
                     civitai_key: tokens.civitai_key
                 })
@@ -1760,7 +1769,15 @@ export const resolveDownloadMethods = {
                 } catch (_error) {
                     pathMetadata = null;
                 }
-                this.downloadFromSearch(missing, url, filename, category, btn, pathMetadata);
+                let downloadMetadata = null;
+                try {
+                    downloadMetadata = btn.dataset.downloadMetadata
+                        ? JSON.parse(decodeURIComponent(btn.dataset.downloadMetadata))
+                        : null;
+                } catch (_error) {
+                    downloadMetadata = null;
+                }
+                this.downloadFromSearch(missing, url, filename, category, btn, pathMetadata, downloadMetadata);
             });
         });
 
@@ -1945,6 +1962,15 @@ export const resolveDownloadMethods = {
             if (!row.pathMetadata) {
                 row.pathMetadata = this.getDownloadPathMetadata(missing, row.detailsContext || row);
             }
+            if (!row.downloadMetadata) {
+                row.downloadMetadata = this.getDownloadMetadata(missing, row.detailsContext || row, {
+                    filename: row.downloadFilename || row.filename || '',
+                    category: row.category || missing.category || '',
+                    url: row.downloadUrl || '',
+                    openUrl: row.openUrl || '',
+                    pathMetadata: row.pathMetadata
+                });
+            }
             const rowKey = `${row.sourceKey}:${row.downloadUrl || row.openUrl || `${row.model}:${row.filename}`}`;
             if (rowKeys.has(rowKey)) return;
             rowKeys.add(rowKey);
@@ -2120,12 +2146,34 @@ export const resolveDownloadMethods = {
     /**
      * Download from search results
      */
-    async downloadFromSearch(missing, url, filename, category, btn, pathMetadata = null) {
+    async downloadFromSearch(missing, url, filename, category, btn, pathMetadata = null, downloadMetadata = null) {
         const progressId = this.getDownloadProgressElementId(missing);
         const progressDiv = this.contentElement?.querySelector(`#${progressId}`);
         const tokens = this.getStoredTokens();
         const targetSelection = this.getDownloadTargetSelection(missing, category || missing.category || 'checkpoints');
         const workflowKey = this.getWorkflowScopedQueueKey?.() || '';
+        const resolvedPathMetadata = pathMetadata || this.getDownloadPathMetadata(missing, {
+            filename,
+            category: targetSelection.category
+        });
+        const resolvedDownloadMetadata = downloadMetadata && typeof downloadMetadata === 'object'
+            ? { ...downloadMetadata }
+            : this.getDownloadMetadata(missing, {
+                filename,
+                category: targetSelection.category,
+                url,
+                download_url: url
+            }, {
+                filename,
+                category: targetSelection.category,
+                url,
+                pathMetadata: resolvedPathMetadata
+            });
+        resolvedDownloadMetadata.filename = filename;
+        resolvedDownloadMetadata.category = targetSelection.category;
+        resolvedDownloadMetadata.download_url = url;
+        resolvedDownloadMetadata.source_url = url;
+        resolvedDownloadMetadata.path_metadata = resolvedPathMetadata;
 
         try {
             this.rememberDownloadSnapshotForMissing(missing, {
@@ -2173,10 +2221,8 @@ export const resolveDownloadMethods = {
                     category: targetSelection.category,
                     subfolder: targetSelection.subfolder,
                     base_directory: targetSelection.baseDirectory || '',
-                    path_metadata: pathMetadata || this.getDownloadPathMetadata(missing, {
-                        filename,
-                        category: targetSelection.category
-                    }),
+                    path_metadata: resolvedPathMetadata,
+                    download_metadata: resolvedDownloadMetadata,
                     hf_token: tokens.hf_token,
                     civitai_key: tokens.civitai_key
                 })

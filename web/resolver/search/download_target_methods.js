@@ -708,6 +708,106 @@ export const downloadTargetMethods = {
         };
     },
 
+    getDownloadMetadata(missing = {}, source = {}, options = {}) {
+        const sourceData = source && typeof source === 'object' ? source : {};
+        const searchSuggestion = this.getCachedSearchSuggestionData(missing);
+        const merged = {
+            ...(missing?.civitai_info || {}),
+            ...(missing?.civitai_search_result || {}),
+            ...(missing?.download_source || {}),
+            ...(searchSuggestion || {}),
+            ...sourceData
+        };
+        const sourceHasIdentity = Boolean(
+            sourceData.model_id
+            || sourceData.modelId
+            || sourceData.version_id
+            || sourceData.versionId
+            || sourceData.details_source
+            || sourceData.source
+            || sourceData.sourceKey
+        );
+        const idSource = sourceHasIdentity ? sourceData : (missing?.download_source || {});
+        const selectedVersion = merged.selected_version || merged.selectedVersion || null;
+        const pathMetadata = options.pathMetadata || this.getDownloadPathMetadata(missing, sourceData);
+        const toList = (value) => {
+            if (Array.isArray(value)) return value.filter(item => item !== undefined && item !== null && item !== '');
+            if (typeof value === 'string') return value.split(',').map(item => item.trim()).filter(Boolean);
+            return [];
+        };
+        const filename = options.filename
+            || merged.downloadFilename
+            || merged.filename
+            || merged.file_name
+            || pathMetadata.filename
+            || missing.original_path?.split('/').pop()?.split('\\').pop()
+            || '';
+        const modelName = merged.model_name
+            || merged.model
+            || merged.name
+            || pathMetadata.model_name
+            || filename.replace(/\.[^.]+$/, '')
+            || '';
+        const versionName = merged.version_name
+            || merged.versionName
+            || merged.version
+            || selectedVersion?.name
+            || pathMetadata.version_name
+            || '';
+        const repoId = merged.repo_id || merged.repo || pathMetadata.repo_id || '';
+        const creator = merged.creator
+            || pathMetadata.creator
+            || (merged.creator_username ? { username: merged.creator_username } : null)
+            || (merged.username ? { username: merged.username } : null)
+            || null;
+        const sourceName = sourceData.details_source
+            || sourceData.source
+            || sourceData.sourceKey
+            || missing?.download_source?.details_source
+            || missing?.download_source?.source
+            || merged.details_source
+            || merged.source
+            || '';
+        const metadata = {
+            source: sourceName,
+            details_source: sourceData.details_source || sourceData.source || sourceName,
+            filename,
+            category: options.category || merged.category || missing.category || '',
+            name: modelName,
+            model_name: modelName,
+            version_name: versionName,
+            model_id: idSource.model_id || idSource.modelId || '',
+            version_id: idSource.version_id || idSource.versionId || '',
+            type: merged.type || merged.model_type || '',
+            model_type: merged.model_type || merged.type || '',
+            base_model: merged.base_model || merged.baseModel || pathMetadata.base_model || '',
+            tags: toList(merged.tags || pathMetadata.tags),
+            trained_words: toList(merged.trained_words || merged.trainedWords || selectedVersion?.trained_words || selectedVersion?.trainedWords),
+            images: toList(merged.images || selectedVersion?.images),
+            creator,
+            author: merged.author || pathMetadata.author || '',
+            repo_id: repoId,
+            url: options.openUrl || merged.model_url || merged.version_url || merged.url || '',
+            version_url: merged.version_url || '',
+            download_url: options.url || merged.download_url || merged.downloadUrl || merged.url || '',
+            size: merged.size || merged.size_bytes || '',
+            sha256: merged.sha256 || merged.hash || merged.hashes?.SHA256 || merged.hashes?.sha256 || '',
+            path_metadata: pathMetadata
+        };
+
+        if (merged.hashes && typeof merged.hashes === 'object') metadata.hashes = merged.hashes;
+        if (merged.file_info && typeof merged.file_info === 'object') metadata.file_info = merged.file_info;
+        if (merged.file && typeof merged.file === 'object') metadata.file = merged.file;
+        if (Array.isArray(merged.files)) metadata.files = merged.files;
+        if (selectedVersion && typeof selectedVersion === 'object') metadata.selected_version = selectedVersion;
+        if (merged.civitai && typeof merged.civitai === 'object') metadata.civitai = merged.civitai;
+        if (merged.metadata_source) metadata.metadata_source = merged.metadata_source;
+        if (merged.is_deleted !== undefined) metadata.is_deleted = Boolean(merged.is_deleted);
+        if (merged.civitai_deleted !== undefined) metadata.civitai_deleted = Boolean(merged.civitai_deleted);
+
+        return metadata;
+    },
+
     calculateDownloadPathTemplateSubfolder(category = '', metadata = {}) {
         const templates = this.getDownloadPathTemplates();
         const normalizedCategory = this.normalizeDownloadCategory(category);

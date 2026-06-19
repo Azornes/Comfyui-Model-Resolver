@@ -1124,6 +1124,26 @@ export const searchPanelMethods = {
             fullModelName && fullModelName !== downloadFilename ? downloadFilename : '',
             baseModel
         ].filter(Boolean);
+        const rowPathMetadata = this.getDownloadPathMetadata(missing, {
+            ...downloadSource,
+            filename: downloadFilename,
+            model: modelName,
+            version: modelParts.version,
+            category: downloadSource.directory || downloadSource.category || missing.category || 'checkpoints'
+        });
+        const rowDetailsContext = ['civitai', 'civarchive'].includes(String(source).toLowerCase())
+            ? {
+                ...downloadSource,
+                source,
+                details_source: String(source).toLowerCase(),
+                model_id: downloadSource.model_id,
+                version_id: downloadSource.version_id,
+                name: modelName,
+                filename: downloadFilename,
+                missing_key: this.getMissingModelKey(missing),
+                category: missing.category
+            }
+            : null;
 
         return {
             sourceKey,
@@ -1141,26 +1161,21 @@ export const searchPanelMethods = {
             category: downloadSource.directory || downloadSource.category || missing.category || 'checkpoints',
             openUrl: modelUrl,
             searchedAt: this.getSearchResultTimestamp(downloadSource),
-            pathMetadata: this.getDownloadPathMetadata(missing, {
+            pathMetadata: rowPathMetadata,
+            downloadMetadata: this.getDownloadMetadata(missing, rowDetailsContext || {
                 ...downloadSource,
                 filename: downloadFilename,
                 model: modelName,
                 version: modelParts.version,
                 category: downloadSource.directory || downloadSource.category || missing.category || 'checkpoints'
+            }, {
+                filename: downloadFilename,
+                category: downloadSource.directory || downloadSource.category || missing.category || 'checkpoints',
+                url: downloadSource.url,
+                openUrl: modelUrl,
+                pathMetadata: rowPathMetadata
             }),
-            detailsContext: ['civitai', 'civarchive'].includes(String(source).toLowerCase())
-                ? {
-                    ...downloadSource,
-                    source,
-                    details_source: String(source).toLowerCase(),
-                    model_id: downloadSource.model_id,
-                    version_id: downloadSource.version_id,
-                    name: modelName,
-                    filename: downloadFilename,
-                    missing_key: this.getMissingModelKey(missing),
-                    category: missing.category
-                }
-                : null
+            detailsContext: rowDetailsContext
         };
     },
 
@@ -1248,6 +1263,9 @@ export const searchPanelMethods = {
             const pathMetadata = row.pathMetadata
                 ? encodeURIComponent(JSON.stringify(row.pathMetadata))
                 : '';
+            const downloadMetadata = row.downloadMetadata
+                ? encodeURIComponent(JSON.stringify(row.downloadMetadata))
+                : '';
 
             let actions = '';
             if (detailsContext) {
@@ -1267,7 +1285,8 @@ export const searchPanelMethods = {
                         data-url="${this.escapeHtml(downloadUrl)}"
                         data-filename="${this.escapeHtml(downloadFilename)}"
                         data-category="${this.escapeHtml(category)}"
-                        data-path-metadata="${this.escapeHtml(pathMetadata)}">${getSvgIcon('download')}</button>
+                        data-path-metadata="${this.escapeHtml(pathMetadata)}"
+                        data-download-metadata="${this.escapeHtml(downloadMetadata)}">${getSvgIcon('download')}</button>
                 `;
             }
             if (openUrl) {

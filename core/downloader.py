@@ -5,12 +5,14 @@ Handles downloading models from various sources with progress tracking.
 """
 
 import os
+import json
 import threading
 import time
 import requests
 from typing import Dict, Any, Optional, Callable, List
 from pathlib import Path
 from collections import deque
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from .log_system.log_funcs import (
     log_debug,
@@ -90,6 +92,445 @@ CATEGORY_MAP = {
     # Legacy/unsupported categories map to checkpoints as fallback
     "default": "upscale_models",  # Model list uses "default" for upscalers
 }
+
+SENSITIVE_METADATA_KEYS = {
+    "authorization",
+    "headers",
+    "hf_token",
+    "civitai_key",
+    "api_key",
+    "apikey",
+    "access_token",
+    "token",
+    "session",
+    "session_token",
+    "cookie",
+    "cookies",
+}
+
+SENSITIVE_QUERY_KEYS = {
+    "authorization",
+    "auth",
+    "hf_token",
+    "civitai_key",
+    "api_key",
+    "apikey",
+    "access_token",
+    "token",
+    "session",
+    "sessionid",
+    "cookie",
+}
+
+
+def _is_sensitive_metadata_key(key: Any) -> bool:
+    key_text = str(key or "").strip().lower()
+    return (
+        key_text in SENSITIVE_METADATA_KEYS
+        or "token" in key_text
+        or "authorization" in key_text
+        or "cookie" in key_text
+    )
+
+
+def _strip_sensitive_url_params(value: str) -> str:
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.query:
+        return value
+
+    filtered = []
+    changed = False
+    for key, item_value in parse_qsl(parsed.query, keep_blank_values=True):
+        key_lower = key.lower()
+        if key_lower in SENSITIVE_QUERY_KEYS or "token" in key_lower:
+            changed = True
+            continue
+        filtered.append((key, item_value))
+
+    if not changed:
+        return value
+    return urlunparse(parsed._replace(query=urlencode(filtered, doseq=True)))
+
+
+def _json_safe_metadata(value: Any, depth: int = 0) -> Any:
+    if depth > 10:
+        return str(value)
+
+    if isinstance(value, dict):
+        cleaned = {}
+        for key, item_value in value.items():
+            if _is_sensitive_metadata_key(key):
+                continue
+            cleaned[str(key)] = _json_safe_metadata(item_value, depth + 1)
+        return cleaned
+
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe_metadata(item, depth + 1) for item in value]
+
+    if isinstance(value, str):
+        return _strip_sensitive_url_params(value)
+
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+
+    return str(value)
+
+
+def _as_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value: Any) -> List[Any]:
+    if isinstance(value, list):
+        return [item for item in value if item not in (None, "")]
+    if isinstance(value, (tuple, set)):
+        return [item for item in value if item not in (None, "")]
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    return []
+
+
+def _first_present(*values: Any) -> Any:
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        if isinstance(value, (list, dict)) and not value:
+            continue
+        return value
+    return ""
+
+
+def _coerce_int_or_value(value: Any) -> Any:
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return value
+
+
+def _coerce_size(value: Any) -> int:
+    try:
+        return int(float(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _normalise_metadata_file_path(path_value: str) -> str:
+    return str(path_value or "").replace(os.sep, "/")
+
+
+def get_metadata_sidecar_path(file_path: str) -> str:
+    """Return the LoRA Manager-compatible sidecar path for a model file."""
+    base_path, _extension = os.path.splitext(file_path)
+    return f"{base_path}.metadata.json"
+
+
+def _resolve_lora_manager_model_type(category: str, source_type: Any = "") -> str:
+    category_key = normalize_download_category(category)
+    if category_key == "diffusion_models":
+        return "diffusion_model"
+    if category_key == "checkpoints":
+        return "checkpoint"
+    if category_key == "embeddings":
+        return "embedding"
+
+    source_token = (
+        str(source_type or "")
+        .strip()
+        .lower()
+        .replace(" ", "_")
+        .replace("-", "_")
+    )
+    if "checkpoint" in source_token:
+        return "checkpoint"
+    if "diffusion" in source_token or source_token == "unet":
+        return "diffusion_model"
+    if "textual" in source_token or "embedding" in source_token:
+        return "embedding"
+    return ""
+
+
+def _metadata_source_value(source_name: str, existing: Any = None) -> Optional[str]:
+    if existing:
+        return str(existing)
+
+    source_token = str(source_name or "").strip().lower()
+    if source_token == "civitai":
+        return "civitai_api"
+    if source_token == "civarchive":
+        return "civarchive"
+    if source_token == "lora_manager_archive":
+        return "archive_db"
+    return None
+
+
+def _find_metadata_file_info(
+    source: Dict[str, Any],
+    selected_version: Dict[str, Any],
+    filename: str,
+) -> Dict[str, Any]:
+    for key in ("file_info", "file"):
+        value = source.get(key)
+        if isinstance(value, dict):
+            return value
+
+    filename_lower = os.path.basename(str(filename or "")).lower()
+    file_lists = [
+        source.get("files"),
+        selected_version.get("files"),
+    ]
+    for file_list in file_lists:
+        if not isinstance(file_list, list):
+            continue
+        first_file = None
+        for file_info in file_list:
+            if not isinstance(file_info, dict):
+                continue
+            if first_file is None:
+                first_file = file_info
+            candidate = str(
+                file_info.get("name")
+                or file_info.get("filename")
+                or file_info.get("fileName")
+                or ""
+            ).lower()
+            if filename_lower and candidate == filename_lower:
+                return file_info
+        if first_file:
+            return first_file
+    return {}
+
+
+def build_lora_manager_metadata(
+    dest_path: str,
+    metadata: Optional[Dict[str, Any]] = None,
+    category: str = "",
+    source_url: str = "",
+) -> Dict[str, Any]:
+    """Build a LoRA Manager-compatible .metadata.json payload."""
+    source = _json_safe_metadata(metadata or {})
+    if not isinstance(source, dict):
+        source = {}
+
+    path_metadata = _as_dict(source.get("path_metadata"))
+    details = _as_dict(source.get("civitai_details") or source.get("details"))
+    selected_version = _as_dict(
+        source.get("selected_version") or details.get("selected_version")
+    )
+
+    basename = os.path.basename(dest_path)
+    file_name = os.path.splitext(basename)[0]
+    filename = _first_present(
+        source.get("filename"),
+        path_metadata.get("filename"),
+        basename,
+    )
+    model_name = _first_present(
+        source.get("model_name"),
+        source.get("model"),
+        source.get("name"),
+        details.get("name"),
+        path_metadata.get("model_name"),
+        path_metadata.get("name"),
+        os.path.splitext(str(filename))[0],
+        file_name,
+    )
+    version_name = _first_present(
+        source.get("version_name"),
+        source.get("versionName"),
+        source.get("version"),
+        selected_version.get("name"),
+        path_metadata.get("version_name"),
+    )
+    base_model = _first_present(
+        source.get("base_model"),
+        source.get("baseModel"),
+        selected_version.get("base_model"),
+        selected_version.get("baseModel"),
+        path_metadata.get("base_model"),
+        "Unknown",
+    )
+    source_name = str(
+        _first_present(source.get("details_source"), source.get("source"), details.get("source"))
+        or ""
+    ).lower()
+
+    model_id = _first_present(
+        source.get("model_id"),
+        source.get("modelId"),
+        details.get("model_id"),
+        path_metadata.get("model_id"),
+    )
+    version_id = _first_present(
+        source.get("version_id"),
+        source.get("versionId"),
+        details.get("version_id"),
+        selected_version.get("id"),
+        path_metadata.get("version_id"),
+    )
+
+    tags = _as_list(
+        _first_present(
+            source.get("tags"),
+            details.get("tags"),
+            path_metadata.get("tags"),
+        )
+    )
+    trained_words = _as_list(
+        _first_present(
+            source.get("trained_words"),
+            source.get("trainedWords"),
+            selected_version.get("trained_words"),
+            selected_version.get("trainedWords"),
+        )
+    )
+    images = _as_list(
+        _first_present(
+            source.get("images"),
+            selected_version.get("images"),
+            details.get("images"),
+        )
+    )
+    creator = _as_dict(
+        _first_present(source.get("creator"), details.get("creator"), path_metadata.get("creator"))
+    )
+    file_info = _find_metadata_file_info(source, selected_version, str(filename))
+    hashes = _as_dict(_first_present(file_info.get("hashes"), source.get("hashes")))
+    sha256 = str(
+        _first_present(
+            source.get("sha256"),
+            source.get("hash"),
+            file_info.get("sha256"),
+            hashes.get("SHA256"),
+            hashes.get("sha256"),
+        )
+        or ""
+    ).lower()
+    direct_url = _first_present(
+        source.get("download_url"),
+        source.get("downloadUrl"),
+        source.get("source_url"),
+        source_url,
+        source.get("url"),
+    )
+    model_description = _first_present(
+        source.get("modelDescription"),
+        source.get("model_description"),
+        source.get("description"),
+        details.get("description"),
+        _as_dict(source.get("model")).get("description"),
+    )
+    version_description = _first_present(
+        selected_version.get("description"),
+        source.get("version_description"),
+    )
+
+    civitai_payload = dict(_as_dict(source.get("civitai")))
+    if model_id and "modelId" not in civitai_payload:
+        civitai_payload["modelId"] = _coerce_int_or_value(model_id)
+    if version_id and "id" not in civitai_payload:
+        civitai_payload["id"] = _coerce_int_or_value(version_id)
+    if version_name and "name" not in civitai_payload:
+        civitai_payload["name"] = str(version_name)
+    if base_model and "baseModel" not in civitai_payload:
+        civitai_payload["baseModel"] = str(base_model)
+    if trained_words and "trainedWords" not in civitai_payload:
+        civitai_payload["trainedWords"] = trained_words
+    if images and "images" not in civitai_payload:
+        civitai_payload["images"] = images
+    if direct_url and "downloadUrl" not in civitai_payload:
+        civitai_payload["downloadUrl"] = _strip_sensitive_url_params(str(direct_url))
+    if version_description and "description" not in civitai_payload:
+        civitai_payload["description"] = str(version_description)
+
+    files = _as_list(_first_present(selected_version.get("files"), source.get("files")))
+    if files and "files" not in civitai_payload:
+        civitai_payload["files"] = files
+
+    model_payload = dict(_as_dict(civitai_payload.get("model")))
+    if model_name and "name" not in model_payload:
+        model_payload["name"] = str(model_name)
+    model_type = _first_present(source.get("type"), source.get("model_type"), details.get("type"))
+    if model_type and "type" not in model_payload:
+        model_payload["type"] = str(model_type)
+    if model_description and "description" not in model_payload:
+        model_payload["description"] = str(model_description)
+    if tags and "tags" not in model_payload:
+        model_payload["tags"] = tags
+    if model_payload:
+        civitai_payload["model"] = model_payload
+    if creator and "creator" not in civitai_payload:
+        civitai_payload["creator"] = creator
+
+    metadata_source = _metadata_source_value(source_name, source.get("metadata_source"))
+    if os.path.exists(dest_path):
+        size = os.path.getsize(dest_path)
+    else:
+        size = _coerce_size(_first_present(source.get("size"), file_info.get("size")))
+
+    payload: Dict[str, Any] = {
+        "file_name": file_name,
+        "model_name": str(model_name or file_name),
+        "file_path": _normalise_metadata_file_path(dest_path),
+        "size": size,
+        "modified": time.time(),
+        "sha256": sha256,
+        "base_model": str(base_model or "Unknown"),
+        "preview_url": "",
+        "preview_nsfw_level": 0,
+        "notes": "",
+        "from_civitai": bool(metadata_source or model_id or version_id),
+        "civitai": civitai_payload,
+        "tags": tags,
+        "modelDescription": str(model_description or ""),
+        "civitai_deleted": bool(source.get("is_deleted") or source.get("civitai_deleted")),
+        "favorite": False,
+        "exclude": False,
+        "db_checked": False,
+        "skip_metadata_refresh": False,
+        "metadata_source": metadata_source,
+        "last_checked_at": time.time(),
+        "hash_status": "completed" if sha256 else "pending",
+    }
+
+    lora_manager_type = _resolve_lora_manager_model_type(category, model_type)
+    if normalize_download_category(category) == "loras":
+        payload["usage_tips"] = str(source.get("usage_tips") or "{}")
+    elif lora_manager_type:
+        payload["model_type"] = lora_manager_type
+        payload["sub_type"] = lora_manager_type
+
+    return payload
+
+
+def write_lora_manager_metadata(
+    dest_path: str,
+    metadata: Optional[Dict[str, Any]] = None,
+    category: str = "",
+    source_url: str = "",
+) -> Optional[str]:
+    """Write the LoRA Manager-compatible sidecar metadata next to a model file."""
+    metadata_path = get_metadata_sidecar_path(dest_path)
+    temp_path = f"{metadata_path}.tmp"
+
+    try:
+        payload = build_lora_manager_metadata(dest_path, metadata, category, source_url)
+        with open(temp_path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, ensure_ascii=False)
+        os.replace(temp_path, metadata_path)
+        log_info(f"Metadata saved: {metadata_path}")
+        return metadata_path
+    except Exception as e:
+        log_warn(f"Could not save metadata sidecar for {dest_path}: {e}")
+        try:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        except Exception:
+            pass
+        return None
 
 
 def format_bytes(bytes_value: int) -> str:
@@ -252,6 +693,8 @@ def download_file(
     headers: Optional[Dict[str, str]] = None,
     chunk_size: int = None,
     progress_callback: Optional[Callable[[int, int], None]] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+    category: str = "",
 ) -> Dict[str, Any]:
     """
     Download a file from URL with progress tracking and speed calculation.
@@ -263,6 +706,8 @@ def download_file(
         headers: Optional HTTP headers (for auth tokens)
         chunk_size: Download chunk size in bytes (defaults to 1MB)
         progress_callback: Optional callback(downloaded_bytes, total_bytes)
+        metadata: Optional sidecar metadata to save next to the model file
+        category: Model category used for LoRA Manager metadata typing
 
     Returns:
         Result dictionary with status and info
@@ -445,6 +890,17 @@ def download_file(
 
         result["success"] = True
         result["size"] = downloaded
+        metadata_path = write_lora_manager_metadata(
+            dest_path,
+            metadata or {},
+            category,
+            url,
+        )
+        if metadata_path:
+            result["metadata_path"] = metadata_path
+            with download_lock:
+                if download_id in download_progress:
+                    download_progress[download_id]["metadata_path"] = metadata_path
 
         # CLI completion log
         elapsed = time.time() - start_time
@@ -510,6 +966,7 @@ def download_model(
     headers: Optional[Dict[str, str]] = None,
     subfolder: str = "",
     base_directory: str = "",
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Download a model to the appropriate directory.
@@ -522,6 +979,7 @@ def download_model(
         headers: Optional HTTP headers
         subfolder: Optional subfolder within category directory
         base_directory: Optional configured base directory to use
+        metadata: Optional sidecar metadata to save next to the model file
 
     Returns:
         Result dictionary
@@ -553,7 +1011,14 @@ def download_model(
             "path": dest_path,
         }
 
-    return download_file(url, dest_path, download_id, headers)
+    return download_file(
+        url,
+        dest_path,
+        download_id,
+        headers=headers,
+        metadata=metadata,
+        category=category,
+    )
 
 
 def get_progress(download_id: str) -> Optional[Dict[str, Any]]:
@@ -594,6 +1059,7 @@ def start_background_download(
     headers: Optional[Dict[str, str]] = None,
     subfolder: str = "",
     base_directory: str = "",
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     Start a download in a background thread.
@@ -627,7 +1093,14 @@ def start_background_download(
     def run_download():
         try:
             result = download_model(
-                url, filename, category, download_id, headers, subfolder, base_directory
+                url,
+                filename,
+                category,
+                download_id,
+                headers,
+                subfolder,
+                base_directory,
+                metadata,
             )
             if not result.get("success"):
                 # Mark as error if download failed
