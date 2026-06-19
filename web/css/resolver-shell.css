@@ -377,6 +377,23 @@
     mask: radial-gradient(circle at 100% 0, transparent 10px, #000 10px);
 }
 
+#model-resolver-modal #model-resolver-queue .mr-queue-tabs:not(.mr-downloads-subtabs) > .mr-queue-tab.mr-tab[data-tab="downloads"].mr-tab-active,
+#model-resolver-modal #model-resolver-queue .mr-queue-tabs:not(.mr-downloads-subtabs) > .mr-queue-tab.mr-tab-active:last-child {
+    border-radius: 10px !important;
+    box-shadow: none !important;
+}
+
+#model-resolver-modal #model-resolver-queue .mr-queue-tabs:not(.mr-downloads-subtabs) > .mr-queue-tab.mr-tab[data-tab="downloads"].mr-tab-active::before,
+#model-resolver-modal #model-resolver-queue .mr-queue-tabs:not(.mr-downloads-subtabs) > .mr-queue-tab.mr-tab[data-tab="downloads"].mr-tab-active::after,
+#model-resolver-modal #model-resolver-queue .mr-queue-tabs:not(.mr-downloads-subtabs) > .mr-queue-tab.mr-tab-active:last-child::before,
+#model-resolver-modal #model-resolver-queue .mr-queue-tabs:not(.mr-downloads-subtabs) > .mr-queue-tab.mr-tab-active:last-child::after {
+    display: none !important;
+    content: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
+}
+
 .mr-queue-list {
     overflow-y: auto;
     flex: 1;
