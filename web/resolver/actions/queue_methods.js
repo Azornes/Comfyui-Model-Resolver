@@ -762,7 +762,7 @@ export const queueMethods = {
             const nodeLabel = info.missing?.subgraph_name || info.missing?.node_type || (info.missing?.subgraph_id ? 'Subgraph' : 'Node');
             const downloaded = this.formatBytes(progress.downloaded || 0);
             const total = progress.total_size ? this.formatBytes(progress.total_size) : '';
-            const speed = progress.speed ? `${this.formatBytes(progress.speed)}/s` : '';
+            const progressMeta = this.formatDownloadProgressMeta?.(progress) || '';
             const status = progress.status || info.lastStatus || 'starting';
             const statusLabel = status === 'downloading'
                 ? `${Math.round(percent)}%`
@@ -795,7 +795,7 @@ export const queueMethods = {
             }
             html += `<div class="mr-download-queue-progress">`;
             html += `<div class="mr-progress-bar"><div class="mr-progress-fill" style="width: ${percent}%;"></div></div>`;
-            html += `<div class="mr-progress-text"><span>${this.escapeHtml(sizeText)}</span><span>${this.escapeHtml(speed)}</span></div>`;
+            html += `<div class="mr-progress-text"><span>${this.escapeHtml(sizeText)}</span><span>${this.escapeHtml(progressMeta)}</span></div>`;
             html += `</div>`;
             html += `<div class="mr-queue-item-actions"><button type="button" class="mr-btn mr-btn-danger mr-btn-sm mr-download-queue-cancel" data-download-id="${this.escapeHtml(downloadId)}">Cancel</button></div>`;
             html += `</div>`;

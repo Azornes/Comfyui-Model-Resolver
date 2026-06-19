@@ -2417,9 +2417,20 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 8px;
     margin-top: 6px;
     font-size: 11px;
     color: var(--mr-text-muted);
+}
+.mr-progress-text > span:first-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.mr-progress-text > span:last-child {
+    flex: 0 0 auto;
+    text-align: right;
+    white-space: nowrap;
 }
 
 /* Scrollbar */

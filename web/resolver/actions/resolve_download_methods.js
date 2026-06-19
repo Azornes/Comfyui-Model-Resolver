@@ -779,14 +779,14 @@ export const resolveDownloadMethods = {
                 const percent = Math.max(0, Math.min(100, Number(progress.progress) || 0));
                 const downloaded = this.formatBytes(progress.downloaded || 0);
                 const total = this.formatBytes(progress.total_size || 0);
-                const speed = progress.speed ? this.formatBytes(progress.speed) + '/s' : '';
+                const progressMeta = this.formatDownloadProgressMeta(progress);
                 const leftText = progress.total_size
                     ? `${downloaded} / ${total} (${percent}%)`
                     : '<span class="mr-info-accent-text">Connecting...</span>';
                 progressDiv.innerHTML = this.renderProgressWithAction({
                     percent,
                     leftText,
-                    rightText: speed,
+                    rightText: progressMeta,
                     actionClass: canCancel ? 'cancel-download-btn mr-btn mr-btn-danger mr-btn-sm' : '',
                     actionText: canCancel ? 'Cancel' : '',
                     actionDataAttr: canCancel ? `data-download-id="${downloadId}"` : '',
@@ -2391,10 +2391,53 @@ export const resolveDownloadMethods = {
      * Format bytes to human readable string
      */
     formatBytes(bytes) {
-        if (bytes === 0) return '0 B';
+        const value = Number(bytes) || 0;
+        if (!Number.isFinite(value) || value <= 0) return '0 B';
         const k = 1024;
-        const sizes = ['B', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.min(sizes.length - 1, Math.floor(Math.log(value) / Math.log(k)));
+        return parseFloat((value / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    },
+
+    formatDuration(seconds) {
+        const totalSeconds = Math.max(0, Math.ceil(Number(seconds) || 0));
+        if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) return '';
+
+        if (totalSeconds < 60) return `${totalSeconds}s`;
+
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const remainingSeconds = totalSeconds % 60;
+
+        if (hours > 0) {
+            return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+        }
+
+        return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+    },
+
+    getDownloadEtaText(progress = {}) {
+        const totalSize = Number(progress.total_size) || 0;
+        const downloaded = Number(progress.downloaded) || 0;
+        const speed = Number(progress.speed) || 0;
+        if (totalSize <= 0 || downloaded <= 0 || speed <= 0 || downloaded >= totalSize) return '';
+
+        const duration = this.formatDuration((totalSize - downloaded) / speed);
+        return duration ? `ETA ${duration}` : '';
+    },
+
+    formatDownloadProgressMeta(progress = {}) {
+        const parts = [];
+        const speed = Number(progress.speed) || 0;
+        if (speed > 0) {
+            parts.push(`${this.formatBytes(speed)}/s`);
+        }
+
+        const eta = this.getDownloadEtaText(progress);
+        if (eta) {
+            parts.push(eta);
+        }
+
+        return parts.join(' | ');
     }
 };
