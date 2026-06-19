@@ -841,9 +841,13 @@ export const queueMethods = {
             nodeId: missing.node_id ?? '',
             widgetIndex: missing.widget_index ?? '',
             workflowLabel,
+            workflowKey: info.workflowKey || '',
             workflowRouteKey: info.workflowRouteKey || '',
+            workflowSignature: info.workflowSignature || '',
             workflowTabId: info.workflowTabId || '',
             workflowTabName: info.workflowTabName || '',
+            workflowTabAriaControls: info.workflowTabAriaControls || '',
+            workflowTabText: info.workflowTabText || '',
             path,
             directory,
             sourceUrl: info.sourceUrl || missing.download_source?.url || '',
@@ -873,18 +877,29 @@ export const queueMethods = {
 
     getDownloadHistoryFolderContext(entry = {}) {
         const targetPath = entry.directory || entry.path || '';
-        if (!targetPath) return null;
-        return {
-            context_scope: 'download_folder',
-            open_folder_label: 'Open Download Folder',
+        const context = {
+            context_scope: 'download_history',
+            open_folder_label: targetPath ? 'Open Download Folder' : '',
             name: entry.filename || 'Download',
             path: targetPath,
             resolved_path: targetPath,
             folder_path: entry.directory || targetPath,
             download_directory: entry.directory || '',
             download_path: entry.path || '',
-            category: entry.category || ''
+            category: entry.category || '',
+            workflow_label: entry.workflowLabel || '',
+            workflow_key: entry.workflowKey || '',
+            workflow_route_key: entry.workflowRouteKey || '',
+            workflow_signature: entry.workflowSignature || '',
+            workflow_tab_id: entry.workflowTabId || '',
+            workflow_tab_name: entry.workflowTabName || '',
+            workflow_tab_aria_controls: entry.workflowTabAriaControls || '',
+            workflow_tab_text: entry.workflowTabText || '',
+            node_id: entry.nodeId ?? '',
+            widget_index: entry.widgetIndex ?? ''
         };
+
+        return (targetPath || this.canSwitchToDownloadWorkflow?.(context)) ? context : null;
     },
 
     renderDownloadsPanel(downloads = [], history = this.getDownloadHistory()) {
@@ -922,6 +937,15 @@ export const queueMethods = {
         if (clearHistoryButton) {
             clearHistoryButton.addEventListener('click', () => this.clearDownloadHistory());
         }
+
+        this.queueList.querySelectorAll('.mr-download-history-remove').forEach(button => {
+            button.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const historyId = button.dataset.historyId || '';
+                const historyIndex = Number.parseInt(button.dataset.historyIndex || '-1', 10);
+                this.removeDownloadHistoryEntry(historyId, historyIndex);
+            });
+        });
     },
 
     renderQueueDownloads(downloads) {
@@ -1002,7 +1026,8 @@ export const queueMethods = {
 
         let html = '<div class="mr-download-history-toolbar"><button type="button" class="mr-btn mr-btn-secondary mr-btn-sm mr-download-history-clear">Clear History</button></div>';
         html += '<div class="mr-queue-items mr-download-history-items">';
-        for (const entry of history) {
+        for (let index = 0; index < history.length; index++) {
+            const entry = history[index];
             const filename = entry.filename || 'model';
             const workflowLabel = entry.workflowLabel || 'Unknown workflow';
             const category = entry.categoryLabel || this.getCategoryDisplayName?.(entry.category || '') || entry.category || '';
@@ -1015,9 +1040,15 @@ export const queueMethods = {
             const sizeLabel = entry.totalSize ? this.formatBytes(entry.totalSize) : '';
             const statusLabel = entry.statusLabel || (entry.status === 'already_exists' ? 'Already downloaded' : 'Downloaded');
             const contextModel = this.getDownloadHistoryFolderContext(entry);
+            const hasFolderAction = Boolean(contextModel?.folder_path || contextModel?.download_directory || contextModel?.directory || contextModel?.path || contextModel?.resolved_path);
+            const hasWorkflowAction = Boolean(contextModel && this.canSwitchToDownloadWorkflow?.(contextModel));
+            const contextTooltip = hasFolderAction && hasWorkflowAction
+                ? 'Right-click for workflow and download folder actions'
+                : (hasWorkflowAction ? 'Right-click to switch to workflow' : 'Right-click to open download folder');
             const contextData = contextModel
-                ? ` data-model="${this.escapeHtml(encodeURIComponent(JSON.stringify(contextModel)))}" oncontextmenu="window.MLOpenContextMenu(event, this)" data-tooltip="Right-click to open download folder"`
+                ? ` data-model="${this.escapeHtml(encodeURIComponent(JSON.stringify(contextModel)))}" oncontextmenu="window.MLOpenContextMenu(event, this)" data-tooltip="${this.escapeHtml(contextTooltip)}"`
                 : '';
+            const historyId = String(entry.id || '');
 
             html += `<div class="mr-queue-item mr-download-history-item"${contextData}>`;
             html += `<div class="mr-queue-item-title mr-download-queue-title">`;
@@ -1037,6 +1068,7 @@ export const queueMethods = {
             if (sizeLabel || timeLabel) {
                 html += `<div class="mr-queue-item-meta"><span>Done</span><code>${this.escapeHtml([timeLabel, sizeLabel].filter(Boolean).join(' | '))}</code></div>`;
             }
+            html += `<div class="mr-queue-item-actions"><button type="button" class="mr-btn mr-btn-danger mr-btn-sm mr-download-history-remove" data-history-id="${this.escapeHtml(historyId)}" data-history-index="${this.escapeHtml(String(index))}">Remove</button></div>`;
             html += `</div>`;
         }
         html += '</div>';
@@ -1045,6 +1077,26 @@ export const queueMethods = {
 
     clearDownloadHistory() {
         this.downloadHistory = [];
+        this.saveDownloadHistory();
+        this.updateQueuePanel();
+    },
+
+    removeDownloadHistoryEntry(historyId = '', fallbackIndex = -1) {
+        const history = this.getDownloadHistory();
+        if (!history.length) return;
+
+        const normalizedId = String(historyId || '');
+        let nextHistory = history;
+        if (normalizedId) {
+            nextHistory = history.filter(entry => String(entry?.id || '') !== normalizedId);
+        }
+
+        if (nextHistory.length === history.length && Number.isInteger(fallbackIndex) && fallbackIndex >= 0 && fallbackIndex < history.length) {
+            nextHistory = history.filter((_, index) => index !== fallbackIndex);
+        }
+
+        if (nextHistory.length === history.length) return;
+        this.downloadHistory = nextHistory;
         this.saveDownloadHistory();
         this.updateQueuePanel();
     },

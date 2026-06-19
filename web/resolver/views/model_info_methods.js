@@ -28,11 +28,12 @@ export const modelInfoMethods = {
         const isDownloadFolderContext = model?.context_scope === 'download_folder';
         const isDownloadRootContext = model?.context_scope === 'download_root';
         const isDownloadQueueContext = model?.context_scope === 'download_queue';
+        const isDownloadHistoryContext = model?.context_scope === 'download_history';
         const isFolderOnlyContext = isDownloadFolderContext || isDownloadRootContext;
-        const isSourceModelContext = !isDownloadTableContext && !isFolderOnlyContext && !isDownloadQueueContext;
+        const isSourceModelContext = !isDownloadTableContext && !isFolderOnlyContext && !isDownloadQueueContext && !isDownloadHistoryContext;
         const hasLocalPath = Boolean(model?.folder_path || model?.download_directory || model?.directory || model?.path || model?.resolved_path);
         const showOpenFolder = !isDownloadTableContext && hasLocalPath;
-        const showSwitchWorkflow = isDownloadQueueContext && Boolean(this.canSwitchToDownloadWorkflow?.(model));
+        const showSwitchWorkflow = (isDownloadQueueContext || isDownloadHistoryContext) && Boolean(this.canSwitchToDownloadWorkflow?.(model));
         this.setContextMenuItemVisible('showInfo', isSourceModelContext);
         this.setContextMenuItemVisible('showMore', canShowMore);
         this.setContextMenuItemVisible('civitai', isSourceModelContext);
