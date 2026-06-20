@@ -128,6 +128,73 @@ export const searchPanelMethods = {
         return '';
     },
 
+    getMissingLocalBaseModel(missing = {}, minConfidence = 70) {
+        const bestMatch = this.getBestLocalMatch?.(missing, minConfidence);
+        const matchModel = bestMatch?.model || {};
+        const pathCandidates = [
+            matchModel.relative_path,
+            matchModel.path,
+            bestMatch?.path,
+            bestMatch?.filename
+        ];
+
+        for (const path of pathCandidates) {
+            const canonical = this.resolveBaseModelAliasFromPath(path);
+            if (canonical) return canonical;
+        }
+        return '';
+    },
+
+    getMissingAutoBaseModel(missing = {}) {
+        const searchSuggestion = this.getCachedSearchSuggestionData?.(missing) || {};
+        const directCandidates = [
+            missing?.civitai_info?.base_model,
+            missing?.civitai_info?.baseModel,
+            missing?.civitai_search_result?.base_model,
+            missing?.civitai_search_result?.baseModel,
+            missing?.download_source?.base_model,
+            missing?.download_source?.baseModel
+        ];
+
+        for (const value of directCandidates) {
+            const canonical = this.resolveBaseModelAlias(value);
+            if (canonical) return canonical;
+        }
+
+        const savedTarget = this.getSavedDownloadTargetSelection?.(missing) || {};
+        const pathCandidates = [
+            this.getMissingLocalBaseModel(missing, 70),
+            savedTarget.subfolder
+        ];
+
+        for (const value of pathCandidates) {
+            const canonical = this.resolveBaseModelAliasFromPath(value)
+                || this.resolveBaseModelAlias(value);
+            if (canonical) return canonical;
+        }
+
+        const cachedCandidates = [
+            searchSuggestion.base_model,
+            searchSuggestion.baseModel
+        ];
+        for (const value of cachedCandidates) {
+            const canonical = this.resolveBaseModelAlias(value);
+            if (canonical) return canonical;
+        }
+
+        const fallbackPathCandidates = [
+            missing?.original_path,
+            missing?.name,
+            searchSuggestion.path
+        ];
+        for (const value of fallbackPathCandidates) {
+            const canonical = this.resolveBaseModelAliasFromPath(value);
+            if (canonical) return canonical;
+        }
+
+        return this.getDominantWorkflowBaseModel();
+    },
+
     getBaseModelAliases() {
         const baseModelsList = this.baseModels?.base_models;
         if (Array.isArray(baseModelsList) && baseModelsList.length > 0) {
@@ -247,9 +314,11 @@ export const searchPanelMethods = {
         return best?.value || '';
     },
 
-    getSearchBaseModelLabel(value = 'auto') {
+    getSearchBaseModelLabel(value = 'auto', missing = {}) {
         if (value === 'auto') {
-            const detected = this.getDominantWorkflowBaseModel();
+            const detected = missing
+                ? this.getMissingAutoBaseModel(missing)
+                : this.getDominantWorkflowBaseModel();
             return detected ? `Auto (${detected})` : 'Auto';
         }
         const option = this.getKnownBaseModelOptions().find(item => item.value === value);
@@ -260,7 +329,7 @@ export const searchPanelMethods = {
         const state = this.getSearchState(missing);
         const selected = state.selectedBaseModel || this.getDefaultSearchBaseModel();
         if (selected === 'none') return '';
-        if (selected === 'auto') return this.getDominantWorkflowBaseModel();
+        if (selected === 'auto') return this.getMissingAutoBaseModel(missing);
         return selected;
     },
 
@@ -939,7 +1008,7 @@ export const searchPanelMethods = {
             if (!options.some(option => option.value === state.selectedBaseModel)) {
                 state.selectedBaseModel = this.getDefaultSearchBaseModel();
             }
-            this.setDropdownValue(baseEl, state.selectedBaseModel, this.getSearchBaseModelLabel(state.selectedBaseModel));
+            this.setDropdownValue(baseEl, state.selectedBaseModel, this.getSearchBaseModelLabel(state.selectedBaseModel, missing));
         }
     },
 
@@ -999,7 +1068,9 @@ export const searchPanelMethods = {
         container.querySelectorAll?.('.mr-search-base-select').forEach((baseEl) => {
             const value = baseEl.dataset?.value || 'auto';
             if (value === 'auto') {
-                this.setDropdownValue(baseEl, value, this.getSearchBaseModelLabel(value));
+                const missingKey = baseEl.dataset?.missingSearchKey || '';
+                const missing = (this.missingModels || []).find(item => this.getMissingSearchKey(item) === missingKey) || {};
+                this.setDropdownValue(baseEl, value, this.getSearchBaseModelLabel(value, missing));
             }
         });
     },
@@ -1433,7 +1504,7 @@ export const searchPanelMethods = {
         html += `<div class="mr-search-source-picker mr-search-base-picker">`;
         html += `<label class="mr-search-source-picker-label" for="${searchBaseSelectId}">Model</label>`;
         html += `<div class="mr-download-target-wrap">`;
-        html += `<input id="${searchBaseSelectId}" class="mr-download-target-input mr-search-base-select" type="text" readonly autocomplete="off" data-value="${this.escapeHtml(selectedBaseModel)}" value="${this.escapeHtml(this.getSearchBaseModelLabel(selectedBaseModel))}">`;
+        html += `<input id="${searchBaseSelectId}" class="mr-download-target-input mr-search-base-select" type="text" readonly autocomplete="off" data-value="${this.escapeHtml(selectedBaseModel)}" data-missing-search-key="${this.escapeHtml(this.getMissingSearchKey(missing))}" value="${this.escapeHtml(this.getSearchBaseModelLabel(selectedBaseModel, missing))}">`;
         html += `<div id="${searchBaseListId}" class="mr-download-target-list mr-search-base-list"></div>`;
         html += `</div>`;
         html += `</div>`;
@@ -1771,6 +1842,7 @@ export const searchPanelMethods = {
         }
 
         this.refreshMissingListStats();
+        this.refreshSearchBaseModelLabels?.();
     },
 
     async fetchUrnLocalMatches(missing) {

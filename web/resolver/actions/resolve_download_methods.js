@@ -1973,7 +1973,7 @@ export const resolveDownloadMethods = {
                 baseList.innerHTML = options
                     .map(option => {
                         const label = option.value === 'auto'
-                            ? this.getSearchBaseModelLabel('auto')
+                            ? this.getSearchBaseModelLabel('auto', missing)
                             : option.label;
                         return `<div class="mr-download-target-option" data-value="${encodeURIComponent(option.value)}" data-label="${encodeURIComponent(label)}">${this.escapeHtml(label)}</div>`;
                     })
