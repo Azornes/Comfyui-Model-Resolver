@@ -1,6 +1,11 @@
 {
-  "updated_at": "2026-06-06T17:43:51+00:00",
-  "last_checked_at": "2026-06-06T17:43:51+00:00",
-  "local_count": 91,
-  "new_models_added": 0
+  "updated_at": "2026-06-21T00:24:23+00:00",
+  "last_checked_at": "2026-06-21T00:24:23+00:00",
+  "local_count": 94,
+  "new_models_added": 3,
+  "new_models_added_list": [
+    "Ideogram 4.0",
+    "Boogu",
+    "PolyGen"
+  ]
 }

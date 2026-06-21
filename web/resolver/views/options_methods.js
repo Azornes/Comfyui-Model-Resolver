@@ -877,6 +877,18 @@ export const optionsMethods = {
             }
         };
 
+        const formatNewBaseModelsSummary = (models = [], maxVisible = 6) => {
+            const names = Array.isArray(models)
+                ? models.map(name => String(name || '').trim()).filter(Boolean)
+                : [];
+            if (!names.length) return '';
+            const visible = names.slice(0, maxVisible);
+            const suffix = names.length > visible.length
+                ? ` and ${names.length - visible.length} more`
+                : '';
+            return `${visible.join(', ')}${suffix}`;
+        };
+
         const updateBaseModels = async () => {
             try {
                 setBaseModelsBusy(true);
@@ -896,8 +908,18 @@ export const optionsMethods = {
                 await this.ensureBaseModelsLoaded();
                 renderBaseModelsStatus(data, false);
                 if (baseModelsStateEl) baseModelsStateEl.textContent = 'Updated';
-                if (baseModelsMessageEl) baseModelsMessageEl.textContent = `Base Models updated. ${Number(data.local_count || 0).toLocaleString()} base models loaded.`;
-                this.showNotification('Base Models updated', 'success');
+                const newModelsSummary = formatNewBaseModelsSummary(data.new_models_added_list);
+                const addedCount = Number(data.new_models_added || 0);
+                const addedText = addedCount > 0
+                    ? ` Added ${addedCount.toLocaleString()} new model${addedCount === 1 ? '' : 's'}${newModelsSummary ? `: ${newModelsSummary}` : ''}.`
+                    : ' No new base models were added.';
+                if (baseModelsMessageEl) baseModelsMessageEl.textContent = `Base Models updated. ${Number(data.local_count || 0).toLocaleString()} base models loaded.${addedText}`;
+                this.showNotification(
+                    addedCount > 0
+                        ? `Base Models updated${newModelsSummary ? `: ${newModelsSummary}` : ''}`
+                        : 'Base Models updated. No new models added.',
+                    'success'
+                );
             } catch (error) {
                 console.error('Model Resolver: base-models update error:', error);
                 if (baseModelsStateEl) baseModelsStateEl.textContent = 'Error';

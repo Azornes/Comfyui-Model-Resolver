@@ -622,6 +622,26 @@
         "ace",
         "ace audio"
       ]
+    },
+    {
+      "name": "Ideogram 4.0",
+      "aliases": [
+        "Ideogram 4.0",
+        "ideogram",
+        "ideogram 4 0"
+      ]
+    },
+    {
+      "name": "Boogu",
+      "aliases": [
+        "boogu"
+      ]
+    },
+    {
+      "name": "PolyGen",
+      "aliases": [
+        "polygen"
+      ]
     }
   ]
 }

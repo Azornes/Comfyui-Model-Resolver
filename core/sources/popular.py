@@ -251,10 +251,13 @@ def generate_aliases(name: str) -> List[str]:
     normalized = re.sub(r"[\._\-]+", " ", name.lower())
     normalized = re.sub(r"\s+", " ", normalized).strip()
     aliases.add(normalized)
+    version_trimmed = re.sub(r"(\d+)(?:[\s\._\-]+0)+(?!\d)", r"\1", normalized)
+    aliases.add(version_trimmed)
     
     # Remove all spaces/dashes/dots/underscores
     collapsed = re.sub(r"[\s\._\-]+", "", name.lower())
     aliases.add(collapsed)
+    aliases.add(re.sub(r"[\s\._\-]+", "", version_trimmed))
     
     # If there are dots/dashes/underscores, add specific clean replacements
     if "." in name:
@@ -350,6 +353,7 @@ def update_base_models_from_remote() -> Dict[str, Any]:
         
     updated_models = list(base_models)
     new_added_count = 0
+    new_added_names = []
     
     for name in remote_names:
         norm_name = _normalize_base_model(name)
@@ -382,6 +386,7 @@ def update_base_models_from_remote() -> Dict[str, Any]:
                 "aliases": filtered_aliases
             })
             new_added_count += 1
+            new_added_names.append(name)
             
     # Write updated models to base-models.json atomically
     os.makedirs(METADATA_DIR, exist_ok=True)
@@ -415,7 +420,8 @@ def update_base_models_from_remote() -> Dict[str, Any]:
         "updated_at": now_str,
         "last_checked_at": now_str,
         "local_count": len(updated_models),
-        "new_models_added": new_added_count
+        "new_models_added": new_added_count,
+        "new_models_added_list": new_added_names
     }
     
     fd_meta, tmp_meta_path = tempfile.mkstemp(
@@ -443,5 +449,6 @@ def update_base_models_from_remote() -> Dict[str, Any]:
         "local_count": len(updated_models),
         "local_updated_at": now_str,
         "new_models_added": new_added_count,
+        "new_models_added_list": new_added_names,
         "updated": True
     }

@@ -89,12 +89,29 @@ export const searchPanelMethods = {
             .replace(/[^a-z0-9]+/g, '');
     },
 
+    getBaseModelTokenVariants(value = '') {
+        const text = String(value || '').trim();
+        if (!text) return new Set();
+        const variants = [
+            text,
+            text.replace(/(\d+)(?:[\s._-]+0)+(?!\d)/g, '$1')
+        ];
+        return new Set(
+            variants
+                .map(item => this.normalizeBaseModelToken(item))
+                .filter(Boolean)
+        );
+    },
+
     resolveBaseModelAliasExact(value = '') {
-        const token = this.normalizeBaseModelToken(value);
-        if (!token) return '';
+        const tokens = this.getBaseModelTokenVariants(value);
+        if (!tokens.size) return '';
         for (const entry of this.getBaseModelAliases()) {
             const aliases = [entry.value, ...(entry.aliases || [])];
-            if (aliases.some(alias => this.normalizeBaseModelToken(alias) === token)) {
+            if (aliases.some(alias => {
+                const aliasTokens = this.getBaseModelTokenVariants(alias);
+                return [...aliasTokens].some(aliasToken => tokens.has(aliasToken));
+            })) {
                 return entry.value;
             }
         }
@@ -102,16 +119,20 @@ export const searchPanelMethods = {
     },
 
     resolveBaseModelAlias(value = '') {
-        const token = this.normalizeBaseModelToken(value);
-        if (!token) return '';
+        const tokens = this.getBaseModelTokenVariants(value);
+        if (!tokens.size) return '';
         const exact = this.resolveBaseModelAliasExact(value);
         if (exact) return exact;
 
         for (const entry of this.getBaseModelAliases()) {
             const aliases = [entry.value, ...(entry.aliases || [])];
             if (aliases.some(alias => {
-                const aliasToken = this.normalizeBaseModelToken(alias);
-                return aliasToken && (aliasToken.includes(token) || token.includes(aliasToken));
+                const aliasTokens = this.getBaseModelTokenVariants(alias);
+                return [...aliasTokens].some(aliasToken => (
+                    aliasToken && [...tokens].some(token => (
+                        aliasToken.includes(token) || token.includes(aliasToken)
+                    ))
+                ));
             })) {
                 return entry.value;
             }
