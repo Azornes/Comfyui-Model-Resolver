@@ -968,21 +968,94 @@ export const searchPanelMethods = {
         );
     },
 
-    reconnectActiveSearchProgress(missingModels = this.missingModels || []) {
+    settleInactiveSearchProgress(missing, state = null, {
+        workflowKey = this.getWorkflowScopedQueueKey(),
+        message = 'Search interrupted',
+        persist = true,
+        refresh = true
+    } = {}) {
+        if (!missing || !state) return false;
+
+        const runId = state.activeSearchRunId;
+        const missingSearchKey = this.getMissingSearchKey(missing);
+        const hasActiveJob = Boolean(
+            runId && this.hasBackgroundSearchJob(workflowKey, missingSearchKey, runId)
+        );
+        if (hasActiveJob) return false;
+
+        let changed = false;
+        let markedError = false;
+        let markedFound = false;
+
+        if (runId) {
+            this.clearSearchProgressTimers(runId);
+            state.activeSearchRunId = null;
+            changed = true;
+        }
+
+        for (const [source, progress] of Object.entries(state.sourceProgress || {})) {
+            if (!progress || (progress.status !== 'pending' && progress.status !== 'running')) continue;
+
+            const resultStatus = this.getMissingSourceResultStatus?.(missing, source, state) || '';
+            const hasResult = resultStatus === 'exact'
+                || resultStatus === 'partial'
+                || resultStatus === 'found';
+
+            state.sourceProgress[source] = {
+                ...progress,
+                status: hasResult ? 'found' : 'error',
+                percent: 100,
+                message: hasResult ? 'Found' : message,
+                error: hasResult ? null : (progress.error || message)
+            };
+            markedFound = markedFound || hasResult;
+            markedError = markedError || !hasResult;
+            changed = true;
+        }
+
+        if (!changed) return false;
+
+        if (markedFound) {
+            state.lastAttemptFound = true;
+        }
+        if (markedError && !state.lastAttemptError) {
+            state.lastAttemptError = message;
+        }
+
+        if (persist) {
+            this.persistSearchStateForWorkflow(workflowKey, missing, state);
+        }
+        if (refresh) {
+            this.refreshSearchUiForMissing(missing, state, { workflowKey });
+        }
+        return true;
+    },
+
+    syncSearchProgressAfterResume(missingModels = this.missingModels || [], { workflowKey = this.getWorkflowScopedQueueKey() } = {}) {
         for (const missing of missingModels || []) {
-            const state = this.searchResultCache.get(this.getMissingSearchKey(missing));
-            const runId = state?.activeSearchRunId;
-            if (!runId) continue;
+            const missingSearchKey = this.getMissingSearchKey(missing);
+            const state = workflowKey === this.getWorkflowScopedQueueKey()
+                ? this.searchResultCache.get(missingSearchKey)
+                : this.getWorkflowSearchCache(workflowKey)?.get(missingSearchKey);
+            if (!state) continue;
+
+            if (this.settleInactiveSearchProgress(missing, state, { workflowKey })) {
+                continue;
+            }
+
+            const runId = state.activeSearchRunId;
+            if (!runId || !this.hasBackgroundSearchJob(workflowKey, missingSearchKey, runId)) continue;
 
             for (const [source, progress] of Object.entries(state.sourceProgress || {})) {
                 if (progress?.status !== 'running') continue;
-                const timerKey = this.getSearchProgressTimerKey(runId, source);
-                if (!this.searchProgressTimers.has(timerKey)) {
-                    this.startEstimatedSearchProgress(state, missing, null, source, runId);
-                }
+                this.startEstimatedSearchProgress(state, missing, null, source, runId, { workflowKey });
             }
-            this.refreshSearchUiForMissing(missing, state);
+            this.refreshSearchUiForMissing(missing, state, { workflowKey });
         }
+    },
+
+    reconnectActiveSearchProgress(missingModels = this.missingModels || []) {
+        this.syncSearchProgressAfterResume(missingModels);
     },
 
     hasActiveSearchProgress(state = {}) {
@@ -1164,28 +1237,6 @@ export const searchPanelMethods = {
         const { sync = true } = options || {};
         const state = this.getSearchState(missing);
         const nextBaseModel = baseModel || this.getDefaultSearchBaseModel();
-        const changed = (state.selectedBaseModel || this.getDefaultSearchBaseModel()) !== nextBaseModel;
-        if (changed) {
-            this.clearSearchProgressTimers(state.activeSearchRunId);
-            state.results = this.createEmptySearchState().results;
-            state.lastAttemptSources = [];
-            state.lastAttemptBaseModelContext = '';
-            state.lastAttemptFound = null;
-            state.lastAttemptError = null;
-            state.sourceProgress = {};
-            state.activeSearchRunId = null;
-            const resultsDiv = container?.querySelector?.(`#search-results-${missing.node_id}-${missing.widget_index}`);
-            if (resultsDiv) {
-                resultsDiv.classList.remove('mr-is-visible');
-                resultsDiv.classList.add('mr-is-hidden');
-                resultsDiv.innerHTML = '';
-            }
-            const searchBtn = container?.querySelector?.(`#search-${missing.node_id}-${missing.widget_index}`);
-            if (searchBtn) {
-                searchBtn.disabled = false;
-                searchBtn.innerHTML = this.renderSearchButtonContent('Search Online');
-            }
-        }
         state.selectedBaseModel = nextBaseModel;
         this.persistSearchStateForActiveWorkflow();
         if (sync) {

@@ -1735,6 +1735,12 @@ export const resolveDownloadMethods = {
             if (currentJob?.runId === searchRunId) {
                 this.backgroundSearchJobs.delete(backgroundJobKey);
             }
+            this.settleInactiveSearchProgress?.(missing, state, {
+                workflowKey,
+                message: state.lastAttemptError || 'Search interrupted',
+                persist: false,
+                refresh: false
+            });
             if (searchBtn) {
                 searchBtn.disabled = false;
                 searchBtn.innerHTML = this.renderSearchButtonContent('Search Again');

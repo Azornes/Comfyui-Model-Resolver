@@ -188,6 +188,12 @@ export class ResolverManagerDialog extends ComfyDialog {
         this.boundHandleFooterMenuClick = (e) => this.handleFooterMenuOutsideClick(e);
         document.addEventListener('click', this.boundHandleFooterMenuClick);
         window.addEventListener('resize', this._boundHandleViewportResize);
+        this._boundSyncSearchProgressAfterResume = () => {
+            if (document.visibilityState === 'hidden') return;
+            window.setTimeout(() => this.syncSearchProgressAfterResume?.(), 0);
+        };
+        window.addEventListener('focus', this._boundSyncSearchProgressAfterResume);
+        document.addEventListener('visibilitychange', this._boundSyncSearchProgressAfterResume);
     }
 }
 
