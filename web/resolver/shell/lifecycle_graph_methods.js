@@ -238,12 +238,15 @@ export const lifecycleGraphMethods = {
     /**
      * Locate and focus a node in the ComfyUI canvas
      */
-    locateNodeInGraph(nodeId, options = {}) {
+    async locateNodeInGraph(nodeId, options = {}) {
         try {
             if (!app?.graph) {
                 this.showNotification('Cannot locate node - graph not available', 'error');
                 return;
             }
+
+            const locateToken = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+            this._locateRequestToken = locateToken;
 
             const locateOptions = typeof options === 'string'
                 ? { subgraphId: options }
@@ -255,7 +258,15 @@ export const lifecycleGraphMethods = {
                 return;
             }
 
-            this.activateGraphForLocate(target);
+            await this.activateGraphForLocate(target);
+            await this.waitForLocateGraphReady(target.graph);
+            if (this._locateRequestToken !== locateToken) return;
+
+            if (app.canvas?.graph !== target.graph) {
+                this.setActiveCanvasGraph(target.graph);
+                await this.waitForLocateGraphReady(target.graph);
+                if (this._locateRequestToken !== locateToken) return;
+            }
 
             const node = target.node;
             const graph = target.graph || node.graph || app.canvas?.graph || app.graph;
@@ -309,6 +320,34 @@ export const lifecycleGraphMethods = {
             console.error('Model Resolver: Error locating node:', e);
             this.showNotification('Error locating node: ' + e.message, 'error');
         }
+    },
+
+    waitForLocateGraphReady(graph, { settleFrames = 3, timeoutMs = 600 } = {}) {
+        return new Promise(resolve => {
+            const start = performance.now();
+            let stableFrames = 0;
+
+            const tick = () => {
+                if (app?.canvas?.graph === graph) {
+                    stableFrames += 1;
+                    if (stableFrames >= settleFrames) {
+                        resolve(true);
+                        return;
+                    }
+                } else {
+                    stableFrames = 0;
+                }
+
+                if (performance.now() - start >= timeoutMs) {
+                    resolve(false);
+                    return;
+                }
+
+                requestAnimationFrame(tick);
+            };
+
+            requestAnimationFrame(tick);
+        });
     },
 
     findLocateTarget(nodeId, options = {}) {
@@ -452,7 +491,7 @@ export const lifecycleGraphMethods = {
         return walk(rootGraph, []) || fallback;
     },
 
-    activateGraphForLocate(target) {
+    async activateGraphForLocate(target) {
         const canvas = app?.canvas;
         if (!canvas || !target?.graph) return false;
 
@@ -460,18 +499,22 @@ export const lifecycleGraphMethods = {
         for (const step of path) {
             if (step.parentGraph && canvas.graph !== step.parentGraph) {
                 this.setActiveCanvasGraph(step.parentGraph);
+                await this.waitForLocateGraphReady(step.parentGraph, { settleFrames: 2, timeoutMs: 500 });
             }
 
             if (step.node?.subgraph && canvas.graph !== step.node.subgraph) {
                 const opened = this.openSubgraphNodeForLocate(step.node);
+                await this.waitForLocateGraphReady(step.node.subgraph, { settleFrames: 2, timeoutMs: 500 });
                 if (!opened || canvas.graph !== step.node.subgraph) {
                     this.setActiveCanvasGraph(step.node.subgraph);
+                    await this.waitForLocateGraphReady(step.node.subgraph, { settleFrames: 2, timeoutMs: 500 });
                 }
             }
         }
 
         if (canvas.graph !== target.graph) {
             this.setActiveCanvasGraph(target.graph);
+            await this.waitForLocateGraphReady(target.graph, { settleFrames: 2, timeoutMs: 500 });
         }
 
         return canvas.graph === target.graph;
