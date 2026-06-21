@@ -589,6 +589,13 @@
     font-size: 11px;
     font-weight: 700;
 }
+.mr-missing-list-head > span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    text-align: center;
+}
 .mr-missing-list {
     min-height: 0;
     overflow-y: auto;
@@ -1586,6 +1593,32 @@
         transform: rotate(360deg);
     }
 }
+@keyframes mr-suggest-lightbulb-flash {
+    0% {
+        color: var(--mr-text);
+        stroke: var(--mr-text);
+        filter: none;
+        transform: scale(1);
+    }
+    35% {
+        color: #ffd84d;
+        stroke: #ffd84d;
+        filter: drop-shadow(0 0 7px rgba(255,216,77,0.75));
+        transform: scale(1.12);
+    }
+    70% {
+        color: #ffe680;
+        stroke: #ffe680;
+        filter: drop-shadow(0 0 4px rgba(255,216,77,0.45));
+        transform: scale(1.04);
+    }
+    100% {
+        color: var(--mr-text);
+        stroke: var(--mr-text);
+        filter: none;
+        transform: scale(1);
+    }
+}
 .mr-refresh-spin-target,
 #model-resolver-modal .mr-refresh-spin-target {
     display: inline-flex;
@@ -1853,7 +1886,7 @@
 }
 .mr-search-source-bar {
     display: grid;
-    grid-template-columns: auto minmax(150px, 0.85fr) minmax(150px, 1fr);
+    grid-template-columns: 82px minmax(0, 0.85fr) minmax(0, 1fr);
     align-items: end;
     gap: 10px;
     margin-bottom: 0;
@@ -5354,8 +5387,10 @@
 }
 .mr-download-target-grid {
     display: grid;
-    grid-template-columns: minmax(120px, 33%) minmax(0, 1fr);
-    grid-template-rows: auto auto;
+    grid-template-columns: minmax(120px, 33%) minmax(0, 1fr) auto;
+    grid-template-areas:
+        "folder-label subfolder-label suggest-label"
+        "folder-control subfolder-control suggest-control";
     gap: 8px 10px;
     align-items: start;
 }
@@ -5366,7 +5401,13 @@
 @media (max-width: 720px) {
     .mr-download-target-grid {
         grid-template-columns: 1fr;
-        grid-template-rows: auto;
+        grid-template-areas:
+            "folder-label"
+            "folder-control"
+            "subfolder-label"
+            "subfolder-control"
+            "suggest-label"
+            "suggest-control";
     }
 }
 .mr-download-target-label {
@@ -5378,6 +5419,22 @@
     text-transform: uppercase;
     letter-spacing: 0.06em;
     line-height: 1.2;
+}
+.mr-download-target-label-folder {
+    grid-area: folder-label;
+}
+.mr-download-target-label-subfolder {
+    grid-area: subfolder-label;
+}
+.mr-download-target-label-suggest {
+    grid-area: suggest-label;
+    justify-content: center;
+}
+.mr-download-target-folder-wrap {
+    grid-area: folder-control;
+}
+.mr-download-target-subfolder-wrap {
+    grid-area: subfolder-control;
 }
 .mr-download-target-input,
 .mr-download-target-select {
@@ -5432,13 +5489,43 @@
 }
 .mr-download-suggest-btn,
 #model-resolver-modal .mr-download-suggest-btn {
-    min-width: 58px;
+    grid-area: suggest-control;
+    justify-self: center;
+    width: var(--mr-download-control-height, 36px);
+    min-width: var(--mr-download-control-height, 36px);
     height: var(--mr-download-control-height, 36px);
     min-height: var(--mr-download-control-height, 36px);
-    padding: 0 9px;
+    padding: 0;
     border-radius: var(--mr-missing-control-radius, 7px);
     font-size: 11px;
     line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.mr-download-suggest-icon {
+    width: 16px;
+    height: 16px;
+    flex: none;
+}
+.mr-download-suggest-btn.mr-is-suggesting,
+.mr-download-suggest-btn.mr-is-suggesting:hover,
+.mr-download-suggest-btn.mr-is-suggesting:focus,
+#model-resolver-modal .mr-download-suggest-btn.mr-is-suggesting,
+#model-resolver-modal .mr-download-suggest-btn.mr-is-suggesting:hover,
+#model-resolver-modal .mr-download-suggest-btn.mr-is-suggesting:focus {
+    color: #ffd84d !important;
+}
+.mr-download-suggest-btn.mr-is-suggesting:disabled,
+#model-resolver-modal .mr-download-suggest-btn.mr-is-suggesting:disabled {
+    opacity: 1;
+}
+.mr-download-suggest-btn.mr-is-suggesting .mr-download-suggest-icon,
+#model-resolver-modal .mr-download-suggest-btn.mr-is-suggesting .mr-download-suggest-icon {
+    color: #ffd84d;
+    stroke: #ffd84d;
+    animation: mr-suggest-lightbulb-flash 650ms ease-out;
+    transform-origin: 50% 58%;
 }
 @media (max-width: 720px) {
     .mr-download-target-label {

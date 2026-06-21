@@ -549,10 +549,11 @@ export const searchPanelMethods = {
         const searchBtn = this.contentElement.querySelector(`#search-${missing.node_id}-${missing.widget_index}`);
         if (searchBtn && currentState) {
             const isRunning = Boolean(currentState.activeSearchRunId);
+            const hasSearchAttempt = this.hasRenderableSearchState(currentState);
             searchBtn.disabled = isRunning;
             searchBtn.innerHTML = isRunning
                 ? this.renderSearchButtonContent('Searching...')
-                : this.renderSearchButtonContent('Search Again');
+                : this.renderSearchButtonContent(hasSearchAttempt ? 'Search Again' : 'Search Online');
         }
     },
 
@@ -1182,9 +1183,7 @@ export const searchPanelMethods = {
             const searchBtn = container?.querySelector?.(`#search-${missing.node_id}-${missing.widget_index}`);
             if (searchBtn) {
                 searchBtn.disabled = false;
-                searchBtn.innerHTML = this.renderSearchButtonContent(
-                    this.hasSearchResultsForMissing(missing) ? 'Search Again' : 'Search Online'
-                );
+                searchBtn.innerHTML = this.renderSearchButtonContent('Search Online');
             }
         }
         state.selectedBaseModel = nextBaseModel;
@@ -1634,7 +1633,7 @@ export const searchPanelMethods = {
         const selectedBaseModel = state.selectedBaseModel || this.getDefaultSearchBaseModel();
         const baseModelTooltip = this.getSearchBaseModelTooltip(missing);
         const buttonText = options.buttonText
-            || (this.hasSearchResultsForMissing(missing) ? 'Search Again' : 'Search Online');
+            || (this.hasRenderableSearchState(state) ? 'Search Again' : 'Search Online');
 
         let html = `<div id="${searchSourcesId}" class="mr-search-source-bar">`;
         html += `<div class="mr-search-source-picker mr-search-button-picker">`;

@@ -1444,19 +1444,18 @@ export const downloadTargetMethods = {
 
         let html = `<div class="mr-download-target">`;
         html += `<div class="mr-download-target-grid">`;
-        html += `<label class="mr-download-target-label" for="${selectId}">Folder</label>`;
-        html += `<label class="mr-download-target-label" for="${subfolderId}">Subfolder (optional)</label>`;
-        html += `<div class="mr-download-target-wrap">`;
+        html += `<label class="mr-download-target-label mr-download-target-label-folder" for="${selectId}">Folder</label>`;
+        html += `<label class="mr-download-target-label mr-download-target-label-subfolder" for="${subfolderId}">Subfolder (optional)</label>`;
+        html += `<label class="mr-download-target-label mr-download-target-label-suggest" for="${suggestId}">Suggest</label>`;
+        html += `<div class="mr-download-target-wrap mr-download-target-folder-wrap">`;
         html += `<input id="${selectId}" class="mr-download-target-input mr-download-target-select" type="text" autocomplete="off" data-value="${this.escapeHtml(selectedCategory)}" value="${this.escapeHtml(this.getCategoryDisplayName(selectedCategory))}">`;
         html += `<div id="${categoryListId}" class="mr-download-target-list"></div>`;
         html += `</div>`;
-        html += `<div class="mr-download-target-wrap">`;
-        html += `<div class="mr-download-subfolder-control">`;
+        html += `<div class="mr-download-target-wrap mr-download-target-subfolder-wrap">`;
         html += `<input id="${subfolderId}" class="mr-download-target-input" type="text" placeholder="e.g. ponyxl\\styles" autocomplete="off" value="${this.escapeHtml(selectedSubfolder)}" data-base-directory="${this.escapeHtml(selectedSubfolderBaseDirectory)}">`;
-        html += `<button id="${suggestId}" class="mr-btn mr-btn-secondary mr-btn-sm mr-download-suggest-btn" type="button" data-tooltip="Apply suggested subfolder">Suggest</button>`;
-        html += `</div>`;
         html += `<div id="${subfolderListId}" class="mr-download-target-list"></div>`;
         html += `</div>`;
+        html += `<button id="${suggestId}" class="mr-btn mr-btn-secondary mr-btn-sm mr-download-suggest-btn" type="button" data-tooltip="Apply suggested subfolder" aria-label="Apply suggested subfolder">${getSvgIcon('lightbulb', 'currentColor', 'mr-download-suggest-icon')}</button>`;
         html += `</div>`;
         html += `</div>`;
         return html;
@@ -1683,12 +1682,19 @@ export const downloadTargetMethods = {
         if (suggestBtn && suggestBtn.dataset.mlSuggestBound !== 'true') {
             suggestBtn.dataset.mlSuggestBound = 'true';
             suggestBtn.addEventListener('click', async () => {
+                const suggestAnimationMs = 700;
+                suggestBtn.classList.remove('mr-is-suggesting');
+                void suggestBtn.offsetWidth;
+                suggestBtn.classList.add('mr-is-suggesting');
                 suggestBtn.disabled = true;
+                const animationDone = new Promise((resolve) => window.setTimeout(resolve, suggestAnimationMs));
                 try {
                     await this.forceSuggestedDownloadSubfolder(missing, categoryEl, subfolderEl);
                     listEl.innerHTML = '';
                     listEl.style.display = 'none';
                 } finally {
+                    await animationDone;
+                    suggestBtn.classList.remove('mr-is-suggesting');
                     suggestBtn.disabled = false;
                 }
             });
