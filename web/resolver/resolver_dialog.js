@@ -68,6 +68,12 @@ export class ResolverManagerDialog extends ComfyDialog {
         this.sidebarTabId = "comfyui-model-resolver";
         this.sidebarOpenModeStorageKey = "model_resolver_sidebar_open_mode";
         this.missingBrowserSplitStorageKey = "model_resolver_missing_browser_detail_w";
+        this.showResolvedModelsStorageKey = "model_resolver_show_resolved_models";
+        try {
+            this.showResolvedModels = localStorage.getItem(this.showResolvedModelsStorageKey) === '1';
+        } catch (e) {
+            this.showResolvedModels = false;
+        }
         this.dockButton = null;
         this.undockButton = null;
         this._floatingRectBeforeDock = null;

@@ -428,6 +428,11 @@ def analyze_and_find_matches(
 
     # Identify missing models
     missing_models = identify_missing_models(all_model_refs, available_models)
+    resolved_models = [
+        {**model_ref, "matches": []}
+        for model_ref in all_model_refs
+        if model_ref.get("exists", False)
+    ]
 
     # Enrich missing models with workflow URLs
     for missing in missing_models:
@@ -557,6 +562,8 @@ def analyze_and_find_matches(
 
     result = {
         "missing_models": missing_with_matches,
+        "resolved_models": resolved_models,
+        "total_resolved": len(resolved_models),
         "total_missing": len(missing_with_matches),
         "total_models_analyzed": len(all_model_refs),
     }

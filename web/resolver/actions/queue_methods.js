@@ -1284,6 +1284,7 @@ export const queueMethods = {
         this.updateSelectedBarForMissing?.(m);
         this.updateApplyPendingButton?.();
         this.updateQueuePanel();
+        this.refreshMissingModelsBrowserFromCache?.();
     },
 
     // Clear all queued selections
@@ -1293,6 +1294,7 @@ export const queueMethods = {
         this.savePendingQueueForActiveWorkflow();
         this.updateApplyPendingButton?.();
         this.updateQueuePanel();
+        this.refreshMissingModelsBrowserFromCache?.();
         try {
             document.querySelectorAll('.model-resolver-selected').forEach(el => { el.style.display = 'none'; el.innerHTML = ''; });
         } catch (e) { /* ignore */ }
@@ -1405,6 +1407,7 @@ export const queueMethods = {
             this.updateSelectedBarForMissing(m);
             this.updateApplyPendingButton?.();
             this.updateQueuePanel();
+            this.refreshMissingModelsBrowserFromCache?.();
         }
     },
 
@@ -1748,6 +1751,7 @@ export const queueMethods = {
         this.updateSelectedBarForMissing?.(missing);
         this.updateQueuePanel();
         this.updateApplyPendingButton();
+        this.refreshMissingModelsBrowserFromCache?.();
     },
 
     /**

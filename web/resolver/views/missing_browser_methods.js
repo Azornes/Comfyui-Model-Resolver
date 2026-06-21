@@ -223,12 +223,76 @@ export const missingBrowserMethods = {
         };
     },
 
-    renderMissingModelsBrowser(missingModels, selectedKey, totalMissing, activeCount, hasAny100Match) {
+    isMissingModelResolved(missing = {}) {
+        if (!missing) return false;
+        if (missing.__isExistingResolved) return true;
+        const key = this.getMissingModelKey(missing);
+        return Boolean(key && this.pendingIndex?.has?.(key));
+    },
+
+    getResolvedWorkflowModels(data = {}) {
+        return (data.resolved_models || []).map(model => this.normalizeResolvedWorkflowModel(model));
+    },
+
+    normalizeResolvedWorkflowModel(model = {}) {
+        const originalPath = model.original_path || model.name || model.filename || '';
+        const filename = originalPath.split('/').pop()?.split('\\').pop() || originalPath || 'Resolved model';
+        const fullPath = model.full_path || model.path || '';
+        const relativePath = model.relative_path || originalPath || filename;
+        const category = model.category || 'unknown';
+        const resolvedModel = {
+            path: fullPath,
+            relative_path: relativePath,
+            filename,
+            category,
+            resolved_path: fullPath
+        };
+
+        return {
+            ...model,
+            __isExistingResolved: true,
+            name: model.name || filename,
+            original_path: originalPath || filename,
+            category,
+            matches: [{
+                confidence: 100,
+                match_type: 'exact',
+                filename,
+                path: fullPath,
+                model: resolvedModel
+            }]
+        };
+    },
+
+    getVisibleMissingModels(missingModels = []) {
+        if (this.showResolvedModels) return missingModels;
+        return missingModels.filter(missing => !this.isMissingModelResolved(missing));
+    },
+
+    getResolvedMissingCount(missingModels = []) {
+        return missingModels.reduce((count, missing) => (
+            count + (this.isMissingModelResolved(missing) ? 1 : 0)
+        ), 0);
+    },
+
+    refreshMissingModelsBrowserFromCache() {
+        if (this.activeTab !== 'missing' || !this.contentElement || !this.cachedAnalysisData) return;
+        this.displayMissingModels(this.contentElement, this.cachedAnalysisData);
+    },
+
+    renderMissingModelsBrowser(missingModels, selectedKey, totalMissing, activeCount, hasAny100Match, options = {}) {
+        const hiddenResolvedCount = Number(options.hiddenResolvedCount || 0);
+        const resolvedCount = Number(options.resolvedCount || 0);
+        const rawMissingCount = Number(options.rawMissingCount ?? totalMissing);
+        const missingCount = Number(options.missingCount ?? rawMissingCount);
+        const resolvedToggleCount = this.showResolvedModels ? resolvedCount : hiddenResolvedCount;
         const stats = this.getMissingModelSummaryStats(missingModels);
         const detailIndex = missingModels.findIndex(missing => this.getMissingModelKey(missing) === selectedKey);
         const detailMissing = detailIndex >= 0 ? missingModels[detailIndex] : null;
         const activeHint = activeCount > 0
             ? `${activeCount} downloading`
+            : hiddenResolvedCount > 0
+            ? `${hiddenResolvedCount} resolved hidden`
             : (hasAny100Match ? 'Auto-link ready for exact matches' : 'Review matches or search online');
         const listLayout = this.getMissingModelsListLayout(missingModels);
         let savedDetailWidth = null;
@@ -239,13 +303,16 @@ export const missingBrowserMethods = {
             ? `--mr-missing-detail-track:${savedDetailWidth}px;`
             : '';
         const listStyle = `--mr-missing-model-col:${listLayout.modelPx}px;--mr-missing-type-col:${listLayout.typePx}px;`;
+        const titleText = this.showResolvedModels && resolvedCount > 0
+            ? `${totalMissing} shown (${missingCount} missing / ${resolvedCount} resolved)`
+            : `${totalMissing} missing model${totalMissing === 1 ? '' : 's'}`;
 
         let html = `
             <div class="mr-missing-browser" style="${listStyle}">
                 <section class="mr-missing-list-pane" aria-label="Missing model list">
                     <div class="mr-missing-list-toolbar">
                         <div>
-                            <div class="mr-missing-list-title">${totalMissing} missing model${totalMissing === 1 ? '' : 's'}</div>
+                            <div class="mr-missing-list-title">${this.escapeHtml(titleText)}</div>
                             <div class="mr-missing-list-meta">${this.escapeHtml(activeHint)}</div>
                         </div>
                         <div class="mr-missing-list-tools">
@@ -254,6 +321,11 @@ export const missingBrowserMethods = {
                                 <span class="mr-missing-stat mr-missing-stat-partial">${stats.partial} partial</span>
                                 <span class="mr-missing-stat mr-missing-stat-none">${stats.none} no match</span>
                             </div>
+                            <label class="mr-missing-resolved-toggle" data-tooltip="Show resolved models, including models that were already available when the workflow loaded.">
+                                <input id="mr-show-resolved-models" type="checkbox" ${this.showResolvedModels ? 'checked' : ''}>
+                                <span>Show resolved</span>
+                                ${resolvedToggleCount > 0 ? `<em>${resolvedToggleCount}</em>` : ''}
+                            </label>
                             <button id="mr-refresh-missing-analysis" type="button" class="mr-btn mr-btn-secondary mr-btn-sm mr-missing-refresh-btn" data-tooltip="Re-analyze workflow and refresh local matches">
                                 <span class="mr-refresh-spin-target">${getSvgIcon('refreshCw')}</span> Refresh
                             </button>
@@ -277,6 +349,7 @@ export const missingBrowserMethods = {
             const key = this.getMissingModelKey(missing);
             const isSelected = key === selectedKey;
             const isBatchSelected = this.batchSelectedMissingKeys?.has(key);
+            const isResolved = this.isMissingModelResolved(missing);
             const filename = this.getMissingFilename(missing);
             const bestMatch = this.getBestLocalMatch(missing, 70);
             const confidence = bestMatch ? Number(bestMatch.confidence || 0) : 0;
@@ -294,7 +367,7 @@ export const missingBrowserMethods = {
 
             html += `
                 <div role="button" tabindex="0"
-                    class="mr-missing-list-row ${isSelected ? 'is-selected' : ''} ${isBatchSelected ? 'is-batch-selected' : ''}"
+                    class="mr-missing-list-row ${isSelected ? 'is-selected' : ''} ${isBatchSelected ? 'is-batch-selected' : ''} ${isResolved ? 'is-resolved' : ''}"
                     data-missing-key="${this.escapeHtml(key)}">
                     <span class="mr-missing-row-select">
                         <input type="checkbox" class="mr-missing-row-check" data-ml-no-drag="1" aria-label="Select ${this.escapeHtml(filename)}" ${isBatchSelected ? 'checked' : ''}>
@@ -302,6 +375,7 @@ export const missingBrowserMethods = {
                     <span class="mr-missing-row-index">${index + 1}</span>
                     <span class="mr-missing-row-model">
                         <span class="mr-missing-row-name" data-tooltip="${this.escapeHtml(filename)}">${this.escapeHtml(filename)}</span>
+                        ${isResolved ? '<span class="mr-missing-row-resolved-pill">Resolved</span>' : ''}
                         ${rowNodeHtml}
                     </span>
                     <span class="mr-missing-row-type ${typeColorClass}">${this.escapeHtml(typeLabel)}</span>
@@ -335,6 +409,18 @@ export const missingBrowserMethods = {
         if (refreshBtn && refreshBtn.dataset.mlRefreshBound !== 'true') {
             refreshBtn.dataset.mlRefreshBound = 'true';
             refreshBtn.addEventListener('click', () => this.refreshMissingAnalysis(refreshBtn));
+        }
+
+        const showResolvedToggle = container.querySelector('#mr-show-resolved-models');
+        if (showResolvedToggle && showResolvedToggle.dataset.mlResolvedBound !== 'true') {
+            showResolvedToggle.dataset.mlResolvedBound = 'true';
+            showResolvedToggle.addEventListener('change', () => {
+                this.showResolvedModels = Boolean(showResolvedToggle.checked);
+                try {
+                    localStorage.setItem(this.showResolvedModelsStorageKey, this.showResolvedModels ? '1' : '0');
+                } catch (e) {}
+                this.displayMissingModels(container, data);
+            });
         }
 
         const selectRow = (row) => {
@@ -797,30 +883,38 @@ export const missingBrowserMethods = {
         const missingModels = (data.missing_models || []).map(missing => (
             this.restoreDownloadedLocalMatchesForMissing?.(missing) || missing
         ));
-        const totalMissing = data.total_missing || 0;
-        this.missingModels = missingModels;
-        this.syncBatchSelectionForMissingModels(missingModels);
+        const resolvedModels = this.getResolvedWorkflowModels(data);
+        const allModelsForDisplay = [...missingModels, ...resolvedModels];
+        const rawMissingCount = data.total_missing ?? missingModels.length;
+        const resolvedMissingCount = this.getResolvedMissingCount(missingModels);
+        const resolvedCount = resolvedMissingCount + resolvedModels.length;
+        const unresolvedMissingCount = Math.max(0, rawMissingCount - resolvedMissingCount);
+        const hiddenResolvedCount = this.showResolvedModels ? 0 : resolvedCount;
+        const visibleMissingModels = this.getVisibleMissingModels(allModelsForDisplay);
+        this.missingModels = visibleMissingModels;
+        this.syncBatchSelectionForMissingModels(visibleMissingModels);
 
         // Check if there are active downloads
         const activeCount = Object.keys(this.activeDownloads).length;
-        const hasAny100Match = missingModels.some(missing =>
+        const hasAny100Match = visibleMissingModels.some(missing =>
             (missing.matches || []).some(match => match.confidence === 100)
         );
+        const hasAnyModelsToDisplay = rawMissingCount > 0 || resolvedModels.length > 0;
 
-        this.setMissingFooterControlsVisible(totalMissing > 0 || activeCount > 0);
+        this.setMissingFooterControlsVisible(hasAnyModelsToDisplay || activeCount > 0);
 
         // Hide download all button if no missing models
         if (this.downloadAllButton) {
-            this.downloadAllButton.style.display = (totalMissing > 0 || activeCount > 0) ? 'inline-flex' : 'none';
+            this.downloadAllButton.style.display = (rawMissingCount > 0 || activeCount > 0) ? 'inline-flex' : 'none';
         }
 
-        if (totalMissing === 0 && activeCount === 0) {
+        if (!hasAnyModelsToDisplay && activeCount === 0) {
             container.innerHTML = this.renderStatusMessage('All models are available! No missing models found.', 'success');
             return;
         }
 
         // If no missing models but downloads are active, show a waiting message
-        if (totalMissing === 0 && activeCount > 0) {
+        if (rawMissingCount === 0 && activeCount > 0 && !resolvedModels.length) {
             container.innerHTML = this.renderStatusMessage(
                 `${activeCount} download${activeCount > 1 ? 's' : ''} in progress. Local matches will refresh when complete.`,
                 'info'
@@ -850,7 +944,7 @@ export const missingBrowserMethods = {
         }
 
         // Sort missing models: those with 100% confidence matches first, then others
-        const sortedMissingModels = [...missingModels].sort((a, b) => {
+        const sortedMissingModels = [...visibleMissingModels].sort((a, b) => {
             const aMatches = a.matches || [];
             const bMatches = b.matches || [];
 
@@ -890,9 +984,10 @@ export const missingBrowserMethods = {
         container.innerHTML = this.renderMissingModelsBrowser(
             sortedMissingModels,
             this.selectedMissingModelKey,
-            totalMissing,
+            sortedMissingModels.length,
             activeCount,
-            hasAny100Match
+            hasAny100Match,
+            { hiddenResolvedCount, resolvedCount, rawMissingCount, missingCount: unresolvedMissingCount }
         );
         this.wireMissingModelsBrowser(container, data, sortedMissingModels);
         this.scheduleInitialUrnLocalMatchRefresh(sortedMissingModels, container, data);
