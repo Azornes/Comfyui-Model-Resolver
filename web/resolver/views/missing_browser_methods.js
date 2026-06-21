@@ -482,6 +482,7 @@ export const missingBrowserMethods = {
             width: detailPane.getBoundingClientRect().width,
             bounds: this.getMissingBrowserSplitBounds(browser)
         };
+        this._appliedMissingBrowserSplitWidth = Math.round(this._missingBrowserSplitStart.width);
         this._lastMissingBrowserSplitApply = 0;
         this._missingBrowserSplitBrowser = browser;
         this._missingBrowserSplitDetailPane = detailPane;
@@ -509,8 +510,11 @@ export const missingBrowserMethods = {
         if (this._missingBrowserSplitFrame) return;
         this._missingBrowserSplitFrame = requestAnimationFrame(() => {
             this._missingBrowserSplitFrame = null;
-            if (!this._missingBrowserSplitDragging || !this._missingBrowserSplitDetailPane || !this._pendingMissingBrowserSplitWidth) return;
-            this._missingBrowserSplitDetailPane.style.setProperty('--mr-missing-detail-track', `${this._pendingMissingBrowserSplitWidth}px`);
+            const nextWidth = this._pendingMissingBrowserSplitWidth;
+            if (!this._missingBrowserSplitDragging || !this._missingBrowserSplitDetailPane || !nextWidth) return;
+            if (nextWidth === this._appliedMissingBrowserSplitWidth) return;
+            this._missingBrowserSplitDetailPane.style.setProperty('--mr-missing-detail-track', `${nextWidth}px`);
+            this._appliedMissingBrowserSplitWidth = nextWidth;
         });
     },
 
@@ -524,7 +528,10 @@ export const missingBrowserMethods = {
             this._missingBrowserSplitFrame = null;
         }
         if (this._missingBrowserSplitDetailPane && this._pendingMissingBrowserSplitWidth) {
-            this._missingBrowserSplitDetailPane.style.setProperty('--mr-missing-detail-track', `${this._pendingMissingBrowserSplitWidth}px`);
+            if (this._pendingMissingBrowserSplitWidth !== this._appliedMissingBrowserSplitWidth) {
+                this._missingBrowserSplitDetailPane.style.setProperty('--mr-missing-detail-track', `${this._pendingMissingBrowserSplitWidth}px`);
+                this._appliedMissingBrowserSplitWidth = this._pendingMissingBrowserSplitWidth;
+            }
             try {
                 localStorage.setItem(this.missingBrowserSplitStorageKey, String(this._pendingMissingBrowserSplitWidth));
             } catch (e) {}
@@ -534,6 +541,7 @@ export const missingBrowserMethods = {
         this._missingBrowserSplitDetailPane = null;
         this._missingBrowserSplitStart = null;
         this._pendingMissingBrowserSplitWidth = null;
+        this._appliedMissingBrowserSplitWidth = null;
         this._lastMissingBrowserSplitApply = 0;
         try {
             document.body.style.userSelect = this._missingBrowserPrevUserSelect || '';
