@@ -444,6 +444,12 @@
     color: var(--mr-text-muted);
 }
 
+@property --mr-missing-detail-track {
+    syntax: "<length-percentage>";
+    inherits: false;
+    initial-value: 42%;
+}
+
 .mr-missing-browser {
     --mr-missing-bg: #111;
     --mr-missing-surface: rgba(255,255,255,0.03);

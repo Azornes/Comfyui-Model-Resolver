@@ -504,6 +504,7 @@ export const missingBrowserMethods = {
         const nextWidth = this._missingBrowserSplitStart.width - (event.clientX - this._missingBrowserSplitStart.x);
         const bounds = this._missingBrowserSplitStart.bounds;
         this._pendingMissingBrowserSplitWidth = Math.round(Math.max(bounds.min, Math.min(bounds.max, nextWidth)));
+        if (this._pendingMissingBrowserSplitWidth === this._appliedMissingBrowserSplitWidth) return;
         const now = performance.now();
         if (this._lastMissingBrowserSplitApply && now - this._lastMissingBrowserSplitApply < 33) return;
         this._lastMissingBrowserSplitApply = now;
