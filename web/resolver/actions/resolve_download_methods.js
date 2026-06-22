@@ -615,13 +615,17 @@ export const resolveDownloadMethods = {
 
         const missingKey = this.getMissingModelKey(missing);
         const patchAnalysisData = (data) => {
-            const list = data?.missing_models;
-            if (!Array.isArray(list)) return;
+            const patchList = (list) => {
+                if (!Array.isArray(list)) return;
 
-            for (const item of list) {
-                if (this.getMissingModelKey(item) !== missingKey) continue;
-                item.matches = this.mergeLocalMatches(item.matches || [], matches);
-            }
+                for (const item of list) {
+                    if (this.getMissingModelKey(item) !== missingKey) continue;
+                    item.matches = this.mergeLocalMatches(item.matches || [], matches);
+                }
+            };
+
+            patchList(data?.missing_models);
+            patchList(data?.resolved_models);
         };
 
         patchAnalysisData(this.cachedAnalysisData);

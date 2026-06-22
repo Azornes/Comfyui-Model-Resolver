@@ -18,7 +18,11 @@ from .log_system.log_funcs import (
     log_exception,
 )
 from .scanner import get_model_files
-from .workflow_analyzer import analyze_workflow_models, identify_missing_models
+from .workflow_analyzer import (
+    NODE_TYPE_TO_CATEGORY_HINTS,
+    analyze_workflow_models,
+    identify_missing_models,
+)
 from .matcher import find_matches
 from .workflow_updater import update_workflow_nodes
 from .sources.civitai import resolve_urn
@@ -428,10 +432,8 @@ def analyze_and_find_matches(
 
     # Identify missing models
     missing_models = identify_missing_models(all_model_refs, available_models)
-    resolved_models = [
-        {**model_ref, "matches": []}
-        for model_ref in all_model_refs
-        if model_ref.get("exists", False)
+    resolved_model_refs = [
+        model_ref for model_ref in all_model_refs if model_ref.get("exists", False)
     ]
 
     # Enrich missing models with workflow URLs
@@ -457,89 +459,74 @@ def analyze_and_find_matches(
                 missing["urn_version_id"] = urn.get("version_id")
                 missing["urn_type"] = urn.get("type", "")
 
+    total_matching_models = len(missing_models) + len(resolved_model_refs)
     if progress_callback:
         progress_callback(
             {
                 "stage": "matching",
-                "message": "Matching missing models...",
+                "message": "Matching local models...",
                 "current": 0,
-                "total": len(missing_models),
+                "total": total_matching_models,
             }
         )
 
-    # Find matches for each missing model
-    missing_with_matches = []
-    total_missing = len(missing_models)
-    for index, missing in enumerate(missing_models, start=1):
-        if progress_callback:
-            progress_callback(
-                {
-                    "stage": "matching",
-                    "message": f"Analyzing model {index} of {total_missing}",
-                    "current": index,
-                    "total": total_missing,
-                    "model_name": missing.get("name")
-                    or missing.get("original_path", ""),
-                }
-            )
+    local_match_cache: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
 
-        # Skip LoraManager lorAs that already exist locally (exists=True means no linking needed)
-        is_lora_v2 = missing.get("is_lora_v2")
-        exists = missing.get("exists")
-        name = missing.get("name") or missing.get("original_path", "")
-        log_debug(f"Checking {name}: is_lora_v2={is_lora_v2}, exists={exists}")
-
-        if is_lora_v2 and exists:
-            log_info(f"Skipping LoraManager lora {name} - already exists locally")
-            continue
-
-        target_for_matching = missing.get("original_path", "")
+    def get_match_target(model_ref: Dict[str, Any]) -> Optional[str]:
+        target_for_matching = (
+            model_ref.get("original_path")
+            or model_ref.get("expected_filename")
+            or model_ref.get("name")
+            or model_ref.get("filename")
+            or model_ref.get("full_path")
+            or ""
+        )
 
         # For URNs, prefer expected_filename for matching
-        if missing.get("is_urn") and missing.get("expected_filename"):
-            target_for_matching = missing["expected_filename"]
-        elif isinstance(target_for_matching, str) and target_for_matching.startswith(
+        if model_ref.get("is_urn") and model_ref.get("expected_filename"):
+            return model_ref["expected_filename"]
+
+        if isinstance(target_for_matching, str) and target_for_matching.startswith(
             "urn:air:"
         ):
             # Don't fuzzy-match the full URN string against every local model.
             # For worker-asset style URNs, try using the filename-like suffix after "@";
             # otherwise skip local matching until the frontend resolves the URN async.
-            urn_suffix = target_for_matching.split("@", 1)[1] if "@" in target_for_matching else ""
+            urn_suffix = (
+                target_for_matching.split("@", 1)[1]
+                if "@" in target_for_matching
+                else ""
+            )
             urn_suffix_ext = os.path.splitext(urn_suffix)[1].lower()
             if urn_suffix and urn_suffix_ext in MODEL_EXTENSIONS:
-                target_for_matching = urn_suffix
-            else:
-                missing_with_matches.append({**missing, "matches": []})
-                continue
+                return urn_suffix
+            return None
 
-        # Filter available models by category if known
-        category = missing.get("category")
+        return target_for_matching
+
+    def get_match_category(model_ref: Dict[str, Any]) -> str:
+        category = model_ref.get("category")
         if not category or category == "unknown":
-            from .workflow_analyzer import NODE_TYPE_TO_CATEGORY_HINTS
-
-            node_type = missing.get("node_type", "")
+            node_type = model_ref.get("node_type", "")
             category = NODE_TYPE_TO_CATEGORY_HINTS.get(node_type, "unknown")
+        return category or "unknown"
 
-        candidates = available_models
-        if category and category != "unknown":
-            candidates = ordered_candidates_cache.get(category)
-            if candidates is None:
-                preferred = available_models_by_category.get(category, [])
-                others = [
-                    m for m in available_models if m.get("category") != category
-                ]
-                candidates = preferred + others
-                ordered_candidates_cache[category] = candidates
+    def get_candidates_for_category(category: str) -> List[Dict[str, Any]]:
+        if not category or category == "unknown":
+            return available_models
 
-        # Find matches
-        matches = find_matches(
-            target_for_matching,
-            candidates,
-            threshold=similarity_threshold,
-            max_results=max_matches_per_model,
-        )
+        candidates = ordered_candidates_cache.get(category)
+        if candidates is None:
+            preferred = available_models_by_category.get(category, [])
+            others = [
+                m for m in available_models if m.get("category") != category
+            ]
+            candidates = preferred + others
+            ordered_candidates_cache[category] = candidates
 
-        # Deduplicate matches by absolute path
+        return candidates
+
+    def deduplicate_matches(matches: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         seen_absolute_paths = {}
         deduplicated_matches = []
         for match in matches:
@@ -558,12 +545,83 @@ def analyze_and_find_matches(
                     deduplicated_matches[idx] = match
                     seen_absolute_paths[absolute_path] = match
 
-        missing_with_matches.append({**missing, "matches": deduplicated_matches})
+        return deduplicated_matches
+
+    def find_local_matches_for_ref(model_ref: Dict[str, Any]) -> List[Dict[str, Any]]:
+        target_for_matching = get_match_target(model_ref)
+        if not target_for_matching:
+            return []
+
+        category = get_match_category(model_ref)
+        cache_key = (target_for_matching, category)
+        if cache_key in local_match_cache:
+            return local_match_cache[cache_key]
+
+        matches = find_matches(
+            target_for_matching,
+            get_candidates_for_category(category),
+            threshold=similarity_threshold,
+            max_results=max_matches_per_model,
+        )
+        deduplicated_matches = deduplicate_matches(matches)
+        local_match_cache[cache_key] = deduplicated_matches
+        return deduplicated_matches
+
+    # Find matches for each missing model
+    missing_with_matches = []
+    total_missing = len(missing_models)
+    for index, missing in enumerate(missing_models, start=1):
+        if progress_callback:
+            progress_callback(
+                {
+                    "stage": "matching",
+                    "message": f"Analyzing model {index} of {total_missing}",
+                    "current": index,
+                    "total": total_matching_models,
+                    "model_name": missing.get("name")
+                    or missing.get("original_path", ""),
+                }
+            )
+
+        # Skip LoraManager lorAs that already exist locally (exists=True means no linking needed)
+        is_lora_v2 = missing.get("is_lora_v2")
+        exists = missing.get("exists")
+        name = missing.get("name") or missing.get("original_path", "")
+        log_debug(f"Checking {name}: is_lora_v2={is_lora_v2}, exists={exists}")
+
+        if is_lora_v2 and exists:
+            log_info(f"Skipping LoraManager lora {name} - already exists locally")
+            continue
+
+        missing_with_matches.append({
+            **missing,
+            "matches": find_local_matches_for_ref(missing),
+        })
+
+    resolved_with_matches = []
+    total_resolved = len(resolved_model_refs)
+    for index, resolved in enumerate(resolved_model_refs, start=1):
+        if progress_callback:
+            progress_callback(
+                {
+                    "stage": "matching",
+                    "message": f"Analyzing resolved model {index} of {total_resolved}",
+                    "current": total_missing + index,
+                    "total": total_matching_models,
+                    "model_name": resolved.get("name")
+                    or resolved.get("original_path", ""),
+                }
+            )
+
+        resolved_with_matches.append({
+            **resolved,
+            "matches": find_local_matches_for_ref(resolved),
+        })
 
     result = {
         "missing_models": missing_with_matches,
-        "resolved_models": resolved_models,
-        "total_resolved": len(resolved_models),
+        "resolved_models": resolved_with_matches,
+        "total_resolved": len(resolved_with_matches),
         "total_missing": len(missing_with_matches),
         "total_models_analyzed": len(all_model_refs),
     }
@@ -573,8 +631,8 @@ def analyze_and_find_matches(
             {
                 "stage": "completed",
                 "message": "Analysis complete",
-                "current": total_missing,
-                "total": total_missing,
+                "current": total_matching_models,
+                "total": total_matching_models,
             }
         )
 

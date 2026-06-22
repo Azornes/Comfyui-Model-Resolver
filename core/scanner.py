@@ -43,6 +43,11 @@ _MODEL_FILES_CACHE_AT: float = 0.0
 _MODEL_FILES_CACHE_TTL_SECONDS = 2.0
 
 
+def _directory_identity(path: str) -> str:
+    """Return a stable identity for loop detection across symlinks/junctions."""
+    return os.path.normcase(os.path.realpath(os.path.abspath(path)))
+
+
 def get_model_directories() -> Dict[str, Tuple[List[str], set]]:
     """
     Get all configured model directories from folder_paths.
@@ -97,11 +102,39 @@ def scan_directory(
     try:
         # Get absolute path and normalize
         base_directory = os.path.abspath(directory)
+        visited_dirs = set()
 
         # Walk through directory recursively
         for root, dirs, files in os.walk(base_directory, followlinks=True):
-            # Skip hidden directories
-            dirs[:] = [d for d in dirs if not d.startswith(".")]
+            try:
+                root_identity = _directory_identity(root)
+            except (OSError, ValueError):
+                root_identity = os.path.normcase(os.path.abspath(root))
+
+            if root_identity in visited_dirs:
+                dirs[:] = []
+                continue
+
+            visited_dirs.add(root_identity)
+
+            # Skip hidden directories and symlink/junction loops.
+            filtered_dirs = []
+            for dirname in dirs:
+                if dirname.startswith("."):
+                    continue
+
+                child_path = os.path.join(root, dirname)
+                try:
+                    child_identity = _directory_identity(child_path)
+                except (OSError, ValueError):
+                    child_identity = os.path.normcase(os.path.abspath(child_path))
+
+                if child_identity in visited_dirs:
+                    continue
+
+                filtered_dirs.append(dirname)
+
+            dirs[:] = filtered_dirs
 
             if "folder" in (extensions or set()) and root != base_directory:
                 if category != "diffusers" or "model_index.json" in files:

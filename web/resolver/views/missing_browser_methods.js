@@ -247,6 +247,20 @@ export const missingBrowserMethods = {
             category,
             resolved_path: fullPath
         };
+        const fallbackMatch = {
+            confidence: 100,
+            match_type: 'exact',
+            filename,
+            path: fullPath,
+            model: resolvedModel
+        };
+        const backendMatches = Array.isArray(model.matches) ? model.matches : [];
+        const hasResolvedMatch = backendMatches.some(match => {
+            const matchPath = match.model?.path || match.model?.resolved_path || match.path || '';
+            const matchRelativePath = match.model?.relative_path || '';
+            return (fullPath && matchPath === fullPath)
+                || (relativePath && matchRelativePath === relativePath);
+        });
 
         return {
             ...model,
@@ -254,13 +268,9 @@ export const missingBrowserMethods = {
             name: model.name || filename,
             original_path: originalPath || filename,
             category,
-            matches: [{
-                confidence: 100,
-                match_type: 'exact',
-                filename,
-                path: fullPath,
-                model: resolvedModel
-            }]
+            matches: backendMatches.length
+                ? (hasResolvedMatch ? backendMatches : [fallbackMatch, ...backendMatches])
+                : [fallbackMatch]
         };
     },
 
