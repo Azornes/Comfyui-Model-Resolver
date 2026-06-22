@@ -1763,6 +1763,30 @@ export const searchPanelMethods = {
         };
     },
 
+    areLocalMatchAlternativesCollapsed() {
+        if (typeof this.localMatchAlternativesCollapsed === 'boolean') {
+            return this.localMatchAlternativesCollapsed;
+        }
+
+        try {
+            this.localMatchAlternativesCollapsed = localStorage.getItem(this.localMatchAlternativesCollapsedStorageKey) === '1';
+        } catch (e) {
+            this.localMatchAlternativesCollapsed = false;
+        }
+
+        return this.localMatchAlternativesCollapsed;
+    },
+
+    setLocalMatchAlternativesCollapsed(collapsed) {
+        this.localMatchAlternativesCollapsed = Boolean(collapsed);
+        try {
+            localStorage.setItem(
+                this.localMatchAlternativesCollapsedStorageKey,
+                this.localMatchAlternativesCollapsed ? '1' : '0'
+            );
+        } catch (e) {}
+    },
+
     renderLocalMatchesContent(missing, missingIndex = 0) {
         const allMatches = missing.matches || [];
         const filteredMatches = allMatches.filter(m => m.confidence >= 70);
@@ -1804,12 +1828,13 @@ export const searchPanelMethods = {
             if (perfectMatches.length > 0 && otherMatches.length > 0) {
                 const matchId = `more-matches-${missing.node_id}-${missing.widget_index}`;
                 const altLabel = `Alternatives (${otherMatches.length})`;
-                html += `<button type="button" class="mr-local-alternatives-toggle" aria-expanded="true" onclick="window.MLToggleHidden('${matchId}', this, '${altLabel}', '${altLabel}')">`;
+                const alternativesCollapsed = this.areLocalMatchAlternativesCollapsed();
+                html += `<button type="button" class="mr-local-alternatives-toggle" data-ml-preference="local-match-alternatives" aria-expanded="${alternativesCollapsed ? 'false' : 'true'}" onclick="window.MLToggleHidden('${matchId}', this, '${altLabel}', '${altLabel}')">`;
                 html += `<span class="mr-local-alternatives-label">${altLabel}</span>`;
-                html += `<span class="mr-local-alternatives-state">Hide</span>`;
+                html += `<span class="mr-local-alternatives-state">${alternativesCollapsed ? 'Show' : 'Hide'}</span>`;
                 html += `<span class="mr-local-alternatives-chevron" aria-hidden="true"></span>`;
                 html += `</button>`;
-                html += `<div id="${matchId}" class="mr-stack-sm">`;
+                html += `<div id="${matchId}" class="mr-stack-sm ${alternativesCollapsed ? 'mr-hidden' : ''}">`;
                 for (let mIdx = 0; mIdx < otherMatches.length; mIdx++) {
                     const match = otherMatches[mIdx];
                     const altBtnId = `resolve-alt-${missingIndex}-${missing.node_id}-${missing.widget_index}-${mIdx}`;

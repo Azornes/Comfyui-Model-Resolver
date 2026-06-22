@@ -7,6 +7,9 @@
         const isHidden = element.classList.toggle('mr-hidden');
         if (trigger) {
             trigger.setAttribute('aria-expanded', String(!isHidden));
+            if (trigger.dataset?.mlPreference === 'local-match-alternatives') {
+                window.ModelResolverDialog?.setLocalMatchAlternativesCollapsed?.(isHidden);
+            }
             const label = trigger.querySelector?.('.mr-local-alternatives-label');
             const state = trigger.querySelector?.('.mr-local-alternatives-state');
             if (label || state) {

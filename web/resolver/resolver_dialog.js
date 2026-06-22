@@ -69,10 +69,16 @@ export class ResolverManagerDialog extends ComfyDialog {
         this.sidebarOpenModeStorageKey = "model_resolver_sidebar_open_mode";
         this.missingBrowserSplitStorageKey = "model_resolver_missing_browser_detail_w";
         this.showResolvedModelsStorageKey = "model_resolver_show_resolved_models";
+        this.localMatchAlternativesCollapsedStorageKey = "model_resolver_local_match_alternatives_collapsed";
         try {
             this.showResolvedModels = localStorage.getItem(this.showResolvedModelsStorageKey) === '1';
         } catch (e) {
             this.showResolvedModels = false;
+        }
+        try {
+            this.localMatchAlternativesCollapsed = localStorage.getItem(this.localMatchAlternativesCollapsedStorageKey) === '1';
+        } catch (e) {
+            this.localMatchAlternativesCollapsed = false;
         }
         this.dockButton = null;
         this.undockButton = null;
