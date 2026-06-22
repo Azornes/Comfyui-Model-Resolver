@@ -2,8 +2,8 @@
   "source": "Comfy-Org/ComfyUI-Manager",
   "source_url": "https://raw.githubusercontent.com/Comfy-Org/ComfyUI-Manager/main/model-list.json",
   "github_url": "https://github.com/Comfy-Org/ComfyUI-Manager/blob/main/model-list.json",
-  "sha": "5fcb5f0637f9fbdedaf8d37da9a390f76ae0ded8",
-  "size": 268817,
-  "model_count": 527,
-  "updated_at": "2026-06-05T01:04:57+00:00"
+  "sha": "5d9308f50a08cf3cfb47e6a25cc525425714d3ad",
+  "size": 274526,
+  "model_count": 538,
+  "updated_at": "2026-06-22T01:35:07+00:00"
 }

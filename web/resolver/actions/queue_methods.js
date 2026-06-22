@@ -1815,6 +1815,7 @@ export const queueMethods = {
             if (data.success) {
                 const optimisticData = this.getOptimisticAnalysisDataAfterApply(appliedSelections);
                 await this.updateWorkflowInComfyUI(data.workflow);
+                this.rememberAppliedResolvedSelections(appliedSelections);
 
                 const appliedKeys = new Set(appliedSelections.map(selection => this.getResolutionQueueKey(selection)));
                 const remainingSelections = clearAll
@@ -1950,6 +1951,169 @@ export const queueMethods = {
         return (this.missingModels || []).filter(missing => activeKeys.has(this.getMissingModelKey(missing)));
     },
 
+    getResolvedSelectionPathCandidates(selection = {}) {
+        const model = selection.resolved_model || {};
+        return [
+            model.relative_path,
+            model.filename,
+            model.name,
+            model.path,
+            model.resolved_path,
+            selection.resolved_path
+        ].filter(Boolean);
+    },
+
+    normalizeResolvedSelectionToken(value = '', { basename = false, stem = false } = {}) {
+        let text = String(value || '').trim().replace(/\\/g, '/').toLowerCase();
+        if (!text) return '';
+        if (basename) {
+            text = text.split('/').pop() || text;
+        }
+        if (stem) {
+            text = text.replace(/\.(safetensors|ckpt|pt|pth|bin|gguf|onnx)$/i, '');
+        }
+        return text;
+    },
+
+    getResolvedSelectionTokenSet(values = []) {
+        const tokens = new Set();
+        for (const value of values) {
+            const normalized = this.normalizeResolvedSelectionToken(value);
+            const basename = this.normalizeResolvedSelectionToken(value, { basename: true });
+            const stem = this.normalizeResolvedSelectionToken(value, { basename: true, stem: true });
+            if (normalized) tokens.add(normalized);
+            if (basename) tokens.add(basename);
+            if (stem) tokens.add(stem);
+        }
+        return tokens;
+    },
+
+    getResolvedSelectionRefs(selection = {}) {
+        const refs = Array.isArray(selection.node_refs) && selection.node_refs.length
+            ? selection.node_refs
+            : [selection];
+        return refs.filter(Boolean).map(ref => ({
+            node_id: ref.node_id ?? selection.node_id,
+            widget_index: ref.widget_index ?? selection.widget_index,
+            subgraph_id: ref.subgraph_id ?? selection.subgraph_id ?? '',
+            is_top_level: ref.is_top_level ?? selection.is_top_level,
+            nested_key: ref.nested_key ?? selection.nested_key ?? ''
+        }));
+    },
+
+    rememberAppliedResolvedSelections(appliedSelections = []) {
+        if (!(this.appliedResolvedSelectionAliases instanceof Map)) {
+            this.appliedResolvedSelectionAliases = new Map();
+        }
+
+        for (const selection of Array.isArray(appliedSelections) ? appliedSelections : []) {
+            const key = this.getResolutionQueueKey(selection);
+            if (!key) continue;
+            this.appliedResolvedSelectionAliases.set(key, {
+                key,
+                category: selection.category || '',
+                refs: this.getResolvedSelectionRefs(selection),
+                tokens: this.getResolvedSelectionTokenSet(this.getResolvedSelectionPathCandidates(selection))
+            });
+        }
+    },
+
+    doesResolvedModelMatchAlias(model = {}, alias = {}) {
+        const refs = Array.isArray(alias.refs) ? alias.refs : [];
+        const modelNodeId = model.node_id ?? '';
+        const modelWidgetIndex = model.widget_index ?? '';
+        const modelSubgraphId = model.subgraph_id ?? '';
+        const modelScope = model.is_top_level !== false;
+        const modelNestedKey = model.nested_key || '';
+        const refMatch = refs.some(ref => (
+            String(ref.node_id ?? '') === String(modelNodeId)
+            && String(ref.widget_index ?? '') === String(modelWidgetIndex)
+            && String(ref.subgraph_id ?? '') === String(modelSubgraphId)
+            && (ref.is_top_level !== false) === modelScope
+            && String(ref.nested_key || '') === String(modelNestedKey)
+        ));
+        if (!refMatch) return false;
+
+        const aliasCategory = String(alias.category || '').toLowerCase();
+        const modelCategory = String(model.category || '').toLowerCase();
+        if (aliasCategory && modelCategory && aliasCategory !== modelCategory) return false;
+
+        const modelTokens = this.getResolvedSelectionTokenSet([
+            model.original_path,
+            model.name,
+            model.filename,
+            model.relative_path,
+            model.full_path,
+            model.path
+        ]);
+        for (const token of alias.tokens || []) {
+            if (modelTokens.has(token)) return true;
+        }
+        return false;
+    },
+
+    applyResolvedSelectionAliasesToAnalysisData(data = null) {
+        if (!data || !(this.appliedResolvedSelectionAliases instanceof Map) || !this.appliedResolvedSelectionAliases.size) {
+            return data;
+        }
+        const resolvedModels = Array.isArray(data.resolved_models) ? data.resolved_models : [];
+        if (!resolvedModels.length) return data;
+
+        const matchedKeys = new Set();
+        for (const model of resolvedModels) {
+            if (model?.missing_key) continue;
+            for (const [key, alias] of this.appliedResolvedSelectionAliases.entries()) {
+                if (matchedKeys.has(key)) continue;
+                if (!this.doesResolvedModelMatchAlias(model, alias)) continue;
+                model.missing_key = key;
+                matchedKeys.add(key);
+                break;
+            }
+        }
+
+        for (const key of matchedKeys) {
+            this.appliedResolvedSelectionAliases.delete(key);
+        }
+        return data;
+    },
+
+    buildOptimisticResolvedModel(selection = {}, sourceMissing = null) {
+        const resolvedModel = selection.resolved_model || {};
+        const resolvedRelativePath = resolvedModel.relative_path
+            || resolvedModel.filename
+            || selection.resolved_path
+            || sourceMissing?.original_path
+            || selection.original_path
+            || '';
+
+        return {
+            ...(sourceMissing || {}),
+            missing_key: this.getResolutionQueueKey(selection),
+            __isOptimisticResolved: true,
+            node_id: selection.node_id ?? sourceMissing?.node_id,
+            widget_index: selection.widget_index ?? sourceMissing?.widget_index,
+            category: selection.category || sourceMissing?.category || resolvedModel.category || 'unknown',
+            original_path: resolvedRelativePath,
+            name: resolvedRelativePath,
+            filename: resolvedModel.filename || resolvedRelativePath.split('/').pop()?.split('\\').pop() || resolvedRelativePath,
+            relative_path: resolvedRelativePath,
+            full_path: resolvedModel.path || selection.resolved_path || sourceMissing?.full_path || '',
+            path: resolvedModel.path || selection.resolved_path || '',
+            matches: [{
+                confidence: 100,
+                match_type: 'exact',
+                filename: resolvedModel.filename || resolvedRelativePath,
+                path: resolvedModel.path || selection.resolved_path || '',
+                model: {
+                    ...resolvedModel,
+                    path: resolvedModel.path || selection.resolved_path || '',
+                    relative_path: resolvedRelativePath,
+                    filename: resolvedModel.filename || resolvedRelativePath
+                }
+            }]
+        };
+    },
+
     getOptimisticAnalysisDataAfterApply(appliedSelections = []) {
         const missingModels = Array.isArray(this.missingModels) ? this.missingModels : [];
         const appliedKeys = new Set(
@@ -1966,10 +2130,25 @@ export const queueMethods = {
             ? sourceData.missing_models
             : missingModels;
         const nextMissing = sourceMissing.filter(missing => !appliedKeys.has(this.getMissingModelKey(missing)));
+        const currentResolved = Array.isArray(sourceData.resolved_models) ? sourceData.resolved_models : [];
+        const optimisticResolved = [];
+        for (const selection of Array.isArray(appliedSelections) ? appliedSelections : []) {
+            const key = this.getResolutionQueueKey(selection);
+            const source = sourceMissing.find(missing => this.getMissingModelKey(missing) === key)
+                || missingModels.find(missing => this.getMissingModelKey(missing) === key)
+                || null;
+            optimisticResolved.push(this.buildOptimisticResolvedModel(selection, source));
+        }
+        const optimisticKeys = new Set(optimisticResolved.map(model => model.missing_key).filter(Boolean));
+        const nextResolved = [
+            ...currentResolved.filter(model => !optimisticKeys.has(this.getMissingModelKey(model))),
+            ...optimisticResolved
+        ];
 
         return {
             ...sourceData,
             missing_models: nextMissing,
+            resolved_models: nextResolved,
             total_missing: nextMissing.length
         };
     },
@@ -1977,6 +2156,7 @@ export const queueMethods = {
     applyOptimisticAnalysisData(data, workflow = null) {
         if (!data) return false;
 
+        this.applyResolvedSelectionAliasesToAnalysisData(data);
         const workflowSignature = this.getWorkflowSignature(workflow || this.getCurrentWorkflow());
         if (workflowSignature) {
             this.cachedWorkflowSignature = workflowSignature;
@@ -2010,6 +2190,7 @@ export const queueMethods = {
             })
             .then(data => {
                 if (signature && this.activeWorkflowSignature !== signature) return;
+                this.applyResolvedSelectionAliasesToAnalysisData(data);
                 this.cachedWorkflowSignature = signature || this.cachedWorkflowSignature;
                 this.cachedAnalysisData = data;
                 this.saveAnalysisCacheForActiveWorkflow?.();

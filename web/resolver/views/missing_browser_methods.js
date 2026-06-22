@@ -288,6 +288,32 @@ export const missingBrowserMethods = {
         this.displayMissingModels(this.contentElement, this.cachedAnalysisData);
     },
 
+    getMissingListScrollSnapshot(container) {
+        const list = container?.querySelector?.('.mr-missing-list');
+        if (!(list instanceof HTMLElement)) return null;
+        return {
+            top: list.scrollTop,
+            left: list.scrollLeft
+        };
+    },
+
+    restoreMissingListScroll(container, snapshot = null) {
+        if (!snapshot) return;
+        const list = container?.querySelector?.('.mr-missing-list');
+        if (!(list instanceof HTMLElement)) return;
+
+        const applyScroll = () => {
+            if (!list.isConnected) return;
+            const maxTop = Math.max(0, list.scrollHeight - list.clientHeight);
+            const maxLeft = Math.max(0, list.scrollWidth - list.clientWidth);
+            list.scrollTop = Math.min(Number(snapshot.top) || 0, maxTop);
+            list.scrollLeft = Math.min(Number(snapshot.left) || 0, maxLeft);
+        };
+
+        applyScroll();
+        requestAnimationFrame(applyScroll);
+    },
+
     renderMissingModelsBrowser(missingModels, selectedKey, totalMissing, activeCount, hasAny100Match, options = {}) {
         const hiddenResolvedCount = Number(options.hiddenResolvedCount || 0);
         const resolvedCount = Number(options.resolvedCount || 0);
@@ -897,6 +923,7 @@ export const missingBrowserMethods = {
      * Display missing models in the dialog
      */
     displayMissingModels(container, data) {
+        const listScrollSnapshot = this.getMissingListScrollSnapshot(container);
         const missingModels = (data.missing_models || []).map(missing => (
             this.restoreDownloadedLocalMatchesForMissing?.(missing) || missing
         ));
@@ -1007,6 +1034,7 @@ export const missingBrowserMethods = {
             { hiddenResolvedCount, resolvedCount, rawMissingCount, missingCount: unresolvedMissingCount }
         );
         this.wireMissingModelsBrowser(container, data, sortedMissingModels);
+        this.restoreMissingListScroll(container, listScrollSnapshot);
         this.scheduleInitialUrnLocalMatchRefresh(sortedMissingModels, container, data);
         this.reconnectActiveSearchProgress(sortedMissingModels);
         this.updateBatchFooterButtons();
