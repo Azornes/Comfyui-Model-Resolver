@@ -291,7 +291,10 @@ export const modelInfoMethods = {
             <div class="mr-info-dialog">
                 <div class="mr-info-dialog-header">
                     <h3 class="mr-info-dialog-title">${loraDisplayName}</h3>
-                    <button class="mr-info-dialog-close">×</button>
+                    <div class="mr-info-header-actions">
+                        <span class="mr-info-civitai-link"></span>
+                        <button class="mr-info-dialog-close">×</button>
+                    </div>
                 </div>
                 <div class="mr-info-dialog-content">
                     <div class="mr-info-dialog-loading">Loading...</div>
@@ -310,29 +313,21 @@ export const modelInfoMethods = {
                                     <td><span>File <span class="mr-tooltip-badge" data-tooltip="The model file name found locally or returned by CivitAI.">?</span></span></td>
                                     <td><span class="mr-info-file"></span></td>
                                 </tr>
-                                <tr class="mr-info-location-row mr-hidden-initial">
-                                    <td><span>Location <span class="mr-tooltip-badge" data-tooltip="Folder where this local model file is stored.">?</span></span></td>
-                                    <td><span class="mr-info-location"></span></td>
+                                <tr class="mr-info-basemodel-row">
+                                    <td><span>Base Model <span class="mr-tooltip-badge" data-tooltip="Base model this resource was made for, for example SD1.5, SDXL or Flux.">?</span></span></td>
+                                    <td><span class="mr-info-base-model"></span></td>
                                 </tr>
                                 <tr class="mr-info-hash-row">
                                     <td><span>Hash (sha256) <span class="mr-tooltip-badge" data-tooltip="Unique fingerprint of the local file. Model Resolver uses it to confirm the exact CivitAI version.">?</span></span></td>
                                     <td><span class="mr-info-hash"></span></td>
                                 </tr>
-                                <tr class="mr-info-civitai-row">
-                                    <td><span>CivitAI <span class="mr-tooltip-badge" data-tooltip="Opens the matching CivitAI model or version page when one was found.">?</span></span></td>
-                                    <td><span class="mr-info-civitai-link"></span></td>
-                                </tr>
-                                <tr class="mr-info-name-row">
-                                    <td><span>Name <span class="mr-tooltip-badge" data-tooltip="Model name from CivitAI or local metadata.">?</span></span></td>
-                                    <td><span class="mr-info-name"></span></td>
-                                </tr>
-                                <tr class="mr-info-basemodel-row">
-                                    <td><span>Base Model <span class="mr-tooltip-badge" data-tooltip="Base model this resource was made for, for example SD1.5, SDXL or Flux.">?</span></span></td>
-                                    <td><span class="mr-info-base-model"></span></td>
-                                </tr>
                                 <tr class="mr-info-size-row mr-hidden-initial">
                                     <td><span>Size <span class="mr-tooltip-badge" data-tooltip="The local model file size, read from metadata or from the file on disk.">?</span></span></td>
                                     <td><span class="mr-info-size"></span></td>
+                                </tr>
+                                <tr class="mr-info-location-row mr-info-row-wide mr-hidden-initial">
+                                    <td><span>Location <span class="mr-tooltip-badge" data-tooltip="Folder where this local model file is stored.">?</span></span></td>
+                                    <td><span class="mr-info-location"></span></td>
                                 </tr>
                                 <tr class="mr-info-trainedwords-row mr-hidden-initial">
                                     <td>
@@ -524,7 +519,7 @@ export const modelInfoMethods = {
             || '';
 
         if (!location) {
-            const fullPath = data.resolved_path || data.resolvedPath || data.full_path || data.fullPath || data.path || '';
+            const fullPath = data.file_path || data.filePath || data.resolved_path || data.resolvedPath || data.full_path || data.fullPath || data.path || '';
             const normalizedFullPath = String(fullPath || '').replace(/\\/g, '/');
             const lastSlash = normalizedFullPath.lastIndexOf('/');
             if (lastSlash > 0) {
@@ -538,6 +533,23 @@ export const modelInfoMethods = {
         }
 
         return location;
+    },
+
+    getInfoDialogLocationOpenPath(data = {}) {
+        return data.file_path
+            || data.filePath
+            || data.resolved_path
+            || data.resolvedPath
+            || data.full_path
+            || data.fullPath
+            || data.path
+            || data.location
+            || data.folder_path
+            || data.folderPath
+            || data.download_directory
+            || data.downloadDirectory
+            || data.directory
+            || '';
     },
 
     normalizeInfoTags(tags) {
@@ -680,6 +692,15 @@ export const modelInfoMethods = {
         dialog.dataset.mlInfoBound = 'true';
 
         dialog.addEventListener('click', async (event) => {
+            const locationBtn = event.target.closest('.mr-info-location-button');
+            if (locationBtn && dialog.contains(locationBtn)) {
+                const path = locationBtn.dataset.path || '';
+                if (path) {
+                    await this.openContainingFolder({ path, resolved_path: path });
+                }
+                return;
+            }
+
             const wordBtn = event.target.closest('.mr-info-trained-word');
             if (wordBtn && dialog.contains(wordBtn)) {
                 const word = wordBtn.dataset.word || '';
@@ -906,8 +927,21 @@ export const modelInfoMethods = {
         const locationEl = dialog.querySelector('.mr-info-location');
         if (locationEl) {
             const location = this.formatInfoDialogLocation(data);
-            locationEl.textContent = location;
+            const openPath = this.getInfoDialogLocationOpenPath(data) || location;
+            locationEl.innerHTML = location ? `
+                <button
+                    type="button"
+                    class="mr-info-location-button"
+                    data-path="${this.escapeHtml(openPath)}"
+                    data-tooltip="Open containing folder"
+                    aria-label="Open containing folder and select this model file"
+                >
+                    <span>${this.escapeHtml(location)}</span>
+                    ${getSvgIcon('folderOpen', 'currentColor', 'mr-info-location-icon')}
+                </button>
+            ` : '';
             this.setInfoTableRowVisible(locationEl.closest('tr'), Boolean(location));
+            if (location) this.bindTooltips(locationEl);
         }
 
         // Update hash
@@ -923,8 +957,8 @@ export const modelInfoMethods = {
                 const url = data.version_url || data.url;
                 civitaiLinkEl.innerHTML = `
                     <a href="${url}" target="_blank" class="mr-info-link">
-                        ${getSvgIcon('civitai', 'currentColor', 'mr-info-civitai-logo')}
                         View on Civitai
+                        ${getSvgIcon('externalLink', 'currentColor', 'mr-info-external-link-icon')}
                     </a>
                 `;
             } else {
@@ -932,16 +966,11 @@ export const modelInfoMethods = {
                 civitaiLinkEl.innerHTML = `
                     <span class="mr-info-not-found">Model not found</span>
                     <a href="https://civitai.com/search?q=${encodeURIComponent(searchName)}" target="_blank" class="mr-info-link">
-                        ${this.getSearchIconHtml()} Search on CivitAI
+                        Search on CivitAI
+                        ${getSvgIcon('externalLink', 'currentColor', 'mr-info-external-link-icon')}
                     </a>
                 `;
             }
-        }
-
-        // Update name
-        const nameEl = dialog.querySelector('.mr-info-name');
-        if (nameEl) {
-            nameEl.textContent = data.model_name || data.modelName || '';
         }
 
         // Update base model row

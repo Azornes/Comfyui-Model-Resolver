@@ -873,6 +873,8 @@ class ModelResolverExtension:
                                 return web.json_response(
                                     {
                                         "filename": filename,
+                                        "file_path": file_path,
+                                        "resolved_path": file_path,
                                         "location": result.get("location")
                                         or file_location,
                                         "url": result.get("url"),
@@ -916,6 +918,8 @@ class ModelResolverExtension:
                                 return web.json_response(
                                     {
                                         "url": result["url"],
+                                        "file_path": file_path,
+                                        "resolved_path": file_path,
                                         "location": file_location,
                                         "model_name": result.get("name", clean_name),
                                         "version_id": result.get("version_id"),
