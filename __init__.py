@@ -996,6 +996,129 @@ class ModelResolverExtension:
 
             if download_available:
 
+                def get_local_path_abs(path_value):
+                    import os
+
+                    try:
+                        return os.path.abspath(str(path_value or ""))
+                    except (OSError, ValueError):
+                        return str(path_value or "")
+
+                def get_local_path_key(path_value):
+                    import os
+
+                    if not path_value:
+                        return ""
+                    try:
+                        return os.path.normcase(os.path.abspath(path_value))
+                    except (OSError, ValueError):
+                        return os.path.normcase(str(path_value or ""))
+
+                def get_local_path_identity(path_value):
+                    import os
+
+                    if not path_value:
+                        return ""
+                    try:
+                        return os.path.normcase(
+                            os.path.realpath(os.path.abspath(path_value))
+                        )
+                    except (OSError, ValueError):
+                        return get_local_path_key(path_value)
+
+                def get_comfy_root_path(folder_paths_module):
+                    import os
+
+                    try:
+                        module_file = getattr(folder_paths_module, "__file__", "")
+                        return os.path.dirname(os.path.abspath(module_file))
+                    except Exception:
+                        return ""
+
+                def is_local_path_within(path_value, root_value):
+                    import os
+
+                    if not path_value or not root_value:
+                        return False
+                    try:
+                        path_key = get_local_path_key(path_value)
+                        root_key = get_local_path_key(root_value)
+                        return os.path.commonpath([path_key, root_key]) == root_key
+                    except Exception:
+                        return False
+
+                def prefer_local_base_directory(
+                    candidate,
+                    current,
+                    preferred_directory="",
+                    comfy_root="",
+                ):
+                    if not current:
+                        return True
+                    if not candidate:
+                        return False
+
+                    candidate_key = get_local_path_key(candidate)
+                    current_key = get_local_path_key(current)
+                    preferred_key = get_local_path_key(preferred_directory)
+                    if preferred_key:
+                        if candidate_key == preferred_key and current_key != preferred_key:
+                            return True
+                        if current_key == preferred_key and candidate_key != preferred_key:
+                            return False
+
+                    if comfy_root:
+                        candidate_is_external = not is_local_path_within(
+                            candidate, comfy_root
+                        )
+                        current_is_external = not is_local_path_within(
+                            current, comfy_root
+                        )
+                        if candidate_is_external != current_is_external:
+                            return candidate_is_external
+
+                    candidate_is_canonical = (
+                        candidate_key == get_local_path_identity(candidate)
+                    )
+                    current_is_canonical = current_key == get_local_path_identity(
+                        current
+                    )
+                    if candidate_is_canonical != current_is_canonical:
+                        return candidate_is_canonical
+
+                    return False
+
+                def dedupe_local_base_directories(
+                    paths,
+                    preferred_directory="",
+                    comfy_root="",
+                ):
+                    import os
+
+                    by_identity = {}
+                    ordered_identities = []
+                    for path in paths or []:
+                        if not path or not os.path.isdir(path):
+                            continue
+                        path_abs = get_local_path_abs(path)
+                        path_identity = get_local_path_identity(path_abs)
+                        if not path_identity:
+                            continue
+
+                        current = by_identity.get(path_identity)
+                        if not current:
+                            by_identity[path_identity] = path_abs
+                            ordered_identities.append(path_identity)
+                        elif prefer_local_base_directory(
+                            path_abs,
+                            current,
+                            preferred_directory,
+                            comfy_root,
+                        ):
+                            by_identity[path_identity] = path_abs
+
+                    return [by_identity[key] for key in ordered_identities]
+
                 def cleanup_search_progress(max_age_seconds=300):
                     now = time.time()
                     with self.search_progress_lock:
@@ -2509,6 +2632,8 @@ class ModelResolverExtension:
                             "upscale_models",
                         ]
                         roots = {}
+                        settings = load_resolver_settings()
+                        comfy_root = get_comfy_root_path(folder_paths)
                         for cat in categories:
                             folder_key = normalize_download_category(cat)
                             candidate_keys = [folder_key]
@@ -2519,17 +2644,16 @@ class ModelResolverExtension:
                             paths = []
                             for candidate_key in candidate_keys:
                                 paths.extend(folder_paths.get_folder_paths(candidate_key) or [])
-                            normalized_paths = []
-                            seen = set()
-                            for path in paths:
-                                if not path:
-                                    continue
-                                path_abs = os.path.abspath(path)
-                                path_key = os.path.normcase(path_abs)
-                                if path_key in seen:
-                                    continue
-                                seen.add(path_key)
-                                normalized_paths.append(path_abs)
+                            preferred_directory = (
+                                get_default_root_for_category(folder_key, settings)
+                                or get_download_directory(folder_key)
+                                or ""
+                            )
+                            normalized_paths = dedupe_local_base_directories(
+                                paths,
+                                preferred_directory=preferred_directory,
+                                comfy_root=comfy_root,
+                            )
                             roots[folder_key] = normalized_paths
 
                         return web.json_response(roots)
@@ -2608,6 +2732,13 @@ class ModelResolverExtension:
                             return web.json_response([])
 
                         subfolders = {}
+                        settings = load_resolver_settings()
+                        comfy_root = get_comfy_root_path(folder_paths)
+                        preferred_directory = (
+                            get_default_root_for_category(category, settings)
+                            or get_download_directory(category)
+                            or ""
+                        )
 
                         def add_subfolder(rel_path, base_dir=""):
                             rel_path = os.path.normpath(str(rel_path or "")).replace(
@@ -2616,12 +2747,23 @@ class ModelResolverExtension:
                             if not rel_path or rel_path == ".":
                                 return
                             base_dir = os.path.abspath(base_dir) if base_dir else ""
-                            key = (rel_path.lower(), os.path.normcase(base_dir))
+                            base_identity = (
+                                get_local_path_identity(base_dir) if base_dir else ""
+                            )
+                            key = (rel_path.lower(), base_identity)
                             base_label = (
                                 os.path.basename(os.path.normpath(base_dir))
                                 if base_dir
                                 else ""
                             )
+                            current = subfolders.get(key)
+                            if current and not prefer_local_base_directory(
+                                base_dir,
+                                current.get("base_directory", ""),
+                                preferred_directory,
+                                comfy_root,
+                            ):
+                                return
                             subfolders[key] = {
                                 "value": rel_path,
                                 "label": rel_path,
@@ -2629,31 +2771,32 @@ class ModelResolverExtension:
                                 "base_directory": base_dir,
                             }
 
-                        base_dirs = []
-                        seen_base_dirs = set()
+                        raw_base_dirs = []
                         for folder_key in available_folder_keys:
                             for base_dir in folder_paths.get_folder_paths(folder_key) or []:
                                 if not base_dir or not os.path.isdir(base_dir):
                                     continue
-                                base_abs = os.path.abspath(base_dir)
-                                base_key = os.path.normcase(base_abs)
-                                if base_key in seen_base_dirs:
-                                    continue
-                                seen_base_dirs.add(base_key)
-                                base_dirs.append(base_abs)
+                                raw_base_dirs.append(base_dir)
+                        base_dirs = dedupe_local_base_directories(
+                            raw_base_dirs,
+                            preferred_directory=preferred_directory,
+                            comfy_root=comfy_root,
+                        )
 
                         def find_base_dir(full_path):
                             if not full_path:
                                 return ""
-                            full_path = os.path.abspath(full_path)
+                            full_path_identity = get_local_path_identity(full_path)
                             for base_dir in base_dirs:
-                                base_abs = os.path.abspath(base_dir)
+                                base_identity = get_local_path_identity(base_dir)
                                 try:
                                     if (
-                                        os.path.commonpath([full_path, base_abs])
-                                        == base_abs
+                                        os.path.commonpath(
+                                            [full_path_identity, base_identity]
+                                        )
+                                        == base_identity
                                     ):
-                                        return base_abs
+                                        return base_dir
                                 except Exception:
                                     continue
                             return ""
