@@ -2132,6 +2132,16 @@ export const downloadTargetMethods = {
                     </div>
                 `;
             }).join('');
+            const typedFolderPath = normalizeSubfolderPath(rawFilter) || rawFilter;
+            const emptyHtml = typedFolderPath
+                ? `
+                    <div class="mr-folder-browser-empty mr-folder-browser-empty-create">
+                        <span>No existing folders match this filter.</span>
+                        <span>During download, this folder path will be created:</span>
+                        <span class="mr-folder-browser-empty-path">${this.escapeHtml(typedFolderPath)}</span>
+                    </div>
+                `
+                : `<div class="mr-folder-browser-empty">No folders match this filter.</div>`;
 
             targetEl.classList.add('mr-download-folder-browser');
             targetEl.innerHTML = `
@@ -2140,7 +2150,7 @@ export const downloadTargetMethods = {
                     <span class="mr-folder-browser-preview-path">${this.escapeHtml(previewPath)}</span>
                 </div>
                 <div class="mr-folder-browser-scroll">
-                    ${rootHtml || `<div class="mr-folder-browser-empty">No folders match this filter.</div>`}
+                    ${rootHtml || emptyHtml}
                 </div>
             `;
             showFloatingSubfolderList();

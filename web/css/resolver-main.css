@@ -5864,10 +5864,24 @@
     background: rgba(255,255,255,0.045);
 }
 .mr-folder-browser-empty {
+    display: grid;
+    gap: 6px;
     padding: 24px 12px;
     color: var(--mr-text-muted);
     text-align: center;
     font-size: 11px;
+}
+.mr-folder-browser-empty-path {
+    justify-self: center;
+    max-width: 100%;
+    padding: 5px 7px;
+    border-radius: 6px;
+    background: rgba(114,211,138,0.08);
+    color: var(--mr-text);
+    font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+    font-size: 10px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 @media (max-width: 720px) {
     .mr-download-target-list.mr-download-folder-browser {
