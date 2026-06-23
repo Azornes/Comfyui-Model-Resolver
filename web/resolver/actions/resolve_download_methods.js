@@ -2054,7 +2054,7 @@ export const resolveDownloadMethods = {
                 sourceList.innerHTML = options
                     .map(option => `<div class="mr-download-target-option" data-value="${encodeURIComponent(option.value)}" data-label="${encodeURIComponent(option.label)}">${this.escapeHtml(option.label)}</div>`)
                     .join('');
-                sourceList.style.display = 'block';
+                this.showDropdownList?.(sourceList, sourceSelect);
                 sourceList.querySelectorAll('.mr-download-target-option').forEach(optionEl => {
                     optionEl.addEventListener('mousedown', (event) => {
                         event.preventDefault();
@@ -2062,7 +2062,7 @@ export const resolveDownloadMethods = {
                         const label = decodeURIComponent(optionEl.dataset.label || optionEl.dataset.value || '');
                         this.setDropdownValue(sourceSelect, value, label);
                         this.setSearchSource(missing, value, container);
-                        sourceList.style.display = 'none';
+                        this.hideDropdownList(sourceList);
                     });
                 });
             };
@@ -2109,7 +2109,11 @@ export const resolveDownloadMethods = {
                         return `<div class="mr-download-target-option" data-value="${encodeURIComponent(option.value)}" data-label="${encodeURIComponent(label)}">${this.escapeHtml(label)}</div>`;
                     })
                     .join('');
-                baseList.style.display = options.length ? 'block' : 'none';
+                if (options.length) {
+                    this.showDropdownList?.(baseList, baseSelect);
+                } else {
+                    this.hideDropdownList(baseList);
+                }
                 baseList.querySelectorAll('.mr-download-target-option').forEach(optionEl => {
                     optionEl.addEventListener('mousedown', (event) => {
                         event.preventDefault();
@@ -2117,7 +2121,7 @@ export const resolveDownloadMethods = {
                         const label = decodeURIComponent(optionEl.dataset.label || optionEl.dataset.value || '');
                         this.setDropdownValue(baseSelect, value, label);
                         this.setSearchBaseModel(missing, value, container);
-                        baseList.style.display = 'none';
+                        this.hideDropdownList(baseList);
                     });
                 });
             };
@@ -2126,7 +2130,7 @@ export const resolveDownloadMethods = {
             this.bindDropdownOutsideDismiss?.(baseList, [baseSelect], () => {
                 const value = this.getDropdownValue(baseSelect);
                 this.setDropdownValue(baseSelect, value, this.getSearchBaseModelLabel(value, missing));
-                baseList.style.display = 'none';
+                this.hideDropdownList(baseList);
             });
             baseSelect.addEventListener('focus', () => renderBaseOptions(''));
             baseSelect.addEventListener('click', () => renderBaseOptions(''));

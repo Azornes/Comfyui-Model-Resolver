@@ -1555,7 +1555,7 @@ export const downloadTargetMethods = {
             if (typeof onDismiss === 'function') {
                 onDismiss();
             } else {
-                listEl.style.display = 'none';
+                this.hideDropdownList(listEl);
             }
         };
         const handleOutsidePointer = (event) => {
@@ -1577,6 +1577,163 @@ export const downloadTargetMethods = {
 
         window.addEventListener('pointerdown', handleOutsidePointer, true);
         window.addEventListener('mousedown', handleOutsidePointer, true);
+    },
+
+    portalDropdownList(listEl) {
+        if (!listEl) return;
+        if (listEl.id) {
+            document.querySelectorAll('.mr-download-target-list[data-ml-floating-portal="true"]').forEach(existing => {
+                if (existing !== listEl && existing.id === listEl.id) {
+                    existing.remove();
+                }
+            });
+        }
+        if (listEl.dataset.mlFloatingPortal !== 'true') {
+            listEl.dataset.mlFloatingPortal = 'true';
+            document.body.appendChild(listEl);
+        }
+        listEl.classList.add('mr-download-target-floating');
+    },
+
+    cleanupFloatingDropdownPositioning(listEl) {
+        if (typeof listEl?._mlFloatingPositionCleanup === 'function') {
+            listEl._mlFloatingPositionCleanup();
+            listEl._mlFloatingPositionCleanup = null;
+        }
+    },
+
+    hideDropdownList(listEl) {
+        if (!listEl) return;
+        this.cleanupFloatingDropdownPositioning(listEl);
+        listEl.style.display = 'none';
+    },
+
+    positionFloatingDropdownList(listEl, anchorEl) {
+        if (!listEl || !anchorEl || listEl.style.display === 'none') return;
+        if (listEl.classList.contains('mr-download-folder-browser')) return;
+
+        const rect = anchorEl.getBoundingClientRect();
+        const viewportPadding = 12;
+        const viewportHeight = Math.max(240, window.innerHeight || document.documentElement.clientHeight || 0);
+        if (rect.bottom < viewportPadding || rect.top > viewportHeight - viewportPadding) {
+            this.hideDropdownList(listEl);
+            return;
+        }
+
+        const gap = 4;
+        const spaceBelow = viewportHeight - rect.bottom - viewportPadding - gap;
+        const spaceAbove = rect.top - viewportPadding - gap;
+        const openAbove = spaceBelow < 160 && spaceAbove > spaceBelow;
+        const availableHeight = Math.max(80, openAbove ? spaceAbove : spaceBelow);
+
+        listEl.style.position = 'fixed';
+        listEl.style.top = '0px';
+        listEl.style.maxHeight = `${availableHeight}px`;
+        this.fitDropdownListWidth(listEl, anchorEl);
+
+        const popupHeight = Math.min(listEl.offsetHeight || availableHeight, availableHeight);
+        const rawTop = openAbove
+            ? rect.top - popupHeight - gap
+            : rect.bottom + gap;
+        const maxTop = Math.max(viewportPadding, viewportHeight - viewportPadding - popupHeight);
+        const top = Math.min(Math.max(rawTop, viewportPadding), maxTop);
+        listEl.style.top = `${Math.round(top)}px`;
+    },
+
+    bindFloatingDropdownPositioning(listEl, anchorEl) {
+        if (!listEl || !anchorEl || listEl.classList.contains('mr-download-folder-browser')) return;
+        this.cleanupFloatingDropdownPositioning(listEl);
+
+        const updatePosition = (event) => {
+            if (event?.type === 'scroll' && event.target instanceof Node && listEl.contains(event.target)) {
+                return;
+            }
+            this.positionFloatingDropdownList(listEl, anchorEl);
+        };
+        window.addEventListener('resize', updatePosition, true);
+        window.addEventListener('scroll', updatePosition, true);
+        listEl._mlFloatingPositionCleanup = () => {
+            window.removeEventListener('resize', updatePosition, true);
+            window.removeEventListener('scroll', updatePosition, true);
+        };
+    },
+
+    showDropdownList(listEl, anchorEl = null) {
+        if (!listEl) return;
+        const anchor = anchorEl
+            || listEl.previousElementSibling
+            || listEl.parentElement?.querySelector?.('.mr-download-target-input');
+        if (!anchor) {
+            listEl.style.display = 'block';
+            return;
+        }
+
+        this.portalDropdownList(listEl);
+        listEl.style.display = 'block';
+        this.positionFloatingDropdownList(listEl, anchor);
+        this.bindFloatingDropdownPositioning(listEl, anchor);
+        requestAnimationFrame(() => this.positionFloatingDropdownList(listEl, anchor));
+    },
+
+    fitDropdownListWidth(listEl, anchorEl = null) {
+        if (!listEl || listEl.classList.contains('mr-download-folder-browser')) return;
+
+        const anchor = anchorEl
+            || listEl.previousElementSibling
+            || listEl.parentElement?.querySelector?.('.mr-download-target-input');
+        if (!anchor) return;
+
+        const anchorRect = anchor.getBoundingClientRect();
+        const inputWidth = Math.ceil(anchorRect.width || 0);
+        if (!inputWidth) return;
+
+        const viewportPadding = 12;
+        const viewportWidth = Math.max(320, window.innerWidth || document.documentElement.clientWidth || 0);
+        const maxByInput = inputWidth * 2;
+        const maxByViewport = Math.max(inputWidth, viewportWidth - viewportPadding * 2);
+        const absoluteMaxWidth = Math.max(inputWidth, Math.min(maxByInput, maxByViewport));
+
+        listEl.style.minWidth = `${inputWidth}px`;
+        listEl.style.width = `${inputWidth}px`;
+        listEl.style.maxWidth = `${absoluteMaxWidth}px`;
+
+        const listStyle = window.getComputedStyle(listEl);
+        const listChromeWidth = [
+            listStyle.borderLeftWidth,
+            listStyle.borderRightWidth,
+            listStyle.paddingLeft,
+            listStyle.paddingRight
+        ].reduce((width, value) => width + (Number.parseFloat(value) || 0), 0);
+        const optionWidths = Array.from(listEl.querySelectorAll('.mr-download-target-option')).map(option => (
+            Math.max(option.scrollWidth, option.getBoundingClientRect().width || 0)
+        ));
+        const contentWidth = Math.ceil(Math.max(inputWidth, ...optionWidths) + listChromeWidth + 2);
+        let targetWidth = Math.max(inputWidth, Math.min(contentWidth, absoluteMaxWidth));
+        const rightSpace = Math.max(inputWidth, viewportWidth - viewportPadding - anchorRect.left);
+        const leftSpace = Math.max(inputWidth, anchorRect.right - viewportPadding);
+
+        if (targetWidth > rightSpace && leftSpace > rightSpace) {
+            targetWidth = Math.min(targetWidth, leftSpace);
+            if (listEl.classList.contains('mr-download-target-floating')) {
+                listEl.style.left = `${Math.round(Math.max(viewportPadding, anchorRect.right - targetWidth))}px`;
+                listEl.style.right = 'auto';
+            } else {
+                listEl.style.left = 'auto';
+                listEl.style.right = '0';
+            }
+        } else {
+            targetWidth = Math.min(targetWidth, rightSpace);
+            if (listEl.classList.contains('mr-download-target-floating')) {
+                listEl.style.left = `${Math.round(Math.max(viewportPadding, anchorRect.left))}px`;
+                listEl.style.right = 'auto';
+            } else {
+                listEl.style.left = '0';
+                listEl.style.right = 'auto';
+            }
+        }
+
+        listEl.style.width = `${Math.round(targetWidth)}px`;
+        listEl.style.maxWidth = `${Math.round(targetWidth)}px`;
     },
 
     enableWheelScrollChaining(scrollEl) {
@@ -1746,7 +1903,7 @@ export const downloadTargetMethods = {
             requestAnimationFrame(positionFloatingSubfolderList);
         };
 
-        const renderOptions = (targetEl, values, onSelect) => {
+        const renderOptions = (targetEl, values, onSelect, anchorEl = null) => {
             const options = values.map(value => (
                 typeof value === 'object'
                     ? value
@@ -1754,7 +1911,7 @@ export const downloadTargetMethods = {
             ));
             if (!options.length) {
                 targetEl.innerHTML = '';
-                targetEl.style.display = 'none';
+                this.hideDropdownList(targetEl);
                 return;
             }
 
@@ -1768,7 +1925,7 @@ export const downloadTargetMethods = {
                 })
                 .join('');
 
-            targetEl.style.display = 'block';
+            this.showDropdownList(targetEl, anchorEl);
 
             targetEl.querySelectorAll('.mr-download-target-option').forEach(option => {
                 option.addEventListener('mousedown', (event) => {
@@ -1777,7 +1934,7 @@ export const downloadTargetMethods = {
                     const label = decodeURIComponent(option.dataset.label || option.dataset.value || '');
                     const baseDirectory = decodeURIComponent(option.dataset.baseDirectory || '');
                     onSelect(value, label, baseDirectory);
-                    targetEl.style.display = 'none';
+                    this.hideDropdownList(targetEl);
                 });
             });
         };
@@ -2080,7 +2237,7 @@ export const downloadTargetMethods = {
                 hideFloatingSubfolderList();
                 this.syncDownloadTargetFolderContext(categoryEl, subfolderEl);
                 this.applySuggestedDownloadSubfolder(missing, categoryEl, subfolderEl);
-            });
+            }, categoryEl);
         };
 
         const populateSubfolderOptions = async (filterText = '') => {
@@ -2141,7 +2298,7 @@ export const downloadTargetMethods = {
             };
             this.bindDropdownOutsideDismiss(categoryListEl, [categoryEl], () => {
                 normalizeCategoryInput();
-                categoryListEl.style.display = 'none';
+                this.hideDropdownList(categoryListEl);
             });
             categoryEl.addEventListener('blur', () => {
                 normalizeCategoryInput();
