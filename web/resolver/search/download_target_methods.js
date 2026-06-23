@@ -1772,10 +1772,18 @@ export const downloadTargetMethods = {
                     const children = hasChildren
                         ? `<div class="mr-folder-browser-children ${shouldExpand ? 'is-expanded' : ''}">${renderFolderTreeNodes(node.children, rootGroup, expandedSet, filter, selectedValue, selectedBaseDirectory)}</div>`
                         : '';
+                    const rowClass = [
+                        'mr-folder-browser-row',
+                        isSelected ? 'is-selected' : '',
+                        hasChildren ? 'is-expandable' : ''
+                    ].filter(Boolean).join(' ');
+                    const rowStateAttribute = hasChildren
+                        ? ` data-state-key="${encodeURIComponent(stateKey)}"`
+                        : '';
 
                     return `
                         <div class="mr-folder-browser-node">
-                            <div class="mr-folder-browser-row ${isSelected ? 'is-selected' : ''}" data-browser-action="select" data-value="${encodeURIComponent(nodeValue)}" data-base-directory="${encodeURIComponent(nodeBaseDirectory)}">
+                            <div class="${rowClass}" data-browser-action="select" data-value="${encodeURIComponent(nodeValue)}" data-base-directory="${encodeURIComponent(nodeBaseDirectory)}"${rowStateAttribute}>
                                 ${toggle}
                                 <span class="mr-folder-browser-folder-icon">${getSvgIcon('folderOpen', 'currentColor', 'mr-folder-browser-svg')}</span>
                                 <span class="mr-folder-browser-name">${this.escapeHtml(node.name)}</span>
@@ -1890,20 +1898,38 @@ export const downloadTargetMethods = {
                 requestAnimationFrame(restoreScrollPosition);
             }
 
+            const toggleFolderBrowserState = (encodedStateKey) => {
+                const stateKey = decodeURIComponent(encodedStateKey || '');
+                if (!stateKey) return;
+                if (expandedSet.has(stateKey)) {
+                    expandedSet.delete(stateKey);
+                } else {
+                    expandedSet.add(stateKey);
+                }
+                renderDownloadFolderBrowser(targetEl, folders, filterText, onSelect, {
+                    preserveScroll: true
+                });
+            };
+
+            const isFolderBrowserToggleZoneClick = (event, row) => {
+                if (!row?.dataset?.stateKey) return false;
+                const rowRect = row.getBoundingClientRect();
+                const toggleEl = row.querySelector('.mr-folder-browser-toggle:not(.mr-folder-browser-toggle-empty)');
+                const folderIconEl = row.querySelector('.mr-folder-browser-folder-icon');
+                const toggleRect = toggleEl?.getBoundingClientRect();
+                const iconRect = folderIconEl?.getBoundingClientRect();
+                const toggleZoneRight = Math.max(
+                    toggleRect?.right || rowRect.left,
+                    iconRect?.left || rowRect.left
+                );
+                return event.clientX >= rowRect.left && event.clientX <= toggleZoneRight;
+            };
+
             targetEl.querySelectorAll('[data-browser-action="toggle"]').forEach(button => {
                 button.addEventListener('mousedown', (event) => {
                     event.preventDefault();
                     event.stopPropagation();
-                    const stateKey = decodeURIComponent(button.dataset.stateKey || '');
-                    if (!stateKey) return;
-                    if (expandedSet.has(stateKey)) {
-                        expandedSet.delete(stateKey);
-                    } else {
-                        expandedSet.add(stateKey);
-                    }
-                    renderDownloadFolderBrowser(targetEl, folders, filterText, onSelect, {
-                        preserveScroll: true
-                    });
+                    toggleFolderBrowserState(button.dataset.stateKey || '');
                 });
             });
 
@@ -1911,6 +1937,10 @@ export const downloadTargetMethods = {
                 row.addEventListener('mousedown', (event) => {
                     event.preventDefault();
                     event.stopPropagation();
+                    if (isFolderBrowserToggleZoneClick(event, row)) {
+                        toggleFolderBrowserState(row.dataset.stateKey || '');
+                        return;
+                    }
                     const value = decodeURIComponent(row.dataset.value || '');
                     const baseDirectory = decodeURIComponent(row.dataset.baseDirectory || '');
                     onSelect(value, '', baseDirectory);
