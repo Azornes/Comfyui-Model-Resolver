@@ -1583,7 +1583,7 @@ export const downloadTargetMethods = {
             const spaceBelow = viewportHeight - rect.bottom - viewportPadding - gap;
             const spaceAbove = rect.top - viewportPadding - gap;
             const openAbove = spaceBelow < 260 && spaceAbove > spaceBelow;
-            const availableHeight = Math.max(180, Math.min(380, openAbove ? spaceAbove : spaceBelow));
+            const availableHeight = Math.max(0, openAbove ? spaceAbove : spaceBelow);
 
             listEl.style.position = 'fixed';
             listEl.style.left = `${left}px`;
@@ -1591,23 +1591,46 @@ export const downloadTargetMethods = {
             listEl.style.width = `${targetWidth}px`;
             listEl.style.minWidth = `${Math.min(rect.width, targetWidth)}px`;
             listEl.style.maxWidth = `${availableWidth}px`;
+            listEl.style.maxHeight = `${availableHeight}px`;
 
             const scrollEl = listEl.querySelector('.mr-folder-browser-scroll');
             if (scrollEl) {
-                const chromeHeight = Math.max(0, listEl.offsetHeight - scrollEl.offsetHeight);
-                scrollEl.style.maxHeight = `${Math.max(140, availableHeight - chromeHeight)}px`;
+                scrollEl.style.height = '';
+                scrollEl.style.maxHeight = '';
+
+                const containerStyle = window.getComputedStyle(listEl);
+                const containerChromeHeight = [
+                    containerStyle.borderTopWidth,
+                    containerStyle.borderBottomWidth,
+                    containerStyle.paddingTop,
+                    containerStyle.paddingBottom
+                ].reduce((height, value) => height + (Number.parseFloat(value) || 0), 0);
+                const chromeHeight = Array.from(listEl.children).reduce((height, child) => {
+                    if (child === scrollEl) return height;
+                    const style = window.getComputedStyle(child);
+                    const marginTop = Number.parseFloat(style.marginTop) || 0;
+                    const marginBottom = Number.parseFloat(style.marginBottom) || 0;
+                    return height + child.offsetHeight + marginTop + marginBottom;
+                }, 0);
+                const scrollHeight = Math.max(0, availableHeight - chromeHeight - containerChromeHeight);
+                scrollEl.style.maxHeight = `${scrollHeight}px`;
             }
 
             const popupHeight = listEl.offsetHeight;
             const top = openAbove
-                ? Math.max(viewportPadding, rect.top - popupHeight - gap)
-                : Math.min(rect.bottom + gap, viewportHeight - viewportPadding - Math.min(popupHeight, availableHeight));
+                ? clampNumber(rect.top - popupHeight - gap, viewportPadding, Math.max(viewportPadding, viewportHeight - viewportPadding - popupHeight))
+                : clampNumber(rect.bottom + gap, viewportPadding, Math.max(viewportPadding, viewportHeight - viewportPadding - popupHeight));
             listEl.style.top = `${top}px`;
         };
 
         const bindFloatingPositioning = () => {
             cleanupFloatingPositioning();
-            const updatePosition = () => positionFloatingSubfolderList();
+            const updatePosition = (event) => {
+                if (event?.type === 'scroll' && event.target instanceof Node && listEl.contains(event.target)) {
+                    return;
+                }
+                positionFloatingSubfolderList();
+            };
             window.addEventListener('resize', updatePosition, true);
             window.addEventListener('scroll', updatePosition, true);
             floatingPositionCleanup = () => {

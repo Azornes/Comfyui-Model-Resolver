@@ -5683,6 +5683,7 @@
     background: rgba(114,211,138,0.12);
 }
 .mr-download-target-list.mr-download-folder-browser {
+    box-sizing: border-box;
     right: auto;
     width: min(560px, calc(100vw - 48px));
     min-width: 100%;
@@ -5711,7 +5712,7 @@
     word-break: break-all;
 }
 .mr-folder-browser-scroll {
-    max-height: 300px;
+    box-sizing: border-box;
     overflow: auto;
     padding: 6px;
 }
@@ -5854,9 +5855,6 @@
 @media (max-width: 720px) {
     .mr-download-target-list.mr-download-folder-browser {
         width: min(100%, calc(100vw - 32px));
-    }
-    .mr-folder-browser-scroll {
-        max-height: 260px;
     }
 }
 
