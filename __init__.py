@@ -776,6 +776,7 @@ class ModelResolverExtension:
 
                     # Get the file path to hash
                     file_path = resolved_path if resolved_path else None
+                    file_location = ""
 
                     if not file_path and category:
                         # Try to find the file in the model directories using folder_paths
@@ -854,16 +855,26 @@ class ModelResolverExtension:
 
                     # Search CivitAI for the model using hash
                     if download_available and file_path and _os.path.exists(file_path):
+                        file_location = _os.path.dirname(file_path).replace("\\", "/")
+                        if file_location and not file_location.endswith("/"):
+                            file_location += "/"
                         try:
                             from .core.sources.civitai import (
                                 get_model_info_for_file,
                             )
 
                             result = get_model_info_for_file(file_path)
-                            if result and result.get("url"):
+                            if result and (
+                                result.get("url")
+                                or result.get("version_url")
+                                or result.get("from_metadata")
+                                or result.get("trained_words")
+                            ):
                                 return web.json_response(
                                     {
                                         "filename": filename,
+                                        "location": result.get("location")
+                                        or file_location,
                                         "url": result.get("url"),
                                         "version_url": result.get("version_url"),
                                         "model_id": result.get("model_id"),
@@ -874,6 +885,7 @@ class ModelResolverExtension:
                                         "version_id": result.get("version_id"),
                                         "version_name": result.get("version_name", ""),
                                         "sha256": result.get("sha256"),
+                                        "size": result.get("size"),
                                         "base_model": result.get("base_model"),
                                         "tags": result.get("tags", []),
                                         "trained_words": result.get(
@@ -904,8 +916,11 @@ class ModelResolverExtension:
                                 return web.json_response(
                                     {
                                         "url": result["url"],
+                                        "location": file_location,
                                         "model_name": result.get("name", clean_name),
                                         "version_id": result.get("version_id"),
+                                        "size": result.get("size"),
+                                        "tags": result.get("tags", []),
                                     }
                                 )
                         except Exception as e:

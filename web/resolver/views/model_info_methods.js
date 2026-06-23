@@ -300,11 +300,19 @@ export const modelInfoMethods = {
                             <span class="mr-info-tag mr-info-type"></span>
                             <span class="mr-info-tag mr-info-basemodel"></span>
                         </div>
+                        <div class="mr-info-tags-row mr-hidden-initial">
+                            <span class="mr-info-tags-label">Tags</span>
+                            <div class="mr-info-tags"></div>
+                        </div>
                         <table class="mr-info-table">
                             <tbody>
                                 <tr class="mr-info-file-row">
                                     <td><span>File <span class="mr-tooltip-badge" data-tooltip="The model file name found locally or returned by CivitAI.">?</span></span></td>
                                     <td><span class="mr-info-file"></span></td>
+                                </tr>
+                                <tr class="mr-info-location-row mr-hidden-initial">
+                                    <td><span>Location <span class="mr-tooltip-badge" data-tooltip="Folder where this local model file is stored.">?</span></span></td>
+                                    <td><span class="mr-info-location"></span></td>
                                 </tr>
                                 <tr class="mr-info-hash-row">
                                     <td><span>Hash (sha256) <span class="mr-tooltip-badge" data-tooltip="Unique fingerprint of the local file. Model Resolver uses it to confirm the exact CivitAI version.">?</span></span></td>
@@ -321,6 +329,10 @@ export const modelInfoMethods = {
                                 <tr class="mr-info-basemodel-row">
                                     <td><span>Base Model <span class="mr-tooltip-badge" data-tooltip="Base model this resource was made for, for example SD1.5, SDXL or Flux.">?</span></span></td>
                                     <td><span class="mr-info-base-model"></span></td>
+                                </tr>
+                                <tr class="mr-info-size-row mr-hidden-initial">
+                                    <td><span>Size <span class="mr-tooltip-badge" data-tooltip="The local model file size, read from metadata or from the file on disk.">?</span></span></td>
+                                    <td><span class="mr-info-size"></span></td>
                                 </tr>
                                 <tr class="mr-info-trainedwords-row mr-hidden-initial">
                                     <td>
@@ -489,7 +501,160 @@ export const modelInfoMethods = {
             )];
         }
 
+        if (words && typeof words === 'object') {
+            return this.normalizeTrainedWords(
+                words.trained_words
+                    || words.trainedWords
+                    || words.words
+                    || words.values
+                    || []
+            );
+        }
+
         return [];
+    },
+
+    formatInfoDialogLocation(data = {}) {
+        let location = data.location
+            || data.folder_path
+            || data.folderPath
+            || data.download_directory
+            || data.downloadDirectory
+            || data.directory
+            || '';
+
+        if (!location) {
+            const fullPath = data.resolved_path || data.resolvedPath || data.full_path || data.fullPath || data.path || '';
+            const normalizedFullPath = String(fullPath || '').replace(/\\/g, '/');
+            const lastSlash = normalizedFullPath.lastIndexOf('/');
+            if (lastSlash > 0) {
+                location = normalizedFullPath.slice(0, lastSlash + 1);
+            }
+        }
+
+        location = String(location || '').trim().replace(/\\/g, '/');
+        if (location && !location.endsWith('/')) {
+            location += '/';
+        }
+
+        return location;
+    },
+
+    normalizeInfoTags(tags) {
+        if (Array.isArray(tags)) {
+            const seen = new Set();
+            const result = [];
+            for (let tag of tags) {
+                if (tag && typeof tag === 'object') {
+                    tag = tag.name || tag.tag || tag.text || tag.value || '';
+                }
+                const text = String(tag || '').trim();
+                if (!text) continue;
+                const key = text.toLowerCase();
+                if (seen.has(key)) continue;
+                seen.add(key);
+                result.push(text);
+            }
+            return result;
+        }
+
+        if (typeof tags === 'string') {
+            return this.normalizeInfoTags(
+                tags
+                    .split(/[\n,|;]/)
+                    .map(tag => tag.trim())
+                    .filter(Boolean)
+            );
+        }
+
+        if (tags && typeof tags === 'object') {
+            return this.normalizeInfoTags(
+                tags.tags
+                    || tags.model_tags
+                    || tags.modelTags
+                    || tags.values
+                    || []
+            );
+        }
+
+        return [];
+    },
+
+    getInfoDialogTags(data = {}) {
+        const sources = [
+            data.tags,
+            data.model_tags,
+            data.modelTags,
+            data.civitai?.tags,
+            data.civitai?.model?.tags,
+            data.model?.tags,
+            data.metadata?.tags,
+            data.path_metadata?.tags
+        ];
+
+        return this.normalizeInfoTags(
+            sources.flatMap(source => this.normalizeInfoTags(source))
+        );
+    },
+
+    formatInfoDialogSize(data = {}) {
+        const rawSize = data.size
+            ?? data.file_size
+            ?? data.fileSize
+            ?? data.size_bytes
+            ?? data.sizeBytes
+            ?? data.file?.size
+            ?? data.file?.sizeBytes
+            ?? null;
+
+        if (rawSize === null || rawSize === undefined || rawSize === '') return '';
+        if (rawSize === 0 || rawSize === '0') return '0 B';
+
+        const numericSize = Number(rawSize);
+        if (Number.isFinite(numericSize)) {
+            return typeof this.formatBytes === 'function'
+                ? this.formatBytes(numericSize)
+                : `${numericSize} B`;
+        }
+
+        return String(rawSize);
+    },
+
+    getInfoDialogTrainedWords(data = {}) {
+        const sources = [
+            data.trained_words,
+            data.trainedWords,
+            data.civitai?.trainedWords,
+            data.civitai?.trained_words,
+            data.selected_version?.trainedWords,
+            data.selected_version?.trained_words,
+            data.modelVersion?.trainedWords,
+            data.modelVersion?.trained_words,
+            data.model_version?.trainedWords,
+            data.model_version?.trained_words,
+            data.version?.trainedWords,
+            data.version?.trained_words,
+            data.path_metadata?.trainedWords,
+            data.path_metadata?.trained_words,
+            data.metadata?.trainedWords,
+            data.metadata?.trained_words
+        ];
+
+        return this.normalizeTrainedWords(
+            sources.flatMap(source => this.normalizeTrainedWords(source))
+        );
+    },
+
+    setInfoTableRowVisible(row, visible) {
+        if (!row) return;
+        row.classList.toggle('mr-hidden-initial', !visible);
+        row.style.display = visible ? '' : 'none';
+    },
+
+    setInfoElementVisible(element, visible) {
+        if (!element) return;
+        element.classList.toggle('mr-hidden-initial', !visible);
+        element.style.display = visible ? '' : 'none';
     },
 
     updateSelectedTrainedWordsSummary(dialog) {
@@ -639,13 +804,19 @@ export const modelInfoMethods = {
      */
     async fetchModelInfoForDialog(loraName, modelData, dialog) {
         try {
+            const resolvedPath = modelData?.resolved_path
+                || modelData?.path
+                || modelData?.full_path
+                || modelData?.folder_path
+                || modelData?.download_directory
+                || '';
             const response = await api.fetchApi('/model_resolver/civitai-search', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     filename: loraName,
                     category: modelData?.category || '',
-                    resolved_path: modelData?.resolved_path || ''
+                    resolved_path: resolvedPath
                 })
             });
 
@@ -706,10 +877,37 @@ export const modelInfoMethods = {
             }
         }
 
+        // Update top tags
+        const tagsRowEl = dialog.querySelector('.mr-info-tags-row');
+        const tagsEl = dialog.querySelector('.mr-info-tags');
+        if (tagsRowEl && tagsEl) {
+            const tags = this.getInfoDialogTags(data);
+            if (tags.length > 0) {
+                tagsEl.innerHTML = tags.map(tag => `
+                    <span class="mr-info-tag mr-info-model-tag" data-tooltip="${this.escapeHtml(tag)}">
+                        ${this.escapeHtml(tag)}
+                    </span>
+                `).join('');
+                this.setInfoElementVisible(tagsRowEl, true);
+                this.bindTooltips(tagsEl);
+            } else {
+                tagsEl.innerHTML = '';
+                this.setInfoElementVisible(tagsRowEl, false);
+            }
+        }
+
         // Update file
         const fileEl = dialog.querySelector('.mr-info-file');
         if (fileEl && data.filename) {
             fileEl.textContent = data.filename;
+        }
+
+        // Update location
+        const locationEl = dialog.querySelector('.mr-info-location');
+        if (locationEl) {
+            const location = this.formatInfoDialogLocation(data);
+            locationEl.textContent = location;
+            this.setInfoTableRowVisible(locationEl.closest('tr'), Boolean(location));
         }
 
         // Update hash
@@ -752,17 +950,22 @@ export const modelInfoMethods = {
             const baseModel = data.base_model || data.baseModel || '';
             baseModelRowEl.textContent = baseModel;
             const row = baseModelRowEl.closest('tr');
-            if (row && baseModel) {
-                row.style.display = '';
-            } else if (row) {
-                row.style.display = 'none';
-            }
+            this.setInfoTableRowVisible(row, Boolean(baseModel));
+        }
+
+        // Update file size row
+        const sizeEl = dialog.querySelector('.mr-info-size');
+        if (sizeEl) {
+            const sizeLabel = this.formatInfoDialogSize(data);
+            sizeEl.textContent = sizeLabel;
+            this.setInfoTableRowVisible(sizeEl.closest('tr'), Boolean(sizeLabel));
         }
 
         // Update trained words
         const trainedWordsEl = dialog.querySelector('.mr-info-trained-words');
         if (trainedWordsEl) {
-            const words = this.normalizeTrainedWords(data.trained_words || data.trainedWords || []);
+            const words = this.getInfoDialogTrainedWords(data);
+            const row = trainedWordsEl.closest('tr');
             if (words.length > 0) {
                 dialog._selectedTrainedWords = new Set();
                 trainedWordsEl.innerHTML = `<div class="mr-info-trained-words-list">${words.map(word => `
@@ -776,13 +979,11 @@ export const modelInfoMethods = {
                         ${this.escapeHtml(word)}
                     </button>
                 `).join('')}</div>`;
-                const row = trainedWordsEl.closest('tr');
-                if (row) row.style.display = '';
+                this.setInfoTableRowVisible(row, true);
                 this.bindTooltips(trainedWordsEl);
                 this.updateSelectedTrainedWordsSummary(dialog);
             } else {
-                const row = trainedWordsEl.closest('tr');
-                if (row) row.style.display = 'none';
+                this.setInfoTableRowVisible(row, false);
             }
         }
 
@@ -790,13 +991,12 @@ export const modelInfoMethods = {
         const clipSkipEl = dialog.querySelector('.mr-info-clip-skip');
         if (clipSkipEl) {
             const clipSkip = data.clip_skip || data.clipSkip;
+            const row = clipSkipEl.closest('tr');
             if (clipSkip && clipSkip !== 'None') {
                 clipSkipEl.textContent = clipSkip;
-                const row = clipSkipEl.closest('tr');
-                if (row) row.style.display = '';
+                this.setInfoTableRowVisible(row, true);
             } else {
-                const row = clipSkipEl.closest('tr');
-                if (row) row.style.display = 'none';
+                this.setInfoTableRowVisible(row, false);
             }
         }
 
@@ -823,9 +1023,7 @@ export const modelInfoMethods = {
                 descEl.classList.remove('is-expanded');
 
                 const shouldCollapse = textOnly.length > 520 || finalHtml.length > 900;
-                if (actionsEl) {
-                    actionsEl.style.display = shouldCollapse ? '' : 'none';
-                }
+                this.setInfoElementVisible(actionsEl, shouldCollapse);
                 if (toggleBtn) {
                     toggleBtn.textContent = 'Show more';
                 }
@@ -834,10 +1032,10 @@ export const modelInfoMethods = {
                 }
 
                 const row = descEl.closest('tr');
-                if (row) row.style.display = '';
+                this.setInfoTableRowVisible(row, true);
             } else {
                 const row = descEl.closest('tr');
-                if (row) row.style.display = 'none';
+                this.setInfoTableRowVisible(row, false);
             }
         }
 

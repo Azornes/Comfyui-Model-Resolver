@@ -1805,11 +1805,86 @@ def _read_model_metadata(metadata_path: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def _as_metadata_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _as_metadata_list(value: Any) -> List[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, tuple):
+        return list(value)
+    return [value] if value else []
+
+
+def _first_metadata_value(*values: Any) -> Any:
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        if isinstance(value, (list, tuple, dict)) and not value:
+            continue
+        return value
+    return None
+
+
+def _metadata_size_to_bytes(value: Any) -> Optional[int]:
+    if value is None or value == "":
+        return None
+
+    try:
+        size = int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+    return size if size >= 0 else None
+
+
+def _format_model_location(file_path: str) -> str:
+    if not file_path:
+        return ""
+
+    location = os.path.dirname(file_path).replace("\\", "/")
+    if location and not location.endswith("/"):
+        location += "/"
+    return location
+
+
+def _normalize_metadata_trained_words(*values: Any) -> List[str]:
+    words: List[str] = []
+    seen = set()
+
+    for value in values:
+        for item in _as_metadata_list(value):
+            if isinstance(item, dict):
+                item = (
+                    item.get("word")
+                    or item.get("name")
+                    or item.get("text")
+                    or item.get("value")
+                )
+            text = str(item or "").strip()
+            if not text:
+                continue
+            key = text.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            words.append(text)
+
+    return words
+
+
 def _metadata_to_model_info(metadata: Dict[str, Any]) -> Dict[str, Any]:
     """
     Convert metadata file format to model info format used by our extension.
     """
-    civitai_data = metadata.get("civitai") or {}
+    civitai_data = _as_metadata_dict(metadata.get("civitai"))
+    selected_version = _as_metadata_dict(metadata.get("selected_version"))
+    path_metadata = _as_metadata_dict(metadata.get("path_metadata"))
 
     # Extract images with metadata
     images = []
@@ -1840,14 +1915,21 @@ def _metadata_to_model_info(metadata: Dict[str, Any]) -> Dict[str, Any]:
                 }
             )
 
-    # Get trained words from CivitAI data
-    trained_words = civitai_data.get("trainedWords") or []
-    if isinstance(trained_words, str):
-        trained_words = [trained_words] if trained_words else []
+    # Get trained words from common sidecar shapes, including LoRA Manager metadata.
+    trained_words = _normalize_metadata_trained_words(
+        metadata.get("trained_words"),
+        metadata.get("trainedWords"),
+        civitai_data.get("trainedWords"),
+        selected_version.get("trained_words"),
+        selected_version.get("trainedWords"),
+        path_metadata.get("trained_words"),
+        path_metadata.get("trainedWords"),
+    )
 
     # Get model info
-    model_info = civitai_data.get("model") or {}
-    version_info = civitai_data
+    model_info = _as_metadata_dict(civitai_data.get("model"))
+    file_infos = _as_metadata_list(civitai_data.get("files"))
+    file_info = _as_metadata_dict(file_infos[0]) if file_infos else {}
 
     # Build model_id from CivitAI data
     model_id = civitai_data.get("modelId") or civitai_data.get("id")
@@ -1855,11 +1937,38 @@ def _metadata_to_model_info(metadata: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "source": "metadata",
         "model_id": model_id,
-        "model_name": metadata.get("model_name") or metadata.get("file_name", ""),
+        "model_name": _first_metadata_value(
+            metadata.get("model_name"),
+            metadata.get("modelName"),
+            model_info.get("name"),
+            metadata.get("file_name"),
+        )
+        or "",
         "model_type": model_info.get("type", "") or civitai_data.get("type", ""),
         "version_id": civitai_data.get("id"),
-        "version_name": civitai_data.get("name", ""),
+        "version_name": _first_metadata_value(
+            metadata.get("version_name"),
+            metadata.get("versionName"),
+            selected_version.get("name"),
+            civitai_data.get("name"),
+        )
+        or "",
         "sha256": metadata.get("sha256", ""),
+        "size": _metadata_size_to_bytes(
+            _first_metadata_value(
+                metadata.get("size"),
+                metadata.get("file_size"),
+                metadata.get("fileSize"),
+                metadata.get("sizeBytes"),
+                path_metadata.get("size"),
+                path_metadata.get("file_size"),
+                path_metadata.get("fileSize"),
+                path_metadata.get("sizeBytes"),
+                (file_info.get("sizeKB") * 1024)
+                if file_info.get("sizeKB") is not None
+                else None,
+            )
+        ),
         "url": f"https://civitai.com/models/{civitai_data.get('modelId')}"
         if civitai_data.get("modelId")
         else None,
@@ -1867,14 +1976,32 @@ def _metadata_to_model_info(metadata: Dict[str, Any]) -> Dict[str, Any]:
         if model_id
         else None,
         "download_url": civitai_data.get("downloadUrl"),
-        "base_model": (metadata.get("base_model") or civitai_data.get("baseModel", "")),
-        "tags": metadata.get("tags") or [],
+        "base_model": _first_metadata_value(
+            metadata.get("base_model"),
+            metadata.get("baseModel"),
+            selected_version.get("base_model"),
+            selected_version.get("baseModel"),
+            civitai_data.get("baseModel"),
+        )
+        or "",
+        "tags": _as_metadata_list(metadata.get("tags") or model_info.get("tags")),
         "trained_words": trained_words,
         "images": images,
         "clip_skip": civitai_data.get("clipSkip"),
-        "description": metadata.get("model_description", "")
-        or civitai_data.get("description", ""),
-        "model_description": metadata.get("model_description", ""),
+        "description": _first_metadata_value(
+            metadata.get("modelDescription"),
+            metadata.get("model_description"),
+            metadata.get("description"),
+            model_info.get("description"),
+            civitai_data.get("description"),
+        )
+        or "",
+        "model_description": _first_metadata_value(
+            metadata.get("modelDescription"),
+            metadata.get("model_description"),
+            model_info.get("description"),
+        )
+        or "",
         "from_metadata": True,
     }
 
@@ -1903,7 +2030,15 @@ def get_model_info_for_file(
         metadata = _read_model_metadata(metadata_path)
         if metadata:
             log_info(f"Using metadata file for {file_path}")
-            return _metadata_to_model_info(metadata)
+            result = _metadata_to_model_info(metadata)
+            result["file_path"] = file_path
+            result["location"] = _format_model_location(file_path)
+            if not result.get("size"):
+                try:
+                    result["size"] = os.path.getsize(file_path)
+                except Exception:
+                    pass
+            return result
     else:
         # Debug: list all files in the same directory
         directory = os.path.dirname(file_path)
@@ -1919,4 +2054,14 @@ def get_model_info_for_file(
     if not file_hash:
         return None
 
-    return get_model_info_by_hash(file_hash, api_key)
+    result = get_model_info_by_hash(file_hash, api_key)
+    if result:
+        result["file_path"] = file_path
+        result["location"] = _format_model_location(file_path)
+        if not result.get("size"):
+            try:
+                result["size"] = os.path.getsize(file_path)
+            except Exception:
+                pass
+
+    return result
