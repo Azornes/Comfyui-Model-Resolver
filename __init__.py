@@ -1437,6 +1437,51 @@ class ModelResolverExtension:
                             marked["requested_base_model"] = base_model_context
                             return marked
 
+                        def make_source_progress_callback(
+                            source_key,
+                            percent_min=None,
+                            percent_max=None,
+                        ):
+                            def source_progress_callback(payload):
+                                if not isinstance(payload, dict):
+                                    return
+
+                                progress_payload = dict(payload)
+                                stage = progress_payload.pop("stage", "running")
+                                message = progress_payload.pop(
+                                    "message", "Searching..."
+                                )
+                                percent = progress_payload.pop("percent", None)
+                                status = progress_payload.pop("status", "running")
+                                progress_payload.pop("source", None)
+
+                                if (
+                                    percent is not None
+                                    and percent_min is not None
+                                    and percent_max is not None
+                                ):
+                                    try:
+                                        normalized_percent = max(
+                                            0.0, min(100.0, float(percent))
+                                        )
+                                        percent = percent_min + (
+                                            normalized_percent / 100.0
+                                        ) * (percent_max - percent_min)
+                                    except (TypeError, ValueError):
+                                        percent = None
+
+                                update_search_progress(
+                                    progress_id,
+                                    source_key,
+                                    stage,
+                                    message,
+                                    percent,
+                                    status=status,
+                                    **progress_payload,
+                                )
+
+                            return source_progress_callback
+
                         def search_local_sources():
                             source_results = {"popular": None, "model_list": None}
                             source_found = False
@@ -1527,13 +1572,16 @@ class ModelResolverExtension:
                                 use_comfy_org_fallback=hf_use_comfy_org_fallback,
                                 use_brave_fallback=hf_use_brave_fallback,
                                 force_refresh=force_search,
+                                progress_callback=make_source_progress_callback(
+                                    "huggingface"
+                                ),
                             )
                             update_search_progress(
                                 progress_id,
                                 "huggingface",
-                                "parse",
-                                "Checking HuggingFace result",
-                                86,
+                                "done",
+                                "HuggingFace checked",
+                                92,
                             )
                             log_search_result("huggingface", hf_result)
                             return {"huggingface": hf_result}, bool(hf_result)
@@ -1689,6 +1737,9 @@ class ModelResolverExtension:
                                     candidate_limit=civitai_candidate_limit,
                                     use_trpc_search=civitai_use_trpc_search,
                                     use_html_fallback=civitai_use_html_fallback,
+                                    progress_callback=make_source_progress_callback(
+                                        "civitai"
+                                    ),
                                 )
                                 log_search_result("civitai", civitai_result)
                                 if not civitai_result and base_model_context:
@@ -1715,6 +1766,9 @@ class ModelResolverExtension:
                                         candidate_limit=civitai_candidate_limit,
                                         use_trpc_search=civitai_use_trpc_search,
                                         use_html_fallback=civitai_use_html_fallback,
+                                        progress_callback=make_source_progress_callback(
+                                            "civitai", 72, 92
+                                        ),
                                     )
                                     log_search_result(
                                         "civitai/any_model",
@@ -1806,6 +1860,9 @@ class ModelResolverExtension:
                                         model_type=category,
                                         base_model_context=base_model_context or None,
                                         limit=civarchive_candidate_limit,
+                                        progress_callback=make_source_progress_callback(
+                                            "civarchive"
+                                        ),
                                     )
                                     log_search_result("civarchive", civarchive_result)
                                     if not civarchive_result and base_model_context:
@@ -1829,6 +1886,9 @@ class ModelResolverExtension:
                                             model_type=category,
                                             base_model_context=None,
                                             limit=civarchive_candidate_limit,
+                                            progress_callback=make_source_progress_callback(
+                                                "civarchive", 72, 92
+                                            ),
                                         )
                                         log_search_result(
                                             "civarchive/any_model",
@@ -1883,6 +1943,9 @@ class ModelResolverExtension:
                                     filename,
                                     model_type=category,
                                     base_model_context=base_model_context or None,
+                                    progress_callback=make_source_progress_callback(
+                                        "lora_manager_archive"
+                                    ),
                                 )
                             )
                             log_search_result(
@@ -1910,6 +1973,9 @@ class ModelResolverExtension:
                                         filename,
                                         model_type=category,
                                         base_model_context=None,
+                                        progress_callback=make_source_progress_callback(
+                                            "lora_manager_archive", 72, 92
+                                        ),
                                     )
                                 )
                                 log_search_result(

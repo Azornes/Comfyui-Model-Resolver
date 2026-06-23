@@ -10,7 +10,7 @@ import re
 import threading
 import time
 import requests
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Callable
 from urllib.parse import urlparse, quote
 
 from ..log_system.log_funcs import (
@@ -45,6 +45,28 @@ def clear_search_cache():
     _search_cache.clear()
     with _author_index_lock:
         _author_index_cache.clear()
+
+
+def _report_progress(
+    progress_callback: Optional[Callable[[Dict[str, Any]], None]],
+    stage: str,
+    message: str,
+    percent: Optional[float] = None,
+    **extra: Any,
+) -> None:
+    if not progress_callback:
+        return
+
+    payload = {"stage": stage, "message": message}
+    if percent is not None:
+        payload["percent"] = percent
+    if extra:
+        payload.update(extra)
+
+    try:
+        progress_callback(payload)
+    except Exception as e:
+        log_debug(f"HuggingFace progress callback failed: {e}")
 
 
 def check_huggingface_token(token: Optional[str]) -> Dict[str, Any]:
@@ -669,6 +691,7 @@ def search_huggingface_for_file(
     use_comfy_org_fallback: bool = True,
     use_brave_fallback: bool = True,
     force_refresh: bool = False,
+    progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Search HuggingFace for a specific model file.
@@ -696,6 +719,12 @@ def search_huggingface_for_file(
     cache_key = f"hf_{filename}_exact{exact_only}_{token_key}_{brave_key}_{methods_key}"
     if cache_key in _search_cache:
         log_debug(f"HuggingFace cache hit file={filename} exact={exact_only}")
+        _report_progress(
+            progress_callback,
+            "cache",
+            "Using HuggingFace cache",
+            86,
+        )
         return _search_cache[cache_key]
 
     try:
@@ -710,7 +739,17 @@ def search_huggingface_for_file(
         search_queries = _build_huggingface_search_queries(filename)
 
         if use_api_search:
-            for search_query in search_queries:
+            total_queries = max(1, len(search_queries))
+            for query_index, search_query in enumerate(search_queries, start=1):
+                _report_progress(
+                    progress_callback,
+                    "api_search",
+                    f"HuggingFace API query {query_index}/{total_queries}",
+                    32 + ((query_index - 1) / total_queries) * 10,
+                    query=search_query,
+                    query_index=query_index,
+                    query_count=total_queries,
+                )
                 search_url = f"{HF_API_URL}/models?search={quote(search_query)}&limit=20"
                 response = requests.get(search_url, headers=headers, timeout=10)
                 if response.status_code != 200:
@@ -728,7 +767,32 @@ def search_huggingface_for_file(
                         seen_repos.add(repo_id)
                         repos_to_check.append(repo_id)
 
-        for repo_id in repos_to_check:
+                _report_progress(
+                    progress_callback,
+                    "api_candidates",
+                    f"HuggingFace API candidates: {len(repos_to_check)} repos",
+                    44,
+                    candidate_count=len(repos_to_check),
+                )
+        else:
+            _report_progress(
+                progress_callback,
+                "api_skip",
+                "Skipping HuggingFace API search",
+                44,
+            )
+
+        repo_count = len(repos_to_check)
+        for repo_index, repo_id in enumerate(repos_to_check, start=1):
+            _report_progress(
+                progress_callback,
+                "repo_files",
+                f"Checking HF repo {repo_index}/{repo_count}",
+                48 + (repo_index / max(1, repo_count)) * 14,
+                repo=repo_id,
+                candidate_index=repo_index,
+                candidate_count=repo_count,
+            )
             log_debug(f"HuggingFace check repo={repo_id} file={filename}")
             files = _get_repo_tree(repo_id, headers=headers)
             if not files:
@@ -740,6 +804,14 @@ def search_huggingface_for_file(
             )
             if result:
                 _search_cache[cache_key] = result
+                _report_progress(
+                    progress_callback,
+                    "found",
+                    "Found HuggingFace match",
+                    92,
+                    repo=repo_id,
+                    match_type=result.get("match_type"),
+                )
                 log_info(
                     f"HuggingFace found match={result['match_type']} file={filename} repo={repo_id} path={result['path']}"
                 )
@@ -748,7 +820,17 @@ def search_huggingface_for_file(
         author_fallback_repos = []
         author_fallback_repo_count = 0
         if use_comfy_org_fallback:
-            for author in HF_AUTHOR_FALLBACKS:
+            total_authors = max(1, len(HF_AUTHOR_FALLBACKS))
+            for author_index, author in enumerate(HF_AUTHOR_FALLBACKS, start=1):
+                _report_progress(
+                    progress_callback,
+                    "author_index",
+                    f"Checking HF fallback index {author_index}/{total_authors}",
+                    64 + ((author_index - 1) / total_authors) * 6,
+                    author=author,
+                    author_index=author_index,
+                    author_count=total_authors,
+                )
                 index = _get_author_index(
                     author,
                     headers={},
@@ -761,6 +843,14 @@ def search_huggingface_for_file(
                     author_fallback_repo_count += int(index.get("repo_count") or 0)
                     if result:
                         _search_cache[cache_key] = result
+                        _report_progress(
+                            progress_callback,
+                            "found",
+                            "Found HuggingFace fallback match",
+                            92,
+                            repo=result.get("repo_id"),
+                            match_type=result.get("match_type"),
+                        )
                         log_info(
                             f"HuggingFace found source=author_index match={result['match_type']} file={filename} repo={result['repo_id']} path={result['path']}"
                         )
@@ -778,8 +868,25 @@ def search_huggingface_for_file(
                         seen_repos.add(repo_id)
                         author_fallback_repos.append(repo_id)
                         author_fallback_repo_count += 1
+        else:
+            _report_progress(
+                progress_callback,
+                "author_skip",
+                "Skipping HuggingFace fallback index",
+                70,
+            )
 
-        for repo_id in author_fallback_repos:
+        fallback_repo_count = len(author_fallback_repos)
+        for repo_index, repo_id in enumerate(author_fallback_repos, start=1):
+            _report_progress(
+                progress_callback,
+                "author_repo",
+                f"Checking HF fallback repo {repo_index}/{fallback_repo_count}",
+                70 + (repo_index / max(1, fallback_repo_count)) * 8,
+                repo=repo_id,
+                candidate_index=repo_index,
+                candidate_count=fallback_repo_count,
+            )
             log_debug(
                 f"HuggingFace author_fallback check repo={repo_id} file={filename}"
             )
@@ -792,22 +899,54 @@ def search_huggingface_for_file(
             )
             if result:
                 _search_cache[cache_key] = result
+                _report_progress(
+                    progress_callback,
+                    "found",
+                    "Found HuggingFace fallback match",
+                    92,
+                    repo=repo_id,
+                    match_type=result.get("match_type"),
+                )
                 log_info(
                     f"HuggingFace found source=author_fallback match={result['match_type']} file={filename} repo={repo_id} path={result['path']}"
                 )
                 return result
 
+        if use_brave_fallback:
+            _report_progress(
+                progress_callback,
+                "brave_search",
+                "Searching Brave fallback",
+                80,
+            )
         brave_candidates = (
             _search_brave_for_huggingface_candidates(filename, brave_api_key or "")
             if use_brave_fallback
             else []
         )
         log_info(f"HuggingFace brave_fallback file={filename} candidates={len(brave_candidates)}")
+        _report_progress(
+            progress_callback,
+            "brave_candidates",
+            f"Brave candidates: {len(brave_candidates)}",
+            84,
+            candidate_count=len(brave_candidates),
+        )
 
-        for candidate in brave_candidates:
+        brave_count = len(brave_candidates)
+        for candidate_index, candidate in enumerate(brave_candidates, start=1):
             repo_id = candidate.get("repo", "")
             branch = candidate.get("branch", "main")
             expected_file = candidate.get("filename", filename)
+            _report_progress(
+                progress_callback,
+                "brave_repo",
+                f"Checking Brave candidate {candidate_index}/{brave_count}",
+                84 + (candidate_index / max(1, brave_count)) * 6,
+                repo=repo_id,
+                candidate_index=candidate_index,
+                candidate_count=brave_count,
+            )
             files = _get_repo_tree(repo_id, headers=headers, branch=branch)
             if not files:
                 continue
@@ -817,6 +956,14 @@ def search_huggingface_for_file(
             )
             if result and result.get("filename", "").lower() == filename.lower():
                 _search_cache[cache_key] = result
+                _report_progress(
+                    progress_callback,
+                    "found",
+                    "Found HuggingFace Brave match",
+                    92,
+                    repo=repo_id,
+                    match_type=result.get("match_type"),
+                )
                 log_info(
                     f"HuggingFace found source=brave_fallback match=exact file={filename} repo={repo_id} path={result['path']}"
                 )
@@ -824,6 +971,15 @@ def search_huggingface_for_file(
 
         # Not found
         _search_cache[cache_key] = None
+        _report_progress(
+            progress_callback,
+            "done",
+            "HuggingFace checked",
+            92,
+            candidate_count=len(repos_to_check),
+            author_repo_count=author_fallback_repo_count,
+            brave_candidate_count=len(brave_candidates),
+        )
         log_info(
             f"HuggingFace miss file={filename} repos={len(repos_to_check)} author_repos={author_fallback_repo_count} brave={len(brave_candidates)}"
         )
@@ -831,6 +987,13 @@ def search_huggingface_for_file(
 
     except Exception as e:
         log_exception(f"HuggingFace search error for {filename}: {e}")
+        _report_progress(
+            progress_callback,
+            "error",
+            f"HuggingFace search error: {e}",
+            100,
+            status="error",
+        )
         return None
 
 

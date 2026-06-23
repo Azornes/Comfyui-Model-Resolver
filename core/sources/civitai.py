@@ -9,7 +9,7 @@ import re
 import json
 import hashlib
 import requests
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Callable
 from urllib.parse import urlparse, parse_qs, quote
 
 from ..matcher import calculate_similarity_with_normalization, normalize_filename
@@ -64,6 +64,28 @@ def clear_search_cache():
     _search_cache.clear()
     _urn_cache.clear()
     _hash_cache.clear()
+
+
+def _report_progress(
+    progress_callback: Optional[Callable[[Dict[str, Any]], None]],
+    stage: str,
+    message: str,
+    percent: Optional[float] = None,
+    **extra: Any,
+) -> None:
+    if not progress_callback:
+        return
+
+    payload = {"stage": stage, "message": message}
+    if percent is not None:
+        payload["percent"] = percent
+    if extra:
+        payload.update(extra)
+
+    try:
+        progress_callback(payload)
+    except Exception as e:
+        log_debug(f"CivitAI progress callback failed: {e}")
 
 
 def check_civitai_session_token(session_token: Optional[str]) -> Dict[str, Any]:
@@ -932,6 +954,7 @@ def search_civitai_for_file(
     candidate_limit: int = DEFAULT_CIVITAI_CANDIDATE_LIMIT,
     use_trpc_search: bool = True,
     use_html_fallback: bool = True,
+    progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Search CivitAI for a specific model file.
@@ -958,11 +981,24 @@ def search_civitai_for_file(
     )
     if cache_key in _search_cache:
         log_debug(f"CivitAI search cache hit for {filename} (exact_only={exact_only})")
+        _report_progress(
+            progress_callback,
+            "cache",
+            "Using CivitAI cache",
+            86,
+        )
         return _search_cache[cache_key]
 
     try:
         # Prefer the CivitAI.red tRPC search because it is much closer to what
         # the browser search UI returns than the broad public /models API.
+        if use_trpc_search:
+            _report_progress(
+                progress_callback,
+                "trpc",
+                "Searching CivitAI tRPC",
+                32,
+            )
         trpc_candidates = (
             _search_civitai_trpc_candidates(
                 filename,
@@ -972,6 +1008,13 @@ def search_civitai_for_file(
             )
             if use_trpc_search
             else []
+        )
+        _report_progress(
+            progress_callback,
+            "trpc_candidates",
+            f"CivitAI tRPC candidates: {len(trpc_candidates)}",
+            42,
+            candidate_count=len(trpc_candidates),
         )
         candidates_to_check: List[Dict[str, Optional[int]]] = []
         seen_candidates = set()
@@ -989,19 +1032,51 @@ def search_civitai_for_file(
         add_candidates(trpc_candidates)
 
         if use_html_fallback and len(candidates_to_check) < candidate_limit:
+            _report_progress(
+                progress_callback,
+                "html",
+                "Searching CivitAI HTML fallback",
+                50,
+            )
             html_candidates = _search_civitai_red_candidates(
                 filename, limit=candidate_limit
             )
             add_candidates(html_candidates)
         else:
             html_candidates = []
+        _report_progress(
+            progress_callback,
+            "html_candidates",
+            f"CivitAI HTML candidates: {len(html_candidates)}",
+            58,
+            candidate_count=len(html_candidates),
+        )
+        _report_progress(
+            progress_callback,
+            "candidates",
+            f"CivitAI candidates to check: {len(candidates_to_check)}",
+            60,
+            candidate_count=len(candidates_to_check),
+            candidate_limit=candidate_limit,
+        )
 
         best_result = None
         best_confidence = 0.0
 
-        for candidate in candidates_to_check:
+        total_candidates = len(candidates_to_check)
+        for candidate_index, candidate in enumerate(candidates_to_check, start=1):
             model_id = candidate["model_id"]
             version_id = candidate.get("version_id")
+            _report_progress(
+                progress_callback,
+                "candidate",
+                f"Checking CivitAI candidate {candidate_index}/{total_candidates}",
+                62 + (candidate_index / max(1, total_candidates)) * 24,
+                model_id=model_id,
+                version_id=version_id,
+                candidate_index=candidate_index,
+                candidate_count=total_candidates,
+            )
             log_info(
                 f"CivitAI candidate check: model_id={model_id}, preferred_version_id={version_id}, filename={filename}"
             )
@@ -1017,6 +1092,15 @@ def search_civitai_for_file(
                 confidence = float(result.get("confidence") or 0.0)
                 if confidence >= 100.0:
                     _search_cache[cache_key] = result
+                    _report_progress(
+                        progress_callback,
+                        "found",
+                        "Found exact CivitAI match",
+                        92,
+                        model_id=result.get("model_id"),
+                        version_id=result.get("version_id"),
+                        confidence=confidence,
+                    )
                     log_info(
                         f"Found exact CivitAI match for {filename}: model_id={result.get('model_id')}, version_id={result.get('version_id')}, candidate_limit={candidate_limit}"
                     )
@@ -1027,6 +1111,15 @@ def search_civitai_for_file(
 
         if best_result:
             _search_cache[cache_key] = best_result
+            _report_progress(
+                progress_callback,
+                "found",
+                "Found CivitAI match",
+                92,
+                model_id=best_result.get("model_id"),
+                version_id=best_result.get("version_id"),
+                confidence=best_confidence,
+            )
             log_info(
                 f"Found best CivitAI match for {filename}: model_id={best_result.get('model_id')}, version_id={best_result.get('version_id')}, confidence={best_confidence}, candidate_limit={candidate_limit}"
             )
@@ -1034,6 +1127,16 @@ def search_civitai_for_file(
 
         # Not found
         _search_cache[cache_key] = None
+        _report_progress(
+            progress_callback,
+            "done",
+            "CivitAI checked",
+            92,
+            trpc_candidate_count=len(trpc_candidates),
+            html_candidate_count=len(html_candidates),
+            checked_candidate_count=len(candidates_to_check),
+            candidate_limit=candidate_limit,
+        )
         log_info(
             f"CivitAI search no result: filename={filename}, trpc_candidates={len(trpc_candidates)}, html_candidates={len(html_candidates)}, checked_candidates={len(candidates_to_check)}, candidate_limit={candidate_limit}"
         )
@@ -1041,6 +1144,13 @@ def search_civitai_for_file(
 
     except Exception as e:
         log_exception(f"CivitAI search error for {filename}: {e}")
+        _report_progress(
+            progress_callback,
+            "error",
+            f"CivitAI search error: {e}",
+            100,
+            status="error",
+        )
         return None
 
 

@@ -9,7 +9,7 @@ import json
 import os
 import re
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, urljoin, urlparse
 
 import requests
@@ -83,6 +83,28 @@ class CivArchiveSearchError(Exception):
 def clear_search_cache():
     """Clear cached CivArchive search results."""
     _search_cache.clear()
+
+
+def _report_progress(
+    progress_callback: Optional[Callable[[Dict[str, Any]], None]],
+    stage: str,
+    message: str,
+    percent: Optional[float] = None,
+    **extra: Any,
+) -> None:
+    if not progress_callback:
+        return
+
+    payload = {"stage": stage, "message": message}
+    if percent is not None:
+        payload["percent"] = percent
+    if extra:
+        payload.update(extra)
+
+    try:
+        progress_callback(payload)
+    except Exception as e:
+        log_debug(f"CivArchive progress callback failed: {e}")
 
 
 def is_civarchive_available() -> bool:
@@ -1510,6 +1532,7 @@ def search_civarchive_for_file(
     base_model_context: Optional[str] = None,
     exact_only: bool = False,
     limit: int = DEFAULT_CIVARCHIVE_CANDIDATE_LIMIT,
+    progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Search CivArchive for the best downloadable match for a model filename.
@@ -1524,16 +1547,36 @@ def search_civarchive_for_file(
         f"file::{normalized_filename.lower()}::{model_type or ''}::{base_model_key}::{exact_only}::{limit}"
     )
     if cache_key in _search_cache:
+        _report_progress(
+            progress_callback,
+            "cache",
+            "Using CivArchive cache",
+            86,
+        )
         return _search_cache[cache_key]
 
     sha256 = _extract_sha256(normalized_filename)
     if sha256:
+        _report_progress(
+            progress_callback,
+            "hash",
+            "Resolving CivArchive hash",
+            40,
+            sha256=sha256,
+        )
         result = resolve_civarchive_by_hash(
             sha256,
             query=normalized_filename,
             exact_only=exact_only,
         )
         _search_cache[cache_key] = result
+        _report_progress(
+            progress_callback,
+            "done",
+            "CivArchive checked",
+            92,
+            found=bool(result),
+        )
         return result
 
     best_match = None
@@ -1545,12 +1588,44 @@ def search_civarchive_for_file(
     )
 
     try:
-        for search_query in _build_search_queries(normalized_filename):
+        search_queries = _build_search_queries(normalized_filename)
+        query_count = max(1, len(search_queries))
+        for query_index, search_query in enumerate(search_queries, start=1):
+            query_percent = 30 + ((query_index - 1) / query_count) * 18
+            _report_progress(
+                progress_callback,
+                "query",
+                f"CivArchive query {query_index}/{query_count}",
+                query_percent,
+                query=search_query,
+                query_index=query_index,
+                query_count=query_count,
+            )
             candidates = _search_page(search_query, model_type=model_type)
-            for candidate in candidates:
+            _report_progress(
+                progress_callback,
+                "candidates",
+                f"CivArchive candidates: {len(candidates)}",
+                min(55, query_percent + 10),
+                candidate_count=len(candidates),
+                checked_candidate_count=len(seen),
+            )
+            candidate_count = len(candidates)
+            for candidate_index, candidate in enumerate(candidates, start=1):
                 identity = _candidate_identity(candidate)
                 if identity in seen:
                     continue
+                checked_index = min(len(seen) + 1, limit)
+                _report_progress(
+                    progress_callback,
+                    "candidate",
+                    f"Resolving CivArchive candidate {checked_index}/{limit}",
+                    58 + (checked_index / max(1, limit)) * 30,
+                    candidate_index=candidate_index,
+                    candidate_count=candidate_count,
+                    checked_candidate_count=checked_index,
+                    candidate_limit=limit,
+                )
                 seen.add(identity)
 
                 resolved = _resolve_search_candidate(
@@ -1598,6 +1673,14 @@ def search_civarchive_for_file(
 
                 if confidence == 100.0 and base_model_matches:
                     _search_cache[cache_key] = best_match
+                    _report_progress(
+                        progress_callback,
+                        "found",
+                        "Found CivArchive match",
+                        92,
+                        confidence=confidence,
+                        checked_candidate_count=len(seen),
+                    )
                     return best_match
 
                 if len(seen) >= limit:
@@ -1612,6 +1695,13 @@ def search_civarchive_for_file(
         raise
     except Exception as e:
         log_exception(f"CivArchive search error for {normalized_filename}: {e}")
+        _report_progress(
+            progress_callback,
+            "error",
+            f"CivArchive search error: {e}",
+            100,
+            status="error",
+        )
         return None
 
     if best_match and best_confidence < 40:
@@ -1622,4 +1712,14 @@ def search_civarchive_for_file(
         best_match = None
 
     _search_cache[cache_key] = best_match
+    _report_progress(
+        progress_callback,
+        "found" if best_match else "done",
+        "Found CivArchive match" if best_match else "CivArchive checked",
+        92,
+        found=bool(best_match),
+        confidence=best_confidence if best_match else None,
+        checked_candidate_count=len(seen),
+        candidate_limit=limit,
+    )
     return best_match

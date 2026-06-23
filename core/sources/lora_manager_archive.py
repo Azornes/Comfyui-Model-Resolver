@@ -9,7 +9,7 @@ import os
 import sqlite3
 import re
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from ..matcher import calculate_similarity_with_normalization, normalize_filename
 from ..log_system.log_funcs import (
@@ -48,6 +48,28 @@ def clear_search_cache():
     global _search_cache, _db_path_cache
     _search_cache.clear()
     _db_path_cache = None
+
+
+def _report_progress(
+    progress_callback: Optional[Callable[[Dict[str, Any]], None]],
+    stage: str,
+    message: str,
+    percent: Optional[float] = None,
+    **extra: Any,
+) -> None:
+    if not progress_callback:
+        return
+
+    payload = {"stage": stage, "message": message}
+    if percent is not None:
+        payload["percent"] = percent
+    if extra:
+        payload.update(extra)
+
+    try:
+        progress_callback(payload)
+    except Exception as e:
+        log_debug(f"LoRA Manager archive progress callback failed: {e}")
 
 
 def get_lora_manager_archive_db_path() -> Optional[str]:
@@ -548,6 +570,7 @@ def search_lora_manager_archive(
     model_type: Optional[str] = None,
     base_model_context: Optional[str] = None,
     limit: int = 10,
+    progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Search the local comfyui-lora-manager CivitAI archive by model name.
@@ -570,16 +593,48 @@ def search_lora_manager_archive(
         f"search::{normalized_query.lower()}::{normalized_type}::{base_model_key}::{limit}"
     )
     if cache_key in _search_cache:
+        _report_progress(
+            progress_callback,
+            "cache",
+            "Using LoRA archive cache",
+            76,
+            result_count=len(_search_cache[cache_key] or []),
+        )
         return list(_search_cache[cache_key])
 
+    _report_progress(
+        progress_callback,
+        "db",
+        "Opening LoRA archive database",
+        28,
+    )
     conn = _connect_readonly()
     if conn is None:
+        _report_progress(
+            progress_callback,
+            "unavailable",
+            "LoRA archive database unavailable",
+            92,
+        )
         return []
 
     try:
         started_at = time.perf_counter()
+        _report_progress(
+            progress_callback,
+            "query",
+            "Querying LoRA archive database",
+            35,
+        )
         candidate_rows = _query_candidate_rows(
             conn, normalized_query, normalized_type, limit
+        )
+        _report_progress(
+            progress_callback,
+            "candidates",
+            f"LoRA archive rows: {len(candidate_rows)}",
+            58,
+            candidate_count=len(candidate_rows),
         )
         if not candidate_rows:
             elapsed = time.perf_counter() - started_at
@@ -587,10 +642,27 @@ def search_lora_manager_archive(
                 f"LoRA Manager archive query={normalized_query} type={normalized_type or 'all'} results=0 candidates=0 elapsed={elapsed:.3f}s"
             )
             _search_cache[cache_key] = []
+            _report_progress(
+                progress_callback,
+                "results",
+                "LoRA archive matches: 0",
+                88,
+                candidate_count=0,
+                result_count=0,
+            )
             return []
 
         scored_candidates = []
-        for row in candidate_rows:
+        row_count = len(candidate_rows)
+        for row_index, row in enumerate(candidate_rows, start=1):
+            _report_progress(
+                progress_callback,
+                "score",
+                f"Scoring LoRA archive row {row_index}/{row_count}",
+                60 + (row_index / max(1, row_count)) * 10,
+                candidate_index=row_index,
+                candidate_count=row_count,
+            )
             confidence = _calculate_confidence(
                 normalized_query,
                 row["model_name"] or "",
@@ -616,10 +688,28 @@ def search_lora_manager_archive(
             row["version_id"]
             for _, _, row in scored_candidates[: max(limit * 3, limit)]
         ]
+        _report_progress(
+            progress_callback,
+            "details",
+            f"Loading LoRA archive details: {len(selected_version_ids)}",
+            72,
+            candidate_count=len(selected_version_ids),
+        )
         full_rows = _load_full_rows_for_versions(conn, selected_version_ids)
 
         results = []
-        for _, _, candidate_row in scored_candidates:
+        scored_count = len(scored_candidates)
+        for candidate_index, (_, _, candidate_row) in enumerate(
+            scored_candidates, start=1
+        ):
+            _report_progress(
+                progress_callback,
+                "build",
+                f"Building LoRA archive match {candidate_index}/{scored_count}",
+                74 + (candidate_index / max(1, scored_count)) * 12,
+                candidate_index=candidate_index,
+                candidate_count=scored_count,
+            )
             version_id = candidate_row["version_id"]
             full_row = full_rows.get(version_id)
             if not full_row:
@@ -647,9 +737,24 @@ def search_lora_manager_archive(
         log_info(
             f"LoRA Manager archive query={normalized_query} type={normalized_type or 'all'} results={len(results)} candidates={len(candidate_rows)} elapsed={elapsed:.3f}s"
         )
+        _report_progress(
+            progress_callback,
+            "results",
+            f"LoRA archive matches: {len(results)}",
+            88,
+            candidate_count=len(candidate_rows),
+            result_count=len(results),
+        )
         return results
     except Exception as e:
         log_exception(f"LoRA Manager archive search error for {query}: {e}")
+        _report_progress(
+            progress_callback,
+            "error",
+            f"LoRA archive search error: {e}",
+            100,
+            status="error",
+        )
         return []
     finally:
         conn.close()
@@ -661,6 +766,7 @@ def search_lora_manager_archive_for_file(
     base_model_context: Optional[str] = None,
     exact_only: bool = False,
     limit: int = 10,
+    progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Search the archive for the best model/version match for a filename.
@@ -674,6 +780,12 @@ def search_lora_manager_archive_for_file(
         f"file::{filename.lower()}::{_normalize_model_type(model_type)}::{base_model_key}::{exact_only}::{limit}"
     )
     if cache_key in _search_cache:
+        _report_progress(
+            progress_callback,
+            "cache",
+            "Using LoRA archive cache",
+            86,
+        )
         return _search_cache[cache_key]
 
     candidates = search_lora_manager_archive(
@@ -681,12 +793,29 @@ def search_lora_manager_archive_for_file(
         model_type=model_type,
         base_model_context=base_model_context,
         limit=limit,
+        progress_callback=progress_callback,
+    )
+    _report_progress(
+        progress_callback,
+        "candidates",
+        f"LoRA archive matches to check: {len(candidates)}",
+        88 if candidates else 92,
+        candidate_count=len(candidates),
     )
     best_match = None
     best_confidence = 0.0
     best_rank = -9999.0
 
-    for candidate in candidates:
+    total_candidates = len(candidates)
+    for candidate_index, candidate in enumerate(candidates, start=1):
+        _report_progress(
+            progress_callback,
+            "candidate",
+            f"Checking LoRA archive match {candidate_index}/{total_candidates}",
+            88 + (candidate_index / max(1, total_candidates)) * 4,
+            candidate_index=candidate_index,
+            candidate_count=total_candidates,
+        )
         candidate_filename = candidate.get("filename", "")
         confidence = _calculate_confidence(filename, candidate.get("name", ""), candidate.get("version_name", ""), candidate_filename)
         if exact_only and confidence < 100.0:
@@ -706,11 +835,33 @@ def search_lora_manager_archive_for_file(
             best_match["confidence"] = confidence
             best_match["match_type"] = "exact" if confidence == 100.0 else "similar"
         if confidence == 100.0 and base_model_matches:
+            _report_progress(
+                progress_callback,
+                "found",
+                "Found LoRA archive match",
+                92,
+                confidence=confidence,
+            )
             break
 
     if best_match is None and exact_only:
         _search_cache[cache_key] = None
+        _report_progress(
+            progress_callback,
+            "done",
+            "LoRA archive checked",
+            92,
+            found=False,
+        )
         return None
 
     _search_cache[cache_key] = best_match
+    _report_progress(
+        progress_callback,
+        "found" if best_match else "done",
+        "Found LoRA archive match" if best_match else "LoRA archive checked",
+        92,
+        found=bool(best_match),
+        confidence=best_confidence if best_match else None,
+    )
     return best_match
