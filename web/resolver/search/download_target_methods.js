@@ -1514,13 +1514,109 @@ export const downloadTargetMethods = {
         const subfolderEl = container.querySelector(`#download-subfolder-${missing.node_id}-${missing.widget_index}`);
         const suggestBtn = container.querySelector(`#download-subfolder-suggest-${missing.node_id}-${missing.widget_index}`);
         const categoryListEl = container.querySelector(`#download-category-list-${missing.node_id}-${missing.widget_index}`);
-        const listEl = container.querySelector(`#download-subfolder-list-${missing.node_id}-${missing.widget_index}`);
+        const listEl = container.querySelector(`#download-subfolder-list-${missing.node_id}-${missing.widget_index}`)
+            || document.getElementById(`download-subfolder-list-${missing.node_id}-${missing.widget_index}`);
         if (!categoryEl || !subfolderEl || !listEl) return;
+
+        document.querySelectorAll('.mr-download-target-list[data-ml-floating-portal="true"]').forEach(existing => {
+            if (existing !== listEl && existing.id === listEl.id) {
+                existing.remove();
+            }
+        });
+        if (listEl.dataset.mlFloatingPortal !== 'true') {
+            listEl.dataset.mlFloatingPortal = 'true';
+            document.body.appendChild(listEl);
+        }
+        listEl.classList.add('mr-download-target-floating');
 
         this.enableWheelScrollChaining(listEl);
         if (categoryListEl) {
             this.enableWheelScrollChaining(categoryListEl);
         }
+        if (listEl.dataset.mlBrowserMouseBound !== 'true') {
+            listEl.dataset.mlBrowserMouseBound = 'true';
+            listEl.addEventListener('mousedown', (event) => {
+                event.preventDefault();
+            });
+        }
+        let floatingPositionCleanup = null;
+
+        const cleanupFloatingPositioning = () => {
+            if (floatingPositionCleanup) {
+                floatingPositionCleanup();
+                floatingPositionCleanup = null;
+            }
+        };
+
+        const hideFloatingSubfolderList = () => {
+            cleanupFloatingPositioning();
+            listEl.style.display = 'none';
+        };
+
+        const clampNumber = (value, min, max) => Math.min(Math.max(value, min), max);
+
+        const positionFloatingSubfolderList = () => {
+            if (listEl.style.display === 'none') return;
+
+            const rect = subfolderEl.getBoundingClientRect();
+            const viewportPadding = 12;
+            const viewportWidth = Math.max(320, window.innerWidth || document.documentElement.clientWidth || 0);
+            const viewportHeight = Math.max(240, window.innerHeight || document.documentElement.clientHeight || 0);
+            if (rect.bottom < viewportPadding || rect.top > viewportHeight - viewportPadding) {
+                hideFloatingSubfolderList();
+                return;
+            }
+
+            const availableWidth = Math.max(260, viewportWidth - viewportPadding * 2);
+            const targetWidth = Math.min(560, availableWidth, Math.max(rect.width, 420));
+            const left = clampNumber(
+                rect.left,
+                viewportPadding,
+                Math.max(viewportPadding, viewportWidth - targetWidth - viewportPadding)
+            );
+            const gap = 6;
+            const spaceBelow = viewportHeight - rect.bottom - viewportPadding - gap;
+            const spaceAbove = rect.top - viewportPadding - gap;
+            const openAbove = spaceBelow < 260 && spaceAbove > spaceBelow;
+            const availableHeight = Math.max(180, Math.min(380, openAbove ? spaceAbove : spaceBelow));
+
+            listEl.style.position = 'fixed';
+            listEl.style.left = `${left}px`;
+            listEl.style.right = 'auto';
+            listEl.style.width = `${targetWidth}px`;
+            listEl.style.minWidth = `${Math.min(rect.width, targetWidth)}px`;
+            listEl.style.maxWidth = `${availableWidth}px`;
+
+            const scrollEl = listEl.querySelector('.mr-folder-browser-scroll');
+            if (scrollEl) {
+                const chromeHeight = Math.max(0, listEl.offsetHeight - scrollEl.offsetHeight);
+                scrollEl.style.maxHeight = `${Math.max(140, availableHeight - chromeHeight)}px`;
+            }
+
+            const popupHeight = listEl.offsetHeight;
+            const top = openAbove
+                ? Math.max(viewportPadding, rect.top - popupHeight - gap)
+                : Math.min(rect.bottom + gap, viewportHeight - viewportPadding - Math.min(popupHeight, availableHeight));
+            listEl.style.top = `${top}px`;
+        };
+
+        const bindFloatingPositioning = () => {
+            cleanupFloatingPositioning();
+            const updatePosition = () => positionFloatingSubfolderList();
+            window.addEventListener('resize', updatePosition, true);
+            window.addEventListener('scroll', updatePosition, true);
+            floatingPositionCleanup = () => {
+                window.removeEventListener('resize', updatePosition, true);
+                window.removeEventListener('scroll', updatePosition, true);
+            };
+        };
+
+        const showFloatingSubfolderList = () => {
+            listEl.style.display = 'block';
+            positionFloatingSubfolderList();
+            bindFloatingPositioning();
+            requestAnimationFrame(positionFloatingSubfolderList);
+        };
 
         const renderOptions = (targetEl, values, onSelect) => {
             const options = values.map(value => (
@@ -1558,6 +1654,252 @@ export const downloadTargetMethods = {
             });
         };
 
+        const normalizeSubfolderPath = (value = '') => String(value || '')
+            .replace(/\//g, '\\')
+            .split('\\')
+            .map(part => part.trim())
+            .filter(part => part && part !== '.')
+            .join('\\');
+
+        const getFolderBrowserExpandedSet = (category = '') => {
+            if (!this.downloadFolderBrowserExpandedGroups) {
+                this.downloadFolderBrowserExpandedGroups = new Map();
+            }
+            const key = this.normalizeDownloadCategory(category || 'unknown');
+            if (!this.downloadFolderBrowserExpandedGroups.has(key)) {
+                this.downloadFolderBrowserExpandedGroups.set(key, new Set());
+            }
+            return this.downloadFolderBrowserExpandedGroups.get(key);
+        };
+
+        const getBaseDirectoryLabel = (baseDirectory = '') => {
+            const clean = String(baseDirectory || '').replace(/[\\\/]+$/, '');
+            if (!clean) return 'Default root';
+            return clean.split(/[\\\/]+/).filter(Boolean).pop() || clean;
+        };
+
+        const buildFolderTree = (entries = []) => {
+            const root = new Map();
+            entries.forEach(entry => {
+                const value = normalizeSubfolderPath(entry.value);
+                if (!value) return;
+
+                const parts = value.split('\\').filter(Boolean);
+                let current = root;
+                let currentPath = '';
+                parts.forEach((part, index) => {
+                    currentPath = currentPath ? `${currentPath}\\${part}` : part;
+                    if (!current.has(part)) {
+                        current.set(part, {
+                            name: part,
+                            path: currentPath,
+                            children: new Map(),
+                            entry: null
+                        });
+                    }
+                    const node = current.get(part);
+                    if (index === parts.length - 1) {
+                        node.entry = entry;
+                    }
+                    current = node.children;
+                });
+            });
+            return root;
+        };
+
+        const countTreeNodes = (nodeMap) => {
+            let count = 0;
+            nodeMap.forEach(node => {
+                count += 1 + countTreeNodes(node.children);
+            });
+            return count;
+        };
+
+        const renderFolderTreeNodes = (
+            nodeMap,
+            rootGroup,
+            expandedSet,
+            filter,
+            selectedValue,
+            selectedBaseDirectory
+        ) => {
+            return Array.from(nodeMap.values())
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map(node => {
+                    const hasChildren = node.children.size > 0;
+                    const stateKey = `node:${rootGroup.key}:${node.path.toLowerCase()}`;
+                    const childCount = countTreeNodes(node.children);
+                    const nodeValue = node.entry?.value || node.path;
+                    const nodeBaseDirectory = node.entry?.baseDirectory || rootGroup.baseDirectory || '';
+                    const isSelected = normalizeSubfolderPath(nodeValue).toLowerCase() === selectedValue.toLowerCase()
+                        && String(nodeBaseDirectory || '') === String(selectedBaseDirectory || '');
+                    const shouldExpand = hasChildren && (
+                        Boolean(filter)
+                        || expandedSet.has(stateKey)
+                        || selectedValue.toLowerCase().startsWith(`${node.path.toLowerCase()}\\`)
+                    );
+                    const toggle = hasChildren
+                        ? `<button class="mr-folder-browser-toggle ${shouldExpand ? 'is-expanded' : ''}" type="button" data-browser-action="toggle" data-state-key="${encodeURIComponent(stateKey)}" aria-label="${shouldExpand ? 'Collapse folder' : 'Expand folder'}"><span class="mr-folder-browser-chevron"></span></button>`
+                        : `<span class="mr-folder-browser-toggle mr-folder-browser-toggle-empty"></span>`;
+                    const children = hasChildren
+                        ? `<div class="mr-folder-browser-children ${shouldExpand ? 'is-expanded' : ''}">${renderFolderTreeNodes(node.children, rootGroup, expandedSet, filter, selectedValue, selectedBaseDirectory)}</div>`
+                        : '';
+
+                    return `
+                        <div class="mr-folder-browser-node">
+                            <div class="mr-folder-browser-row ${isSelected ? 'is-selected' : ''}" data-browser-action="select" data-value="${encodeURIComponent(nodeValue)}" data-base-directory="${encodeURIComponent(nodeBaseDirectory)}">
+                                ${toggle}
+                                <span class="mr-folder-browser-folder-icon">${getSvgIcon('folderOpen', 'currentColor', 'mr-folder-browser-svg')}</span>
+                                <span class="mr-folder-browser-name">${this.escapeHtml(node.name)}</span>
+                                ${childCount ? `<span class="mr-folder-browser-count">${childCount}</span>` : ''}
+                            </div>
+                            ${children}
+                        </div>
+                    `;
+                })
+                .join('');
+        };
+
+        const renderDownloadFolderBrowser = (targetEl, folders, filterText, onSelect) => {
+            const rawFilter = String(filterText || '').trim();
+            const filter = rawFilter.toLowerCase();
+            const normalizedFilter = filter.replace(/[\/]+/g, '\\');
+            const category = this.getDropdownValue(categoryEl);
+            const expandedSet = getFolderBrowserExpandedSet(category);
+            const selectedValue = normalizeSubfolderPath(subfolderEl.value || '');
+            const selectedBaseDirectory = subfolderEl.dataset.baseDirectory || '';
+            const folderEntries = folders.map(folder => ({
+                value: normalizeSubfolderPath(this.getSubfolderOptionValue(folder)),
+                label: this.getSubfolderOptionLabel(folder),
+                baseDirectory: this.getSubfolderOptionBaseDirectory(folder),
+                searchText: this.getSubfolderOptionSearchText(folder)
+            })).filter(entry => entry.value);
+            const filteredEntries = normalizedFilter
+                ? folderEntries.filter(entry => (
+                    entry.searchText.includes(filter)
+                    || entry.value.toLowerCase().includes(normalizedFilter)
+                    || entry.label.toLowerCase().includes(filter)
+                ))
+                : folderEntries;
+            const rootGroupsMap = new Map();
+            filteredEntries.forEach(entry => {
+                const baseDirectory = entry.baseDirectory || '';
+                const key = baseDirectory || '__default__';
+                if (!rootGroupsMap.has(key)) {
+                    rootGroupsMap.set(key, {
+                        key,
+                        baseDirectory,
+                        label: getBaseDirectoryLabel(baseDirectory),
+                        entries: []
+                    });
+                }
+                rootGroupsMap.get(key).entries.push(entry);
+            });
+            const rootGroups = Array.from(rootGroupsMap.values())
+                .sort((a, b) => a.label.localeCompare(b.label));
+            const selectedContext = this.getDownloadTargetFolderContext(
+                category,
+                selectedValue,
+                selectedBaseDirectory
+            );
+            const previewPath = selectedContext?.download_directory
+                || selectedContext?.folder_path
+                || selectedValue
+                || this.getDownloadTargetBaseDirectory(category)
+                || '';
+            const hasExactTypedMatch = rawFilter
+                ? folderEntries.some(entry => entry.value.toLowerCase() === normalizeSubfolderPath(rawFilter).toLowerCase())
+                : true;
+            const typedPath = normalizeSubfolderPath(rawFilter);
+            const clearRow = selectedValue
+                ? `<button class="mr-folder-browser-manual" type="button" data-browser-action="select" data-value="" data-base-directory="">
+                    <span class="mr-folder-browser-manual-title">Use model root</span>
+                    <span class="mr-folder-browser-manual-path">${this.escapeHtml(this.getDownloadTargetBaseDirectory(category) || 'Category root')}</span>
+                </button>`
+                : '';
+            const manualRow = typedPath && !hasExactTypedMatch
+                ? `<button class="mr-folder-browser-manual" type="button" data-browser-action="select" data-value="${encodeURIComponent(typedPath)}" data-base-directory="">
+                    <span class="mr-folder-browser-manual-title">Use typed folder</span>
+                    <span class="mr-folder-browser-manual-path">${this.escapeHtml(typedPath)}</span>
+                </button>`
+                : '';
+            const rootHtml = rootGroups.map(group => {
+                const tree = buildFolderTree(group.entries);
+                const stateKey = `root:${group.key}`;
+                const isExpanded = Boolean(normalizedFilter)
+                    || rootGroups.length === 1
+                    || expandedSet.has(stateKey)
+                    || (selectedBaseDirectory && selectedBaseDirectory === group.baseDirectory);
+                const treeHtml = renderFolderTreeNodes(
+                    tree,
+                    group,
+                    expandedSet,
+                    normalizedFilter,
+                    selectedValue,
+                    selectedBaseDirectory
+                );
+
+                return `
+                    <div class="mr-folder-browser-root">
+                        <button class="mr-folder-browser-root-head ${isExpanded ? 'is-expanded' : ''}" type="button" data-browser-action="toggle" data-state-key="${encodeURIComponent(stateKey)}">
+                            <span class="mr-folder-browser-chevron"></span>
+                            <span class="mr-folder-browser-root-title">${this.escapeHtml(group.label)}</span>
+                            <span class="mr-folder-browser-root-count">${group.entries.length}</span>
+                        </button>
+                        ${group.baseDirectory ? `<div class="mr-folder-browser-root-path">${this.escapeHtml(group.baseDirectory)}</div>` : ''}
+                        <div class="mr-folder-browser-tree ${isExpanded ? 'is-expanded' : ''}">${treeHtml}</div>
+                    </div>
+                `;
+            }).join('');
+
+            targetEl.classList.add('mr-download-folder-browser');
+            targetEl.innerHTML = `
+                <div class="mr-folder-browser-head">
+                    <div>
+                        <div class="mr-folder-browser-title">Browse folders</div>
+                        <div class="mr-folder-browser-subtitle">${filteredEntries.length} of ${folderEntries.length} folders</div>
+                    </div>
+                    <div class="mr-folder-browser-category">${this.escapeHtml(this.getCategoryDisplayName(category))}</div>
+                </div>
+                <div class="mr-folder-browser-preview">
+                    <span class="mr-folder-browser-preview-label">Target folder path</span>
+                    <span class="mr-folder-browser-preview-path">${this.escapeHtml(previewPath)}</span>
+                </div>
+                ${clearRow}
+                ${manualRow}
+                <div class="mr-folder-browser-scroll">
+                    ${rootHtml || `<div class="mr-folder-browser-empty">No folders match this filter.</div>`}
+                </div>
+            `;
+            showFloatingSubfolderList();
+
+            targetEl.querySelectorAll('[data-browser-action="toggle"]').forEach(button => {
+                button.addEventListener('mousedown', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const stateKey = decodeURIComponent(button.dataset.stateKey || '');
+                    if (!stateKey) return;
+                    if (expandedSet.has(stateKey)) {
+                        expandedSet.delete(stateKey);
+                    } else {
+                        expandedSet.add(stateKey);
+                    }
+                    renderDownloadFolderBrowser(targetEl, folders, filterText, onSelect);
+                });
+            });
+
+            targetEl.querySelectorAll('[data-browser-action="select"]').forEach(row => {
+                row.addEventListener('mousedown', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const value = decodeURIComponent(row.dataset.value || '');
+                    const baseDirectory = decodeURIComponent(row.dataset.baseDirectory || '');
+                    onSelect(value, '', baseDirectory);
+                    hideFloatingSubfolderList();
+                });
+            });
+        };
+
         const populateCategoryOptions = (filterText = '') => {
             if (!categoryListEl) return;
             const filter = String(filterText || '').trim().toLowerCase();
@@ -1586,22 +1928,18 @@ export const downloadTargetMethods = {
                 });
                 subfolderEl.dataset.baseDirectory = '';
                 listEl.innerHTML = '';
-                listEl.style.display = 'none';
+                hideFloatingSubfolderList();
                 this.syncDownloadTargetFolderContext(categoryEl, subfolderEl);
                 this.applySuggestedDownloadSubfolder(missing, categoryEl, subfolderEl);
             });
         };
 
         const populateSubfolderOptions = async (filterText = '') => {
-            const filter = (filterText || '').toLowerCase();
             const category = this.getDropdownValue(categoryEl);
             await this.ensureDownloadSubfoldersLoaded(category);
             const folders = this.getAvailableSubfolders(category);
-            const filtered = filter
-                ? folders.filter(folder => this.getSubfolderOptionSearchText(folder).includes(filter))
-                : folders;
 
-            renderOptions(listEl, filtered, (value, _label, baseDirectory) => {
+            renderDownloadFolderBrowser(listEl, folders, filterText, (value, _label, baseDirectory) => {
                 subfolderEl.value = value;
                 subfolderEl.dataset.baseDirectory = baseDirectory || '';
                 this.saveDownloadTargetSelection(missing, {
@@ -1616,7 +1954,11 @@ export const downloadTargetMethods = {
 
         const hideList = (targetEl) => {
             setTimeout(() => {
-                targetEl.style.display = 'none';
+                if (targetEl === listEl) {
+                    hideFloatingSubfolderList();
+                } else {
+                    targetEl.style.display = 'none';
+                }
             }, 150);
         };
 
@@ -1633,7 +1975,7 @@ export const downloadTargetMethods = {
                     subfolderEl.value = '';
                     subfolderEl.dataset.baseDirectory = '';
                     listEl.innerHTML = '';
-                    listEl.style.display = 'none';
+                    hideFloatingSubfolderList();
                 }
                 this.saveDownloadTargetSelection(missing, {
                     category,
@@ -1691,7 +2033,7 @@ export const downloadTargetMethods = {
                 try {
                     await this.forceSuggestedDownloadSubfolder(missing, categoryEl, subfolderEl);
                     listEl.innerHTML = '';
-                    listEl.style.display = 'none';
+                    hideFloatingSubfolderList();
                 } finally {
                     await animationDone;
                     suggestBtn.classList.remove('mr-is-suggesting');
