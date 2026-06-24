@@ -2369,6 +2369,10 @@ export const downloadTargetMethods = {
                 this.syncDownloadTargetFolderContext(categoryEl, subfolderEl);
                 refreshCategoryTooltip();
                 this.applySuggestedDownloadSubfolder(missing, categoryEl, subfolderEl);
+                categoryEl.dispatchEvent(new CustomEvent('mr-download-category-change', {
+                    bubbles: true,
+                    detail: { category: value }
+                }));
             }, categoryEl);
         };
 
@@ -2414,6 +2418,12 @@ export const downloadTargetMethods = {
                 });
                 this.syncDownloadTargetFolderContext(categoryEl, subfolderEl);
                 refreshCategoryTooltip();
+                if (category !== previousCategory) {
+                    categoryEl.dispatchEvent(new CustomEvent('mr-download-category-change', {
+                        bubbles: true,
+                        detail: { category }
+                    }));
+                }
                 populateCategoryOptions(typed);
             });
             categoryEl.addEventListener('keydown', (event) => {

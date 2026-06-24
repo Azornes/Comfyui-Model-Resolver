@@ -2569,6 +2569,49 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+.mr-combo-list.mr-local-model-browser {
+    box-sizing: border-box;
+    left: auto;
+    right: auto;
+    width: min(760px, calc(100vw - 48px));
+    max-height: none;
+    overflow: hidden;
+    padding: 0;
+    z-index: var(--mr-z-context-menu);
+}
+.mr-local-model-browser-scroll {
+    box-sizing: border-box;
+    overflow: auto;
+    padding: 6px;
+}
+.mr-local-model-browser .mr-folder-browser-root.is-preferred {
+    border-color: rgba(114,211,138,0.18);
+    background: rgba(114,211,138,0.035);
+}
+.mr-local-model-browser .mr-folder-browser-root-title {
+    font-size: 11px;
+}
+.mr-local-model-row {
+    min-height: 30px;
+}
+.mr-local-model-file-icon {
+    color: rgba(120,170,255,0.95);
+}
+.mr-local-model-folder-tag {
+    min-width: 0;
+    max-width: 42%;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.045);
+    color: var(--mr-text-muted);
+    font-size: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.mr-local-model-folder-row {
+    font-weight: 700;
+}
 
 /* Status Messages */
 .mr-status {

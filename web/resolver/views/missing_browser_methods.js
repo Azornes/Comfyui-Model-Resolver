@@ -735,88 +735,350 @@ export const missingBrowserMethods = {
         const comboInput = container.querySelector(`#combo-input-${comboId}`);
         const comboList = container.querySelector(`#combo-list-${comboId}`);
         const comboRefresh = container.querySelector(`#combo-refresh-${comboId}`);
-        const comboSection = comboInput?.closest('.mr-combo-section')
-            || comboList?.closest('.mr-combo-section')
-            || comboRefresh?.closest('.mr-combo-section');
-
-        if (comboList) {
-            this.enableWheelScrollChaining(comboList);
-        }
 
         const getAllModels = () => Array.isArray(this.allModels) ? this.allModels : [];
-        const buildLabel = (m) => `${m.category ? m.category + ': ' : ''}${m.relative_path || m.filename || ''}`;
-        const getFolder = (m) => m.path || m.base_directory || '';
-        let comboListPointerActive = false;
-        let outsideComboPointerHandler = null;
-        const isInsideCombo = (target) => (
-            Boolean(target) && (
-                Boolean(comboSection?.contains(target))
-                || Boolean(comboInput?.contains(target))
-                || Boolean(comboList?.contains(target))
-                || Boolean(comboRefresh?.contains(target))
-            )
-        );
-        const stopOutsideComboPointerListener = () => {
-            if (!outsideComboPointerHandler) return;
-            window.removeEventListener('pointerdown', outsideComboPointerHandler, true);
-            outsideComboPointerHandler = null;
+        const normalizeModelPath = (value = '') => String(value || '')
+            .replace(/\//g, '\\')
+            .split('\\')
+            .map(part => part.trim())
+            .filter(Boolean)
+            .join('\\');
+        const getModelCategory = (model = {}) => this.normalizeDownloadCategory(model.category || 'unknown') || 'unknown';
+        const getDownloadCategoryElement = () => container.querySelector(`#download-category-${missing.node_id}-${missing.widget_index}`)
+            || this.contentElement?.querySelector(`#download-category-${missing.node_id}-${missing.widget_index}`);
+        const getPreferredModelCategory = () => {
+            const categoryEl = getDownloadCategoryElement();
+            const selectedCategory = this.normalizeDownloadCategory(this.getDropdownValue?.(categoryEl) || categoryEl?.value || '');
+            const savedCategory = this.normalizeDownloadCategory(this.getSavedDownloadTargetSelection?.(missing)?.category || '');
+            const inferredCategory = this.normalizeDownloadCategory(
+                missing.category || this.getMissingDownloadCategory?.(missing, 'unknown') || 'unknown'
+            );
+            return selectedCategory || savedCategory || inferredCategory || 'unknown';
         };
-        const startOutsideComboPointerListener = () => {
-            if (outsideComboPointerHandler) return;
-            outsideComboPointerHandler = (event) => {
-                if (!comboList?.isConnected) {
-                    stopOutsideComboPointerListener();
-                    return;
-                }
-                if (isInsideCombo(event.target)) {
-                    return;
-                }
-                hideComboList();
+        const getLocalModelExpandedSet = (preferredCategory = getPreferredModelCategory()) => {
+            if (!this.localModelBrowserExpandedGroups) {
+                this.localModelBrowserExpandedGroups = new Map();
+            }
+            const key = preferredCategory || 'all';
+            if (!this.localModelBrowserExpandedGroups.has(key)) {
+                this.localModelBrowserExpandedGroups.set(key, new Set());
+            }
+            return this.localModelBrowserExpandedGroups.get(key);
+        };
+        const getCurrentQueuedModelIdentity = () => {
+            const key = this.getMissingModelKey(missing);
+            const idx = this.pendingIndex?.get?.(key);
+            const selection = Number.isInteger(idx) ? this.pendingResolutions?.[idx] : null;
+            const model = selection?.resolved_model || {};
+            return [
+                model.path || selection?.resolved_path || '',
+                model.relative_path || '',
+                model.filename || '',
+                model.category || selection?.category || ''
+            ].map(value => String(value || '').trim().toLowerCase()).join('::');
+        };
+        const getModelIdentity = (model = {}) => [
+            model.path || '',
+            model.relative_path || '',
+            model.filename || '',
+            model.category || ''
+        ].map(value => String(value || '').trim().toLowerCase()).join('::');
+        const getBaseDirectoryLabel = (baseDirectory = '') => {
+            const clean = String(baseDirectory || '').replace(/[\\\/]+$/, '');
+            if (!clean) return 'Default root';
+            return clean.split(/[\\\/]+/).filter(Boolean).pop() || clean;
+        };
+        const makeModelEntry = (model, index, preferredCategory = getPreferredModelCategory()) => {
+            const category = getModelCategory(model);
+            const categoryLabel = this.getCategoryDisplayName(category);
+            const relativePath = normalizeModelPath(model.relative_path || model.filename || '');
+            const pathParts = relativePath.split('\\').filter(Boolean);
+            const filename = pathParts.pop() || model.filename || relativePath || 'model';
+            const folderPath = pathParts.join('\\');
+            const baseDirectory = String(model.base_directory || '');
+            const fullPath = String(model.path || '');
+            return {
+                index,
+                model,
+                category,
+                categoryLabel,
+                relativePath: relativePath || filename,
+                filename,
+                folderPath,
+                baseDirectory,
+                baseLabel: getBaseDirectoryLabel(baseDirectory),
+                fullPath,
+                isPreferred: category === preferredCategory,
+                searchText: [
+                    category,
+                    categoryLabel,
+                    relativePath,
+                    filename,
+                    folderPath,
+                    baseDirectory,
+                    fullPath
+                ].join(' ').toLowerCase()
             };
-            window.addEventListener('pointerdown', outsideComboPointerHandler, true);
+        };
+        const clampNumber = (value, min, max) => Math.min(Math.max(value, min), max);
+        const cleanupComboPositioning = () => {
+            if (typeof comboList?._mlFloatingPositionCleanup === 'function') {
+                comboList._mlFloatingPositionCleanup();
+                comboList._mlFloatingPositionCleanup = null;
+            }
+        };
+        const positionComboList = () => {
+            if (!comboList || !comboInput || comboList.style.display === 'none') return;
+            const rect = comboInput.getBoundingClientRect();
+            const viewportPadding = 12;
+            const viewportWidth = Math.max(320, window.innerWidth || document.documentElement.clientWidth || 0);
+            const viewportHeight = Math.max(240, window.innerHeight || document.documentElement.clientHeight || 0);
+            const availableWidth = Math.max(280, viewportWidth - viewportPadding * 2);
+            const targetWidth = Math.min(760, availableWidth, Math.max(rect.width, 520));
+            const left = clampNumber(
+                rect.left,
+                viewportPadding,
+                Math.max(viewportPadding, viewportWidth - targetWidth - viewportPadding)
+            );
+            const gap = 6;
+            const spaceBelow = viewportHeight - rect.bottom - viewportPadding - gap;
+            const spaceAbove = rect.top - viewportPadding - gap;
+            const openAbove = spaceBelow < 280 && spaceAbove > spaceBelow;
+            const availableHeight = Math.max(180, openAbove ? spaceAbove : spaceBelow);
+
+            comboList.style.position = 'fixed';
+            comboList.style.left = `${Math.round(left)}px`;
+            comboList.style.right = 'auto';
+            comboList.style.width = `${Math.round(targetWidth)}px`;
+            comboList.style.maxWidth = `${Math.round(availableWidth)}px`;
+            comboList.style.maxHeight = `${Math.round(availableHeight)}px`;
+
+            const scrollEl = comboList.querySelector('.mr-local-model-browser-scroll');
+            if (scrollEl) {
+                const chromeHeight = Array.from(comboList.children).reduce((height, child) => {
+                    if (child === scrollEl) return height;
+                    const style = window.getComputedStyle(child);
+                    return height
+                        + child.offsetHeight
+                        + (Number.parseFloat(style.marginTop) || 0)
+                        + (Number.parseFloat(style.marginBottom) || 0);
+                }, 0);
+                scrollEl.style.maxHeight = `${Math.max(120, availableHeight - chromeHeight)}px`;
+            }
+
+            const popupHeight = Math.min(comboList.offsetHeight || availableHeight, availableHeight);
+            const top = openAbove
+                ? clampNumber(rect.top - popupHeight - gap, viewportPadding, Math.max(viewportPadding, viewportHeight - viewportPadding - popupHeight))
+                : clampNumber(rect.bottom + gap, viewportPadding, Math.max(viewportPadding, viewportHeight - viewportPadding - popupHeight));
+            comboList.style.top = `${Math.round(top)}px`;
+        };
+        const bindComboPositioning = () => {
+            cleanupComboPositioning();
+            const updatePosition = (event) => {
+                if (event?.type === 'scroll' && event.target instanceof Node && comboList?.contains(event.target)) {
+                    return;
+                }
+                positionComboList();
+            };
+            window.addEventListener('resize', updatePosition, true);
+            window.addEventListener('scroll', updatePosition, true);
+            comboList._mlFloatingPositionCleanup = () => {
+                window.removeEventListener('resize', updatePosition, true);
+                window.removeEventListener('scroll', updatePosition, true);
+            };
         };
         const showComboList = () => {
             if (!comboList) return;
-            comboList.classList.remove('mr-is-hidden');
-            comboList.classList.add('mr-is-visible');
-            startOutsideComboPointerListener();
+            document.querySelectorAll('.mr-combo-list[data-ml-floating-portal="true"]').forEach(existing => {
+                if (existing !== comboList && existing.id === comboList.id) {
+                    existing.remove();
+                }
+            });
+            if (comboList.dataset.mlFloatingPortal !== 'true') {
+                comboList.dataset.mlFloatingPortal = 'true';
+                document.body.appendChild(comboList);
+            }
+            comboList.classList.add('mr-local-model-browser', 'mr-download-target-floating');
+            comboList.style.display = 'block';
+            positionComboList();
+            bindComboPositioning();
+            requestAnimationFrame(positionComboList);
         };
         const hideComboList = () => {
             if (!comboList) return;
-            comboList.classList.remove('mr-is-visible');
-            comboList.classList.add('mr-is-hidden');
-            stopOutsideComboPointerListener();
+            cleanupComboPositioning();
+            comboList.style.display = 'none';
         };
-
-        const populateComboOptions = (filterText, highlightIdx = -1) => {
+        if (comboList) {
+            this.bindDropdownOutsideDismiss?.(comboList, [comboInput, comboRefresh], hideComboList);
+            this.enableWheelScrollChaining(comboList);
+        }
+        const buildModelTree = (entries = []) => {
+            const root = { folders: new Map(), models: [] };
+            entries.forEach(entry => {
+                const folderParts = entry.folderPath.split('\\').filter(Boolean);
+                let current = root;
+                let currentPath = '';
+                folderParts.forEach(part => {
+                    currentPath = currentPath ? `${currentPath}\\${part}` : part;
+                    if (!current.folders.has(part)) {
+                        current.folders.set(part, {
+                            name: part,
+                            path: currentPath,
+                            folders: new Map(),
+                            models: []
+                        });
+                    }
+                    current = current.folders.get(part);
+                });
+                current.models.push(entry);
+            });
+            return root;
+        };
+        const countTreeModels = (node) => {
+            let count = node.models?.length || 0;
+            node.folders?.forEach(child => {
+                count += countTreeModels(child);
+            });
+            return count;
+        };
+        const renderModelRows = (entries = [], selectedIdentity = '') => entries
+            .sort((a, b) => a.filename.localeCompare(b.filename))
+            .map(entry => {
+                const selected = getModelIdentity(entry.model) === selectedIdentity;
+                const folderText = entry.folderPath || entry.baseLabel || '';
+                return `
+                    <div class="mr-folder-browser-row mr-local-model-row ${selected ? 'is-selected' : ''}" data-browser-action="select-model" data-model-index="${entry.index}" data-tooltip="${this.escapeHtml(entry.fullPath || entry.relativePath)}">
+                        <span class="mr-folder-browser-toggle mr-folder-browser-toggle-empty"></span>
+                        <span class="mr-folder-browser-folder-icon mr-local-model-file-icon">${getSvgIcon('file', 'currentColor', 'mr-folder-browser-svg')}</span>
+                        <span class="mr-folder-browser-name">${this.escapeHtml(entry.filename)}</span>
+                        ${folderText ? `<span class="mr-local-model-folder-tag">${this.escapeHtml(folderText)}</span>` : ''}
+                    </div>
+                `;
+            })
+            .join('');
+        const renderModelTreeNodes = (node, groupKey, expandedSet, filter, selectedIdentity) => {
+            const folderHtml = Array.from(node.folders.values())
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map(folder => {
+                    const stateKey = `node:${groupKey}:${folder.path.toLowerCase()}`;
+                    const modelCount = countTreeModels(folder);
+                    const shouldExpand = Boolean(filter) || expandedSet.has(stateKey);
+                    return `
+                        <div class="mr-folder-browser-node">
+                            <div class="mr-folder-browser-row is-expandable mr-local-model-folder-row" data-browser-action="toggle" data-state-key="${encodeURIComponent(stateKey)}">
+                                <button class="mr-folder-browser-toggle ${shouldExpand ? 'is-expanded' : ''}" type="button" aria-label="${shouldExpand ? 'Collapse folder' : 'Expand folder'}"><span class="mr-folder-browser-chevron"></span></button>
+                                <span class="mr-folder-browser-folder-icon">${getSvgIcon('folderOpen', 'currentColor', 'mr-folder-browser-svg')}</span>
+                                <span class="mr-folder-browser-name">${this.escapeHtml(folder.name)}</span>
+                                <span class="mr-folder-browser-count">${modelCount}</span>
+                            </div>
+                            <div class="mr-folder-browser-children ${shouldExpand ? 'is-expanded' : ''}">
+                                ${renderModelTreeNodes(folder, groupKey, expandedSet, filter, selectedIdentity)}
+                            </div>
+                        </div>
+                    `;
+                })
+                .join('');
+            return `${renderModelRows(node.models || [], selectedIdentity)}${folderHtml}`;
+        };
+        const populateComboOptions = (filterText, options = {}) => {
             if (!comboList) return;
+            const previousScrollEl = comboList.querySelector('.mr-local-model-browser-scroll');
+            const previousScrollTop = options.preserveScroll && previousScrollEl ? previousScrollEl.scrollTop : 0;
             const allModels = getAllModels();
-            const f = (filterText || '').toLowerCase();
-            const filtered = f
-                ? allModels.filter(m => buildLabel(m).toLowerCase().includes(f))
-                : allModels.slice();
-
-            let html = '';
-            for (let i = 0; i < filtered.length; i++) {
-                const m = filtered[i];
-                const label = buildLabel(m);
-                const folder = getFolder(m);
-                const isHighlighted = i === highlightIdx;
-                const folderDisplay = folder ? folder.replace(/\\/g, '/').replace(/:/, '') : '';
-                html += `<div data-idx="${allModels.indexOf(m)}" class="mr-combo-option ${isHighlighted ? 'is-highlighted' : ''}">`;
-                html += `<div class="mr-combo-option-row">`;
-                html += `<code>${this.escapeHtml(label)}</code>`;
-                html += `</div>`;
-                if (folderDisplay) {
-                    html += `<div class="mr-combo-folder" data-tooltip="${this.escapeHtml(folderDisplay)}">Folder ${this.escapeHtml(folderDisplay)}</div>`;
+            const activePreferredCategory = getPreferredModelCategory();
+            const allEntries = allModels.map((model, index) => makeModelEntry(model, index, activePreferredCategory));
+            const rawFilter = String(filterText || '').trim();
+            const filter = rawFilter.toLowerCase();
+            const tokens = filter.split(/\s+/).filter(Boolean);
+            const filteredEntries = allEntries.filter(entry => {
+                if (!tokens.length) return true;
+                return tokens.every(token => entry.searchText.includes(token));
+            });
+            const grouped = new Map();
+            filteredEntries.forEach(entry => {
+                const groupKey = `${entry.category}::${entry.baseDirectory || ''}`;
+                if (!grouped.has(groupKey)) {
+                    grouped.set(groupKey, {
+                        key: groupKey,
+                        category: entry.category,
+                        label: entry.categoryLabel,
+                        baseDirectory: entry.baseDirectory,
+                        baseLabel: entry.baseLabel,
+                        isPreferred: entry.category === activePreferredCategory,
+                        entries: []
+                    });
                 }
-                html += `</div>`;
-            }
-            comboList.innerHTML = html;
+                grouped.get(groupKey).entries.push(entry);
+            });
+            const expandedSet = getLocalModelExpandedSet(activePreferredCategory);
+            const selectedIdentity = getCurrentQueuedModelIdentity();
+            const groupsHtml = Array.from(grouped.values())
+                .sort((a, b) => {
+                    if (a.isPreferred !== b.isPreferred) return a.isPreferred ? -1 : 1;
+                    const labelCompare = a.label.localeCompare(b.label);
+                    if (labelCompare !== 0) return labelCompare;
+                    return (a.baseLabel || '').localeCompare(b.baseLabel || '');
+                })
+                .map(group => {
+                    const stateKey = `root:${group.key.toLowerCase()}`;
+                    const collapsedStateKey = `collapsed:${stateKey}`;
+                    const isExpanded = Boolean(filter)
+                        || expandedSet.has(stateKey)
+                        || (group.isPreferred && !expandedSet.has(collapsedStateKey));
+                    const tree = buildModelTree(group.entries);
+                    return `
+                        <div class="mr-folder-browser-root ${group.isPreferred ? 'is-preferred' : ''}">
+                            <button class="mr-folder-browser-root-head ${isExpanded ? 'is-expanded' : ''}" type="button" data-browser-action="toggle" data-state-key="${encodeURIComponent(stateKey)}">
+                                <span class="mr-folder-browser-chevron"></span>
+                                <span class="mr-folder-browser-root-title">${this.escapeHtml(group.label)}${group.isPreferred ? ' · recommended' : ''}</span>
+                                <span class="mr-folder-browser-root-count">${group.entries.length}</span>
+                            </button>
+                            ${group.baseDirectory ? `<div class="mr-folder-browser-root-path">${this.escapeHtml(group.baseDirectory)}</div>` : ''}
+                            <div class="mr-folder-browser-tree ${isExpanded ? 'is-expanded' : ''}">
+                                ${renderModelTreeNodes(tree, group.key, expandedSet, filter, selectedIdentity)}
+                            </div>
+                        </div>
+                    `;
+                })
+                .join('');
+            const emptyHtml = tokens.length
+                ? `<div class="mr-folder-browser-empty">No local models match this filter.</div>`
+                : `<div class="mr-folder-browser-empty">No local models in the enabled categories.</div>`;
 
-            comboList.querySelectorAll('div[data-idx]').forEach(el => {
+            comboList.innerHTML = `
+                <div class="mr-local-model-browser-scroll">
+                    ${groupsHtml || emptyHtml}
+                </div>
+            `;
+
+            comboList.querySelectorAll('[data-browser-action="toggle"]').forEach(row => {
+                row.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const scrollElBefore = comboList.querySelector('.mr-local-model-browser-scroll');
+                    const scrollTop = scrollElBefore ? scrollElBefore.scrollTop : 0;
+                    const stateKey = decodeURIComponent(row.dataset.stateKey || '');
+                    if (!stateKey) return;
+                    const collapsedStateKey = `collapsed:${stateKey}`;
+                    const isExpanded = row.classList.contains('is-expanded')
+                        || Boolean(row.querySelector('.mr-folder-browser-toggle.is-expanded'));
+                    if (isExpanded) {
+                        expandedSet.delete(stateKey);
+                        expandedSet.add(collapsedStateKey);
+                    } else {
+                        expandedSet.add(stateKey);
+                        expandedSet.delete(collapsedStateKey);
+                    }
+                    populateComboOptions(comboInput?.value || '', { preserveScroll: true });
+                    const scrollEl = comboList.querySelector('.mr-local-model-browser-scroll');
+                    if (scrollEl) scrollEl.scrollTop = scrollTop;
+                    positionComboList();
+                });
+            });
+            comboList.querySelectorAll('[data-browser-action="select-model"]').forEach(el => {
                 el.addEventListener('click', () => {
-                    const idx = parseInt(el.dataset.idx, 10);
+                    const idx = parseInt(el.dataset.modelIndex, 10);
                     if (!Number.isNaN(idx) && idx >= 0 && idx < allModels.length) {
                         const chosenModel = allModels[idx];
                         if (chosenModel) {
@@ -826,19 +1088,15 @@ export const missingBrowserMethods = {
                     }
                 });
             });
+            const scrollEl = comboList.querySelector('.mr-local-model-browser-scroll');
+            if (scrollEl) {
+                this.enableWheelScrollChaining(scrollEl);
+                scrollEl.scrollTop = previousScrollTop;
+            }
+            positionComboList();
         };
 
         if (comboList) {
-            comboList.addEventListener('pointerdown', () => {
-                comboListPointerActive = true;
-                const releaseComboPointer = () => {
-                    setTimeout(() => {
-                        comboListPointerActive = false;
-                    }, 0);
-                };
-                window.addEventListener('pointerup', releaseComboPointer, { once: true, capture: true });
-                window.addEventListener('pointercancel', releaseComboPointer, { once: true, capture: true });
-            }, { capture: true });
             populateComboOptions('');
         }
 
@@ -851,15 +1109,24 @@ export const missingBrowserMethods = {
                 showComboList();
                 populateComboOptions(comboInput.value);
             });
-            comboInput.addEventListener('blur', () => {
-                setTimeout(() => {
-                    if (!comboList) return;
-                    if (comboListPointerActive || comboList.matches(':hover')) {
-                        return;
-                    }
-                    hideComboList();
-                }, 200);
-            });
+        }
+
+        const categoryPriorityEl = getDownloadCategoryElement();
+        if (categoryPriorityEl && categoryPriorityEl.dataset.mlLocalModelPriorityBound !== 'true') {
+            categoryPriorityEl.dataset.mlLocalModelPriorityBound = 'true';
+            let lastPriorityCategory = getPreferredModelCategory();
+            const refreshLocalModelPriority = () => {
+                const nextPriorityCategory = getPreferredModelCategory();
+                if (nextPriorityCategory === lastPriorityCategory && comboList?.style.display === 'none') {
+                    return;
+                }
+                lastPriorityCategory = nextPriorityCategory;
+                populateComboOptions(comboInput?.value || '', { preserveScroll: true });
+            };
+            categoryPriorityEl.addEventListener('input', refreshLocalModelPriority);
+            categoryPriorityEl.addEventListener('change', refreshLocalModelPriority);
+            categoryPriorityEl.addEventListener('blur', () => setTimeout(refreshLocalModelPriority, 0));
+            categoryPriorityEl.addEventListener('mr-download-category-change', refreshLocalModelPriority);
         }
 
         if (comboRefresh) {
