@@ -3,6 +3,59 @@ import { api } from "../../../../../scripts/api.js";
 import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
 export const renderFormatMethods = {
+    encodeContextMenuModel(context = null) {
+        if (!context) return '';
+        try {
+            return encodeURIComponent(JSON.stringify(context));
+        } catch (error) {
+            console.warn('Model Resolver: failed to encode context menu model', error);
+            return '';
+        }
+    },
+
+    getContextMenuAttrs(context = null, tooltip = '') {
+        const data = this.encodeContextMenuModel(context);
+        if (!data) return '';
+        const tooltipAttr = tooltip ? ` data-tooltip="${this.escapeHtml(tooltip)}"` : '';
+        return ` data-model="${this.escapeHtml(data)}" oncontextmenu="window.MLOpenContextMenu(event, this)"${tooltipAttr}`;
+    },
+
+    getContextMenuProps(context = null, tooltip = '') {
+        const data = this.encodeContextMenuModel(context);
+        if (!data) return {};
+        const props = {
+            "data-model": data,
+            oncontextmenu: (event) => {
+                window.MLOpenContextMenu?.(event, event.currentTarget);
+            }
+        };
+        if (tooltip) {
+            props["data-tooltip"] = tooltip;
+        }
+        return props;
+    },
+
+    setContextMenuElement(element, context = null, tooltip = '') {
+        if (!element) return;
+        const data = this.encodeContextMenuModel(context);
+        if (!data) {
+            element.removeAttribute('data-model');
+            element.removeAttribute('data-tooltip');
+            element.oncontextmenu = null;
+            return;
+        }
+
+        element.dataset.model = data;
+        if (tooltip) {
+            element.dataset.tooltip = tooltip;
+        } else {
+            element.removeAttribute('data-tooltip');
+        }
+        element.oncontextmenu = (event) => {
+            window.MLOpenContextMenu?.(event, event.currentTarget);
+        };
+    },
+
     /**
      * Get a colored confidence badge HTML
      * @param {number} confidence - Confidence percentage (0-100)
@@ -110,13 +163,8 @@ export const renderFormatMethods = {
         const icon = icons[type] || icons.info;
         const contextMenuModel = options?.contextMenuModel || null;
         const contextMenuTooltip = options?.contextMenuTooltip || 'Right-click to open download folder';
-        const contextMenuData = contextMenuModel
-            ? this.escapeHtml(encodeURIComponent(JSON.stringify(contextMenuModel)))
-            : '';
-        const contextMenuAttrs = contextMenuData
-            ? ` data-model="${contextMenuData}" oncontextmenu="window.MLOpenContextMenu(event, this)" data-tooltip="${this.escapeHtml(contextMenuTooltip)}"`
-            : '';
-        const className = contextMenuData
+        const contextMenuAttrs = this.getContextMenuAttrs(contextMenuModel, contextMenuTooltip);
+        const className = contextMenuAttrs
             ? `mr-status mr-status-${type} mr-download-folder-context`
             : `mr-status mr-status-${type}`;
 

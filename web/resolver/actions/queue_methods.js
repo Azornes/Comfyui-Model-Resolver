@@ -1161,7 +1161,7 @@ export const queueMethods = {
                 ? 'Right-click for workflow and download folder actions'
                 : 'Right-click to switch to workflow';
             const contextData = contextModel
-                ? ` data-model="${this.escapeHtml(encodeURIComponent(JSON.stringify(contextModel)))}" oncontextmenu="window.MLOpenContextMenu(event, this)" data-tooltip="${this.escapeHtml(contextTooltip)}"`
+                ? this.getContextMenuAttrs(contextModel, contextTooltip)
                 : '';
 
             html += `<div class="mr-queue-item mr-download-queue-item"${contextData}>`;
@@ -1215,7 +1215,7 @@ export const queueMethods = {
                 ? 'Right-click for workflow and download folder actions'
                 : (hasWorkflowAction ? 'Right-click to switch to workflow' : 'Right-click to open download folder');
             const contextData = contextModel
-                ? ` data-model="${this.escapeHtml(encodeURIComponent(JSON.stringify(contextModel)))}" oncontextmenu="window.MLOpenContextMenu(event, this)" data-tooltip="${this.escapeHtml(contextTooltip)}"`
+                ? this.getContextMenuAttrs(contextModel, contextTooltip)
                 : '';
             const historyId = String(entry.id || '');
 
@@ -1322,9 +1322,7 @@ export const queueMethods = {
         if (!selection) {
             selectedBar.style.display = 'none';
             selectedBar.innerHTML = '';
-            selectedBar.removeAttribute('data-model');
-            selectedBar.removeAttribute('data-tooltip');
-            selectedBar.oncontextmenu = null;
+            this.setContextMenuElement(selectedBar, null);
             return;
         }
 
@@ -1343,18 +1341,12 @@ export const queueMethods = {
             }
             : null;
         const selectedContextAttrs = selectedContext
-            ? ` data-model="${this.escapeHtml(encodeURIComponent(JSON.stringify(selectedContext)))}" oncontextmenu="window.MLOpenContextMenu(event, this)" data-tooltip="Right-click to open containing folder"`
+            ? this.getContextMenuAttrs(selectedContext, 'Right-click to open containing folder')
             : '';
         if (selectedContext) {
-            selectedBar.dataset.model = encodeURIComponent(JSON.stringify(selectedContext));
-            selectedBar.dataset.tooltip = 'Right-click to open containing folder';
-            selectedBar.oncontextmenu = (event) => {
-                window.MLOpenContextMenu?.(event, selectedBar);
-            };
+            this.setContextMenuElement(selectedBar, selectedContext, 'Right-click to open containing folder');
         } else {
-            selectedBar.removeAttribute('data-model');
-            selectedBar.removeAttribute('data-tooltip');
-            selectedBar.oncontextmenu = null;
+            this.setContextMenuElement(selectedBar, null);
         }
         const applyBtnId = `selected-apply-${domKey}`;
         const removeBtnId = `selected-remove-${domKey}`;

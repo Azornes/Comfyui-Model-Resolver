@@ -262,8 +262,7 @@ export const tabsLoadedMethods = {
                     const fullName = model.name || model.original_path?.split(/[\/\\]/).pop() || 'Unknown';
                     const name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx|gguf)$/i, '');
                     const strength = model.strength !== null && model.strength !== undefined ? model.strength.toFixed(2) : null;
-                    const modelData = encodeURIComponent(JSON.stringify(model));
-                    html += `<span class="mr-model-chip" data-model="${modelData}" oncontextmenu="window.MLOpenContextMenu(event, this)">${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
+                    html += `<span class="mr-model-chip"${this.getContextMenuAttrs(model)}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
                 }
                 html += `</div></div>`;
             }
@@ -282,8 +281,7 @@ export const tabsLoadedMethods = {
                     const fullName = model.name || model.original_path?.split(/[\/\\]/).pop() || 'Unknown';
                     const name = fullName.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx|gguf)$/i, '');
                     const strength = model.strength !== null && model.strength !== undefined ? model.strength.toFixed(2) : null;
-                    const modelData = encodeURIComponent(JSON.stringify(model));
-                    html += `<span class="mr-model-chip" data-model="${modelData}" oncontextmenu="window.MLOpenContextMenu(event, this)">${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
+                    html += `<span class="mr-model-chip"${this.getContextMenuAttrs(model)}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
                 }
                 html += `</div></div>`;
             }

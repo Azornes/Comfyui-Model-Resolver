@@ -1771,7 +1771,7 @@ export const searchPanelMethods = {
                 <tr>
                     <td>${sourcePill}</td>
                     <td>
-                        <div class="mr-search-result-model" data-tooltip="${modelTitle}" ${detailsData ? `data-model="${this.escapeHtml(detailsData)}" oncontextmenu="window.MLOpenContextMenu(event, this)"` : ''}>
+                        <div class="mr-search-result-model" data-tooltip="${modelTitle}"${this.getContextMenuAttrs(detailsContext)}>
                             <span>${modelHtml}</span>
                             ${secondary || filename ? `<small>${secondary || filename}</small>` : ''}
                         </div>
@@ -1841,13 +1841,8 @@ export const searchPanelMethods = {
     } = {}) {
         const safePercent = Math.max(0, Math.min(100, Number(percent) || 0));
         const actionAttr = actionDataAttr ? ` ${actionDataAttr}` : '';
-        const contextMenuData = contextMenuModel
-            ? this.escapeHtml(encodeURIComponent(JSON.stringify(contextMenuModel)))
-            : '';
-        const contextMenuAttrs = contextMenuData
-            ? ` data-model="${contextMenuData}" oncontextmenu="window.MLOpenContextMenu(event, this)" data-tooltip="${this.escapeHtml(contextMenuTooltip)}"`
-            : '';
-        const containerClass = contextMenuData
+        const contextMenuAttrs = this.getContextMenuAttrs(contextMenuModel, contextMenuTooltip);
+        const containerClass = contextMenuAttrs
             ? 'mr-progress-container mr-download-folder-context'
             : 'mr-progress-container';
         const actionHtml = actionClass || actionText
@@ -1931,9 +1926,8 @@ export const searchPanelMethods = {
                 const matchPath = match.model?.relative_path || match.model?.path || match.path || match.filename || '';
                 const isBestMatch = matchIndex === 0 && match.confidence >= 95;
                 const contextModel = this.buildContextMenuModelData(match.model || {}, match.filename || '');
-                const modelData = encodeURIComponent(JSON.stringify(contextModel));
 
-                html += `<div class="mr-match-row ${isBestMatch ? 'mr-best-match' : ''}" data-model="${modelData}" oncontextmenu="window.MLOpenContextMenu(event, this)">`;
+                html += `<div class="mr-match-row ${isBestMatch ? 'mr-best-match' : ''}"${this.getContextMenuAttrs(contextModel)}>`;
                 html += this.getConfidenceBadge(match.confidence);
                 html += `<span class="mr-match-filename" data-tooltip="${this.escapeHtml(matchPath)}">${this.escapeHtml(matchPath)}</span>`;
                 html += `<span class="mr-match-status ${match.confidence === 100 ? 'mr-match-status-exact' : 'mr-match-status-partial'}">${match.confidence === 100 ? 'Exact' : 'Partial'}</span>`;
@@ -1957,9 +1951,8 @@ export const searchPanelMethods = {
                     const match = otherMatches[mIdx];
                     const altBtnId = `resolve-alt-${missingIndex}-${missing.node_id}-${missing.widget_index}-${mIdx}`;
                     const contextModel = this.buildContextMenuModelData(match.model || {}, match.filename || '');
-                    const modelData = encodeURIComponent(JSON.stringify(contextModel));
                     const matchPath = match.model?.relative_path || match.model?.path || match.path || match.filename || '';
-                    html += `<div class="mr-match-row" data-model="${modelData}" oncontextmenu="window.MLOpenContextMenu(event, this)">`;
+                    html += `<div class="mr-match-row"${this.getContextMenuAttrs(contextModel)}>`;
                     html += this.getConfidenceBadge(match.confidence);
                     html += `<span class="mr-match-filename" data-tooltip="${this.escapeHtml(matchPath)}">${this.escapeHtml(matchPath)}</span>`;
                     html += `<span class="mr-match-status mr-match-status-partial">Partial</span>`;

@@ -641,17 +641,11 @@ export const downloadTargetMethods = {
     setDownloadFolderContextTarget(element, contextMenuModel = null, tooltip = 'Right-click to open this folder') {
         if (!element) return;
         if (contextMenuModel) {
-            element.dataset.model = encodeURIComponent(JSON.stringify(contextMenuModel));
-            element.dataset.tooltip = tooltip;
+            this.setContextMenuElement(element, contextMenuModel, tooltip);
             element.classList.add('mr-download-folder-context');
-            element.oncontextmenu = (event) => {
-                window.MLOpenContextMenu?.(event, element);
-            };
         } else {
-            delete element.dataset.model;
-            delete element.dataset.tooltip;
+            this.setContextMenuElement(element, null);
             element.classList.remove('mr-download-folder-context');
-            element.oncontextmenu = null;
         }
     },
 
@@ -1995,7 +1989,7 @@ export const downloadTargetMethods = {
                 ...context,
                 open_folder_label: 'Open Folder'
             };
-            return ` data-model="${this.escapeHtml(encodeURIComponent(JSON.stringify(menuContext)))}" oncontextmenu="window.MLOpenContextMenu(event, this)" data-tooltip="${this.escapeHtml(tooltip)}"`;
+            return this.getContextMenuAttrs(menuContext, tooltip);
         };
 
         const buildFolderTree = (entries = []) => {

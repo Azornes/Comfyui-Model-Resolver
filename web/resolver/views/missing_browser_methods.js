@@ -881,8 +881,7 @@ export const missingBrowserMethods = {
             };
         };
         const getLocalPathContextAttrs = (context, tooltip = 'Right-click for options') => {
-            if (!context) return '';
-            return ` data-model="${this.escapeHtml(encodeURIComponent(JSON.stringify(context)))}" oncontextmenu="window.MLOpenContextMenu(event, this)" data-tooltip="${this.escapeHtml(tooltip)}"`;
+            return this.getContextMenuAttrs(context, tooltip);
         };
         const makeModelEntry = (model, index, preferredCategory = getPreferredModelCategory()) => {
             const category = getModelCategory(model);
@@ -1542,10 +1541,7 @@ export const missingBrowserMethods = {
         };
 
         if (contextMenuModel) {
-            notificationProps["data-model"] = encodeURIComponent(JSON.stringify(contextMenuModel));
-            notificationProps.oncontextmenu = (event) => {
-                window.MLOpenContextMenu?.(event, event.currentTarget);
-            };
+            Object.assign(notificationProps, this.getContextMenuProps?.(contextMenuModel) || {});
         }
 
         if (type === 'success') {
