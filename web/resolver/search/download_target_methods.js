@@ -2083,6 +2083,15 @@ export const downloadTargetMethods = {
             if (!clean) return 'Default root';
             return clean.split(/[\\\/]+/).filter(Boolean).pop() || clean;
         };
+        const getFolderBrowserContextAttrs = (category = '', subfolder = '', baseDirectory = '', tooltip = 'Right-click to open this folder') => {
+            const context = this.getDownloadTargetFolderContext(category, subfolder, baseDirectory);
+            if (!context) return '';
+            const menuContext = {
+                ...context,
+                open_folder_label: 'Open Folder'
+            };
+            return ` data-model="${this.escapeHtml(encodeURIComponent(JSON.stringify(menuContext)))}" oncontextmenu="window.MLOpenContextMenu(event, this)" data-tooltip="${this.escapeHtml(tooltip)}"`;
+        };
 
         const buildFolderTree = (entries = []) => {
             const root = new Map();
@@ -2124,6 +2133,7 @@ export const downloadTargetMethods = {
         const renderFolderTreeNodes = (
             nodeMap,
             rootGroup,
+            category,
             expandedSet,
             filter,
             selectedValue,
@@ -2137,6 +2147,7 @@ export const downloadTargetMethods = {
                     const childCount = countTreeNodes(node.children);
                     const nodeValue = node.entry?.value || node.path;
                     const nodeBaseDirectory = node.entry?.baseDirectory || rootGroup.baseDirectory || '';
+                    const contextAttrs = getFolderBrowserContextAttrs(category, nodeValue, nodeBaseDirectory);
                     const isSelected = normalizeSubfolderPath(nodeValue).toLowerCase() === selectedValue.toLowerCase()
                         && String(nodeBaseDirectory || '') === String(selectedBaseDirectory || '');
                     const shouldExpand = hasChildren && (
@@ -2148,7 +2159,7 @@ export const downloadTargetMethods = {
                         ? `<button class="mr-folder-browser-toggle ${shouldExpand ? 'is-expanded' : ''}" type="button" data-browser-action="toggle" data-state-key="${encodeURIComponent(stateKey)}" aria-label="${shouldExpand ? 'Collapse folder' : 'Expand folder'}"><span class="mr-folder-browser-chevron"></span></button>`
                         : `<span class="mr-folder-browser-toggle mr-folder-browser-toggle-empty"></span>`;
                     const children = hasChildren
-                        ? `<div class="mr-folder-browser-children ${shouldExpand ? 'is-expanded' : ''}">${renderFolderTreeNodes(node.children, rootGroup, expandedSet, filter, selectedValue, selectedBaseDirectory)}</div>`
+                        ? `<div class="mr-folder-browser-children ${shouldExpand ? 'is-expanded' : ''}">${renderFolderTreeNodes(node.children, rootGroup, category, expandedSet, filter, selectedValue, selectedBaseDirectory)}</div>`
                         : '';
                     const rowClass = [
                         'mr-folder-browser-row',
@@ -2161,7 +2172,7 @@ export const downloadTargetMethods = {
 
                     return `
                         <div class="mr-folder-browser-node">
-                            <div class="${rowClass}" data-browser-action="select" data-value="${encodeURIComponent(nodeValue)}" data-base-directory="${encodeURIComponent(nodeBaseDirectory)}"${rowStateAttribute}>
+                            <div class="${rowClass}" data-browser-action="select" data-value="${encodeURIComponent(nodeValue)}" data-base-directory="${encodeURIComponent(nodeBaseDirectory)}"${rowStateAttribute}${contextAttrs}>
                                 ${toggle}
                                 <span class="mr-folder-browser-folder-icon">${getSvgIcon('folderOpen', 'currentColor', 'mr-folder-browser-svg')}</span>
                                 <span class="mr-folder-browser-name">${this.escapeHtml(node.name)}</span>
@@ -2235,15 +2246,17 @@ export const downloadTargetMethods = {
                 const treeHtml = renderFolderTreeNodes(
                     tree,
                     group,
+                    category,
                     expandedSet,
                     normalizedFilter,
                     selectedValue,
                     selectedBaseDirectory
                 );
+                const rootContextAttrs = getFolderBrowserContextAttrs(category, '', group.baseDirectory);
 
                 return `
                     <div class="mr-folder-browser-root">
-                        <button class="mr-folder-browser-root-head ${isExpanded ? 'is-expanded' : ''}" type="button" data-browser-action="toggle" data-state-key="${encodeURIComponent(stateKey)}">
+                        <button class="mr-folder-browser-root-head ${isExpanded ? 'is-expanded' : ''}" type="button" data-browser-action="toggle" data-state-key="${encodeURIComponent(stateKey)}"${rootContextAttrs}>
                             <span class="mr-folder-browser-chevron"></span>
                             <span class="mr-folder-browser-root-title">${this.escapeHtml(group.label)}</span>
                             <span class="mr-folder-browser-root-count">${group.entries.length}</span>
@@ -2315,6 +2328,7 @@ export const downloadTargetMethods = {
 
             targetEl.querySelectorAll('[data-browser-action="toggle"]').forEach(button => {
                 button.addEventListener('mousedown', (event) => {
+                    if (event.button !== 0) return;
                     event.preventDefault();
                     event.stopPropagation();
                     toggleFolderBrowserState(button.dataset.stateKey || '');
@@ -2323,6 +2337,7 @@ export const downloadTargetMethods = {
 
             targetEl.querySelectorAll('[data-browser-action="select"]').forEach(row => {
                 row.addEventListener('mousedown', (event) => {
+                    if (event.button !== 0) return;
                     event.preventDefault();
                     event.stopPropagation();
                     if (isFolderBrowserToggleZoneClick(event, row)) {

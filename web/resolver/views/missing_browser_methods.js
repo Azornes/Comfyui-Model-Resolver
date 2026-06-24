@@ -783,6 +783,52 @@ export const missingBrowserMethods = {
             model.filename || '',
             model.category || ''
         ].map(value => String(value || '').trim().toLowerCase()).join('::');
+        const getLocalModelDedupeIdentity = (entry = {}) => {
+            const path = String(entry.fullPath || entry.model?.path || '').trim();
+            if (path) {
+                return path.replace(/[\\/]+/g, '/').toLowerCase();
+            }
+            return [
+                entry.baseDirectory || '',
+                entry.relativePath || entry.model?.relative_path || entry.model?.filename || ''
+            ].map(value => String(value || '').trim().replace(/[\\/]+/g, '/').toLowerCase()).join('::');
+        };
+        const getLocalModelCategoryRank = (category = '', preferredCategory = '') => {
+            const normalized = this.normalizeDownloadCategory(category || '');
+            if (normalized && normalized === preferredCategory) return 0;
+            const ranks = {
+                checkpoints: 10,
+                loras: 10,
+                vae: 10,
+                diffusion_models: 10,
+                text_encoders: 10,
+                controlnet: 10,
+                clip: 20,
+                clip_gguf: 30
+            };
+            return ranks[normalized] ?? 40;
+        };
+        const dedupeLocalModelEntries = (entries = [], preferredCategory = '') => {
+            const byIdentity = new Map();
+            entries.forEach(entry => {
+                const identity = getLocalModelDedupeIdentity(entry);
+                if (!identity) return;
+                const previous = byIdentity.get(identity);
+                if (!previous) {
+                    byIdentity.set(identity, entry);
+                    return;
+                }
+                const currentRank = getLocalModelCategoryRank(entry.category, preferredCategory);
+                const previousRank = getLocalModelCategoryRank(previous.category, preferredCategory);
+                if (
+                    currentRank < previousRank
+                    || (currentRank === previousRank && String(entry.category || '').localeCompare(String(previous.category || '')) < 0)
+                ) {
+                    byIdentity.set(identity, entry);
+                }
+            });
+            return Array.from(byIdentity.values());
+        };
         const getBaseDirectoryLabel = (baseDirectory = '') => {
             const clean = String(baseDirectory || '').replace(/[\\\/]+$/, '');
             if (!clean) return 'Default root';
@@ -1043,7 +1089,10 @@ export const missingBrowserMethods = {
             const previousScrollTop = options.preserveScroll && previousScrollEl ? previousScrollEl.scrollTop : 0;
             const allModels = getAllModels();
             const activePreferredCategory = getPreferredModelCategory();
-            const allEntries = allModels.map((model, index) => makeModelEntry(model, index, activePreferredCategory));
+            const allEntries = dedupeLocalModelEntries(
+                allModels.map((model, index) => makeModelEntry(model, index, activePreferredCategory)),
+                activePreferredCategory
+            );
             const rawFilter = String(filterText || '').trim();
             const filter = rawFilter.toLowerCase();
             const tokens = filter.split(/\s+/).filter(Boolean);
