@@ -1,4 +1,4 @@
-﻿import { app } from "../../../../../scripts/app.js";
+import { app } from "../../../../../scripts/app.js";
 import { api } from "../../../../../scripts/api.js";
 import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
@@ -1599,5 +1599,49 @@ export const missingBrowserMethods = {
                 }, 300);
             }
         }, dismissTime);
+    },
+
+    refreshMissingListRow(missing, options = {}) {
+        if (!missing || !this.contentElement) return;
+
+        const missingKey = this.getMissingModelKey(missing);
+        const row = Array.from(this.contentElement.querySelectorAll('.mr-missing-list-row'))
+            .find(item => item.dataset.missingKey === missingKey);
+        if (!row) return;
+
+        const bestMatch = this.getBestLocalMatch(missing, 70);
+        const confidence = bestMatch ? Number(bestMatch.confidence || 0) : 0;
+        const matchName = bestMatch?.model?.relative_path || bestMatch?.filename || bestMatch?.path || '';
+        const matchDisplay = matchName || 'No local match';
+        const matchClass = confidence === 100 ? 'exact' : (bestMatch ? 'partial' : 'none');
+
+        const bestEl = row.querySelector('.mr-missing-row-best');
+        if (bestEl) {
+            bestEl.setAttribute('data-tooltip', matchDisplay);
+            bestEl.innerHTML = bestMatch
+                ? this.escapeHtml(matchDisplay)
+                : '<span class="mr-missing-row-none">-- No local match</span>';
+        }
+
+        const matchEl = row.querySelector('.mr-missing-row-match');
+        if (matchEl) {
+            matchEl.className = `mr-missing-row-match mr-missing-row-match-${matchClass}`;
+            const valueEl = matchEl.querySelector('strong');
+            if (valueEl) {
+                valueEl.textContent = bestMatch ? `${confidence.toFixed(confidence % 1 ? 1 : 0)}%` : '--';
+            } else {
+                matchEl.innerHTML = `<strong>${bestMatch ? `${confidence.toFixed(confidence % 1 ? 1 : 0)}%` : '--'}</strong>`;
+            }
+        }
+
+        const sourcesEl = row.querySelector('.mr-missing-row-sources');
+        if (sourcesEl) {
+            sourcesEl.innerHTML = this.renderMissingSourcesSummary(missing);
+        }
+
+        this.refreshMissingListStats?.();
+        if (options.refreshBaseModels) {
+            this.refreshSearchBaseModelLabels?.();
+        }
     }
 };

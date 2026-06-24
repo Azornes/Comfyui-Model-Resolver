@@ -1,4 +1,4 @@
-﻿import { app } from "../../../../../scripts/app.js";
+import { app } from "../../../../../scripts/app.js";
 import { api } from "../../../../../scripts/api.js";
 import { $el } from "../../../../../scripts/ui.js";
 import { createModuleLogger } from "../../log_system/log_funcs.js";
@@ -1021,7 +1021,7 @@ export const resolveDownloadMethods = {
             this.wireLocalMatchButtons(body, missing, displayIndex);
         }
 
-        this.refreshMissingListRowForMissing(missing);
+        this.refreshMissingListRow(missing);
         this.updateBatchFooterButtons?.();
     },
 
@@ -1109,48 +1109,6 @@ export const resolveDownloadMethods = {
                 button.classList.remove('mr-btn-is-disabled', 'mr-is-refreshing');
             }
         }
-    },
-
-    refreshMissingListRowForMissing(missing) {
-        if (!missing || !this.contentElement) return;
-
-        const missingKey = this.getMissingModelKey(missing);
-        const row = Array.from(this.contentElement.querySelectorAll('.mr-missing-list-row'))
-            .find(item => item.dataset.missingKey === missingKey);
-        if (!row) return;
-
-        const bestMatch = this.getBestLocalMatch(missing, 70);
-        const confidence = bestMatch ? Number(bestMatch.confidence || 0) : 0;
-        const matchName = bestMatch?.model?.relative_path || bestMatch?.filename || bestMatch?.path || '';
-        const matchDisplay = matchName || 'No local match';
-        const matchClass = confidence === 100 ? 'exact' : (bestMatch ? 'partial' : 'none');
-
-        const bestEl = row.querySelector('.mr-missing-row-best');
-        if (bestEl) {
-            bestEl.setAttribute('data-tooltip', matchDisplay);
-            bestEl.innerHTML = bestMatch
-                ? this.escapeHtml(matchDisplay)
-                : '<span class="mr-missing-row-none">-- No local match</span>';
-        }
-
-        const matchEl = row.querySelector('.mr-missing-row-match');
-        if (matchEl) {
-            matchEl.className = `mr-missing-row-match mr-missing-row-match-${matchClass}`;
-            matchEl.innerHTML = `<strong>${bestMatch ? `${confidence.toFixed(confidence % 1 ? 1 : 0)}%` : '--'}</strong>`;
-        }
-
-        const sourcesEl = row.querySelector('.mr-missing-row-sources');
-        if (sourcesEl) {
-            sourcesEl.innerHTML = this.renderMissingSourcesSummary(missing);
-        }
-
-        const stats = this.getMissingModelSummaryStats(this.missingModels || []);
-        const exactEl = this.contentElement.querySelector('.mr-missing-stat-exact');
-        const partialEl = this.contentElement.querySelector('.mr-missing-stat-partial');
-        const noneEl = this.contentElement.querySelector('.mr-missing-stat-none');
-        if (exactEl) exactEl.textContent = `${stats.exact} exact`;
-        if (partialEl) partialEl.textContent = `${stats.partial} partial`;
-        if (noneEl) noneEl.textContent = `${stats.none} no match`;
     },
 
     async refreshAfterDownload(missing, downloadedFilename, { progressDiv = null, downloadBtn = null, category = '', downloadPath = '', downloadDirectory = '', alreadyExists = false } = {}) {

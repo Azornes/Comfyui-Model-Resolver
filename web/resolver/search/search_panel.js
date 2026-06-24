@@ -2137,49 +2137,6 @@ export const searchPanelMethods = {
         `;
     },
 
-    refreshMissingListRowLocalMatch(missing = {}) {
-        if (!this.contentElement) return;
-
-        const key = this.getMissingModelKey(missing);
-        const rows = this.contentElement.querySelectorAll('.mr-missing-list-row');
-        for (const row of rows) {
-            if (row.getAttribute('data-missing-key') !== key) continue;
-
-            const bestMatch = this.getBestLocalMatch(missing, 70);
-            const confidence = bestMatch ? Number(bestMatch.confidence || 0) : 0;
-            const matchName = bestMatch?.model?.relative_path || bestMatch?.filename || bestMatch?.path || '';
-            const matchDisplay = matchName || 'No local match';
-            const matchClass = confidence === 100 ? 'exact' : (bestMatch ? 'partial' : 'none');
-
-            const bestEl = row.querySelector('.mr-missing-row-best');
-            if (bestEl) {
-                bestEl.setAttribute('data-tooltip', matchDisplay);
-                bestEl.innerHTML = bestMatch
-                    ? this.escapeHtml(matchDisplay)
-                    : '<span class="mr-missing-row-none">-- No local match</span>';
-            }
-
-            const matchEl = row.querySelector('.mr-missing-row-match');
-            if (matchEl) {
-                matchEl.classList.remove(
-                    'mr-missing-row-match-exact',
-                    'mr-missing-row-match-partial',
-                    'mr-missing-row-match-none'
-                );
-                matchEl.classList.add(`mr-missing-row-match-${matchClass}`);
-                const valueEl = matchEl.querySelector('strong');
-                if (valueEl) {
-                    valueEl.textContent = bestMatch
-                        ? `${confidence.toFixed(confidence % 1 ? 1 : 0)}%`
-                        : '--';
-                }
-            }
-        }
-
-        this.refreshMissingListStats();
-        this.refreshSearchBaseModelLabels?.();
-    },
-
     async fetchUrnLocalMatches(missing) {
         if (!missing?.civitai_info?.expected_filename) return [];
 
@@ -2234,7 +2191,7 @@ export const searchPanelMethods = {
                 container.innerHTML = this.renderLocalMatchesContent(missing, missing.__displayIndex || 0);
                 this.wireLocalMatchButtons(this.contentElement, missing, missing.__displayIndex || 0);
             }
-            this.refreshMissingListRowLocalMatch(missing);
+            this.refreshMissingListRow(missing, { refreshBaseModels: true });
         } catch (error) {
             console.error('Model Resolver: URN local match refresh error:', error);
             if (container) {
