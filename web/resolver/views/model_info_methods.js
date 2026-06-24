@@ -1,4 +1,4 @@
-﻿import { app } from "../../../../../scripts/app.js";
+import { app } from "../../../../../scripts/app.js";
 import { api } from "../../../../../scripts/api.js";
 import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
@@ -142,18 +142,12 @@ export const modelInfoMethods = {
         }
 
         try {
-            const response = await api.fetchApi('/model_resolver/open-containing-folder', {
+            await this.fetchJson('/model_resolver/open-containing-folder', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ path })
-            });
-
-            if (!response.ok) {
-                throw new Error(`Open folder failed: ${response.status}`);
-            }
+            }, 'Open containing folder');
         } catch (error) {
-            console.error('Model Resolver: Open folder error:', error);
-            this.showNotification('Failed to open containing folder', 'error');
+            // Already logged and notified inside fetchJson
         }
     },
 
@@ -174,32 +168,21 @@ export const modelInfoMethods = {
 
         try {
             // Search CivitAI for this model using hash (pass resolved_path for hash lookup)
-            const response = await api.fetchApi('/model_resolver/civitai-search', {
+            const data = await this.fetchJson('/model_resolver/civitai-search', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     filename: name,
                     category: model.category,
                     resolved_path: model.resolved_path || ''
                 })
-            });
+            }, 'Search CivitAI');
 
-            if (!response.ok) {
-                this.showNotification('Nie znaleziono modelu na CivitAI', 'error');
-                return;
-            }
-
-            const data = await response.json();
-            if (data.url) {
+            if (data && data.url) {
                 window.open(data.url, '_blank');
             } else {
-                // Try direct search on CivitAI
-                const searchName = name.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx|gguf)$/i, '');
-                const searchUrl = `https://civitai.com/search?q=${encodeURIComponent(searchName)}`;
-                window.open(searchUrl, '_blank');
+                throw new Error('No URL in search result');
             }
         } catch (e) {
-            console.error('Model Resolver: Error searching CivitAI:', e);
             // Fall back to direct search
             const searchName = name.replace(/\.(safetensors|ckpt|pt|pth|bin|pkl|sft|onnx|gguf)$/i, '');
             const searchUrl = `https://civitai.com/search?q=${encodeURIComponent(searchName)}`;

@@ -310,5 +310,16 @@ export const renderFormatMethods = {
         }
 
         return parts.join(' | ');
+    },
+
+    getBaseDirectoryLabel(baseDirectory = '') {
+        const clean = String(baseDirectory || '').replace(/[\\\/]+$/, '');
+        if (!clean) return 'Default root';
+        return clean.split(/[\\\/]+/).filter(Boolean).pop() || clean;
+    },
+
+    estimateTextWidth(value, charPx = 6, minPx = 40, maxPx = 180) {
+        const length = String(value || '').length;
+        return Math.max(minPx, Math.min(maxPx, Math.ceil(length * charPx)));
     }
 };

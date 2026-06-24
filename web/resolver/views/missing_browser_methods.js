@@ -202,7 +202,6 @@ export const missingBrowserMethods = {
 
     getMissingModelsListLayout(missingModels = []) {
         const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-        const textWidth = (value, charPx) => Math.ceil(String(value || '').length * charPx);
 
         let modelPx = 180;
         let typePx = 66;
@@ -212,10 +211,10 @@ export const missingBrowserMethods = {
             const typeLabel = missing.category ? this.getCategoryDisplayName(missing.category) : 'unknown';
             modelPx = Math.max(
                 modelPx,
-                textWidth(filename, 7.2) + 12,
-                textWidth(nodeLabel, 5.5) + 34
+                this.estimateTextWidth(filename, 7.2, 0, 1000) + 12,
+                this.estimateTextWidth(nodeLabel, 5.5, 0, 1000) + 34
             );
-            typePx = Math.max(typePx, textWidth(typeLabel, 5.8) + 18);
+            typePx = Math.max(typePx, this.estimateTextWidth(typeLabel, 5.8, 0, 1000) + 18);
         }
 
         return {
@@ -826,11 +825,7 @@ export const missingBrowserMethods = {
             });
             return Array.from(byIdentity.values());
         };
-        const getBaseDirectoryLabel = (baseDirectory = '') => {
-            const clean = String(baseDirectory || '').replace(/[\\\/]+$/, '');
-            if (!clean) return 'Default root';
-            return clean.split(/[\\\/]+/).filter(Boolean).pop() || clean;
-        };
+
         const joinLocalModelPath = (basePath = '', relativePath = '') => {
             if (typeof this.joinLocalPath === 'function') {
                 return this.joinLocalPath(basePath, relativePath);
@@ -897,7 +892,7 @@ export const missingBrowserMethods = {
                 filename,
                 folderPath,
                 baseDirectory,
-                baseLabel: getBaseDirectoryLabel(baseDirectory),
+                baseLabel: this.getBaseDirectoryLabel(baseDirectory),
                 fullPath,
                 isPreferred: category === preferredCategory,
                 searchText: [

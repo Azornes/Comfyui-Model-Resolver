@@ -1,4 +1,5 @@
 import { $el, ComfyDialog } from "../../../../scripts/ui.js";
+import { api } from "../../../../scripts/api.js";
 import { dialogShellMethods } from "./shell/dialog_shell_methods.js";
 import { lifecycleGraphMethods } from "./shell/lifecycle_graph_methods.js";
 import { workflowStateMethods } from "./shell/workflow_state_methods.js";
@@ -208,6 +209,32 @@ export class ResolverManagerDialog extends ComfyDialog {
         };
         window.addEventListener('focus', this._boundSyncSearchProgressAfterResume);
         document.addEventListener('visibilitychange', this._boundSyncSearchProgressAfterResume);
+    }
+
+    async fetchJson(endpoint, options = {}, errorContext = 'API Request') {
+        try {
+            const fetchOptions = {
+                ...options,
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(options.headers || {})
+                }
+            };
+            const response = await api.fetchApi(endpoint, fetchOptions);
+            if (!response.ok) {
+                throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+            }
+            if (response.status === 204) {
+                return null;
+            }
+            return await response.json();
+        } catch (error) {
+            console.error(`Model Resolver: ${errorContext} failed:`, error);
+            if (typeof this.showNotification === 'function') {
+                this.showNotification(error.message || 'API request failed', 'error');
+            }
+            throw error;
+        }
     }
 }
 

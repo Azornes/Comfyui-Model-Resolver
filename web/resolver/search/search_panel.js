@@ -1481,11 +1481,6 @@ export const searchPanelMethods = {
     },
 
     getSearchResultsTableLayout(rows = []) {
-        const textWidth = (value, charPx = 6, minPx = 40, maxPx = 180) => {
-            const length = String(value || '').length;
-            return Math.max(minPx, Math.min(maxPx, Math.ceil(length * charPx)));
-        };
-
         const maxSourceLabel = rows.reduce(
             (max, row) => Math.max(max, String(row.sourceLabel || row.sourceKey || '').length),
             'Source'.length
@@ -1503,9 +1498,9 @@ export const searchPanelMethods = {
             return Math.max(max, count);
         }, 1);
 
-        const sourcePx = Math.max(118, textWidth('x'.repeat(maxSourceLabel), 6, 34, 100) + 52);
-        const matchPx = textWidth('x'.repeat(maxMatchLabel), 7, 34, 76) + 22;
-        const sizePx = textWidth('x'.repeat(maxSizeLabel), 6.5, 42, 88) + 30;
+        const sourcePx = Math.max(118, this.estimateTextWidth('x'.repeat(maxSourceLabel), 6, 34, 100) + 52);
+        const matchPx = this.estimateTextWidth('x'.repeat(maxMatchLabel), 7, 34, 76) + 22;
+        const sizePx = this.estimateTextWidth('x'.repeat(maxSizeLabel), 6.5, 42, 88) + 30;
         const actionsPx = Math.max(96, (maxActions * 28) + (Math.max(0, maxActions - 1) * 8) + 26);
         const modelMinPx = 210;
         const tableMinPx = Math.ceil(sourcePx + matchPx + sizePx + actionsPx + modelMinPx);
