@@ -238,6 +238,9 @@ def normalize_download_path_mode(value: Any, auto_fill_subfolder: Any = None) ->
 
 def normalize_settings(settings: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
     data = dict(settings or {})
+    data["auto_refresh_comfy_models_after_apply"] = bool_setting(
+        data.get("auto_refresh_comfy_models_after_apply"), True
+    )
     data["download_path_mode"] = normalize_download_path_mode(
         data.get("download_path_mode"), data.get("auto_fill_subfolder")
     )

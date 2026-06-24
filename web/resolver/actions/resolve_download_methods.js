@@ -58,6 +58,8 @@ export const resolveDownloadMethods = {
             log.debug('Resolve response: success=', data.success, ' missing count:', data.workflow?.nodes?.length);
 
             if (data.success) {
+                await this.refreshComfyModelCatalogAfterApply?.(data.workflow, resolutions);
+
                 // Update workflow in ComfyUI
                 await this.updateWorkflowInComfyUI(data.workflow);
 
@@ -149,6 +151,8 @@ export const resolveDownloadMethods = {
             const resolveData = await resolveResponse.json();
 
             if (resolveData.success) {
+                await this.refreshComfyModelCatalogAfterApply?.(resolveData.workflow, resolutions);
+
                 // Update workflow in ComfyUI
                 await this.updateWorkflowInComfyUI(resolveData.workflow);
 

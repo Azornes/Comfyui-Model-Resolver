@@ -1814,6 +1814,7 @@ export const queueMethods = {
             const data = await response.json();
             if (data.success) {
                 const optimisticData = this.getOptimisticAnalysisDataAfterApply(appliedSelections);
+                await this.refreshComfyModelCatalogAfterApply?.(data.workflow, applyResolutions);
                 await this.updateWorkflowInComfyUI(data.workflow);
                 this.rememberAppliedResolvedSelections(appliedSelections);
 

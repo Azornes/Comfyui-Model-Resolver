@@ -98,6 +98,7 @@ export class ResolverManagerDialog extends ComfyDialog {
         this._workflowRefreshGeneration = 0;
         this._workflowRefreshExpectedRoute = null;
         this._workflowRefreshPreviousSignature = null;
+        this._comfyModelCatalogRefreshPromise = null;
         this._boundHandleViewportResize = () => this.scheduleModalViewportClamp(true);
 
         // Create backdrop overlay for click-outside-to-close

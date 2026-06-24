@@ -2379,6 +2379,7 @@ export const downloadTargetMethods = {
             hf_use_brave_fallback: localStorage.getItem('ModelResolver.hfUseBraveFallback') !== 'false',
             auto_fill_base_model: localStorage.getItem('ModelResolver.autoFillBaseModel') !== 'false',
             auto_fill_subfolder: localStorage.getItem('ModelResolver.autoFillSubfolder') !== 'false',
+            auto_refresh_comfy_models_after_apply: localStorage.getItem('ModelResolver.autoRefreshComfyModelsAfterApply') !== 'false',
             frontend_logs_enabled: storedFrontendLogsEnabled === null
                 ? frontendLogger.enabled !== false
                 : storedFrontendLogsEnabled !== 'false',
@@ -2448,6 +2449,8 @@ export const downloadTargetMethods = {
                 localStorage.setItem('ModelResolver.autoFillBaseModel',      data.auto_fill_base_model ? 'true' : 'false');
             if (data.auto_fill_subfolder !== undefined)
                 localStorage.setItem('ModelResolver.autoFillSubfolder',      data.auto_fill_subfolder ? 'true' : 'false');
+            if (data.auto_refresh_comfy_models_after_apply !== undefined)
+                localStorage.setItem('ModelResolver.autoRefreshComfyModelsAfterApply', data.auto_refresh_comfy_models_after_apply ? 'true' : 'false');
             if (data.download_path_mode !== undefined)
                 localStorage.setItem('ModelResolver.downloadPathMode',       this.normalizeDownloadPathMode(data.download_path_mode));
             if (data.download_path_templates !== undefined)

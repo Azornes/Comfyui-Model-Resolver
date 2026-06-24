@@ -296,6 +296,15 @@ export const optionsMethods = {
                                                 <span class="mr-options-switch"></span>
                                             </span>
                                         </label>
+                                        <label class="mr-options-toggle-row">
+                                            <div class="mr-options-toggle-copy">
+                                                <span class="mr-options-toggle-title">Refresh ComfyUI models after Apply <span class="mr-tooltip-badge" data-tooltip="When enabled, Model Resolver refreshes ComfyUI's model lists only if an applied model is not visible to ComfyUI yet. Disable this if the refresh is too slow and you prefer to refresh models manually.">?</span></span>
+                                            </div>
+                                            <span class="mr-options-toggle-control">
+                                                <input id="mr-options-auto-refresh-comfy-models" class="mr-options-switch-input" type="checkbox" ${tokens.auto_refresh_comfy_models_after_apply ? 'checked' : ''}>
+                                                <span class="mr-options-switch"></span>
+                                            </span>
+                                        </label>
                                     </div>
                                 </div>
                             </div>
@@ -607,6 +616,7 @@ export const optionsMethods = {
         const hfUseBraveFallbackInput = this.contentElement.querySelector('#mr-options-hf-use-brave-fallback');
         const autoFillBaseModelInput = this.contentElement.querySelector('#mr-options-auto-fill-base-model');
         const autoFillSubfolderInput = this.contentElement.querySelector('#mr-options-auto-fill-subfolder');
+        const autoRefreshComfyModelsInput = this.contentElement.querySelector('#mr-options-auto-refresh-comfy-models');
         const downloadPathModeInput = this.contentElement.querySelector('#mr-options-download-path-mode');
         const defaultRootSelectInputs = Array.from(this.contentElement.querySelectorAll('.mr-options-default-root'));
         const templatePresetInputs = Array.from(this.contentElement.querySelectorAll('.mr-options-template-preset'));
@@ -660,6 +670,7 @@ export const optionsMethods = {
             hfUseBraveFallbackInput,
             autoFillBaseModelInput,
             autoFillSubfolderInput,
+            autoRefreshComfyModelsInput,
             downloadPathModeInput,
             ...defaultRootSelectInputs,
             ...templatePresetInputs,
@@ -1613,6 +1624,7 @@ export const optionsMethods = {
                     hf_use_brave_fallback:        Boolean(hfUseBraveFallbackInput?.checked),
                     auto_fill_base_model:          Boolean(autoFillBaseModelInput?.checked),
                     auto_fill_subfolder:           Boolean(autoFillSubfolderInput?.checked),
+                    auto_refresh_comfy_models_after_apply: Boolean(autoRefreshComfyModelsInput?.checked),
                     download_path_mode:            downloadPathMode,
                     download_path_templates:       downloadPathTemplates,
                     base_model_path_mappings:      baseModelPathMappings,
@@ -1637,6 +1649,7 @@ export const optionsMethods = {
                 localStorage.setItem('ModelResolver.hfUseBraveFallback',     newSettings.hf_use_brave_fallback ? 'true' : 'false');
                 localStorage.setItem('ModelResolver.autoFillBaseModel',      newSettings.auto_fill_base_model ? 'true' : 'false');
                 localStorage.setItem('ModelResolver.autoFillSubfolder',      newSettings.auto_fill_subfolder ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.autoRefreshComfyModelsAfterApply', newSettings.auto_refresh_comfy_models_after_apply ? 'true' : 'false');
                 localStorage.setItem('ModelResolver.downloadPathMode',       newSettings.download_path_mode);
                 localStorage.setItem('ModelResolver.downloadPathTemplates',  JSON.stringify(newSettings.download_path_templates));
                 localStorage.setItem('ModelResolver.baseModelPathMappings',  JSON.stringify(newSettings.base_model_path_mappings));
