@@ -979,21 +979,7 @@ export const resolveDownloadMethods = {
             body.innerHTML = `<div class="mr-no-matches">Checking local matches for ${this.escapeHtml(targetFilename)}...</div>`;
         }
 
-        const response = await api.fetchApi('/model_resolver/local-matches', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                filename: targetFilename,
-                category: category || missing.category || '',
-                force_rescan: true
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error(`Local match refresh failed: ${response.status}`);
-        }
-
-        const data = await response.json();
+        const data = await this.fetchLocalMatches(targetFilename, category || missing.category || '', true);
         const matches = Array.isArray(data.matches) ? data.matches : [];
         const missingKey = this.getMissingModelKey(missing);
         const currentMissing = (this.missingModels || []).find(item => this.getMissingModelKey(item) === missingKey) || missing;
@@ -1060,21 +1046,7 @@ export const resolveDownloadMethods = {
                 body.innerHTML = `<div class="mr-no-matches">Refreshing local matches for ${this.escapeHtml(displayName)}...</div>`;
             }
 
-            const response = await api.fetchApi('/model_resolver/local-matches', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    filename: targetFilename,
-                    category: missing.category || '',
-                    force_rescan: true
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error(`Local match refresh failed: ${response.status}`);
-            }
-
-            const data = await response.json();
+            const data = await this.fetchLocalMatches(targetFilename, missing.category || '', true);
             const matches = Array.isArray(data.matches) ? data.matches : [];
             currentMissing.matches = matches;
             missing.matches = matches;
@@ -2640,5 +2612,23 @@ export const resolveDownloadMethods = {
             this.updateQueuePanel?.();
             this.showNotification('Download failed: ' + error.message, 'error');
         }
+    },
+
+    async fetchLocalMatches(filename, category = '', forceRescan = false) {
+        const response = await api.fetchApi('/model_resolver/local-matches', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                filename,
+                category: category || '',
+                force_rescan: Boolean(forceRescan)
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`Local match search failed: ${response.status}`);
+        }
+
+        return await response.json();
     }
 };

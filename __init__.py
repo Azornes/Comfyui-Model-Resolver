@@ -2369,59 +2369,43 @@ class ModelResolverExtension:
                         log_exception(f"Clear search cache error: {e}")
                         return web.json_response({"error": str(e)}, status=500)
 
+                async def _check_credential_helper(request, payload_key, check_func, log_name):
+                    try:
+                        data = await request.json()
+                        val = data.get(payload_key, "")
+                        result = await asyncio.to_thread(check_func, val)
+                        return web.json_response(result)
+                    except Exception as e:
+                        log_exception(f"{log_name} check error: {e}")
+                        return web.json_response({"error": str(e)}, status=500)
+
                 @routes.post("/model_resolver/civitai/session-token/check")
                 async def civitai_session_token_check_route(request):
                     """Check whether a CivitAI browser session token is valid."""
-                    try:
-                        data = await request.json()
-                        token = data.get("civitai_session_token", "")
-                        result = await asyncio.to_thread(
-                            check_civitai_session_token, token
-                        )
-                        return web.json_response(result)
-                    except Exception as e:
-                        log_exception(f"CivitAI session token check error: {e}")
-                        return web.json_response({"error": str(e)}, status=500)
+                    return await _check_credential_helper(
+                        request, "civitai_session_token", check_civitai_session_token, "CivitAI session token"
+                    )
 
                 @routes.post("/model_resolver/civitai/api-key/check")
                 async def civitai_api_key_check_route(request):
                     """Check whether a CivitAI API key is valid."""
-                    try:
-                        data = await request.json()
-                        api_key = data.get("civitai_key", "")
-                        result = await asyncio.to_thread(
-                            check_civitai_api_key, api_key
-                        )
-                        return web.json_response(result)
-                    except Exception as e:
-                        log_exception(f"CivitAI API key check error: {e}")
-                        return web.json_response({"error": str(e)}, status=500)
+                    return await _check_credential_helper(
+                        request, "civitai_key", check_civitai_api_key, "CivitAI API key"
+                    )
 
                 @routes.post("/model_resolver/huggingface/token/check")
                 async def huggingface_token_check_route(request):
                     """Check whether a HuggingFace token is valid."""
-                    try:
-                        data = await request.json()
-                        token = data.get("hf_token", "")
-                        result = await asyncio.to_thread(check_huggingface_token, token)
-                        return web.json_response(result)
-                    except Exception as e:
-                        log_exception(f"HuggingFace token check error: {e}")
-                        return web.json_response({"error": str(e)}, status=500)
+                    return await _check_credential_helper(
+                        request, "hf_token", check_huggingface_token, "HuggingFace token"
+                    )
 
                 @routes.post("/model_resolver/brave/api-key/check")
                 async def brave_api_key_check_route(request):
                     """Check whether a Brave Search API key is valid."""
-                    try:
-                        data = await request.json()
-                        api_key = data.get("brave_search_api_key", "")
-                        result = await asyncio.to_thread(
-                            check_brave_search_api_key, api_key
-                        )
-                        return web.json_response(result)
-                    except Exception as e:
-                        log_exception(f"Brave Search API key check error: {e}")
-                        return web.json_response({"error": str(e)}, status=500)
+                    return await _check_credential_helper(
+                        request, "brave_search_api_key", check_brave_search_api_key, "Brave Search API key"
+                    )
 
                 @routes.get("/model_resolver/huggingface/author-index/status")
                 async def huggingface_author_index_status_route(request):

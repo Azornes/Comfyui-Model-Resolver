@@ -2151,20 +2151,7 @@ export const searchPanelMethods = {
         }
 
         const promise = (async () => {
-            const response = await api.fetchApi('/model_resolver/local-matches', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    filename,
-                    category: missing.category || ''
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error(`Local match search failed: ${response.status}`);
-            }
-
-            const data = await response.json();
+            const data = await this.fetchLocalMatches(filename, missing.category || '', false);
             missing.matches = Array.isArray(data.matches) ? data.matches : [];
             missing.__urnLocalMatchesFilename = filename;
             return missing.matches;
