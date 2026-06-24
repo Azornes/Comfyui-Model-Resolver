@@ -4,6 +4,7 @@ import { $el } from "../../../../../scripts/ui.js";
 import { LOG_LEVEL as DEFAULT_FRONTEND_LOG_LEVEL } from "../../log_system/config.js";
 import { logger as frontendLogger } from "../../log_system/logger.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
+import { createFloatingTreePicker } from "../utils/tree_picker.js";
 export const downloadTargetMethods = {
     /**
      * Ensure all models are loaded for the dropdown.
@@ -1900,17 +1901,6 @@ export const downloadTargetMethods = {
             }));
         };
 
-        document.querySelectorAll('.mr-download-target-list[data-ml-floating-portal="true"]').forEach(existing => {
-            if (existing !== listEl && existing.id === listEl.id) {
-                existing.remove();
-            }
-        });
-        if (listEl.dataset.mlFloatingPortal !== 'true') {
-            listEl.dataset.mlFloatingPortal = 'true';
-            document.body.appendChild(listEl);
-        }
-        listEl.classList.add('mr-download-target-floating');
-
         this.enableWheelScrollChaining(listEl);
         if (categoryListEl) {
             this.enableWheelScrollChaining(categoryListEl);
@@ -1921,108 +1911,23 @@ export const downloadTargetMethods = {
                 event.preventDefault();
             });
         }
-        let floatingPositionCleanup = null;
-
-        const cleanupFloatingPositioning = () => {
-            if (floatingPositionCleanup) {
-                floatingPositionCleanup();
-                floatingPositionCleanup = null;
-            }
-        };
-
-        const hideFloatingSubfolderList = () => {
-            cleanupFloatingPositioning();
-            listEl.style.display = 'none';
-        };
+        const subfolderTreePicker = createFloatingTreePicker({
+            listEl,
+            anchorEl: subfolderEl,
+            duplicateSelector: '.mr-download-target-list[data-ml-floating-portal="true"]',
+            floatingClass: 'mr-download-target-floating',
+            scrollSelector: '.mr-folder-browser-scroll',
+            minAvailableWidth: 260,
+            minPopupWidth: 420,
+            maxPopupWidth: 560,
+            openAboveThreshold: 260,
+            minAvailableHeight: 0,
+            minScrollHeight: 0,
+            setMinWidth: true
+        });
+        const hideFloatingSubfolderList = () => subfolderTreePicker.hide();
+        const showFloatingSubfolderList = () => subfolderTreePicker.show();
         this.bindDropdownOutsideDismiss(listEl, [subfolderEl], hideFloatingSubfolderList);
-
-        const clampNumber = (value, min, max) => Math.min(Math.max(value, min), max);
-
-        const positionFloatingSubfolderList = () => {
-            if (listEl.style.display === 'none') return;
-
-            const rect = subfolderEl.getBoundingClientRect();
-            const viewportPadding = 12;
-            const viewportWidth = Math.max(320, window.innerWidth || document.documentElement.clientWidth || 0);
-            const viewportHeight = Math.max(240, window.innerHeight || document.documentElement.clientHeight || 0);
-            if (rect.bottom < viewportPadding || rect.top > viewportHeight - viewportPadding) {
-                hideFloatingSubfolderList();
-                return;
-            }
-
-            const availableWidth = Math.max(260, viewportWidth - viewportPadding * 2);
-            const targetWidth = Math.min(560, availableWidth, Math.max(rect.width, 420));
-            const left = clampNumber(
-                rect.left,
-                viewportPadding,
-                Math.max(viewportPadding, viewportWidth - targetWidth - viewportPadding)
-            );
-            const gap = 6;
-            const spaceBelow = viewportHeight - rect.bottom - viewportPadding - gap;
-            const spaceAbove = rect.top - viewportPadding - gap;
-            const openAbove = spaceBelow < 260 && spaceAbove > spaceBelow;
-            const availableHeight = Math.max(0, openAbove ? spaceAbove : spaceBelow);
-
-            listEl.style.position = 'fixed';
-            listEl.style.left = `${left}px`;
-            listEl.style.right = 'auto';
-            listEl.style.width = `${targetWidth}px`;
-            listEl.style.minWidth = `${Math.min(rect.width, targetWidth)}px`;
-            listEl.style.maxWidth = `${availableWidth}px`;
-            listEl.style.maxHeight = `${availableHeight}px`;
-
-            const scrollEl = listEl.querySelector('.mr-folder-browser-scroll');
-            if (scrollEl) {
-                scrollEl.style.height = '';
-                scrollEl.style.maxHeight = '';
-
-                const containerStyle = window.getComputedStyle(listEl);
-                const containerChromeHeight = [
-                    containerStyle.borderTopWidth,
-                    containerStyle.borderBottomWidth,
-                    containerStyle.paddingTop,
-                    containerStyle.paddingBottom
-                ].reduce((height, value) => height + (Number.parseFloat(value) || 0), 0);
-                const chromeHeight = Array.from(listEl.children).reduce((height, child) => {
-                    if (child === scrollEl) return height;
-                    const style = window.getComputedStyle(child);
-                    const marginTop = Number.parseFloat(style.marginTop) || 0;
-                    const marginBottom = Number.parseFloat(style.marginBottom) || 0;
-                    return height + child.offsetHeight + marginTop + marginBottom;
-                }, 0);
-                const scrollHeight = Math.max(0, availableHeight - chromeHeight - containerChromeHeight);
-                scrollEl.style.maxHeight = `${scrollHeight}px`;
-            }
-
-            const popupHeight = listEl.offsetHeight;
-            const top = openAbove
-                ? clampNumber(rect.top - popupHeight - gap, viewportPadding, Math.max(viewportPadding, viewportHeight - viewportPadding - popupHeight))
-                : clampNumber(rect.bottom + gap, viewportPadding, Math.max(viewportPadding, viewportHeight - viewportPadding - popupHeight));
-            listEl.style.top = `${top}px`;
-        };
-
-        const bindFloatingPositioning = () => {
-            cleanupFloatingPositioning();
-            const updatePosition = (event) => {
-                if (event?.type === 'scroll' && event.target instanceof Node && listEl.contains(event.target)) {
-                    return;
-                }
-                positionFloatingSubfolderList();
-            };
-            window.addEventListener('resize', updatePosition, true);
-            window.addEventListener('scroll', updatePosition, true);
-            floatingPositionCleanup = () => {
-                window.removeEventListener('resize', updatePosition, true);
-                window.removeEventListener('scroll', updatePosition, true);
-            };
-        };
-
-        const showFloatingSubfolderList = () => {
-            listEl.style.display = 'block';
-            positionFloatingSubfolderList();
-            bindFloatingPositioning();
-            requestAnimationFrame(positionFloatingSubfolderList);
-        };
 
         const renderOptions = (targetEl, values, onSelect, anchorEl = null) => {
             const options = values.map(value => (

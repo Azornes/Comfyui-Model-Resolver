@@ -2,6 +2,7 @@
 import { api } from "../../../../../scripts/api.js";
 import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
+import { createFloatingTreePicker } from "../utils/tree_picker.js";
 export const missingBrowserMethods = {
     getMissingFilename(missing = {}) {
         return missing.original_path?.split('/').pop()?.split('\\').pop() || missing.name || 'Missing model';
@@ -915,95 +916,24 @@ export const missingBrowserMethods = {
                 ].join(' ').toLowerCase()
             };
         };
-        const clampNumber = (value, min, max) => Math.min(Math.max(value, min), max);
-        const cleanupComboPositioning = () => {
-            if (typeof comboList?._mlFloatingPositionCleanup === 'function') {
-                comboList._mlFloatingPositionCleanup();
-                comboList._mlFloatingPositionCleanup = null;
-            }
-        };
-        const positionComboList = () => {
-            if (!comboList || !comboInput || comboList.style.display === 'none') return;
-            const rect = comboInput.getBoundingClientRect();
-            const viewportPadding = 12;
-            const viewportWidth = Math.max(320, window.innerWidth || document.documentElement.clientWidth || 0);
-            const viewportHeight = Math.max(240, window.innerHeight || document.documentElement.clientHeight || 0);
-            const availableWidth = Math.max(280, viewportWidth - viewportPadding * 2);
-            const targetWidth = Math.min(760, availableWidth, Math.max(rect.width, 520));
-            const left = clampNumber(
-                rect.left,
-                viewportPadding,
-                Math.max(viewportPadding, viewportWidth - targetWidth - viewportPadding)
-            );
-            const gap = 6;
-            const spaceBelow = viewportHeight - rect.bottom - viewportPadding - gap;
-            const spaceAbove = rect.top - viewportPadding - gap;
-            const openAbove = spaceBelow < 280 && spaceAbove > spaceBelow;
-            const availableHeight = Math.max(180, openAbove ? spaceAbove : spaceBelow);
-
-            comboList.style.position = 'fixed';
-            comboList.style.left = `${Math.round(left)}px`;
-            comboList.style.right = 'auto';
-            comboList.style.width = `${Math.round(targetWidth)}px`;
-            comboList.style.maxWidth = `${Math.round(availableWidth)}px`;
-            comboList.style.maxHeight = `${Math.round(availableHeight)}px`;
-
-            const scrollEl = comboList.querySelector('.mr-local-model-browser-scroll');
-            if (scrollEl) {
-                const chromeHeight = Array.from(comboList.children).reduce((height, child) => {
-                    if (child === scrollEl) return height;
-                    const style = window.getComputedStyle(child);
-                    return height
-                        + child.offsetHeight
-                        + (Number.parseFloat(style.marginTop) || 0)
-                        + (Number.parseFloat(style.marginBottom) || 0);
-                }, 0);
-                scrollEl.style.maxHeight = `${Math.max(120, availableHeight - chromeHeight)}px`;
-            }
-
-            const popupHeight = Math.min(comboList.offsetHeight || availableHeight, availableHeight);
-            const top = openAbove
-                ? clampNumber(rect.top - popupHeight - gap, viewportPadding, Math.max(viewportPadding, viewportHeight - viewportPadding - popupHeight))
-                : clampNumber(rect.bottom + gap, viewportPadding, Math.max(viewportPadding, viewportHeight - viewportPadding - popupHeight));
-            comboList.style.top = `${Math.round(top)}px`;
-        };
-        const bindComboPositioning = () => {
-            cleanupComboPositioning();
-            const updatePosition = (event) => {
-                if (event?.type === 'scroll' && event.target instanceof Node && comboList?.contains(event.target)) {
-                    return;
-                }
-                positionComboList();
-            };
-            window.addEventListener('resize', updatePosition, true);
-            window.addEventListener('scroll', updatePosition, true);
-            comboList._mlFloatingPositionCleanup = () => {
-                window.removeEventListener('resize', updatePosition, true);
-                window.removeEventListener('scroll', updatePosition, true);
-            };
-        };
-        const showComboList = () => {
-            if (!comboList) return;
-            document.querySelectorAll('.mr-combo-list[data-ml-floating-portal="true"]').forEach(existing => {
-                if (existing !== comboList && existing.id === comboList.id) {
-                    existing.remove();
-                }
-            });
-            if (comboList.dataset.mlFloatingPortal !== 'true') {
-                comboList.dataset.mlFloatingPortal = 'true';
-                document.body.appendChild(comboList);
-            }
-            comboList.classList.add('mr-local-model-browser', 'mr-download-target-floating');
-            comboList.style.display = 'block';
-            positionComboList();
-            bindComboPositioning();
-            requestAnimationFrame(positionComboList);
-        };
-        const hideComboList = () => {
-            if (!comboList) return;
-            cleanupComboPositioning();
-            comboList.style.display = 'none';
-        };
+        const localModelTreePicker = createFloatingTreePicker({
+            listEl: comboList,
+            anchorEl: comboInput,
+            duplicateSelector: '.mr-combo-list[data-ml-floating-portal="true"]',
+            floatingClass: 'mr-download-target-floating',
+            browserClass: 'mr-local-model-browser',
+            scrollSelector: '.mr-local-model-browser-scroll',
+            minAvailableWidth: 280,
+            minPopupWidth: 520,
+            maxPopupWidth: 760,
+            openAboveThreshold: 280,
+            minAvailableHeight: 180,
+            minScrollHeight: 120,
+            roundValues: true
+        });
+        const showComboList = () => localModelTreePicker.show();
+        const hideComboList = () => localModelTreePicker.hide();
+        const positionComboList = () => localModelTreePicker.position();
         if (comboList) {
             this.bindDropdownOutsideDismiss?.(comboList, [comboInput, comboRefresh], hideComboList);
             this.enableWheelScrollChaining(comboList);
