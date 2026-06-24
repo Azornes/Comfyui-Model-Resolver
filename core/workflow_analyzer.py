@@ -6,7 +6,8 @@ Extracts model references from workflow JSON and identifies missing models.
 
 import os
 import re
-from typing import List, Dict, Any, Optional
+import threading
+from typing import List, Dict, Any, Optional, Set
 
 from .log_system.log_funcs import (
     log_debug,
@@ -304,6 +305,14 @@ NESTED_MODEL_KEYS = {
     "text_encoder": "text_encoders",
 }
 
+_DYNAMIC_CATEGORY_SENTINEL_PREFIX = "__model_resolver_folder_category__"
+_DYNAMIC_NODE_WIDGET_CATEGORY_CACHE: Dict[str, Dict[str, Any]] = {}
+_DYNAMIC_NODE_WIDGET_CATEGORY_LOCK = threading.RLock()
+
+# These ComfyUI INPUT_TYPES entries become widgets in widgets_values. Typed graph
+# inputs like MODEL or CLIP are links, so they should not shift widget indexes.
+_WIDGET_INPUT_TYPES = {"BOOLEAN", "COMBO", "FLOAT", "INT", "STRING"}
+
 
 def normalize_widget_name(value: Any) -> str:
     return re.sub(r"[_\s-]+", "_", str(value or "").strip().lower()).strip("_")
@@ -408,6 +417,242 @@ def get_widget_name_hint(node: Dict[str, Any], widget_index: int) -> str:
     return candidates[0] if candidates else ""
 
 
+def _ordered_unique_categories(values: List[Any]) -> List[str]:
+    return _unique_strings([value for value in values if value])
+
+
+def _merge_category_hints(
+    target: Dict[Any, List[str]], key: Any, categories: List[str]
+) -> None:
+    if not categories:
+        return
+
+    target[key] = _ordered_unique_categories(target.get(key, []) + categories)
+
+
+def _get_folder_paths_module() -> Any:
+    global folder_paths
+    if folder_paths is not None:
+        return folder_paths
+
+    try:
+        import folder_paths as fp
+
+        folder_paths = fp
+        return folder_paths
+    except Exception:
+        return None
+
+
+def _get_comfy_node_class(node_type: str) -> Any:
+    if not node_type:
+        return None
+
+    try:
+        import nodes as comfy_nodes
+    except Exception:
+        return None
+
+    node_class_mappings = getattr(comfy_nodes, "NODE_CLASS_MAPPINGS", {}) or {}
+    if not isinstance(node_class_mappings, dict):
+        return None
+
+    return node_class_mappings.get(node_type)
+
+
+def _extract_categories_from_value(
+    value: Any,
+    sentinel_to_category: Dict[str, str],
+    depth: int = 0,
+    seen: Optional[Set[int]] = None,
+) -> List[str]:
+    if depth > 8 or not sentinel_to_category:
+        return []
+
+    if isinstance(value, str):
+        return _ordered_unique_categories(
+            [
+                category
+                for sentinel, category in sentinel_to_category.items()
+                if category and sentinel in value
+            ]
+        )
+
+    if not isinstance(value, (dict, list, tuple, set)):
+        return []
+
+    if seen is None:
+        seen = set()
+
+    value_id = id(value)
+    if value_id in seen:
+        return []
+    seen.add(value_id)
+
+    categories: List[str] = []
+    if isinstance(value, dict):
+        for key, nested_value in value.items():
+            categories.extend(
+                _extract_categories_from_value(
+                    key, sentinel_to_category, depth + 1, seen
+                )
+            )
+            categories.extend(
+                _extract_categories_from_value(
+                    nested_value, sentinel_to_category, depth + 1, seen
+                )
+            )
+    else:
+        for item in value:
+            categories.extend(
+                _extract_categories_from_value(
+                    item, sentinel_to_category, depth + 1, seen
+                )
+            )
+
+    return _ordered_unique_categories(categories)
+
+
+def _is_input_type_widget_spec(spec: Any) -> bool:
+    if not isinstance(spec, (list, tuple)) or not spec:
+        return False
+
+    input_type = spec[0]
+    if isinstance(input_type, (list, tuple)):
+        return True
+
+    if isinstance(input_type, str):
+        return input_type.strip().upper() in _WIDGET_INPUT_TYPES
+
+    return False
+
+
+def _iter_widget_input_type_entries(
+    input_types: Dict[str, Any],
+) -> List[tuple[str, Any]]:
+    entries: List[tuple[str, Any]] = []
+    if not isinstance(input_types, dict):
+        return entries
+
+    for section_name in ("required", "optional"):
+        section = input_types.get(section_name, {})
+        if not isinstance(section, dict):
+            continue
+        entries.extend(section.items())
+
+    return entries
+
+
+def _build_dynamic_node_widget_category_hints(node_type: str) -> Dict[str, Any]:
+    empty_hints = {"by_name": {}, "by_index": {}}
+    node_class = _get_comfy_node_class(node_type)
+    if node_class is None:
+        return empty_hints
+
+    input_types_getter = getattr(node_class, "INPUT_TYPES", None)
+    if not callable(input_types_getter):
+        return empty_hints
+
+    folder_paths_module = _get_folder_paths_module()
+    get_filename_list = getattr(folder_paths_module, "get_filename_list", None)
+    if folder_paths_module is None or not callable(get_filename_list):
+        return empty_hints
+
+    sentinel_to_category: Dict[str, str] = {}
+
+    def traced_get_filename_list(category: Any, *args: Any, **kwargs: Any) -> List[str]:
+        category_name = str(category or "").strip()
+        sentinel = f"{_DYNAMIC_CATEGORY_SENTINEL_PREFIX}{len(sentinel_to_category)}"
+        sentinel_to_category[sentinel] = category_name
+        return [sentinel]
+
+    input_types_func = getattr(input_types_getter, "__func__", input_types_getter)
+    input_types_globals = getattr(input_types_func, "__globals__", {})
+    patched_globals: List[tuple[Dict[str, Any], str, Any]] = []
+
+    try:
+        setattr(folder_paths_module, "get_filename_list", traced_get_filename_list)
+        if isinstance(input_types_globals, dict):
+            for global_name, global_value in list(input_types_globals.items()):
+                if global_value is get_filename_list:
+                    input_types_globals[global_name] = traced_get_filename_list
+                    patched_globals.append(
+                        (input_types_globals, global_name, global_value)
+                    )
+        input_types = input_types_getter()
+    except Exception as exc:
+        log_debug(
+            f"Could not infer dynamic model widget categories for {node_type}: {exc}"
+        )
+        return empty_hints
+    finally:
+        for global_scope, global_name, global_value in patched_globals:
+            global_scope[global_name] = global_value
+        setattr(folder_paths_module, "get_filename_list", get_filename_list)
+
+    if not sentinel_to_category or not isinstance(input_types, dict):
+        return empty_hints
+
+    hints = {"by_name": {}, "by_index": {}}
+    widget_index = 0
+
+    for input_name, spec in _iter_widget_input_type_entries(input_types):
+        categories = _extract_categories_from_value(spec, sentinel_to_category)
+        normalized_name = normalize_widget_name(input_name)
+
+        if normalized_name:
+            _merge_category_hints(hints["by_name"], normalized_name, categories)
+
+        if _is_input_type_widget_spec(spec):
+            if categories:
+                _merge_category_hints(hints["by_index"], widget_index, categories)
+            widget_index += 1
+
+    if hints["by_name"] or hints["by_index"]:
+        log_debug(
+            f"Inferred dynamic model widget categories for {node_type}: {hints}"
+        )
+
+    return hints
+
+
+def get_dynamic_node_widget_category_hints(node_type: str) -> Dict[str, Any]:
+    if not node_type:
+        return {"by_name": {}, "by_index": {}}
+
+    with _DYNAMIC_NODE_WIDGET_CATEGORY_LOCK:
+        cached = _DYNAMIC_NODE_WIDGET_CATEGORY_CACHE.get(node_type)
+        if cached is not None:
+            return cached
+
+        hints = _build_dynamic_node_widget_category_hints(node_type)
+
+        # Only cache after ComfyUI has exposed the node class and folder_paths. If
+        # analysis runs unusually early, a later call can still infer the hints.
+        if _get_comfy_node_class(node_type) is not None and _get_folder_paths_module():
+            _DYNAMIC_NODE_WIDGET_CATEGORY_CACHE[node_type] = hints
+
+        return hints
+
+
+def get_dynamic_widget_category_hints(
+    node: Dict[str, Any], widget_index: int
+) -> List[str]:
+    hints = get_dynamic_node_widget_category_hints(str(node.get("type", "") or ""))
+
+    categories: List[str] = []
+    by_name = hints.get("by_name", {})
+    if isinstance(by_name, dict):
+        for candidate in get_widget_name_candidates(node, widget_index):
+            categories.extend(by_name.get(normalize_widget_name(candidate), []))
+
+    by_index = hints.get("by_index", {})
+    if isinstance(by_index, dict):
+        categories.extend(by_index.get(widget_index, []))
+
+    return _ordered_unique_categories(categories)
+
+
 MODEL_WIDGET_PLACEHOLDERS = {
     "",
     "none",
@@ -473,19 +718,42 @@ def get_node_output_category_hint(node: Dict[str, Any]) -> Optional[str]:
 def get_model_widget_category_hint(
     node: Dict[str, Any], widget_index: int
 ) -> Optional[str]:
+    category_hints = get_model_widget_category_hints(node, widget_index)
+    return category_hints[0] if category_hints else None
+
+
+def get_model_widget_category_hints(
+    node: Dict[str, Any], widget_index: int
+) -> List[str]:
     node_type = node.get("type", "")
     indexed_category_hint = get_node_model_widget_category_hint(node_type, widget_index)
     widget_category_hint = get_widget_category_hint(node, widget_index)
+    dynamic_category_hints: List[str] = []
+    if not indexed_category_hint and not widget_category_hint:
+        dynamic_category_hints = get_dynamic_widget_category_hints(node, widget_index)
+
     output_category_hint = get_node_output_category_hint(node)
     widgets_values = node.get("widgets_values", [])
     has_single_widget_value = len(widgets_values) == 1
     output_widget_category_hint = (
         output_category_hint
-        if (indexed_category_hint or widget_category_hint or has_single_widget_value)
+        if (
+            indexed_category_hint
+            or widget_category_hint
+            or dynamic_category_hints
+            or has_single_widget_value
+        )
         else None
     )
 
-    return indexed_category_hint or output_widget_category_hint or widget_category_hint
+    return _ordered_unique_categories(
+        [
+            indexed_category_hint,
+            widget_category_hint,
+            *dynamic_category_hints,
+            output_widget_category_hint,
+        ]
+    )
 
 
 def get_effective_model_category_hint(
@@ -839,10 +1107,18 @@ def get_node_model_info(
     # For each widget value, check if it looks like a model file or URN
     for idx, value in enumerate(widgets_values):
         widget_name = get_widget_name_hint(node, idx)
-        model_widget_category_hint = get_model_widget_category_hint(node, idx)
-        effective_category_hint = get_effective_model_category_hint(node, idx)
+        model_widget_category_hints = get_model_widget_category_hints(node, idx)
+        model_widget_category_hint = (
+            model_widget_category_hints[0] if model_widget_category_hints else None
+        )
+        effective_category_hint = (
+            model_widget_category_hint
+            or NODE_TYPE_TO_CATEGORY_HINTS.get(node_type)
+        )
         categories_to_try_for_widget = (
-            [effective_category_hint] if effective_category_hint else None
+            model_widget_category_hints
+            if model_widget_category_hints
+            else ([effective_category_hint] if effective_category_hint else None)
         )
 
         if not should_scan_as_model_reference(

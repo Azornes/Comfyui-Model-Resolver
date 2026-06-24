@@ -5826,6 +5826,14 @@ a.mr-image-preview-resource-name:hover {
     letter-spacing: 0.06em;
     line-height: 1.2;
 }
+.mr-download-target-label .mr-download-folder-help {
+    width: 14px;
+    height: 14px;
+    margin-left: 3px;
+    font-size: 9px;
+    line-height: 1;
+    transform: translateY(-1px);
+}
 .mr-download-target-label-folder {
     grid-area: folder-label;
 }

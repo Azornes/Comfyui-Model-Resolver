@@ -262,6 +262,37 @@ export const downloadTargetMethods = {
         return this.normalizeDownloadCategory(fallbackCategory || 'checkpoints');
     },
 
+    getDownloadCategoryTooltip(missing = {}, selectedCategory = '', options = {}) {
+        const category = this.normalizeDownloadCategory(selectedCategory || 'checkpoints');
+        const label = this.getCategoryDisplayName(category);
+        const saved = options.saved || this.getSavedDownloadTargetSelection(missing);
+        const inferredCategory = options.inferredCategory || this.getMissingDownloadCategory(missing, options.defaultCategory || 'checkpoints');
+        const preserveSavedCategory = options.preserveSavedCategory ?? this.shouldPreserveSavedDownloadCategory(missing, saved, inferredCategory);
+
+        if (preserveSavedCategory) {
+            return `Folder is set to ${label} because you manually changed it for this missing model. Model Resolver remembers that choice for this workflow entry.`;
+        }
+
+        const nodeCategory = this.getMissingNodeTypeDownloadCategory(missing);
+        if (nodeCategory && this.normalizeDownloadCategory(nodeCategory) === category) {
+            const nodeType = missing.locate_node_type || missing.promoted_inner_node_type || missing.node_type || 'this node';
+            return `Auto selected ${label} because the node type (${nodeType}) uses this kind of model folder.`;
+        }
+
+        const rawMissingCategory = missing.category || missing.directory || '';
+        const missingCategory = rawMissingCategory ? this.normalizeDownloadCategory(rawMissingCategory) : '';
+        if (missingCategory && missingCategory === category) {
+            return `Auto selected ${label} from the model category detected in the workflow: ${rawMissingCategory}.`;
+        }
+
+        const defaultCategory = this.normalizeDownloadCategory(options.defaultCategory || 'checkpoints');
+        if (defaultCategory && defaultCategory === category) {
+            return `Auto selected ${label} from the download source or default folder for this result.`;
+        }
+
+        return `Auto selected ${label} as the best available download folder. If this is wrong, choose another folder manually.`;
+    },
+
     getCategoryDisplayName(category = '') {
         category = this.normalizeDownloadCategory(category);
         const displayNames = {
@@ -1438,17 +1469,23 @@ export const downloadTargetMethods = {
         const selectedCategory = this.normalizeDownloadCategory(
             preserveSavedCategory ? (saved.category || inferredCategory) : inferredCategory
         );
+        const categoryTooltip = this.getDownloadCategoryTooltip(missing, selectedCategory, {
+            saved,
+            inferredCategory,
+            preserveSavedCategory,
+            defaultCategory
+        });
         const preserveSavedSubfolder = Boolean(saved?.subfolderTouched);
         const selectedSubfolder = preserveSavedSubfolder ? saved.subfolder || '' : '';
         const selectedSubfolderBaseDirectory = preserveSavedSubfolder ? saved.subfolderBaseDirectory || '' : '';
 
         let html = `<div class="mr-download-target">`;
         html += `<div class="mr-download-target-grid">`;
-        html += `<label class="mr-download-target-label mr-download-target-label-folder" for="${selectId}">Folder</label>`;
+        html += `<label class="mr-download-target-label mr-download-target-label-folder" for="${selectId}">Folder <span class="mr-tooltip-badge mr-download-folder-help" data-tooltip="${this.escapeHtml(categoryTooltip)}" tabindex="0">?</span></label>`;
         html += `<label class="mr-download-target-label mr-download-target-label-subfolder" for="${subfolderId}">Subfolder (optional)</label>`;
         html += `<label class="mr-download-target-label mr-download-target-label-suggest" for="${suggestId}">Suggest</label>`;
         html += `<div class="mr-download-target-wrap mr-download-target-folder-wrap">`;
-        html += `<input id="${selectId}" class="mr-download-target-input mr-download-target-select" type="text" autocomplete="off" data-value="${this.escapeHtml(selectedCategory)}" value="${this.escapeHtml(this.getCategoryDisplayName(selectedCategory))}">`;
+        html += `<input id="${selectId}" class="mr-download-target-input mr-download-target-select" type="text" autocomplete="off" data-value="${this.escapeHtml(selectedCategory)}" data-default-category="${this.escapeHtml(defaultCategory || 'checkpoints')}" value="${this.escapeHtml(this.getCategoryDisplayName(selectedCategory))}">`;
         html += `<div id="${categoryListId}" class="mr-download-target-list"></div>`;
         html += `</div>`;
         html += `<div class="mr-download-target-wrap mr-download-target-subfolder-wrap">`;
@@ -1778,6 +1815,23 @@ export const downloadTargetMethods = {
         const listEl = container.querySelector(`#download-subfolder-list-${missing.node_id}-${missing.widget_index}`)
             || document.getElementById(`download-subfolder-list-${missing.node_id}-${missing.widget_index}`);
         if (!categoryEl || !subfolderEl || !listEl) return;
+
+        const refreshCategoryTooltip = () => {
+            const helpEl = container.querySelector('.mr-download-folder-help');
+            if (!helpEl) return;
+
+            const saved = this.getSavedDownloadTargetSelection(missing);
+            const defaultCategory = categoryEl.dataset.defaultCategory || 'checkpoints';
+            const selectedCategory = this.getDropdownValue(categoryEl)
+                || this.getMissingDownloadCategory(missing, defaultCategory);
+            const inferredCategory = this.getMissingDownloadCategory(missing, defaultCategory);
+            helpEl.setAttribute('data-tooltip', this.getDownloadCategoryTooltip(missing, selectedCategory, {
+                saved,
+                inferredCategory,
+                preserveSavedCategory: this.shouldPreserveSavedDownloadCategory(missing, saved, inferredCategory),
+                defaultCategory
+            }));
+        };
 
         document.querySelectorAll('.mr-download-target-list[data-ml-floating-portal="true"]').forEach(existing => {
             if (existing !== listEl && existing.id === listEl.id) {
@@ -2246,6 +2300,7 @@ export const downloadTargetMethods = {
                 listEl.innerHTML = '';
                 hideFloatingSubfolderList();
                 this.syncDownloadTargetFolderContext(categoryEl, subfolderEl);
+                refreshCategoryTooltip();
                 this.applySuggestedDownloadSubfolder(missing, categoryEl, subfolderEl);
             }, categoryEl);
         };
@@ -2291,6 +2346,7 @@ export const downloadTargetMethods = {
                     subfolderTouched: Boolean(subfolderEl.value)
                 });
                 this.syncDownloadTargetFolderContext(categoryEl, subfolderEl);
+                refreshCategoryTooltip();
                 populateCategoryOptions(typed);
             });
             categoryEl.addEventListener('keydown', (event) => {
@@ -2305,6 +2361,7 @@ export const downloadTargetMethods = {
                 if (category && knownCategories.has(this.normalizeDownloadCategory(category))) {
                     this.setDropdownValue(categoryEl, category, this.getCategoryDisplayName(category));
                 }
+                refreshCategoryTooltip();
             };
             this.bindDropdownOutsideDismiss(categoryListEl, [categoryEl], () => {
                 normalizeCategoryInput();
@@ -2342,6 +2399,7 @@ export const downloadTargetMethods = {
                 const animationDone = new Promise((resolve) => window.setTimeout(resolve, suggestAnimationMs));
                 try {
                     await this.forceSuggestedDownloadSubfolder(missing, categoryEl, subfolderEl);
+                    refreshCategoryTooltip();
                     listEl.innerHTML = '';
                     hideFloatingSubfolderList();
                 } finally {
@@ -2353,7 +2411,9 @@ export const downloadTargetMethods = {
         }
 
         this.syncDownloadTargetFolderContext(categoryEl, subfolderEl);
-        this.applySuggestedDownloadSubfolder(missing, categoryEl, subfolderEl);
+        Promise.resolve(this.applySuggestedDownloadSubfolder(missing, categoryEl, subfolderEl))
+            .then(refreshCategoryTooltip)
+            .catch(() => refreshCategoryTooltip());
     },
 
     getStoredTokens() {
