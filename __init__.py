@@ -218,9 +218,13 @@ class ModelResolverExtension:
                         else str(force_rescan).lower() in {"1", "true", "yes"}
                     )
 
-                    if not workflow_json:
+                    if workflow_json is None:
                         return web.json_response(
                             {"error": "Workflow JSON is required"}, status=400
+                        )
+                    if not isinstance(workflow_json, dict):
+                        return web.json_response(
+                            {"error": "Workflow JSON must be an object"}, status=400
                         )
 
                     if analysis_id:

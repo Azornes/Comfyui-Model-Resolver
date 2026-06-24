@@ -19,9 +19,12 @@ from .log_system.log_funcs import (
 )
 from .scanner import get_model_files
 from .workflow_analyzer import (
+    NESTED_MODEL_KEYS,
     NODE_TYPE_TO_CATEGORY_HINTS,
     analyze_workflow_models,
+    get_model_widget_category_hint,
     identify_missing_models,
+    should_scan_as_model_reference,
 )
 from .matcher import find_matches
 from .workflow_updater import update_workflow_nodes
@@ -75,6 +78,127 @@ def get_workflow_url_info_for_filename(
             return url_info
 
     return None
+
+
+def workflow_has_nodes(workflow_json: Dict[str, Any]) -> bool:
+    """Return True when the active top-level workflow contains nodes."""
+    if not isinstance(workflow_json, dict):
+        return False
+
+    nodes = workflow_json.get("nodes")
+    return isinstance(nodes, list) and len(nodes) > 0
+
+
+def iter_active_workflow_nodes(workflow_json: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Return top-level nodes plus nodes from subgraphs referenced by top-level nodes."""
+    if not isinstance(workflow_json, dict):
+        return []
+
+    top_level_nodes = workflow_json.get("nodes")
+    if not isinstance(top_level_nodes, list):
+        return []
+
+    active_nodes = [
+        node for node in top_level_nodes if isinstance(node, dict)
+    ]
+
+    definitions = workflow_json.get("definitions")
+    if not isinstance(definitions, dict):
+        return active_nodes
+
+    subgraph_list = definitions.get("subgraphs")
+    if not isinstance(subgraph_list, list):
+        return active_nodes
+
+    subgraphs = {
+        str(subgraph.get("id")): subgraph
+        for subgraph in subgraph_list
+        if isinstance(subgraph, dict) and subgraph.get("id") is not None
+    }
+    pending_subgraphs = [
+        str(node.get("type"))
+        for node in active_nodes
+        if str(node.get("type")) in subgraphs
+    ]
+    seen_subgraphs = set()
+
+    while pending_subgraphs:
+        subgraph_id = pending_subgraphs.pop(0)
+        if subgraph_id in seen_subgraphs:
+            continue
+        seen_subgraphs.add(subgraph_id)
+
+        subgraph = subgraphs.get(subgraph_id)
+        subgraph_nodes = subgraph.get("nodes") if isinstance(subgraph, dict) else None
+        if not isinstance(subgraph_nodes, list):
+            continue
+
+        for node in subgraph_nodes:
+            if not isinstance(node, dict):
+                continue
+            active_nodes.append(node)
+            nested_subgraph_id = str(node.get("type"))
+            if (
+                nested_subgraph_id in subgraphs
+                and nested_subgraph_id not in seen_subgraphs
+            ):
+                pending_subgraphs.append(nested_subgraph_id)
+
+    return active_nodes
+
+
+def node_has_potential_model_reference(node: Dict[str, Any]) -> bool:
+    """Detect model-looking widget values without resolving paths or scanning disks."""
+    if not isinstance(node, dict):
+        return False
+
+    widgets_values = node.get("widgets_values")
+    if not isinstance(widgets_values, list) or not widgets_values:
+        return False
+
+    node_type = node.get("type", "")
+    if (
+        node_type in {
+            "LoraLoaderV2",
+            "Lora Loader (LoraManager)",
+            "Lora Stacker (LoraManager)",
+        }
+        and len(widgets_values) >= 3
+        and isinstance(widgets_values[2], list)
+    ):
+        for lora_item in widgets_values[2]:
+            if isinstance(lora_item, dict) and str(lora_item.get("name") or "").strip():
+                return True
+
+    for idx, value in enumerate(widgets_values):
+        model_widget_category_hint = get_model_widget_category_hint(node, idx)
+        if should_scan_as_model_reference(
+            value, declared_model_widget=bool(model_widget_category_hint)
+        ):
+            return True
+
+        if not isinstance(value, dict):
+            continue
+
+        for nested_key in NESTED_MODEL_KEYS:
+            nested_value = value.get(nested_key)
+            if (
+                isinstance(nested_value, str)
+                and should_scan_as_model_reference(
+                    nested_value, declared_model_widget=True
+                )
+            ):
+                return True
+
+    return False
+
+
+def workflow_has_potential_model_references(workflow_json: Dict[str, Any]) -> bool:
+    """Return True when active workflow nodes contain any model-looking values."""
+    return any(
+        node_has_potential_model_reference(node)
+        for node in iter_active_workflow_nodes(workflow_json)
+    )
 
 
 def normalize_workflow_download_url(url: str) -> str:
@@ -391,6 +515,27 @@ def analyze_and_find_matches(
                 "total": 0,
             }
         )
+
+    if (
+        not workflow_has_nodes(workflow_json)
+        or not workflow_has_potential_model_references(workflow_json)
+    ):
+        if progress_callback:
+            progress_callback(
+                {
+                    "stage": "completed",
+                    "message": "Analysis complete",
+                    "current": 0,
+                    "total": 0,
+                }
+            )
+        return {
+            "missing_models": [],
+            "resolved_models": [],
+            "total_resolved": 0,
+            "total_missing": 0,
+            "total_models_analyzed": 0,
+        }
 
     # Extract URLs from workflow (node.properties.models + regex)
     workflow_urls = extract_workflow_urls(workflow_json)

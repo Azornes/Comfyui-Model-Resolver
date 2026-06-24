@@ -164,6 +164,27 @@ export const lifecycleGraphMethods = {
                 return;
             }
 
+            if (!this.workflowHasNodes(workflow)) {
+                this._analysisProgressToken = null;
+                const data = {
+                    missing_models: [],
+                    resolved_models: [],
+                    total_missing: 0,
+                    total_resolved: 0,
+                    total_models_analyzed: 0
+                };
+                if (this._workflowDataLoadToken === loadToken) {
+                    this.cachedWorkflowSignature = workflowSignature;
+                    this.cachedAnalysisData = data;
+                    this.saveAnalysisCacheForActiveWorkflow();
+                }
+                if (shouldRenderMissingModels()) {
+                    await this.ensureDownloadDirectoriesLoaded();
+                    this.displayMissingModels(this.contentElement, data);
+                }
+                return;
+            }
+
             const analysisId = `an-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             this._analysisProgressToken = analysisId;
             if (shouldRenderMissingModels()) {
@@ -216,6 +237,12 @@ export const lifecycleGraphMethods = {
                 this.contentElement.innerHTML = `<p class="mr-error-text">Error: ${error.message}</p>`;
             }
         }
+    },
+
+    workflowHasNodes(workflow) {
+        if (!workflow || typeof workflow !== 'object') return false;
+
+        return Array.isArray(workflow.nodes) && workflow.nodes.length > 0;
     },
 
     /**
