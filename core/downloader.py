@@ -1,4 +1,4 @@
-﻿"""
+"""
 Model Downloader Module
 
 Handles downloading models from various sources with progress tracking.
@@ -23,6 +23,7 @@ from .log_system.log_funcs import (
     log_exception,
 )
 from .resolver import normalize_sha256
+from .path_utils import is_path_within, get_path_identity
 
 try:
     import folder_paths
@@ -656,13 +657,10 @@ def get_download_directory(category: str, preferred_base_directory: str = "") ->
         folder_keys.append("clip")
 
     def _normalize(path_value: str) -> str:
-        return os.path.normcase(os.path.abspath(path_value))
+        return get_path_identity(path_value)
 
     def _is_within(path_value: str, root_value: str) -> bool:
-        try:
-            return os.path.commonpath([_normalize(path_value), _normalize(root_value)]) == _normalize(root_value)
-        except Exception:
-            return False
+        return is_path_within(path_value, root_value)
 
     def _choose_preferred_path(paths: List[str], preferred_key: str = "") -> Optional[str]:
         if not paths:

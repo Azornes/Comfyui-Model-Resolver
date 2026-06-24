@@ -1,4 +1,4 @@
-﻿"""
+"""
 Directory Scanner Module
 
 Scans configured model directories and finds available model files.
@@ -15,6 +15,8 @@ from .log_system.log_funcs import (
     log_error,
     log_exception,
 )
+
+from .path_utils import get_path_identity
 
 # Import folder_paths lazily - it may not be available until ComfyUI is initialized
 try:
@@ -45,7 +47,7 @@ _MODEL_FILES_CACHE_TTL_SECONDS = 2.0
 
 def _path_identity(path: str) -> str:
     """Return a stable identity for dedupe across symlinks/junctions."""
-    return os.path.normcase(os.path.realpath(os.path.abspath(path)))
+    return get_path_identity(path)
 
 
 def _directory_identity(path: str) -> str:

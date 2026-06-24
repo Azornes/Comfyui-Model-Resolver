@@ -1,4 +1,4 @@
-﻿"""
+"""
 Core Resolver Module
 
 Integrates all components to provide high-level API for model linking.
@@ -38,15 +38,14 @@ URL_PATTERN = re.compile(r'(https?://(?:huggingface\.co|civitai\.com)[^\s"\'<>\)
 MODEL_EXTENSIONS = (".safetensors", ".ckpt", ".pt", ".pth", ".bin", ".onnx", ".gguf")
 
 
-def get_path_identity(path: str) -> str:
-    """Return a stable path identity across symlinks/junctions."""
-    if not path:
-        return ""
-
-    try:
-        return os.path.normcase(os.path.realpath(os.path.abspath(path)))
-    except (OSError, ValueError):
-        return os.path.normcase(os.path.abspath(path))
+from .path_utils import (
+    get_path_identity,
+    get_path_abs,
+    get_path_key,
+    is_path_within,
+    prefer_local_base_directory,
+    dedupe_local_base_directories,
+)
 
 
 def strip_known_model_extension(filename: str) -> str:

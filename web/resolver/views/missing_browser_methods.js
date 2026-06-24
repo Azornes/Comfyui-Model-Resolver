@@ -733,6 +733,7 @@ export const missingBrowserMethods = {
         const comboRefresh = container.querySelector(`#combo-refresh-${comboId}`);
 
         const getAllModels = () => Array.isArray(this.allModels) ? this.allModels : [];
+        let localModelLoadToken = 0;
         const normalizeModelPath = (value = '') => String(value || '')
             .replace(/\//g, '\\')
             .split('\\')
@@ -1003,6 +1004,15 @@ export const missingBrowserMethods = {
                 .join('');
             return `${renderModelRows(node.models || [], selectedIdentity)}${folderHtml}`;
         };
+        const renderLocalModelLoadingState = (message = 'Loading local models...') => {
+            if (!comboList) return;
+            comboList.innerHTML = `
+                <div class="mr-local-model-browser-scroll">
+                    <div class="mr-folder-browser-empty">${this.escapeHtml(message)}</div>
+                </div>
+            `;
+            positionComboList();
+        };
         const populateComboOptions = (filterText, options = {}) => {
             if (!comboList) return;
             const previousScrollEl = comboList.querySelector('.mr-local-model-browser-scroll');
@@ -1126,19 +1136,35 @@ export const missingBrowserMethods = {
             }
             positionComboList();
         };
+        const ensureLocalModelsThenPopulate = async (filterText = '', options = {}) => {
+            if (Array.isArray(this.allModels) && this.allModels.length > 0) {
+                populateComboOptions(filterText, options);
+                return;
+            }
+
+            const token = ++localModelLoadToken;
+            renderLocalModelLoadingState();
+            try {
+                await this.ensureAllModelsLoaded?.();
+            } catch (error) {
+                console.warn('Model Resolver: could not load local models for picker', error);
+            }
+            if (token !== localModelLoadToken) return;
+            populateComboOptions(filterText, options);
+        };
 
         if (comboList) {
-            populateComboOptions('');
+            ensureLocalModelsThenPopulate('');
         }
 
         if (comboInput) {
             const debouncedFilter = this.debounce(() => {
-                populateComboOptions(comboInput.value);
+                ensureLocalModelsThenPopulate(comboInput.value);
             }, 200);
             comboInput.addEventListener('input', debouncedFilter);
             comboInput.addEventListener('focus', () => {
                 showComboList();
-                populateComboOptions(comboInput.value);
+                ensureLocalModelsThenPopulate(comboInput.value);
             });
         }
 
@@ -1152,7 +1178,7 @@ export const missingBrowserMethods = {
                     return;
                 }
                 lastPriorityCategory = nextPriorityCategory;
-                populateComboOptions(comboInput?.value || '', { preserveScroll: true });
+                ensureLocalModelsThenPopulate(comboInput?.value || '', { preserveScroll: true });
             };
             categoryPriorityEl.addEventListener('input', refreshLocalModelPriority);
             categoryPriorityEl.addEventListener('change', refreshLocalModelPriority);
