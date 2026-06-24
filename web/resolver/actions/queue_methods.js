@@ -1,4 +1,4 @@
-﻿import { app } from "../../../../../scripts/app.js";
+import { app } from "../../../../../scripts/app.js";
 import { api } from "../../../../../scripts/api.js";
 import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
@@ -2586,13 +2586,7 @@ export const queueMethods = {
         this.showNotification(`Cancelling ${downloadIds.length} download${downloadIds.length > 1 ? 's' : ''}...`, 'info');
 
         for (const downloadId of downloadIds) {
-            try {
-                await api.fetchApi(`/model_resolver/cancel/${downloadId}`, {
-                    method: 'POST'
-                });
-            } catch (error) {
-                console.error('Model Resolver: Error cancelling download:', error);
-            }
+            await this.cancelDownload(downloadId);
         }
     },
 

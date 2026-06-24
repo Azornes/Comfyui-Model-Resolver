@@ -1,4 +1,4 @@
-﻿import { app } from "../../../../scripts/app.js";
+import { app } from "../../../../scripts/app.js";
 import { api } from "../../../../scripts/api.js";
 import { $el } from "../../../../scripts/ui.js";
 import { createModuleLogger } from "../log_system/log_funcs.js";
@@ -750,58 +750,5 @@ export class ModelResolver {
             console.error("🔗 Model Resolver: Error creating/showing dialog:", error);
             alert("Error opening Model Resolver: " + error.message);
         }
-    }
-
-    static switchFilter(filter) {
-        document.querySelectorAll('.mr-btn-filter').forEach(b => b.classList.remove('active'));
-        document.getElementById('filter-' + filter).classList.add('active');
-        
-        document.querySelectorAll('.mr-model-section').forEach(s => {
-            const hasActive = s.dataset.mlActive === 'true';
-            const hasInactive = s.dataset.mlInactive === 'true';
-            
-            if (filter === 'all') {
-                s.style.display = 'block';
-            } else if (filter === 'active') {
-                s.style.display = hasActive ? 'block' : 'none';
-            } else if (filter === 'inactive') {
-                s.style.display = hasInactive ? 'block' : 'none';
-            }
-        });
-        
-        const copySection = document.querySelector('[id^="mr-copy-"]');
-        if (copySection) {
-            const codeEl = copySection.querySelector('code');
-            const labelEl = copySection.querySelector('div');
-            
-            if (filter === 'all') {
-                codeEl.textContent = copySection.dataset.mlAll;
-                labelEl.textContent = 'Copy all:';
-            } else if (filter === 'active') {
-                codeEl.textContent = copySection.dataset.mlActive;
-                labelEl.textContent = 'Copy active:';
-            } else if (filter === 'inactive') {
-                codeEl.textContent = copySection.dataset.mlInactive;
-                labelEl.textContent = 'Copy inactive:';
-            }
-        }
-    }
-
-    static copyToClipboard(text, btn) {
-        navigator.clipboard.writeText(text).then(() => {
-            const orig = btn.textContent;
-            btn.textContent = '✓';
-            setTimeout(() => btn.textContent = orig, 1500);
-        });
-    }
-
-    static copyFromCode(sectionId, btn) {
-        const section = document.getElementById(sectionId);
-        const codeEl = section.querySelector('code');
-        navigator.clipboard.writeText(codeEl.textContent).then(() => {
-            const orig = btn.textContent;
-            btn.textContent = '✓ Copied!';
-            setTimeout(() => btn.textContent = orig, 1500);
-        });
     }
 }
