@@ -27,7 +27,7 @@ from .workflow_analyzer import (
     should_scan_as_model_reference,
 )
 from .matcher import find_matches
-from .type_utils import as_dict, as_list
+from .type_utils import as_dict, as_list, MODEL_EXTENSIONS as _MODEL_EXTENSIONS
 from .workflow_updater import update_workflow_nodes
 from .sources.civitai import resolve_urn
 from .sources.huggingface import parse_huggingface_url as parse_hf_url
@@ -36,7 +36,7 @@ from .sources.huggingface import parse_huggingface_url as parse_hf_url
 URL_PATTERN = re.compile(r'(https?://(?:huggingface\.co|civitai\.com)[^\s"\'<>\)\\]+)')
 
 # Model file extensions to look for
-MODEL_EXTENSIONS = (".safetensors", ".ckpt", ".pt", ".pth", ".bin", ".onnx", ".gguf")
+MODEL_EXTENSIONS = tuple(_MODEL_EXTENSIONS)
 
 
 from .path_utils import (

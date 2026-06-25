@@ -283,18 +283,8 @@ def base_model_score(candidate: str, preferred: Optional[str]) -> float:
 
 # ==================== CENTRALIZED MATCHING & CONFIDENCE HELPERS ====================
 
-MODEL_FILE_EXTENSIONS = {
-    ".ckpt",
-    ".pt",
-    ".pt2",
-    ".bin",
-    ".pth",
-    ".safetensors",
-    ".pkl",
-    ".sft",
-    ".onnx",
-    ".gguf",
-}
+from .type_utils import MODEL_EXTENSIONS
+MODEL_FILE_EXTENSIONS = MODEL_EXTENSIONS
 
 
 def strip_known_model_extension(filename: str) -> str:

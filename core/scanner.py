@@ -17,6 +17,7 @@ from .log_system.log_funcs import (
 )
 
 from .path_utils import get_path_identity
+from .type_utils import MODEL_EXTENSIONS
 
 # Import folder_paths lazily - it may not be available until ComfyUI is initialized
 try:
@@ -24,21 +25,6 @@ try:
 except ImportError:
     folder_paths = None
     log_warn("Model Resolver: folder_paths not available yet - will retry later")
-
-# Model file extensions to look for
-# This matches folder_paths.supported_pt_extensions
-MODEL_EXTENSIONS = {
-    ".ckpt",
-    ".pt",
-    ".pt2",
-    ".bin",
-    ".pth",
-    ".safetensors",
-    ".pkl",
-    ".sft",
-    ".onnx",
-    ".gguf",
-}
 
 _MODEL_FILES_CACHE: Optional[List[Dict[str, str]]] = None
 _MODEL_FILES_CACHE_AT: float = 0.0
