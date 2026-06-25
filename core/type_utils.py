@@ -103,3 +103,121 @@ def to_bool(value: Any, default: bool = False) -> bool:
     return bool(value)
 
 
+# Map of AIR URN type strings to internal ComfyUI folder_paths categories
+URN_TYPE_MAP = {
+    "checkpoint": "checkpoints",
+    "lora": "loras",
+    "vae": "vae",
+    "upscaler": "upscale_models",
+    "upscale_model": "upscale_models",
+    "latent_upscale_model": "latent_upscale_models",
+    "embedding": "embeddings",
+    "hypernetwork": "hypernetworks",
+    "controlnet": "controlnet",
+    "clip": "text_encoders",
+    "clip_vision": "clip_vision",
+    "diffusers": "diffusers",
+}
+
+# General mapping of raw/unnormalized keys to canonical categories
+CATEGORY_MAP = {
+    "checkpoints": "checkpoints",
+    "checkpoint": "checkpoints",
+    "loras": "loras",
+    "lora": "loras",
+    "embeddings": "embeddings",
+    "embedding": "embeddings",
+    "hypernetworks": "hypernetworks",
+    "hypernetwork": "hypernetworks",
+    "controlnet": "controlnet",
+    "control_net": "controlnet",
+    "vae": "vae",
+    "upscaler": "upscale_models",
+    "upscale_model": "upscale_models",
+    "upscale_models": "upscale_models",
+    "latent_upscale_model": "latent_upscale_models",
+    "latent_upscale_models": "latent_upscale_models",
+    "style_model": "style_models",
+    "style_models": "style_models",
+    "gligen": "gligen",
+    "diffusers": "diffusers",
+    "vae_approx": "vae_approx",
+    "sam": "sams",
+    "sam_model": "sams",
+    "sam_models": "sams",
+    "sams": "sams",
+    "ultralytics": "ultralytics",
+    "ultralytics_bbox": "ultralytics",
+    "ultralytics_segm": "ultralytics",
+    "yolo": "ultralytics",
+    "audio_encoder": "audio_encoders",
+    "audio_encoders": "audio_encoders",
+    "background_removal": "background_removal",
+    "background_removal_model": "background_removal",
+    "frame_interpolation": "frame_interpolation",
+    "frame_interpolation_model": "frame_interpolation",
+    "geometry_estimation": "geometry_estimation",
+    "geometry_estimation_model": "geometry_estimation",
+    "detection": "detection",
+    "model_patch": "model_patches",
+    "model_patches": "model_patches",
+    "photomaker": "photomaker",
+    "optical_flow": "optical_flow",
+    "optical_flow_model": "optical_flow",
+    "clip_vision": "clip_vision",
+    "ipadapter": "ipadapter",
+    "ip_adapter": "ipadapter",
+    "default": "upscale_models",
+}
+
+# Strict case-sensitive types for CivitAI search API (HTTP 400 on lowercase/mismatch)
+CIVITAI_API_TYPE_MAP = {
+    "checkpoint": "Checkpoint",
+    "checkpoints": "Checkpoint",
+    "lora": "LORA",
+    "loras": "LORA",
+    "vae": "VAE",
+    "controlnet": "Controlnet",
+    "embedding": "TextualInversion",
+    "embeddings": "TextualInversion",
+    "upscaler": "Upscaler",
+    "upscale_models": "Upscaler",
+}
+
+# Case-sensitive types for CivArchive search API (mapping filter support)
+CIVARCHIVE_API_TYPE_MAP = {
+    "checkpoint": "Checkpoint",
+    "checkpoints": "Checkpoint",
+    "lora": "LORA",
+    "loras": "LORA",
+    "locon": "LoCon",
+    "lycoris": "LoCon",
+    "vae": "VAE",
+    "controlnet": "Controlnet",
+    "embedding": "TextualInversion",
+    "embeddings": "TextualInversion",
+    "textualinversion": "TextualInversion",
+    "upscaler": "Upscaler",
+    "upscale_models": "Upscaler",
+    "workflow": "Workflows",
+    "workflows": "Workflows",
+}
+
+def normalize_download_category(category: str) -> str:
+    """Return the canonical ComfyUI folder_paths key for a download category."""
+    token = (
+        str(category or "")
+        .strip()
+        .lower()
+        .replace("\\", "_")
+        .replace("/", "_")
+        .replace("-", "_")
+        .replace(" ", "_")
+    )
+    while "__" in token:
+        token = token.replace("__", "_")
+    token = token.strip("_")
+    return CATEGORY_MAP.get(token, token or "checkpoints")
+
+
+

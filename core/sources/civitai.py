@@ -20,7 +20,7 @@ from ..matcher import (
     base_model_matches as _base_model_matches,
     base_model_score as _base_model_score,
 )
-from ..type_utils import first_non_empty
+from ..type_utils import first_non_empty, CIVITAI_API_TYPE_MAP
 from ..progress import report_progress
 from ..path_utils import calculate_file_sha256
 from ..log_system.log_funcs import (
@@ -1082,24 +1082,11 @@ def search_civitai(
     """
     results = []
 
-    type_map = {
-        "checkpoint": "Checkpoint",
-        "checkpoints": "Checkpoint",
-        "lora": "LORA",
-        "loras": "LORA",
-        "vae": "VAE",
-        "controlnet": "Controlnet",
-        "embedding": "TextualInversion",
-        "embeddings": "TextualInversion",
-        "upscaler": "Upscaler",
-        "upscale_models": "Upscaler",
-    }
-
     try:
         params = {"query": query, "limit": limit, "nsfw": "false"}
 
         if model_type:
-            civitai_type = type_map.get(model_type.lower())
+            civitai_type = CIVITAI_API_TYPE_MAP.get(model_type.lower())
             if civitai_type:
                 params["types"] = civitai_type
 

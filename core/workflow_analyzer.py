@@ -1,4 +1,4 @@
-﻿"""
+"""
 Workflow Analyzer Module
 
 Extracts model references from workflow JSON and identifies missing models.
@@ -39,21 +39,7 @@ MODEL_EXTENSIONS = {
     ".gguf",
 }
 
-# URN Type to ComfyUI category mapping
-URN_TYPE_MAP = {
-    "checkpoint": "checkpoints",
-    "lora": "loras",
-    "vae": "vae",
-    "upscaler": "upscale_models",
-    "upscale_model": "upscale_models",
-    "latent_upscale_model": "latent_upscale_models",
-    "embedding": "embeddings",
-    "hypernetwork": "hypernetworks",
-    "controlnet": "controlnet",
-    "clip": "text_encoders",
-    "clip_vision": "clip_vision",
-    "diffusers": "diffusers",
-}
+from .type_utils import URN_TYPE_MAP
 
 URN_REGEX = re.compile(r"^urn:air:([^:]+):([^:]+):([^:]+):(\d+)@(\d+)$")
 

@@ -23,7 +23,7 @@ from ..matcher import (
     base_model_score as _base_model_score,
     calculate_candidate_rank,
 )
-from ..type_utils import to_int
+from ..type_utils import to_int, CIVARCHIVE_API_TYPE_MAP
 from ..progress import report_progress
 from ..log_system.log_funcs import (
     log_debug,
@@ -56,23 +56,7 @@ REQUEST_HEADERS = {
     ),
 }
 
-CIVARCHIVE_TYPE_MAP = {
-    "checkpoint": "Checkpoint",
-    "checkpoints": "Checkpoint",
-    "lora": "LORA",
-    "loras": "LORA",
-    "locon": "LoCon",
-    "lycoris": "LoCon",
-    "vae": "VAE",
-    "controlnet": "Controlnet",
-    "embedding": "TextualInversion",
-    "embeddings": "TextualInversion",
-    "textualinversion": "TextualInversion",
-    "upscaler": "Upscaler",
-    "upscale_models": "Upscaler",
-    "workflow": "Workflows",
-    "workflows": "Workflows",
-}
+# Imported CIVARCHIVE_API_TYPE_MAP
 
 
 class CivArchiveSearchError(Exception):
@@ -303,7 +287,7 @@ def _search_page(
         "rating": "all",
         "platform": "all",
     }
-    civarchive_type = CIVARCHIVE_TYPE_MAP.get(str(model_type or "").lower())
+    civarchive_type = CIVARCHIVE_API_TYPE_MAP.get(str(model_type or "").lower())
     if civarchive_type:
         params["type"] = civarchive_type
 

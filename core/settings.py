@@ -11,62 +11,9 @@ from .path_utils import write_json_atomic, read_json_safe
 
 SETTINGS_FILE = Path(__file__).resolve().parents[1] / "model_resolver_settings.json"
 
-DOWNLOAD_PATH_MODES = {"suggested", "template", "manual"}
+from .type_utils import to_bool, CATEGORY_MAP, normalize_download_category
 
-CATEGORY_MAP = {
-    "checkpoint": "checkpoints",
-    "checkpoints": "checkpoints",
-    "lora": "loras",
-    "loras": "loras",
-    "embedding": "embeddings",
-    "embeddings": "embeddings",
-    "diffusion_model": "diffusion_models",
-    "diffusion_models": "diffusion_models",
-    "unet": "diffusion_models",
-    "clip": "text_encoders",
-    "clips": "text_encoders",
-    "text_encoder": "text_encoders",
-    "text_encoders": "text_encoders",
-    "controlnet": "controlnet",
-    "control_net": "controlnet",
-    "vae": "vae",
-    "upscaler": "upscale_models",
-    "upscale_model": "upscale_models",
-    "upscale_models": "upscale_models",
-    "latent_upscale_model": "latent_upscale_models",
-    "latent_upscale_models": "latent_upscale_models",
-    "style_model": "style_models",
-    "style_models": "style_models",
-    "gligen": "gligen",
-    "diffusers": "diffusers",
-    "vae_approx": "vae_approx",
-    "sam": "sams",
-    "sam_model": "sams",
-    "sam_models": "sams",
-    "sams": "sams",
-    "ultralytics": "ultralytics",
-    "ultralytics_bbox": "ultralytics",
-    "ultralytics_segm": "ultralytics",
-    "yolo": "ultralytics",
-    "audio_encoder": "audio_encoders",
-    "audio_encoders": "audio_encoders",
-    "background_removal": "background_removal",
-    "background_removal_model": "background_removal",
-    "frame_interpolation": "frame_interpolation",
-    "frame_interpolation_model": "frame_interpolation",
-    "geometry_estimation": "geometry_estimation",
-    "geometry_estimation_model": "geometry_estimation",
-    "detection": "detection",
-    "model_patch": "model_patches",
-    "model_patches": "model_patches",
-    "photomaker": "photomaker",
-    "optical_flow": "optical_flow",
-    "optical_flow_model": "optical_flow",
-    "clip_vision": "clip_vision",
-    "ipadapter": "ipadapter",
-    "ip_adapter": "ipadapter",
-    "default": "upscale_models",
-}
+DOWNLOAD_PATH_MODES = {"suggested", "template", "manual"}
 
 DEFAULT_DOWNLOAD_PATH_TEMPLATES: Dict[str, str] = {
     "loras": "{base_model}/{first_tag}",
@@ -120,28 +67,8 @@ _INVALID_SEGMENT_CHARS_RE = re.compile(r'[<>:"|?*\x00-\x1f]+')
 _UNKNOWN_PLACEHOLDER_RE = re.compile(r"\{[^{}]+\}")
 
 
-from .type_utils import to_bool
-
-
 def bool_setting(value: Any, default: bool = True) -> bool:
     return to_bool(value, default)
-
-
-
-def normalize_download_category(category: str) -> str:
-    token = (
-        str(category or "")
-        .strip()
-        .lower()
-        .replace("\\", "_")
-        .replace("/", "_")
-        .replace("-", "_")
-        .replace(" ", "_")
-    )
-    while "__" in token:
-        token = token.replace("__", "_")
-    token = token.strip("_")
-    return CATEGORY_MAP.get(token, token or "checkpoints")
 
 
 def sanitize_folder_name(value: Any, fallback: str = "") -> str:
