@@ -6,7 +6,10 @@ and directory matching to be shared across all modules.
 """
 
 import os
+import json
+import hashlib
 from typing import Any, Tuple, Optional
+
 
 
 def get_path_identity(path: str) -> str:
@@ -161,4 +164,35 @@ def get_filename_from_path(path: Any) -> str:
 METADATA_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "metadata"
 )
+
+
+def calculate_file_sha256(file_path: str, chunk_size: int = 131072) -> Optional[str]:
+    """Calculate SHA256 hex digest for an existing local file safely."""
+    if not file_path or not os.path.exists(file_path):
+        return None
+    sha256_hash = hashlib.sha256()
+    try:
+        with open(file_path, "rb") as f:
+            for byte_block in iter(lambda: f.read(chunk_size), b""):
+                if byte_block:
+                    sha256_hash.update(byte_block)
+        return sha256_hash.hexdigest()
+    except Exception as e:
+        from .log_system.log_funcs import log_error
+        log_error(f"Error computing hash for {file_path}: {e}")
+        return None
+
+
+def read_json_safe(file_path: str, default: Any = None) -> Any:
+    """Safely read and parse a JSON file, returning a default value on error."""
+    if not file_path or not os.path.exists(file_path):
+        return default
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        from .log_system.log_funcs import log_warn
+        log_warn(f"Error reading JSON from {os.path.basename(file_path)}: {e}")
+        return default
+
 

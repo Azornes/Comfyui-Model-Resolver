@@ -20,7 +20,7 @@ from ..log_system.log_funcs import (
     log_exception,
 )
 
-from ..path_utils import METADATA_DIR
+from ..path_utils import METADATA_DIR, read_json_safe
 POPULAR_MODELS_FILE = os.path.join(METADATA_DIR, "popular-models.json")
 MODEL_ALIASES_FILE = os.path.join(METADATA_DIR, "model-aliases.json")
 BASE_MODELS_FILE = os.path.join(METADATA_DIR, "base-models.json")
@@ -38,16 +38,8 @@ def _load_popular_models() -> Dict[str, Any]:
     if _popular_models_cache is not None:
         return _popular_models_cache
 
-    try:
-        if os.path.exists(POPULAR_MODELS_FILE):
-            with open(POPULAR_MODELS_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                _popular_models_cache = data.get("models", {})
-                return _popular_models_cache
-    except Exception as e:
-        log_error(f"Error loading popular models: {e}")
-
-    _popular_models_cache = {}
+    data = read_json_safe(POPULAR_MODELS_FILE, {})
+    _popular_models_cache = data.get("models", {})
     return _popular_models_cache
 
 
@@ -58,16 +50,8 @@ def _load_model_aliases() -> Dict[str, List[str]]:
     if _model_aliases_cache is not None:
         return _model_aliases_cache
 
-    try:
-        if os.path.exists(MODEL_ALIASES_FILE):
-            with open(MODEL_ALIASES_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                _model_aliases_cache = data.get("aliases", {})
-                return _model_aliases_cache
-    except Exception as e:
-        log_error(f"Error loading model aliases: {e}")
-
-    _model_aliases_cache = {}
+    data = read_json_safe(MODEL_ALIASES_FILE, {})
+    _model_aliases_cache = data.get("aliases", {})
     return _model_aliases_cache
 
 
@@ -83,11 +67,9 @@ def load_base_model_aliases() -> Dict[str, List[str]]:
 
     aliases_dict = {}
     try:
-        if os.path.exists(BASE_MODELS_FILE):
-            with open(BASE_MODELS_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                base_models = data.get("base_models", [])
-                for model in base_models:
+        data = read_json_safe(BASE_MODELS_FILE, {})
+        base_models = data.get("base_models", [])
+        for model in base_models:
                     name = model.get("name", "")
                     normalized_name = _normalize_base_model(name)
                     if not normalized_name:
@@ -220,23 +202,11 @@ def get_base_models_config() -> Dict[str, Any]:
 
 
 def _read_base_models_file() -> Dict[str, Any]:
-    try:
-        if os.path.exists(BASE_MODELS_FILE):
-            with open(BASE_MODELS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-    except Exception as e:
-        log_warn(f"Error reading base-models.json: {e}")
-    return {"base_models": []}
+    return read_json_safe(BASE_MODELS_FILE, {"base_models": []})
 
 
 def _read_base_models_meta() -> Dict[str, Any]:
-    try:
-        if os.path.exists(BASE_MODELS_META_FILE):
-            with open(BASE_MODELS_META_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-    except Exception as e:
-        log_warn(f"Error reading base-models.meta.json: {e}")
-    return {}
+    return read_json_safe(BASE_MODELS_META_FILE, {})
 
 
 def generate_aliases(name: str) -> List[str]:

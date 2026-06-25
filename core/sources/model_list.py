@@ -55,16 +55,10 @@ def _fetch_json_url(url: str) -> Dict[str, Any]:
 
 
 def _read_json_file(path: str, default: Any) -> Any:
-    try:
-        if os.path.exists(path):
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-    except Exception as e:
-        log_warn(f"Error reading {os.path.basename(path)}: {e}")
-    return default
+    return read_json_safe(path, default)
 
 
-from ..path_utils import write_json_atomic
+from ..path_utils import write_json_atomic, read_json_safe
 
 
 def _write_json_file_atomic(path: str, data: Any):
@@ -114,17 +108,12 @@ def _load_model_list() -> List[Dict]:
     if _model_list_cache is not None:
         return _model_list_cache
 
-    try:
-        if os.path.exists(MODEL_LIST_FILE):
-            with open(MODEL_LIST_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                _model_list_cache = data.get("models", [])
-                log_info(
-                    f"Loaded {len(_model_list_cache)} models from model-list.json"
-                )
-                return _model_list_cache
-    except Exception as e:
-        log_error(f"Error loading model list: {e}")
+    data = read_json_safe(MODEL_LIST_FILE, {})
+    _model_list_cache = data.get("models", [])
+    log_info(
+        f"Loaded {len(_model_list_cache)} models from model-list.json"
+    )
+    return _model_list_cache
 
     _model_list_cache = []
     return _model_list_cache

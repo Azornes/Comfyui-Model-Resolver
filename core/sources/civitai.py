@@ -22,6 +22,7 @@ from ..matcher import (
 )
 from ..type_utils import first_non_empty
 from ..progress import report_progress
+from ..path_utils import calculate_file_sha256
 from ..log_system.log_funcs import (
     log_debug,
     log_info,
@@ -1412,20 +1413,7 @@ def _get_sha256_hash(file_path: str) -> Optional[str]:
     Returns:
         SHA256 hash as hex string, or None if file doesn't exist
     """
-    if not file_path or not os.path.exists(file_path):
-        return None
-
-    BUF_SIZE = 1024 * 128  # 128KB chunks
-    sha256_hash = hashlib.sha256()
-
-    try:
-        with open(file_path, "rb") as f:
-            for byte_block in iter(lambda: f.read(BUF_SIZE), b""):
-                sha256_hash.update(byte_block)
-        return sha256_hash.hexdigest()
-    except Exception as e:
-        log_error(f"Error computing hash for {file_path}: {e}")
-        return None
+    return calculate_file_sha256(file_path)
 
 
 def get_model_info_by_hash(

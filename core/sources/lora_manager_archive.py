@@ -16,6 +16,7 @@ from ..matcher import (
     normalize_base_model as _normalize_base_model,
     base_model_matches as _base_model_matches,
     base_model_score as _base_model_score,
+    calculate_candidate_rank,
 )
 from ..progress import report_progress
 from ..log_system.log_funcs import (
@@ -616,8 +617,8 @@ def search_lora_manager_archive(
             )
             if confidence < 40:
                 continue
-            rank = confidence + _base_model_score(
-                row["base_model"], base_model_context
+            _, rank = calculate_candidate_rank(
+                confidence, row["base_model"], base_model_context
             )
             scored_candidates.append((rank, confidence, row))
 
@@ -765,14 +766,11 @@ def search_lora_manager_archive_for_file(
         confidence = calculate_archived_model_confidence(filename, candidate.get("name", ""), candidate.get("version_name", ""), candidate_filename)
         if exact_only and confidence < 100.0:
             continue
-        base_model_matches = _base_model_matches(
-            candidate.get("base_model"), base_model_context
+        base_model_matches, rank = calculate_candidate_rank(
+            confidence, candidate.get("base_model"), base_model_context
         )
         if base_model_context and not base_model_matches:
             continue
-        rank = confidence + _base_model_score(
-            candidate.get("base_model"), base_model_context
-        )
         if rank > best_rank:
             best_rank = rank
             best_confidence = confidence

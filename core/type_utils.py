@@ -85,3 +85,21 @@ def to_int(value: Any, default: Any = None) -> Any:
     except (TypeError, ValueError):
         return default
 
+
+def to_bool(value: Any, default: bool = False) -> bool:
+    """
+    Safely cast a value to a boolean, converting string "true", "yes", "1" etc.
+    """
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return bool(value)
+
+

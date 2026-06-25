@@ -388,3 +388,15 @@ def calculate_archived_model_confidence(
 
     return round(best * 100, 1)
 
+
+def calculate_candidate_rank(
+    confidence: float,
+    base_model: Optional[str],
+    base_model_context: Optional[str],
+) -> Tuple[bool, float]:
+    """Calculate whether base model matches context and compute candidate's final rank score."""
+    matches = base_model_matches(base_model, base_model_context)
+    score = base_model_score(base_model, base_model_context)
+    return matches, confidence + score
+
+

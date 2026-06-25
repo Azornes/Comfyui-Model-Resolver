@@ -21,6 +21,7 @@ from ..matcher import (
     normalize_base_model as _normalize_base_model,
     base_model_matches as _base_model_matches,
     base_model_score as _base_model_score,
+    calculate_candidate_rank,
 )
 from ..type_utils import to_int
 from ..progress import report_progress
@@ -1555,11 +1556,8 @@ def search_civarchive_for_file(
 
                     resolved["confidence"] = confidence
                     resolved["match_type"] = "exact" if confidence == 100.0 else "similar"
-                base_model_matches = _base_model_matches(
-                    resolved.get("base_model"), base_model_context
-                )
-                rank = confidence + _base_model_score(
-                    resolved.get("base_model"), base_model_context
+                base_model_matches, rank = calculate_candidate_rank(
+                    confidence, resolved.get("base_model"), base_model_context
                 )
 
                 if rank > best_rank:

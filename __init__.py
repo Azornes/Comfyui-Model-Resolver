@@ -87,7 +87,7 @@ class ModelResolverExtension:
                 from .core.path_templates import infer_download_path_templates
                 from .core.scanner import get_model_files, invalidate_model_files_cache
                 from .core.path_utils import get_filename_from_path
-                from .core.type_utils import first_non_empty, to_int
+                from .core.type_utils import first_non_empty, to_int, to_bool
                 from .core.settings import (
                     bool_setting as resolver_bool_setting,
                     get_default_root_for_category,
@@ -479,12 +479,7 @@ class ModelResolverExtension:
                 data = await request.json()
                 filename = data.get("filename", "")
                 category = data.get("category", "")
-                force_rescan = data.get("force_rescan", False)
-                force_rescan = (
-                    force_rescan
-                    if isinstance(force_rescan, bool)
-                    else str(force_rescan).lower() == "true"
-                )
+                force_rescan = to_bool(data.get("force_rescan"), False)
 
                 if not filename:
                     return web.json_response(
@@ -1121,27 +1116,11 @@ class ModelResolverExtension:
                         base_model_context = data.get("base_model_context", "")
                         progress_id = str(data.get("progress_id") or "").strip()
                         progress_source = str(data.get("progress_source") or "").strip()
-                        civitai_candidate_limit_raw = data.get(
-                            "civitai_candidate_limit", 5
-                        )
-                        try:
-                            civitai_candidate_limit = int(
-                                civitai_candidate_limit_raw
-                            )
-                        except (TypeError, ValueError):
-                            civitai_candidate_limit = 5
+                        civitai_candidate_limit = to_int(data.get("civitai_candidate_limit"), 5)
                         civitai_candidate_limit = max(
                             1, min(civitai_candidate_limit, 20)
                         )
-                        civarchive_candidate_limit_raw = data.get(
-                            "civarchive_candidate_limit", 10
-                        )
-                        try:
-                            civarchive_candidate_limit = int(
-                                civarchive_candidate_limit_raw
-                            )
-                        except (TypeError, ValueError):
-                            civarchive_candidate_limit = 10
+                        civarchive_candidate_limit = to_int(data.get("civarchive_candidate_limit"), 10)
                         civarchive_candidate_limit = max(
                             1, min(civarchive_candidate_limit, 30)
                         )
@@ -1163,36 +1142,12 @@ class ModelResolverExtension:
                         hf_use_brave_fallback = data.get(
                             "hf_use_brave_fallback", True
                         )
-                        is_urn = (
-                            is_urn_raw
-                            if isinstance(is_urn_raw, bool)
-                            else (str(is_urn_raw).lower() == "true")
-                        )
-                        hf_use_api_search = (
-                            hf_use_api_search
-                            if isinstance(hf_use_api_search, bool)
-                            else str(hf_use_api_search).lower() == "true"
-                        )
-                        civitai_use_trpc_search = (
-                            civitai_use_trpc_search
-                            if isinstance(civitai_use_trpc_search, bool)
-                            else str(civitai_use_trpc_search).lower() == "true"
-                        )
-                        civitai_use_html_fallback = (
-                            civitai_use_html_fallback
-                            if isinstance(civitai_use_html_fallback, bool)
-                            else str(civitai_use_html_fallback).lower() == "true"
-                        )
-                        hf_use_comfy_org_fallback = (
-                            hf_use_comfy_org_fallback
-                            if isinstance(hf_use_comfy_org_fallback, bool)
-                            else str(hf_use_comfy_org_fallback).lower() == "true"
-                        )
-                        hf_use_brave_fallback = (
-                            hf_use_brave_fallback
-                            if isinstance(hf_use_brave_fallback, bool)
-                            else str(hf_use_brave_fallback).lower() == "true"
-                        )
+                        is_urn = to_bool(is_urn_raw, False)
+                        hf_use_api_search = to_bool(hf_use_api_search, True)
+                        civitai_use_trpc_search = to_bool(civitai_use_trpc_search, True)
+                        civitai_use_html_fallback = to_bool(civitai_use_html_fallback, True)
+                        hf_use_comfy_org_fallback = to_bool(hf_use_comfy_org_fallback, True)
+                        hf_use_brave_fallback = to_bool(hf_use_brave_fallback, True)
 
                         # For URN-only requests, model_id and version_id are required instead of filename
                         model_id = data.get("model_id")
@@ -1241,12 +1196,7 @@ class ModelResolverExtension:
                                 if len(normalized_sources) == 1
                                 else "all"
                             )
-                        force_search = data.get("force_search", False)
-                        force_search = (
-                            force_search
-                            if isinstance(force_search, bool)
-                            else str(force_search).lower() == "true"
-                        )
+                        force_search = to_bool(data.get("force_search"), False)
 
                         update_search_progress(
                             progress_id,

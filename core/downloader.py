@@ -23,7 +23,7 @@ from .log_system.log_funcs import (
     log_exception,
 )
 from .resolver import normalize_sha256
-from .path_utils import is_path_within, get_path_identity, write_json_atomic
+from .path_utils import is_path_within, get_path_identity, write_json_atomic, read_json_safe, calculate_file_sha256 as _calculate_file_sha256
 from .type_utils import as_dict, as_list, first_non_empty
 
 try:
@@ -271,14 +271,8 @@ def read_completed_metadata_sha256(file_path: str) -> str:
     if not os.path.exists(metadata_path):
         return ""
 
-    try:
-        with open(metadata_path, "r", encoding="utf-8") as handle:
-            payload = json.load(handle)
-    except Exception as e:
-        log_warn(f"Could not read metadata sidecar for SHA256 check: {metadata_path} ({e})")
-        return ""
-
-    if not isinstance(payload, dict):
+    payload = read_json_safe(metadata_path, {})
+    if not isinstance(payload, dict) or not payload:
         return ""
 
     hash_status = str(payload.get("hash_status") or "completed").strip().lower()
@@ -293,12 +287,7 @@ def read_completed_metadata_sha256(file_path: str) -> str:
 
 def calculate_file_sha256(file_path: str) -> str:
     """Calculate SHA256 for an existing local file."""
-    sha256_hash = hashlib.sha256()
-    with open(file_path, "rb") as handle:
-        for chunk in iter(lambda: handle.read(CHUNK_SIZE), b""):
-            if chunk:
-                sha256_hash.update(chunk)
-    return sha256_hash.hexdigest()
+    return _calculate_file_sha256(file_path) or ""
 
 
 def build_lora_manager_metadata(

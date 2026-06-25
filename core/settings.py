@@ -6,7 +6,7 @@ import json
 import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Optional
-from .path_utils import write_json_atomic
+from .path_utils import write_json_atomic, read_json_safe
 
 
 SETTINGS_FILE = Path(__file__).resolve().parents[1] / "model_resolver_settings.json"
@@ -120,18 +120,12 @@ _INVALID_SEGMENT_CHARS_RE = re.compile(r'[<>:"|?*\x00-\x1f]+')
 _UNKNOWN_PLACEHOLDER_RE = re.compile(r"\{[^{}]+\}")
 
 
+from .type_utils import to_bool
+
+
 def bool_setting(value: Any, default: bool = True) -> bool:
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        if normalized in {"1", "true", "yes", "on"}:
-            return True
-        if normalized in {"0", "false", "no", "off"}:
-            return False
-    return bool(value)
+    return to_bool(value, default)
+
 
 
 def normalize_download_category(category: str) -> str:
@@ -188,15 +182,8 @@ def normalize_download_path_template(template: Any) -> str:
 
 
 def _read_settings_file() -> Dict[str, Any]:
-    try:
-        if SETTINGS_FILE.is_file():
-            with SETTINGS_FILE.open("r", encoding="utf-8") as handle:
-                data = json.load(handle)
-            if isinstance(data, dict):
-                return data
-    except Exception:
-        return {}
-    return {}
+    data = read_json_safe(str(SETTINGS_FILE), {})
+    return data if isinstance(data, dict) else {}
 
 
 def _coerce_dict(value: Any) -> Dict[str, Any]:
