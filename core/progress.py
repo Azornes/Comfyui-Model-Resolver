@@ -1,0 +1,42 @@
+"""
+Progress Reporting Module
+
+Unified utility for reporting progress of asynchronous search and download operations.
+"""
+
+from typing import Dict, Any, Optional, Callable
+from .log_system.log_funcs import log_debug
+
+
+def report_progress(
+    progress_callback: Optional[Callable[[Dict[str, Any]], None]],
+    stage: str,
+    message: str,
+    percent: Optional[float] = None,
+    error_context: str = "Progress callback",
+    **extra: Any,
+) -> None:
+    """
+    Report progress via callback payload.
+    
+    Args:
+        progress_callback: Callback function to execute
+        stage: Progress stage name
+        message: Informational message
+        percent: Progress percentage (0.0 to 100.0)
+        error_context: Source name to use in error logging
+        extra: Additional key-value pairs to add to payload
+    """
+    if not progress_callback:
+        return
+
+    payload = {"stage": stage, "message": message}
+    if percent is not None:
+        payload["percent"] = percent
+    if extra:
+        payload.update(extra)
+
+    try:
+        progress_callback(payload)
+    except Exception as e:
+        log_debug(f"{error_context} failed: {e}")

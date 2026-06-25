@@ -11,8 +11,9 @@ import shutil
 import tempfile
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
-from difflib import SequenceMatcher
 from urllib.request import Request, urlopen
+
+from ..matcher import normalize_filename, calculate_similarity
 
 from ..log_system.log_funcs import (
     log_debug,
@@ -219,16 +220,12 @@ def update_model_list_from_remote() -> Dict[str, Any]:
 
 def _normalize_filename(filename: str) -> str:
     """Normalize filename for comparison."""
-    # Remove extension
-    base = os.path.splitext(filename)[0].lower()
-    # Replace separators with spaces
-    base = base.replace("-", " ").replace("_", " ").replace(".", " ")
-    return base
+    return normalize_filename(filename)
 
 
 def _similarity(a: str, b: str) -> float:
     """Calculate similarity between two strings."""
-    return SequenceMatcher(None, a, b).ratio()
+    return calculate_similarity(a, b)
 
 
 def search_model_list(

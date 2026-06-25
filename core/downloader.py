@@ -24,6 +24,7 @@ from .log_system.log_funcs import (
 )
 from .resolver import normalize_sha256
 from .path_utils import is_path_within, get_path_identity
+from .type_utils import as_dict, as_list
 
 try:
     import folder_paths
@@ -180,17 +181,11 @@ def _json_safe_metadata(value: Any, depth: int = 0) -> Any:
 
 
 def _as_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
+    return as_dict(value)
 
 
 def _as_list(value: Any) -> List[Any]:
-    if isinstance(value, list):
-        return [item for item in value if item not in (None, "")]
-    if isinstance(value, (tuple, set)):
-        return [item for item in value if item not in (None, "")]
-    if isinstance(value, str):
-        return [item.strip() for item in value.split(",") if item.strip()]
-    return []
+    return as_list(value)
 
 
 def _first_present(*values: Any) -> Any:

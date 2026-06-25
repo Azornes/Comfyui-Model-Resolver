@@ -37,8 +37,8 @@ def normalize_filename(filename: str) -> str:
     # Convert to lowercase
     base = base.lower()
 
-    # Normalize separators: replace underscores, hyphens, and spaces with a single space
-    base = re.sub(r"[_\-\s]+", " ", base)
+    # Normalize separators: replace underscores, hyphens, dots, and spaces with a single space
+    base = re.sub(r"[_\-\.\s]+", " ", base)
 
     # Strip whitespace
     base = base.strip()

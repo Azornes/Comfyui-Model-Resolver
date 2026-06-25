@@ -27,6 +27,7 @@ from .workflow_analyzer import (
     should_scan_as_model_reference,
 )
 from .matcher import find_matches
+from .type_utils import as_dict, as_list
 from .workflow_updater import update_workflow_nodes
 from .sources.civitai import resolve_urn
 from .sources.huggingface import parse_huggingface_url as parse_hf_url
@@ -327,15 +328,11 @@ def _metadata_sidecar_candidates(model_path: str) -> List[str]:
 
 
 def _as_dict(value: Any) -> Dict[str, Any]:
-    return value if isinstance(value, dict) else {}
+    return as_dict(value)
 
 
 def _as_list(value: Any) -> List[Any]:
-    if isinstance(value, list):
-        return value
-    if isinstance(value, tuple):
-        return list(value)
-    return []
+    return as_list(value)
 
 
 def _collect_hashes_from_container(value: Any) -> List[str]:

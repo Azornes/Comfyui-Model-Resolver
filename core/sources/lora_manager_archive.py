@@ -18,6 +18,7 @@ from ..matcher import (
     base_model_matches as _base_model_matches,
     base_model_score as _base_model_score,
 )
+from ..progress import report_progress
 from ..log_system.log_funcs import (
     log_debug,
     log_info,
@@ -63,19 +64,14 @@ def _report_progress(
     percent: Optional[float] = None,
     **extra: Any,
 ) -> None:
-    if not progress_callback:
-        return
-
-    payload = {"stage": stage, "message": message}
-    if percent is not None:
-        payload["percent"] = percent
-    if extra:
-        payload.update(extra)
-
-    try:
-        progress_callback(payload)
-    except Exception as e:
-        log_debug(f"LoRA Manager archive progress callback failed: {e}")
+    report_progress(
+        progress_callback,
+        stage,
+        message,
+        percent,
+        error_context="LoRA Manager archive progress callback",
+        **extra,
+    )
 
 
 def get_lora_manager_archive_db_path() -> Optional[str]:
