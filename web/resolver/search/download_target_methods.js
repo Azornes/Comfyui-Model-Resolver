@@ -2273,6 +2273,9 @@ export const downloadTargetMethods = {
         }
         this.clearAllSearchProgressTimers();
         for (const job of this.backgroundSearchJobs?.values?.() || []) {
+            for (const progressId of job.sourceProgressIds?.values?.() || []) {
+                this.cancelBackendSearchProgress?.(progressId);
+            }
             for (const controller of job.sourceControllers?.values?.() || []) {
                 try {
                     controller.abort();

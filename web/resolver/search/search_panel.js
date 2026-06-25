@@ -564,9 +564,6 @@ export const searchPanelMethods = {
      */
     mergeSearchResults(existingResults = {}, newResults = {}, { searchedAt = null, forceRefresh = false } = {}) {
         const searchedSources = new Set(Array.isArray(newResults.searched_sources) ? newResults.searched_sources : []);
-        const sourceErrors = newResults.source_errors && typeof newResults.source_errors === 'object'
-            ? newResults.source_errors
-            : {};
         const pickResult = (source) => {
             if (newResults[source]) {
                 const existingTimestamp = this.getSearchResultTimestamp(existingResults[source]);
@@ -580,20 +577,28 @@ export const searchPanelMethods = {
             }
             const sourceWasSearched = searchedSources.has(source)
                 || (searchedSources.has('local') && (source === 'popular' || source === 'model_list'));
-            const sourceHadError = sourceErrors[source]
-                || (sourceErrors.local && (source === 'popular' || source === 'model_list'));
-            if (forceRefresh && sourceWasSearched && !sourceHadError) {
+            if (forceRefresh && sourceWasSearched) {
                 return null;
             }
             return existingResults[source] || null;
         };
+        const hashSourcesToClear = forceRefresh
+            ? this.getHashLookupSourcesForSearchSources(Array.from(searchedSources))
+            : new Set();
+        const existingHashMatches = Array.isArray(existingResults.local_hash_matches)
+            ? existingResults.local_hash_matches.filter(match => {
+                if (!hashSourcesToClear.size) return true;
+                const source = String(match?.hash_lookup_source || '').trim();
+                return source && !hashSourcesToClear.has(source);
+            })
+            : [];
         const localHashMatches = this.mergeLocalMatches
             ? this.mergeLocalMatches(
-                Array.isArray(existingResults.local_hash_matches) ? existingResults.local_hash_matches : [],
+                existingHashMatches,
                 Array.isArray(newResults.local_hash_matches) ? newResults.local_hash_matches : []
             )
             : [
-                ...(Array.isArray(existingResults.local_hash_matches) ? existingResults.local_hash_matches : []),
+                ...existingHashMatches,
                 ...(Array.isArray(newResults.local_hash_matches) ? newResults.local_hash_matches : [])
             ];
 
@@ -774,6 +779,65 @@ export const searchPanelMethods = {
         if (missing?.download_source?.url) return true;
         const state = this.searchResultCache?.get(this.getMissingSearchKey(missing));
         return this.hasSearchResults(state?.results || {});
+    },
+
+    hasSearchAttemptForMissing(missing = {}) {
+        if (missing?.download_source?.url) return true;
+        const state = this.searchResultCache?.get(this.getMissingSearchKey(missing));
+        return this.hasRenderableSearchState?.(state || {}) || this.hasSearchResults(state?.results || {});
+    },
+
+    getSearchResultKeysForSources(sources = []) {
+        const normalized = new Set((Array.isArray(sources) ? sources : [sources])
+            .map(source => String(source || '').trim())
+            .filter(Boolean));
+        if (normalized.has('all')) {
+            return ['popular', 'model_list', 'huggingface', 'civitai', 'civarchive', 'lora_manager_archive'];
+        }
+
+        const keys = new Set();
+        for (const source of normalized) {
+            if (source === 'local') {
+                keys.add('popular');
+                keys.add('model_list');
+            } else if (source) {
+                keys.add(source);
+            }
+        }
+        return Array.from(keys);
+    },
+
+    getHashLookupSourcesForSearchSources(sources = []) {
+        const normalized = new Set((Array.isArray(sources) ? sources : [sources])
+            .map(source => String(source || '').trim())
+            .filter(Boolean));
+        const hashSources = ['huggingface', 'civitai', 'civarchive'];
+        if (normalized.has('all')) return new Set(hashSources);
+        return new Set(hashSources.filter(source => normalized.has(source)));
+    },
+
+    clearSearchResultsForSources(results = {}, sources = []) {
+        const nextResults = {
+            popular: results.popular || null,
+            model_list: results.model_list || null,
+            huggingface: results.huggingface || null,
+            civitai: results.civitai || null,
+            civarchive: results.civarchive || null,
+            lora_manager_archive: results.lora_manager_archive || null,
+            local_hash_matches: Array.isArray(results.local_hash_matches) ? results.local_hash_matches : []
+        };
+        for (const key of this.getSearchResultKeysForSources(sources)) {
+            if (key in nextResults) nextResults[key] = null;
+        }
+
+        const hashSourcesToClear = this.getHashLookupSourcesForSearchSources(sources);
+        if (hashSourcesToClear.size) {
+            nextResults.local_hash_matches = nextResults.local_hash_matches.filter(match => {
+                const source = String(match?.hash_lookup_source || '').trim();
+                return source && !hashSourcesToClear.has(source);
+            });
+        }
+        return nextResults;
     },
 
     /**
@@ -1265,6 +1329,17 @@ export const searchPanelMethods = {
         });
     },
 
+    cancelBackendSearchProgress(progressId = '') {
+        const id = String(progressId || '').trim();
+        if (!id) return;
+        this.fetchJson(`/model_resolver/search-cancel/${encodeURIComponent(id)}`, {
+            method: 'POST',
+            silent: true
+        }, 'Cancel search').catch(error => {
+            console.warn('Model Resolver: backend search cancel failed', error);
+        });
+    },
+
     cancelSearchSource(missing, source, runId = '', { workflowKey = this.getWorkflowScopedQueueKey() } = {}) {
         if (!missing || !source || !runId) return false;
 
@@ -1275,6 +1350,8 @@ export const searchPanelMethods = {
 
         job.cancelledSources = job.cancelledSources || new Set();
         job.cancelledSources.add(source);
+        const progressId = job.sourceProgressIds?.get(source) || '';
+        this.cancelBackendSearchProgress(progressId);
         const controller = job.sourceControllers?.get(source);
         if (controller && !controller.signal?.aborted) {
             controller.abort();
@@ -1303,6 +1380,22 @@ export const searchPanelMethods = {
         this.persistSearchStateForWorkflow(workflowKey, missing, state);
         this.refreshSearchUiForMissing(missing, state, { workflowKey });
         return true;
+    },
+
+    cancelBackgroundSearchJob(job = null) {
+        if (!job?.missing || !job.runId) return false;
+        const sources = new Set([
+            ...Array.from(job.sourceControllers?.keys?.() || []),
+            ...Array.from(job.sourceProgressIds?.keys?.() || []),
+            ...Object.keys(this.getSearchStateForWorkflow(job.workflowKey, job.missing)?.sourceProgress || {})
+        ]);
+        let cancelled = false;
+        for (const source of sources) {
+            cancelled = this.cancelSearchSource(job.missing, source, job.runId, {
+                workflowKey: job.workflowKey || this.getWorkflowScopedQueueKey()
+            }) || cancelled;
+        }
+        return cancelled;
     },
 
     /**

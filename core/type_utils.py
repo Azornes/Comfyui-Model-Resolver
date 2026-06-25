@@ -182,6 +182,14 @@ CIVITAI_API_TYPE_MAP = {
     "embeddings": "TextualInversion",
     "upscaler": "Upscaler",
     "upscale_models": "Upscaler",
+    "hypernetwork": "Hypernetwork",
+    "hypernetworks": "Hypernetwork",
+    "poses": "Poses",
+    "wildcards": "Wildcards",
+    "motion_module": "MotionModule",
+    "motion_modules": "MotionModule",
+    "aesthetic_gradient": "AestheticGradient",
+    "aesthetic_gradients": "AestheticGradient",
 }
 
 # Case-sensitive types for CivArchive search API (mapping filter support)
@@ -201,6 +209,20 @@ CIVARCHIVE_API_TYPE_MAP = {
     "upscale_models": "Upscaler",
     "workflow": "Workflows",
     "workflows": "Workflows",
+    "hypernetwork": "Hypernetwork",
+    "hypernetworks": "Hypernetwork",
+    "unet": "UNet",
+    "diffusion_models": "UNet",
+    "text_encoder": "TextEncoder",
+    "text_encoders": "TextEncoder",
+    "clip": "TextEncoder",
+    "detection": "Detection",
+    "wildcards": "Wildcards",
+    "aesthetic_gradient": "AestheticGradient",
+    "aesthetic_gradients": "AestheticGradient",
+    "poses": "Poses",
+    "motion_module": "MotionModule",
+    "motion_modules": "MotionModule",
 }
 
 from typing import Any, Dict, List, Optional, Tuple, Callable

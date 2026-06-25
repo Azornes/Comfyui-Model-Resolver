@@ -9,6 +9,22 @@
 import asyncio
 import threading
 import time
+import sys
+import os
+
+if not __package__ or __package__ == "":
+    this_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(this_dir)
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
+    package_name = os.path.basename(this_dir)
+    __package__ = package_name
+
+    current_module = sys.modules.get(__name__)
+    if current_module:
+        sys.modules[package_name] = current_module
+        if not hasattr(current_module, "__path__"):
+            current_module.__path__ = [this_dir]
 from .core.log_system.log_funcs import (
     create_module_logger,
     log_debug,
@@ -38,6 +54,7 @@ class ModelResolverExtension:
         self.logger = create_module_logger(__name__)
         self.analysis_progress = {}
         self.search_progress = {}
+        self.cancelled_search_progress = set()
         self.search_progress_lock = threading.Lock()
         self.search_result_timestamps = {}
 
@@ -959,6 +976,35 @@ class ModelResolverExtension:
                         ]
                         for progress_id in expired:
                             self.search_progress.pop(progress_id, None)
+                        self.cancelled_search_progress.difference_update(expired)
+
+                def is_search_progress_cancelled(progress_id):
+                    if not progress_id:
+                        return False
+                    with self.search_progress_lock:
+                        return progress_id in self.cancelled_search_progress
+
+                def mark_search_progress_cancelled(progress_id, source=""):
+                    if not progress_id:
+                        return False
+                    cleanup_search_progress()
+                    now = time.time()
+                    with self.search_progress_lock:
+                        current = self.search_progress.get(progress_id, {})
+                        self.cancelled_search_progress.add(progress_id)
+                        self.search_progress[progress_id] = {
+                            **current,
+                            "progress_id": progress_id,
+                            "source": source or current.get("source", ""),
+                            "stage": "cancelled",
+                            "message": "Cancelled",
+                            "status": "cancelled",
+                            "percent": 100,
+                            "cancelled": True,
+                            "updated_at": now,
+                            "created_at": current.get("created_at", now),
+                        }
+                    return True
 
                 def update_search_progress(
                     progress_id,
@@ -975,6 +1021,23 @@ class ModelResolverExtension:
                     now = time.time()
                     with self.search_progress_lock:
                         current = self.search_progress.get(progress_id, {})
+                        if (
+                            progress_id in self.cancelled_search_progress
+                            and status != "cancelled"
+                        ):
+                            self.search_progress[progress_id] = {
+                                **current,
+                                "progress_id": progress_id,
+                                "source": source or current.get("source", ""),
+                                "stage": "cancelled",
+                                "message": "Cancelled",
+                                "status": "cancelled",
+                                "percent": 100,
+                                "cancelled": True,
+                                "updated_at": now,
+                                "created_at": current.get("created_at", now),
+                            }
+                            return
                         payload = {
                             **current,
                             "progress_id": progress_id,
@@ -1005,10 +1068,33 @@ class ModelResolverExtension:
                         return web.json_response({"exists": False})
                     return web.json_response({"exists": True, **progress})
 
+                @routes.post("/model_resolver/search-cancel/{progress_id}")
+                @json_api_endpoint("search-cancel", return_success_on_error=True)
+                async def cancel_search_progress_route(request):
+                    """Mark an in-flight source search as cancelled."""
+                    progress_id = request.match_info.get("progress_id", "").strip()
+                    if not progress_id:
+                        return web.json_response(
+                            {"error": "Progress ID is required"}, status=400
+                        )
+                    marked = mark_search_progress_cancelled(progress_id)
+                    return web.json_response(
+                        {"success": True, "cancelled": marked, "progress_id": progress_id}
+                    )
+
                 @routes.post("/model_resolver/search")
                 async def search_sources(request):
                     """Search for model download sources."""
                     try:
+                        class SearchCancelled(BaseException):
+                            # Progress helpers swallow ordinary callback errors; cancellation
+                            # must bubble out of source loops and stop follow-up requests.
+                            pass
+
+                        def raise_if_search_cancelled(source=""):
+                            if is_search_progress_cancelled(progress_id):
+                                raise SearchCancelled("Search cancelled")
+
                         def format_log_value(value):
                             if value is None or value == "":
                                 return None
@@ -1194,6 +1280,7 @@ class ModelResolverExtension:
                             "Preparing search",
                             8,
                         )
+                        raise_if_search_cancelled(progress_source)
 
                         if force_search:
                             update_search_progress(
@@ -1218,6 +1305,7 @@ class ModelResolverExtension:
                                 "Force search enabled: cleared cache "
                                 + format_log_fields(sources=sorted(normalized_sources))
                             )
+                        raise_if_search_cancelled(progress_source)
 
                         log_info(
                             f"Search [{','.join(sorted(normalized_sources))}] request "
@@ -1405,6 +1493,7 @@ class ModelResolverExtension:
                             seen_hash_sources = set()
                             for source_key in ("huggingface", "civitai", "civarchive"):
                                 for source_result in iter_result_items(payload.get(source_key)):
+                                    raise_if_search_cancelled(source_key)
                                     if not is_hash_lookup_candidate(source_result):
                                         continue
                                     sha256 = get_result_sha256(source_result)
@@ -1469,6 +1558,7 @@ class ModelResolverExtension:
                             percent_max=None,
                         ):
                             def source_progress_callback(payload):
+                                raise_if_search_cancelled(source_key)
                                 if not isinstance(payload, dict):
                                     return
 
@@ -1519,6 +1609,7 @@ class ModelResolverExtension:
                         ):
                             if initial_message is None:
                                 initial_message = f"Querying {source_key.capitalize()}"
+                            raise_if_search_cancelled(source_key)
                             update_search_progress(
                                 progress_id,
                                 source_key,
@@ -1532,7 +1623,9 @@ class ModelResolverExtension:
                                 + format_log_fields(**start_fields)
                             )
                             try:
+                                raise_if_search_cancelled(source_key)
                                 source_results, source_found = search_task_fn()
+                                raise_if_search_cancelled(source_key)
                                 done_messages = {
                                     "local": "Local database checked",
                                     "huggingface": "HuggingFace checked",
@@ -1561,13 +1654,16 @@ class ModelResolverExtension:
                             search_fn,
                             any_model_label,
                         ):
+                            raise_if_search_cancelled(source_key)
                             res = search_fn(
                                 base_model_context or None,
                                 make_source_progress_callback(source_key),
                             )
+                            raise_if_search_cancelled(source_key)
                             log_search_result(source_key, res)
 
                             if not res and base_model_context:
+                                raise_if_search_cancelled(source_key)
                                 update_search_progress(
                                     progress_id,
                                     source_key,
@@ -1587,6 +1683,7 @@ class ModelResolverExtension:
                                     None,
                                     make_source_progress_callback(source_key, 72, 92),
                                 )
+                                raise_if_search_cancelled(source_key)
                                 log_search_result(f"{source_key}/any_model", res)
                                 if res:
                                     res = mark_any_model_fallback(res)
@@ -1993,10 +2090,12 @@ class ModelResolverExtension:
                             "Waiting for search sources",
                             18,
                         )
+                        raise_if_search_cancelled(progress_source)
 
                         for source_results, source_found in await asyncio.gather(
                             *search_tasks
                         ):
+                            raise_if_search_cancelled(progress_source)
                             for source_key, source_result in source_results.items():
                                 if source_key == "source_errors":
                                     results["source_errors"].update(source_result or {})
@@ -2006,7 +2105,9 @@ class ModelResolverExtension:
                             if source_found:
                                 results["found"] = True
 
+                        raise_if_search_cancelled(progress_source)
                         results["local_hash_matches"] = collect_local_hash_matches(results)
+                        raise_if_search_cancelled(progress_source)
 
                         log_info(
                             f"Search [{','.join(results['searched_sources'])}] done "
@@ -2024,6 +2125,34 @@ class ModelResolverExtension:
                         )
                         stamp_search_results(results)
                         return web.json_response(results)
+
+                    except SearchCancelled:
+                        update_search_progress(
+                            progress_id if "progress_id" in locals() else "",
+                            progress_source if "progress_source" in locals() else "",
+                            "cancelled",
+                            "Cancelled",
+                            100,
+                            status="cancelled",
+                            cancelled=True,
+                        )
+                        log_info(
+                            "Search cancelled "
+                            + format_log_fields(
+                                source=progress_source if "progress_source" in locals() else "",
+                                progress_id=progress_id if "progress_id" in locals() else "",
+                            )
+                        )
+                        return web.json_response(
+                            {
+                                "cancelled": True,
+                                "found": False,
+                                "searched_sources": sorted(normalized_sources)
+                                if "normalized_sources" in locals()
+                                else [],
+                                "source_errors": {},
+                            }
+                        )
 
                     except Exception as e:
                         update_search_progress(

@@ -366,9 +366,12 @@ export const resolveDownloadMethods = {
         }
 
         this.batchSearchCancelRequested = true;
+        for (const job of Array.from(this.backgroundSearchJobs?.values?.() || [])) {
+            this.cancelBackgroundSearchJob?.(job);
+        }
         this.closeFooterMenus();
         this.updateBatchFooterButtons();
-        this.showNotification('Stopping batch search after the current model...', 'info');
+        this.showNotification('Stopping active search...', 'info');
     },
 
     async downloadMissingBatch(mode = 'selected') {
@@ -1591,6 +1594,7 @@ export const resolveDownloadMethods = {
                 missing,
                 startedAt: Date.now(),
                 sourceControllers: new Map(),
+                sourceProgressIds: new Map(),
                 cancelledSources: new Set(),
                 promise: null
             };
@@ -1600,6 +1604,10 @@ export const resolveDownloadMethods = {
             state.lastAttemptFound = null;
             state.lastAttemptError = null;
             state.lastAttemptBaseModelContext = baseModelContext;
+            if (forceSearch) {
+                state.results = this.clearSearchResultsForSources?.(state.results || {}, sourceIds)
+                    || this.createEmptySearchState().results;
+            }
             state.sourceProgress = {};
             for (const source of sourceIds) {
                 this.setSourceProgress(state, source, {
@@ -1674,6 +1682,9 @@ export const resolveDownloadMethods = {
                 const currentJob = this.backgroundSearchJobs.get(backgroundJobKey);
                 if (sourceController && currentJob?.runId === searchRunId) {
                     currentJob.sourceControllers?.set(source, sourceController);
+                }
+                if (currentJob?.runId === searchRunId) {
+                    currentJob.sourceProgressIds?.set(source, progressId);
                 }
                 this.startBackendSearchProgressPolling?.(state, missing, source, searchRunId, progressId, { workflowKey });
 
@@ -1792,6 +1803,7 @@ export const resolveDownloadMethods = {
                     const cleanupJob = this.backgroundSearchJobs.get(backgroundJobKey);
                     if (cleanupJob?.runId === searchRunId) {
                         cleanupJob.sourceControllers?.delete(source);
+                        cleanupJob.sourceProgressIds?.delete(source);
                     }
                 }
             });
@@ -2030,7 +2042,7 @@ export const resolveDownloadMethods = {
             searchBtn.dataset.mlSearchBound = 'true';
             searchBtn.addEventListener('click', () => {
                 this.searchOnline(missing, {
-                    forceSearch: this.hasSearchResultsForMissing(missing)
+                    forceSearch: this.hasSearchAttemptForMissing?.(missing) || this.hasSearchResultsForMissing(missing)
                 });
             });
         }

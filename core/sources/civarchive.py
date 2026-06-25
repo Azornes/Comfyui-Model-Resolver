@@ -38,6 +38,8 @@ from ..log_system.log_funcs import (
     log_exception,
 )
 
+_coerce_int = to_int
+
 CIVARCHIVE_BASE_URL = "https://civarchive.com"
 CIVARCHIVE_API_URL = f"{CIVARCHIVE_BASE_URL}/api"
 CIVITAI_DOWNLOAD_URL_PREFIXES = (
@@ -47,6 +49,8 @@ CIVITAI_DOWNLOAD_URL_PREFIXES = (
 
 DEFAULT_CIVARCHIVE_CANDIDATE_LIMIT = 10
 MAX_CIVARCHIVE_CANDIDATE_LIMIT = 30
+SEARCH_RESULT_DETAIL_LIMIT = 5
+HASH_PAGE_MODEL_LINK_LIMIT = 5
 MODEL_TITLE_MATCH_THRESHOLD = 82.0
 
 
@@ -136,7 +140,7 @@ def _normalize_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 def _extract_next_data(html_text: str) -> Dict[str, Any]:
     match = re.search(
-        r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',
+        r'<script\b(?=[^>]*\bid=["\']__NEXT_DATA__["\'])(?=[^>]*\btype=["\']application/json["\'])[^>]*>(.*?)</script>',
         html_text,
         flags=re.DOTALL,
     )
@@ -194,30 +198,144 @@ def _request_json(
         return None
 
 
+def _normalize_embedded_html_text(html_text: str) -> str:
+    if not html_text:
+        return ""
+    return (
+        html.unescape(html_text)
+        .replace("\\/", "/")
+        .replace("\\u002F", "/")
+        .replace("\\u0026", "&")
+    )
+
+
+def _request_page_text(
+    path_or_url: str,
+    params: Optional[Dict[str, Any]] = None,
+    timeout: int = 20,
+) -> Optional[str]:
+    url = urljoin(CIVARCHIVE_BASE_URL, path_or_url)
+    request_params = {k: v for k, v in (params or {}).items() if v is not None}
+    try:
+        response = requests.get(
+            url,
+            params=request_params,
+            headers=REQUEST_HEADERS,
+            timeout=timeout,
+        )
+    except Exception as e:
+        log_warn(f"CivArchive page request failed: url={url}, error={e}")
+        return None
+
+    if response.status_code != 200:
+        log_debug(f"CivArchive page returned {response.status_code}: url={url}")
+        return None
+
+    return response.text
+
+
+def _extract_model_links_from_html(html_text: str) -> List[Dict[str, Optional[int]]]:
+    text = _normalize_embedded_html_text(html_text)
+    if not text:
+        return []
+
+    links: List[Dict[str, Optional[int]]] = []
+    seen = set()
+
+    def add_link(model_id: Any, version_id: Any = None) -> None:
+        resolved_model_id = _coerce_int(model_id)
+        resolved_version_id = _coerce_int(version_id) if version_id else None
+        key = (resolved_model_id, resolved_version_id)
+        if not resolved_model_id or key in seen:
+            return
+        seen.add(key)
+        links.append(
+            {
+                "model_id": resolved_model_id,
+                "version_id": resolved_version_id,
+            }
+        )
+
+    pattern = re.compile(r"(?<!/download)/models/(\d+)(?:\?[^\"'<>\s]*?modelVersionId=(\d+))?")
+
+    def add_links_from_text(value: Any) -> None:
+        if not isinstance(value, str) or "/models/" not in value:
+            return
+        for match in pattern.finditer(_normalize_embedded_html_text(value)):
+            add_link(match.group(1), match.group(2))
+
+    def walk_next_data(value: Any) -> None:
+        if isinstance(value, dict):
+            model_id = (
+                value.get("model_id")
+                or value.get("modelId")
+                or value.get("civitai_model_id")
+            )
+            version_id = (
+                value.get("model_version_id")
+                or value.get("modelVersionId")
+                or value.get("version_id")
+                or value.get("civitai_model_version_id")
+                or (value.get("id") if model_id else None)
+            )
+            if model_id and version_id:
+                add_link(model_id, version_id)
+
+            for key in ("href", "url", "platform_url", "version_url"):
+                add_links_from_text(value.get(key))
+
+            for nested in value.values():
+                walk_next_data(nested)
+        elif isinstance(value, list):
+            for item in value:
+                walk_next_data(item)
+
+    walk_next_data(_extract_next_data(html_text))
+
+    for match in pattern.finditer(text):
+        add_link(match.group(1), match.group(2))
+
+    filtered_links = []
+    for link in links:
+        if not link.get("version_id"):
+            continue
+        filtered_links.append(link)
+    filtered_links.extend(link for link in links if not link.get("version_id"))
+    return filtered_links
+
+
+def _extract_download_urls_from_html(html_text: str) -> List[str]:
+    text = _normalize_embedded_html_text(html_text)
+    if not text:
+        return []
+
+    urls: List[str] = []
+    pattern = re.compile(
+        r"https?://(?:huggingface\.co|civitai\.com|civitai\.red)/[^\"'<>\s)]+",
+        flags=re.IGNORECASE,
+    )
+    for match in pattern.finditer(text):
+        url = _normalize_download_url(match.group(0).rstrip(".,;]})"))
+        if url and url not in urls:
+            urls.append(url)
+    return urls
+
+
 def _extract_model_payload_from_page(
     model_id: int,
     version_id: Optional[int] = None,
     timeout: int = 20,
 ) -> Optional[Dict[str, Any]]:
     params = {"modelVersionId": version_id} if version_id is not None else None
-    try:
-        response = requests.get(
-            f"{CIVARCHIVE_BASE_URL}/models/{model_id}",
-            params=params,
-            headers=REQUEST_HEADERS,
-            timeout=timeout,
-        )
-    except Exception as e:
-        log_warn(f"CivArchive model page request failed: model_id={model_id}, error={e}")
+    page_text = _request_page_text(
+        f"/models/{model_id}",
+        params=params,
+        timeout=timeout,
+    )
+    if not page_text:
         return None
 
-    if response.status_code != 200:
-        log_debug(
-            f"CivArchive model page returned {response.status_code}: model_id={model_id}, version_id={version_id}"
-        )
-        return None
-
-    next_data = _extract_next_data(response.text)
+    next_data = _extract_next_data(page_text)
     page_props = next_data.get("props", {}).get("pageProps", {})
     if isinstance(page_props.get("data"), dict):
         return page_props["data"]
@@ -230,11 +348,19 @@ def _request_model_payload(
     model_id: int,
     version_id: Optional[int] = None,
     timeout: int = 20,
+    prefer_page: bool = False,
 ) -> Optional[Dict[str, Any]]:
     params = {"modelVersionId": version_id} if version_id is not None else None
+    if prefer_page:
+        payload = _extract_model_payload_from_page(model_id, version_id, timeout=timeout)
+        if payload:
+            return payload
+
     payload = _request_json(f"/models/{model_id}", params=params, timeout=timeout)
     if payload:
         return payload
+    if prefer_page:
+        return None
     return _extract_model_payload_from_page(model_id, version_id, timeout=timeout)
 
 
@@ -246,11 +372,12 @@ def _search_page(
     params: Dict[str, Any] = {
         "q": query,
         "rating": "all",
-        "platform": "all",
+        "platform": "civitai,huggingface,malcolmrey,modelscope,modelscope_cn",
+        "sort": "relevance",
     }
-    civarchive_type = CIVARCHIVE_API_TYPE_MAP.get(str(model_type or "").lower())
-    if civarchive_type:
-        params["type"] = civarchive_type
+    # We do not send the 'type' parameter to CivArchive because crowdsourced model uploads
+    # (especially VAEs) are frequently misclassified (e.g. as Checkpoint or null type) in their database.
+    # We rely on name confidence sorting instead.
 
     try:
         response = requests.get(
@@ -414,7 +541,11 @@ def _transform_file_entry(file_data: Dict[str, Any]) -> Dict[str, Any]:
             mirror["url"] = mirror_url
             transformed_mirrors.append(mirror)
 
-    download_url = _normalize_download_url(file_data.get("downloadUrl"))
+    download_url = _normalize_download_url(
+        file_data.get("downloadUrl")
+        or file_data.get("download_url")
+        or file_data.get("url")
+    )
     name = file_data.get("name") or file_data.get("filename")
 
     if not download_url:
@@ -726,13 +857,19 @@ def _normalize_archive_version(
 def get_civarchive_model_details(
     model_id: int,
     version_id: Optional[int] = None,
+    prefer_page: bool = False,
 ) -> Optional[Dict[str, Any]]:
     """Fetch and normalize full CivArchive model details for the resolver UI."""
     if not model_id:
         return None
 
-    payload = _request_model_payload(model_id, version_id, timeout=25)
-    if not payload and version_id:
+    payload = _request_model_payload(
+        model_id,
+        version_id,
+        timeout=25,
+        prefer_page=prefer_page,
+    )
+    if not payload and version_id and not prefer_page:
         resolved = resolve_civarchive_model_version(model_id, version_id)
         if not resolved:
             return None
@@ -1029,12 +1166,258 @@ def _find_model_title_match_in_model_details(
     return None
 
 
+def _build_result_from_model_details(
+    model_details: Dict[str, Any],
+    query: str = "",
+    exact_only: bool = False,
+) -> Optional[Dict[str, Any]]:
+    selected_version = model_details.get("selected_version")
+    if not isinstance(selected_version, dict):
+        return None
+
+    files = selected_version.get("files") or []
+    if not isinstance(files, list):
+        files = [files]
+
+    selected_file = None
+    best_confidence = -1.0
+    for file_info in files:
+        if not isinstance(file_info, dict):
+            continue
+        filename = file_info.get("name") or file_info.get("filename") or ""
+        confidence = calculate_archived_model_confidence(
+            query,
+            model_details.get("name", ""),
+            selected_version.get("name", ""),
+            filename,
+        )
+        if confidence > best_confidence:
+            best_confidence = confidence
+            selected_file = file_info
+
+    if selected_file is None:
+        selected_file = _select_primary_model_file(files)
+        if selected_file:
+            best_confidence = calculate_archived_model_confidence(
+                query,
+                model_details.get("name", ""),
+                selected_version.get("name", ""),
+                selected_file.get("name") or selected_file.get("filename") or "",
+            )
+
+    if selected_file is None:
+        return None
+    if exact_only and best_confidence < 100.0:
+        return None
+
+    result = _build_result_from_normalized_version(
+        model_details=model_details,
+        version=selected_version,
+        file_info=selected_file,
+        match_type="exact" if best_confidence == 100.0 else "similar",
+    )
+    if not result:
+        return None
+
+    hashes = selected_file.get("hashes") if isinstance(selected_file.get("hashes"), dict) else {}
+    sha256 = (
+        selected_file.get("sha256")
+        or selected_file.get("hash")
+        or hashes.get("SHA256")
+        or hashes.get("sha256")
+    )
+    result["confidence"] = best_confidence
+    result["sha256"] = sha256
+    result["hash"] = sha256
+    result["hashes"] = hashes
+    return result
+
+
+def _extract_hash_page_files(html_text: str) -> List[Dict[str, Any]]:
+    next_data = _extract_next_data(html_text)
+    page_props = next_data.get("props", {}).get("pageProps", {})
+    files = page_props.get("files") if isinstance(page_props, dict) else []
+    if not isinstance(files, list):
+        files = [files]
+    return [file_info for file_info in files if isinstance(file_info, dict)]
+
+
+def _hash_page_file_matches_model(
+    file_info: Dict[str, Any],
+    model_id: Optional[int],
+    version_id: Optional[int],
+) -> bool:
+    if not model_id and not version_id:
+        return False
+
+    file_model_id = _coerce_int(file_info.get("model_id") or file_info.get("modelId"))
+    file_version_id = _coerce_int(
+        file_info.get("model_version_id")
+        or file_info.get("modelVersionId")
+        or file_info.get("version_id")
+    )
+    if model_id and file_model_id and file_model_id != _coerce_int(model_id):
+        return False
+    if version_id and file_version_id and file_version_id != _coerce_int(version_id):
+        return False
+    return bool((model_id and file_model_id) or (version_id and file_version_id))
+
+
+def _select_hash_page_file(
+    files: List[Dict[str, Any]],
+    query: str,
+    model_id: Optional[int] = None,
+    version_id: Optional[int] = None,
+) -> Optional[Dict[str, Any]]:
+    best_file = None
+    best_score = -1.0
+    for file_info in files:
+        if not isinstance(file_info, dict):
+            continue
+        if not _normalize_download_url(file_info.get("url") or file_info.get("downloadUrl")):
+            continue
+
+        filename = file_info.get("filename") or file_info.get("name") or ""
+        confidence = calculate_archived_model_confidence(query, "", "", filename)
+        model_match = _hash_page_file_matches_model(file_info, model_id, version_id)
+        score = confidence + (8.0 if model_match else 0.0)
+        if score > best_score:
+            best_score = score
+            best_file = file_info
+
+    if best_file is None:
+        return None
+
+    filename = best_file.get("filename") or best_file.get("name") or ""
+    confidence = calculate_archived_model_confidence(query, "", "", filename)
+    if confidence >= 70.0 or _hash_page_file_matches_model(best_file, model_id, version_id):
+        return best_file
+    return None
+
+
+def _select_model_details_file(
+    files: List[Dict[str, Any]],
+    query: str,
+    sha256: str = "",
+) -> Optional[Dict[str, Any]]:
+    normalized_hash = (sha256 or "").lower()
+    best_file = None
+    best_confidence = -1.0
+
+    for file_info in files:
+        if not isinstance(file_info, dict):
+            continue
+        if not _collect_normalized_download_urls(file_info):
+            continue
+
+        hashes = file_info.get("hashes") if isinstance(file_info.get("hashes"), dict) else {}
+        file_hash = (
+            file_info.get("sha256")
+            or file_info.get("hash")
+            or hashes.get("SHA256")
+            or hashes.get("sha256")
+        )
+        if normalized_hash and str(file_hash or "").lower() == normalized_hash:
+            return file_info
+
+        filename = file_info.get("name") or file_info.get("filename") or ""
+        confidence = calculate_archived_model_confidence(query, "", "", filename)
+        if confidence > best_confidence:
+            best_confidence = confidence
+            best_file = file_info
+
+    if best_file is None:
+        return None
+
+    filename = best_file.get("name") or best_file.get("filename") or ""
+    confidence = calculate_archived_model_confidence(query, "", "", filename)
+    return best_file if confidence >= 70.0 else None
+
+
+def _prefer_query_matching_mirror(
+    file_info: Dict[str, Any],
+    query: str,
+) -> Dict[str, Any]:
+    mirrors = file_info.get("mirrors") or []
+    if not isinstance(mirrors, list):
+        mirrors = [mirrors]
+
+    best_mirror = None
+    best_confidence = -1.0
+    for mirror in mirrors:
+        if not isinstance(mirror, dict):
+            continue
+        url = _normalize_download_url(mirror.get("url"))
+        filename = mirror.get("filename") or mirror.get("name") or ""
+        if not url or not filename:
+            continue
+        confidence = calculate_archived_model_confidence(query, "", "", filename)
+        if confidence > best_confidence:
+            best_confidence = confidence
+            best_mirror = mirror
+
+    if not best_mirror or best_confidence < 70.0:
+        return file_info
+
+    preferred_url = _normalize_download_url(best_mirror.get("url"))
+    download_urls = []
+    if preferred_url:
+        download_urls.append(preferred_url)
+    for url in _collect_normalized_download_urls(file_info):
+        if url and url not in download_urls:
+            download_urls.append(url)
+
+    preferred = dict(file_info)
+    preferred["name"] = best_mirror.get("filename") or best_mirror.get("name")
+    preferred["filename"] = preferred["name"]
+    preferred["download_url"] = preferred_url or preferred.get("download_url")
+    preferred["downloadUrl"] = preferred["download_url"]
+    preferred["download_urls"] = download_urls
+    return preferred
+
+
+def _build_result_from_hash_page_file(
+    model_details: Dict[str, Any],
+    version: Dict[str, Any],
+    file_info: Dict[str, Any],
+    query: str,
+    sha256: str = "",
+) -> Optional[Dict[str, Any]]:
+    model_id = _coerce_int(model_details.get("model_id") or file_info.get("model_id"))
+    version_id = _coerce_int(version.get("id") or file_info.get("model_version_id"))
+    normalized_file = _normalize_archive_file(file_info, model_id, version_id)
+    confidence = calculate_archived_model_confidence(
+        query,
+        model_details.get("name", ""),
+        version.get("name", ""),
+        normalized_file.get("name") or normalized_file.get("filename") or "",
+    )
+    result = _build_result_from_normalized_version(
+        model_details=model_details,
+        version=version,
+        file_info=normalized_file,
+        match_type="exact" if confidence == 100.0 else "similar",
+    )
+    if not result:
+        return None
+
+    result["confidence"] = confidence
+    if sha256:
+        result["sha256"] = sha256
+        result["hash"] = sha256
+        hashes = result.get("hashes") if isinstance(result.get("hashes"), dict) else {}
+        if not hashes.get("SHA256") and not hashes.get("sha256"):
+            result["hashes"] = {**hashes, "SHA256": sha256}
+    return result
+
+
 def _resolve_civarchive_model_title_match(
     model_id: int,
     title_query: str,
     base_model_context: Optional[str] = None,
+    prefer_page: bool = False,
 ) -> Optional[Dict[str, Any]]:
-    details = get_civarchive_model_details(model_id)
+    details = get_civarchive_model_details(model_id, prefer_page=prefer_page)
     if not details:
         return None
 
@@ -1191,18 +1574,34 @@ def resolve_civarchive_model_version(
     version_id: Optional[int] = None,
     query: str = "",
     exact_only: bool = False,
+    prefer_page: bool = False,
 ) -> Optional[Dict[str, Any]]:
     """Resolve a model/version through CivArchive."""
     if model_id is None:
         return None
 
-    params = {"modelVersionId": version_id} if version_id is not None else None
-    payload = _request_model_payload(model_id, version_id)
+    payload = _request_model_payload(model_id, version_id, prefer_page=prefer_page)
     if not payload:
         return None
 
-    return _build_result_from_payload(
+    result = _build_result_from_payload(
         payload,
+        query=query or str(model_id),
+        exact_only=exact_only,
+    )
+    if result:
+        return result
+
+    details = get_civarchive_model_details(
+        model_id,
+        version_id,
+        prefer_page=prefer_page,
+    )
+    if not details:
+        return None
+
+    return _build_result_from_model_details(
+        details,
         query=query or str(model_id),
         exact_only=exact_only,
     )
@@ -1219,6 +1618,212 @@ def _candidate_identity(candidate: Dict[str, Any]) -> Tuple[Any, Any, Any]:
     return (candidate.get("id"), candidate.get("url"), None)
 
 
+def _candidate_display_name(candidate: Dict[str, Any]) -> str:
+    for key in ("name", "title", "filename", "fileName", "modelName"):
+        value = candidate.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _build_result_from_search_candidate(
+    candidate: Dict[str, Any],
+    query: str,
+    page_text: str = "",
+    parsed: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    candidate_name = _candidate_display_name(candidate)
+    query_basename = os.path.basename(query or "").strip()
+    filename = (
+        candidate.get("filename")
+        or candidate.get("fileName")
+        or (candidate_name if _has_known_model_extension(candidate_name) else query_basename)
+    )
+    confidence = calculate_archived_model_confidence(
+        query,
+        candidate_name,
+        "",
+        filename or "",
+    )
+    if confidence < 95.0:
+        return None
+
+    download_urls = []
+    for key in ("download_url", "downloadUrl", "url"):
+        url = _normalize_download_url(candidate.get(key))
+        if url and not url.startswith(CIVARCHIVE_BASE_URL) and url not in download_urls:
+            download_urls.append(url)
+    for url in _extract_download_urls_from_html(page_text):
+        if url not in download_urls:
+            download_urls.append(url)
+    if not download_urls:
+        return None
+
+    open_url = urljoin(CIVARCHIVE_BASE_URL, str(candidate.get("url") or ""))
+    sha256 = (parsed or {}).get("sha256")
+    return {
+        "source": "civarchive",
+        "name": candidate_name or filename or query_basename,
+        "version_name": "",
+        "type": candidate.get("type"),
+        "filename": filename or query_basename,
+        "url": open_url,
+        "download_url": download_urls[0],
+        "download_urls": download_urls,
+        "size": _extract_file_size_bytes(candidate),
+        "base_model": candidate.get("base_model") or candidate.get("baseModel"),
+        "tags": candidate.get("tags") or [],
+        "trained_words": [],
+        "images": [],
+        "creator": candidate.get("creator") or {},
+        "platform": candidate.get("platform") or candidate.get("source"),
+        "is_deleted": False,
+        "match_type": "exact" if confidence == 100.0 else "similar",
+        "confidence": confidence,
+        "sha256": sha256,
+        "hash": sha256,
+        "hashes": {"SHA256": sha256} if sha256 else {},
+    }
+
+
+def _resolve_civarchive_model_link(
+    model_id: int,
+    version_id: Optional[int],
+    query: str,
+    exact_only: bool = False,
+    base_model_context: Optional[str] = None,
+    allow_model_title_match: bool = False,
+) -> Optional[Dict[str, Any]]:
+    details = get_civarchive_model_details(
+        model_id,
+        version_id,
+        prefer_page=True,
+    )
+    if not details:
+        return None
+
+    if allow_model_title_match:
+        result = _find_model_title_match_in_model_details(
+            model_id=model_id,
+            model_details=details,
+            title_query=query,
+            base_model_context=base_model_context,
+        )
+        if result:
+            return result
+
+    return _build_result_from_model_details(
+        details,
+        query=query,
+        exact_only=exact_only,
+    )
+
+
+def _resolve_hash_search_candidate_from_page(
+    candidate: Dict[str, Any],
+    sha256: str,
+    query: str,
+    exact_only: bool = False,
+    base_model_context: Optional[str] = None,
+    allow_model_title_match: bool = False,
+) -> Optional[Dict[str, Any]]:
+    page_text = _request_page_text(f"/sha256/{sha256.lower()}")
+    hash_page_files = _extract_hash_page_files(page_text or "")
+    model_links = _extract_model_links_from_html(page_text or "")
+    for link in model_links[:HASH_PAGE_MODEL_LINK_LIMIT]:
+        model_id = link["model_id"]
+        version_id = link.get("version_id")
+        details = get_civarchive_model_details(
+            model_id,
+            version_id,
+            prefer_page=True,
+        )
+        if not details:
+            continue
+
+        result = None
+        if allow_model_title_match:
+            result = _find_model_title_match_in_model_details(
+                model_id=model_id,
+                model_details=details,
+                title_query=query,
+                base_model_context=base_model_context,
+            )
+
+        selected_version = details.get("selected_version")
+        if not result and isinstance(selected_version, dict):
+            selected_model_file = _select_model_details_file(
+                selected_version.get("files") or [],
+                query,
+                sha256=sha256,
+            )
+            if selected_model_file:
+                selected_model_file = _prefer_query_matching_mirror(
+                    selected_model_file,
+                    query,
+                )
+                confidence = calculate_archived_model_confidence(
+                    query,
+                    details.get("name", ""),
+                    selected_version.get("name", ""),
+                    selected_model_file.get("name")
+                    or selected_model_file.get("filename")
+                    or "",
+                )
+                result = _build_result_from_normalized_version(
+                    model_details=details,
+                    version=selected_version,
+                    file_info=selected_model_file,
+                    match_type="exact" if confidence == 100.0 else "similar",
+                )
+                if result:
+                    result["confidence"] = confidence
+
+            selected_file = None
+            if not result:
+                selected_file = _select_hash_page_file(
+                    hash_page_files,
+                    query,
+                    model_id=model_id,
+                    version_id=version_id,
+                )
+                if not selected_file:
+                    selected_file = _select_hash_page_file(hash_page_files, query)
+            if selected_file:
+                result = _build_result_from_hash_page_file(
+                    details,
+                    selected_version,
+                    selected_file,
+                    query,
+                    sha256=sha256,
+                )
+
+        if not result:
+            result = _build_result_from_model_details(
+                details,
+                query=query,
+                exact_only=exact_only,
+            )
+
+        if result:
+            if exact_only and float(result.get("confidence") or 0) < 100.0:
+                continue
+            result.setdefault("sha256", sha256)
+            result.setdefault("hash", sha256)
+            hashes = result.get("hashes") if isinstance(result.get("hashes"), dict) else {}
+            if sha256 and not hashes.get("SHA256") and not hashes.get("sha256"):
+                hashes = {**hashes, "SHA256": sha256}
+                result["hashes"] = hashes
+            return result
+
+    return _build_result_from_search_candidate(
+        candidate,
+        query,
+        page_text=page_text or "",
+        parsed={"sha256": sha256},
+    )
+
+
 def _resolve_search_candidate(
     candidate: Dict[str, Any],
     query: str,
@@ -1231,26 +1836,22 @@ def _resolve_search_candidate(
         return None
 
     if parsed.get("sha256"):
-        result = resolve_civarchive_by_hash(
+        result = _resolve_hash_search_candidate_from_page(
+            candidate,
             parsed["sha256"],
             query=query,
             exact_only=exact_only,
+            base_model_context=base_model_context,
+            allow_model_title_match=allow_model_title_match,
         )
     elif parsed.get("model_id"):
-        if allow_model_title_match:
-            result = _resolve_civarchive_model_title_match(
-                parsed["model_id"],
-                title_query=query,
-                base_model_context=base_model_context,
-            )
-            if result:
-                return result
-
-        result = resolve_civarchive_model_version(
+        result = _resolve_civarchive_model_link(
             parsed["model_id"],
             parsed.get("version_id"),
             query=query,
             exact_only=exact_only,
+            base_model_context=base_model_context,
+            allow_model_title_match=allow_model_title_match,
         )
     else:
         result = None
@@ -1263,6 +1864,12 @@ def _resolve_search_candidate(
             result.get("filename", ""),
         )
     return result
+
+
+def _is_hash_verified_exact_match(result: Optional[Dict[str, Any]], confidence: float) -> bool:
+    if not result or confidence < 100.0:
+        return False
+    return bool(result.get("sha256") or result.get("hash"))
 
 
 def _build_search_queries(filename: str) -> List[str]:
@@ -1295,6 +1902,7 @@ def search_civarchive(
         return []
 
     limit = max(1, min(int(limit), MAX_CIVARCHIVE_CANDIDATE_LIMIT))
+    detail_limit = min(limit, SEARCH_RESULT_DETAIL_LIMIT)
     cache_key = f"search::{normalized_query.lower()}::{model_type or ''}::{limit}"
     if cache_key in _search_cache:
         return list(_search_cache[cache_key])
@@ -1304,6 +1912,8 @@ def search_civarchive(
     candidates = _search_page(normalized_query, model_type=model_type)
 
     for candidate in candidates:
+        if len(seen) >= detail_limit:
+            break
         identity = _candidate_identity(candidate)
         if identity in seen:
             continue
@@ -1316,7 +1926,7 @@ def search_civarchive(
         if resolved.get("confidence", 0) < 40:
             continue
         results.append(resolved)
-        if len(results) >= limit:
+        if len(results) >= detail_limit:
             break
 
     results.sort(
@@ -1346,6 +1956,7 @@ def search_civarchive_for_file(
         return None
 
     limit = max(1, min(int(limit), MAX_CIVARCHIVE_CANDIDATE_LIMIT))
+    detail_limit = min(limit, SEARCH_RESULT_DETAIL_LIMIT)
     base_model_key = _normalize_base_model(base_model_context or "")
     cache_key = (
         f"file::{normalized_filename.lower()}::{model_type or ''}::{base_model_key}::{exact_only}::{limit}"
@@ -1414,21 +2025,45 @@ def search_civarchive_for_file(
                 candidate_count=len(candidates),
                 checked_candidate_count=len(seen),
             )
-            candidate_count = len(candidates)
-            for candidate_index, candidate in enumerate(candidates, start=1):
+            # Pre-calculate preliminary confidence, filter, and sort candidates
+            scored_candidates = []
+            for candidate in candidates:
+                candidate_name = candidate.get("name") or ""
+                if not candidate_name:
+                    continue
+                prelim = calculate_archived_model_confidence(
+                    normalized_filename,
+                    candidate_name,
+                )
+                if prelim >= 35.0:
+                    scored_candidates.append((prelim, candidate))
+
+            # Sort by preliminary confidence descending
+            scored_candidates.sort(key=lambda x: x[0], reverse=True)
+
+            candidate_count = len(scored_candidates)
+            for candidate_index, (prelim_confidence, candidate) in enumerate(scored_candidates, start=1):
+                if len(seen) >= detail_limit:
+                    break
                 identity = _candidate_identity(candidate)
                 if identity in seen:
                     continue
-                checked_index = min(len(seen) + 1, limit)
+
+                checked_index = min(len(seen) + 1, detail_limit)
+
+                # Throttling: sleep a bit between requests to stay under the rate limit
+                if checked_index > 1:
+                    time.sleep(0.6)
+
                 _report_progress(
                     progress_callback,
                     "candidate",
-                    f"Resolving CivArchive candidate {checked_index}/{limit}",
-                    58 + (checked_index / max(1, limit)) * 30,
+                    f"Resolving CivArchive candidate {checked_index}/{detail_limit}",
+                    58 + (checked_index / max(1, detail_limit)) * 30,
                     candidate_index=candidate_index,
                     candidate_count=candidate_count,
                     checked_candidate_count=checked_index,
-                    candidate_limit=limit,
+                    candidate_limit=detail_limit,
                 )
                 seen.add(identity)
 
@@ -1472,7 +2107,10 @@ def search_civarchive_for_file(
                     best_confidence = confidence
                     best_match = resolved
 
-                if confidence == 100.0 and base_model_matches:
+                if confidence == 100.0 and (
+                    base_model_matches
+                    or _is_hash_verified_exact_match(resolved, confidence)
+                ):
                     _search_cache[cache_key] = best_match
                     _report_progress(
                         progress_callback,
@@ -1484,8 +2122,11 @@ def search_civarchive_for_file(
                     )
                     return best_match
 
-                if len(seen) >= limit:
+                if len(seen) >= detail_limit:
                     break
+
+            if len(seen) >= detail_limit:
+                break
 
             if best_match and (
                 not base_model_context
@@ -1507,8 +2148,11 @@ def search_civarchive_for_file(
 
     if best_match and best_confidence < 40:
         best_match = None
-    if best_match and base_model_context and not _base_model_matches(
-        best_match.get("base_model"), base_model_context
+    if (
+        best_match
+        and base_model_context
+        and not _base_model_matches(best_match.get("base_model"), base_model_context)
+        and not _is_hash_verified_exact_match(best_match, best_confidence)
     ):
         best_match = None
 
@@ -1521,6 +2165,6 @@ def search_civarchive_for_file(
         found=bool(best_match),
         confidence=best_confidence if best_match else None,
         checked_candidate_count=len(seen),
-        candidate_limit=limit,
+        candidate_limit=detail_limit,
     )
     return best_match

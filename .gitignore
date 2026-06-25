@@ -28,6 +28,7 @@ Thumbs.db
 *.tmp
 *.bak
 *.cache
+scratch/
 
 # User settings – contains API keys and tokens, must NOT be committed
 model_resolver_settings.json
