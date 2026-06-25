@@ -158,51 +158,51 @@ class ModelResolverExtension:
                 )
                 download_available = False
 
+            def json_api_endpoint(error_prefix):
+                def decorator(func):
+                    from functools import wraps
+                    @wraps(func)
+                    async def wrapper(request, *args, **kwargs):
+                        try:
+                            return await func(request, *args, **kwargs)
+                        except Exception as e:
+                            self.logger.error(
+                                f"Model Resolver {error_prefix} error: {e}", exc_info=True
+                            )
+                            return web.json_response({"error": str(e)}, status=500)
+                    return wrapper
+                return decorator
+
             # ==================== BASE MODELS CONFIG ROUTE ====================
 
             @routes.get("/model_resolver/base-models")
+            @json_api_endpoint("base-models")
             async def get_base_models(request):
                 """Return the base models config from metadata/base-models.json.
                 
                 Returns {base_models: [{name, aliases}]} so the frontend
                 dropdown can populate correctly via baseModels.base_models.
                 """
-                try:
-                    from .core.sources.popular import get_base_models_config
-                    data = get_base_models_config()
-                    return web.json_response(data)
-                except Exception as e:
-                    self.logger.error(
-                        f"Model Resolver base-models error: {e}", exc_info=True
-                    )
-                    return web.json_response({"error": str(e)}, status=500)
+                from .core.sources.popular import get_base_models_config
+                data = get_base_models_config()
+                return web.json_response(data)
 
             @routes.get("/model_resolver/base-models/status")
+            @json_api_endpoint("base-models status")
             async def get_base_models_status_route(request):
                 """Get local and optional remote base models status."""
-                try:
-                    check_remote = request.query.get("check_remote") == "1"
-                    from .core.sources.popular import get_base_models_status
-                    status = await asyncio.to_thread(get_base_models_status, check_remote)
-                    return web.json_response(status)
-                except Exception as e:
-                    self.logger.error(
-                        f"Model Resolver base-models status error: {e}", exc_info=True
-                    )
-                    return web.json_response({"error": str(e)}, status=500)
+                check_remote = request.query.get("check_remote") == "1"
+                from .core.sources.popular import get_base_models_status
+                status = await asyncio.to_thread(get_base_models_status, check_remote)
+                return web.json_response(status)
 
             @routes.post("/model_resolver/base-models/update")
+            @json_api_endpoint("base-models update")
             async def update_base_models_route(request):
                 """Update base models list from CivitAI."""
-                try:
-                    from .core.sources.popular import update_base_models_from_remote
-                    status = await asyncio.to_thread(update_base_models_from_remote)
-                    return web.json_response(status)
-                except Exception as e:
-                    self.logger.error(
-                        f"Model Resolver base-models update error: {e}", exc_info=True
-                    )
-                    return web.json_response({"error": str(e)}, status=500)
+                from .core.sources.popular import update_base_models_from_remote
+                status = await asyncio.to_thread(update_base_models_from_remote)
+                return web.json_response(status)
 
             # ==================== ANALYZE ROUTES ====================
 
@@ -419,6 +419,7 @@ class ModelResolverExtension:
                     return web.json_response({"error": str(e)}, status=500)
 
             @routes.get("/model_resolver/analyze-progress/{analysis_id}")
+            @json_api_endpoint("analyze-progress")
             async def get_analyze_progress(request):
                 """Get workflow analysis progress."""
                 analysis_id = request.match_info.get("analysis_id", "").strip()
@@ -442,580 +443,541 @@ class ModelResolverExtension:
                 return web.json_response(progress)
 
             @routes.post("/model_resolver/resolve")
+            @json_api_endpoint("resolve", return_success_on_error=True)
             async def resolve_models(request):
                 """Apply model resolution and return updated workflow."""
-                try:
-                    data = await request.json()
-                    workflow_json = data.get("workflow")
-                    resolutions = data.get("resolutions", [])
+                data = await request.json()
+                workflow_json = data.get("workflow")
+                resolutions = data.get("resolutions", [])
 
-                    if not workflow_json:
-                        return web.json_response(
-                            {"error": "Workflow JSON is required"}, status=400
-                        )
-
-                    if not resolutions:
-                        return web.json_response(
-                            {"error": "Resolutions array is required"}, status=400
-                        )
-
-                    # Apply resolutions
-                    updated_workflow = apply_resolution(workflow_json, resolutions)
-
+                if not workflow_json:
                     return web.json_response(
-                        {"workflow": updated_workflow, "success": True}
+                        {"error": "Workflow JSON is required"}, status=400
                     )
-                except Exception as e:
-                    self.logger.error(f"Model Resolver resolve error: {e}", exc_info=True)
+
+                if not resolutions:
                     return web.json_response(
-                        {"error": str(e), "success": False}, status=500
+                        {"error": "Resolutions array is required"}, status=400
                     )
+
+                # Apply resolutions
+                updated_workflow = apply_resolution(workflow_json, resolutions)
+
+                return web.json_response(
+                    {"workflow": updated_workflow, "success": True}
+                )
 
             @routes.post("/model_resolver/local-matches")
+            @json_api_endpoint("local-matches")
             async def local_matches(request):
                 """Search local model files by filename/path."""
-                try:
-                    data = await request.json()
-                    filename = data.get("filename", "")
-                    category = data.get("category", "")
-                    force_rescan = data.get("force_rescan", False)
-                    force_rescan = (
-                        force_rescan
-                        if isinstance(force_rescan, bool)
-                        else str(force_rescan).lower() == "true"
+                data = await request.json()
+                filename = data.get("filename", "")
+                category = data.get("category", "")
+                force_rescan = data.get("force_rescan", False)
+                force_rescan = (
+                    force_rescan
+                    if isinstance(force_rescan, bool)
+                    else str(force_rescan).lower() == "true"
+                )
+
+                if not filename:
+                    return web.json_response(
+                        {"error": "filename is required"}, status=400
                     )
 
-                    if not filename:
-                        return web.json_response(
-                            {"error": "filename is required"}, status=400
-                        )
-
-                    matches = search_local_matches(
-                        filename,
-                        category=category or None,
-                        similarity_threshold=0.0,
-                        max_matches_per_model=10,
-                        force_rescan=force_rescan,
-                    )
-                    return web.json_response({"matches": matches})
-                except Exception as e:
-                    self.logger.error(
-                        f"Model Resolver local-matches error: {e}", exc_info=True
-                    )
-                    return web.json_response({"error": str(e)}, status=500)
+                matches = search_local_matches(
+                    filename,
+                    category=category or None,
+                    similarity_threshold=0.0,
+                    max_matches_per_model=10,
+                    force_rescan=force_rescan,
+                )
+                return web.json_response({"matches": matches})
 
             @routes.post("/model_resolver/open-containing-folder")
+            @json_api_endpoint("open-containing-folder")
             async def open_containing_folder(request):
                 """Open Explorer at the folder containing the selected model."""
-                try:
-                    import os
-                    import subprocess
+                import os
+                import subprocess
 
-                    data = await request.json()
-                    target_path = data.get("path", "")
+                data = await request.json()
+                target_path = data.get("path", "")
 
-                    if not target_path:
-                        return web.json_response(
-                            {"error": "path is required"}, status=400
-                        )
-
-                    normalized_path = os.path.normpath(target_path)
-                    if not os.path.exists(normalized_path):
-                        return web.json_response(
-                            {"error": "path does not exist"}, status=404
-                        )
-
-                    if os.path.isfile(normalized_path):
-                        absolute_path = os.path.abspath(normalized_path)
-                        subprocess.Popen(
-                            ["explorer.exe", "/select,", absolute_path],
-                            shell=False,
-                        )
-                    else:
-                        os.startfile(normalized_path)
-
-                    return web.json_response({"success": True})
-                except Exception as e:
-                    self.logger.error(
-                        f"Model Resolver open-containing-folder error: {e}",
-                        exc_info=True,
+                if not target_path:
+                    return web.json_response(
+                        {"error": "path is required"}, status=400
                     )
-                    return web.json_response({"error": str(e)}, status=500)
+
+                normalized_path = os.path.normpath(target_path)
+                if not os.path.exists(normalized_path):
+                    return web.json_response(
+                        {"error": "path does not exist"}, status=404
+                    )
+
+                if os.path.isfile(normalized_path):
+                    absolute_path = os.path.abspath(normalized_path)
+                    subprocess.Popen(
+                        ["explorer.exe", "/select,", absolute_path],
+                        shell=False,
+                    )
+                else:
+                    os.startfile(normalized_path)
+
+                return web.json_response({"success": True})
 
             @routes.get("/model_resolver/models")
+            @json_api_endpoint("get_models")
             async def get_models(request):
                 """Get list of all available models."""
-                try:
-                    force_rescan = str(
-                        request.query.get("force")
-                        or request.query.get("force_rescan")
-                        or ""
-                    ).lower() in {"1", "true", "yes"}
-                    models = get_model_files(force_rescan=force_rescan)
-                    return web.json_response(models)
-                except Exception as e:
-                    self.logger.error(
-                        f"Model Resolver get_models error: {e}", exc_info=True
-                    )
-                    return web.json_response({"error": str(e)}, status=500)
+                force_rescan = str(
+                    request.query.get("force")
+                    or request.query.get("force_rescan")
+                    or ""
+                ).lower() in {"1", "true", "yes"}
+                models = get_model_files(force_rescan=force_rescan)
+                return web.json_response(models)
 
             @routes.post("/model_resolver/loaded")
+            @json_api_endpoint("get_loaded_models")
             async def get_loaded_models(request):
                 """Get all currently loaded models in the workflow."""
-                try:
-                    data = await request.json()
-                    workflow_json = data.get("workflow")
+                data = await request.json()
+                workflow_json = data.get("workflow")
 
-                    if not workflow_json:
-                        return web.json_response(
-                            {"error": "Workflow JSON is required"}, status=400
-                        )
-
-                    # Import workflow analyzer to extract models
-                    from .core.workflow_analyzer import (
-                        analyze_workflow_models,
-                        try_resolve_model_path,
-                        is_model_filename,
-                        URN_REGEX,
-                        URN_TYPE_MAP,
-                    )
-
-                    # Get available models for existence checking
-                    available_models = get_model_files()
-                    available_paths = {m.get("path") for m in available_models}
-                    # Create lookup for full paths by filename (with and without extension)
-                    path_by_filename = {}
-                    for m in available_models:
-                        rel_path = m.get("relative_path", "")
-                        if rel_path:
-                            filename = rel_path.split("/")[-1].split("\\")[-1]
-                            path_by_filename[filename] = m.get("path")
-                            # Also add without extension for matching (simple approach)
-                            if "." in filename:
-                                filename_no_ext = filename.rsplit(".", 1)[0]
-                                if filename_no_ext not in path_by_filename:
-                                    path_by_filename[filename_no_ext] = m.get("path")
-                            # Add the full relative path as key too
-                            path_by_filename[rel_path] = m.get("path")
-
-                    # Also use folder_paths.get_full_path() to get paths
-                    import folder_paths
-
-                    for cat in [
-                        "loras",
-                        "checkpoints",
-                        "vae",
-                        "controlnet",
-                        "upscale_models",
-                    ]:
-                        try:
-                            filenames = folder_paths.get_filename_list(cat)
-                            for fn in filenames:
-                                full_path = folder_paths.get_full_path(cat, fn)
-                                if (
-                                    full_path
-                                    and full_path not in path_by_filename.values()
-                                ):
-                                    path_by_filename[fn] = full_path
-                                    fn_no_ext = (
-                                        fn.rsplit(".", 1)[0] if "." in fn else fn
-                                    )
-                                    if fn_no_ext not in path_by_filename:
-                                        path_by_filename[fn_no_ext] = full_path
-                        except Exception:
-                            pass
-
-                    # Analyze workflow to get all model references
-                    all_model_refs = analyze_workflow_models(
-                        workflow_json, available_models=available_models
-                    )
-
-                    # Also extract from node.properties.models
-                    nodes = list(workflow_json.get("nodes", []))
-                    definitions = workflow_json.get("definitions", {})
-                    subgraphs = definitions.get("subgraphs", [])
-                    for subgraph in subgraphs:
-                        nodes.extend(subgraph.get("nodes", []))
-
-                    # Collect all loaded models with their values
-                    loaded_models = []
-
-                    # Process each model reference from analyze_workflow_models
-                    for ref in all_model_refs:
-                        original_path = ref.get("original_path", "")
-                        node_id = ref.get("node_id")
-                        widget_index = ref.get("widget_index")
-                        node_type = ref.get("node_type", "")
-                        category = ref.get("category", "unknown")
-
-                        # Determine model name and strength
-                        model_name = original_path.split("/")[-1].split("\\")[-1]
-                        strength = None
-
-                        # For standard LoraLoader nodes, strength is in next widget_value
-                        if node_type in ["LoraLoader", "LoraLoaderModelOnly"]:
-                            # Find the node in workflow to get strength value
-                            for node in nodes:
-                                if str(node.get("id")) == str(node_id):
-                                    widgets_values = node.get("widgets_values", [])
-                                    if len(widgets_values) > widget_index + 1:
-                                        try:
-                                            strength = float(
-                                                widgets_values[widget_index + 1]
-                                            )
-                                        except (ValueError, TypeError):
-                                            strength = 1.0
-                                    break
-
-                        if ref.get("strength") is not None:
-                            strength = ref.get("strength")
-
-                        # For text-based lora loaders (LoraLoaderV2, LoraManager), get strength from ref
-                        if ref.get("is_lora_v2"):
-                            strength = ref.get("strength")
-                            model_name = ref.get("name", model_name)
-
-                        # Check if model exists locally
-                        exists = ref.get("exists", False)
-
-                        # If URN, resolve to display name
-                        if ref.get("is_urn"):
-                            urn = ref.get("urn", {})
-                            # Use model name from URN as display name
-                            model_name = (
-                                f"urn:{urn.get('type', 'model')}:{urn.get('model_id')}"
-                            )
-                            category = urn.get("type", category)
-                            if category in URN_TYPE_MAP:
-                                category = URN_TYPE_MAP[category]
-
-                        loaded_models.append(
-                            {
-                                "name": model_name,
-                                "category": category,
-                                "node_id": node_id,
-                                "widget_index": widget_index,
-                                "node_type": node_type,
-                                "exists": exists,
-                                "strength": strength,
-                                "original_path": original_path,
-                                "is_urn": ref.get("is_urn", False),
-                                "is_lora_v2": ref.get("is_lora_v2", False),
-                                "active": ref.get("active"),
-                                "connected": ref.get("connected", True),
-                                "resolved_path": (
-                                    path_by_filename.get(model_name)
-                                    or path_by_filename.get(original_path)
-                                ),
-                            }
-                        )
-
-                    # Also check node.properties.models for embedded models
-                    for node in nodes:
-                        node_type = node.get("type", "")
-                        properties = node.get("properties", {})
-                        models_list = properties.get("models", [])
-
-                        for model_info in models_list:
-                            if isinstance(model_info, dict):
-                                name = model_info.get("name", "")
-                                url = model_info.get("url", "")
-                                directory = model_info.get("directory", "")
-
-                                if name:
-                                    # Check if this model is already in loaded_models
-                                    existing = next(
-                                        (
-                                            m
-                                            for m in loaded_models
-                                            if m.get("original_path") == name
-                                        ),
-                                        None,
-                                    )
-                                    if not existing:
-                                        loaded_models.append(
-                                            {
-                                                "name": name.split("/")[-1].split("\\")[
-                                                    -1
-                                                ],
-                                                "category": directory or "checkpoints",
-                                                "node_id": node.get("id"),
-                                                "widget_index": None,
-                                                "node_type": node_type,
-                                                "exists": True,  # Embedded models are loaded
-                                                "strength": None,
-                                                "original_path": name,
-                                                "is_urn": False,
-                                            }
-                                        )
-
+                if not workflow_json:
                     return web.json_response(
-                        {"loaded_models": loaded_models, "total": len(loaded_models)}
+                        {"error": "Workflow JSON is required"}, status=400
                     )
 
-                except Exception as e:
-                    self.logger.error(
-                        f"Model Resolver get_loaded_models error: {e}", exc_info=True
+                # Import workflow analyzer to extract models
+                from .core.workflow_analyzer import (
+                    analyze_workflow_models,
+                    try_resolve_model_path,
+                    is_model_filename,
+                    URN_REGEX,
+                    URN_TYPE_MAP,
+                )
+
+                # Get available models for existence checking
+                available_models = get_model_files()
+                available_paths = {m.get("path") for m in available_models}
+                # Create lookup for full paths by filename (with and without extension)
+                path_by_filename = {}
+                for m in available_models:
+                    rel_path = m.get("relative_path", "")
+                    if rel_path:
+                        filename = rel_path.split("/")[-1].split("\\")[-1]
+                        path_by_filename[filename] = m.get("path")
+                        # Also add without extension for matching (simple approach)
+                        if "." in filename:
+                            filename_no_ext = filename.rsplit(".", 1)[0]
+                            if filename_no_ext not in path_by_filename:
+                                path_by_filename[filename_no_ext] = m.get("path")
+                        # Add the full relative path as key too
+                        path_by_filename[rel_path] = m.get("path")
+
+                # Also use folder_paths.get_full_path() to get paths
+                import folder_paths
+
+                for cat in [
+                    "loras",
+                    "checkpoints",
+                    "vae",
+                    "controlnet",
+                    "upscale_models",
+                ]:
+                    try:
+                        filenames = folder_paths.get_filename_list(cat)
+                        for fn in filenames:
+                            full_path = folder_paths.get_full_path(cat, fn)
+                            if (
+                                full_path
+                                and full_path not in path_by_filename.values()
+                            ):
+                                path_by_filename[fn] = full_path
+                                fn_no_ext = (
+                                    fn.rsplit(".", 1)[0] if "." in fn else fn
+                                )
+                                if fn_no_ext not in path_by_filename:
+                                    path_by_filename[fn_no_ext] = full_path
+                    except Exception:
+                        pass
+
+                # Analyze workflow to get all model references
+                all_model_refs = analyze_workflow_models(
+                    workflow_json, available_models=available_models
+                )
+
+                # Also extract from node.properties.models
+                nodes = list(workflow_json.get("nodes", []))
+                definitions = workflow_json.get("definitions", {})
+                subgraphs = definitions.get("subgraphs", [])
+                for subgraph in subgraphs:
+                    nodes.extend(subgraph.get("nodes", []))
+
+                # Collect all loaded models with their values
+                loaded_models = []
+
+                # Process each model reference from analyze_workflow_models
+                for ref in all_model_refs:
+                    original_path = ref.get("original_path", "")
+                    node_id = ref.get("node_id")
+                    widget_index = ref.get("widget_index")
+                    node_type = ref.get("node_type", "")
+                    category = ref.get("category", "unknown")
+
+                    # Determine model name and strength
+                    model_name = original_path.split("/")[-1].split("\\")[-1]
+                    strength = None
+
+                    # For standard LoraLoader nodes, strength is in next widget_value
+                    if node_type in ["LoraLoader", "LoraLoaderModelOnly"]:
+                        # Find the node in workflow to get strength value
+                        for node in nodes:
+                            if str(node.get("id")) == str(node_id):
+                                widgets_values = node.get("widgets_values", [])
+                                if len(widgets_values) > widget_index + 1:
+                                    try:
+                                        strength = float(
+                                            widgets_values[widget_index + 1]
+                                        )
+                                    except (ValueError, TypeError):
+                                        strength = 1.0
+                                break
+
+                    if ref.get("strength") is not None:
+                        strength = ref.get("strength")
+
+                    # For text-based lora loaders (LoraLoaderV2, LoraManager), get strength from ref
+                    if ref.get("is_lora_v2"):
+                        strength = ref.get("strength")
+                        model_name = ref.get("name", model_name)
+
+                    # Check if model exists locally
+                    exists = ref.get("exists", False)
+
+                    # If URN, resolve to display name
+                    if ref.get("is_urn"):
+                        urn = ref.get("urn", {})
+                        # Use model name from URN as display name
+                        model_name = (
+                            f"urn:{urn.get('type', 'model')}:{urn.get('model_id')}"
+                        )
+                        category = urn.get("type", category)
+                        if category in URN_TYPE_MAP:
+                            category = URN_TYPE_MAP[category]
+
+                    loaded_models.append(
+                        {
+                            "name": model_name,
+                            "category": category,
+                            "node_id": node_id,
+                            "widget_index": widget_index,
+                            "node_type": node_type,
+                            "exists": exists,
+                            "strength": strength,
+                            "original_path": original_path,
+                            "is_urn": ref.get("is_urn", False),
+                            "is_lora_v2": ref.get("is_lora_v2", False),
+                            "active": ref.get("active"),
+                            "connected": ref.get("connected", True),
+                            "resolved_path": (
+                                path_by_filename.get(model_name)
+                                or path_by_filename.get(original_path)
+                            ),
+                        }
                     )
-                    return web.json_response({"error": str(e)}, status=500)
+
+                # Also check node.properties.models for embedded models
+                for node in nodes:
+                    node_type = node.get("type", "")
+                    properties = node.get("properties", {})
+                    models_list = properties.get("models", [])
+
+                    for model_info in models_list:
+                        if isinstance(model_info, dict):
+                            name = model_info.get("name", "")
+                            url = model_info.get("url", "")
+                            directory = model_info.get("directory", "")
+
+                            if name:
+                                # Check if this model is already in loaded_models
+                                existing = next(
+                                    (
+                                        m
+                                        for m in loaded_models
+                                        if m.get("original_path") == name
+                                    ),
+                                    None,
+                                )
+                                if not existing:
+                                    loaded_models.append(
+                                        {
+                                            "name": name.split("/")[-1].split("\\")[
+                                                -1
+                                            ],
+                                            "category": directory or "checkpoints",
+                                            "node_id": node.get("id"),
+                                            "widget_index": None,
+                                            "node_type": node_type,
+                                            "exists": True,  # Embedded models are loaded
+                                            "strength": None,
+                                            "original_path": name,
+                                            "is_urn": False,
+                                        }
+                                    )
+
+                return web.json_response(
+                    {"loaded_models": loaded_models, "total": len(loaded_models)}
+                )
 
             # ==================== CIVITAI SEARCH ROUTE ====================
 
             @routes.post("/model_resolver/civitai-search")
+            @json_api_endpoint("civitai-search")
             async def civitai_search(request):
                 """Search CivitAI for a model using file hash."""
-                try:
-                    data = await request.json()
-                    filename = data.get("filename", "")
-                    category = data.get("category", "")
-                    resolved_path = data.get("resolved_path", "")
+                data = await request.json()
+                filename = data.get("filename", "")
+                category = data.get("category", "")
+                resolved_path = data.get("resolved_path", "")
 
-                    if not filename:
-                        return web.json_response(
-                            {"error": "Filename is required"}, status=400
+                if not filename:
+                    return web.json_response(
+                        {"error": "Filename is required"}, status=400
+                    )
+
+                # Clean filename for display
+                import os as _os
+
+                clean_name = _os.path.splitext(filename)[0]
+
+                # Get the file path to hash
+                file_path = resolved_path if resolved_path else None
+                file_location = ""
+
+                if not file_path and category:
+                    # Try to find the file in the model directories using folder_paths
+                    try:
+                        import folder_paths
+
+                        # Map category to folder_paths type
+                        category_map = {
+                            "loras": "loras",
+                            "checkpoints": "checkpoints",
+                            "vae": "vae",
+                            "controlnet": "controlnet",
+                            "clip": "text_encoders",
+                            "clips": "text_encoders",
+                            "text_encoder": "text_encoders",
+                            "text_encoders": "text_encoders",
+                            "diffusion_model": "diffusion_models",
+                            "diffusion_models": "diffusion_models",
+                            "unet": "diffusion_models",
+                            "upscale_models": "upscale_models",
+                            "upscale_model": "upscale_models",
+                            "latent_upscale_model": "latent_upscale_models",
+                            "latent_upscale_models": "latent_upscale_models",
+                            "style_model": "style_models",
+                            "style_models": "style_models",
+                            "gligen": "gligen",
+                            "diffusers": "diffusers",
+                            "vae_approx": "vae_approx",
+                            "sam": "sams",
+                            "sam_model": "sams",
+                            "sam_models": "sams",
+                            "sams": "sams",
+                            "ultralytics": "ultralytics",
+                            "ultralytics_bbox": "ultralytics",
+                            "ultralytics_segm": "ultralytics",
+                            "yolo": "ultralytics",
+                            "audio_encoder": "audio_encoders",
+                            "audio_encoders": "audio_encoders",
+                            "background_removal": "background_removal",
+                            "background_removal_model": "background_removal",
+                            "frame_interpolation": "frame_interpolation",
+                            "frame_interpolation_model": "frame_interpolation",
+                            "geometry_estimation": "geometry_estimation",
+                            "geometry_estimation_model": "geometry_estimation",
+                            "detection": "detection",
+                            "model_patch": "model_patches",
+                            "model_patches": "model_patches",
+                            "photomaker": "photomaker",
+                            "optical_flow": "optical_flow",
+                            "optical_flow_model": "optical_flow",
+                        }
+                        folder_type = category_map.get(
+                            category.lower(), category.lower()
                         )
+                        file_path = folder_paths.get_full_path(
+                            folder_type, filename
+                        )
+                    except Exception:
+                        pass
 
-                    # Clean filename for display
-                    import os as _os
-
-                    clean_name = _os.path.splitext(filename)[0]
-
-                    # Get the file path to hash
-                    file_path = resolved_path if resolved_path else None
-                    file_location = ""
-
-                    if not file_path and category:
-                        # Try to find the file in the model directories using folder_paths
+                    # If not found, try scanner
+                    if not file_path:
                         try:
-                            import folder_paths
+                            from .core.scanner import get_model_files
 
-                            # Map category to folder_paths type
-                            category_map = {
-                                "loras": "loras",
-                                "checkpoints": "checkpoints",
-                                "vae": "vae",
-                                "controlnet": "controlnet",
-                                "clip": "text_encoders",
-                                "clips": "text_encoders",
-                                "text_encoder": "text_encoders",
-                                "text_encoders": "text_encoders",
-                                "diffusion_model": "diffusion_models",
-                                "diffusion_models": "diffusion_models",
-                                "unet": "diffusion_models",
-                                "upscale_models": "upscale_models",
-                                "upscale_model": "upscale_models",
-                                "latent_upscale_model": "latent_upscale_models",
-                                "latent_upscale_models": "latent_upscale_models",
-                                "style_model": "style_models",
-                                "style_models": "style_models",
-                                "gligen": "gligen",
-                                "diffusers": "diffusers",
-                                "vae_approx": "vae_approx",
-                                "sam": "sams",
-                                "sam_model": "sams",
-                                "sam_models": "sams",
-                                "sams": "sams",
-                                "ultralytics": "ultralytics",
-                                "ultralytics_bbox": "ultralytics",
-                                "ultralytics_segm": "ultralytics",
-                                "yolo": "ultralytics",
-                                "audio_encoder": "audio_encoders",
-                                "audio_encoders": "audio_encoders",
-                                "background_removal": "background_removal",
-                                "background_removal_model": "background_removal",
-                                "frame_interpolation": "frame_interpolation",
-                                "frame_interpolation_model": "frame_interpolation",
-                                "geometry_estimation": "geometry_estimation",
-                                "geometry_estimation_model": "geometry_estimation",
-                                "detection": "detection",
-                                "model_patch": "model_patches",
-                                "model_patches": "model_patches",
-                                "photomaker": "photomaker",
-                                "optical_flow": "optical_flow",
-                                "optical_flow_model": "optical_flow",
-                            }
-                            folder_type = category_map.get(
-                                category.lower(), category.lower()
-                            )
-                            file_path = folder_paths.get_full_path(
-                                folder_type, filename
-                            )
+                            available_models = get_model_files()
+                            for m in available_models:
+                                if (
+                                    m.get("relative_path", "").endswith(filename)
+                                    or m.get("filename", "") == filename
+                                ):
+                                    file_path = m.get("path")
+                                    break
                         except Exception:
                             pass
 
-                        # If not found, try scanner
-                        if not file_path:
-                            try:
-                                from .core.scanner import get_model_files
+                # Search CivitAI for the model using hash
+                if download_available and file_path and _os.path.exists(file_path):
+                    file_location = _os.path.dirname(file_path).replace("\\", "/")
+                    if file_location and not file_location.endswith("/"):
+                        file_location += "/"
+                    try:
+                        from .core.sources.civitai import (
+                            get_model_info_for_file,
+                        )
 
-                                available_models = get_model_files()
-                                for m in available_models:
-                                    if (
-                                        m.get("relative_path", "").endswith(filename)
-                                        or m.get("filename", "") == filename
-                                    ):
-                                        file_path = m.get("path")
-                                        break
-                            except Exception:
-                                pass
-
-                    # Search CivitAI for the model using hash
-                    if download_available and file_path and _os.path.exists(file_path):
-                        file_location = _os.path.dirname(file_path).replace("\\", "/")
-                        if file_location and not file_location.endswith("/"):
-                            file_location += "/"
-                        try:
-                            from .core.sources.civitai import (
-                                get_model_info_for_file,
+                        result = get_model_info_for_file(file_path)
+                        if result and (
+                            result.get("url")
+                            or result.get("version_url")
+                            or result.get("from_metadata")
+                            or result.get("trained_words")
+                        ):
+                            return web.json_response(
+                                {
+                                    "filename": filename,
+                                    "file_path": file_path,
+                                    "resolved_path": file_path,
+                                    "location": result.get("location")
+                                    or file_location,
+                                    "url": result.get("url"),
+                                    "version_url": result.get("version_url"),
+                                    "model_id": result.get("model_id"),
+                                    "model_name": result.get(
+                                        "model_name", clean_name
+                                    ),
+                                    "model_type": result.get("model_type", ""),
+                                    "version_id": result.get("version_id"),
+                                    "version_name": result.get("version_name", ""),
+                                    "sha256": result.get("sha256"),
+                                    "size": result.get("size"),
+                                    "base_model": result.get("base_model"),
+                                    "tags": result.get("tags", []),
+                                    "trained_words": result.get(
+                                        "trained_words", []
+                                    ),
+                                    "images": result.get("images", []),
+                                    "clip_skip": result.get("clip_skip"),
+                                    "description": result.get("description", ""),
+                                    "model_description": result.get(
+                                        "model_description", ""
+                                    ),
+                                }
                             )
+                    except Exception as e:
+                        self.logger.warning(f"CivitAI search error: {e}")
 
-                            result = get_model_info_for_file(file_path)
-                            if result and (
-                                result.get("url")
-                                or result.get("version_url")
-                                or result.get("from_metadata")
-                                or result.get("trained_words")
-                            ):
-                                return web.json_response(
-                                    {
-                                        "filename": filename,
-                                        "file_path": file_path,
-                                        "resolved_path": file_path,
-                                        "location": result.get("location")
-                                        or file_location,
-                                        "url": result.get("url"),
-                                        "version_url": result.get("version_url"),
-                                        "model_id": result.get("model_id"),
-                                        "model_name": result.get(
-                                            "model_name", clean_name
-                                        ),
-                                        "model_type": result.get("model_type", ""),
-                                        "version_id": result.get("version_id"),
-                                        "version_name": result.get("version_name", ""),
-                                        "sha256": result.get("sha256"),
-                                        "size": result.get("size"),
-                                        "base_model": result.get("base_model"),
-                                        "tags": result.get("tags", []),
-                                        "trained_words": result.get(
-                                            "trained_words", []
-                                        ),
-                                        "images": result.get("images", []),
-                                        "clip_skip": result.get("clip_skip"),
-                                        "description": result.get("description", ""),
-                                        "model_description": result.get(
-                                            "model_description", ""
-                                        ),
-                                    }
-                                )
-                        except Exception as e:
-                            self.logger.warning(f"CivitAI search error: {e}")
+                # No result found - try fallback to filename search
+                if download_available:
+                    try:
+                        from .core.sources.civitai import (
+                            search_civitai_for_file,
+                        )
 
-                    # No result found - try fallback to filename search
-                    if download_available:
-                        try:
-                            from .core.sources.civitai import (
-                                search_civitai_for_file,
+                        result = search_civitai_for_file(
+                            filename, model_type=category
+                        )
+                        if result and result.get("url"):
+                            return web.json_response(
+                                {
+                                    "url": result["url"],
+                                    "file_path": file_path,
+                                    "resolved_path": file_path,
+                                    "location": file_location,
+                                    "model_name": result.get("name", clean_name),
+                                    "version_id": result.get("version_id"),
+                                    "size": result.get("size"),
+                                    "tags": result.get("tags", []),
+                                }
                             )
+                    except Exception as e:
+                        self.logger.warning(f"CivitAI fallback search error: {e}")
 
-                            result = search_civitai_for_file(
-                                filename, model_type=category
-                            )
-                            if result and result.get("url"):
-                                return web.json_response(
-                                    {
-                                        "url": result["url"],
-                                        "file_path": file_path,
-                                        "resolved_path": file_path,
-                                        "location": file_location,
-                                        "model_name": result.get("name", clean_name),
-                                        "version_id": result.get("version_id"),
-                                        "size": result.get("size"),
-                                        "tags": result.get("tags", []),
-                                    }
-                                )
-                        except Exception as e:
-                            self.logger.warning(f"CivitAI fallback search error: {e}")
-
-                    # No result found
-                    return web.json_response({"url": None})
-
-                except Exception as e:
-                    self.logger.error(
-                        f"Model Resolver civitai-search error: {e}", exc_info=True
-                    )
-                    return web.json_response({"error": str(e)}, status=500)
+                # No result found
+                return web.json_response({"url": None})
 
             @routes.post("/model_resolver/model-details")
+            @json_api_endpoint("model-details")
             async def model_details(request):
                 """Return normalized full model details for sources that expose model pages."""
-                try:
-                    data = await request.json()
-                    source = str(data.get("source", "")).strip().lower()
-                    model_id = data.get("model_id")
-                    version_id = data.get("version_id")
-                    civitai_key = data.get("civitai_key", "")
+                data = await request.json()
+                source = str(data.get("source", "")).strip().lower()
+                model_id = data.get("model_id")
+                version_id = data.get("version_id")
+                civitai_key = data.get("civitai_key", "")
 
-                    if not download_available:
-                        return web.json_response(
-                            {"error": "Download providers are not available"}, status=503
-                        )
-
-                    try:
-                        model_id = (
-                            int(model_id)
-                            if model_id is not None and str(model_id).strip()
-                            else None
-                        )
-                    except (TypeError, ValueError):
-                        model_id = None
-
-                    try:
-                        version_id = (
-                            int(version_id)
-                            if version_id is not None and str(version_id).strip()
-                            else None
-                        )
-                    except (TypeError, ValueError):
-                        version_id = None
-
-                    if source == "lora_manager_archive":
-                        source = "civitai"
-
-                    if source not in {"civitai", "civarchive"}:
-                        return web.json_response(
-                            {"error": "Unsupported model details source"}, status=400
-                        )
-                    if not model_id:
-                        return web.json_response(
-                            {"error": "model_id is required"}, status=400
-                        )
-
-                    if source == "civitai":
-                        details = await asyncio.to_thread(
-                            get_civitai_model_details,
-                            model_id,
-                            version_id,
-                            civitai_key or None,
-                        )
-                    else:
-                        details = await asyncio.to_thread(
-                            get_civarchive_model_details,
-                            model_id,
-                            version_id,
-                        )
-
-                    if not details:
-                        return web.json_response(
-                            {"error": "Model details not found"}, status=404
-                        )
-
-                    return web.json_response(details)
-
-                except Exception as e:
-                    self.logger.error(
-                        f"Model Resolver model-details error: {e}", exc_info=True
+                if not download_available:
+                    return web.json_response(
+                        {"error": "Download providers are not available"}, status=503
                     )
-                    return web.json_response({"error": str(e)}, status=500)
+
+                try:
+                    model_id = (
+                        int(model_id)
+                        if model_id is not None and str(model_id).strip()
+                        else None
+                    )
+                except (TypeError, ValueError):
+                    model_id = None
+
+                try:
+                    version_id = (
+                        int(version_id)
+                        if version_id is not None and str(version_id).strip()
+                        else None
+                    )
+                except (TypeError, ValueError):
+                    version_id = None
+
+                if source == "lora_manager_archive":
+                    source = "civitai"
+
+                if source not in {"civitai", "civarchive"}:
+                    return web.json_response(
+                        {"error": "Unsupported model details source"}, status=400
+                    )
+                if not model_id:
+                    return web.json_response(
+                        {"error": "model_id is required"}, status=400
+                    )
+
+                if source == "civitai":
+                    details = await asyncio.to_thread(
+                        get_civitai_model_details,
+                        model_id,
+                        version_id,
+                        civitai_key or None,
+                    )
+                else:
+                    details = await asyncio.to_thread(
+                        get_civarchive_model_details,
+                        model_id,
+                        version_id,
+                    )
+
+                if not details:
+                    return web.json_response(
+                        {"error": "Model details not found"}, status=404
+                    )
+
+                return web.json_response(details)
 
             # ==================== DOWNLOAD ROUTES ====================
 
@@ -1090,6 +1052,7 @@ class ModelResolverExtension:
                         self.search_progress[progress_id] = payload
 
                 @routes.get("/model_resolver/search-progress/{progress_id}")
+                @json_api_endpoint("search-progress")
                 async def get_search_progress_route(request):
                     """Return live progress for an in-flight source search."""
                     progress_id = request.match_info.get("progress_id", "")
@@ -2250,22 +2213,19 @@ class ModelResolverExtension:
                         return web.json_response({"error": str(e)}, status=500)
 
                 @routes.post("/model_resolver/clear-search-cache")
+                @json_api_endpoint("Clear search cache")
                 async def clear_search_cache_route(request):
                     """Clear backend search caches after token/settings changes."""
-                    try:
-                        clear_huggingface_search_cache()
-                        clear_civitai_search_cache()
-                        clear_civarchive_search_cache()
-                        clear_lora_manager_archive_search_cache()
-                        reload_popular_databases()
-                        reload_model_list()
-                        invalidate_model_files_cache()
-                        self.search_result_timestamps.clear()
-                        log_info("Cleared backend search caches")
-                        return web.json_response({"success": True, "cleared": "all"})
-                    except Exception as e:
-                        log_exception(f"Clear search cache error: {e}")
-                        return web.json_response({"error": str(e)}, status=500)
+                    clear_huggingface_search_cache()
+                    clear_civitai_search_cache()
+                    clear_civarchive_search_cache()
+                    clear_lora_manager_archive_search_cache()
+                    reload_popular_databases()
+                    reload_model_list()
+                    invalidate_model_files_cache()
+                    self.search_result_timestamps.clear()
+                    log_info("Cleared backend search caches")
+                    return web.json_response({"success": True, "cleared": "all"})
 
                 async def _check_credential_helper(request, payload_key, check_func, log_name):
                     try:
@@ -2306,603 +2266,540 @@ class ModelResolverExtension:
                     )
 
                 @routes.get("/model_resolver/huggingface/author-index/status")
+                @json_api_endpoint("HuggingFace author index status")
                 async def huggingface_author_index_status_route(request):
                     """Return local HuggingFace author fallback index status."""
-                    try:
-                        return web.json_response(get_author_fallback_index_status())
-                    except Exception as e:
-                        log_exception(f"HuggingFace author index status error: {e}")
-                        return web.json_response({"error": str(e)}, status=500)
+                    return web.json_response(get_author_fallback_index_status())
 
                 @routes.post("/model_resolver/huggingface/author-index/refresh")
+                @json_api_endpoint("HuggingFace author index refresh")
                 async def huggingface_author_index_refresh_route(request):
                     """Refresh HuggingFace author fallback index."""
-                    try:
-                        data = await request.json()
-                        hf_token = data.get("hf_token", "")
-                        result = await asyncio.to_thread(
-                            refresh_author_fallback_index, hf_token or None
-                        )
-                        clear_huggingface_search_cache()
-                        return web.json_response(result)
-                    except Exception as e:
-                        log_exception(f"HuggingFace author index refresh error: {e}")
-                        return web.json_response({"error": str(e)}, status=500)
+                    data = await request.json()
+                    hf_token = data.get("hf_token", "")
+                    result = await asyncio.to_thread(
+                        refresh_author_fallback_index, hf_token or None
+                    )
+                    clear_huggingface_search_cache()
+                    return web.json_response(result)
 
                 @routes.get("/model_resolver/model-list/status")
+                @json_api_endpoint("Model list status")
                 async def model_list_status_route(request):
                     """Return local model-list status and optionally compare with GitHub."""
-                    try:
-                        check_remote = (
-                            str(request.query.get("check_remote", "")).lower()
-                            in {"1", "true", "yes"}
-                        )
-                        return web.json_response(
-                            get_model_list_update_status(check_remote=check_remote)
-                        )
-                    except Exception as e:
-                        log_exception(f"Model list status error: {e}")
-                        return web.json_response({"error": str(e)}, status=500)
+                    check_remote = (
+                        str(request.query.get("check_remote", "")).lower()
+                        in {"1", "true", "yes"}
+                    )
+                    return web.json_response(
+                        get_model_list_update_status(check_remote=check_remote)
+                    )
 
                 @routes.post("/model_resolver/model-list/update")
+                @json_api_endpoint("Model list update")
                 async def model_list_update_route(request):
                     """Download latest ComfyUI-Manager model-list.json."""
-                    try:
-                        result = await asyncio.to_thread(update_model_list_from_remote)
-                        clear_huggingface_search_cache()
-                        clear_civitai_search_cache()
-                        clear_civarchive_search_cache()
-                        clear_lora_manager_archive_search_cache()
-                        self.search_result_timestamps.clear()
-                        return web.json_response(result)
-                    except Exception as e:
-                        log_exception(f"Model list update error: {e}")
-                        return web.json_response({"error": str(e)}, status=500)
+                    result = await asyncio.to_thread(update_model_list_from_remote)
+                    clear_huggingface_search_cache()
+                    clear_civitai_search_cache()
+                    clear_civarchive_search_cache()
+                    clear_lora_manager_archive_search_cache()
+                    self.search_result_timestamps.clear()
+                    return web.json_response(result)
 
                 @routes.post("/model_resolver/download")
+                @json_api_endpoint("download", return_success_on_error=True)
                 async def download_model(request):
                     """Start downloading a model."""
-                    try:
-                        data = await request.json()
-                        url = data.get("url", "")
-                        filename = data.get("filename", "")
-                        category = data.get("category", "checkpoints")
-                        category = normalize_download_category(category)
-                        subfolder = data.get("subfolder", "")
-                        base_directory = data.get("base_directory", "")
-                        path_metadata = data.get("path_metadata", {})
-                        if not isinstance(path_metadata, dict):
-                            path_metadata = {}
-                        download_metadata = data.get("download_metadata") or data.get(
-                            "metadata", {}
-                        )
-                        if not isinstance(download_metadata, dict):
-                            download_metadata = {}
-                        download_metadata = dict(download_metadata)
-                        settings = load_resolver_settings()
-                        if not base_directory:
-                            base_directory = get_default_root_for_category(category, settings)
-                        subfolder = resolve_download_subfolder(
-                            category,
-                            subfolder,
-                            path_metadata,
-                            settings,
-                        )
+                    data = await request.json()
+                    url = data.get("url", "")
+                    filename = data.get("filename", "")
+                    category = data.get("category", "checkpoints")
+                    category = normalize_download_category(category)
+                    subfolder = data.get("subfolder", "")
+                    base_directory = data.get("base_directory", "")
+                    path_metadata = data.get("path_metadata", {})
+                    if not isinstance(path_metadata, dict):
+                        path_metadata = {}
+                    download_metadata = data.get("download_metadata") or data.get(
+                        "metadata", {}
+                    )
+                    if not isinstance(download_metadata, dict):
+                        download_metadata = {}
+                    download_metadata = dict(download_metadata)
+                    settings = load_resolver_settings()
+                    if not base_directory:
+                        base_directory = get_default_root_for_category(category, settings)
+                    subfolder = resolve_download_subfolder(
+                        category,
+                        subfolder,
+                        path_metadata,
+                        settings,
+                    )
 
-                        if not url:
-                            return web.json_response(
-                                {"error": "URL is required"}, status=400
-                            )
-
-                        if not filename:
-                            # Extract filename from URL
-                            from urllib.parse import urlparse, unquote
-
-                            parsed = urlparse(url)
-                            filename = unquote(parsed.path.split("/")[-1])
-
-                        if not filename:
-                            return web.json_response(
-                                {"error": "Could not determine filename"}, status=400
-                            )
-
-                        # Build headers if needed
-                        headers = {}
-                        if "huggingface.co" in url:
-                            hf_token = data.get("hf_token", "")
-                            if hf_token:
-                                headers["Authorization"] = f"Bearer {hf_token}"
-                        elif "civitai.com" in url:
-                            civitai_key = data.get("civitai_key", "")
-                            if civitai_key and "token=" not in url:
-                                url += (
-                                    f"{'&' if '?' in url else '?'}token={civitai_key}"
-                                )
-
-                        def _first_metadata_value(*values):
-                            for value in values:
-                                if value is None:
-                                    continue
-                                if isinstance(value, str) and not value.strip():
-                                    continue
-                                return value
-                            return ""
-
-                        def _metadata_int(value):
-                            try:
-                                return int(value)
-                            except (TypeError, ValueError):
-                                return None
-
-                        inferred_source = ""
-                        if "civitai.com" in url:
-                            inferred_source = "civitai"
-                        elif "huggingface.co" in url:
-                            inferred_source = "huggingface"
-
-                        download_metadata.setdefault("filename", filename)
-                        download_metadata.setdefault("category", category)
-                        download_metadata.setdefault("download_url", url)
-                        download_metadata.setdefault("source_url", url)
-                        download_metadata.setdefault("path_metadata", path_metadata)
-                        download_metadata.setdefault(
-                            "source",
-                            _first_metadata_value(
-                                download_metadata.get("details_source"),
-                                path_metadata.get("source"),
-                                inferred_source,
-                            ),
+                    if not url:
+                        return web.json_response(
+                            {"error": "URL is required"}, status=400
                         )
 
-                        model_id = _metadata_int(
-                            _first_metadata_value(
-                                download_metadata.get("model_id"),
-                                download_metadata.get("modelId"),
-                                path_metadata.get("model_id"),
-                            )
+                    if not filename:
+                        # Extract filename from URL
+                        from urllib.parse import urlparse, unquote
+
+                        parsed = urlparse(url)
+                        filename = unquote(parsed.path.split("/")[-1])
+
+                    if not filename:
+                        return web.json_response(
+                            {"error": "Could not determine filename"}, status=400
                         )
-                        version_id = _metadata_int(
-                            _first_metadata_value(
-                                download_metadata.get("version_id"),
-                                download_metadata.get("versionId"),
-                                path_metadata.get("version_id"),
+
+                    # Build headers if needed
+                    headers = {}
+                    if "huggingface.co" in url:
+                        hf_token = data.get("hf_token", "")
+                        if hf_token:
+                            headers["Authorization"] = f"Bearer {hf_token}"
+                    elif "civitai.com" in url:
+                        civitai_key = data.get("civitai_key", "")
+                        if civitai_key and "token=" not in url:
+                            url += (
+                                f"{'&' if '?' in url else '?'}token={civitai_key}"
                             )
-                        )
-                        source_name = str(
-                            _first_metadata_value(
-                                download_metadata.get("details_source"),
-                                download_metadata.get("source"),
-                            )
-                        ).lower()
+
+                    def _first_metadata_value(*values):
+                        for value in values:
+                            if value is None:
+                                continue
+                            if isinstance(value, str) and not value.strip():
+                                continue
+                            return value
+                        return ""
+
+                    def _metadata_int(value):
                         try:
-                            if (
-                                source_name == "civitai"
-                                and model_id
-                                and not download_metadata.get("civitai_details")
-                            ):
-                                details = await asyncio.to_thread(
-                                    get_civitai_model_details,
-                                    model_id,
-                                    version_id,
-                                    data.get("civitai_key", ""),
-                                )
-                                if details:
-                                    download_metadata["civitai_details"] = details
-                            elif (
-                                source_name == "civarchive"
-                                and model_id
-                                and not download_metadata.get("civitai_details")
-                            ):
-                                details = await asyncio.to_thread(
-                                    get_civarchive_model_details,
-                                    model_id,
-                                    version_id,
-                                )
-                                if details:
-                                    download_metadata["civitai_details"] = details
-                        except Exception as metadata_error:
-                            self.logger.warning(
-                                f"Model metadata lookup failed: {metadata_error}"
-                            )
+                            return int(value)
+                        except (TypeError, ValueError):
+                            return None
 
+                    inferred_source = ""
+                    if "civitai.com" in url:
+                        inferred_source = "civitai"
+                    elif "huggingface.co" in url:
+                        inferred_source = "huggingface"
+
+                    download_metadata.setdefault("filename", filename)
+                    download_metadata.setdefault("category", category)
+                    download_metadata.setdefault("download_url", url)
+                    download_metadata.setdefault("source_url", url)
+                    download_metadata.setdefault("path_metadata", path_metadata)
+                    download_metadata.setdefault(
+                        "source",
+                        _first_metadata_value(
+                            download_metadata.get("details_source"),
+                            path_metadata.get("source"),
+                            inferred_source,
+                        ),
+                    )
+
+                    model_id = _metadata_int(
+                        _first_metadata_value(
+                            download_metadata.get("model_id"),
+                            download_metadata.get("modelId"),
+                            path_metadata.get("model_id"),
+                        )
+                    )
+                    version_id = _metadata_int(
+                        _first_metadata_value(
+                            download_metadata.get("version_id"),
+                            download_metadata.get("versionId"),
+                            path_metadata.get("version_id"),
+                        )
+                    )
+                    source_name = str(
+                        _first_metadata_value(
+                            download_metadata.get("details_source"),
+                            download_metadata.get("source"),
+                        )
+                    ).lower()
+                    try:
+                        if (
+                            source_name == "civitai"
+                            and model_id
+                            and not download_metadata.get("civitai_details")
+                        ):
+                            details = await asyncio.to_thread(
+                                get_civitai_model_details,
+                                model_id,
+                                version_id,
+                                data.get("civitai_key", ""),
+                            )
+                            if details:
+                                download_metadata["civitai_details"] = details
+                        elif (
+                            source_name == "civarchive"
+                            and model_id
+                            and not download_metadata.get("civitai_details")
+                        ):
+                            details = await asyncio.to_thread(
+                                get_civarchive_model_details,
+                                model_id,
+                                version_id,
+                            )
+                            if details:
+                                download_metadata["civitai_details"] = details
+                    except Exception as metadata_error:
+                        self.logger.warning(
+                            f"Model metadata lookup failed: {metadata_error}"
+                        )
+
+                    target_directory = ""
+                    target_path = ""
+                    try:
+                        import os as _download_os
+
+                        target_directory = (
+                            get_download_directory(category, base_directory) or ""
+                        )
+                        if target_directory and subfolder:
+                            target_directory = _download_os.path.join(
+                                target_directory, subfolder
+                            )
+                        if target_directory:
+                            target_path = _download_os.path.join(
+                                target_directory, filename
+                            )
+                    except Exception:
                         target_directory = ""
                         target_path = ""
-                        try:
-                            import os as _download_os
 
-                            target_directory = (
-                                get_download_directory(category, base_directory) or ""
-                            )
-                            if target_directory and subfolder:
-                                target_directory = _download_os.path.join(
-                                    target_directory, subfolder
-                                )
-                            if target_directory:
-                                target_path = _download_os.path.join(
-                                    target_directory, filename
-                                )
-                        except Exception:
-                            target_directory = ""
-                            target_path = ""
+                    # Start background download
+                    download_id = start_background_download(
+                        url=url,
+                        filename=filename,
+                        category=category,
+                        headers=headers if headers else None,
+                        subfolder=subfolder,
+                        base_directory=base_directory,
+                        metadata=download_metadata,
+                    )
 
-                        # Start background download
-                        download_id = start_background_download(
-                            url=url,
-                            filename=filename,
-                            category=category,
-                            headers=headers if headers else None,
-                            subfolder=subfolder,
-                            base_directory=base_directory,
-                            metadata=download_metadata,
-                        )
-
-                        return web.json_response(
-                            {
-                                "success": True,
-                                "download_id": download_id,
-                                "filename": filename,
-                                "category": category,
-                                "path": target_path,
-                                "directory": target_directory,
-                            }
-                        )
-
-                    except Exception as e:
-                        self.logger.error(
-                            f"Model Resolver download error: {e}", exc_info=True
-                        )
-                        return web.json_response(
-                            {"error": str(e), "success": False}, status=500
-                        )
+                    return web.json_response(
+                        {
+                            "success": True,
+                            "download_id": download_id,
+                            "filename": filename,
+                            "category": category,
+                            "path": target_path,
+                            "directory": target_directory,
+                        }
+                    )
 
                 @routes.get("/model_resolver/progress/{download_id}")
+                @json_api_endpoint("progress")
                 async def get_download_progress(request):
                     """Get progress for a specific download."""
-                    try:
-                        download_id = request.match_info["download_id"]
-                        progress = get_progress(download_id)
+                    download_id = request.match_info["download_id"]
+                    progress = get_progress(download_id)
 
-                        if progress:
-                            return web.json_response(progress)
-                        else:
-                            return web.json_response(
-                                {"error": "Download not found"}, status=404
-                            )
-                    except Exception as e:
-                        self.logger.error(
-                            f"Model Resolver progress error: {e}", exc_info=True
+                    if progress:
+                        return web.json_response(progress)
+                    else:
+                        return web.json_response(
+                            {"error": "Download not found"}, status=404
                         )
-                        return web.json_response({"error": str(e)}, status=500)
 
                 @routes.get("/model_resolver/progress")
+                @json_api_endpoint("progress")
                 async def get_all_downloads_progress(request):
                     """Get progress for all downloads."""
-                    try:
-                        progress = get_all_progress()
-                        return web.json_response(progress)
-                    except Exception as e:
-                        self.logger.error(
-                            f"Model Resolver progress error: {e}", exc_info=True
-                        )
-                        return web.json_response({"error": str(e)}, status=500)
+                    progress = get_all_progress()
+                    return web.json_response(progress)
 
                 @routes.post("/model_resolver/cancel/{download_id}")
+                @json_api_endpoint("cancel", return_success_on_error=True)
                 async def cancel_download_route(request):
                     """Cancel a download in progress."""
-                    try:
-                        download_id = request.match_info["download_id"]
-                        cancel_download(download_id)
-                        return web.json_response({"success": True})
-                    except Exception as e:
-                        self.logger.error(
-                            f"Model Resolver cancel error: {e}", exc_info=True
-                        )
-                        return web.json_response(
-                            {"error": str(e), "success": False}, status=500
-                        )
+                    download_id = request.match_info["download_id"]
+                    cancel_download(download_id)
+                    return web.json_response({"success": True})
 
                 @routes.get("/model_resolver/directories")
+                @json_api_endpoint("directories")
                 async def get_directories(request):
                     """Get available model directories."""
-                    try:
-                        import folder_paths
+                    import folder_paths
 
-                        preferred_categories = [
-                            "checkpoints",
-                            "loras",
-                            "vae",
-                            "controlnet",
-                            "clip",
-                            "clip_vision",
-                            "embeddings",
-                            "upscale_models",
-                            "diffusion_models",
-                            "text_encoders",
-                            "ipadapter",
-                            "sams",
-                            "ultralytics",
-                        ]
-                        skip_categories = {"custom_nodes", "configs"}
-                        categories = []
-                        for cat in [
-                            *preferred_categories,
-                            *folder_paths.folder_names_and_paths.keys(),
-                        ]:
-                            normalized_cat = normalize_download_category(cat)
-                            if (
-                                not normalized_cat
-                                or normalized_cat in skip_categories
-                                or normalized_cat in categories
-                            ):
-                                continue
-                            categories.append(normalized_cat)
+                    preferred_categories = [
+                        "checkpoints",
+                        "loras",
+                        "vae",
+                        "controlnet",
+                        "clip",
+                        "clip_vision",
+                        "embeddings",
+                        "upscale_models",
+                        "diffusion_models",
+                        "text_encoders",
+                        "ipadapter",
+                        "sams",
+                        "ultralytics",
+                    ]
+                    skip_categories = {"custom_nodes", "configs"}
+                    categories = []
+                    for cat in [
+                        *preferred_categories,
+                        *folder_paths.folder_names_and_paths.keys(),
+                    ]:
+                        normalized_cat = normalize_download_category(cat)
+                        if (
+                            not normalized_cat
+                            or normalized_cat in skip_categories
+                            or normalized_cat in categories
+                        ):
+                            continue
+                        categories.append(normalized_cat)
 
-                        directories = {}
-                        for cat in categories:
-                            path = get_download_directory(cat)
-                            if path:
-                                directories[cat] = path
+                    directories = {}
+                    for cat in categories:
+                        path = get_download_directory(cat)
+                        if path:
+                            directories[cat] = path
 
-                        return web.json_response(directories)
-                    except Exception as e:
-                        self.logger.error(
-                            f"Model Resolver directories error: {e}", exc_info=True
-                        )
-                        return web.json_response({"error": str(e)}, status=500)
+                    return web.json_response(directories)
 
                 @routes.get("/model_resolver/root-directories")
+                @json_api_endpoint("root directories")
                 async def get_root_directories(request):
                     """Get configured ComfyUI root directories for path settings."""
-                    try:
-                        import os
-                        import folder_paths
+                    import os
+                    import folder_paths
 
-                        categories = [
-                            "loras",
-                            "checkpoints",
-                            "diffusion_models",
-                            "embeddings",
-                            "text_encoders",
-                            "vae",
-                            "upscale_models",
-                        ]
-                        roots = {}
-                        settings = load_resolver_settings()
-                        comfy_root = get_comfy_root_path(folder_paths)
-                        for cat in categories:
-                            folder_key = normalize_download_category(cat)
-                            candidate_keys = [folder_key]
-                            if folder_key == "diffusion_models":
-                                candidate_keys.append("unet")
-                            elif folder_key == "text_encoders":
-                                candidate_keys.append("clip")
-                            paths = []
-                            for candidate_key in candidate_keys:
-                                paths.extend(folder_paths.get_folder_paths(candidate_key) or [])
-                            preferred_directory = (
-                                get_default_root_for_category(folder_key, settings)
-                                or get_download_directory(folder_key)
-                                or ""
-                            )
-                            normalized_paths = dedupe_local_base_directories(
-                                paths,
-                                preferred_directory=preferred_directory,
-                                comfy_root=comfy_root,
-                            )
-                            roots[folder_key] = normalized_paths
-
-                        return web.json_response(roots)
-                    except Exception as e:
-                        self.logger.error(
-                            f"Model Resolver root directories error: {e}", exc_info=True
-                        )
-                        return web.json_response({"error": str(e)}, status=500)
-
-                @routes.get("/model_resolver/path-template-suggestions")
-                async def get_path_template_suggestions(request):
-                    """Infer path template presets from existing local model folders."""
-                    try:
-                        from .core.sources.popular import get_base_models_config
-
-                        force_rescan = request.query.get("force") == "1"
-                        models = await asyncio.to_thread(get_model_files, force_rescan)
-                        base_models_config = get_base_models_config()
-                        suggestions = await asyncio.to_thread(
-                            infer_download_path_templates,
-                            models,
-                            base_models_config,
-                        )
-                        return web.json_response(suggestions)
-                    except Exception as e:
-                        self.logger.error(
-                            f"Model Resolver path template suggestions error: {e}",
-                            exc_info=True,
-                        )
-                        return web.json_response({"error": str(e)}, status=500)
-
-                @routes.get("/model_resolver/capabilities")
-                async def get_capabilities(request):
-                    """Get optional source capabilities available in this install."""
-                    try:
-                        return web.json_response(
-                            {
-                                "sources": {
-                                    "civarchive": is_civarchive_available(),
-                                    "lora_manager_archive": is_lora_manager_archive_available()
-                                }
-                            }
-                        )
-                    except Exception as e:
-                        self.logger.error(
-                            f"Model Resolver capabilities error: {e}", exc_info=True
-                        )
-                        return web.json_response({"error": str(e)}, status=500)
-
-                @routes.get("/model_resolver/subfolders/{category}")
-                async def get_subfolders(request):
-                    """Get known subfolders for a category using ComfyUI folder_paths."""
-                    try:
-                        import os
-                        import folder_paths
-
-                        raw_category = (request.match_info.get("category") or "").strip()
-                        category = normalize_download_category(raw_category)
-
-                        if not category or category == "unknown":
-                            return web.json_response([])
-
-                        known_categories = set(folder_paths.folder_names_and_paths.keys())
-                        folder_keys = [category]
-                        if category == "diffusion_models":
-                            folder_keys.append("unet")
-                        elif category == "text_encoders":
-                            folder_keys.append("clip")
-                        available_folder_keys = [
-                            folder_key for folder_key in folder_keys if folder_key in known_categories
-                        ]
-                        if not available_folder_keys:
-                            self.logger.debug(
-                                f"Model Resolver: skipping subfolder lookup for unknown category '{raw_category}' -> '{category}'"
-                            )
-                            return web.json_response([])
-
-                        subfolders = {}
-                        settings = load_resolver_settings()
-                        comfy_root = get_comfy_root_path(folder_paths)
+                    categories = [
+                        "loras",
+                        "checkpoints",
+                        "diffusion_models",
+                        "embeddings",
+                        "text_encoders",
+                        "vae",
+                        "upscale_models",
+                    ]
+                    roots = {}
+                    settings = load_resolver_settings()
+                    comfy_root = get_comfy_root_path(folder_paths)
+                    for cat in categories:
+                        folder_key = normalize_download_category(cat)
+                        candidate_keys = [folder_key]
+                        if folder_key == "diffusion_models":
+                            candidate_keys.append("unet")
+                        elif folder_key == "text_encoders":
+                            candidate_keys.append("clip")
+                        paths = []
+                        for candidate_key in candidate_keys:
+                            paths.extend(folder_paths.get_folder_paths(candidate_key) or [])
                         preferred_directory = (
-                            get_default_root_for_category(category, settings)
-                            or get_download_directory(category)
+                            get_default_root_for_category(folder_key, settings)
+                            or get_download_directory(folder_key)
                             or ""
                         )
-
-                        def add_subfolder(rel_path, base_dir=""):
-                            rel_path = os.path.normpath(str(rel_path or "")).replace(
-                                os.sep, "\\"
-                            )
-                            if not rel_path or rel_path == ".":
-                                return
-                            base_dir = os.path.abspath(base_dir) if base_dir else ""
-                            base_identity = (
-                                get_local_path_identity(base_dir) if base_dir else ""
-                            )
-                            key = (rel_path.lower(), base_identity)
-                            base_label = (
-                                os.path.basename(os.path.normpath(base_dir))
-                                if base_dir
-                                else ""
-                            )
-                            current = subfolders.get(key)
-                            if current and not prefer_local_base_directory(
-                                base_dir,
-                                current.get("base_directory", ""),
-                                preferred_directory,
-                                comfy_root,
-                            ):
-                                return
-                            subfolders[key] = {
-                                "value": rel_path,
-                                "label": rel_path,
-                                "base_label": base_label,
-                                "base_directory": base_dir,
-                            }
-
-                        raw_base_dirs = []
-                        for folder_key in available_folder_keys:
-                            for base_dir in folder_paths.get_folder_paths(folder_key) or []:
-                                if not base_dir or not os.path.isdir(base_dir):
-                                    continue
-                                raw_base_dirs.append(base_dir)
-                        base_dirs = dedupe_local_base_directories(
-                            raw_base_dirs,
+                        normalized_paths = dedupe_local_base_directories(
+                            paths,
                             preferred_directory=preferred_directory,
                             comfy_root=comfy_root,
                         )
+                        roots[folder_key] = normalized_paths
 
-                        def find_base_dir(full_path):
-                            if not full_path:
-                                return ""
-                            full_path_identity = get_local_path_identity(full_path)
-                            for base_dir in base_dirs:
-                                base_identity = get_local_path_identity(base_dir)
-                                try:
-                                    if (
-                                        os.path.commonpath(
-                                            [full_path_identity, base_identity]
-                                        )
-                                        == base_identity
-                                    ):
-                                        return base_dir
-                                except Exception:
-                                    continue
+                    return web.json_response(roots)
+
+                @routes.get("/model_resolver/path-template-suggestions")
+                @json_api_endpoint("path template suggestions")
+                async def get_path_template_suggestions(request):
+                    """Infer path template presets from existing local model folders."""
+                    from .core.sources.popular import get_base_models_config
+
+                    force_rescan = request.query.get("force") == "1"
+                    models = await asyncio.to_thread(get_model_files, force_rescan)
+                    base_models_config = get_base_models_config()
+                    suggestions = await asyncio.to_thread(
+                        infer_download_path_templates,
+                        models,
+                        base_models_config,
+                    )
+                    return web.json_response(suggestions)
+
+                @routes.get("/model_resolver/capabilities")
+                @json_api_endpoint("capabilities")
+                async def get_capabilities(request):
+                    """Get optional source capabilities available in this install."""
+                    return web.json_response(
+                        {
+                            "sources": {
+                                "civarchive": is_civarchive_available(),
+                                "lora_manager_archive": is_lora_manager_archive_available()
+                            }
+                        }
+                    )
+
+                @routes.get("/model_resolver/subfolders/{category}")
+                @json_api_endpoint("subfolders")
+                async def get_subfolders(request):
+                    """Get known subfolders for a category using ComfyUI folder_paths."""
+                    import os
+                    import folder_paths
+
+                    raw_category = (request.match_info.get("category") or "").strip()
+                    category = normalize_download_category(raw_category)
+
+                    if not category or category == "unknown":
+                        return web.json_response([])
+
+                    known_categories = set(folder_paths.folder_names_and_paths.keys())
+                    folder_keys = [category]
+                    if category == "diffusion_models":
+                        folder_keys.append("unet")
+                    elif category == "text_encoders":
+                        folder_keys.append("clip")
+                    available_folder_keys = [
+                        folder_key for folder_key in folder_keys if folder_key in known_categories
+                    ]
+                    if not available_folder_keys:
+                        self.logger.debug(
+                            f"Model Resolver: skipping subfolder lookup for unknown category '{raw_category}' -> '{category}'"
+                        )
+                        return web.json_response([])
+
+                    subfolders = {}
+                    settings = load_resolver_settings()
+                    comfy_root = get_comfy_root_path(folder_paths)
+                    preferred_directory = (
+                        get_default_root_for_category(category, settings)
+                        or get_download_directory(category)
+                        or ""
+                    )
+
+                    def add_subfolder(rel_path, base_dir=""):
+                        rel_path = os.path.normpath(str(rel_path or "")).replace(
+                            os.sep, "\\"
+                        )
+                        if not rel_path or rel_path == ".":
+                            return
+                        base_dir = os.path.abspath(base_dir) if base_dir else ""
+                        base_identity = (
+                            get_local_path_identity(base_dir) if base_dir else ""
+                        )
+                        key = (rel_path.lower(), base_identity)
+                        base_label = (
+                            os.path.basename(os.path.normpath(base_dir))
+                            if base_dir
+                            else ""
+                        )
+                        current = subfolders.get(key)
+                        if current and not prefer_local_base_directory(
+                            base_dir,
+                            current.get("base_directory", ""),
+                            preferred_directory,
+                            comfy_root,
+                        ):
+                            return
+                        subfolders[key] = {
+                            "value": rel_path,
+                            "label": rel_path,
+                            "base_label": base_label,
+                            "base_directory": base_dir,
+                        }
+
+                    raw_base_dirs = []
+                    for folder_key in available_folder_keys:
+                        for base_dir in folder_paths.get_folder_paths(folder_key) or []:
+                            if not base_dir or not os.path.isdir(base_dir):
+                                continue
+                            raw_base_dirs.append(base_dir)
+                    base_dirs = dedupe_local_base_directories(
+                        raw_base_dirs,
+                        preferred_directory=preferred_directory,
+                        comfy_root=comfy_root,
+                    )
+
+                    def find_base_dir(full_path):
+                        if not full_path:
                             return ""
-
-                        for folder_key in available_folder_keys:
-                            filenames = folder_paths.get_filename_list(folder_key) or []
-                            for rel_path in filenames:
-                                if not isinstance(rel_path, str):
-                                    continue
-                                base_dir = ""
-                                try:
-                                    base_dir = find_base_dir(
-                                        folder_paths.get_full_path(folder_key, rel_path)
-                                    )
-                                except Exception:
-                                    base_dir = ""
-                                parts = [p for p in rel_path.replace("/", "\\").split("\\") if p]
-                                if len(parts) <= 1:
-                                    continue
-                                current = ""
-                                for part in parts[:-1]:
-                                    current = f"{current}\\{part}" if current else part
-                                    add_subfolder(current, base_dir)
-
+                        full_path_identity = get_local_path_identity(full_path)
                         for base_dir in base_dirs:
-                            for root, dirs, _files in os.walk(base_dir):
-                                rel_root = os.path.relpath(root, base_dir)
-                                for dirname in dirs:
-                                    rel_path = (
-                                        dirname
-                                        if rel_root in ("", ".")
-                                        else os.path.join(rel_root, dirname)
+                            base_identity = get_local_path_identity(base_dir)
+                            try:
+                                if (
+                                    os.path.commonpath(
+                                        [full_path_identity, base_identity]
                                     )
-                                    add_subfolder(rel_path, base_dir)
+                                    == base_identity
+                                ):
+                                    return base_dir
+                            except Exception:
+                                continue
+                        return ""
 
-                        value_counts = {}
-                        for item in subfolders.values():
-                            value_key = item.get("value", "").lower()
-                            value_counts[value_key] = value_counts.get(value_key, 0) + 1
+                    for folder_key in available_folder_keys:
+                        filenames = folder_paths.get_filename_list(folder_key) or []
+                        for rel_path in filenames:
+                            if not isinstance(rel_path, str):
+                                continue
+                            base_dir = ""
+                            try:
+                                base_dir = find_base_dir(
+                                    folder_paths.get_full_path(folder_key, rel_path)
+                                )
+                            except Exception:
+                                base_dir = ""
+                            parts = [p for p in rel_path.replace("/", "\\").split("\\") if p]
+                            if len(parts) <= 1:
+                                continue
+                            current = ""
+                            for part in parts[:-1]:
+                                current = f"{current}\\{part}" if current else part
+                                add_subfolder(current, base_dir)
 
-                        response_items = []
-                        for item in subfolders.values():
-                            value = item.get("value", "")
-                            base_label = item.get("base_label", "")
-                            label = (
-                                f"{value} ({base_label})"
-                                if base_label and value_counts.get(value.lower(), 0) > 1
-                                else value
-                            )
-                            response_items.append(
-                                {
-                                    "value": value,
-                                    "label": label,
-                                    "base_directory": item.get("base_directory", ""),
-                                }
-                            )
+                    for base_dir in base_dirs:
+                        for root, dirs, _files in os.walk(base_dir):
+                            rel_root = os.path.relpath(root, base_dir)
+                            for dirname in dirs:
+                                rel_path = (
+                                    dirname
+                                    if rel_root in ("", ".")
+                                    else os.path.join(rel_root, dirname)
+                                )
+                                add_subfolder(rel_path, base_dir)
 
-                        return web.json_response(
-                            sorted(
-                                response_items,
-                                key=lambda item: (
-                                    item.get("value", "").lower(),
-                                    item.get("base_directory", "").lower(),
-                                ),
-                            )
+                    value_counts = {}
+                    for item in subfolders.values():
+                        value_key = item.get("value", "").lower()
+                        value_counts[value_key] = value_counts.get(value_key, 0) + 1
+
+                    response_items = []
+                    for item in subfolders.values():
+                        value = item.get("value", "")
+                        base_label = item.get("base_label", "")
+                        label = (
+                            f"{value} ({base_label})"
+                            if base_label and value_counts.get(value.lower(), 0) > 1
+                            else value
                         )
-                    except Exception as e:
-                        self.logger.error(
-                            f"Model Resolver subfolders error: {e}", exc_info=True
+                        response_items.append(
+                            {
+                                "value": value,
+                                "label": label,
+                                "base_directory": item.get("base_directory", ""),
+                            }
                         )
-                        return web.json_response({"error": str(e)}, status=500)
+
+                    return web.json_response(
+                        sorted(
+                            response_items,
+                            key=lambda item: (
+                                item.get("value", "").lower(),
+                                item.get("base_directory", "").lower(),
+                            ),
+                        )
+                    )
 
             # ==================== SETTINGS (server-side persistence) ====================
 
@@ -2922,28 +2819,22 @@ class ModelResolverExtension:
             _apply_backend_logging_settings(load_resolver_settings())
 
             @routes.get("/model_resolver/settings")
+            @json_api_endpoint("settings GET")
             async def get_settings_route(request):
                 """Return persisted settings (API keys, preferences)."""
-                try:
-                    data = await asyncio.to_thread(load_resolver_settings)
-                    return web.json_response(data)
-                except Exception as e:
-                    self.logger.error(f"Model Resolver settings GET error: {e}", exc_info=True)
-                    return web.json_response({"error": str(e)}, status=500)
+                data = await asyncio.to_thread(load_resolver_settings)
+                return web.json_response(data)
 
             @routes.post("/model_resolver/settings")
+            @json_api_endpoint("settings POST")
             async def save_settings_route(request):
                 """Persist settings (API keys, preferences) to disk."""
-                try:
-                    payload = await request.json()
-                    if not isinstance(payload, dict):
-                        return web.json_response({"error": "Expected JSON object"}, status=400)
-                    settings = await asyncio.to_thread(save_resolver_settings, payload)
-                    _apply_backend_logging_settings(settings)
-                    return web.json_response({"success": True})
-                except Exception as e:
-                    self.logger.error(f"Model Resolver settings POST error: {e}", exc_info=True)
-                    return web.json_response({"error": str(e)}, status=500)
+                payload = await request.json()
+                if not isinstance(payload, dict):
+                    return web.json_response({"error": "Expected JSON object"}, status=400)
+                settings = await asyncio.to_thread(save_resolver_settings, payload)
+                _apply_backend_logging_settings(settings)
+                return web.json_response({"success": True})
 
             self.routes_setup = True
             self.logger.info("Model Resolver: API routes registered successfully")

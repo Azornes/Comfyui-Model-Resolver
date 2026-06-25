@@ -13,8 +13,8 @@ from typing import Dict, Any, Optional, List, Callable
 from urllib.parse import urlparse, parse_qs, quote
 
 from ..matcher import (
-    calculate_similarity_with_normalization,
-    normalize_filename,
+    calculate_filename_confidence,
+    calculate_model_title_confidence,
     normalize_base_model as _normalize_base_model,
     base_model_matches as _base_model_matches,
     base_model_score as _base_model_score,
@@ -38,18 +38,7 @@ DEFAULT_CIVITAI_CANDIDATE_LIMIT = 5
 MAX_CIVITAI_CANDIDATE_LIMIT = 20
 MODEL_TITLE_MATCH_THRESHOLD = 82.0
 
-MODEL_FILE_EXTENSIONS = {
-    ".ckpt",
-    ".pt",
-    ".pt2",
-    ".bin",
-    ".pth",
-    ".safetensors",
-    ".pkl",
-    ".sft",
-    ".onnx",
-    ".gguf",
-}
+
 
 CIVITAI_TYPE_MAP = {
     "checkpoint": "Checkpoint",
@@ -286,64 +275,7 @@ def _build_civitai_result_from_version(
     }
 
 
-def _calculate_filename_confidence(target_filename: str, candidate_filename: str) -> float:
-    """Calculate filename confidence using the same normalized approach as local matching."""
-    target_norm = normalize_filename(target_filename)
-    candidate_norm = normalize_filename(candidate_filename)
 
-    if target_norm == candidate_norm:
-        return 100.0
-
-    similarity = calculate_similarity_with_normalization(
-        target_filename, candidate_filename
-    )
-    similarity_no_ext = calculate_similarity_with_normalization(
-        os.path.splitext(target_filename)[0], os.path.splitext(candidate_filename)[0]
-    )
-    return round(max(similarity, similarity_no_ext) * 100, 1)
-
-
-def _strip_known_model_extension(filename: str) -> str:
-    """Strip only known model extensions, preserving names like v4.0."""
-    if not isinstance(filename, str):
-        return ""
-
-    lowered = filename.lower()
-    for ext in MODEL_FILE_EXTENSIONS:
-        if lowered.endswith(ext):
-            return filename[: -len(ext)]
-    return filename
-
-
-def _has_known_model_extension(filename: str) -> bool:
-    return _strip_known_model_extension(filename) != filename
-
-
-def _normalize_model_title(value: str) -> str:
-    value = _strip_known_model_extension(str(value or "")).lower()
-    value = re.sub(r"[^a-z0-9]+", " ", value)
-    return re.sub(r"\s+", " ", value).strip()
-
-
-def _calculate_model_title_confidence(query: str, model_name: str) -> float:
-    query_norm = _normalize_model_title(query)
-    model_norm = _normalize_model_title(model_name)
-    if not query_norm or not model_norm:
-        return 0.0
-
-    if query_norm == model_norm:
-        return 100.0
-
-    return round(
-        max(
-            calculate_similarity_with_normalization(query_norm, model_norm),
-            calculate_similarity_with_normalization(
-                query_norm.replace(" ", ""), model_norm.replace(" ", "")
-            ),
-        )
-        * 100,
-        1,
-    )
 
 
 def _version_sort_key(version: Dict[str, Any]) -> tuple:
@@ -389,7 +321,7 @@ def _find_model_title_match_in_model(
 ) -> Optional[Dict[str, Any]]:
     """For extensionless workflow values, resolve by CivitAI model page title."""
     model_name = model_data.get("name", "")
-    title_confidence = _calculate_model_title_confidence(title_query, model_name)
+    title_confidence = calculate_model_title_confidence(title_query, model_name)
     if title_confidence < MODEL_TITLE_MATCH_THRESHOLD:
         log_debug(
             f"CivitAI title candidate rejected: model_id={model_id}, query={title_query}, model_name={model_name}, confidence={title_confidence}"
@@ -483,7 +415,7 @@ def _find_matching_file_in_versions(
                 }
 
             if not exact_only:
-                confidence = _calculate_filename_confidence(filename, file_name)
+                confidence = calculate_filename_confidence(filename, file_name)
                 if confidence > best_confidence:
                     best_confidence = confidence
                     best_match = {
@@ -722,7 +654,7 @@ def _find_civitai_file_in_model(
             "base_model": resolved.get("base_model"),
             "tags": resolved.get("tags", []),
             "match_type": "exact",
-            "confidence": _calculate_filename_confidence(
+            "confidence": calculate_filename_confidence(
                 filename, expected_filename
             ),
             "sha256": sha256,
@@ -802,7 +734,7 @@ def _find_civitai_file_in_model(
 
             if not exact_only:
                 expected_filename = resolved.get("expected_filename", "")
-                confidence = _calculate_filename_confidence(filename, expected_filename)
+                confidence = calculate_filename_confidence(filename, expected_filename)
                 ranking_score = confidence + _base_model_score(
                     resolved.get("base_model"), base_model_context
                 )
@@ -844,7 +776,7 @@ def _find_civitai_file_in_model(
         )
         result["confidence"] = match.get(
             "confidence",
-            _calculate_filename_confidence(filename, result.get("filename", "")),
+            calculate_filename_confidence(filename, result.get("filename", "")),
         )
         if match["match_type"] == "similar":
             log_info(

@@ -12,8 +12,7 @@ import time
 from typing import Any, Callable, Dict, List, Optional
 
 from ..matcher import (
-    calculate_similarity_with_normalization,
-    normalize_filename,
+    calculate_archived_model_confidence,
     normalize_base_model as _normalize_base_model,
     base_model_matches as _base_model_matches,
     base_model_score as _base_model_score,
@@ -148,33 +147,7 @@ def _normalize_model_type(model_type: Optional[str]) -> str:
     return type_map.get(value, value)
 
 
-def _calculate_confidence(
-    query: str, model_name: str, version_name: str = "", filename: str = ""
-) -> float:
-    candidates = [value for value in [model_name, version_name, filename] if value]
-    if not candidates:
-        return 0.0
 
-    query_norm = normalize_filename(query)
-    best = 0.0
-
-    for candidate in candidates:
-        candidate_norm = normalize_filename(candidate)
-        if query_norm == candidate_norm:
-            return 100.0
-
-        similarity = calculate_similarity_with_normalization(query, candidate)
-        similarity_no_ext = calculate_similarity_with_normalization(
-            os.path.splitext(query)[0], os.path.splitext(candidate)[0]
-        )
-        candidate_score = max(similarity, similarity_no_ext)
-
-        if query_norm in candidate_norm or candidate_norm in query_norm:
-            candidate_score = max(candidate_score, 0.85)
-
-        best = max(best, candidate_score)
-
-    return round(best * 100, 1)
 
 
 
@@ -501,7 +474,7 @@ def _build_result_from_row(
     elif not isinstance(trained_words, list):
         trained_words = []
 
-    confidence = _calculate_confidence(
+    confidence = calculate_archived_model_confidence(
         query,
         row["model_name"] or "",
         row["version_name"] or "",
@@ -635,7 +608,7 @@ def search_lora_manager_archive(
                 candidate_index=row_index,
                 candidate_count=row_count,
             )
-            confidence = _calculate_confidence(
+            confidence = calculate_archived_model_confidence(
                 normalized_query,
                 row["model_name"] or "",
                 row["version_name"] or "",
@@ -789,7 +762,7 @@ def search_lora_manager_archive_for_file(
             candidate_count=total_candidates,
         )
         candidate_filename = candidate.get("filename", "")
-        confidence = _calculate_confidence(filename, candidate.get("name", ""), candidate.get("version_name", ""), candidate_filename)
+        confidence = calculate_archived_model_confidence(filename, candidate.get("name", ""), candidate.get("version_name", ""), candidate_filename)
         if exact_only and confidence < 100.0:
             continue
         base_model_matches = _base_model_matches(

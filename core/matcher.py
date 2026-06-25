@@ -195,30 +195,11 @@ def find_matches(
             candidate["_match_filename_norm"] = candidate_norm
 
         if target_norm == candidate_norm:
-            # Exact match after normalization = 100% confidence
             similarity = 1.0
+            confidence = 100.0
         else:
-            # Calculate similarity using the configured fuzzy matcher
-            # This gives a ratio between 0.0 and 1.0 based on longest common subsequence
-            similarity = calculate_similarity_with_normalization(
-                target_filename, candidate_filename
-            )
-
-            # Also try comparing without extensions for better matching
-            candidate_base = os.path.splitext(candidate_filename)[0]
-            similarity_no_ext = calculate_similarity_with_normalization(
-                target_base, candidate_base
-            )
-
-            # Use the higher of the two similarity scores
-            # But ensure we never get 1.0 unless it's an exact normalized match
-            similarity = max(similarity, similarity_no_ext)
-
-            # Cap similarity at 0.999 for non-exact matches to prevent false 100% scores
-            # Fuzzy matchers can sometimes give 1.0 for very similar but not identical strings
-            # due to normalization artifacts
-            if similarity >= 0.999 and target_norm != candidate_norm:
-                similarity = 0.999
+            confidence = calculate_filename_confidence(target_filename, candidate_filename)
+            similarity = confidence / 100.0
 
         # Only include if above threshold
         if similarity >= threshold:
@@ -226,7 +207,7 @@ def find_matches(
                 "model": candidate,
                 "filename": candidate_filename,
                 "similarity": similarity,
-                "confidence": round(similarity * 100, 1),  # Convert to percentage
+                "confidence": confidence,
             }
             if max_results <= 0:
                 return []
@@ -298,4 +279,122 @@ def base_model_score(candidate: str, preferred: Optional[str]) -> float:
     if not preferred:
         return 0.0
     return 1000.0 if base_model_matches(candidate, preferred) else -1000.0
+
+
+# ==================== CENTRALIZED MATCHING & CONFIDENCE HELPERS ====================
+
+MODEL_FILE_EXTENSIONS = {
+    ".ckpt",
+    ".pt",
+    ".pt2",
+    ".bin",
+    ".pth",
+    ".safetensors",
+    ".pkl",
+    ".sft",
+    ".onnx",
+    ".gguf",
+}
+
+
+def strip_known_model_extension(filename: str) -> str:
+    """Strip only known model extensions, preserving names like v4.0."""
+    if not isinstance(filename, str):
+        return ""
+
+    lowered = filename.lower()
+    for ext in MODEL_FILE_EXTENSIONS:
+        if lowered.endswith(ext):
+            return filename[: -len(ext)]
+    return filename
+
+
+def has_known_model_extension(filename: str) -> bool:
+    """Check if a filename ends with a known model extension."""
+    return strip_known_model_extension(filename) != filename
+
+
+def normalize_model_title(value: str) -> str:
+    """Normalize model title for comparison."""
+    value = strip_known_model_extension(str(value or "")).lower()
+    value = re.sub(r"[^a-z0-9]+", " ", value)
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def calculate_model_title_confidence(query: str, model_name: str) -> float:
+    """Calculate confidence score (0.0 to 100.0) for a model title matching a query."""
+    query_norm = normalize_model_title(query)
+    model_norm = normalize_model_title(model_name)
+    if not query_norm or not model_norm:
+        return 0.0
+
+    if query_norm == model_norm:
+        return 100.0
+
+    return round(
+        max(
+            calculate_similarity_with_normalization(query_norm, model_norm),
+            calculate_similarity_with_normalization(
+                query_norm.replace(" ", ""), model_norm.replace(" ", "")
+            ),
+        )
+        * 100,
+        1,
+    )
+
+
+def calculate_filename_confidence(target_filename: str, candidate_filename: str) -> float:
+    """Calculate similarity confidence percentage (0.0 to 100.0) between two filenames."""
+    target_norm = normalize_filename(target_filename)
+    candidate_norm = normalize_filename(candidate_filename)
+
+    if target_norm == candidate_norm:
+        return 100.0
+
+    similarity = calculate_similarity_with_normalization(
+        target_filename, candidate_filename
+    )
+    similarity_no_ext = calculate_similarity_with_normalization(
+        os.path.splitext(target_filename)[0], os.path.splitext(candidate_filename)[0]
+    )
+    best_similarity = max(similarity, similarity_no_ext)
+    
+    # Cap similarity at 0.999 for non-exact matches to prevent false 100% scores
+    if best_similarity >= 0.999:
+        best_similarity = 0.999
+        
+    return round(best_similarity * 100, 1)
+
+
+def calculate_archived_model_confidence(
+    query: str,
+    model_name: str = "",
+    version_name: str = "",
+    filename: str = "",
+) -> float:
+    """Calculate confidence score (0.0 to 100.0) for a model in an archive matching a query."""
+    candidates = [value for value in [filename, model_name, version_name] if value]
+    if not candidates:
+        return 0.0
+
+    query_norm = normalize_filename(query)
+    best = 0.0
+    for candidate in candidates:
+        candidate_norm = normalize_filename(candidate)
+        if query_norm == candidate_norm:
+            return 100.0
+
+        similarity = calculate_similarity_with_normalization(query, candidate)
+        similarity_no_ext = calculate_similarity_with_normalization(
+            os.path.splitext(query)[0],
+            os.path.splitext(candidate)[0],
+        )
+        score = max(similarity, similarity_no_ext)
+        if query_norm and candidate_norm and (
+            query_norm in candidate_norm or candidate_norm in query_norm
+        ):
+            score = max(score, 0.85)
+        best = max(best, score)
+
+    return round(best * 100, 1)
 

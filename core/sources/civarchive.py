@@ -15,8 +15,8 @@ from urllib.parse import parse_qs, urljoin, urlparse
 import requests
 
 from ..matcher import (
-    calculate_similarity_with_normalization,
-    normalize_filename,
+    calculate_archived_model_confidence,
+    calculate_model_title_confidence,
     normalize_base_model as _normalize_base_model,
     base_model_matches as _base_model_matches,
     base_model_score as _base_model_score,
@@ -40,18 +40,7 @@ DEFAULT_CIVARCHIVE_CANDIDATE_LIMIT = 10
 MAX_CIVARCHIVE_CANDIDATE_LIMIT = 30
 MODEL_TITLE_MATCH_THRESHOLD = 82.0
 
-MODEL_FILE_EXTENSIONS = {
-    ".ckpt",
-    ".pt",
-    ".pt2",
-    ".bin",
-    ".pth",
-    ".safetensors",
-    ".pkl",
-    ".sft",
-    ".onnx",
-    ".gguf",
-}
+
 
 _search_cache: Dict[str, Any] = {}
 
@@ -925,79 +914,7 @@ def get_civarchive_model_details(
     }
 
 
-def _calculate_confidence(
-    query: str,
-    model_name: str = "",
-    version_name: str = "",
-    filename: str = "",
-) -> float:
-    candidates = [value for value in [filename, model_name, version_name] if value]
-    if not candidates:
-        return 0.0
 
-    query_norm = normalize_filename(query)
-    best = 0.0
-    for candidate in candidates:
-        candidate_norm = normalize_filename(candidate)
-        if query_norm == candidate_norm:
-            return 100.0
-
-        similarity = calculate_similarity_with_normalization(query, candidate)
-        similarity_no_ext = calculate_similarity_with_normalization(
-            os.path.splitext(query)[0],
-            os.path.splitext(candidate)[0],
-        )
-        score = max(similarity, similarity_no_ext)
-        if query_norm and candidate_norm and (
-            query_norm in candidate_norm or candidate_norm in query_norm
-        ):
-            score = max(score, 0.85)
-        best = max(best, score)
-
-    return round(best * 100, 1)
-
-
-def _strip_known_model_extension(filename: str) -> str:
-    """Strip only known model extensions, preserving names like v4.0."""
-    if not isinstance(filename, str):
-        return ""
-
-    lowered = filename.lower()
-    for ext in MODEL_FILE_EXTENSIONS:
-        if lowered.endswith(ext):
-            return filename[: -len(ext)]
-    return filename
-
-
-def _has_known_model_extension(filename: str) -> bool:
-    return _strip_known_model_extension(filename) != filename
-
-
-def _normalize_model_title(value: str) -> str:
-    value = _strip_known_model_extension(str(value or "")).lower()
-    value = re.sub(r"[^a-z0-9]+", " ", value)
-    return re.sub(r"\s+", " ", value).strip()
-
-
-def _calculate_model_title_confidence(query: str, model_name: str) -> float:
-    query_norm = _normalize_model_title(query)
-    model_norm = _normalize_model_title(model_name)
-    if not query_norm or not model_norm:
-        return 0.0
-
-    if query_norm == model_norm:
-        return 100.0
-
-    return round(
-        max(
-            calculate_similarity_with_normalization(query_norm, model_norm),
-            calculate_similarity_with_normalization(
-                query_norm.replace(" ", ""), model_norm.replace(" ", "")
-            ),
-        )
-        * 100,
-        1,
-    )
 
 
 def _version_sort_key(version: Dict[str, Any]) -> tuple:
@@ -1147,7 +1064,7 @@ def _find_model_title_match_in_model_details(
 ) -> Optional[Dict[str, Any]]:
     """For extensionless workflow values, resolve by CivArchive model page title."""
     model_name = model_details.get("name", "")
-    title_confidence = _calculate_model_title_confidence(title_query, model_name)
+    title_confidence = calculate_model_title_confidence(title_query, model_name)
     if title_confidence < MODEL_TITLE_MATCH_THRESHOLD:
         log_debug(
             f"CivArchive title candidate rejected: model_id={model_id}, query={title_query}, model_name={model_name}, confidence={title_confidence}"
@@ -1245,7 +1162,7 @@ def _build_result_from_payload(
 
     for file_info in files:
         file_name = file_info.get("name") or ""
-        confidence = _calculate_confidence(
+        confidence = calculate_archived_model_confidence(
             query_value,
             context.get("name", ""),
             version.get("name", ""),
@@ -1257,7 +1174,7 @@ def _build_result_from_payload(
 
     if selected_file is None:
         selected_file = _select_primary_file(files)
-        best_confidence = _calculate_confidence(
+        best_confidence = calculate_archived_model_confidence(
             query_value,
             context.get("name", ""),
             version.get("name", ""),
@@ -1434,7 +1351,7 @@ def _resolve_search_candidate(
         result = None
 
     if result and not result.get("confidence"):
-        result["confidence"] = _calculate_confidence(
+        result["confidence"] = calculate_archived_model_confidence(
             query,
             candidate.get("name", ""),
             "",
@@ -1624,13 +1541,13 @@ def search_civarchive_for_file(
                     confidence = float(
                         resolved.get("title_confidence")
                         or resolved.get("confidence")
-                        or _calculate_model_title_confidence(
+                        or calculate_model_title_confidence(
                             normalized_filename,
                             resolved.get("name", ""),
                         )
                     )
                 else:
-                    confidence = _calculate_confidence(
+                    confidence = calculate_archived_model_confidence(
                         normalized_filename,
                         resolved.get("name", ""),
                         resolved.get("version_name", ""),
