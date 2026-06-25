@@ -1614,345 +1614,344 @@ class ModelResolverExtension:
 
                             return source_progress_callback
 
-                        def search_local_sources():
-                            source_results = {"popular": None, "model_list": None}
-                            source_found = False
-
+                        def run_source_search(
+                            source_key,
+                            search_task_fn,
+                            initial_stage="query",
+                            initial_message=None,
+                            initial_percent=30,
+                            log_start_fields=None,
+                            error_handlers=None,
+                        ):
+                            if initial_message is None:
+                                initial_message = f"Querying {source_key.capitalize()}"
                             update_search_progress(
                                 progress_id,
-                                "local",
-                                "popular",
-                                "Checking popular models",
-                                28,
+                                source_key,
+                                initial_stage,
+                                initial_message,
+                                initial_percent,
                             )
+                            start_fields = log_start_fields or {"file": filename}
                             log_info(
-                                "Search [local] start "
-                                + format_log_fields(file=filename, cat=category)
+                                f"Search [{source_key}] start "
+                                + format_log_fields(**start_fields)
                             )
-                            popular_info = get_popular_model_url(filename)
-                            log_search_result("popular", popular_info)
-                            update_search_progress(
-                                progress_id,
-                                "local",
-                                "model_list",
-                                "Checking local model database",
-                                58,
-                            )
-                            model_list_result = search_model_list(filename)
-                            log_search_result(
-                                "model_list",
-                                model_list_result,
-                                {
-                                    "confidence": model_list_result.get("confidence")
-                                    if model_list_result
-                                    else None
-                                },
-                            )
-                            if popular_info:
-                                popular_result = {
-                                    "source": "popular",
-                                    "filename": filename,
-                                    **popular_info,
+                            try:
+                                source_results, source_found = search_task_fn()
+                                done_messages = {
+                                    "local": "Local database checked",
+                                    "huggingface": "HuggingFace checked",
+                                    "civitai": "CivitAI checked",
+                                    "civarchive": "CivArchive checked",
+                                    "lora_manager_archive": "LoRA Manager archive checked",
                                 }
-                                if (
-                                    model_list_result
-                                    and model_list_result.get("filename", "").lower()
-                                    == filename.lower()
-                                    and model_list_result.get("size")
-                                ):
-                                    popular_result["size"] = model_list_result.get(
-                                        "size"
-                                    )
-                                source_results["popular"] = popular_result
-                                source_found = True
+                                done_msg = done_messages.get(source_key, f"{source_key} checked")
+                                update_search_progress(
+                                    progress_id,
+                                    source_key,
+                                    "done",
+                                    done_msg,
+                                    92,
+                                )
+                                return source_results, source_found
+                            except Exception as e:
+                                if error_handlers:
+                                    for exc_type, handler_fn in error_handlers.items():
+                                        if isinstance(e, exc_type):
+                                            return handler_fn(e)
+                                raise e
 
-                            if model_list_result:
-                                confidence = model_list_result.get("confidence", 0)
-                                if is_urn and confidence >= 70:
-                                    source_results["model_list"] = model_list_result
-                                    source_found = True
-                                elif not is_urn:
-                                    source_results["model_list"] = model_list_result
-                                    source_found = True
-
-                            update_search_progress(
-                                progress_id,
-                                "local",
-                                "done",
-                                "Local database checked",
-                                92,
+                        def execute_search_with_fallback(
+                            source_key,
+                            search_fn,
+                            any_model_label,
+                        ):
+                            res = search_fn(
+                                base_model_context or None,
+                                make_source_progress_callback(source_key),
                             )
-                            return source_results, source_found
+                            log_search_result(source_key, res)
+
+                            if not res and base_model_context:
+                                update_search_progress(
+                                    progress_id,
+                                    source_key,
+                                    "any_model",
+                                    f"Retrying {any_model_label} any model",
+                                    72,
+                                )
+                                log_info(
+                                    f"Search [{source_key}] retry any model "
+                                    + format_log_fields(
+                                        file=filename,
+                                        cat=category,
+                                        base=base_model_context,
+                                    )
+                                )
+                                res = search_fn(
+                                    None,
+                                    make_source_progress_callback(source_key, 72, 92),
+                                )
+                                log_search_result(f"{source_key}/any_model", res)
+                                if res:
+                                    res = mark_any_model_fallback(res)
+                            return res
+
+                        def search_local_sources():
+                            def task():
+                                source_results = {"popular": None, "model_list": None}
+                                source_found = False
+
+                                popular_info = get_popular_model_url(filename)
+                                log_search_result("popular", popular_info)
+                                update_search_progress(
+                                    progress_id,
+                                    "local",
+                                    "model_list",
+                                    "Checking local model database",
+                                    58,
+                                )
+                                model_list_result = search_model_list(filename)
+                                log_search_result(
+                                    "model_list",
+                                    model_list_result,
+                                    {
+                                        "confidence": model_list_result.get("confidence")
+                                        if model_list_result
+                                        else None
+                                    },
+                                )
+                                if popular_info:
+                                    popular_result = {
+                                        "source": "popular",
+                                        "filename": filename,
+                                        **popular_info,
+                                    }
+                                    if (
+                                        model_list_result
+                                        and model_list_result.get("filename", "").lower()
+                                        == filename.lower()
+                                        and model_list_result.get("size")
+                                    ):
+                                        popular_result["size"] = model_list_result.get(
+                                            "size"
+                                        )
+                                    source_results["popular"] = popular_result
+                                    source_found = True
+
+                                if model_list_result:
+                                    confidence = model_list_result.get("confidence", 0)
+                                    if is_urn and confidence >= 70:
+                                        source_results["model_list"] = model_list_result
+                                        source_found = True
+                                    elif not is_urn:
+                                        source_results["model_list"] = model_list_result
+                                        source_found = True
+
+                                return source_results, source_found
+
+                            return run_source_search(
+                                "local",
+                                task,
+                                initial_stage="popular",
+                                initial_message="Checking popular models",
+                                initial_percent=28,
+                                log_start_fields={"file": filename, "cat": category},
+                            )
 
                         def search_huggingface_source_task():
-                            update_search_progress(
-                                progress_id,
+                            def task():
+                                hf_result = search_huggingface_for_file(
+                                    filename,
+                                    token=hf_token or None,
+                                    brave_api_key=brave_search_api_key or None,
+                                    use_api_search=hf_use_api_search,
+                                    use_comfy_org_fallback=hf_use_comfy_org_fallback,
+                                    use_brave_fallback=hf_use_brave_fallback,
+                                    force_refresh=force_search,
+                                    progress_callback=make_source_progress_callback(
+                                        "huggingface"
+                                    ),
+                                )
+                                log_search_result("huggingface", hf_result)
+                                return {"huggingface": hf_result}, bool(hf_result)
+
+                            return run_source_search(
                                 "huggingface",
-                                "query",
-                                "Querying HuggingFace",
-                                32,
+                                task,
+                                initial_stage="query",
+                                initial_message="Querying HuggingFace",
+                                initial_percent=32,
+                                log_start_fields={"file": filename},
                             )
-                            log_info(
-                                "Search [huggingface] start "
-                                + format_log_fields(file=filename)
-                            )
-                            hf_result = search_huggingface_for_file(
-                                filename,
-                                token=hf_token or None,
-                                brave_api_key=brave_search_api_key or None,
-                                use_api_search=hf_use_api_search,
-                                use_comfy_org_fallback=hf_use_comfy_org_fallback,
-                                use_brave_fallback=hf_use_brave_fallback,
-                                force_refresh=force_search,
-                                progress_callback=make_source_progress_callback(
-                                    "huggingface"
-                                ),
-                            )
-                            update_search_progress(
-                                progress_id,
-                                "huggingface",
-                                "done",
-                                "HuggingFace checked",
-                                92,
-                            )
-                            log_search_result("huggingface", hf_result)
-                            return {"huggingface": hf_result}, bool(hf_result)
 
                         def search_civitai_source_task():
-                            source_results = {"civitai": None}
-                            source_found = False
+                            def task():
+                                source_results = {"civitai": None}
+                                source_found = False
 
-                            update_search_progress(
-                                progress_id,
-                                "civitai",
-                                "query",
-                                "Querying CivitAI",
-                                30,
-                            )
-                            log_info(
-                                "Search [civitai] start "
-                                + format_log_fields(
-                                    file=filename,
-                                    cat=category,
-                                    urn=is_urn,
-                                )
-                            )
-                            # For URNs, use direct model_id/version_id to get download URL
-                            if is_urn:
-                                # Get model_id and version_id from request data
-                                model_id = data.get("model_id")
-                                version_id = data.get("version_id")
+                                if is_urn:
+                                    model_id_val = data.get("model_id")
+                                    version_id_val = data.get("version_id")
 
-                                if model_id and version_id:
-                                    update_search_progress(
-                                        progress_id,
-                                        "civitai",
-                                        "urn",
-                                        "Resolving CivitAI URN",
-                                        46,
-                                    )
-                                    # Use resolve_urn to get model info (cached)
-                                    model_info = resolve_urn(model_id, version_id)
-                                    if model_info:
+                                    if model_id_val and version_id_val:
                                         update_search_progress(
                                             progress_id,
                                             "civitai",
-                                            "file",
-                                            "Selecting CivitAI file",
-                                            76,
+                                            "urn",
+                                            "Resolving CivitAI URN",
+                                            46,
                                         )
-                                        primary_file = None
-                                        for file_info in model_info.get("files", []):
-                                            if (
-                                                file_info.get("name")
-                                                == model_info.get("expected_filename")
-                                            ):
-                                                primary_file = file_info
-                                                break
-                                        if primary_file is None:
-                                            primary_file = (
-                                                model_info.get("files") or [{}]
-                                            )[0]
+                                        model_info = resolve_urn(model_id_val, version_id_val)
+                                        if model_info:
+                                            update_search_progress(
+                                                progress_id,
+                                                "civitai",
+                                                "file",
+                                                "Selecting CivitAI file",
+                                                76,
+                                            )
+                                            primary_file = None
+                                            for file_info in model_info.get("files", []):
+                                                if (
+                                                    file_info.get("name")
+                                                    == model_info.get("expected_filename")
+                                                ):
+                                                    primary_file = file_info
+                                                    break
+                                            if primary_file is None:
+                                                primary_file = (
+                                                    model_info.get("files") or [{}]
+                                                )[0]
 
-                                        download_url = get_civitai_download_url(
-                                            version_id
+                                            download_url = get_civitai_download_url(
+                                                version_id_val
+                                            )
+                                            source_results["civitai"] = {
+                                                "source": "civitai",
+                                                "name": model_info.get("model_name"),
+                                                "version_name": model_info.get(
+                                                    "version_name"
+                                                ),
+                                                "filename": model_info.get(
+                                                    "expected_filename"
+                                                ),
+                                                "type": category,
+                                                "download_url": download_url,
+                                                "url": f"https://civitai.com/models/{model_id_val}?modelVersionId={version_id_val}",
+                                                "model_id": model_id_val,
+                                                "version_id": version_id_val,
+                                                "size": primary_file.get("size"),
+                                                "base_model": model_info.get("base_model"),
+                                                "tags": model_info.get("tags", []),
+                                                "sha256": primary_file.get("sha256")
+                                                or (primary_file.get("hashes") or {}).get("SHA256")
+                                                or (primary_file.get("hashes") or {}).get("sha256"),
+                                                "hashes": primary_file.get("hashes") or {},
+                                                "match_type": "exact",
+                                                "confidence": 100.0,
+                                            }
+                                            log_search_result(
+                                                "civitai/urn",
+                                                source_results["civitai"],
+                                                {
+                                                    "files_count": len(
+                                                        model_info.get("files", [])
+                                                    )
+                                                },
+                                            )
+                                            source_found = True
+                                        else:
+                                            log_search_result(
+                                                "civitai/urn",
+                                                None,
+                                                {
+                                                    "model_id": model_id_val,
+                                                    "version_id": version_id_val,
+                                                },
+                                            )
+                                    elif category:
+                                        update_search_progress(
+                                            progress_id,
+                                            "civitai",
+                                            "fallback",
+                                            "Searching CivitAI fallback",
+                                            58,
                                         )
-                                        source_results["civitai"] = {
-                                            "source": "civitai",
-                                            "name": model_info.get("model_name"),
-                                            "version_name": model_info.get(
-                                                "version_name"
-                                            ),
-                                            "filename": model_info.get(
-                                                "expected_filename"
-                                            ),
-                                            "type": category,
-                                            "download_url": download_url,
-                                            "url": f"https://civitai.com/models/{model_id}?modelVersionId={version_id}",
-                                            "model_id": model_id,
-                                            "version_id": version_id,
-                                            "size": primary_file.get("size"),
-                                            "base_model": model_info.get("base_model"),
-                                            "tags": model_info.get("tags", []),
-                                            "sha256": primary_file.get("sha256")
-                                            or (primary_file.get("hashes") or {}).get("SHA256")
-                                            or (primary_file.get("hashes") or {}).get("sha256"),
-                                            "hashes": primary_file.get("hashes") or {},
-                                            "match_type": "exact",
-                                            "confidence": 100.0,
-                                        }
+                                        log_info(
+                                            "Search [civitai] URN ids missing; falling back"
+                                        )
+                                        civitai_results = search_civitai(
+                                            filename,
+                                            model_type=category,
+                                        )
                                         log_search_result(
-                                            "civitai/urn",
-                                            source_results["civitai"],
+                                            "civitai/fallback",
+                                            civitai_results[0] if civitai_results else None,
                                             {
-                                                "files_count": len(
-                                                    model_info.get("files", [])
-                                                )
+                                                "results_count": len(civitai_results),
                                             },
                                         )
-                                        source_found = True
-                                    else:
-                                        log_search_result(
-                                            "civitai/urn",
-                                            None,
-                                            {
-                                                "model_id": model_id,
-                                                "version_id": version_id,
-                                            },
-                                        )
-                                elif category:
-                                    # Fallback to search if no IDs
-                                    update_search_progress(
-                                        progress_id,
+                                        if civitai_results:
+                                            first_result = civitai_results[0]
+                                            source_results["civitai"] = {
+                                                "source": "civitai",
+                                                "name": first_result.get("name"),
+                                                "filename": first_result.get("filename"),
+                                                "type": first_result.get("type"),
+                                                "download_url": first_result.get(
+                                                    "download_url"
+                                                ),
+                                                "url": first_result.get("url"),
+                                                "size": first_result.get("size"),
+                                                "base_model": first_result.get("base_model"),
+                                                "tags": first_result.get("tags", []),
+                                            }
+                                            source_found = True
+                                else:
+                                    civitai_result = execute_search_with_fallback(
                                         "civitai",
-                                        "fallback",
-                                        "Searching CivitAI fallback",
-                                        58,
-                                    )
-                                    log_info(
-                                        "Search [civitai] URN ids missing; falling back"
-                                    )
-                                    civitai_results = search_civitai(
-                                        filename,
-                                        model_type=category,
-                                    )
-                                    log_search_result(
-                                        "civitai/fallback",
-                                        civitai_results[0] if civitai_results else None,
-                                        {
-                                            "results_count": len(civitai_results),
-                                        },
-                                    )
-                                    if civitai_results:
-                                        first_result = civitai_results[0]
-                                        source_results["civitai"] = {
-                                            "source": "civitai",
-                                            "name": first_result.get("name"),
-                                            "filename": first_result.get("filename"),
-                                            "type": first_result.get("type"),
-                                            "download_url": first_result.get(
-                                                "download_url"
-                                            ),
-                                            "url": first_result.get("url"),
-                                            "size": first_result.get("size"),
-                                            "base_model": first_result.get("base_model"),
-                                            "tags": first_result.get("tags", []),
-                                        }
-                                        source_found = True
-                            else:
-                                update_search_progress(
-                                    progress_id,
-                                    "civitai",
-                                    "match",
-                                    "Matching CivitAI files",
-                                    48,
-                                )
-                                civitai_result = search_civitai_for_file(
-                                    filename,
-                                    model_type=category,
-                                    base_model_context=base_model_context or None,
-                                    session_token=civitai_session_token or None,
-                                    candidate_limit=civitai_candidate_limit,
-                                    use_trpc_search=civitai_use_trpc_search,
-                                    use_html_fallback=civitai_use_html_fallback,
-                                    progress_callback=make_source_progress_callback(
-                                        "civitai"
-                                    ),
-                                )
-                                log_search_result("civitai", civitai_result)
-                                if not civitai_result and base_model_context:
-                                    update_search_progress(
-                                        progress_id,
-                                        "civitai",
-                                        "any_model",
-                                        "Retrying CivitAI any model",
-                                        72,
-                                    )
-                                    log_info(
-                                        "Search [civitai] retry any model "
-                                        + format_log_fields(
-                                            file=filename,
-                                            cat=category,
-                                            base=base_model_context,
-                                        )
-                                    )
-                                    civitai_result = search_civitai_for_file(
-                                        filename,
-                                        model_type=category,
-                                        base_model_context=None,
-                                        session_token=civitai_session_token or None,
-                                        candidate_limit=civitai_candidate_limit,
-                                        use_trpc_search=civitai_use_trpc_search,
-                                        use_html_fallback=civitai_use_html_fallback,
-                                        progress_callback=make_source_progress_callback(
-                                            "civitai", 72, 92
+                                        lambda base_ctx, cb: search_civitai_for_file(
+                                            filename,
+                                            model_type=category,
+                                            base_model_context=base_ctx,
+                                            session_token=civitai_session_token or None,
+                                            candidate_limit=civitai_candidate_limit,
+                                            use_trpc_search=civitai_use_trpc_search,
+                                            use_html_fallback=civitai_use_html_fallback,
+                                            progress_callback=cb,
                                         ),
-                                    )
-                                    log_search_result(
-                                        "civitai/any_model",
-                                        civitai_result,
+                                        "CivitAI"
                                     )
                                     if civitai_result:
-                                        civitai_result = mark_any_model_fallback(
-                                            civitai_result
-                                        )
-                                if civitai_result:
-                                    source_results["civitai"] = civitai_result
-                                    source_found = True
+                                        source_results["civitai"] = civitai_result
+                                        source_found = True
 
-                            update_search_progress(
-                                progress_id,
+                                return source_results, source_found
+
+                            return run_source_search(
                                 "civitai",
-                                "done",
-                                "CivitAI checked",
-                                92,
+                                task,
+                                initial_stage="query",
+                                initial_message="Querying CivitAI",
+                                initial_percent=30,
+                                log_start_fields={
+                                    "file": filename,
+                                    "cat": category,
+                                    "urn": is_urn,
+                                },
                             )
-                            return source_results, source_found
 
                         def search_civarchive_source_task():
-                            source_results = {"civarchive": None}
-                            source_found = False
+                            def task():
+                                source_results = {"civarchive": None}
+                                source_found = False
 
-                            update_search_progress(
-                                progress_id,
-                                "civarchive",
-                                "query",
-                                "Querying CivArchive",
-                                30,
-                            )
-                            log_info(
-                                "Search [civarchive] start "
-                                + format_log_fields(
-                                    file=filename,
-                                    cat=category,
-                                    urn=is_urn,
-                                )
-                            )
-                            try:
                                 if is_urn:
-                                    model_id = data.get("model_id")
-                                    version_id = data.get("version_id")
-                                    if model_id and version_id:
+                                    model_id_val = data.get("model_id")
+                                    version_id_val = data.get("version_id")
+                                    if model_id_val and version_id_val:
                                         update_search_progress(
                                             progress_id,
                                             "civarchive",
@@ -1961,16 +1960,16 @@ class ModelResolverExtension:
                                             50,
                                         )
                                         civarchive_result = resolve_civarchive_model_version(
-                                            model_id,
-                                            version_id,
+                                            model_id_val,
+                                            version_id_val,
                                             query=filename,
                                         )
                                         log_search_result(
                                             "civarchive/urn",
                                             civarchive_result,
                                             {
-                                                "model_id": model_id,
-                                                "version_id": version_id,
+                                                "model_id": model_id_val,
+                                                "version_id": version_id_val,
                                             },
                                         )
                                         if civarchive_result:
@@ -1981,65 +1980,29 @@ class ModelResolverExtension:
                                             "civarchive/urn",
                                             None,
                                             {
-                                                "model_id": model_id,
-                                                "version_id": version_id,
+                                                "model_id": model_id_val,
+                                                "version_id": version_id_val,
                                             },
                                         )
                                 else:
-                                    update_search_progress(
-                                        progress_id,
+                                    civarchive_result = execute_search_with_fallback(
                                         "civarchive",
-                                        "match",
-                                        "Matching CivArchive files",
-                                        48,
-                                    )
-                                    civarchive_result = search_civarchive_for_file(
-                                        filename,
-                                        model_type=category,
-                                        base_model_context=base_model_context or None,
-                                        limit=civarchive_candidate_limit,
-                                        progress_callback=make_source_progress_callback(
-                                            "civarchive"
-                                        ),
-                                    )
-                                    log_search_result("civarchive", civarchive_result)
-                                    if not civarchive_result and base_model_context:
-                                        update_search_progress(
-                                            progress_id,
-                                            "civarchive",
-                                            "any_model",
-                                            "Retrying CivArchive any model",
-                                            72,
-                                        )
-                                        log_info(
-                                            "Search [civarchive] retry any model "
-                                            + format_log_fields(
-                                                file=filename,
-                                                cat=category,
-                                                base=base_model_context,
-                                            )
-                                        )
-                                        civarchive_result = search_civarchive_for_file(
+                                        lambda base_ctx, cb: search_civarchive_for_file(
                                             filename,
                                             model_type=category,
-                                            base_model_context=None,
+                                            base_model_context=base_ctx,
                                             limit=civarchive_candidate_limit,
-                                            progress_callback=make_source_progress_callback(
-                                                "civarchive", 72, 92
-                                            ),
-                                        )
-                                        log_search_result(
-                                            "civarchive/any_model",
-                                            civarchive_result,
-                                        )
-                                        if civarchive_result:
-                                            civarchive_result = mark_any_model_fallback(
-                                                civarchive_result
-                                            )
+                                            progress_callback=cb,
+                                        ),
+                                        "CivArchive"
+                                    )
                                     if civarchive_result:
                                         source_results["civarchive"] = civarchive_result
                                         source_found = True
-                            except CivArchiveSearchError as e:
+
+                                return source_results, source_found
+
+                            def handle_civarchive_error(e):
                                 error_message = f"CivArchive search failed: {e}"
                                 log_warn(error_message)
                                 update_search_progress(
@@ -2050,88 +2013,53 @@ class ModelResolverExtension:
                                     100,
                                     status="error",
                                 )
-                                source_results["source_errors"] = {
-                                    "civarchive": error_message
-                                }
+                                return {
+                                    "civarchive": None,
+                                    "source_errors": {"civarchive": error_message},
+                                }, False
 
-                            if not source_results.get("source_errors"):
-                                update_search_progress(
-                                    progress_id,
-                                    "civarchive",
-                                    "done",
-                                    "CivArchive checked",
-                                    92,
-                                )
-                            return source_results, source_found
+                            return run_source_search(
+                                "civarchive",
+                                task,
+                                initial_stage="query",
+                                initial_message="Querying CivArchive",
+                                initial_percent=30,
+                                log_start_fields={
+                                    "file": filename,
+                                    "cat": category,
+                                    "urn": is_urn,
+                                },
+                                error_handlers={CivArchiveSearchError: handle_civarchive_error},
+                            )
 
                         def search_lora_manager_archive_source_task():
-                            update_search_progress(
-                                progress_id,
-                                "lora_manager_archive",
-                                "query",
-                                "Searching LoRA Manager archive",
-                                36,
-                            )
-                            log_info(
-                                "Search [lora_manager_archive] start "
-                                + format_log_fields(file=filename, cat=category)
-                            )
-                            lora_manager_archive_result = (
-                                search_lora_manager_archive_for_file(
-                                    filename,
-                                    model_type=category,
-                                    base_model_context=base_model_context or None,
-                                    progress_callback=make_source_progress_callback(
-                                        "lora_manager_archive"
-                                    ),
-                                )
-                            )
-                            log_search_result(
-                                "lora_manager_archive",
-                                lora_manager_archive_result,
-                            )
-                            if not lora_manager_archive_result and base_model_context:
-                                update_search_progress(
-                                    progress_id,
+                            def task():
+                                lora_manager_archive_result = execute_search_with_fallback(
                                     "lora_manager_archive",
-                                    "any_model",
-                                    "Retrying LoRA archive any model",
-                                    72,
-                                )
-                                log_info(
-                                    "Search [lora_manager_archive] retry any model "
-                                    + format_log_fields(
-                                        file=filename,
-                                        cat=category,
-                                        base=base_model_context,
-                                    )
-                                )
-                                lora_manager_archive_result = (
-                                    search_lora_manager_archive_for_file(
+                                    lambda base_ctx, cb: search_lora_manager_archive_for_file(
                                         filename,
                                         model_type=category,
-                                        base_model_context=None,
-                                        progress_callback=make_source_progress_callback(
-                                            "lora_manager_archive", 72, 92
-                                        ),
-                                    )
+                                        base_model_context=base_ctx,
+                                        progress_callback=cb,
+                                    ),
+                                    "LoRA archive"
                                 )
-                                log_search_result(
-                                    "lora_manager_archive/any_model",
-                                    lora_manager_archive_result,
+                                return (
+                                    {
+                                        "lora_manager_archive": lora_manager_archive_result
+                                    },
+                                    bool(lora_manager_archive_result),
                                 )
-                                if lora_manager_archive_result:
-                                    lora_manager_archive_result = (
-                                        mark_any_model_fallback(
-                                            lora_manager_archive_result
-                                        )
-                                    )
-                            return (
-                                {
-                                    "lora_manager_archive": lora_manager_archive_result
-                                },
-                                bool(lora_manager_archive_result),
+
+                            return run_source_search(
+                                "lora_manager_archive",
+                                task,
+                                initial_stage="query",
+                                initial_message="Searching LoRA Manager archive",
+                                initial_percent=36,
+                                log_start_fields={"file": filename, "cat": category},
                             )
+
 
                         search_tasks = []
                         if search_local:
