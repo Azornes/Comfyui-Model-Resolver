@@ -1513,6 +1513,9 @@ export const modelInfoMethods = {
         const source = data.source || contextModel.details_source || contextModel.source || '';
         const creator = data.creator || {};
         const creatorName = creator.username || creator.name || '';
+        const pageUrl = data.version_url || data.url || '';
+        const civitaiUrl = this.getSourceModelCivitaiUrl(data, selectedVersion, contextModel);
+        const showCivitaiAction = civitaiUrl && civitaiUrl !== pageUrl;
 
         const statItems = [
             ['Downloads', stats.downloadCount || stats.downloads || versionStats.downloadCount || versionStats.downloads],
@@ -1530,7 +1533,8 @@ export const modelInfoMethods = {
                         <span>${this.escapeHtml([source, data.type, creatorName].filter(Boolean).join(' / '))}</span>
                     </div>
                     <div class="mr-model-details-actions">
-                        ${data.version_url || data.url ? `<a class="mr-model-details-action" href="${this.escapeHtml(data.version_url || data.url)}" target="_blank" rel="noopener noreferrer">${getSvgIcon('externalLink')} Open page</a>` : ''}
+                        ${showCivitaiAction ? `<a class="mr-model-details-action" href="${this.escapeHtml(civitaiUrl)}" target="_blank" rel="noopener noreferrer">${getSvgIcon('civitai')} View on CivitAI</a>` : ''}
+                        ${pageUrl ? `<a class="mr-model-details-action" href="${this.escapeHtml(pageUrl)}" target="_blank" rel="noopener noreferrer">${getSvgIcon('externalLink')} Open page</a>` : ''}
                     </div>
                 </div>
                 <div class="mr-model-details-main">
@@ -1589,15 +1593,64 @@ export const modelInfoMethods = {
         `;
     },
 
+    getSourceModelCivitaiUrl(data = {}, selectedVersion = {}, contextModel = {}) {
+        const modelId = selectedVersion.civitai_model_id
+            || selectedVersion.civitaiModelId
+            || data.civitai_model_id
+            || data.civitaiModelId
+            || contextModel.civitai_model_id
+            || contextModel.civitaiModelId;
+        const versionId = selectedVersion.civitai_model_version_id
+            || selectedVersion.civitaiModelVersionId
+            || data.civitai_model_version_id
+            || data.civitaiModelVersionId
+            || contextModel.civitai_model_version_id
+            || contextModel.civitaiModelVersionId;
+
+        if (modelId) {
+            return `https://civitai.com/models/${encodeURIComponent(modelId)}${versionId ? `?modelVersionId=${encodeURIComponent(versionId)}` : ''}`;
+        }
+
+        const explicitUrl = selectedVersion.platform_url
+            || selectedVersion.platformUrl
+            || data.platform_url
+            || data.platformUrl
+            || contextModel.platform_url
+            || contextModel.platformUrl;
+        const value = String(explicitUrl || '').trim();
+        if (!/^https?:\/\//i.test(value)) return '';
+
+        try {
+            const url = new URL(value);
+            const host = url.hostname.toLowerCase().replace(/^www\./, '');
+            if (host !== 'civitai.com' && host !== 'civitai.red') return '';
+            url.hostname = 'civitai.com';
+            return url.toString();
+        } catch (error) {
+            return /civitai\.(?:com|red)\//i.test(value)
+                ? value.replace('civitai.red', 'civitai.com')
+                : '';
+        }
+    },
+
     renderSourceModelDetailsFiles(version = {}, data = {}, contextModel = {}) {
         const files = Array.isArray(version.files) ? version.files.filter(file => file?.download_url) : [];
         if (!files.length) {
             return '<div class="mr-model-details-empty">No downloadable files available for this version.</div>';
         }
 
-        return files.map((file, index) => {
+        const targetIndex = files.findIndex(file => this.isSourceModelDetailsTargetFile(file, contextModel));
+        const orderedFiles = targetIndex > 0
+            ? [files[targetIndex], ...files.filter((_, index) => index !== targetIndex)]
+            : files;
+
+        return orderedFiles.map((file, index) => {
+            const isTarget = this.isSourceModelDetailsTargetFile(file, contextModel);
             const fileMeta = this.getSourceModelFileMeta(file);
             const mirrors = this.getSourceModelMirrors(file);
+            const preferredMirror = this.getSourceModelPreferredMirror(file, contextModel, mirrors);
+            const preferredDownloadUrl = preferredMirror?.url || file.download_url;
+            const preferredFilename = preferredMirror?.filename || file.name || contextModel.filename || data.name || 'model';
             const payload = {
                 source: data.source || contextModel.details_source || contextModel.source,
                 model_id: data.model_id || contextModel.model_id,
@@ -1605,8 +1658,8 @@ export const modelInfoMethods = {
                 name: data.name || contextModel.name,
                 version_name: version.name || '',
                 type: data.type || contextModel.type,
-                filename: file.name || contextModel.filename || data.name || 'model',
-                download_url: file.download_url,
+                filename: preferredFilename,
+                download_url: preferredDownloadUrl,
                 url: version.url || data.version_url || data.url,
                 size: file.size,
                 base_model: version.base_model || contextModel.base_model,
@@ -1617,20 +1670,109 @@ export const modelInfoMethods = {
             const mirrorList = mirrors.length > 1
                 ? this.renderSourceModelMirrors(mirrors, payload)
                 : '';
+            const summaryBadges = [
+                isTarget ? 'Matched' : '',
+                file.primary ? 'Primary' : '',
+                mirrors.length ? `${mirrors.length} mirrors` : ''
+            ].filter(Boolean);
+            const openAttr = index === 0 ? ' open' : '';
             return `
-                <div class="mr-model-details-file ${file.primary ? 'is-primary' : ''}">
-                    <div>
-                        <strong>${this.escapeHtml(file.name || `File ${index + 1}`)}</strong>
-                        <span>${this.escapeHtml(fileMeta.summary)}</span>
+                <details class="mr-model-details-file ${file.primary ? 'is-primary' : ''} ${isTarget ? 'is-target' : ''}"${openAttr}>
+                    <summary class="mr-model-details-file-summary">
+                        <span class="mr-model-details-file-chevron" aria-hidden="true"></span>
+                        <span class="mr-model-details-file-heading">
+                            <strong>${this.escapeHtml(file.name || `File ${index + 1}`)}</strong>
+                            <span>${this.escapeHtml(fileMeta.summary)}</span>
+                        </span>
+                        ${summaryBadges.length ? `<span class="mr-model-details-file-summary-badges">${summaryBadges.map(badge => `<span>${this.escapeHtml(badge)}</span>`).join('')}</span>` : ''}
+                    </summary>
+                    <div class="mr-model-details-file-body">
                         ${fileMeta.badges.length ? `<div class="mr-model-details-file-badges">${fileMeta.badges.map(badge => `<span>${this.escapeHtml(badge)}</span>`).join('')}</div>` : ''}
+                        <button type="button" class="mr-btn mr-btn-primary mr-model-details-use" data-selection="${this.escapeHtml(encodeURIComponent(JSON.stringify(payload)))}">
+                            ${isTarget ? 'Use matched file' : 'Use this file'}
+                        </button>
+                        ${mirrorList}
                     </div>
-                    <button type="button" class="mr-btn mr-btn-primary mr-model-details-use" data-selection="${this.escapeHtml(encodeURIComponent(JSON.stringify(payload)))}">
-                        Use this version
-                    </button>
-                    ${mirrorList}
-                </div>
+                </details>
             `;
         }).join('');
+    },
+
+    isSourceModelDetailsTargetFile(file = {}, contextModel = {}) {
+        const targetFilename = this.getSourceModelComparableFilename(contextModel.filename || contextModel.original_path || '');
+        const targetUrl = String(contextModel.download_url || contextModel.url || '').trim();
+        const targetHash = String(contextModel.sha256 || contextModel.hash || '').trim().toLowerCase();
+        const fileHash = this.getSourceModelFileHash(file);
+        if (targetHash && fileHash && targetHash === fileHash) return true;
+
+        const urls = this.getSourceModelFileUrls(file);
+        if (targetUrl && urls.some(url => url === targetUrl)) return true;
+
+        if (!targetFilename) return false;
+        return this.getSourceModelFileNames(file).some(name => (
+            this.getSourceModelComparableFilename(name) === targetFilename
+        ));
+    },
+
+    getSourceModelPreferredMirror(file = {}, contextModel = {}, mirrors = null) {
+        const candidates = Array.isArray(mirrors) ? mirrors : this.getSourceModelMirrors(file);
+        const targetUrl = String(contextModel.download_url || contextModel.url || '').trim();
+        if (targetUrl) {
+            const byUrl = candidates.find(mirror => String(mirror.url || '') === targetUrl);
+            if (byUrl) return byUrl;
+        }
+
+        const targetFilename = this.getSourceModelComparableFilename(contextModel.filename || contextModel.original_path || '');
+        if (targetFilename) {
+            const byName = candidates.find(mirror => (
+                this.getSourceModelComparableFilename(mirror.filename || mirror.name || '') === targetFilename
+            ));
+            if (byName) return byName;
+        }
+
+        return null;
+    },
+
+    getSourceModelComparableFilename(value = '') {
+        return String(value || '')
+            .split(/[\\/]+/)
+            .pop()
+            .trim()
+            .toLowerCase();
+    },
+
+    getSourceModelFileHash(file = {}) {
+        const hashes = file.hashes && typeof file.hashes === 'object' ? file.hashes : {};
+        return String(file.sha256 || file.hash || hashes.SHA256 || hashes.sha256 || '').trim().toLowerCase();
+    },
+
+    getSourceModelFileNames(file = {}) {
+        const names = new Set();
+        [file.name, file.filename].forEach(name => {
+            if (name) names.add(String(name));
+        });
+        const mirrors = Array.isArray(file.mirrors) ? file.mirrors : [];
+        mirrors.forEach(mirror => {
+            if (mirror?.filename) names.add(String(mirror.filename));
+            if (mirror?.name) names.add(String(mirror.name));
+        });
+        return Array.from(names);
+    },
+
+    getSourceModelFileUrls(file = {}) {
+        const urls = new Set();
+        [file.download_url, file.downloadUrl, file.url].forEach(url => {
+            if (url) urls.add(String(url));
+        });
+        const downloadUrls = Array.isArray(file.download_urls) ? file.download_urls : [];
+        downloadUrls.forEach(url => {
+            if (url) urls.add(String(url));
+        });
+        const mirrors = Array.isArray(file.mirrors) ? file.mirrors : [];
+        mirrors.forEach(mirror => {
+            if (mirror?.url) urls.add(String(mirror.url));
+        });
+        return Array.from(urls);
     },
 
     getSourceModelMirrors(file = {}) {
@@ -1766,13 +1908,14 @@ export const modelInfoMethods = {
 
     getSourceModelMirrorMeta(mirror = {}, isDefault = false) {
         const host = this.getSourceModelMirrorHost(mirror.url || '');
+        const mirrorHash = this.getSourceModelDisplayHash(mirror);
         const meta = [
             isDefault ? 'Default' : '',
             this.isSourceModelMirrorDead(mirror) ? 'Likely dead' : '',
             host,
             this.isSourceModelMirrorGated(mirror) ? 'Gated' : '',
             mirror.is_paid ? 'Paid' : '',
-            mirror.sha256 ? `SHA256 ${String(mirror.sha256).slice(0, 10)}` : ''
+            mirrorHash ? `SHA256 ${mirrorHash}` : ''
         ].filter(Boolean);
         return meta.join(' / ');
     },
@@ -1791,12 +1934,18 @@ export const modelInfoMethods = {
             mirrorCount ? `${mirrorCount} mirrors` : '',
             file.id ? `ID ${file.id}` : ''
         ].filter(Boolean);
+        const fileHash = this.getSourceModelDisplayHash(file);
         const summary = [
             this.formatSearchResultSize(file),
-            file.sha256 ? `SHA256 ${String(file.sha256).slice(0, 10)}` : ''
+            fileHash ? `SHA256 ${fileHash}` : ''
         ].filter(Boolean).join(' / ') || 'Downloadable file';
 
         return { badges, summary };
+    },
+
+    getSourceModelDisplayHash(value = {}) {
+        const hashes = value.hashes && typeof value.hashes === 'object' ? value.hashes : {};
+        return String(value.sha256 || value.hash || hashes.SHA256 || hashes.sha256 || '').trim();
     },
 
     renderSourceModelImageMeta(image = {}) {
