@@ -21,16 +21,14 @@ from ..log_system.log_funcs import (
     log_error,
     log_exception,
 )
-from ..path_utils import write_json_atomic
+from ..path_utils import write_json_atomic, METADATA_DIR
 
 HF_API_URL = "https://huggingface.co/api"
 HF_AUTHOR_FALLBACKS = ["Comfy-Org"]
 BRAVE_SEARCH_API_URL = "https://api.search.brave.com/res/v1/web/search"
 HF_AUTHOR_INDEX_CACHE_TTL_SECONDS = 24 * 60 * 60
 HF_AUTHOR_INDEX_CACHE_VERSION = 1
-METADATA_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "metadata"
-)
+
 HF_AUTHOR_INDEX_CACHE_PATH = os.path.join(
     METADATA_DIR, "huggingface-author-index.json"
 )

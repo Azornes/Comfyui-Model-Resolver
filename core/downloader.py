@@ -24,7 +24,7 @@ from .log_system.log_funcs import (
 )
 from .resolver import normalize_sha256
 from .path_utils import is_path_within, get_path_identity, write_json_atomic
-from .type_utils import as_dict, as_list
+from .type_utils import as_dict, as_list, first_non_empty
 
 try:
     import folder_paths
@@ -135,15 +135,7 @@ def _as_list(value: Any) -> List[Any]:
 
 
 def _first_present(*values: Any) -> Any:
-    for value in values:
-        if value is None:
-            continue
-        if isinstance(value, str) and not value.strip():
-            continue
-        if isinstance(value, (list, dict)) and not value:
-            continue
-        return value
-    return ""
+    return first_non_empty(*values)
 
 
 def _coerce_int_or_value(value: Any) -> Any:

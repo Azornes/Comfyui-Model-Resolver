@@ -148,3 +148,17 @@ def write_json_atomic(
         except OSError:
             pass
         raise
+
+
+def get_filename_from_path(path: Any) -> str:
+    """Return the filename/basename of a path, handling both forward and backward slashes."""
+    if not path:
+        return ""
+    return str(path).replace("\\", "/").split("/")[-1]
+
+
+# Path to metadata directory
+METADATA_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "metadata"
+)
+

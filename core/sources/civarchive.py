@@ -22,6 +22,7 @@ from ..matcher import (
     base_model_matches as _base_model_matches,
     base_model_score as _base_model_score,
 )
+from ..type_utils import to_int
 from ..progress import report_progress
 from ..log_system.log_funcs import (
     log_debug,
@@ -105,12 +106,7 @@ def is_civarchive_available() -> bool:
 
 
 def _coerce_int(value: Any) -> Optional[int]:
-    if value is None:
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
+    return to_int(value)
 
 
 def _size_kb_to_bytes(value: Any) -> Optional[int]:

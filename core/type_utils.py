@@ -56,3 +56,32 @@ MODEL_EXTENSIONS = {
     ".onnx",
     ".gguf",
 }
+
+
+def first_non_empty(*values: Any, default: Any = "") -> Any:
+    """
+    Return the first value that is not None, not an empty/whitespace-only string,
+    and not an empty collection.
+    """
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        if isinstance(value, (list, tuple, dict, set)) and not value:
+            continue
+        return value
+    return default
+
+
+def to_int(value: Any, default: Any = None) -> Any:
+    """
+    Safely cast a value to an integer, returning a default value on failure.
+    """
+    if value is None or value == "":
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+

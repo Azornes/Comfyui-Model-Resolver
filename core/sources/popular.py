@@ -20,10 +20,7 @@ from ..log_system.log_funcs import (
     log_exception,
 )
 
-# Path to metadata directory
-METADATA_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "metadata"
-)
+from ..path_utils import METADATA_DIR
 POPULAR_MODELS_FILE = os.path.join(METADATA_DIR, "popular-models.json")
 MODEL_ALIASES_FILE = os.path.join(METADATA_DIR, "model-aliases.json")
 BASE_MODELS_FILE = os.path.join(METADATA_DIR, "base-models.json")

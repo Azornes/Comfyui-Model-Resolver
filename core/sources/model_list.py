@@ -23,10 +23,7 @@ from ..log_system.log_funcs import (
     log_exception,
 )
 
-# Path to metadata directory
-METADATA_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "metadata"
-)
+from ..path_utils import METADATA_DIR
 MODEL_LIST_FILE = os.path.join(METADATA_DIR, "model-list.json")
 MODEL_LIST_META_FILE = os.path.join(METADATA_DIR, "model-list.meta.json")
 MODEL_LIST_SOURCE_URL = (

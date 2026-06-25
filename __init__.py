@@ -86,6 +86,8 @@ class ModelResolverExtension:
                 )
                 from .core.path_templates import infer_download_path_templates
                 from .core.scanner import get_model_files, invalidate_model_files_cache
+                from .core.path_utils import get_filename_from_path
+                from .core.type_utils import first_non_empty, to_int
                 from .core.settings import (
                     bool_setting as resolver_bool_setting,
                     get_default_root_for_category,
@@ -571,7 +573,7 @@ class ModelResolverExtension:
                 for m in available_models:
                     rel_path = m.get("relative_path", "")
                     if rel_path:
-                        filename = rel_path.split("/")[-1].split("\\")[-1]
+                        filename = get_filename_from_path(rel_path)
                         path_by_filename[filename] = m.get("path")
                         # Also add without extension for matching (simple approach)
                         if "." in filename:
@@ -632,7 +634,7 @@ class ModelResolverExtension:
                     category = ref.get("category", "unknown")
 
                     # Determine model name and strength
-                    model_name = original_path.split("/")[-1].split("\\")[-1]
+                    model_name = get_filename_from_path(original_path)
                     strength = None
 
                     # For standard LoraLoader nodes, strength is in next widget_value
@@ -2252,19 +2254,10 @@ class ModelResolverExtension:
                             )
 
                     def _first_metadata_value(*values):
-                        for value in values:
-                            if value is None:
-                                continue
-                            if isinstance(value, str) and not value.strip():
-                                continue
-                            return value
-                        return ""
+                        return first_non_empty(*values)
 
                     def _metadata_int(value):
-                        try:
-                            return int(value)
-                        except (TypeError, ValueError):
-                            return None
+                        return to_int(value)
 
                     inferred_source = ""
                     if "civitai.com" in url:

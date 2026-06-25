@@ -26,7 +26,7 @@ from .workflow_analyzer import (
     identify_missing_models,
     should_scan_as_model_reference,
 )
-from .matcher import find_matches
+from .matcher import find_matches, strip_known_model_extension
 from .type_utils import as_dict, as_list, MODEL_EXTENSIONS as _MODEL_EXTENSIONS
 from .workflow_updater import update_workflow_nodes
 from .sources.civitai import resolve_urn
@@ -49,16 +49,7 @@ from .path_utils import (
 )
 
 
-def strip_known_model_extension(filename: str) -> str:
-    """Strip only known model extensions, preserving names like v4.0."""
-    if not isinstance(filename, str):
-        return ""
-
-    lowered = filename.lower()
-    for ext in MODEL_EXTENSIONS:
-        if lowered.endswith(ext):
-            return filename[: -len(ext)]
-    return filename
+# Imported from .matcher
 
 
 def get_workflow_url_info_for_filename(

@@ -20,6 +20,7 @@ from ..matcher import (
     base_model_matches as _base_model_matches,
     base_model_score as _base_model_score,
 )
+from ..type_utils import first_non_empty
 from ..progress import report_progress
 from ..log_system.log_funcs import (
     log_debug,
@@ -1750,15 +1751,7 @@ def _as_metadata_list(value: Any) -> List[Any]:
 
 
 def _first_metadata_value(*values: Any) -> Any:
-    for value in values:
-        if value is None:
-            continue
-        if isinstance(value, str) and not value.strip():
-            continue
-        if isinstance(value, (list, tuple, dict)) and not value:
-            continue
-        return value
-    return None
+    return first_non_empty(*values, default=None)
 
 
 def _metadata_size_to_bytes(value: Any) -> Optional[int]:
