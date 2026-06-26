@@ -1,4 +1,4 @@
-#model-resolver-modal,
+﻿#model-resolver-modal,
 #model-resolver-modal button,
 #model-resolver-modal input,
 #model-resolver-modal select {
@@ -4997,14 +4997,14 @@ a.mr-image-preview-resource-name:hover {
     min-width: 0;
     min-height: 0;
     overflow-y: auto;
-    padding: 12px 18px 28px;
+    padding: 10px 1px 1px 10px;
 }
 
 .mr-model-details-side {
     min-width: 0;
     min-height: 0;
     overflow-y: auto;
-    padding: 16px 14px 34px;
+    padding: 5px;
     background: #1d1e22;
     border-left: 1px solid rgba(255, 255, 255, 0.08);
 }
@@ -5210,7 +5210,7 @@ a.mr-image-preview-resource-name:hover {
 
 .mr-model-details-panel {
     margin-bottom: 12px;
-    padding: 13px;
+    padding: 5px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 8px;
     background: #25262b;
