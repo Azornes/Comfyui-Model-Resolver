@@ -4046,6 +4046,84 @@
     word-break: break-word;
 }
 
+.mr-info-hash-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    width: 100%;
+    flex-wrap: wrap;
+}
+
+.mr-info-hash {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.mr-info-hash.is-empty {
+    display: none;
+}
+
+.mr-info-hash-calculate {
+    flex: 0 0 auto;
+    min-height: 26px;
+    padding: 4px 9px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.055);
+    color: rgba(255, 255, 255, 0.86);
+    font-size: 11px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.mr-info-hash-calculate:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.18);
+}
+
+.mr-info-hash-calculate:disabled {
+    cursor: wait;
+    opacity: 0.72;
+}
+
+.mr-info-hash-progress {
+    display: grid;
+    grid-template-columns: minmax(84px, 1fr) auto;
+    align-items: center;
+    gap: 7px;
+    min-width: min(240px, 100%);
+    flex: 1 1 220px;
+}
+
+.mr-info-hash-progress.mr-hidden-initial,
+.mr-info-hash-progress[hidden] {
+    display: none !important;
+}
+
+.mr-info-hash-progress-bar {
+    height: 7px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.mr-info-hash-progress-bar span {
+    display: block;
+    width: 0%;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, rgba(114,211,138,0.74), rgba(100,181,246,0.82));
+    transition: width 150ms ease;
+}
+
+.mr-info-hash-progress small {
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 10px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
 .mr-info-field-label {
     display: grid;
     grid-template-columns: 14px minmax(0, 1fr) auto;

@@ -37,6 +37,7 @@ HF_AUTHOR_INDEX_CACHE_PATH = os.path.join(
 # Cache for search results
 _search_cache: Dict[str, Any] = {}
 _author_index_cache: Dict[str, Dict[str, Any]] = {}
+_download_size_cache: Dict[str, Optional[int]] = {}
 _author_index_lock = threading.RLock()
 
 
@@ -44,6 +45,7 @@ def clear_search_cache():
     """Clear cached HuggingFace search results and in-memory indexes."""
     global _search_cache, _author_index_cache
     _search_cache.clear()
+    _download_size_cache.clear()
     with _author_index_lock:
         _author_index_cache.clear()
 
@@ -350,6 +352,128 @@ def get_huggingface_download_url(repo: str, filename: str, branch: str = "main")
     return f"https://huggingface.co/{repo}/resolve/{branch}/{quote(filename)}"
 
 
+def _parse_size_header(value: Any) -> Optional[int]:
+    if value is None or value == "":
+        return None
+    try:
+        size = int(str(value).strip())
+        return size if size > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_content_range_size(value: Any) -> Optional[int]:
+    if not value:
+        return None
+    match = re.search(r"/(\d+)\s*$", str(value))
+    if not match:
+        return None
+    return _parse_size_header(match.group(1))
+
+
+def _extract_file_info_size(file_info: Dict[str, Any]) -> Optional[int]:
+    if not isinstance(file_info, dict):
+        return None
+
+    for key in ("size", "sizeBytes", "size_bytes", "fileSize", "file_size", "bytes"):
+        size = _parse_size_header(file_info.get(key))
+        if size:
+            return size
+
+    lfs_info = file_info.get("lfs") if isinstance(file_info.get("lfs"), dict) else {}
+    for key in ("size", "sizeBytes", "size_bytes"):
+        size = _parse_size_header(lfs_info.get(key))
+        if size:
+            return size
+
+    return None
+
+
+def _normalize_huggingface_size_probe_url(url: str) -> Optional[str]:
+    if not isinstance(url, str) or not url.strip():
+        return None
+    value = url.strip()
+    parsed = urlparse(value)
+    if "huggingface.co" not in parsed.netloc:
+        return None
+    if "/blob/" in parsed.path:
+        value = value.replace("/blob/", "/resolve/", 1)
+    return value
+
+
+def _response_file_size(response: requests.Response) -> Optional[int]:
+    size = _parse_content_range_size(response.headers.get("Content-Range"))
+    if size:
+        return size
+
+    for key in (
+        "x-linked-size",
+        "x-file-size",
+        "x-goog-stored-content-length",
+        "content-length",
+    ):
+        size = _parse_size_header(response.headers.get(key))
+        if size:
+            content_type = (response.headers.get("content-type") or "").lower()
+            if key == "content-length" and "text/html" in content_type:
+                continue
+            return size
+
+    return None
+
+
+def _fetch_remote_file_size_bytes(
+    url: str,
+    headers: Optional[Dict[str, str]] = None,
+    timeout: int = 15,
+) -> Optional[int]:
+    probe_url = _normalize_huggingface_size_probe_url(url)
+    if not probe_url:
+        return None
+
+    request_headers = {**(headers or {}), "Accept-Encoding": "identity"}
+    cache_scope = "token" if request_headers.get("Authorization") else "public"
+    cache_key = f"{cache_scope}::{probe_url}"
+    if cache_key in _download_size_cache:
+        return _download_size_cache[cache_key]
+
+    size = None
+    try:
+        response = requests.head(
+            probe_url,
+            headers=request_headers,
+            allow_redirects=True,
+            timeout=timeout,
+        )
+        try:
+            if response.status_code < 400:
+                size = _response_file_size(response)
+        finally:
+            response.close()
+    except Exception as e:
+        log_debug(f"HuggingFace size HEAD failed: url={probe_url}, error={e}")
+
+    if not size:
+        try:
+            response = requests.get(
+                probe_url,
+                headers={**request_headers, "Range": "bytes=0-0"},
+                allow_redirects=True,
+                stream=True,
+                timeout=timeout,
+            )
+            try:
+                if response.status_code < 400:
+                    size = _response_file_size(response)
+            finally:
+                response.close()
+        except Exception as e:
+            log_debug(f"HuggingFace size range request failed: url={probe_url}, error={e}")
+
+    _download_size_cache[cache_key] = size
+    return size
+
+
 def clean_filename_for_search(filename: str) -> str:
     """
     Clean up filename for better search results.
@@ -367,7 +491,11 @@ def clean_filename_for_search(filename: str) -> str:
 
 
 def _build_huggingface_result(
-    repo_id: str, file_path: str, file_info: Dict[str, Any], match_type: str
+    repo_id: str,
+    file_path: str,
+    file_info: Dict[str, Any],
+    match_type: str,
+    headers: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     lfs_info = file_info.get("lfs") if isinstance(file_info.get("lfs"), dict) else {}
     sha256 = (
@@ -376,13 +504,17 @@ def _build_huggingface_result(
         or lfs_info.get("sha256")
         or lfs_info.get("oid")
     )
+    download_url = get_huggingface_download_url(repo_id, file_path)
+    size = _extract_file_info_size(file_info)
+    if not size:
+        size = _fetch_remote_file_size_bytes(download_url, headers=headers)
     return {
         "source": "huggingface",
         "repo_id": repo_id,
         "filename": os.path.basename(file_path),
         "path": file_path,
-        "url": get_huggingface_download_url(repo_id, file_path),
-        "size": file_info.get("size"),
+        "url": download_url,
+        "size": size,
         "match_type": match_type,
         "sha256": sha256,
     }
@@ -416,6 +548,7 @@ def _find_matching_file_in_repo(
     files: List[Dict[str, Any]],
     filename: str,
     exact_only: bool = False,
+    headers: Optional[Dict[str, str]] = None,
 ) -> Optional[Dict[str, Any]]:
     filename_lower = filename.lower()
     filename_base = os.path.splitext(filename_lower)[0]
@@ -431,7 +564,13 @@ def _find_matching_file_in_repo(
         file_base = os.path.splitext(file_name_lower)[0]
 
         if file_name_lower == filename_lower or file_path.lower().endswith(filename_lower):
-            return _build_huggingface_result(repo_id, file_path, file_info, "exact")
+            return _build_huggingface_result(
+                repo_id,
+                file_path,
+                file_info,
+                "exact",
+                headers=headers,
+            )
 
     if exact_only:
         return None
@@ -449,7 +588,11 @@ def _find_matching_file_in_repo(
             if filename_base in file_base or file_base in filename_base:
                 if file_path.endswith(".safetensors") or file_path.endswith(".ckpt"):
                     partial_match = _build_huggingface_result(
-                        repo_id, file_path, file_info, "partial"
+                        repo_id,
+                        file_path,
+                        file_info,
+                        "partial",
+                        headers=headers,
                     )
                     break
 
@@ -457,7 +600,10 @@ def _find_matching_file_in_repo(
 
 
 def _find_matching_file_in_author_index(
-    index: Dict[str, Any], filename: str, exact_only: bool = False
+    index: Dict[str, Any],
+    filename: str,
+    exact_only: bool = False,
+    headers: Optional[Dict[str, str]] = None,
 ) -> Optional[Dict[str, Any]]:
     files = index.get("files") or []
     filename_lower = filename.lower()
@@ -475,7 +621,13 @@ def _find_matching_file_in_author_index(
         if file_name_lower == filename_lower or file_path.lower().endswith(
             filename_lower
         ):
-            return _build_huggingface_result(repo_id, file_path, file_info, "exact")
+            return _build_huggingface_result(
+                repo_id,
+                file_path,
+                file_info,
+                "exact",
+                headers=headers,
+            )
 
     if exact_only:
         return None
@@ -496,7 +648,11 @@ def _find_matching_file_in_author_index(
                 ".ckpt"
             ):
                 partial_match = _build_huggingface_result(
-                    repo_id, file_path, file_info, "partial"
+                    repo_id,
+                    file_path,
+                    file_info,
+                    "partial",
+                    headers=headers,
                 )
                 break
 
@@ -736,7 +892,11 @@ def search_huggingface_for_file(
 
             log_debug(f"HuggingFace tree repo={repo_id} files={len(files)}")
             result = _find_matching_file_in_repo(
-                repo_id, files, filename, exact_only=exact_only
+                repo_id,
+                files,
+                filename,
+                exact_only=exact_only,
+                headers=headers,
             )
             if result:
                 _search_cache[cache_key] = result
@@ -774,7 +934,10 @@ def search_huggingface_for_file(
                 )
                 if index:
                     result = _find_matching_file_in_author_index(
-                        index, filename, exact_only=exact_only
+                        index,
+                        filename,
+                        exact_only=exact_only,
+                        headers={},
                     )
                     author_fallback_repo_count += int(index.get("repo_count") or 0)
                     if result:
@@ -831,7 +994,11 @@ def search_huggingface_for_file(
                 continue
 
             result = _find_matching_file_in_repo(
-                repo_id, files, filename, exact_only=exact_only
+                repo_id,
+                files,
+                filename,
+                exact_only=exact_only,
+                headers=headers,
             )
             if result:
                 _search_cache[cache_key] = result
@@ -888,7 +1055,11 @@ def search_huggingface_for_file(
                 continue
 
             result = _find_matching_file_in_repo(
-                repo_id, files, expected_file, exact_only=True
+                repo_id,
+                files,
+                expected_file,
+                exact_only=True,
+                headers=headers,
             )
             if result and result.get("filename", "").lower() == filename.lower():
                 _search_cache[cache_key] = result
@@ -995,12 +1166,16 @@ def get_repo_files(repo: str, token: Optional[str] = None) -> List[Dict[str, Any
                 if path.endswith(
                     (".safetensors", ".ckpt", ".pt", ".bin", ".pth", ".onnx", ".gguf")
                 ):
+                    url = get_huggingface_download_url(repo, path)
+                    size = _extract_file_info_size(item)
+                    if not size:
+                        size = _fetch_remote_file_size_bytes(url, headers=headers)
                     files.append(
                         {
                             "filename": os.path.basename(path),
                             "path": path,
-                            "url": get_huggingface_download_url(repo, path),
-                            "size": item.get("size"),
+                            "url": url,
+                            "size": size,
                         }
                     )
 

@@ -54,8 +54,11 @@ class ModelResolverExtension:
         self.logger = create_module_logger(__name__)
         self.analysis_progress = {}
         self.search_progress = {}
+        self.hash_progress = {}
         self.cancelled_search_progress = set()
+        self.cancelled_hash_progress = set()
         self.search_progress_lock = threading.Lock()
+        self.hash_progress_lock = threading.Lock()
         self.search_result_timestamps = {}
 
     def initialize(self):
@@ -103,7 +106,11 @@ class ModelResolverExtension:
                 )
                 from .core.path_templates import infer_download_path_templates
                 from .core.scanner import get_model_files, invalidate_model_files_cache
-                from .core.path_utils import get_filename_from_path
+                from .core.path_utils import (
+                    get_filename_from_path,
+                    read_json_safe,
+                    write_json_atomic,
+                )
                 from .core.type_utils import first_non_empty, to_int, to_bool
                 from .core.settings import (
                     bool_setting as resolver_bool_setting,
@@ -124,7 +131,9 @@ class ModelResolverExtension:
                     get_all_progress,
                     cancel_download,
                     get_download_directory,
+                    get_metadata_sidecar_path,
                     normalize_download_category,
+                    write_lora_manager_metadata,
                 )
                 from .core.sources.popular import (
                     get_popular_model_url,
@@ -544,6 +553,349 @@ class ModelResolverExtension:
 
                 return web.json_response({"success": True})
 
+            def cleanup_hash_progress(max_age_seconds=300):
+                cutoff = time.time() - max_age_seconds
+                with self.hash_progress_lock:
+                    expired = [
+                        progress_id
+                        for progress_id, progress in self.hash_progress.items()
+                        if progress.get("updated_at", progress.get("created_at", 0)) < cutoff
+                    ]
+                    for progress_id in expired:
+                        self.hash_progress.pop(progress_id, None)
+                    self.cancelled_hash_progress.difference_update(expired)
+
+            def update_hash_progress(progress_id, **payload):
+                if not progress_id:
+                    return
+                with self.hash_progress_lock:
+                    current = self.hash_progress.get(progress_id, {})
+                    self.hash_progress[progress_id] = {
+                        **current,
+                        **payload,
+                        "progress_id": progress_id,
+                        "updated_at": time.time(),
+                    }
+
+            def is_hash_progress_cancelled(progress_id):
+                if not progress_id:
+                    return False
+                with self.hash_progress_lock:
+                    return progress_id in self.cancelled_hash_progress
+
+            def mark_hash_progress_cancelled(progress_id):
+                if not progress_id:
+                    return False
+                cleanup_hash_progress()
+                with self.hash_progress_lock:
+                    current = self.hash_progress.get(progress_id)
+                    if not current:
+                        return False
+                    self.cancelled_hash_progress.add(progress_id)
+                    self.hash_progress[progress_id] = {
+                        **current,
+                        "status": "cancelling",
+                        "stage": "cancelling",
+                        "message": "Stopping hash calculation...",
+                        "updated_at": time.time(),
+                    }
+                    return True
+
+            class HashCalculationCancelled(Exception):
+                pass
+
+            def resolve_hash_file_request(data):
+                import os as _os
+
+                file_path = (
+                    data.get("file_path")
+                    or data.get("resolved_path")
+                    or data.get("path")
+                    or ""
+                )
+                if not file_path:
+                    return "", "file_path is required"
+
+                normalized_path = _os.path.abspath(_os.path.normpath(file_path))
+                if not _os.path.exists(normalized_path) or not _os.path.isfile(normalized_path):
+                    return "", "file does not exist"
+                return normalized_path, ""
+
+            def write_calculated_hash_metadata(normalized_path, metadata_path, sha256):
+                import os as _os
+
+                model_dir = _os.path.abspath(_os.path.dirname(normalized_path))
+                resolved_metadata_path = ""
+                if metadata_path:
+                    candidate_path = _os.path.abspath(_os.path.normpath(metadata_path))
+                    try:
+                        same_dir = _os.path.commonpath([model_dir, candidate_path]) == model_dir
+                    except ValueError:
+                        same_dir = False
+                    if same_dir:
+                        resolved_metadata_path = candidate_path
+
+                if not resolved_metadata_path:
+                    resolved_metadata_path = get_metadata_sidecar_path(normalized_path)
+
+                metadata_updated = False
+                try:
+                    metadata = read_json_safe(resolved_metadata_path, {})
+                    if not isinstance(metadata, dict):
+                        metadata = {}
+
+                    filename = _os.path.basename(normalized_path)
+                    stem, _ext = _os.path.splitext(filename)
+                    hashes = metadata.get("hashes")
+                    if not isinstance(hashes, dict):
+                        hashes = {}
+                    hashes["SHA256"] = sha256
+
+                    metadata["sha256"] = sha256
+                    metadata["hashes"] = hashes
+                    metadata["hash_status"] = "completed"
+                    metadata["last_checked_at"] = time.time()
+                    metadata.setdefault("file_name", stem)
+                    metadata.setdefault("model_name", stem)
+                    metadata.setdefault("file_path", normalized_path.replace("\\", "/"))
+                    try:
+                        metadata.setdefault("size", _os.path.getsize(normalized_path))
+                    except Exception:
+                        pass
+
+                    write_json_atomic(resolved_metadata_path, metadata, indent=2)
+                    metadata_updated = True
+                    log_info(
+                        f"Calculated SHA256 and updated metadata: {resolved_metadata_path}"
+                    )
+                except Exception as metadata_error:
+                    log_warn(
+                        f"Could not update metadata with calculated SHA256 for {normalized_path}: {metadata_error}"
+                    )
+
+                return resolved_metadata_path, metadata_updated
+
+            def calculate_sha256_with_progress(normalized_path, progress_id=""):
+                import hashlib
+                import os as _os
+
+                total_bytes = max(0, _os.path.getsize(normalized_path))
+                bytes_read = 0
+                sha256_hash = hashlib.sha256()
+                last_update = 0.0
+                chunk_size = 1024 * 1024 * 4
+
+                update_hash_progress(
+                    progress_id,
+                    status="running",
+                    stage="hashing",
+                    message="Calculating SHA256...",
+                    percent=0,
+                    bytes_read=0,
+                    total_bytes=total_bytes,
+                )
+
+                with open(normalized_path, "rb") as handle:
+                    for chunk in iter(lambda: handle.read(chunk_size), b""):
+                        if not chunk:
+                            continue
+                        sha256_hash.update(chunk)
+                        bytes_read += len(chunk)
+                        if is_hash_progress_cancelled(progress_id):
+                            percent = 0 if total_bytes <= 0 else min(
+                                98,
+                                (bytes_read / total_bytes) * 98,
+                            )
+                            update_hash_progress(
+                                progress_id,
+                                status="cancelled",
+                                stage="cancelled",
+                                message="Hash calculation cancelled",
+                                percent=percent,
+                                bytes_read=bytes_read,
+                                total_bytes=total_bytes,
+                            )
+                            raise HashCalculationCancelled()
+                        now = time.time()
+                        if now - last_update >= 0.15 or bytes_read >= total_bytes:
+                            percent = 98 if total_bytes <= 0 else min(
+                                98,
+                                (bytes_read / total_bytes) * 98,
+                            )
+                            update_hash_progress(
+                                progress_id,
+                                status="running",
+                                stage="hashing",
+                                message="Calculating SHA256...",
+                                percent=percent,
+                                bytes_read=bytes_read,
+                                total_bytes=total_bytes,
+                            )
+                            last_update = now
+
+                return sha256_hash.hexdigest()
+
+            @routes.post("/model_resolver/calculate-file-hash")
+            @json_api_endpoint("calculate-file-hash")
+            async def calculate_file_hash_route(request):
+                """Calculate SHA256 for a local model and persist it to sidecar metadata."""
+                data = await request.json()
+                metadata_path = data.get("metadata_path") or ""
+
+                normalized_path, error = resolve_hash_file_request(data)
+                if error == "file_path is required":
+                    return web.json_response(
+                        {"error": "file_path is required"}, status=400
+                    )
+                if error:
+                    return web.json_response(
+                        {"error": error}, status=404
+                    )
+
+                sha256 = calculate_sha256_with_progress(normalized_path)
+                if not sha256:
+                    return web.json_response(
+                        {"error": "could not calculate hash"}, status=500
+                    )
+                resolved_metadata_path, metadata_updated = write_calculated_hash_metadata(
+                    normalized_path,
+                    metadata_path,
+                    sha256,
+                )
+
+                return web.json_response(
+                    {
+                        "success": True,
+                        "sha256": sha256,
+                        "hash": sha256,
+                        "file_path": normalized_path,
+                        "metadata_path": resolved_metadata_path,
+                        "metadata_updated": metadata_updated,
+                    }
+                )
+
+            @routes.post("/model_resolver/calculate-file-hash/start")
+            @json_api_endpoint("calculate-file-hash-start")
+            async def calculate_file_hash_start_route(request):
+                """Start SHA256 calculation in a background thread."""
+                import uuid
+
+                data = await request.json()
+                metadata_path = data.get("metadata_path") or ""
+                normalized_path, error = resolve_hash_file_request(data)
+                if error == "file_path is required":
+                    return web.json_response(
+                        {"error": "file_path is required"}, status=400
+                    )
+                if error:
+                    return web.json_response(
+                        {"error": error}, status=404
+                    )
+
+                cleanup_hash_progress()
+                progress_id = f"hash_{uuid.uuid4().hex}"
+                with self.hash_progress_lock:
+                    self.hash_progress[progress_id] = {
+                        "progress_id": progress_id,
+                        "status": "queued",
+                        "stage": "queued",
+                        "message": "Preparing hash calculation...",
+                        "percent": 0,
+                        "file_path": normalized_path,
+                        "created_at": time.time(),
+                        "updated_at": time.time(),
+                    }
+
+                def run_hash_task():
+                    try:
+                        sha256 = calculate_sha256_with_progress(
+                            normalized_path,
+                            progress_id=progress_id,
+                        )
+                        if is_hash_progress_cancelled(progress_id):
+                            raise HashCalculationCancelled()
+                        update_hash_progress(
+                            progress_id,
+                            status="running",
+                            stage="metadata",
+                            message="Saving metadata...",
+                            percent=99,
+                        )
+                        resolved_metadata_path, metadata_updated = write_calculated_hash_metadata(
+                            normalized_path,
+                            metadata_path,
+                            sha256,
+                        )
+                        update_hash_progress(
+                            progress_id,
+                            status="done",
+                            stage="done",
+                            message="Hash calculated",
+                            percent=100,
+                            sha256=sha256,
+                            hash=sha256,
+                            file_path=normalized_path,
+                            metadata_path=resolved_metadata_path,
+                            metadata_updated=metadata_updated,
+                        )
+                    except HashCalculationCancelled:
+                        update_hash_progress(
+                            progress_id,
+                            status="cancelled",
+                            stage="cancelled",
+                            message="Hash calculation cancelled",
+                        )
+                    except Exception as exc:
+                        log_exception(f"Hash calculation failed for {normalized_path}: {exc}")
+                        update_hash_progress(
+                            progress_id,
+                            status="error",
+                            stage="error",
+                            message=str(exc) or "Hash calculation failed",
+                            percent=100,
+                            error=str(exc) or "Hash calculation failed",
+                        )
+
+                threading.Thread(target=run_hash_task, daemon=True).start()
+                return web.json_response(
+                    {
+                        "success": True,
+                        "progress_id": progress_id,
+                    }
+                )
+
+            @routes.get("/model_resolver/calculate-file-hash/progress/{progress_id}")
+            @json_api_endpoint("calculate-file-hash-progress")
+            async def calculate_file_hash_progress_route(request):
+                """Return progress for a background SHA256 calculation."""
+                progress_id = request.match_info.get("progress_id", "").strip()
+                cleanup_hash_progress()
+                with self.hash_progress_lock:
+                    progress = dict(self.hash_progress.get(progress_id) or {})
+                if not progress:
+                    return web.json_response(
+                        {"error": "progress not found"}, status=404
+                    )
+                return web.json_response(progress)
+
+            @routes.post("/model_resolver/calculate-file-hash/cancel/{progress_id}")
+            @json_api_endpoint("calculate-file-hash-cancel")
+            async def calculate_file_hash_cancel_route(request):
+                """Cancel a background SHA256 calculation."""
+                progress_id = request.match_info.get("progress_id", "").strip()
+                if not progress_id:
+                    return web.json_response(
+                        {"error": "progress_id is required"}, status=400
+                    )
+                cancelled = mark_hash_progress_cancelled(progress_id)
+                return web.json_response(
+                    {
+                        "success": True,
+                        "cancelled": cancelled,
+                        "progress_id": progress_id,
+                    }
+                )
+
             @routes.get("/model_resolver/models")
             @json_api_endpoint("get_models")
             async def get_models(request):
@@ -820,11 +1172,67 @@ class ModelResolverExtension:
                             or result.get("from_metadata")
                             or result.get("trained_words")
                         ):
+                            metadata_path = result.get("metadata_path") or ""
+                            metadata_saved = False
+                            if not result.get("from_metadata"):
+                                try:
+                                    sidecar_path = get_metadata_sidecar_path(file_path)
+                                    if sidecar_path and not _os.path.exists(sidecar_path):
+                                        metadata_payload = {
+                                            "source": "civitai",
+                                            "details_source": "civitai",
+                                            "filename": filename,
+                                            "category": category,
+                                            "model_name": result.get("model_name", clean_name),
+                                            "name": result.get("model_name", clean_name),
+                                            "model_type": result.get("model_type", ""),
+                                            "type": result.get("model_type", ""),
+                                            "model_id": result.get("model_id"),
+                                            "version_id": result.get("version_id"),
+                                            "version_name": result.get("version_name", ""),
+                                            "sha256": result.get("sha256"),
+                                            "size": result.get("size"),
+                                            "base_model": result.get("base_model"),
+                                            "tags": result.get("tags", []),
+                                            "trained_words": result.get("trained_words", []),
+                                            "images": result.get("images", []),
+                                            "clip_skip": result.get("clip_skip"),
+                                            "description": result.get("description", ""),
+                                            "model_description": result.get("model_description", ""),
+                                            "download_url": result.get("download_url"),
+                                            "url": result.get("version_url") or result.get("url"),
+                                            "path_metadata": {
+                                                "filename": filename,
+                                                "category": category,
+                                                "source": "civitai",
+                                                "model_id": result.get("model_id"),
+                                                "version_id": result.get("version_id"),
+                                            },
+                                        }
+                                        metadata_path = write_lora_manager_metadata(
+                                            file_path,
+                                            metadata_payload,
+                                            category,
+                                            result.get("version_url")
+                                            or result.get("url")
+                                            or result.get("download_url")
+                                            or "",
+                                        ) or ""
+                                        metadata_saved = bool(metadata_path)
+                                    elif sidecar_path:
+                                        metadata_path = sidecar_path
+                                except Exception as metadata_error:
+                                    self.logger.warning(
+                                        f"CivitAI metadata sidecar save failed: {metadata_error}"
+                                    )
+
                             return web.json_response(
                                 {
                                     "filename": filename,
                                     "file_path": file_path,
                                     "resolved_path": file_path,
+                                    "metadata_path": metadata_path,
+                                    "metadata_saved": metadata_saved,
                                     "location": result.get("location")
                                     or file_location,
                                     "url": result.get("url"),

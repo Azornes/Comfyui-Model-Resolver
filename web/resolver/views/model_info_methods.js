@@ -319,7 +319,20 @@ export const modelInfoMethods = {
                                 </tr>
                                 <tr class="mr-info-hash-row">
                                     <td>${this.renderInfoFieldLabel('hash', 'Hash (sha256)', 'Unique fingerprint of the local file. Model Resolver uses it to confirm the exact CivitAI version.')}</td>
-                                    <td><span class="mr-info-hash"></span></td>
+                                    <td>
+                                        <div class="mr-info-hash-control">
+                                            <span class="mr-info-hash"></span>
+                                            <button type="button" class="mr-info-hash-calculate mr-hidden-initial">
+                                                Calculate hash
+                                            </button>
+                                            <div class="mr-info-hash-progress mr-hidden-initial">
+                                                <div class="mr-info-hash-progress-bar">
+                                                    <span></span>
+                                                </div>
+                                                <small>0%</small>
+                                            </div>
+                                        </div>
+                                    </td>
                                 </tr>
                                 <tr class="mr-info-size-row mr-hidden-initial">
                                     <td>${this.renderInfoFieldLabel('hardDrive', 'Size', 'The local model file size, read from metadata or from the file on disk.')}</td>
@@ -687,11 +700,225 @@ export const modelInfoMethods = {
         }
     },
 
+    getInfoDialogHash(data = {}) {
+        return String(data.sha256 || data.hash || data.hashes?.SHA256 || data.hashes?.sha256 || '').trim();
+    },
+
+    getInfoDialogModelFilePath(data = {}) {
+        return data.file_path
+            || data.filePath
+            || data.resolved_path
+            || data.resolvedPath
+            || data.full_path
+            || data.fullPath
+            || data.path
+            || '';
+    },
+
+    updateInfoDialogHashDisplay(dialog, data = {}) {
+        const hashEl = dialog.querySelector('.mr-info-hash');
+        const button = dialog.querySelector('.mr-info-hash-calculate');
+        const progressEl = dialog.querySelector('.mr-info-hash-progress');
+        const hash = this.getInfoDialogHash(data);
+        const filePath = this.getInfoDialogModelFilePath(data);
+
+        if (hashEl) {
+            hashEl.textContent = hash;
+            hashEl.classList.toggle('is-empty', !hash);
+        }
+        if (button) {
+            const canCalculate = Boolean(!hash && filePath);
+            button.classList.toggle('mr-hidden-initial', !canCalculate);
+            button.hidden = !canCalculate;
+            button.disabled = false;
+            button.textContent = 'Calculate hash';
+            delete button.dataset.hashCalculating;
+            delete button.dataset.progressId;
+        }
+        if (progressEl && hash) {
+            this.hideInfoDialogHashProgress(dialog);
+        }
+    },
+
+    hideInfoDialogHashProgress(dialog) {
+        const progressEl = dialog.querySelector('.mr-info-hash-progress');
+        if (!progressEl) return;
+        const bar = progressEl.querySelector('.mr-info-hash-progress-bar span');
+        const label = progressEl.querySelector('small');
+        progressEl.classList.add('mr-hidden-initial');
+        progressEl.hidden = true;
+        if (bar) bar.style.width = '0%';
+        if (label) label.textContent = '0%';
+    },
+
+    updateInfoDialogHashProgress(dialog, percent = 0, message = '') {
+        const progressEl = dialog.querySelector('.mr-info-hash-progress');
+        if (!progressEl) return;
+
+        const safePercent = Math.max(0, Math.min(100, Number(percent) || 0));
+        const bar = progressEl.querySelector('.mr-info-hash-progress-bar span');
+        const label = progressEl.querySelector('small');
+        progressEl.classList.remove('mr-hidden-initial');
+        progressEl.hidden = false;
+        if (bar) bar.style.width = `${safePercent}%`;
+        if (label) {
+            label.textContent = message
+                ? `${Math.round(safePercent)}% · ${message}`
+                : `${Math.round(safePercent)}%`;
+        }
+    },
+
+    async cancelInfoDialogHashCalculation(dialog, button) {
+        const state = dialog?._hashCalculation || {};
+        state.cancelRequested = true;
+        dialog._hashCalculation = state;
+        if (button) {
+            button.disabled = true;
+            button.textContent = 'Stopping...';
+        }
+
+        if (state.progressId) {
+            try {
+                await this.fetchJson(
+                    `/model_resolver/calculate-file-hash/cancel/${encodeURIComponent(state.progressId)}`,
+                    { method: 'POST', silent: true },
+                    'Cancel model hash calculation'
+                );
+            } catch (error) {
+                // Keep the UI in stopping state; polling will surface the final state if possible.
+            }
+        }
+    },
+
+    async calculateInfoDialogHash(dialog, button) {
+        if (button?.dataset.hashCalculating === 'true') {
+            await this.cancelInfoDialogHashCalculation(dialog, button);
+            return;
+        }
+
+        const data = dialog?._infoDialogData || {};
+        const filePath = this.getInfoDialogModelFilePath(data);
+        if (!filePath) {
+            this.showNotification?.('No local file path available', 'error');
+            return;
+        }
+
+        dialog._hashCalculation = { progressId: '', cancelRequested: false };
+        if (button) {
+            button.disabled = false;
+            button.textContent = 'Stop calculate';
+            button.dataset.hashCalculating = 'true';
+            delete button.dataset.progressId;
+        }
+        this.updateInfoDialogHashProgress(dialog, 0, 'Preparing');
+
+        try {
+            const start = await this.fetchJson('/model_resolver/calculate-file-hash/start', {
+                method: 'POST',
+                body: JSON.stringify({
+                    file_path: filePath,
+                    metadata_path: data.metadata_path || data.metadataPath || ''
+                })
+            }, 'Start model hash calculation');
+            const progressId = start?.progress_id;
+            if (!progressId) {
+                throw new Error('No progress id returned');
+            }
+            if (!dialog._hashCalculation) {
+                dialog._hashCalculation = { progressId, cancelRequested: false };
+            }
+            dialog._hashCalculation.progressId = progressId;
+            if (button) {
+                button.dataset.progressId = progressId;
+                button.textContent = 'Stop calculate';
+                button.disabled = false;
+            }
+            if (dialog._hashCalculation.cancelRequested) {
+                await this.cancelInfoDialogHashCalculation(dialog, button);
+            }
+
+            let result = null;
+            for (;;) {
+                await new Promise(resolve => setTimeout(resolve, 250));
+                if (!dialog.isConnected) {
+                    await this.cancelInfoDialogHashCalculation(dialog, button);
+                    return;
+                }
+                const progress = await this.fetchJson(
+                    `/model_resolver/calculate-file-hash/progress/${encodeURIComponent(progressId)}`,
+                    { silent: true },
+                    'Get model hash progress'
+                );
+                this.updateInfoDialogHashProgress(
+                    dialog,
+                    progress?.percent || 0,
+                    progress?.message || ''
+                );
+
+                if (progress?.status === 'done') {
+                    result = progress;
+                    break;
+                }
+                if (progress?.status === 'cancelled') {
+                    this.hideInfoDialogHashProgress(dialog);
+                    if (button) {
+                        button.disabled = false;
+                        button.textContent = 'Calculate hash';
+                        delete button.dataset.hashCalculating;
+                        delete button.dataset.progressId;
+                    }
+                    dialog._hashCalculation = null;
+                    this.showNotification?.('Hash calculation stopped.', 'info');
+                    return;
+                }
+                if (progress?.status === 'error') {
+                    throw new Error(progress.error || progress.message || 'Hash calculation failed');
+                }
+            }
+
+            const sha256 = result?.sha256 || result?.hash || '';
+            if (!sha256) {
+                throw new Error('No hash returned');
+            }
+
+            const updatedData = {
+                ...data,
+                sha256,
+                hash: sha256,
+                metadata_path: result.metadata_path || data.metadata_path || data.metadataPath || '',
+                metadata_saved: Boolean(result.metadata_updated || data.metadata_saved)
+            };
+            dialog._infoDialogData = updatedData;
+            dialog._hashCalculation = null;
+            this.updateInfoDialogHashDisplay(dialog, updatedData);
+            this.showNotification?.(
+                result.metadata_updated ? 'Hash calculated and saved to metadata.' : 'Hash calculated.',
+                'success'
+            );
+        } catch (error) {
+            dialog._hashCalculation = null;
+            if (button) {
+                button.disabled = false;
+                button.textContent = 'Calculate hash';
+                delete button.dataset.hashCalculating;
+                delete button.dataset.progressId;
+            }
+            this.hideInfoDialogHashProgress(dialog);
+            this.showNotification?.(`Hash calculation failed: ${error?.message || error}`, 'error');
+        }
+    },
+
     bindInfoDialogInteractions(dialog) {
         if (!dialog || dialog.dataset.mlInfoBound === 'true') return;
         dialog.dataset.mlInfoBound = 'true';
 
         dialog.addEventListener('click', async (event) => {
+            const hashButton = event.target.closest('.mr-info-hash-calculate');
+            if (hashButton && dialog.contains(hashButton)) {
+                await this.calculateInfoDialogHash(dialog, hashButton);
+                return;
+            }
+
             const locationBtn = event.target.closest('.mr-info-location-button');
             if (locationBtn && dialog.contains(locationBtn)) {
                 const path = locationBtn.dataset.path || '';
@@ -860,6 +1087,7 @@ export const modelInfoMethods = {
             this.updateInfoDialogError(dialog, 'No data received');
             return;
         }
+        dialog._infoDialogData = { ...(dialog._infoDialogData || {}), ...data };
 
         // Update title
         const titleEl = dialog.querySelector('.mr-info-dialog-title');
@@ -937,10 +1165,7 @@ export const modelInfoMethods = {
         }
 
         // Update hash
-        const hashEl = dialog.querySelector('.mr-info-hash');
-        if (hashEl) {
-            hashEl.textContent = data.sha256 || data.hash || '';
-        }
+        this.updateInfoDialogHashDisplay(dialog, data);
 
         // Update CivitAI link
         const civitaiLinkEl = dialog.querySelector('.mr-info-civitai-link');

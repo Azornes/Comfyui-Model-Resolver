@@ -1699,6 +1699,7 @@ def _metadata_to_model_info(metadata: Dict[str, Any]) -> Dict[str, Any]:
     model_info = _as_metadata_dict(civitai_data.get("model"))
     file_infos = _as_metadata_list(civitai_data.get("files"))
     file_info = _as_metadata_dict(file_infos[0]) if file_infos else {}
+    metadata_hashes = _as_metadata_dict(metadata.get("hashes"))
 
     # Build model_id from CivitAI data
     model_id = civitai_data.get("modelId") or civitai_data.get("id")
@@ -1722,7 +1723,13 @@ def _metadata_to_model_info(metadata: Dict[str, Any]) -> Dict[str, Any]:
             civitai_data.get("name"),
         )
         or "",
-        "sha256": metadata.get("sha256", ""),
+        "sha256": _first_metadata_value(
+            metadata.get("sha256"),
+            metadata.get("hash"),
+            metadata_hashes.get("SHA256"),
+            metadata_hashes.get("sha256"),
+        )
+        or "",
         "size": _metadata_size_to_bytes(
             _first_metadata_value(
                 metadata.get("size"),
@@ -1801,6 +1808,7 @@ def get_model_info_for_file(
             log_info(f"Using metadata file for {file_path}")
             result = _metadata_to_model_info(metadata)
             result["file_path"] = file_path
+            result["metadata_path"] = metadata_path
             result["location"] = _format_model_location(file_path)
             if not result.get("size"):
                 try:
