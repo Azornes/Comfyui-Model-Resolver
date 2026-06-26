@@ -56,6 +56,7 @@ MODEL_TITLE_MATCH_THRESHOLD = 82.0
 
 
 _search_cache: Dict[str, Any] = {}
+_download_size_cache: Dict[str, Optional[int]] = {}
 
 REQUEST_HEADERS = {
     "accept": "application/json,text/html;q=0.9,*/*;q=0.8",
@@ -76,6 +77,7 @@ class CivArchiveSearchError(Exception):
 def clear_search_cache():
     """Clear cached CivArchive search results."""
     _search_cache.clear()
+    _download_size_cache.clear()
 
 
 def _report_progress(
@@ -234,27 +236,96 @@ def _request_page_text(
     return response.text
 
 
-def _extract_model_links_from_html(html_text: str) -> List[Dict[str, Optional[int]]]:
+def _normalize_civarchive_type(value: Any) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip()
+    mapped = CIVARCHIVE_API_TYPE_MAP.get(text.lower(), text)
+    return re.sub(r"[^a-z0-9]+", "", str(mapped).lower())
+
+
+def _extract_hash_page_model_cards(next_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    page_props = next_data.get("props", {}).get("pageProps", {})
+    models = page_props.get("models") if isinstance(page_props, dict) else []
+    if not isinstance(models, list):
+        models = [models]
+
+    cards: List[Dict[str, Any]] = []
+    for model in models:
+        if not isinstance(model, dict):
+            continue
+
+        version = model.get("version") if isinstance(model.get("version"), dict) else {}
+        model_id = _coerce_int(
+            model.get("id")
+            or model.get("model_id")
+            or model.get("modelId")
+            or version.get("model_id")
+            or version.get("modelId")
+        )
+        version_id = _coerce_int(
+            version.get("id")
+            or model.get("model_version_id")
+            or model.get("modelVersionId")
+            or model.get("version_id")
+        )
+        if not model_id:
+            continue
+
+        cards.append(
+            {
+                "model_id": model_id,
+                "version_id": version_id,
+                "type": model.get("type"),
+                "name": model.get("name"),
+            }
+        )
+
+    return cards
+
+
+def _extract_model_links_from_html(html_text: str) -> List[Dict[str, Any]]:
     text = _normalize_embedded_html_text(html_text)
     if not text:
         return []
 
-    links: List[Dict[str, Optional[int]]] = []
+    next_data = _extract_next_data(html_text)
+    model_cards = _extract_hash_page_model_cards(next_data)
+    card_meta_by_key = {
+        (card.get("model_id"), card.get("version_id")): card
+        for card in model_cards
+        if card.get("model_id")
+    }
+    links: List[Dict[str, Any]] = []
+    links_by_key: Dict[Tuple[Optional[int], Optional[int]], Dict[str, Any]] = {}
     seen = set()
 
-    def add_link(model_id: Any, version_id: Any = None) -> None:
+    def add_link(model_id: Any, version_id: Any = None, **metadata: Any) -> None:
         resolved_model_id = _coerce_int(model_id)
         resolved_version_id = _coerce_int(version_id) if version_id else None
         key = (resolved_model_id, resolved_version_id)
-        if not resolved_model_id or key in seen:
+        if not resolved_model_id:
+            return
+        card_meta = card_meta_by_key.get(key) or {}
+        if key in seen:
+            existing = links_by_key.get(key)
+            if existing:
+                for field in ("type", "name"):
+                    value = metadata.get(field) or card_meta.get(field)
+                    if value and not existing.get(field):
+                        existing[field] = value
             return
         seen.add(key)
-        links.append(
-            {
-                "model_id": resolved_model_id,
-                "version_id": resolved_version_id,
-            }
-        )
+        link = {
+            "model_id": resolved_model_id,
+            "version_id": resolved_version_id,
+        }
+        for field in ("type", "name"):
+            value = metadata.get(field) or card_meta.get(field)
+            if value:
+                link[field] = value
+        links.append(link)
+        links_by_key[key] = link
 
     pattern = re.compile(r"(?<!/download)/models/(\d+)(?:\?[^\"'<>\s]*?modelVersionId=(\d+))?")
 
@@ -290,10 +361,18 @@ def _extract_model_links_from_html(html_text: str) -> List[Dict[str, Optional[in
             for item in value:
                 walk_next_data(item)
 
-    walk_next_data(_extract_next_data(html_text))
+    walk_next_data(next_data)
 
     for match in pattern.finditer(text):
         add_link(match.group(1), match.group(2))
+
+    for card in model_cards:
+        add_link(
+            card.get("model_id"),
+            card.get("version_id"),
+            type=card.get("type"),
+            name=card.get("name"),
+        )
 
     filtered_links = []
     for link in links:
@@ -302,6 +381,27 @@ def _extract_model_links_from_html(html_text: str) -> List[Dict[str, Optional[in
         filtered_links.append(link)
     filtered_links.extend(link for link in links if not link.get("version_id"))
     return filtered_links
+
+
+def _prefer_model_links_for_expected_type(
+    links: List[Dict[str, Any]],
+    expected_model_type: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    expected_type = _normalize_civarchive_type(expected_model_type)
+    if not expected_type:
+        return links
+
+    def is_expected(link: Dict[str, Any]) -> bool:
+        return _normalize_civarchive_type(link.get("type")) == expected_type
+
+    if not any(is_expected(link) for link in links):
+        return links
+
+    ordered = sorted(
+        enumerate(links),
+        key=lambda item: (0 if is_expected(item[1]) else 1, item[0]),
+    )
+    return [link for _, link in ordered]
 
 
 def _extract_download_urls_from_html(html_text: str) -> List[str]:
@@ -483,6 +583,111 @@ def _normalize_download_url(url: Any) -> Optional[str]:
         return value
     if value.startswith("/api/download/"):
         return urljoin(CIVARCHIVE_BASE_URL, value)
+    return None
+
+
+def _prepare_size_probe_url(url: Any) -> Optional[str]:
+    normalized = _normalize_download_url(url)
+    if not normalized:
+        return None
+
+    parsed = urlparse(normalized)
+    host = parsed.netloc.lower()
+    path = parsed.path or ""
+
+    if host.endswith("huggingface.co") and "/blob/" in path:
+        normalized = normalized.replace("/blob/", "/resolve/", 1)
+        parsed = urlparse(normalized)
+        host = parsed.netloc.lower()
+        path = parsed.path or ""
+
+    if host.endswith("civarchive.com") and not path.startswith("/api/download/"):
+        return None
+    if (host.endswith("civitai.com") or host.endswith("civitai.red")) and not path.startswith("/api/download/"):
+        return None
+
+    return normalized
+
+
+def _response_file_size(response: requests.Response) -> Optional[int]:
+    size = _parse_content_range_size(response.headers.get("Content-Range"))
+    if size:
+        return size
+
+    for key in (
+        "x-linked-size",
+        "x-file-size",
+        "x-goog-stored-content-length",
+        "content-length",
+    ):
+        size = _parse_size_header(response.headers.get(key))
+        if size:
+            content_type = (response.headers.get("content-type") or "").lower()
+            if key == "content-length" and "text/html" in content_type:
+                continue
+            return size
+
+    return None
+
+
+def _fetch_remote_file_size_bytes(url: Any, timeout: int = 15) -> Optional[int]:
+    probe_url = _prepare_size_probe_url(url)
+    if not probe_url:
+        return None
+    if probe_url in _download_size_cache:
+        return _download_size_cache[probe_url]
+
+    size = None
+    try:
+        response = requests.head(
+            probe_url,
+            headers=REQUEST_HEADERS,
+            allow_redirects=True,
+            timeout=timeout,
+        )
+        try:
+            if response.status_code < 400:
+                size = _response_file_size(response)
+        finally:
+            response.close()
+    except Exception as e:
+        log_debug(f"CivArchive size HEAD failed: url={probe_url}, error={e}")
+
+    if not size:
+        try:
+            response = requests.get(
+                probe_url,
+                headers={**REQUEST_HEADERS, "Range": "bytes=0-0"},
+                allow_redirects=True,
+                stream=True,
+                timeout=timeout,
+            )
+            try:
+                if response.status_code < 400:
+                    size = _response_file_size(response)
+            finally:
+                response.close()
+        except Exception as e:
+            log_debug(f"CivArchive size range request failed: url={probe_url}, error={e}")
+
+    _download_size_cache[probe_url] = size
+    return size
+
+
+def _resolve_file_size_bytes(
+    file_info: Dict[str, Any],
+    download_urls: Optional[List[str]] = None,
+) -> Optional[int]:
+    size = _extract_file_size_bytes(file_info)
+    if size:
+        return size
+
+    urls = download_urls if download_urls is not None else _collect_normalized_download_urls(file_info)
+    for url in urls:
+        size = _fetch_remote_file_size_bytes(url)
+        if size:
+            return size
+
     return None
 
 
@@ -1055,7 +1260,7 @@ def _build_result_from_normalized_version(
 
     size = file_info.get("size")
     if size is None:
-        size = _extract_file_size_bytes(file_info)
+        size = _resolve_file_size_bytes(file_info, download_urls)
 
     return {
         "source": "civarchive",
@@ -1176,6 +1381,26 @@ def _find_model_title_match_in_model_details(
         )
 
     return None
+
+
+def _parse_size_header(value: Any) -> Optional[int]:
+    if value is None or value == "":
+        return None
+    try:
+        size = int(str(value).strip())
+        return size if size > 0 else None
+    except (TypeError, ValueError):
+        size = parse_size_to_bytes(value)
+        return size if size and size > 0 else None
+
+
+def _parse_content_range_size(value: Any) -> Optional[int]:
+    if not value:
+        return None
+    match = re.search(r"/(\d+)\s*$", str(value))
+    if not match:
+        return None
+    return _parse_size_header(match.group(1))
 
 
 def _build_result_from_model_details(
@@ -1544,7 +1769,7 @@ def _build_result_from_payload(
         "civitai_model_version_id": version.get("civitai_model_version_id") or version.get("civitaiModelVersionId"),
         "download_url": download_urls[0],
         "download_urls": download_urls,
-        "size": _extract_file_size_bytes(selected_file),
+        "size": _resolve_file_size_bytes(selected_file, download_urls),
         "base_model": version.get("baseModel") or version.get("base_model") or version.get("baseModelType"),
         "tags": tags,
         "trained_words": trained_words,
@@ -1568,10 +1793,21 @@ def resolve_civarchive_by_hash(
     sha256: str,
     query: str = "",
     exact_only: bool = False,
+    model_type: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Resolve a model by SHA256 hash through CivArchive."""
     if not sha256:
         return None
+
+    result = _resolve_hash_search_candidate_from_page(
+        {"url": f"/sha256/{sha256.lower()}", "name": query or sha256},
+        sha256,
+        query=query or sha256,
+        exact_only=exact_only,
+        expected_model_type=model_type,
+    )
+    if result:
+        return result
 
     payload = _request_json(f"/sha256/{sha256.lower()}")
     if not payload:
@@ -1685,7 +1921,7 @@ def _build_result_from_search_candidate(
         "url": open_url,
         "download_url": download_urls[0],
         "download_urls": download_urls,
-        "size": _extract_file_size_bytes(candidate),
+        "size": _resolve_file_size_bytes(candidate, download_urls),
         "base_model": candidate.get("base_model") or candidate.get("baseModel"),
         "tags": candidate.get("tags") or [],
         "trained_words": [],
@@ -1741,10 +1977,14 @@ def _resolve_hash_search_candidate_from_page(
     exact_only: bool = False,
     base_model_context: Optional[str] = None,
     allow_model_title_match: bool = False,
+    expected_model_type: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     page_text = _request_page_text(f"/sha256/{sha256.lower()}")
     hash_page_files = _extract_hash_page_files(page_text or "")
-    model_links = _extract_model_links_from_html(page_text or "")
+    model_links = _prefer_model_links_for_expected_type(
+        _extract_model_links_from_html(page_text or ""),
+        expected_model_type=expected_model_type,
+    )
     for link in model_links[:HASH_PAGE_MODEL_LINK_LIMIT]:
         model_id = link["model_id"]
         version_id = link.get("version_id")
@@ -1845,6 +2085,7 @@ def _resolve_search_candidate(
     exact_only: bool = False,
     base_model_context: Optional[str] = None,
     allow_model_title_match: bool = False,
+    model_type: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     parsed = parse_civarchive_url(candidate.get("url", ""))
     if not parsed:
@@ -1858,6 +2099,7 @@ def _resolve_search_candidate(
             exact_only=exact_only,
             base_model_context=base_model_context,
             allow_model_title_match=allow_model_title_match,
+            expected_model_type=model_type,
         )
     elif parsed.get("model_id"):
         result = _resolve_civarchive_model_link(
@@ -1934,7 +2176,11 @@ def search_civarchive(
             continue
         seen.add(identity)
 
-        resolved = _resolve_search_candidate(candidate, normalized_query)
+        resolved = _resolve_search_candidate(
+            candidate,
+            normalized_query,
+            model_type=model_type,
+        )
         if not resolved:
             continue
 
@@ -1998,6 +2244,7 @@ def search_civarchive_for_file(
             sha256,
             query=normalized_filename,
             exact_only=exact_only,
+            model_type=model_type,
         )
         _search_cache[cache_key] = result
         _report_progress(
@@ -2088,6 +2335,7 @@ def search_civarchive_for_file(
                     exact_only=exact_only,
                     base_model_context=base_model_context,
                     allow_model_title_match=allow_model_title_match,
+                    model_type=model_type,
                 )
                 if not resolved:
                     continue
