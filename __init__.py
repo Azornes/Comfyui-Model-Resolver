@@ -169,6 +169,7 @@ class ModelResolverExtension:
                     CivArchiveSearchError,
                     is_civarchive_available,
                     search_civarchive_for_file,
+                    resolve_civarchive_by_hash,
                     resolve_civarchive_model_version,
                     get_civarchive_model_details,
                     clear_search_cache as clear_civarchive_search_cache,
@@ -1102,17 +1103,20 @@ class ModelResolverExtension:
                     {"loaded_models": loaded_models, "total": len(loaded_models)}
                 )
 
-            # ==================== CIVITAI SEARCH ROUTE ====================
+            # ==================== MODEL METADATA LOOKUP ROUTE ====================
 
             @routes.post("/model_resolver/civitai-search")
             @json_api_endpoint("civitai-search")
             async def civitai_search(request):
-                """Search CivitAI for a model using file hash."""
+                """Fetch model metadata from trusted exact-match sources."""
                 data = await request.json()
                 filename = data.get("filename", "")
                 category = data.get("category", "")
                 resolved_path = data.get("resolved_path", "")
                 local_only = to_bool(data.get("local_only"), False)
+                force_refresh = to_bool(
+                    data.get("force_refresh") or data.get("force"), False
+                )
                 provided_hash = (
                     data.get("sha256")
                     or data.get("hash")
@@ -1125,6 +1129,12 @@ class ModelResolverExtension:
                     and all(ch in "0123456789abcdef" for ch in provided_hash)
                 ):
                     provided_hash = ""
+                hf_token = data.get("hf_token", "")
+                brave_search_api_key = data.get("brave_search_api_key", "")
+                hf_use_brave_fallback = to_bool(
+                    data.get("hf_use_brave_fallback", True),
+                    True,
+                )
 
                 if not filename:
                     return web.json_response(
@@ -1222,8 +1232,16 @@ class ModelResolverExtension:
                         or "",
                         "metadata_saved": bool(metadata_saved),
                         "location": result.get("location") or file_location,
+                        "source": result.get("source") or "",
+                        "details_source": result.get("details_source")
+                        or result.get("source")
+                        or "",
                         "url": result.get("url"),
                         "version_url": result.get("version_url"),
+                        "download_url": result.get("download_url"),
+                        "platform_url": result.get("platform_url"),
+                        "repo_id": result.get("repo_id"),
+                        "path": result.get("path"),
                         "model_id": result.get("model_id"),
                         "model_name": result.get("model_name") or clean_name,
                         "model_type": model_type,
@@ -1240,11 +1258,364 @@ class ModelResolverExtension:
                         "model_description": result.get("model_description", ""),
                         "from_metadata": bool(result.get("from_metadata")),
                         "local_only": bool(local_payload),
+                        "metadata_checked": bool(civitai_checked),
                         "civitai_checked": bool(civitai_checked),
                     }
 
+                def normalize_sha256_value(value):
+                    text = str(value or "").strip().lower()
+                    if text.startswith("sha256:"):
+                        text = text.split(":", 1)[1].strip()
+                    if len(text) == 64 and all(
+                        ch in "0123456789abcdef" for ch in text
+                    ):
+                        return text
+                    return ""
+
+                def extract_result_sha256(result):
+                    if not isinstance(result, dict):
+                        return ""
+                    for key in ("sha256", "hash"):
+                        normalized = normalize_sha256_value(result.get(key))
+                        if normalized:
+                            return normalized
+                    hashes = result.get("hashes")
+                    if isinstance(hashes, dict):
+                        for key in ("SHA256", "sha256", "Sha256"):
+                            normalized = normalize_sha256_value(hashes.get(key))
+                            if normalized:
+                                return normalized
+                    return ""
+
+                def result_filename_matches(result):
+                    if not isinstance(result, dict):
+                        return False
+                    expected = _os.path.basename(filename or "").lower()
+                    candidates = [
+                        result.get("filename"),
+                        result.get("path"),
+                        result.get("file_path"),
+                    ]
+                    for candidate in candidates:
+                        basename = _os.path.basename(str(candidate or "")).lower()
+                        if basename and basename == expected:
+                            return True
+                    return False
+
+                def result_hash_matches(result, *, require_filename=False):
+                    if not provided_hash or not isinstance(result, dict):
+                        return False
+                    result_hash = extract_result_sha256(result)
+                    if result_hash != provided_hash:
+                        return False
+                    if require_filename and not result_filename_matches(result):
+                        return False
+                    return True
+
+                def huggingface_page_url(result):
+                    try:
+                        from urllib.parse import quote as _quote
+                    except Exception:
+                        _quote = None
+                    repo_id = str(
+                        result.get("repo_id") or result.get("repo") or ""
+                    ).strip()
+                    hf_path = str(
+                        result.get("path") or result.get("filename") or ""
+                    ).strip()
+                    if not repo_id or not hf_path:
+                        return ""
+                    if _quote:
+                        hf_path = _quote(hf_path.replace("\\", "/"), safe="/")
+                    return f"https://huggingface.co/{repo_id}/blob/main/{hf_path}"
+
+                def prepare_remote_result(result, source_name):
+                    result = dict(result or {})
+                    source_name = str(source_name or result.get("source") or "").lower()
+                    if source_name == "huggingface":
+                        download_url = result.get("download_url") or result.get("url")
+                        page_url = result.get("page_url") or huggingface_page_url(result)
+                        if page_url:
+                            result["url"] = page_url
+                            result["version_url"] = page_url
+                        result["download_url"] = download_url
+                        result["model_name"] = (
+                            result.get("model_name")
+                            or result.get("name")
+                            or result.get("repo_id")
+                            or clean_name
+                        )
+                        result["model_type"] = (
+                            result.get("model_type")
+                            or infer_model_type_from_category(category)
+                        )
+                    else:
+                        result["model_name"] = (
+                            result.get("model_name")
+                            or result.get("name")
+                            or clean_name
+                        )
+                        if result.get("url") and not result.get("version_url"):
+                            result["version_url"] = result.get("url")
+
+                    result["source"] = source_name or result.get("source") or ""
+                    result["details_source"] = (
+                        result.get("details_source")
+                        or source_name
+                        or result.get("source")
+                        or ""
+                    )
+                    result["file_path"] = file_path or result.get("file_path") or ""
+                    result["resolved_path"] = (
+                        file_path or result.get("resolved_path") or ""
+                    )
+                    result["location"] = result.get("location") or file_location
+                    result["filename"] = result.get("filename") or filename
+                    result["sha256"] = (
+                        extract_result_sha256(result)
+                        or provided_hash
+                        or result.get("sha256")
+                    )
+                    if not result.get("size") and file_path and _os.path.exists(file_path):
+                        try:
+                            result["size"] = _os.path.getsize(file_path)
+                        except Exception:
+                            pass
+                    return result
+
+                def remote_link_is_marked_dead(item):
+                    if not isinstance(item, dict):
+                        return False
+                    status = str(item.get("status") or "").lower()
+                    return bool(
+                        item.get("deletedAt")
+                        or item.get("deleted_at")
+                        or item.get("is_dead")
+                        or item.get("isDead")
+                        or item.get("likelyDead")
+                        or item.get("likely_dead")
+                        or item.get("dead")
+                        or status in {"dead", "deleted", "unavailable", "missing"}
+                    )
+
+                def result_url_looks_like_model_file(url, expected_filename=""):
+                    text = str(url or "").strip()
+                    if not text.startswith(("http://", "https://")):
+                        return False
+                    try:
+                        from urllib.parse import unquote as _unquote, urlparse as _urlparse
+                        parsed = _urlparse(text)
+                        host = parsed.netloc.lower()
+                        path = _unquote(parsed.path or "")
+                    except Exception:
+                        host = ""
+                        path = text
+                    if host.endswith("huggingface.co") and path.startswith("/spaces/"):
+                        return False
+                    if (
+                        host.endswith("civitai.com")
+                        or host.endswith("civitai.red")
+                    ) and path.startswith("/api/download/"):
+                        return True
+
+                    basename = _os.path.basename(path).lower()
+                    expected = _os.path.basename(str(expected_filename or "")).lower()
+                    if expected and basename == expected:
+                        return True
+                    model_extensions = {
+                        ".safetensors",
+                        ".ckpt",
+                        ".pt",
+                        ".pth",
+                        ".bin",
+                        ".gguf",
+                        ".onnx",
+                        ".pb",
+                        ".pkl",
+                        ".pickle",
+                    }
+                    return _os.path.splitext(basename)[1].lower() in model_extensions
+
+                def collect_result_download_urls(result):
+                    urls = []
+                    if remote_link_is_marked_dead(result):
+                        return urls
+                    expected_filename = result.get("filename") or filename
+                    dead_urls = set()
+                    mirrors = result.get("mirrors") or []
+                    if not isinstance(mirrors, list):
+                        mirrors = [mirrors]
+                    for mirror in mirrors:
+                        if not isinstance(mirror, dict):
+                            continue
+                        if remote_link_is_marked_dead(mirror):
+                            dead_url = str(mirror.get("url") or "").strip()
+                            if dead_url.startswith(("http://", "https://")):
+                                dead_urls.add(dead_url)
+                            continue
+                        url = str(mirror.get("url") or "").strip()
+                        mirror_filename = (
+                            mirror.get("filename")
+                            or mirror.get("name")
+                            or expected_filename
+                        )
+                        if (
+                            result_url_looks_like_model_file(url, mirror_filename)
+                            and url not in urls
+                        ):
+                            urls.append(url)
+                    raw_urls = result.get("download_urls") or []
+                    if not isinstance(raw_urls, list):
+                        raw_urls = [raw_urls]
+                    for raw_url in raw_urls:
+                        url = str(raw_url or "").strip()
+                        if (
+                            result_url_looks_like_model_file(url, expected_filename)
+                            and url not in dead_urls
+                            and url not in urls
+                        ):
+                            urls.append(url)
+                    for key in ("download_url", "downloadUrl"):
+                        url = str(result.get(key) or "").strip()
+                        if (
+                            result_url_looks_like_model_file(url, expected_filename)
+                            and url not in dead_urls
+                            and url not in urls
+                        ):
+                            urls.append(url)
+                    return urls
+
+                def remote_download_url_is_alive(url):
+                    try:
+                        import requests
+                    except Exception:
+                        return True
+
+                    headers = {
+                        "User-Agent": "ComfyUI-Model-Resolver/1.0",
+                        "Accept": "*/*",
+                    }
+                    try:
+                        response = requests.head(
+                            url,
+                            headers=headers,
+                            allow_redirects=True,
+                            timeout=8,
+                        )
+                        try:
+                            if response.status_code < 400:
+                                return True
+                            if response.status_code in {401, 403, 404, 410}:
+                                return False
+                        finally:
+                            response.close()
+                    except Exception:
+                        pass
+
+                    try:
+                        response = requests.get(
+                            url,
+                            headers={**headers, "Range": "bytes=0-0"},
+                            allow_redirects=True,
+                            stream=True,
+                            timeout=8,
+                        )
+                        try:
+                            return response.status_code < 400
+                        finally:
+                            response.close()
+                    except Exception:
+                        return False
+
+                def civarchive_result_has_live_download(result):
+                    urls = collect_result_download_urls(result)
+                    if not urls:
+                        return False
+                    for url in urls[:3]:
+                        if remote_download_url_is_alive(url):
+                            result["download_url"] = url
+                            result["download_urls"] = [
+                                url,
+                                *[other for other in urls if other != url],
+                            ]
+                            return True
+                    return False
+
+                def save_remote_metadata(result, source_name):
+                    metadata_path = result.get("metadata_path") or ""
+                    metadata_saved = False
+                    if (
+                        result.get("from_metadata")
+                        or not file_path
+                        or not _os.path.exists(file_path)
+                    ):
+                        return metadata_path, metadata_saved
+                    try:
+                        metadata_payload = {
+                            "source": source_name,
+                            "details_source": result.get("details_source")
+                            or source_name,
+                            "filename": filename,
+                            "category": category,
+                            "model_name": result.get("model_name", clean_name),
+                            "name": result.get("model_name", clean_name),
+                            "model_type": result.get("model_type", "")
+                            or result.get("type", ""),
+                            "type": result.get("model_type", "")
+                            or result.get("type", ""),
+                            "model_id": result.get("model_id"),
+                            "version_id": result.get("version_id"),
+                            "version_name": result.get("version_name", ""),
+                            "sha256": result.get("sha256") or provided_hash,
+                            "size": result.get("size"),
+                            "base_model": result.get("base_model"),
+                            "tags": result.get("tags", []),
+                            "trained_words": result.get("trained_words", []),
+                            "images": result.get("images", []),
+                            "clip_skip": result.get("clip_skip"),
+                            "description": result.get("description", ""),
+                            "model_description": result.get("model_description", ""),
+                            "download_url": result.get("download_url"),
+                            "source_url": result.get("version_url") or result.get("url"),
+                            "version_url": result.get("version_url") or result.get("url"),
+                            "model_url": result.get("url"),
+                            "url": result.get("version_url") or result.get("url"),
+                            "platform_url": result.get("platform_url"),
+                            "repo_id": result.get("repo_id"),
+                            "path": result.get("path"),
+                            "path_metadata": {
+                                "filename": filename,
+                                "category": category,
+                                "source": source_name,
+                                "model_id": result.get("model_id"),
+                                "version_id": result.get("version_id"),
+                                "repo_id": result.get("repo_id"),
+                                "path": result.get("path"),
+                            },
+                        }
+                        metadata_path = write_lora_manager_metadata(
+                            file_path,
+                            metadata_payload,
+                            category,
+                            result.get("version_url")
+                            or result.get("url")
+                            or result.get("platform_url")
+                            or result.get("download_url")
+                            or "",
+                        ) or ""
+                        metadata_saved = bool(metadata_path)
+                        if metadata_path:
+                            result["metadata_path"] = metadata_path
+                    except Exception as metadata_error:
+                        self.logger.warning(
+                            f"{source_name} metadata sidecar save failed: {metadata_error}"
+                        )
+                    return metadata_path, metadata_saved
+
                 if local_only:
                     result = None
+                    metadata_path = ""
+                    metadata_saved = False
                     if download_available and file_path and _os.path.exists(file_path):
                         try:
                             from .core.sources.civitai import (
@@ -1255,17 +1626,99 @@ class ModelResolverExtension:
                                 file_path,
                                 local_only=True,
                             )
+                            source_metadata_path = (
+                                result.get("metadata_path")
+                                if isinstance(result, dict)
+                                else ""
+                            )
+                            canonical_metadata_path = get_metadata_sidecar_path(file_path)
+                            if (
+                                isinstance(result, dict)
+                                and result.get("from_metadata")
+                                and source_metadata_path
+                                and canonical_metadata_path
+                                and _os.path.abspath(source_metadata_path)
+                                != _os.path.abspath(canonical_metadata_path)
+                                and not _os.path.exists(canonical_metadata_path)
+                            ):
+                                preview_url = result.get("preview_url") or ""
+                                if not preview_url:
+                                    model_base_path, _model_ext = _os.path.splitext(file_path)
+                                    for preview_ext in (
+                                        ".preview.png",
+                                        ".preview.jpg",
+                                        ".preview.jpeg",
+                                        ".preview.webp",
+                                    ):
+                                        preview_path = f"{model_base_path}{preview_ext}"
+                                        if _os.path.exists(preview_path):
+                                            preview_url = preview_path.replace("\\", "/")
+                                            break
+                                metadata_payload = {
+                                    "source": "metadata_import",
+                                    "details_source": result.get("source") or "metadata",
+                                    "filename": filename,
+                                    "category": category,
+                                    "model_name": result.get("model_name", clean_name),
+                                    "name": result.get("model_name", clean_name),
+                                    "model_type": result.get("model_type", ""),
+                                    "type": result.get("model_type", ""),
+                                    "model_id": result.get("model_id"),
+                                    "version_id": result.get("version_id"),
+                                    "version_name": result.get("version_name", ""),
+                                    "sha256": result.get("sha256"),
+                                    "size": result.get("size"),
+                                    "base_model": result.get("base_model"),
+                                    "tags": result.get("tags", []),
+                                    "trained_words": result.get("trained_words", []),
+                                    "images": result.get("images", []),
+                                    "clip_skip": result.get("clip_skip"),
+                                    "description": result.get("description", ""),
+                                    "model_description": result.get("model_description", ""),
+                                    "download_url": result.get("download_url"),
+                                    "preview_url": preview_url,
+                                    "source_url": result.get("version_url")
+                                    or result.get("url"),
+                                    "version_url": result.get("version_url")
+                                    or result.get("url"),
+                                    "model_url": result.get("url"),
+                                    "url": result.get("version_url") or result.get("url"),
+                                    "path_metadata": {
+                                        "filename": filename,
+                                        "category": category,
+                                        "source": "metadata_import",
+                                        "model_id": result.get("model_id"),
+                                        "version_id": result.get("version_id"),
+                                        "imported_from": source_metadata_path,
+                                    },
+                                }
+                                metadata_path = write_lora_manager_metadata(
+                                    file_path,
+                                    metadata_payload,
+                                    category,
+                                    result.get("version_url")
+                                    or result.get("url")
+                                    or result.get("download_url")
+                                    or "",
+                                ) or ""
+                                metadata_saved = bool(metadata_path)
+                                if metadata_path:
+                                    result["metadata_path"] = metadata_path
+                                    result["metadata_imported_from"] = source_metadata_path
                         except Exception as e:
                             self.logger.warning(f"Local model info error: {e}")
                     return web.json_response(
                         build_info_response(
                             result,
+                            metadata_path=metadata_path,
+                            metadata_saved=metadata_saved,
                             local_payload=True,
                             civitai_checked=False,
                         )
                     )
 
-                # Search CivitAI for the model using hash
+                # Search remote metadata. CivitAI and CivArchive are hash-only;
+                # HuggingFace name results must still confirm the exact SHA.
                 if download_available and file_path and _os.path.exists(file_path):
                     try:
                         from .core.sources.civitai import (
@@ -1274,7 +1727,10 @@ class ModelResolverExtension:
                         )
 
                         if provided_hash:
-                            result = get_model_info_by_hash(provided_hash)
+                            result = get_model_info_by_hash(
+                                provided_hash,
+                                use_cache=not force_refresh,
+                            )
                             if result:
                                 result["file_path"] = file_path
                                 result["resolved_path"] = file_path
@@ -1284,66 +1740,28 @@ class ModelResolverExtension:
                                         result["size"] = _os.path.getsize(file_path)
                                     except Exception:
                                         pass
-                        else:
+                                if not extract_result_sha256(result):
+                                    result["sha256"] = provided_hash
+                        elif not force_refresh:
                             result = get_model_info_for_file(file_path)
+                        else:
+                            result = None
 
                         if result and (
                             result.get("url")
                             or result.get("version_url")
                             or result.get("from_metadata")
                             or result.get("trained_words")
+                        ) and (
+                            result.get("from_metadata")
+                            or not provided_hash
+                            or result_hash_matches(result)
                         ):
-                            metadata_path = result.get("metadata_path") or ""
-                            metadata_saved = False
-                            if not result.get("from_metadata"):
-                                try:
-                                    sidecar_path = get_metadata_sidecar_path(file_path)
-                                    if sidecar_path:
-                                        metadata_payload = {
-                                            "source": "civitai",
-                                            "details_source": "civitai",
-                                            "filename": filename,
-                                            "category": category,
-                                            "model_name": result.get("model_name", clean_name),
-                                            "name": result.get("model_name", clean_name),
-                                            "model_type": result.get("model_type", ""),
-                                            "type": result.get("model_type", ""),
-                                            "model_id": result.get("model_id"),
-                                            "version_id": result.get("version_id"),
-                                            "version_name": result.get("version_name", ""),
-                                            "sha256": result.get("sha256") or provided_hash,
-                                            "size": result.get("size"),
-                                            "base_model": result.get("base_model"),
-                                            "tags": result.get("tags", []),
-                                            "trained_words": result.get("trained_words", []),
-                                            "images": result.get("images", []),
-                                            "clip_skip": result.get("clip_skip"),
-                                            "description": result.get("description", ""),
-                                            "model_description": result.get("model_description", ""),
-                                            "download_url": result.get("download_url"),
-                                            "url": result.get("version_url") or result.get("url"),
-                                            "path_metadata": {
-                                                "filename": filename,
-                                                "category": category,
-                                                "source": "civitai",
-                                                "model_id": result.get("model_id"),
-                                                "version_id": result.get("version_id"),
-                                            },
-                                        }
-                                        metadata_path = write_lora_manager_metadata(
-                                            file_path,
-                                            metadata_payload,
-                                            category,
-                                            result.get("version_url")
-                                            or result.get("url")
-                                            or result.get("download_url")
-                                            or "",
-                                        ) or ""
-                                        metadata_saved = bool(metadata_path)
-                                except Exception as metadata_error:
-                                    self.logger.warning(
-                                        f"CivitAI metadata sidecar save failed: {metadata_error}"
-                                    )
+                            result = prepare_remote_result(result, "civitai")
+                            metadata_path, metadata_saved = save_remote_metadata(
+                                result,
+                                "civitai",
+                            )
 
                             return web.json_response(
                                 build_info_response(
@@ -1356,37 +1774,135 @@ class ModelResolverExtension:
                     except Exception as e:
                         self.logger.warning(f"CivitAI search error: {e}")
 
-                # No result found - try fallback to filename search
-                if download_available:
-                    try:
-                        from .core.sources.civitai import (
-                            search_civitai_for_file,
-                        )
+                    if provided_hash:
+                        try:
+                            result = resolve_civarchive_by_hash(
+                                provided_hash,
+                                query=filename,
+                                exact_only=False,
+                                model_type=infer_model_type_from_category(category),
+                            )
+                            if result:
+                                if not extract_result_sha256(result):
+                                    result["sha256"] = provided_hash
+                                result = prepare_remote_result(result, "civarchive")
+                                if result_hash_matches(result) and civarchive_result_has_live_download(result):
+                                    metadata_path, metadata_saved = save_remote_metadata(
+                                        result,
+                                        "civarchive",
+                                    )
+                                    return web.json_response(
+                                        build_info_response(
+                                            result,
+                                            metadata_path=metadata_path,
+                                            metadata_saved=metadata_saved,
+                                            civitai_checked=True,
+                                        )
+                                    )
+                                if result_hash_matches(result):
+                                    self.logger.info(
+                                        f"CivArchive metadata candidate rejected: "
+                                        f"no live download link for {filename}"
+                                    )
+                        except Exception as e:
+                            self.logger.warning(f"CivArchive hash lookup error: {e}")
 
-                        result = search_civitai_for_file(
-                            filename, model_type=category
-                        )
-                        if result and result.get("url"):
-                            return web.json_response(
+                    if provided_hash:
+                        hf_attempts = [
+                            {
+                                "label": "HuggingFace",
+                                "use_api_search": True,
+                                "use_comfy_org_fallback": True,
+                                "use_brave_fallback": False,
+                            }
+                        ]
+                        if hf_use_brave_fallback and brave_search_api_key:
+                            hf_attempts.append(
                                 {
-                                    "filename": filename,
-                                    "url": result["url"],
-                                    "file_path": file_path,
-                                    "resolved_path": file_path,
-                                    "location": file_location,
-                                    "model_name": result.get("name", clean_name),
-                                    "version_id": result.get("version_id"),
-                                    "size": result.get("size"),
-                                    "tags": result.get("tags", []),
-                                    "civitai_checked": True,
+                                    "label": "HuggingFace Brave",
+                                    "use_api_search": False,
+                                    "use_comfy_org_fallback": False,
+                                    "use_brave_fallback": True,
                                 }
                             )
-                    except Exception as e:
-                        self.logger.warning(f"CivitAI fallback search error: {e}")
+
+                        for hf_attempt in hf_attempts:
+                            try:
+                                result = search_huggingface_for_file(
+                                    filename,
+                                    token=hf_token or None,
+                                    exact_only=True,
+                                    brave_api_key=brave_search_api_key or None,
+                                    use_api_search=hf_attempt["use_api_search"],
+                                    use_comfy_org_fallback=hf_attempt[
+                                        "use_comfy_org_fallback"
+                                    ],
+                                    use_brave_fallback=hf_attempt[
+                                        "use_brave_fallback"
+                                    ],
+                                    force_refresh=force_refresh,
+                                )
+                                if result and result_hash_matches(
+                                    result,
+                                    require_filename=True,
+                                ):
+                                    result = prepare_remote_result(
+                                        result,
+                                        "huggingface",
+                                    )
+                                    metadata_path, metadata_saved = save_remote_metadata(
+                                        result,
+                                        "huggingface",
+                                    )
+                                    return web.json_response(
+                                        build_info_response(
+                                            result,
+                                            metadata_path=metadata_path,
+                                            metadata_saved=metadata_saved,
+                                            civitai_checked=True,
+                                        )
+                                )
+                                if result:
+                                    self.logger.info(
+                                        f"{hf_attempt['label']} metadata candidate rejected: "
+                                        f"filename/hash mismatch for {filename}"
+                                    )
+                            except Exception as e:
+                                self.logger.warning(
+                                    f"{hf_attempt['label']} metadata lookup error: {e}"
+                                )
 
                 # No result found
                 response = build_info_response(None, civitai_checked=True)
                 response["url"] = None
+                if force_refresh and file_path and _os.path.exists(file_path):
+                    try:
+                        metadata_payload = {
+                            "filename": filename,
+                            "category": category,
+                            "model_name": clean_name,
+                            "name": clean_name,
+                            "model_type": infer_model_type_from_category(category),
+                            "sha256": provided_hash,
+                            "size": _os.path.getsize(file_path),
+                            "civitai_deleted": True,
+                            "civitai_checked": True,
+                            "remote_metadata_missing": True,
+                            "source": "local",
+                            "details_source": "",
+                        }
+                        metadata_path = write_lora_manager_metadata(
+                            file_path,
+                            metadata_payload,
+                            category,
+                            "",
+                        ) or ""
+                        response["metadata_path"] = metadata_path
+                        response["metadata_saved"] = bool(metadata_path)
+                    except Exception as metadata_error:
+                        self.logger.warning(
+                            f"Remote metadata no-match sidecar save failed: {metadata_error}"
+                        )
                 return web.json_response(response)
 
             @routes.post("/model_resolver/model-details")

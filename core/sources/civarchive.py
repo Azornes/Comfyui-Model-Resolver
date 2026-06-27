@@ -10,7 +10,7 @@ import os
 import re
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from urllib.parse import parse_qs, urljoin, urlparse
+from urllib.parse import parse_qs, unquote, urljoin, urlparse
 
 import requests
 
@@ -416,7 +416,7 @@ def _extract_download_urls_from_html(html_text: str) -> List[str]:
     )
     for match in pattern.finditer(text):
         url = _normalize_download_url(match.group(0).rstrip(".,;]})"))
-        if url and url not in urls:
+        if url and _download_url_looks_like_model_file(url) and url not in urls:
             urls.append(url)
     return urls
 
@@ -586,6 +586,45 @@ def _normalize_download_url(url: Any) -> Optional[str]:
     return None
 
 
+def _download_url_looks_like_model_file(
+    url: Any,
+    expected_filename: str = "",
+) -> bool:
+    normalized = _normalize_download_url(url)
+    if not normalized:
+        return False
+
+    parsed = urlparse(normalized)
+    host = parsed.netloc.lower()
+    path = unquote(parsed.path or "")
+    if host.endswith("huggingface.co") and path.startswith("/spaces/"):
+        return False
+    if normalized.startswith(CIVITAI_DOWNLOAD_URL_PREFIXES):
+        return True
+
+    basename = os.path.basename(path).lower()
+    expected = os.path.basename(str(expected_filename or "")).lower()
+    if expected and basename == expected:
+        return True
+    return _has_known_model_extension(basename)
+
+
+def _archive_link_is_dead(item: Dict[str, Any]) -> bool:
+    if not isinstance(item, dict):
+        return False
+    status = str(item.get("status") or "").lower()
+    return bool(
+        item.get("deletedAt")
+        or item.get("deleted_at")
+        or item.get("is_dead")
+        or item.get("isDead")
+        or item.get("likelyDead")
+        or item.get("likely_dead")
+        or item.get("dead")
+        or status in {"dead", "deleted", "unavailable", "missing"}
+    )
+
+
 def _prepare_size_probe_url(url: Any) -> Optional[str]:
     normalized = _normalize_download_url(url)
     if not normalized:
@@ -746,16 +785,18 @@ def _transform_file_entry(file_data: Dict[str, Any]) -> Dict[str, Any]:
             mirror["url"] = mirror_url
             transformed_mirrors.append(mirror)
 
-    download_url = _normalize_download_url(
-        file_data.get("downloadUrl")
-        or file_data.get("download_url")
-        or file_data.get("url")
-    )
+    download_url = None
+    if not _archive_link_is_dead(file_data):
+        download_url = _normalize_download_url(
+            file_data.get("downloadUrl")
+            or file_data.get("download_url")
+            or file_data.get("url")
+        )
     name = file_data.get("name") or file_data.get("filename")
 
     if not download_url:
         for mirror in transformed_mirrors:
-            if mirror.get("deletedAt") is None and mirror.get("url"):
+            if not _archive_link_is_dead(mirror) and mirror.get("url"):
                 download_url = mirror["url"]
                 break
 
@@ -877,6 +918,7 @@ def _select_primary_file(files: List[Dict[str, Any]]) -> Optional[Dict[str, Any]
 
 def _collect_download_urls(file_info: Dict[str, Any]) -> List[str]:
     urls: List[str] = []
+    expected_filename = file_info.get("filename") or file_info.get("name") or ""
     mirrors = file_info.get("mirrors") or []
     if not isinstance(mirrors, list):
         mirrors = [mirrors]
@@ -884,14 +926,25 @@ def _collect_download_urls(file_info: Dict[str, Any]) -> List[str]:
     for mirror in mirrors:
         if not isinstance(mirror, dict):
             continue
-        if mirror.get("deletedAt") is not None:
+        if _archive_link_is_dead(mirror):
             continue
         url = _normalize_download_url(mirror.get("url"))
-        if url and url not in urls:
+        mirror_filename = mirror.get("filename") or mirror.get("name") or expected_filename
+        if (
+            url
+            and _download_url_looks_like_model_file(url, mirror_filename)
+            and url not in urls
+        ):
             urls.append(url)
 
-    download_url = _normalize_download_url(file_info.get("downloadUrl"))
-    if download_url and download_url not in urls:
+    download_url = None
+    if not _archive_link_is_dead(file_info):
+        download_url = _normalize_download_url(file_info.get("downloadUrl"))
+    if (
+        download_url
+        and _download_url_looks_like_model_file(download_url, expected_filename)
+        and download_url not in urls
+    ):
         urls.append(download_url)
 
     non_civitai_urls = [
@@ -917,15 +970,7 @@ def _normalize_archive_mirrors(file_info: Dict[str, Any]) -> List[Dict[str, Any]
         seen_urls.add(url)
         sha256 = mirror.get("sha256") or mirror.get("hash")
         deleted_at = mirror.get("deletedAt") or mirror.get("deleted_at")
-        is_dead = bool(
-            deleted_at
-            or mirror.get("is_dead")
-            or mirror.get("isDead")
-            or mirror.get("likelyDead")
-            or mirror.get("likely_dead")
-            or mirror.get("dead")
-            or str(mirror.get("status") or "").lower() in {"dead", "deleted", "unavailable", "missing"}
-        )
+        is_dead = _archive_link_is_dead(mirror)
         normalized.append(
             {
                 "url": url,
@@ -940,7 +985,9 @@ def _normalize_archive_mirrors(file_info: Dict[str, Any]) -> List[Dict[str, Any]
             }
         )
 
-    download_url = _normalize_download_url(file_info.get("downloadUrl"))
+    download_url = None
+    if not _archive_link_is_dead(file_info):
+        download_url = _normalize_download_url(file_info.get("downloadUrl"))
     if download_url and download_url not in seen_urls:
         normalized.append(
             {
@@ -950,16 +997,7 @@ def _normalize_archive_mirrors(file_info: Dict[str, Any]) -> List[Dict[str, Any]
                 "sha256": file_info.get("sha256"),
                 "hash": file_info.get("sha256"),
                 "deleted_at": file_info.get("deletedAt") or file_info.get("deleted_at"),
-                "is_dead": bool(
-                    file_info.get("deletedAt")
-                    or file_info.get("deleted_at")
-                    or file_info.get("is_dead")
-                    or file_info.get("isDead")
-                    or file_info.get("likelyDead")
-                    or file_info.get("likely_dead")
-                    or file_info.get("dead")
-                    or str(file_info.get("status") or "").lower() in {"dead", "deleted", "unavailable", "missing"}
-                ),
+                "is_dead": _archive_link_is_dead(file_info),
                 "is_gated": file_info.get("is_gated"),
                 "is_paid": file_info.get("is_paid"),
             }
@@ -1208,18 +1246,53 @@ def _version_sort_key(version: Dict[str, Any]) -> tuple:
 
 def _collect_normalized_download_urls(file_info: Dict[str, Any]) -> List[str]:
     urls: List[str] = []
+    if _archive_link_is_dead(file_info):
+        return urls
+
+    expected_filename = file_info.get("filename") or file_info.get("name") or ""
+    dead_urls = set()
+    mirrors = file_info.get("mirrors") or []
+    if not isinstance(mirrors, list):
+        mirrors = [mirrors]
+    for mirror in mirrors:
+        if not isinstance(mirror, dict):
+            continue
+        if _archive_link_is_dead(mirror):
+            dead_url = _normalize_download_url(mirror.get("url"))
+            if dead_url:
+                dead_urls.add(dead_url)
+            continue
+        url = _normalize_download_url(mirror.get("url"))
+        mirror_filename = mirror.get("filename") or mirror.get("name") or expected_filename
+        if (
+            url
+            and _download_url_looks_like_model_file(url, mirror_filename)
+            and url not in urls
+        ):
+            urls.append(url)
+
     raw_urls = file_info.get("download_urls") or []
     if not isinstance(raw_urls, list):
         raw_urls = [raw_urls]
 
     for raw_url in raw_urls:
         url = _normalize_download_url(raw_url)
-        if url and url not in urls:
+        if (
+            url
+            and url not in dead_urls
+            and _download_url_looks_like_model_file(url, expected_filename)
+            and url not in urls
+        ):
             urls.append(url)
 
     for key in ("download_url", "downloadUrl"):
         url = _normalize_download_url(file_info.get(key))
-        if url and url not in urls:
+        if (
+            url
+            and url not in dead_urls
+            and _download_url_looks_like_model_file(url, expected_filename)
+            and url not in urls
+        ):
             urls.append(url)
 
     return urls
@@ -1511,7 +1584,9 @@ def _select_hash_page_file(
     for file_info in files:
         if not isinstance(file_info, dict):
             continue
-        if not _normalize_download_url(file_info.get("url") or file_info.get("downloadUrl")):
+        if _archive_link_is_dead(file_info):
+            continue
+        if not _collect_normalized_download_urls(file_info):
             continue
 
         filename = file_info.get("filename") or file_info.get("name") or ""
@@ -1583,6 +1658,8 @@ def _prefer_query_matching_mirror(
     best_confidence = -1.0
     for mirror in mirrors:
         if not isinstance(mirror, dict):
+            continue
+        if _archive_link_is_dead(mirror):
             continue
         url = _normalize_download_url(mirror.get("url"))
         filename = mirror.get("filename") or mirror.get("name") or ""

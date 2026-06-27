@@ -395,6 +395,23 @@ def build_lora_manager_metadata(
         source_url,
         source.get("url"),
     )
+    source_page_url = _first_present(
+        source.get("version_url"),
+        source.get("model_url"),
+        source.get("page_url"),
+        source.get("source_url"),
+        source.get("url"),
+        source.get("platform_url"),
+        source_url,
+    )
+    platform_url = _first_present(source.get("platform_url"), source.get("platformUrl"))
+    preview_url = _first_present(
+        source.get("preview_url"),
+        source.get("previewUrl"),
+        source.get("preview"),
+        source.get("thumbnail_url"),
+        source.get("thumbnailUrl"),
+    )
     model_description = _first_present(
         source.get("modelDescription"),
         source.get("model_description"),
@@ -458,7 +475,7 @@ def build_lora_manager_metadata(
         "modified": time.time(),
         "sha256": sha256,
         "base_model": str(base_model or "Unknown"),
-        "preview_url": "",
+        "preview_url": str(preview_url or ""),
         "preview_nsfw_level": 0,
         "notes": "",
         "from_civitai": bool(metadata_source or model_id or version_id),
@@ -470,6 +487,13 @@ def build_lora_manager_metadata(
         "exclude": False,
         "db_checked": False,
         "skip_metadata_refresh": False,
+        "source": source_name,
+        "details_source": source_name,
+        "source_url": _strip_sensitive_url_params(str(source_page_url or "")),
+        "model_url": _strip_sensitive_url_params(str(source_page_url or "")),
+        "version_url": _strip_sensitive_url_params(str(source_page_url or "")),
+        "download_url": _strip_sensitive_url_params(str(direct_url or "")),
+        "platform_url": _strip_sensitive_url_params(str(platform_url or "")),
         "metadata_source": metadata_source,
         "last_checked_at": time.time(),
         "hash_status": "completed" if sha256 else "pending",

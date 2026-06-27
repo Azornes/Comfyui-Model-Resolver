@@ -1140,6 +1140,7 @@ export const modelInfoMethods = {
         if (!dialog) return;
         if (button?.dataset.fetchingCivitai === 'true') return;
 
+        const forceRefresh = button?.dataset.forceRefresh === 'true';
         const lookup = dialog._infoDialogLookup || {};
         let data = dialog._infoDialogData || {};
         const filename = data.filename || lookup.loraName || '';
@@ -1153,13 +1154,14 @@ export const modelInfoMethods = {
         }
 
         dialog._infoDialogCivitaiFetchStarted = true;
-        const setFetchingState = (isFetching, label = 'Fetch with CivitAI') => {
+        const defaultLabel = forceRefresh ? 'Refetch metadata' : 'Fetch metadata';
+        const setFetchingState = (isFetching, label = defaultLabel) => {
             if (!button) return;
             button.dataset.fetchingCivitai = isFetching ? 'true' : 'false';
             button.disabled = isFetching;
             button.innerHTML = isFetching
-                ? `${getSvgIcon('civitai', 'currentColor', 'mr-info-external-link-icon')} Fetching...`
-                : `${getSvgIcon('civitai', 'currentColor', 'mr-info-external-link-icon')} ${this.escapeHtml(label)}`;
+                ? `${getSvgIcon('globe', 'currentColor', 'mr-info-external-link-icon')} Fetching...`
+                : `${getSvgIcon('globe', 'currentColor', 'mr-info-external-link-icon')} ${this.escapeHtml(label)}`;
         };
 
         setFetchingState(true);
@@ -1181,15 +1183,20 @@ export const modelInfoMethods = {
                 throw new Error('No SHA256 hash available');
             }
 
+            const tokens = this.getStoredTokens?.() || {};
             const result = await this.fetchJson('/model_resolver/civitai-search', {
                 method: 'POST',
                 body: JSON.stringify({
                     filename,
                     category,
                     resolved_path: resolvedPath,
-                    sha256: hash
+                    sha256: hash,
+                    force_refresh: forceRefresh,
+                    hf_token: tokens.hf_token || '',
+                    brave_search_api_key: tokens.brave_search_api_key || '',
+                    hf_use_brave_fallback: tokens.hf_use_brave_fallback !== false
                 })
-            }, 'Fetch CivitAI model info');
+            }, 'Fetch model metadata');
 
             const merged = {
                 ...data,
@@ -1199,24 +1206,57 @@ export const modelInfoMethods = {
                 file_path: result.file_path || data.file_path || resolvedPath,
                 resolved_path: result.resolved_path || data.resolved_path || resolvedPath,
                 sha256: result.sha256 || hash,
+                metadata_checked: true,
                 civitai_checked: true
             };
             dialog._infoDialogData = merged;
             this.updateInfoDialogWithData(dialog, merged);
             if (merged.url || merged.version_url) {
-                this.showNotification?.('CivitAI info loaded.', 'success');
+                this.showNotification?.(
+                    forceRefresh ? 'Metadata refreshed.' : 'Metadata loaded.',
+                    'success'
+                );
             } else {
-                this.showNotification?.('No exact CivitAI match found.', 'info');
+                this.showNotification?.('No exact remote metadata match found.', 'info');
             }
         } catch (error) {
-            this.showNotification?.(`CivitAI fetch failed: ${error?.message || error}`, 'error');
+            this.showNotification?.(`Metadata fetch failed: ${error?.message || error}`, 'error');
             this.updateInfoDialogWithData(dialog, {
                 ...(dialog._infoDialogData || data),
+                metadata_checked: true,
                 civitai_checked: true
             });
         } finally {
             setFetchingState(false);
         }
+    },
+
+    getInfoMetadataSourceKey(data = {}) {
+        const source = String(data.details_source || data.source || '').toLowerCase();
+        const url = String(data.version_url || data.url || data.platform_url || '').toLowerCase();
+        if (source.includes('huggingface') || url.includes('huggingface.co')) return 'huggingface';
+        if (source.includes('civarchive') || url.includes('civarchive.com')) return 'civarchive';
+        if (source.includes('civitai') || url.includes('civitai.com') || url.includes('civitai.red')) return 'civitai';
+        return 'metadata';
+    },
+
+    getInfoMetadataSourceLabel(data = {}) {
+        const key = this.getInfoMetadataSourceKey(data);
+        if (key === 'huggingface') return 'HuggingFace';
+        if (key === 'civarchive') return 'CivArchive';
+        if (key === 'civitai') return 'CivitAI';
+        return 'metadata source';
+    },
+
+    getInfoMetadataSourceIcon(data = {}) {
+        const key = this.getInfoMetadataSourceKey(data);
+        if (key === 'huggingface') return getSvgIcon('huggingface', 'currentColor', 'mr-info-external-link-icon');
+        if (key === 'civitai') return getSvgIcon('civitai', 'currentColor', 'mr-info-external-link-icon');
+        return getSvgIcon('externalLink', 'currentColor', 'mr-info-external-link-icon');
+    },
+
+    hasInfoMetadataBeenChecked(data = {}) {
+        return Boolean(data.metadata_checked || data.metadataChecked || data.civitai_checked || data.civitaiChecked);
     },
 
     /**
@@ -1317,28 +1357,37 @@ export const modelInfoMethods = {
         // Update CivitAI link
         const civitaiLinkEl = dialog.querySelector('.mr-info-civitai-link');
         if (civitaiLinkEl) {
+            const hasLocalFile = Boolean(this.getInfoDialogModelFilePath(data));
             if (data.url || data.version_url) {
                 const url = data.version_url || data.url;
+                const sourceLabel = this.getInfoMetadataSourceLabel(data);
                 civitaiLinkEl.innerHTML = `
-                    <a href="${url}" target="_blank" class="mr-info-link">
-                        View on Civitai
-                        ${getSvgIcon('externalLink', 'currentColor', 'mr-info-external-link-icon')}
+                    <a href="${this.escapeHtml(url)}" target="_blank" class="mr-info-link">
+                        View on ${this.escapeHtml(sourceLabel)}
+                        ${this.getInfoMetadataSourceIcon(data)}
                     </a>
+                    ${hasLocalFile ? `
+                        <button type="button" class="mr-info-link mr-info-fetch-civitai" data-force-refresh="true">
+                            ${getSvgIcon('globe', 'currentColor', 'mr-info-external-link-icon')}
+                            Refetch metadata
+                        </button>
+                    ` : ''}
                 `;
-            } else if (data.civitai_checked || data.civitaiChecked) {
-                const searchName = data.model_name || data.modelName || 'Unknown';
+            } else if (this.hasInfoMetadataBeenChecked(data)) {
                 civitaiLinkEl.innerHTML = `
-                    <span class="mr-info-not-found">Model not found</span>
-                    <a href="https://civitai.com/search?q=${encodeURIComponent(searchName)}" target="_blank" class="mr-info-link">
-                        Search on CivitAI
-                        ${getSvgIcon('externalLink', 'currentColor', 'mr-info-external-link-icon')}
-                    </a>
+                    <span class="mr-info-not-found">No exact metadata match</span>
+                    ${hasLocalFile ? `
+                        <button type="button" class="mr-info-link mr-info-fetch-civitai" data-force-refresh="true">
+                            ${getSvgIcon('globe', 'currentColor', 'mr-info-external-link-icon')}
+                            Refetch metadata
+                        </button>
+                    ` : ''}
                 `;
-            } else if (this.getInfoDialogModelFilePath(data)) {
+            } else if (hasLocalFile) {
                 civitaiLinkEl.innerHTML = `
                     <button type="button" class="mr-info-link mr-info-fetch-civitai">
-                        ${getSvgIcon('civitai', 'currentColor', 'mr-info-external-link-icon')}
-                        Fetch with CivitAI
+                        ${getSvgIcon('globe', 'currentColor', 'mr-info-external-link-icon')}
+                        Fetch metadata
                     </button>
                 `;
             } else {

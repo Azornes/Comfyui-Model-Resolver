@@ -1119,6 +1119,55 @@ def get_civitai_model_details(
     }
 
 
+def _enrich_model_info_with_details(
+    result: Dict[str, Any],
+    model_id: Optional[int],
+    version_id: Optional[int],
+    api_key: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Fill hash lookup results with the fuller /models/{id} payload when useful."""
+    if not result or not model_id:
+        return result
+
+    needs_details = (
+        not result.get("images")
+        or not result.get("description")
+        or not result.get("model_description")
+        or not result.get("tags")
+    )
+    if not needs_details:
+        return result
+
+    try:
+        details = get_civitai_model_details(model_id, version_id, api_key)
+    except Exception as exc:
+        log_debug(f"CivitAI details enrichment failed for model_id={model_id}: {exc}")
+        return result
+
+    if not details:
+        return result
+
+    selected_version = _as_metadata_dict(details.get("selected_version"))
+    result["model_name"] = result.get("model_name") or details.get("name")
+    result["model_type"] = result.get("model_type") or details.get("type")
+    result["description"] = (
+        result.get("description")
+        or selected_version.get("description")
+        or details.get("description")
+        or ""
+    )
+    result["model_description"] = (
+        result.get("model_description")
+        or details.get("description")
+        or ""
+    )
+    result["tags"] = result.get("tags") or details.get("tags") or []
+    result["images"] = result.get("images") or details.get("images") or []
+    result["version_url"] = result.get("version_url") or details.get("version_url")
+    result["url"] = result.get("url") or details.get("url")
+    return result
+
+
 def search_civitai_by_hash(
     hash_value: str, api_key: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
@@ -1344,6 +1393,12 @@ def get_model_info_by_hash(
                 "model_description": model_info.get("description", ""),
             }
 
+            result = _enrich_model_info_with_details(
+                result,
+                model_id,
+                version_info.get("id"),
+                api_key,
+            )
             _hash_cache[cache_key] = result
             log_info(f"Found model by hash {file_hash}: {result.get('model_name')}")
             return result
@@ -1411,6 +1466,12 @@ def get_model_info_by_hash(
                 "model_description": model_info.get("description", ""),
             }
 
+            result = _enrich_model_info_with_details(
+                result,
+                model_id,
+                version_info.get("id"),
+                api_key,
+            )
             _hash_cache[cache_key] = result
             log_info(f"Found model by hash {file_hash}: {result.get('model_name')}")
             return result
@@ -1540,6 +1601,8 @@ def _get_metadata_file_path(model_path: str) -> str:
     possible_names = [
         base_name + ".metadata.json",
         filename + ".metadata.json",
+        base_name + ".civitai.info",
+        filename + ".civitai.info",
         base_name + ".json",
         filename.replace("_", " ").split()[0] + ".metadata.json"
         if "_" in base_name
@@ -1572,8 +1635,34 @@ def _read_model_metadata(metadata_path: str) -> Optional[Dict[str, Any]]:
         if not isinstance(data, dict):
             return None
 
-        # Check if it has the needed info
-        if not data.get("sha256") and not data.get("civitai"):
+        files = _as_metadata_list(data.get("files"))
+        file_hashes = [
+            _as_metadata_dict(file_info).get("hashes")
+            for file_info in files
+            if isinstance(file_info, dict)
+        ]
+        has_file_sha = any(
+            isinstance(hashes, dict)
+            and (hashes.get("SHA256") or hashes.get("sha256"))
+            for hashes in file_hashes
+        )
+        has_civitai_shape = bool(
+            data.get("civitai")
+            or data.get("modelId")
+            or data.get("model")
+            or data.get("images")
+            or data.get("downloadUrl")
+        )
+
+        # Check if it has the needed info. Older sidecars use a top-level
+        # CivitAI model-version shape and are commonly named *.civitai.info.
+        if (
+            not data.get("sha256")
+            and not data.get("hash")
+            and not data.get("hashes")
+            and not has_file_sha
+            and not has_civitai_shape
+        ):
             return None
 
         log_info(f"Successfully read metadata from: {metadata_path}")
@@ -1644,13 +1733,29 @@ def _metadata_to_model_info(metadata: Dict[str, Any]) -> Dict[str, Any]:
     """
     Convert metadata file format to model info format used by our extension.
     """
-    civitai_data = _as_metadata_dict(metadata.get("civitai"))
+    embedded_civitai_data = _as_metadata_dict(metadata.get("civitai"))
+    looks_like_civitai_version = bool(
+        metadata.get("modelId")
+        or metadata.get("files")
+        or metadata.get("images")
+        or metadata.get("downloadUrl")
+    )
+    civitai_data = embedded_civitai_data or (
+        metadata if looks_like_civitai_version else {}
+    )
     selected_version = _as_metadata_dict(metadata.get("selected_version"))
+    if not selected_version and looks_like_civitai_version:
+        selected_version = civitai_data
     path_metadata = _as_metadata_dict(metadata.get("path_metadata"))
 
     # Extract images with metadata
     images = []
-    for img in civitai_data.get("images") or []:
+    for img in (
+        civitai_data.get("images")
+        or selected_version.get("images")
+        or metadata.get("images")
+        or []
+    ):
         if isinstance(img, dict) and img.get("url"):
             img_meta = img.get("meta") or {}
             images.append(
@@ -1700,22 +1805,60 @@ def _metadata_to_model_info(metadata: Dict[str, Any]) -> Dict[str, Any]:
     file_infos = _as_metadata_list(civitai_data.get("files"))
     file_info = _as_metadata_dict(file_infos[0]) if file_infos else {}
     metadata_hashes = _as_metadata_dict(metadata.get("hashes"))
+    file_hashes = _as_metadata_dict(file_info.get("hashes"))
 
     # Build model_id from CivitAI data
-    model_id = civitai_data.get("modelId") or civitai_data.get("id")
+    model_id = (
+        civitai_data.get("modelId")
+        or metadata.get("model_id")
+        or metadata.get("modelId")
+    )
+    version_id = (
+        civitai_data.get("id")
+        or metadata.get("version_id")
+        or metadata.get("versionId")
+    )
+    details_source = (
+        metadata.get("details_source")
+        or metadata.get("source")
+        or metadata.get("metadata_source")
+        or "metadata"
+    )
+    stored_page_url = _first_metadata_value(
+        metadata.get("version_url"),
+        metadata.get("model_url"),
+        metadata.get("page_url"),
+        metadata.get("source_url"),
+        metadata.get("url"),
+        metadata.get("platform_url"),
+        path_metadata.get("version_url"),
+        path_metadata.get("model_url"),
+        path_metadata.get("source_url"),
+        path_metadata.get("url"),
+        path_metadata.get("platform_url"),
+    )
+    civitai_model_url = f"https://civitai.com/models/{model_id}" if model_id else None
+    civitai_version_url = (
+        f"https://civitai.com/models/{model_id}?modelVersionId={version_id}"
+        if model_id and version_id
+        else civitai_model_url
+    )
+    page_url = stored_page_url or civitai_version_url
 
     return {
-        "source": "metadata",
+        "source": details_source,
+        "details_source": details_source,
         "model_id": model_id,
         "model_name": _first_metadata_value(
             metadata.get("model_name"),
             metadata.get("modelName"),
             model_info.get("name"),
+            metadata.get("name") if not model_id else None,
             metadata.get("file_name"),
         )
         or "",
         "model_type": model_info.get("type", "") or civitai_data.get("type", ""),
-        "version_id": civitai_data.get("id"),
+        "version_id": version_id,
         "version_name": _first_metadata_value(
             metadata.get("version_name"),
             metadata.get("versionName"),
@@ -1728,6 +1871,8 @@ def _metadata_to_model_info(metadata: Dict[str, Any]) -> Dict[str, Any]:
             metadata.get("hash"),
             metadata_hashes.get("SHA256"),
             metadata_hashes.get("sha256"),
+            file_hashes.get("SHA256"),
+            file_hashes.get("sha256"),
         )
         or "",
         "size": _metadata_size_to_bytes(
@@ -1745,13 +1890,16 @@ def _metadata_to_model_info(metadata: Dict[str, Any]) -> Dict[str, Any]:
                 else None,
             )
         ),
-        "url": f"https://civitai.com/models/{civitai_data.get('modelId')}"
-        if civitai_data.get("modelId")
-        else None,
-        "version_url": f"https://civitai.com/models/{civitai_data.get('modelId')}?modelVersionId={civitai_data.get('id')}"
-        if model_id
-        else None,
-        "download_url": civitai_data.get("downloadUrl"),
+        "url": page_url,
+        "version_url": page_url,
+        "model_url": stored_page_url or civitai_model_url,
+        "source_url": stored_page_url,
+        "platform_url": metadata.get("platform_url") or path_metadata.get("platform_url"),
+        "download_url": _first_metadata_value(
+            metadata.get("download_url"),
+            civitai_data.get("downloadUrl"),
+            file_info.get("downloadUrl"),
+        ),
         "base_model": _first_metadata_value(
             metadata.get("base_model"),
             metadata.get("baseModel"),
