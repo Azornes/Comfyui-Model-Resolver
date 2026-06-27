@@ -562,10 +562,12 @@ export const missingBrowserMethods = {
                         <input type="checkbox" class="mr-missing-row-check" data-ml-no-drag="1" aria-label="Select ${this.escapeHtml(filename)}" ${isBatchSelected ? 'checked' : ''}>
                     </span>
                     <span class="mr-missing-row-index">${index + 1}</span>
-                    <span class="mr-missing-row-model">
-                        <span class="mr-missing-row-name" data-tooltip="${this.escapeHtml(filename)}">${this.escapeHtml(filename)}</span>
-                        ${isResolved ? '<span class="mr-missing-row-resolved-pill">Resolved</span>' : ''}
-                        ${rowNodeHtml}
+                    <span class="mr-missing-row-model ${isResolved ? 'is-resolved' : ''}">
+                        ${isResolved ? `<span class="mr-missing-row-resolved-icon" data-tooltip="Model resolved">${getSvgIcon('circleCheckBig')}</span>` : ''}
+                        <span class="mr-missing-row-model-details">
+                            <span class="mr-missing-row-name" data-tooltip="${this.escapeHtml(filename)}">${this.escapeHtml(filename)}</span>
+                            ${rowNodeHtml}
+                        </span>
                     </span>
                     <span class="mr-missing-row-type ${typeColorClass}">${this.escapeHtml(typeLabel)}</span>
                     <span class="mr-missing-row-best" data-tooltip="${this.escapeHtml(matchDisplay)}">
