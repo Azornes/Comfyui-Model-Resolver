@@ -491,7 +491,7 @@ export const downloadTargetMethods = {
     },
 
     getModelTypeColorClass(value = '') {
-        const token = String(value || '')
+        const rawToken = String(value || '')
             .trim()
             .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
             .toLowerCase()
@@ -499,6 +499,9 @@ export const downloadTargetMethods = {
             .replace(/[^a-z0-9_]/g, '')
             .replace(/_+/g, '_')
             .replace(/^_|_$/g, '');
+        const token = rawToken
+            ? (this.normalizeDownloadCategory?.(rawToken) || rawToken)
+            : '';
         const colorNames = {
             checkpoints: 'model',
             checkpoint: 'model',
@@ -535,6 +538,7 @@ export const downloadTargetMethods = {
             text_encoder: 'clip',
             clip: 'clip',
             clips: 'clip',
+            clip_gguf: 'clip',
             clip_vision: 'clip-vision',
             clipvision: 'clip-vision',
             clip_vision_output: 'clip-vision-output',
