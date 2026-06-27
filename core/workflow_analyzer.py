@@ -714,9 +714,7 @@ def get_model_widget_category_hints(
     node_type = node.get("type", "")
     indexed_category_hint = get_node_model_widget_category_hint(node_type, widget_index)
     widget_category_hint = get_widget_category_hint(node, widget_index)
-    dynamic_category_hints: List[str] = []
-    if not indexed_category_hint and not widget_category_hint:
-        dynamic_category_hints = get_dynamic_widget_category_hints(node, widget_index)
+    dynamic_category_hints = get_dynamic_widget_category_hints(node, widget_index)
 
     output_category_hint = get_node_output_category_hint(node)
     widgets_values = node.get("widgets_values", [])
@@ -724,15 +722,24 @@ def get_model_widget_category_hints(
     output_widget_category_hint = (
         output_category_hint
         if (
-            indexed_category_hint
-            or widget_category_hint
-            or dynamic_category_hints
-            or has_single_widget_value
+            not dynamic_category_hints
+            and (
+                indexed_category_hint
+                or widget_category_hint
+                or has_single_widget_value
+            )
         )
         else None
     )
 
     hints_list = []
+    for h in dynamic_category_hints:
+        if h:
+            hints_list.append(h)
+
+    if dynamic_category_hints:
+        return _ordered_unique_categories(hints_list)
+
     if indexed_category_hint:
         hints_list.append(indexed_category_hint)
     
@@ -744,9 +751,6 @@ def get_model_widget_category_hints(
     else:
         if widget_category_hint:
             hints_list.append(widget_category_hint)
-        for h in dynamic_category_hints:
-            if h:
-                hints_list.append(h)
         if output_widget_category_hint:
             hints_list.append(output_widget_category_hint)
             
@@ -1092,6 +1096,8 @@ def get_node_model_info(
                                 "active": active,
                                 "node_title": node_title,
                                 "category": "loras",
+                                "category_hints": ["loras"],
+                                "folder_key_hints": ["loras"],
                                 "full_path": lora_full_path,
                                 "exists": lora_exists,
                                 "is_urn": False,
@@ -1104,6 +1110,7 @@ def get_node_model_info(
     # For each widget value, check if it looks like a model file or URN
     for idx, value in enumerate(widgets_values):
         widget_name = get_widget_name_hint(node, idx)
+        model_widget_folder_key_hints = get_dynamic_widget_category_hints(node, idx)
         model_widget_category_hints = get_model_widget_category_hints(node, idx)
         model_widget_category_hint = (
             model_widget_category_hints[0] if model_widget_category_hints else None
@@ -1161,6 +1168,8 @@ def get_node_model_info(
                         "original_path": value_str,
                         "node_title": node_title,
                         "category": category,
+                        "category_hints": nested_categories or ([category] if category else []),
+                        "folder_key_hints": nested_categories or ([category] if category else []),
                         "full_path": full_path,
                         "exists": exists,
                         "is_urn": False,
@@ -1192,6 +1201,16 @@ def get_node_model_info(
                 effective_category_hint
                 or URN_TYPE_MAP.get(typ.lower(), "unknown")
             )
+            urn_category_hints = (
+                categories_to_try_for_widget
+                if categories_to_try_for_widget
+                else ([category] if category else [])
+            )
+            urn_folder_key_hints = (
+                model_widget_folder_key_hints
+                if model_widget_folder_key_hints
+                else urn_category_hints
+            )
 
             model_refs.append(
                 {
@@ -1210,6 +1229,8 @@ def get_node_model_info(
                     },
                     "node_title": node_title,
                     "category": category,
+                    "category_hints": urn_category_hints,
+                    "folder_key_hints": urn_folder_key_hints,
                     "full_path": None,
                     "exists": False,
                     "is_urn": True,
@@ -1242,6 +1263,10 @@ def get_node_model_info(
                 "original_path": value_str,
                 "node_title": node_title,
                 "category": category,
+                "category_hints": categories_to_try_for_widget or ([category] if category else []),
+                "folder_key_hints": model_widget_folder_key_hints
+                or categories_to_try_for_widget
+                or ([category] if category else []),
                 "full_path": full_path,
                 "exists": exists,
                 "is_urn": False,

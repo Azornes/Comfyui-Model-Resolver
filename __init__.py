@@ -113,6 +113,7 @@ class ModelResolverExtension:
                 )
                 from .core.type_utils import first_non_empty, to_int, to_bool
                 from .core.settings import (
+                    TEMPLATE_KEY_ALIASES,
                     bool_setting as resolver_bool_setting,
                     get_default_root_for_category,
                     load_settings as load_resolver_settings,
@@ -3542,7 +3543,7 @@ class ModelResolverExtension:
                     import os
                     import folder_paths
 
-                    categories = [
+                    preferred_categories = [
                         "loras",
                         "checkpoints",
                         "diffusion_models",
@@ -3550,24 +3551,81 @@ class ModelResolverExtension:
                         "text_encoders",
                         "vae",
                         "upscale_models",
+                        "controlnet",
+                        "clip_vision",
+                        "ipadapter",
+                        "sams",
+                        "ultralytics",
                     ]
+                    skip_categories = {"custom_nodes", "configs"}
+                    known_categories = set(folder_paths.folder_names_and_paths.keys())
+                    categories = []
+                    category_source_keys = {}
+                    for cat in [
+                        *preferred_categories,
+                        *known_categories,
+                    ]:
+                        folder_key = normalize_download_category(cat)
+                        if (
+                            not folder_key
+                            or folder_key in skip_categories
+                            or folder_key in categories
+                        ):
+                            if folder_key and folder_key not in skip_categories:
+                                category_source_keys.setdefault(folder_key, []).append(cat)
+                            continue
+                        categories.append(folder_key)
+                        category_source_keys.setdefault(folder_key, []).append(cat)
+
                     roots = {}
                     settings = load_resolver_settings()
                     comfy_root = get_comfy_root_path(folder_paths)
                     for cat in categories:
                         folder_key = normalize_download_category(cat)
-                        candidate_keys = [folder_key]
-                        if folder_key == "diffusion_models":
-                            candidate_keys.append("unet")
-                        elif folder_key == "text_encoders":
-                            candidate_keys.append("clip")
+                        if folder_key in known_categories:
+                            raw_candidate_keys = [folder_key]
+                        else:
+                            raw_candidate_keys = [
+                                folder_key,
+                                *TEMPLATE_KEY_ALIASES.get(folder_key, ()),
+                                *category_source_keys.get(folder_key, []),
+                            ]
+                        if folder_key == "ultralytics":
+                            raw_candidate_keys = [
+                                candidate_key
+                                for candidate_key in raw_candidate_keys
+                                if str(candidate_key or "").strip().lower() != "yolo"
+                            ]
+
+                        candidate_keys = []
+                        for candidate_key in raw_candidate_keys:
+                            if (
+                                candidate_key
+                                and candidate_key in known_categories
+                                and candidate_key not in candidate_keys
+                            ):
+                                candidate_keys.append(candidate_key)
                         paths = []
                         for candidate_key in candidate_keys:
                             paths.extend(folder_paths.get_folder_paths(candidate_key) or [])
-                        preferred_directory = (
-                            get_default_root_for_category(folder_key, settings)
-                            or get_download_directory(folder_key)
-                            or ""
+                        if folder_key == "ultralytics":
+                            normalized_ultralytics_paths = []
+                            for path in paths:
+                                normalized_path = os.path.normpath(str(path or ""))
+                                basename = os.path.basename(normalized_path).lower()
+                                if basename == "yolo":
+                                    continue
+                                parent_dir = os.path.dirname(normalized_path)
+                                if (
+                                    basename in {"bbox", "segm"}
+                                    and os.path.basename(parent_dir).lower()
+                                    == "ultralytics"
+                                ):
+                                    normalized_path = parent_dir
+                                normalized_ultralytics_paths.append(normalized_path)
+                            paths = normalized_ultralytics_paths
+                        preferred_directory = get_default_root_for_category(
+                            folder_key, settings
                         )
                         normalized_paths = dedupe_local_base_directories(
                             paths,
@@ -3575,6 +3633,19 @@ class ModelResolverExtension:
                             comfy_root=comfy_root,
                         )
                         roots[folder_key] = normalized_paths
+
+                    for raw_key in known_categories:
+                        if (
+                            not raw_key
+                            or raw_key in skip_categories
+                            or raw_key in roots
+                        ):
+                            continue
+                        raw_paths = folder_paths.get_folder_paths(raw_key) or []
+                        roots[raw_key] = dedupe_local_base_directories(
+                            raw_paths,
+                            comfy_root=comfy_root,
+                        )
 
                     return web.json_response(roots)
 

@@ -58,6 +58,165 @@ export const missingBrowserMethods = {
         };
     },
 
+    getMissingSupportedFolderCategories(missing = {}) {
+        const categories = [];
+        const addCategory = (value) => {
+            if (value === undefined || value === null || String(value).trim() === '') return;
+            if (Array.isArray(value)) {
+                value.forEach(addCategory);
+                return;
+            }
+            String(value).split(/[,|;]/).forEach(part => {
+                const normalized = this.normalizeDownloadCategory?.(part) || String(part || '').trim();
+                if (
+                    normalized
+                    && normalized !== 'unknown'
+                    && !categories.includes(normalized)
+                ) {
+                    categories.push(normalized);
+                }
+            });
+        };
+
+        addCategory(this.getMissingSupportedDownloadCategories?.(missing) || []);
+        if (!categories.length) {
+            addCategory(missing.category_hints);
+            addCategory(missing.categoryHints);
+            addCategory(missing.model_widget_category_hints);
+            addCategory(missing.modelWidgetCategoryHints);
+            addCategory(missing.supported_categories);
+            addCategory(missing.supportedCategories);
+            addCategory(missing.category);
+        }
+        return categories;
+    },
+
+    getMissingSupportedFolderKeys(missing = {}) {
+        const keys = [];
+        const addKey = (value) => {
+            if (value === undefined || value === null || String(value).trim() === '') return;
+            if (Array.isArray(value)) {
+                value.forEach(addKey);
+                return;
+            }
+            String(value).split(/[,|;]/).forEach(part => {
+                const key = String(part || '').trim();
+                if (key && key !== 'unknown' && !keys.includes(key)) {
+                    keys.push(key);
+                }
+            });
+        };
+
+        addKey(missing.folder_key_hints);
+        addKey(missing.folderKeyHints);
+        addKey(missing.model_widget_folder_key_hints);
+        addKey(missing.modelWidgetFolderKeyHints);
+
+        if (keys.length) {
+            const nodeCategory = this.getMissingNodeTypeDownloadCategory?.(missing) || '';
+            if (nodeCategory) {
+                const filteredKeys = keys.filter(key => (
+                    (this.normalizeDownloadCategory?.(key) || key) === nodeCategory
+                ));
+                if (filteredKeys.length) return filteredKeys;
+            }
+            return keys;
+        }
+
+        return this.getMissingSupportedFolderCategories(missing);
+    },
+
+    normalizeMissingFolderRootPath(folderKey = '', path = '') {
+        const cleanPath = String(path || '').trim();
+        if (!cleanPath) return '';
+
+        const normalizedCategory = this.normalizeDownloadCategory?.(folderKey) || folderKey;
+        const rawKey = String(folderKey || '').trim();
+        if (!normalizedCategory || normalizedCategory === rawKey) {
+            return cleanPath;
+        }
+
+        const usesBackslash = cleanPath.includes('\\');
+        const normalizedPath = cleanPath.replace(/\\/g, '/').replace(/\/+$/g, '');
+        const parts = normalizedPath.split('/').filter(Boolean);
+        const leaf = (parts[parts.length - 1] || '').toLowerCase();
+        const parent = (parts[parts.length - 2] || '').toLowerCase();
+        const canonicalLeaf = String(normalizedCategory || '').toLowerCase();
+        const rawSuffix = rawKey.toLowerCase().startsWith(`${canonicalLeaf}_`)
+            ? rawKey.slice(canonicalLeaf.length + 1).toLowerCase()
+            : '';
+
+        if (rawSuffix && leaf === rawSuffix && parent === canonicalLeaf) {
+            const parentPath = parts.slice(0, -1).join('/');
+            return usesBackslash ? parentPath.replace(/\//g, '\\') : parentPath;
+        }
+        return cleanPath;
+    },
+
+    getMissingSupportedFolderDetails(missing = {}) {
+        const folderKeys = this.getMissingSupportedFolderKeys(missing);
+        const seenPaths = new Set();
+        const details = [];
+
+        const normalizePathIdentity = (value = '') => String(value || '')
+            .replace(/[\\/]+/g, '/')
+            .replace(/\/+$/g, '')
+            .toLowerCase();
+
+        folderKeys.forEach(folderKey => {
+            const normalizedCategory = this.normalizeDownloadCategory?.(folderKey) || folderKey;
+            const label = this.getCategoryDisplayName?.(normalizedCategory) || folderKey;
+            const roots = this.downloadRootDirectories?.[folderKey]
+                || this.downloadRootDirectories?.[normalizedCategory];
+            const paths = Array.isArray(roots)
+                ? roots
+                : (roots ? [roots] : []);
+
+            if (!paths.length) {
+                details.push({
+                    category: normalizedCategory,
+                    folderKey,
+                    label,
+                    path: '',
+                    display: label && label !== folderKey ? `${label} (${folderKey})` : folderKey
+                });
+                return;
+            }
+
+            paths.forEach(path => {
+                const cleanPath = this.normalizeMissingFolderRootPath(folderKey, path);
+                if (!cleanPath) return;
+                const identity = `${normalizedCategory}::${normalizePathIdentity(cleanPath)}`;
+                if (seenPaths.has(identity)) return;
+                seenPaths.add(identity);
+                details.push({
+                    category: normalizedCategory,
+                    folderKey,
+                    label,
+                    path: cleanPath,
+                    display: `${label}: ${cleanPath}`
+                });
+            });
+        });
+
+        return details;
+    },
+
+    renderMissingNodeFolderBadge(missing = {}) {
+        const details = this.getMissingSupportedFolderDetails(missing);
+        if (!details.length) return '';
+
+        const folderCount = details.length;
+        const tooltip = folderCount === 1
+            ? `This node reads models from 1 folder:\n${details[0].display}`
+            : `This node reads models from ${folderCount} folders:\n${details.map(detail => detail.display).join('\n')}`;
+        const ariaLabel = folderCount === 1
+            ? `This node reads models from 1 folder`
+            : `This node reads models from ${folderCount} folders`;
+
+        return `<span class="mr-node-folder-count-badge" data-tooltip="${this.escapeHtml(tooltip)}" tabindex="0" aria-label="${this.escapeHtml(ariaLabel)}">${this.escapeHtml(String(folderCount))}</span>`;
+    },
+
     getBestLocalMatch(missing = {}, minConfidence = 0) {
         const matches = Array.isArray(missing.matches) ? missing.matches : [];
         return matches
@@ -1297,11 +1456,23 @@ export const missingBrowserMethods = {
             return;
         }
 
-        if (!this.downloadDirectories) {
+        const needsDownloadDirectories = !this.downloadDirectories;
+        const needsDownloadRootDirectories = !this.downloadRootDirectories
+            && typeof this.ensureDownloadRootDirectoriesLoaded === 'function';
+        if (needsDownloadDirectories || needsDownloadRootDirectories) {
             const renderToken = `download-dirs-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             this._downloadDirectoriesRenderToken = renderToken;
-            container.innerHTML = this.renderStatusMessage('Loading download folders...', 'info');
-            this.ensureDownloadDirectoriesLoaded?.().then(() => {
+            container.innerHTML = this.renderStatusMessage('Loading model folders...', 'info');
+
+            const loaders = [];
+            if (needsDownloadDirectories) {
+                loaders.push(this.ensureDownloadDirectoriesLoaded?.());
+            }
+            if (needsDownloadRootDirectories) {
+                loaders.push(this.ensureDownloadRootDirectoriesLoaded());
+            }
+
+            Promise.allSettled(loaders).then(() => {
                 if (
                     this._downloadDirectoriesRenderToken === renderToken &&
                     this.activeTab === 'missing' &&
@@ -1469,6 +1640,7 @@ export const missingBrowserMethods = {
             html += this.getLocateIconHtml();
         }
         html += `${nodeChipText}</span>`;
+        html += this.renderMissingNodeFolderBadge(missing);
         html += `</div>`;
         html += `</div>`;
         html += `</div>`;

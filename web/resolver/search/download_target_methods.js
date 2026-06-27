@@ -106,6 +106,7 @@ export const downloadTargetMethods = {
             diffusion_models: 'diffusion_models',
             clip: 'text_encoders',
             clips: 'text_encoders',
+            clip_gguf: 'text_encoders',
             text_encoder: 'text_encoders',
             text_encoders: 'text_encoders',
             ip_adapter: 'ipadapter',
@@ -137,19 +138,127 @@ export const downloadTargetMethods = {
         ].map(key => this.normalizeDownloadCategory(key)).filter(Boolean));
     },
 
-    getSourceResultDownloadCategory(source = {}, fallbackCategory = '') {
+    getMissingSupportedDownloadCategories(missing = {}) {
+        const knownCategories = this.getKnownDownloadCategorySet();
+        const collectCategories = (...values) => {
+            const categories = [];
+            const addCategory = (value) => {
+                if (value === undefined || value === null || String(value).trim() === '') return;
+                if (Array.isArray(value)) {
+                    value.forEach(addCategory);
+                    return;
+                }
+                String(value).split(/[,|;]/).forEach(part => {
+                    const normalized = this.normalizeDownloadCategory(part);
+                    if (normalized && knownCategories.has(normalized) && !categories.includes(normalized)) {
+                        categories.push(normalized);
+                    }
+                });
+            };
+            values.forEach(addCategory);
+            return categories;
+        };
+        const chooseSupported = (supported = []) => {
+            if (!supported.length) return [];
+            const nodeCategory = this.getMissingNodeTypeDownloadCategory(missing);
+            if (nodeCategory && supported.includes(nodeCategory)) {
+                return [nodeCategory];
+            }
+            return supported;
+        };
+
+        const widgetSupported = collectCategories(
+            missing.folder_key_hints,
+            missing.folderKeyHints,
+            missing.model_widget_folder_key_hints,
+            missing.modelWidgetFolderKeyHints,
+            missing.model_widget_category_hints,
+            missing.modelWidgetCategoryHints
+        );
+        if (widgetSupported.length) {
+            return chooseSupported(widgetSupported);
+        }
+
+        const supported = collectCategories(
+            missing.category_hints,
+            missing.categoryHints,
+            missing.supported_categories,
+            missing.supportedCategories
+        );
+        if (supported.length) {
+            return chooseSupported(supported);
+        }
+
+        const fallbackSupported = [];
+        const addCategory = (value) => {
+            if (value === undefined || value === null || String(value).trim() === '') return;
+            if (Array.isArray(value)) {
+                value.forEach(addCategory);
+                return;
+            }
+            String(value).split(/[,|;]/).forEach(part => {
+                const normalized = this.normalizeDownloadCategory(part);
+                if (normalized && knownCategories.has(normalized) && !fallbackSupported.includes(normalized)) {
+                    fallbackSupported.push(normalized);
+                }
+            });
+        };
+
+        addCategory(this.getMissingNodeTypeDownloadCategory(missing));
+        if (fallbackSupported.length) {
+            return fallbackSupported;
+        }
+
+        addCategory(missing.category);
+        addCategory(missing.directory);
+
+        return fallbackSupported;
+    },
+
+    getSourceResultDownloadCategory(source = {}, fallbackCategory = '', missing = null) {
         const sourceData = source && typeof source === 'object' ? source : {};
         const knownCategories = this.getKnownDownloadCategorySet();
-        const candidates = [
+        const fallback = this.normalizeDownloadCategory(fallbackCategory || '');
+        const supportedCategories = missing
+            ? this.getMissingSupportedDownloadCategories(missing)
+            : [];
+        const sourceCandidates = [
             sourceData.model_type,
             sourceData.modelType,
             sourceData.type,
             sourceData.category,
-            sourceData.directory,
-            fallbackCategory
+            sourceData.directory
         ];
 
-        for (const candidate of candidates) {
+        for (const candidate of sourceCandidates) {
+            if (candidate === undefined || candidate === null || String(candidate).trim() === '') continue;
+            const normalized = this.normalizeDownloadCategory(candidate);
+            if (
+                normalized
+                && knownCategories.has(normalized)
+                && supportedCategories.includes(normalized)
+            ) {
+                return normalized;
+            }
+        }
+
+        if (
+            fallback
+            && knownCategories.has(fallback)
+            && (!supportedCategories.length || supportedCategories.includes(fallback))
+        ) {
+            return fallback;
+        }
+
+        if (supportedCategories.length) {
+            return supportedCategories[0];
+        }
+
+        if (fallback && knownCategories.has(fallback)) {
+            return fallback;
+        }
+
+        for (const candidate of sourceCandidates) {
             if (candidate === undefined || candidate === null || String(candidate).trim() === '') continue;
             const normalized = this.normalizeDownloadCategory(candidate);
             if (normalized && knownCategories.has(normalized)) {
@@ -163,7 +272,7 @@ export const downloadTargetMethods = {
             : this.normalizeDownloadCategory(fallbackCategory || 'checkpoints');
     },
 
-    getNodeTypeDownloadCategory(nodeType = '') {
+    getExactNodeTypeDownloadCategory(nodeType = '') {
         const normalizedNodeType = String(nodeType || '').trim();
         const exactMap = {
             CheckpointLoaderSimple: 'checkpoints',
@@ -181,13 +290,30 @@ export const downloadTargetMethods = {
             CLIPLoader: 'text_encoders',
             DualCLIPLoader: 'text_encoders',
             TripleCLIPLoader: 'text_encoders',
+            CLIPLoaderGGUF: 'text_encoders',
+            ClipLoaderGGUF: 'text_encoders',
+            DualCLIPLoaderGGUF: 'text_encoders',
+            DualClipLoaderGGUF: 'text_encoders',
+            TripleCLIPLoaderGGUF: 'text_encoders',
+            TripleClipLoaderGGUF: 'text_encoders',
+            QuadrupleCLIPLoader: 'text_encoders',
+            QuadrupleClipLoader: 'text_encoders',
+            QuadrupleCLIPLoaderGGUF: 'text_encoders',
+            QuadrupleClipLoaderGGUF: 'text_encoders',
             UpscaleModelLoader: 'upscale_models',
             LTXVAudioVAELoader: 'checkpoints',
             LowVRAMAudioVAELoader: 'checkpoints'
         };
-        if (exactMap[normalizedNodeType]) {
-            return exactMap[normalizedNodeType];
-        }
+        return exactMap[normalizedNodeType] || '';
+    },
+
+    getNodeTypeDownloadCategory(nodeType = '') {
+        const normalizedNodeType = String(nodeType || '').trim();
+        const exactCategory = this.getExactNodeTypeDownloadCategory(normalizedNodeType);
+        if (exactCategory) return exactCategory;
+
+        const tokenCategory = this.getNodeTypeDownloadCategoryFromTokens(normalizedNodeType);
+        if (tokenCategory) return tokenCategory;
 
         const token = normalizedNodeType.toLowerCase();
         if (!token) return '';
@@ -200,6 +326,53 @@ export const downloadTargetMethods = {
         if (token.includes('embedding') || token.includes('textualinversion')) return 'embeddings';
         if (token.includes('clip')) return 'text_encoders';
         return '';
+    },
+
+    normalizeNodeCategoryToken(value = '') {
+        return String(value || '')
+            .trim()
+            .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '');
+    },
+
+    getNodeTypeDownloadCategoryFromTokens(nodeType = '') {
+        const nodeToken = this.normalizeNodeCategoryToken(nodeType);
+        if (!nodeToken) return '';
+
+        const ignoredTokens = new Set(['model', 'models', 'loader', 'provider']);
+        const candidates = [];
+        const seen = new Set();
+        const addCandidate = (category, tokenValue) => {
+            const token = this.normalizeNodeCategoryToken(tokenValue);
+            if (!token || token.length < 3 || ignoredTokens.has(token)) return;
+            const key = `${category}:${token}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+            candidates.push({ category, token });
+        };
+        const addTokenParts = (category, tokenValue) => {
+            String(tokenValue || '').split(/[_\s-]+/).forEach(part => addCandidate(category, part));
+        };
+
+        this.getDefaultDownloadCategoryKeys().forEach(rawCategory => {
+            const category = this.normalizeDownloadCategory(rawCategory);
+            if (!category) return;
+            const tokenName = this.getCategoryTokenName(category);
+            addCandidate(category, category);
+            addCandidate(category, category.replace(/s$/, ''));
+            addCandidate(category, tokenName);
+            addTokenParts(category, category);
+            addTokenParts(category, tokenName);
+        });
+
+        candidates.sort((a, b) => b.token.length - a.token.length);
+        const match = candidates.find(candidate => (
+            candidate.token.length <= 3
+                ? nodeToken.startsWith(candidate.token)
+                : nodeToken.includes(candidate.token)
+        ));
+        return match?.category || '';
     },
 
     getMissingNodeTypeDownloadCategory(missing = {}) {
@@ -233,7 +406,9 @@ export const downloadTargetMethods = {
 
     getMissingDownloadCategory(missing = {}, fallbackCategory = 'checkpoints') {
         const knownCategories = this.getKnownDownloadCategorySet();
+        const supportedCategories = this.getMissingSupportedDownloadCategories?.(missing) || [];
         const candidates = [
+            ...supportedCategories,
             this.getMissingNodeTypeDownloadCategory(missing),
             missing.category,
             missing.directory,
@@ -1117,7 +1292,8 @@ export const downloadTargetMethods = {
                 });
                 merged.category = this.getSourceResultDownloadCategory(
                     result,
-                    merged.category || missing.category || ''
+                    merged.category || missing.category || '',
+                    missing
                 );
             }
         }
@@ -1367,7 +1543,8 @@ export const downloadTargetMethods = {
         const searchSuggestion = this.getCachedSearchSuggestionData(missing);
         return this.getSourceResultDownloadCategory(
             searchSuggestion || {},
-            this.getMissingDownloadCategory(missing, fallbackCategory || 'checkpoints')
+            this.getMissingDownloadCategory(missing, fallbackCategory || 'checkpoints'),
+            missing
         );
     },
 

@@ -1282,6 +1282,32 @@
     transform: translateY(-1px);
 }
 
+.mr-node-folder-count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    border: 1px solid rgba(114, 211, 138, 0.28);
+    background: rgba(114, 211, 138, 0.105);
+    color: #c9f6d0;
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 1;
+    cursor: help;
+    flex-shrink: 0;
+}
+
+.mr-node-folder-count-badge:hover,
+.mr-node-folder-count-badge:focus-visible {
+    border-color: rgba(114, 211, 138, 0.46);
+    background: rgba(114, 211, 138, 0.16);
+    color: #e6ffe9;
+    outline: none;
+}
+
 .mr-missing-browser .mr-node-chip.is-locatable:hover {
     background: var(--mr-missing-chip-bg-hover, rgba(255, 255, 255, 0.06));
     border-color: var(--mr-missing-chip-border-hover, rgba(255, 255, 255, 0.18));
@@ -6257,7 +6283,8 @@ a.mr-image-preview-resource-name:hover {
     font-size: 12px;
     font-weight: 400;
     line-height: 1.5;
-    white-space: normal;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
     text-align: left;
     box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
     pointer-events: none;

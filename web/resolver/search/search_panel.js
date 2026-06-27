@@ -1671,7 +1671,8 @@ export const searchPanelMethods = {
         const baseModel = downloadSource.base_model || missing.civitai_info?.base_model || '';
         const rowCategory = this.getSourceResultDownloadCategory?.(
             downloadSource,
-            downloadSource.directory || downloadSource.category || this.getMissingDownloadCategory?.(missing, 'checkpoints') || 'checkpoints'
+            downloadSource.directory || downloadSource.category || this.getMissingDownloadCategory?.(missing, 'checkpoints') || 'checkpoints',
+            missing
         ) || downloadSource.directory || downloadSource.category || this.getMissingDownloadCategory?.(missing, 'checkpoints') || 'checkpoints';
         const secondaryParts = [
             sourceSecondary,

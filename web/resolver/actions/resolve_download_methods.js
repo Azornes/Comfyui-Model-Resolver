@@ -2297,7 +2297,8 @@ export const resolveDownloadMethods = {
             const archiveName = civarchiveResult.name || archiveFilename || 'Model';
             const archiveCategory = this.getSourceResultDownloadCategory?.(
                 civarchiveResult,
-                this.getMissingDownloadCategory?.(missing, 'checkpoints') || 'checkpoints'
+                this.getMissingDownloadCategory?.(missing, 'checkpoints') || 'checkpoints',
+                missing
             ) || this.getMissingDownloadCategory?.(missing, 'checkpoints') || 'checkpoints';
             const archiveSecondary = [
                 archiveName && archiveName !== archiveFilename ? archiveFilename : '',
@@ -2332,7 +2333,8 @@ export const resolveDownloadMethods = {
             const archiveName = loraManagerArchiveResult.name || archiveFilename;
             const archiveCategory = this.getSourceResultDownloadCategory?.(
                 loraManagerArchiveResult,
-                this.getMissingDownloadCategory?.(missing, 'loras') || 'loras'
+                this.getMissingDownloadCategory?.(missing, 'loras') || 'loras',
+                missing
             ) || this.getMissingDownloadCategory?.(missing, 'loras') || 'loras';
             addRow({
                 sourceKey: 'lora-archive',
@@ -2364,7 +2366,8 @@ export const resolveDownloadMethods = {
             const modelName = civitaiResult.name || missing.civitai_info?.model_name || downloadFilename || 'Model';
             const civitaiCategory = this.getSourceResultDownloadCategory?.(
                 civitaiResult,
-                this.getMissingDownloadCategory?.(missing, 'checkpoints') || 'checkpoints'
+                this.getMissingDownloadCategory?.(missing, 'checkpoints') || 'checkpoints',
+                missing
             ) || this.getMissingDownloadCategory?.(missing, 'checkpoints') || 'checkpoints';
             const civitaiSecondary = [
                 civitaiResult.type || '',

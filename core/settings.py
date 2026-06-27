@@ -43,7 +43,7 @@ TEMPLATE_KEY_ALIASES = {
     "checkpoints": ("checkpoints", "checkpoint"),
     "embeddings": ("embeddings", "embedding"),
     "diffusion_models": ("diffusion_models", "diffusion_model", "unet"),
-    "text_encoders": ("text_encoders", "text_encoder", "clip", "clips"),
+    "text_encoders": ("text_encoders", "text_encoder", "clip", "clips", "clip_gguf"),
     "controlnet": ("controlnet", "control_net"),
     "vae": ("vae",),
     "upscale_models": ("upscale_models", "upscale_model", "upscaler"),
