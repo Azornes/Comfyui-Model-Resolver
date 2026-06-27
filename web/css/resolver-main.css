@@ -404,6 +404,46 @@
     display: none;
 }
 
+.mr-download-progress-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--mr-spacing-8);
+}
+
+.mr-download-progress-item {
+    padding: 8px;
+    border: 1px solid var(--mr-border);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.025);
+}
+
+.mr-download-progress-item-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--mr-spacing-8);
+    margin-bottom: 5px;
+    color: var(--mr-text-muted);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.mr-download-progress-item-head > span:first-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mr-download-progress-item-head > span:last-child {
+    flex: 0 0 auto;
+    color: var(--mr-text);
+}
+
+.mr-download-progress-item .mr-progress-container {
+    margin-top: 0;
+}
+
 .mr-civitai-open-btn {
     background: transparent;
     color: #ff9800;

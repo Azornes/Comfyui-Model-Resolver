@@ -776,6 +776,14 @@ export const resolveDownloadMethods = {
         return null;
     },
 
+    getActiveDownloadEntriesForMissing(missing) {
+        if (!missing) return [];
+        const missingKey = this.getDownloadStateKey(missing);
+        return Object.entries(this.activeDownloads || {})
+            .filter(([, info]) => info?.missing && this.getDownloadStateKey(info.missing) === missingKey)
+            .map(([downloadId, info]) => ({ downloadId, info }));
+    },
+
     getDownloadSnapshotForMissing(missing) {
         const active = this.getActiveDownloadEntryForMissing(missing);
         if (active) {
@@ -813,7 +821,7 @@ export const resolveDownloadMethods = {
     },
 
     attachDownloadActionHandlers(progressDiv, downloadId) {
-        if (!progressDiv || !downloadId) return;
+        if (!progressDiv) return;
         const bindInstantAction = (button, handler) => {
             if (!button || button._hasListener) return;
             button._hasListener = true;
@@ -834,108 +842,172 @@ export const resolveDownloadMethods = {
             button.addEventListener('click', run);
         };
         progressDiv.querySelectorAll('.cancel-download-btn, .cancel-download-btn-pending').forEach(cancelBtn => {
-            bindInstantAction(cancelBtn, () => this.cancelDownload(downloadId));
+            bindInstantAction(cancelBtn, () => {
+                const targetDownloadId = cancelBtn.dataset.downloadId || downloadId;
+                if (targetDownloadId) this.cancelDownload(targetDownloadId);
+            });
         });
         progressDiv.querySelectorAll('.pause-download-btn').forEach(pauseBtn => {
-            bindInstantAction(pauseBtn, () => this.pauseDownload(downloadId));
+            bindInstantAction(pauseBtn, () => {
+                const targetDownloadId = pauseBtn.dataset.downloadId || downloadId;
+                if (targetDownloadId) this.pauseDownload(targetDownloadId);
+            });
         });
         progressDiv.querySelectorAll('.resume-download-btn').forEach(resumeBtn => {
-            bindInstantAction(resumeBtn, () => this.resumeDownload(downloadId));
+            bindInstantAction(resumeBtn, () => {
+                const targetDownloadId = resumeBtn.dataset.downloadId || downloadId;
+                if (targetDownloadId) this.resumeDownload(targetDownloadId);
+            });
         });
     },
 
-    renderDownloadSnapshot(downloadId, snapshot, elements = {}) {
-        if (!snapshot) return;
+    getDownloadProgressStatusLabel(status = '', percent = 0) {
+        if (status === 'downloading') return `${Math.round(percent)}%`;
+        if (status === 'starting') return 'Starting';
+        if (status === 'paused') return 'Paused';
+        if (status === 'completed_checking') return 'Checking';
+        return String(status || '').replace(/_/g, ' ') || 'Download';
+    },
 
-        const { progressDiv, downloadBtn } = elements.progressDiv || elements.downloadBtn
-            ? elements
-            : this.resolveDownloadUiElements(snapshot);
-        const progress = snapshot.progress || {};
-        const status = snapshot.status || progress.status || '';
-        const isActive = snapshot.isActive || Boolean(downloadId && this.activeDownloads?.[downloadId]);
+    isDownloadProgressStatus(status = '', isActive = false) {
         const terminalStatuses = new Set(['cancelling', 'cancelled', 'error', 'refresh_error', 'completed_checking', 'completed']);
-        const shouldRenderProgress = status === 'starting'
+        return status === 'starting'
             || status === 'downloading'
             || status === 'paused'
             || (isActive && !terminalStatuses.has(status));
+    },
 
-        if (progressDiv) {
-            progressDiv.classList.remove('mr-is-hidden');
-            progressDiv.classList.add('mr-is-visible');
+    renderDownloadSnapshotMarkup(downloadId, snapshot) {
+        const progress = snapshot.progress || {};
+        const status = snapshot.status || progress.status || '';
+        const isActive = snapshot.isActive || Boolean(downloadId && this.activeDownloads?.[downloadId]);
+        const shouldRenderProgress = this.isDownloadProgressStatus(status, isActive);
 
-            if (shouldRenderProgress) {
-                const canCancel = Boolean(downloadId);
-                const backend = String(progress.download_backend || snapshot.downloadBackend || snapshot.download_backend || '').toLowerCase();
-                const isAria2 = backend === 'aria2';
-                const isPaused = status === 'paused';
-                const percent = Math.max(0, Math.min(100, Number(progress.progress) || 0));
-                const downloaded = this.formatBytes(progress.downloaded || 0);
-                const total = this.formatBytes(progress.total_size || 0);
-                const progressMeta = this.formatDownloadProgressMeta(progress);
-                const leftText = progress.total_size
-                    ? `${downloaded} / ${total} (${percent}%)${isPaused ? ' - Paused' : ''}`
-                    : '<span class="mr-info-accent-text">Connecting...</span>';
-                let actionClass = canCancel ? 'cancel-download-btn mr-btn mr-btn-danger mr-btn-sm' : '';
-                let actionText = canCancel ? 'Cancel' : '';
-                let actionsHtml = '';
-                if (canCancel && isAria2 && isPaused) {
-                    actionClass = 'resume-download-btn mr-btn mr-btn-primary mr-btn-sm';
-                    actionText = 'Resume';
-                } else if (canCancel && isAria2 && status === 'downloading') {
-                    actionClass = 'pause-download-btn mr-btn mr-btn-secondary mr-btn-sm';
-                    actionText = 'Pause';
-                }
-                if (canCancel && isAria2 && (isPaused || status === 'downloading')) {
-                    const safeDownloadId = this.escapeHtml(String(downloadId));
-                    const toggleButton = isPaused
-                        ? `<button class="resume-download-btn mr-btn mr-btn-primary mr-btn-sm" data-download-id="${safeDownloadId}">Resume</button>`
-                        : `<button class="pause-download-btn mr-btn mr-btn-secondary mr-btn-sm" data-download-id="${safeDownloadId}">Pause</button>`;
-                    actionsHtml = `${toggleButton}<button class="cancel-download-btn mr-btn mr-btn-danger mr-btn-sm" data-download-id="${safeDownloadId}">Cancel</button>`;
-                }
-                progressDiv.innerHTML = this.renderProgressWithAction({
-                    percent,
-                    leftText,
-                    rightText: progressMeta,
-                    actionClass,
-                    actionText,
-                    actionDataAttr: canCancel ? `data-download-id="${downloadId}"` : '',
-                    actionsHtml,
-                    contextMenuModel: this.getDownloadFolderContext(progress, snapshot)
-                });
-                this.attachDownloadActionHandlers(progressDiv, downloadId);
-            } else if (status === 'cancelled') {
-                progressDiv.innerHTML = this.renderStatusMessage('Download cancelled - incomplete file removed', 'warning');
-            } else if (status === 'cancelling') {
-                progressDiv.innerHTML = this.renderDownloadStatusMessage(
-                    snapshot.message || 'Cancelling download...',
-                    snapshot.type || 'info',
-                    progress,
-                    snapshot
-                );
-            } else if (status === 'error' || status === 'refresh_error') {
-                progressDiv.innerHTML = this.renderDownloadStatusMessage(
-                    snapshot.message || progress.error || 'Download failed',
-                    snapshot.type || (status === 'refresh_error' ? 'warning' : 'error'),
-                    progress,
-                    snapshot
-                );
-            } else if (status === 'completed_checking') {
-                progressDiv.innerHTML = this.renderDownloadStatusMessage(
-                    snapshot.message || 'Download complete. Checking local matches...',
-                    snapshot.type || 'success',
-                    progress,
-                    snapshot
-                );
-            } else if (status === 'completed') {
-                progressDiv.innerHTML = this.renderDownloadStatusMessage(
-                    snapshot.message || 'Download complete. Local matches updated.',
-                    snapshot.type || 'success',
-                    progress,
-                    snapshot
-                );
+        if (shouldRenderProgress) {
+            const canCancel = Boolean(downloadId);
+            const backend = String(progress.download_backend || snapshot.downloadBackend || snapshot.download_backend || '').toLowerCase();
+            const isAria2 = backend === 'aria2';
+            const isPaused = status === 'paused';
+            const percent = Math.max(0, Math.min(100, Number(progress.progress) || 0));
+            const downloaded = this.formatBytes(progress.downloaded || 0);
+            const total = this.formatBytes(progress.total_size || 0);
+            const progressMeta = this.formatDownloadProgressMeta(progress);
+            const leftText = progress.total_size
+                ? `${downloaded} / ${total} (${percent}%)${isPaused ? ' - Paused' : ''}`
+                : '<span class="mr-info-accent-text">Connecting...</span>';
+            let actionClass = canCancel ? 'cancel-download-btn mr-btn mr-btn-danger mr-btn-sm' : '';
+            let actionText = canCancel ? 'Cancel' : '';
+            let actionsHtml = '';
+            if (canCancel && isAria2 && isPaused) {
+                actionClass = 'resume-download-btn mr-btn mr-btn-primary mr-btn-sm';
+                actionText = 'Resume';
+            } else if (canCancel && isAria2 && status === 'downloading') {
+                actionClass = 'pause-download-btn mr-btn mr-btn-secondary mr-btn-sm';
+                actionText = 'Pause';
             }
+            if (canCancel && isAria2 && (isPaused || status === 'downloading')) {
+                const safeDownloadId = this.escapeHtml(String(downloadId));
+                const toggleButton = isPaused
+                    ? `<button class="resume-download-btn mr-btn mr-btn-primary mr-btn-sm" data-download-id="${safeDownloadId}">Resume</button>`
+                    : `<button class="pause-download-btn mr-btn mr-btn-secondary mr-btn-sm" data-download-id="${safeDownloadId}">Pause</button>`;
+                actionsHtml = `${toggleButton}<button class="cancel-download-btn mr-btn mr-btn-danger mr-btn-sm" data-download-id="${safeDownloadId}">Cancel</button>`;
+            }
+            return this.renderProgressWithAction({
+                percent,
+                leftText,
+                rightText: progressMeta,
+                actionClass,
+                actionText,
+                actionDataAttr: canCancel ? `data-download-id="${downloadId}"` : '',
+                actionsHtml,
+                contextMenuModel: this.getDownloadFolderContext(progress, snapshot)
+            });
         }
 
+        if (status === 'cancelled') {
+            return this.renderStatusMessage('Download cancelled - incomplete file removed', 'warning');
+        }
+        if (status === 'cancelling') {
+            return this.renderDownloadStatusMessage(snapshot.message || 'Cancelling download...', snapshot.type || 'info', progress, snapshot);
+        }
+        if (status === 'error' || status === 'refresh_error') {
+            return this.renderDownloadStatusMessage(
+                snapshot.message || progress.error || 'Download failed',
+                snapshot.type || (status === 'refresh_error' ? 'warning' : 'error'),
+                progress,
+                snapshot
+            );
+        }
+        if (status === 'completed_checking') {
+            return this.renderDownloadStatusMessage(snapshot.message || 'Download complete. Checking local matches...', snapshot.type || 'success', progress, snapshot);
+        }
+        if (status === 'completed') {
+            return this.renderDownloadStatusMessage(snapshot.message || 'Download complete. Local matches updated.', snapshot.type || 'success', progress, snapshot);
+        }
+        return '';
+    },
+
+    buildActiveDownloadSnapshot(downloadId, info = {}) {
+        const progress = this.applyPendingDownloadStatus?.(
+            info,
+            info.lastProgress || { status: info.lastStatus || 'starting', progress: 0 }
+        ) || info.lastProgress || {};
+        return {
+            ...(info.statusSnapshot || {}),
+            downloadId,
+            missing: info.missing,
+            category: info.category || '',
+            filename: progress.filename || info.filename || '',
+            downloadPath: progress.path || info.downloadPath || '',
+            downloadDirectory: progress.directory || info.downloadDirectory || '',
+            progress,
+            status: progress.status || info.lastStatus || 'starting',
+            isActive: true
+        };
+    },
+
+    renderDownloadProgressGroupItem(downloadId, snapshot) {
+        const progress = snapshot.progress || {};
+        const status = snapshot.status || progress.status || '';
+        const percent = Math.max(0, Math.min(100, Number(progress.progress) || 0));
+        const filename = progress.filename || snapshot.filename || 'Download';
+        const statusLabel = this.getDownloadProgressStatusLabel(status, percent);
+        const itemIdAttr = downloadId ? ` data-download-id="${this.escapeHtml(String(downloadId))}"` : '';
+        return `
+            <div class="mr-download-progress-item"${itemIdAttr}>
+                <div class="mr-download-progress-item-head">
+                    <span data-tooltip="${this.escapeHtml(filename)}">${this.escapeHtml(filename)}</span>
+                    <span>${this.escapeHtml(statusLabel)}</span>
+                </div>
+                ${this.renderDownloadSnapshotMarkup(downloadId, snapshot)}
+            </div>
+        `;
+    },
+
+    renderDownloadProgressGroupForMissing(missing, progressDiv, { includeDownloadId = '', includeSnapshot = null } = {}) {
+        if (!missing || !progressDiv) return false;
+
+        const activeEntries = this.getActiveDownloadEntriesForMissing(missing);
+        const renderedIds = new Set();
+        const items = activeEntries.map(({ downloadId, info }) => {
+            renderedIds.add(String(downloadId));
+            return this.renderDownloadProgressGroupItem(downloadId, this.buildActiveDownloadSnapshot(downloadId, info));
+        });
+
+        if (includeSnapshot && (!includeDownloadId || !renderedIds.has(String(includeDownloadId)))) {
+            items.push(this.renderDownloadProgressGroupItem(includeDownloadId, includeSnapshot));
+        }
+
+        if (items.length <= 1) return false;
+
+        progressDiv.classList.remove('mr-is-hidden');
+        progressDiv.classList.add('mr-is-visible');
+        progressDiv.innerHTML = `<div class="mr-download-progress-list">${items.join('')}</div>`;
+        this.attachDownloadActionHandlers(progressDiv, includeDownloadId);
+        return true;
+    },
+
+    updateDownloadButtonForSnapshot(downloadBtn, progress, status, shouldRenderProgress) {
         if (!downloadBtn) return;
 
         if (shouldRenderProgress) {
@@ -977,6 +1049,39 @@ export const resolveDownloadMethods = {
         } else {
             this.restoreDownloadButtonReadyState(downloadBtn);
         }
+    },
+
+    renderDownloadSnapshot(downloadId, snapshot, elements = {}) {
+        if (!snapshot) return;
+
+        const { progressDiv, downloadBtn } = elements.progressDiv || elements.downloadBtn
+            ? elements
+            : this.resolveDownloadUiElements(snapshot);
+        const progress = snapshot.progress || {};
+        const status = snapshot.status || progress.status || '';
+        const isActive = snapshot.isActive || Boolean(downloadId && this.activeDownloads?.[downloadId]);
+        const shouldRenderProgress = this.isDownloadProgressStatus(status, isActive);
+        const missingForGroup = snapshot.missing || this.activeDownloads?.[downloadId]?.missing || null;
+
+        if (
+            progressDiv &&
+            this.renderDownloadProgressGroupForMissing(missingForGroup, progressDiv, {
+                includeDownloadId: downloadId,
+                includeSnapshot: snapshot
+            })
+        ) {
+            this.updateDownloadButtonForSnapshot(downloadBtn, progress, status, shouldRenderProgress);
+            return;
+        }
+
+        if (progressDiv) {
+            progressDiv.classList.remove('mr-is-hidden');
+            progressDiv.classList.add('mr-is-visible');
+            progressDiv.innerHTML = this.renderDownloadSnapshotMarkup(downloadId, snapshot);
+            this.attachDownloadActionHandlers(progressDiv, downloadId);
+        }
+
+        this.updateDownloadButtonForSnapshot(downloadBtn, progress, status, shouldRenderProgress);
     },
 
     restoreDownloadProgressForMissing(missing) {
@@ -1218,7 +1323,7 @@ export const resolveDownloadMethods = {
         const workflowTabText = workflowContext.workflowTabText || '';
 
         try {
-            this.rememberDownloadSnapshotForMissing(missing, {
+            const startingSnapshot = this.rememberDownloadSnapshotForMissing(missing, {
                 downloadId: null,
                 category,
                 subfolder,
@@ -1254,15 +1359,7 @@ export const resolveDownloadMethods = {
             }
 
             if (progressDiv) {
-                progressDiv.classList.remove('mr-is-hidden');
-                progressDiv.classList.add('mr-is-visible');
-                progressDiv.innerHTML = this.renderProgressWithAction({
-                    percent: 0,
-                    leftText: '<span class="mr-info-accent-text">Connecting...</span>',
-                    rightText: '',
-                    actionClass: 'cancel-download-btn-pending mr-btn mr-btn-danger mr-btn-sm',
-                    actionText: 'Cancel'
-                });
+                this.renderDownloadSnapshot(null, startingSnapshot, { progressDiv, downloadBtn: btn });
             }
 
             // Start download
