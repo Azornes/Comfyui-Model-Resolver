@@ -37,6 +37,24 @@ export const optionsMethods = {
                 .map(option => `<option value="${option.value}" ${option.value === selected ? 'selected' : ''} title="${this.escapeHtml(option.tooltip)}">${this.escapeHtml(option.label)}</option>`)
                 .join('');
         };
+        const renderDownloadBackendOptions = (selectedValue) => {
+            const selected = this.normalizeDownloadBackend(selectedValue);
+            const options = [
+                {
+                    value: 'python',
+                    label: 'Python (built-in)',
+                    tooltip: 'Uses Model Resolver built-in downloader. This remains the default and requires no external tools.'
+                },
+                {
+                    value: 'aria2',
+                    label: 'aria2 (experimental)',
+                    tooltip: 'Uses an external aria2c process for large downloads, pause/resume, and segmented transfers.'
+                }
+            ];
+            return options
+                .map(option => `<option value="${option.value}" ${option.value === selected ? 'selected' : ''} title="${this.escapeHtml(option.tooltip)}">${this.escapeHtml(option.label)}</option>`)
+                .join('');
+        };
         const renderTemplatePlaceholderBadges = () => ['{base_model}', '{author}', '{first_tag}', '{model_name}', '{version_name}']
             .map(placeholder => `<span class="mr-options-placeholder-badge">${this.escapeHtml(placeholder)}</span>`)
             .join('');
@@ -211,6 +229,33 @@ export const optionsMethods = {
                                 <h4 class="mr-options-section-title">Download Sources</h4>
                             </div>
                             <div class="mr-options-grid">
+                                <div class="mr-options-panel">
+                                    <div class="mr-options-stack">
+                                        <div class="mr-options-subsection-head">
+                                            <h5 class="mr-options-subsection-title">Download Engine</h5>
+                                            <span class="mr-tooltip-badge" data-tooltip="Choose how model files are downloaded. aria2 requires the external aria2c executable and is intended for large downloads.">?</span>
+                                        </div>
+                                        <div class="mr-options-number-row">
+                                            <div class="mr-options-number-copy">
+                                                <span class="mr-options-label">Download backend</span>
+                                            </div>
+                                            <select id="mr-options-download-backend" class="mr-options-input">
+                                                ${renderDownloadBackendOptions(tokens.download_backend)}
+                                            </select>
+                                        </div>
+                                        <div class="mr-options-number-row">
+                                            <div class="mr-options-number-copy">
+                                                <span class="mr-options-label">aria2c path <span class="mr-tooltip-badge" data-tooltip="Optional full path to aria2c/aria2c.exe. Leave empty to use aria2c from your system PATH.">?</span></span>
+                                            </div>
+                                            <input id="mr-options-aria2c-path" class="mr-options-input" type="text" value="${this.escapeHtml(tokens.aria2c_path || '')}" placeholder="Leave empty to use aria2c from PATH">
+                                        </div>
+                                        <div class="mr-options-db-actions">
+                                            <button id="mr-options-aria2-check" type="button" class="mr-btn mr-btn-secondary">${getSvgIcon('refreshCw')} Check aria2</button>
+                                            <a class="mr-options-inline-link" href="https://github.com/willmiao/ComfyUI-Lora-Manager/wiki/Aria2-Download-Backend-(Experimental)" target="_blank" rel="noopener noreferrer">Setup guide</a>
+                                        </div>
+                                        <div id="mr-options-aria2-status" class="mr-options-db-message">Python downloader is used by default. aria2 requires aria2c installed or a configured executable path.</div>
+                                    </div>
+                                </div>
                                 <div class="mr-options-panel">
                                     <div class="mr-options-toggle-list">
                                         ${sourceDefaultsRows}
@@ -619,6 +664,10 @@ export const optionsMethods = {
         const autoFillBaseModelInput = this.contentElement.querySelector('#mr-options-auto-fill-base-model');
         const autoFillSubfolderInput = this.contentElement.querySelector('#mr-options-auto-fill-subfolder');
         const autoRefreshComfyModelsInput = this.contentElement.querySelector('#mr-options-auto-refresh-comfy-models');
+        const downloadBackendInput = this.contentElement.querySelector('#mr-options-download-backend');
+        const aria2cPathInput = this.contentElement.querySelector('#mr-options-aria2c-path');
+        const aria2CheckBtn = this.contentElement.querySelector('#mr-options-aria2-check');
+        const aria2StatusEl = this.contentElement.querySelector('#mr-options-aria2-status');
         const downloadPathModeInput = this.contentElement.querySelector('#mr-options-download-path-mode');
         const defaultRootSelectInputs = Array.from(this.contentElement.querySelectorAll('.mr-options-default-root'));
         const templatePresetInputs = Array.from(this.contentElement.querySelectorAll('.mr-options-template-preset'));
@@ -673,6 +722,8 @@ export const optionsMethods = {
             autoFillBaseModelInput,
             autoFillSubfolderInput,
             autoRefreshComfyModelsInput,
+            downloadBackendInput,
+            aria2cPathInput,
             downloadPathModeInput,
             ...defaultRootSelectInputs,
             ...templatePresetInputs,
@@ -719,6 +770,40 @@ export const optionsMethods = {
             statusEl.textContent = text;
             statusEl.classList.remove('is-valid', 'is-invalid', 'is-pending');
             if (mode) statusEl.classList.add(mode);
+        };
+
+        const setAria2Status = (text, mode = '') => {
+            if (!aria2StatusEl) return;
+            aria2StatusEl.textContent = text;
+            aria2StatusEl.classList.remove('is-valid', 'is-invalid', 'is-pending');
+            if (mode) aria2StatusEl.classList.add(mode);
+        };
+
+        const checkAria2Status = async ({ useUnsavedPath = true } = {}) => {
+            if (aria2CheckBtn) aria2CheckBtn.disabled = true;
+            setAria2Status('Checking aria2...', 'is-pending');
+            try {
+                const data = await this.fetchJson('/model_resolver/aria2/status', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        aria2c_path: useUnsavedPath
+                            ? (aria2cPathInput?.value || '')
+                            : (tokens.aria2c_path || '')
+                    }),
+                    silent: true
+                }, 'Check aria2');
+                if (data?.available) {
+                    const path = data.resolved_path || 'aria2c from PATH';
+                    const runningText = data.running ? ' Daemon is running.' : ' Daemon will start on first aria2 download.';
+                    setAria2Status(`aria2 is available: ${path}.${runningText}`, 'is-valid');
+                } else {
+                    setAria2Status(data?.error || 'aria2c was not found. Install aria2 or configure the aria2c path.', 'is-invalid');
+                }
+            } catch (error) {
+                setAria2Status(error.message || 'aria2 check failed.', 'is-invalid');
+            } finally {
+                if (aria2CheckBtn) aria2CheckBtn.disabled = false;
+            }
         };
 
         const checkCredential = async ({ input, button, statusEl, endpoint, payloadKey, missingText }) => {
@@ -1494,6 +1579,16 @@ export const optionsMethods = {
             });
         }
 
+        if (aria2CheckBtn) {
+            aria2CheckBtn.addEventListener('click', () => {
+                checkAria2Status({ useUnsavedPath: true });
+            });
+        }
+
+        if (tokens.download_backend === 'aria2') {
+            checkAria2Status({ useUnsavedPath: false });
+        }
+
         if (civitaiSessionCheckBtn) {
             civitaiSessionCheckBtn.addEventListener('click', () => {
                 checkCredential({
@@ -1576,6 +1671,7 @@ export const optionsMethods = {
                     );
                 });
                 const baseModelPathMappings = collectBaseModelPathMappings();
+                const downloadBackend = this.normalizeDownloadBackend(downloadBackendInput?.value || tokens.download_backend);
                 const downloadPathMode = this.normalizeDownloadPathMode(downloadPathModeInput?.value || tokens.download_path_mode);
                 const defaultRootSettings = {};
                 defaultRootSelectInputs.forEach((select) => {
@@ -1598,6 +1694,8 @@ export const optionsMethods = {
                     auto_fill_base_model:          Boolean(autoFillBaseModelInput?.checked),
                     auto_fill_subfolder:           Boolean(autoFillSubfolderInput?.checked),
                     auto_refresh_comfy_models_after_apply: Boolean(autoRefreshComfyModelsInput?.checked),
+                    download_backend:              downloadBackend,
+                    aria2c_path:                    aria2cPathInput?.value?.trim() || '',
                     download_path_mode:            downloadPathMode,
                     download_path_templates:       downloadPathTemplates,
                     base_model_path_mappings:      baseModelPathMappings,
@@ -1623,6 +1721,8 @@ export const optionsMethods = {
                 localStorage.setItem('ModelResolver.autoFillBaseModel',      newSettings.auto_fill_base_model ? 'true' : 'false');
                 localStorage.setItem('ModelResolver.autoFillSubfolder',      newSettings.auto_fill_subfolder ? 'true' : 'false');
                 localStorage.setItem('ModelResolver.autoRefreshComfyModelsAfterApply', newSettings.auto_refresh_comfy_models_after_apply ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.downloadBackend',        newSettings.download_backend);
+                localStorage.setItem('ModelResolver.aria2cPath',             newSettings.aria2c_path);
                 localStorage.setItem('ModelResolver.downloadPathMode',       newSettings.download_path_mode);
                 localStorage.setItem('ModelResolver.downloadPathTemplates',  JSON.stringify(newSettings.download_path_templates));
                 localStorage.setItem('ModelResolver.baseModelPathMappings',  JSON.stringify(newSettings.base_model_path_mappings));
@@ -1666,6 +1766,11 @@ export const optionsMethods = {
 
     },
 
+    normalizeDownloadBackend(value = '') {
+        const backend = String(value || '').trim().toLowerCase();
+        return backend === 'aria2' ? 'aria2' : 'python';
+    },
+
     getStoredTokens() {
         const civitaiCandidateLimitRaw = parseInt(localStorage.getItem('ModelResolver.civitaiCandidateLimit') || '5', 10);
         const civitai_candidate_limit = Number.isFinite(civitaiCandidateLimitRaw)
@@ -1700,6 +1805,8 @@ export const optionsMethods = {
             backend_log_level: storedBackendLogLevel || 'DEBUG',
             civitai_candidate_limit,
             search_source_enabled,
+            download_backend: this.normalizeDownloadBackend(localStorage.getItem('ModelResolver.downloadBackend') || 'python'),
+            aria2c_path: localStorage.getItem('ModelResolver.aria2cPath') || '',
             download_path_mode: this.getDownloadPathMode(),
             download_path_templates: this.getDownloadPathTemplates(),
             base_model_path_mappings: this.getBaseModelPathMappings(),
@@ -1755,6 +1862,10 @@ export const optionsMethods = {
                 localStorage.setItem('ModelResolver.autoFillSubfolder',      data.auto_fill_subfolder ? 'true' : 'false');
             if (data.auto_refresh_comfy_models_after_apply !== undefined)
                 localStorage.setItem('ModelResolver.autoRefreshComfyModelsAfterApply', data.auto_refresh_comfy_models_after_apply ? 'true' : 'false');
+            if (data.download_backend !== undefined)
+                localStorage.setItem('ModelResolver.downloadBackend',        this.normalizeDownloadBackend(data.download_backend));
+            if (data.aria2c_path !== undefined)
+                localStorage.setItem('ModelResolver.aria2cPath',             String(data.aria2c_path || ''));
             if (data.download_path_mode !== undefined)
                 localStorage.setItem('ModelResolver.downloadPathMode',       this.normalizeDownloadPathMode(data.download_path_mode));
             if (data.download_path_templates !== undefined)

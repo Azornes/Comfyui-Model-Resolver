@@ -14,6 +14,7 @@ SETTINGS_FILE = Path(__file__).resolve().parents[1] / "model_resolver_settings.j
 from .type_utils import to_bool, CATEGORY_MAP, normalize_download_category
 
 DOWNLOAD_PATH_MODES = {"suggested", "template", "manual"}
+DOWNLOAD_BACKENDS = {"python", "aria2"}
 
 DEFAULT_DOWNLOAD_PATH_TEMPLATES: Dict[str, str] = {
     "loras": "{base_model}/{first_tag}",
@@ -155,8 +156,15 @@ def normalize_download_path_mode(value: Any, auto_fill_subfolder: Any = None) ->
     return "suggested"
 
 
+def normalize_download_backend(value: Any) -> str:
+    backend = str(value or "").strip().lower()
+    return backend if backend in DOWNLOAD_BACKENDS else "python"
+
+
 def normalize_settings(settings: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
     data = dict(settings or {})
+    data["download_backend"] = normalize_download_backend(data.get("download_backend"))
+    data["aria2c_path"] = str(data.get("aria2c_path") or "").strip()
     data["auto_refresh_comfy_models_after_apply"] = bool_setting(
         data.get("auto_refresh_comfy_models_after_apply"), True
     )

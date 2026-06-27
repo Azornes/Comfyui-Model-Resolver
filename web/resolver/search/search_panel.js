@@ -1926,6 +1926,7 @@ export const searchPanelMethods = {
         actionClass = '',
         actionText = '',
         actionDataAttr = '',
+        actionsHtml = '',
         contextMenuModel = null,
         contextMenuTooltip = 'Right-click to open download folder'
     } = {}) {
@@ -1935,9 +1936,9 @@ export const searchPanelMethods = {
         const containerClass = contextMenuAttrs
             ? 'mr-progress-container mr-download-folder-context'
             : 'mr-progress-container';
-        const actionHtml = actionClass || actionText
+        const actionHtml = actionsHtml || (actionClass || actionText
             ? `<button class="${actionClass}"${actionAttr}>${actionText}</button>`
-            : '';
+            : '');
         return `
             <div class="${containerClass}"${contextMenuAttrs}>
                 <div class="mr-progress-row">

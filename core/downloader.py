@@ -7,6 +7,10 @@ Handles downloading models from various sources with progress tracking.
 import os
 import json
 import hashlib
+import secrets
+import shutil
+import socket
+import subprocess
 import threading
 import time
 import requests
@@ -35,13 +39,21 @@ except ImportError:
 download_progress: Dict[str, Dict[str, Any]] = {}
 download_lock = threading.Lock()
 cancelled_downloads: set = set()
+aria2_lock = threading.RLock()
+aria2_process: Optional[subprocess.Popen] = None
+aria2_rpc_url = ""
+aria2_rpc_secret = ""
+aria2_transfers: Dict[str, Dict[str, str]] = {}
+aria2_action_locks: Dict[str, threading.Lock] = {}
+aria2_desired_states: Dict[str, Dict[str, Any]] = {}
 
 # Speed calculation settings
 SPEED_HISTORY_SIZE = 5  # Number of samples for smoothing
 CHUNK_SIZE = 1024 * 1024  # 1MB chunks for faster downloads
 CLI_LOG_INTERVAL = 5  # Log progress to CLI every N seconds
+ARIA2_RPC_TIMEOUT = (2, 5)  # local JSON-RPC should respond quickly
 
-from .settings import CATEGORY_MAP, normalize_download_category
+from .settings import CATEGORY_MAP, load_settings, normalize_download_backend, normalize_download_category
 
 SENSITIVE_METADATA_KEYS = {
     "authorization",
@@ -664,6 +676,429 @@ def generate_download_id() -> str:
     return str(uuid.uuid4())[:8]
 
 
+class Aria2Error(RuntimeError):
+    """Raised when the aria2 backend cannot start or process a request."""
+
+
+def _download_backend_from_settings(settings: Optional[Dict[str, Any]] = None) -> str:
+    active_settings = settings if isinstance(settings, dict) else load_settings()
+    return normalize_download_backend(active_settings.get("download_backend"))
+
+
+def _try_certifi_ca_path() -> str:
+    try:
+        import certifi  # type: ignore
+
+        path = certifi.where()
+        return path if path and os.path.isfile(path) else ""
+    except Exception:
+        return ""
+
+
+def _resolve_aria2c_executable(settings: Optional[Dict[str, Any]] = None) -> str:
+    active_settings = settings if isinstance(settings, dict) else load_settings()
+    configured = str(active_settings.get("aria2c_path") or "").strip()
+    candidate = os.path.expandvars(os.path.expanduser(configured or "aria2c"))
+
+    resolved = shutil.which(candidate)
+    if resolved:
+        return resolved
+
+    if configured and os.path.isfile(candidate):
+        return candidate
+
+    raise Aria2Error(
+        "aria2c executable was not found. Install aria2 or configure aria2c_path."
+    )
+
+
+def get_aria2_status(settings: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    active_settings = settings if isinstance(settings, dict) else load_settings()
+    configured_path = str(active_settings.get("aria2c_path") or "").strip()
+    try:
+        resolved_path = _resolve_aria2c_executable(active_settings)
+        available = True
+        error = ""
+    except Exception as exc:
+        resolved_path = ""
+        available = False
+        error = str(exc)
+
+    with aria2_lock:
+        running = aria2_process is not None and aria2_process.poll() is None
+
+    return {
+        "backend": _download_backend_from_settings(active_settings),
+        "configured_path": configured_path,
+        "resolved_path": resolved_path,
+        "available": available,
+        "running": running,
+        "error": error,
+    }
+
+
+def _find_free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        sock.listen(1)
+        return int(sock.getsockname()[1])
+
+
+def _aria2_rpc(method: str, params: Optional[List[Any]] = None) -> Any:
+    if not aria2_rpc_url:
+        raise Aria2Error("aria2 RPC endpoint is not initialized")
+
+    payload = {
+        "jsonrpc": "2.0",
+        "id": secrets.token_hex(8),
+        "method": method,
+        "params": [f"token:{aria2_rpc_secret}", *(params or [])],
+    }
+    response = requests.post(aria2_rpc_url, json=payload, timeout=ARIA2_RPC_TIMEOUT)
+    text = response.text
+    try:
+        body = response.json()
+    except ValueError as exc:
+        raise Aria2Error(
+            f"aria2 RPC returned non-JSON response ({response.status_code}): {text[:300]}"
+        ) from exc
+
+    if "error" in body:
+        error = body.get("error") or {}
+        message = error.get("message") if isinstance(error, dict) else str(error)
+        raise Aria2Error(message or f"aria2 RPC {method} failed")
+
+    if response.status_code != 200:
+        raise Aria2Error(
+            f"aria2 RPC {method} returned HTTP {response.status_code}: {text[:300]}"
+        )
+
+    return body.get("result")
+
+
+def _aria2_ping() -> bool:
+    try:
+        result = _aria2_rpc("aria2.getVersion", [])
+        return isinstance(result, dict)
+    except Exception:
+        return False
+
+
+def _ensure_aria2_daemon(settings: Optional[Dict[str, Any]] = None) -> None:
+    global aria2_process, aria2_rpc_url, aria2_rpc_secret
+
+    active_settings = settings if isinstance(settings, dict) else load_settings()
+    with aria2_lock:
+        if aria2_process is not None and aria2_process.poll() is None and _aria2_ping():
+            return
+
+        if aria2_process is not None and aria2_process.poll() is None:
+            try:
+                aria2_process.terminate()
+            except Exception:
+                pass
+        aria2_process = None
+
+        executable = _resolve_aria2c_executable(active_settings)
+        port = _find_free_port()
+        aria2_rpc_secret = secrets.token_hex(16)
+        aria2_rpc_url = f"http://127.0.0.1:{port}/jsonrpc"
+
+        command = [
+            executable,
+            "--enable-rpc=true",
+            "--rpc-listen-all=false",
+            f"--rpc-listen-port={port}",
+            f"--rpc-secret={aria2_rpc_secret}",
+            "--check-certificate=true",
+            "--allow-overwrite=true",
+            "--auto-file-renaming=false",
+            "--file-allocation=none",
+            "--max-concurrent-downloads=5",
+            "--continue=true",
+            "--daemon=false",
+            "--quiet=true",
+            f"--stop-with-process={os.getpid()}",
+        ]
+        ca_cert = _try_certifi_ca_path()
+        if ca_cert:
+            command.insert(5, f"--ca-certificate={ca_cert}")
+
+        creationflags = 0
+        if os.name == "nt":
+            creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+        log_info(f"Starting aria2 RPC daemon from {executable}")
+        aria2_process = subprocess.Popen(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            creationflags=creationflags,
+        )
+
+        start_time = time.time()
+        last_error = ""
+        while time.time() - start_time < 10:
+            if aria2_process.poll() is not None:
+                stderr = ""
+                try:
+                    stderr = (aria2_process.stderr.read() if aria2_process.stderr else b"").decode(
+                        "utf-8",
+                        errors="replace",
+                    )
+                except Exception:
+                    stderr = ""
+                raise Aria2Error(
+                    f"aria2 RPC process exited early with code {aria2_process.returncode}: {stderr.strip()}"
+                )
+            try:
+                if _aria2_ping():
+                    return
+            except Exception as exc:
+                last_error = str(exc)
+            time.sleep(0.2)
+
+        raise Aria2Error(
+            f"Timed out waiting for aria2 RPC to become ready{': ' + last_error if last_error else ''}"
+        )
+
+
+def _aria2_tell_status(gid: str) -> Dict[str, Any]:
+    keys = [
+        "gid",
+        "status",
+        "totalLength",
+        "completedLength",
+        "downloadSpeed",
+        "errorMessage",
+        "files",
+    ]
+    result = _aria2_rpc("aria2.tellStatus", [gid, keys])
+    return result if isinstance(result, dict) else {}
+
+
+def _parse_aria2_int(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _resolve_aria2_completed_path(status: Dict[str, Any], default_path: str) -> str:
+    files = status.get("files")
+    if isinstance(files, list) and files:
+        first = files[0]
+        if isinstance(first, dict):
+            candidate = first.get("path")
+            if isinstance(candidate, str) and candidate:
+                return candidate
+    return default_path
+
+
+def _delete_partial_download_files(dest_path: str) -> None:
+    for path in (dest_path, f"{dest_path}.aria2"):
+        try:
+            if path and os.path.exists(path):
+                os.remove(path)
+        except Exception as exc:
+            log_warn(f"Could not delete incomplete download file {path}: {exc}")
+
+
+def download_file_with_aria2(
+    url: str,
+    dest_path: str,
+    download_id: str,
+    headers: Optional[Dict[str, str]] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+    category: str = "",
+) -> Dict[str, Any]:
+    """Download a file with an aria2c JSON-RPC process."""
+    settings = load_settings()
+    result = {
+        "success": False,
+        "download_id": download_id,
+        "path": dest_path,
+        "error": None,
+        "size": 0,
+    }
+    start_time = time.time()
+    filename = os.path.basename(dest_path)
+
+    with download_lock:
+        download_progress[download_id] = {
+            "status": "starting",
+            "progress": 0,
+            "total_size": 0,
+            "downloaded": 0,
+            "filename": filename,
+            "path": dest_path,
+            "directory": os.path.dirname(dest_path),
+            "url": url,
+            "error": None,
+            "speed": 0,
+            "start_time": start_time,
+            "download_backend": "aria2",
+        }
+
+    try:
+        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+        _ensure_aria2_daemon(settings)
+
+        options: Dict[str, Any] = {
+            "dir": os.path.dirname(dest_path),
+            "out": filename,
+            "continue": "true",
+            "max-connection-per-server": "4",
+            "split": "4",
+            "min-split-size": "1M",
+            "allow-overwrite": "true",
+            "auto-file-renaming": "false",
+            "file-allocation": "none",
+        }
+        if headers:
+            options["header"] = [f"{key}: {value}" for key, value in headers.items()]
+
+        gid = _aria2_rpc("aria2.addUri", [[url], options])
+        if not isinstance(gid, str) or not gid:
+            raise Aria2Error("aria2 did not return a download gid")
+
+        with aria2_lock:
+            aria2_transfers[download_id] = {"gid": gid, "path": dest_path}
+        with download_lock:
+            download_progress[download_id]["aria2_gid"] = gid
+            download_progress[download_id]["status"] = "downloading"
+
+        log_info(f"Starting aria2 download: {filename}")
+        last_cli_log = start_time
+
+        while True:
+            if download_id in cancelled_downloads:
+                try:
+                    _aria2_rpc("aria2.forceRemove", [gid])
+                except Exception:
+                    pass
+                with download_lock:
+                    if download_id in download_progress:
+                        download_progress[download_id]["status"] = "cancelled"
+                        download_progress[download_id]["speed"] = 0
+                _delete_partial_download_files(dest_path)
+                cancelled_downloads.discard(download_id)
+                result["error"] = "Download cancelled"
+                return result
+
+            status = _aria2_tell_status(gid)
+            state = str(status.get("status") or "")
+            total_size = _parse_aria2_int(status.get("totalLength"))
+            downloaded = _parse_aria2_int(status.get("completedLength"))
+            speed = _parse_aria2_int(status.get("downloadSpeed"))
+            progress = int((downloaded / total_size) * 100) if total_size > 0 else 0
+            mapped_status = {
+                "active": "downloading",
+                "waiting": "downloading",
+                "paused": "paused",
+                "complete": "completed",
+                "error": "error",
+                "removed": "cancelled",
+            }.get(state, state or "downloading")
+
+            with download_lock:
+                if download_id in download_progress:
+                    download_progress[download_id].update(
+                        {
+                            "status": mapped_status,
+                            "progress": max(0, min(progress, 100)),
+                            "total_size": total_size,
+                            "downloaded": downloaded,
+                            "speed": 0 if mapped_status in {"paused", "completed"} else speed,
+                            "download_backend": "aria2",
+                            "aria2_gid": gid,
+                        }
+                    )
+
+            now = time.time()
+            if now - last_cli_log >= CLI_LOG_INTERVAL and mapped_status == "downloading":
+                last_cli_log = now
+                total_str = format_bytes(total_size) if total_size else "?"
+                log_info(
+                    f"aria2 progress: {format_bytes(downloaded)} / {total_str} ({progress}%) - {format_bytes(speed)}/s"
+                )
+
+            if state == "complete":
+                completed_path = _resolve_aria2_completed_path(status, dest_path)
+                size = os.path.getsize(completed_path) if os.path.exists(completed_path) else downloaded
+                metadata_path = write_lora_manager_metadata(
+                    completed_path,
+                    metadata or {},
+                    category,
+                    url,
+                )
+                with download_lock:
+                    download_progress[download_id].update(
+                        {
+                            "status": "completed",
+                            "progress": 100,
+                            "downloaded": size,
+                            "total_size": total_size or size,
+                            "speed": 0,
+                            "path": completed_path,
+                            "directory": os.path.dirname(completed_path),
+                        }
+                    )
+                    if metadata_path:
+                        download_progress[download_id]["metadata_path"] = metadata_path
+                result.update(
+                    {
+                        "success": True,
+                        "path": completed_path,
+                        "size": size,
+                        "metadata_path": metadata_path,
+                    }
+                )
+                elapsed = time.time() - start_time
+                avg_speed = size / elapsed if elapsed > 0 else 0
+                log_info(f"✓ aria2 download complete: {filename}")
+                log_info(
+                    f"Size: {format_bytes(size)}, Time: {elapsed:.1f}s, Avg speed: {format_bytes(int(avg_speed))}/s"
+                )
+                return result
+
+            if state == "error":
+                error_msg = status.get("errorMessage") or "aria2 download failed"
+                with download_lock:
+                    download_progress[download_id]["status"] = "error"
+                    download_progress[download_id]["error"] = error_msg
+                result["error"] = error_msg
+                return result
+
+            if state == "removed":
+                with download_lock:
+                    download_progress[download_id]["status"] = "cancelled"
+                    download_progress[download_id]["speed"] = 0
+                _delete_partial_download_files(dest_path)
+                cancelled_downloads.discard(download_id)
+                result["error"] = "Download cancelled"
+                return result
+
+            time.sleep(0.5)
+
+    except Exception as exc:
+        error_msg = str(exc)
+        with download_lock:
+            if download_id in download_progress:
+                download_progress[download_id]["status"] = "error"
+                download_progress[download_id]["error"] = error_msg
+                download_progress[download_id]["speed"] = 0
+        result["error"] = error_msg
+        log_error(f"✗ aria2 download failed: {filename}")
+        log_error(f"Error: {error_msg}")
+        return result
+    finally:
+        with aria2_lock:
+            aria2_transfers.pop(download_id, None)
+            aria2_action_locks.pop(download_id, None)
+            aria2_desired_states.pop(download_id, None)
+
+
 def download_file(
     url: str,
     dest_path: str,
@@ -691,6 +1126,16 @@ def download_file(
         Result dictionary with status and info
     """
     global download_progress, cancelled_downloads
+
+    if _download_backend_from_settings() == "aria2":
+        return download_file_with_aria2(
+            url,
+            dest_path,
+            download_id,
+            headers=headers,
+            metadata=metadata,
+            category=category,
+        )
 
     # Use default 1MB chunk size if not specified
     if chunk_size is None:
@@ -724,6 +1169,7 @@ def download_file(
             "error": None,
             "speed": 0,  # bytes per second
             "start_time": start_time,
+            "download_backend": "python",
         }
 
     try:
@@ -1103,10 +1549,143 @@ def get_all_progress() -> Dict[str, Dict[str, Any]]:
         return {k: v.copy() for k, v in download_progress.items()}
 
 
+def _force_remove_aria2_transfer(download_id: str, gid: str) -> None:
+    try:
+        _aria2_rpc("aria2.forceRemove", [gid])
+    except Exception as exc:
+        log_warn(f"Could not cancel aria2 download {download_id}: {exc}")
+
+
+def _get_aria2_action_lock(download_id: str) -> threading.Lock:
+    with aria2_lock:
+        lock = aria2_action_locks.get(download_id)
+        if lock is None:
+            lock = threading.Lock()
+            aria2_action_locks[download_id] = lock
+        return lock
+
+
+def _set_download_progress_status(download_id: str, status: str, **updates: Any) -> None:
+    with download_lock:
+        if download_id in download_progress:
+            download_progress[download_id]["status"] = status
+            download_progress[download_id].update(updates)
+
+
+def _aria2_action_error_is_ok(status: str, message: str) -> bool:
+    lowered = str(message or "").lower()
+    if status == "paused":
+        return "already paused" in lowered or "is paused" in lowered
+    if status == "downloading":
+        return "not paused" in lowered or "has not been paused" in lowered
+    return False
+
+
+def _run_aria2_desired_state_worker(download_id: str) -> None:
+    while True:
+        with aria2_lock:
+            desired = dict(aria2_desired_states.get(download_id) or {})
+        if not desired or download_id in cancelled_downloads:
+            with aria2_lock:
+                state = aria2_desired_states.get(download_id)
+                if state:
+                    state["running"] = False
+            return
+
+        desired_status = str(desired.get("status") or "")
+        desired_seq = int(desired.get("seq") or 0)
+        transfer = aria2_transfers.get(download_id)
+        gid = transfer.get("gid") if isinstance(transfer, dict) else ""
+        if not gid:
+            with aria2_lock:
+                aria2_desired_states.pop(download_id, None)
+            return
+
+        method = "aria2.forcePause" if desired_status == "paused" else "aria2.unpause"
+        try:
+            with _get_aria2_action_lock(download_id):
+                _aria2_rpc(method, [gid])
+            _set_download_progress_status(
+                download_id,
+                desired_status,
+                speed=0 if desired_status == "paused" else download_progress.get(download_id, {}).get("speed", 0),
+            )
+        except Exception as exc:
+            if _aria2_action_error_is_ok(desired_status, str(exc)):
+                _set_download_progress_status(download_id, desired_status, speed=0 if desired_status == "paused" else download_progress.get(download_id, {}).get("speed", 0))
+            else:
+                log_warn(f"aria2 {desired_status} action failed for {download_id}: {exc}")
+
+        with aria2_lock:
+            latest = aria2_desired_states.get(download_id)
+            if not latest:
+                return
+            if int(latest.get("seq") or 0) == desired_seq:
+                aria2_desired_states.pop(download_id, None)
+                return
+
+
+def _queue_aria2_desired_state(download_id: str, status: str) -> Dict[str, Any]:
+    transfer = aria2_transfers.get(download_id)
+    if not transfer or not transfer.get("gid"):
+        return {"success": False, "error": "Download action is not available yet"}
+
+    start_worker = False
+    with aria2_lock:
+        previous = aria2_desired_states.get(download_id) or {}
+        seq = int(previous.get("seq") or 0) + 1
+        running = bool(previous.get("running"))
+        aria2_desired_states[download_id] = {
+            "status": status,
+            "seq": seq,
+            "running": True,
+        }
+        start_worker = not running
+
+    _set_download_progress_status(
+        download_id,
+        status,
+        speed=0 if status == "paused" else download_progress.get(download_id, {}).get("speed", 0),
+    )
+
+    if start_worker:
+        threading.Thread(
+            target=_run_aria2_desired_state_worker,
+            args=(download_id,),
+            daemon=True,
+        ).start()
+
+    return {"success": True, "message": "Download paused" if status == "paused" else "Download resumed"}
+
+
 def cancel_download(download_id: str) -> bool:
     """Cancel a download in progress."""
     cancelled_downloads.add(download_id)
+    with aria2_lock:
+        aria2_desired_states.pop(download_id, None)
+    _set_download_progress_status(download_id, "cancelling", speed=0)
+    transfer = aria2_transfers.get(download_id)
+    if transfer and transfer.get("gid"):
+        threading.Thread(
+            target=_force_remove_aria2_transfer,
+            args=(download_id, transfer["gid"]),
+            daemon=True,
+        ).start()
     return True
+
+
+def pause_download(download_id: str) -> Dict[str, Any]:
+    """Pause an aria2 download. Built-in Python downloads cannot be paused."""
+    if download_id in cancelled_downloads:
+        return {"success": False, "error": "Download is being cancelled"}
+    return _queue_aria2_desired_state(download_id, "paused")
+
+
+def resume_download(download_id: str) -> Dict[str, Any]:
+    """Resume a paused aria2 download."""
+    if download_id in cancelled_downloads:
+        return {"success": False, "error": "Download is being cancelled"}
+    return _queue_aria2_desired_state(download_id, "downloading")
 
 
 def clear_completed_downloads():
@@ -1158,6 +1737,7 @@ def start_background_download(
             "error": None,
             "speed": 0,
             "start_time": time.time(),
+            "download_backend": _download_backend_from_settings(),
         }
 
     def run_download():
@@ -1200,6 +1780,7 @@ def start_background_download(
                     "error": str(e),
                     "speed": 0,
                     "start_time": time.time(),
+                    "download_backend": _download_backend_from_settings(),
                 }
 
     thread = threading.Thread(target=run_download, daemon=True)

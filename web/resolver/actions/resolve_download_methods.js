@@ -749,7 +749,8 @@ export const resolveDownloadMethods = {
                 status,
                 filename: progress.filename || info.filename || '',
                 path: progress.path || info.downloadPath || '',
-                directory: progress.directory || info.downloadDirectory || ''
+                directory: progress.directory || info.downloadDirectory || '',
+                download_backend: progress.download_backend || info.downloadBackend || ''
             },
             status,
             message: options.message || '',
@@ -811,12 +812,35 @@ export const resolveDownloadMethods = {
         return { progressDiv, downloadBtn };
     },
 
-    attachDownloadCancelHandler(progressDiv, downloadId) {
+    attachDownloadActionHandlers(progressDiv, downloadId) {
         if (!progressDiv || !downloadId) return;
+        const bindInstantAction = (button, handler) => {
+            if (!button || button._hasListener) return;
+            button._hasListener = true;
+            const run = (event) => {
+                event?.preventDefault?.();
+                event?.stopPropagation?.();
+                if (button.disabled) return;
+                if (event?.type === 'click' && button._handledPointerAction) {
+                    button._handledPointerAction = false;
+                    return;
+                }
+                if (event?.type === 'pointerdown') {
+                    button._handledPointerAction = true;
+                }
+                handler();
+            };
+            button.addEventListener('pointerdown', run);
+            button.addEventListener('click', run);
+        };
         progressDiv.querySelectorAll('.cancel-download-btn, .cancel-download-btn-pending').forEach(cancelBtn => {
-            if (cancelBtn._hasListener) return;
-            cancelBtn._hasListener = true;
-            cancelBtn.addEventListener('click', () => this.cancelDownload(downloadId));
+            bindInstantAction(cancelBtn, () => this.cancelDownload(downloadId));
+        });
+        progressDiv.querySelectorAll('.pause-download-btn').forEach(pauseBtn => {
+            bindInstantAction(pauseBtn, () => this.pauseDownload(downloadId));
+        });
+        progressDiv.querySelectorAll('.resume-download-btn').forEach(resumeBtn => {
+            bindInstantAction(resumeBtn, () => this.resumeDownload(downloadId));
         });
     },
 
@@ -832,6 +856,7 @@ export const resolveDownloadMethods = {
         const terminalStatuses = new Set(['cancelling', 'cancelled', 'error', 'refresh_error', 'completed_checking', 'completed']);
         const shouldRenderProgress = status === 'starting'
             || status === 'downloading'
+            || status === 'paused'
             || (isActive && !terminalStatuses.has(status));
 
         if (progressDiv) {
@@ -840,23 +865,44 @@ export const resolveDownloadMethods = {
 
             if (shouldRenderProgress) {
                 const canCancel = Boolean(downloadId);
+                const backend = String(progress.download_backend || snapshot.downloadBackend || snapshot.download_backend || '').toLowerCase();
+                const isAria2 = backend === 'aria2';
+                const isPaused = status === 'paused';
                 const percent = Math.max(0, Math.min(100, Number(progress.progress) || 0));
                 const downloaded = this.formatBytes(progress.downloaded || 0);
                 const total = this.formatBytes(progress.total_size || 0);
                 const progressMeta = this.formatDownloadProgressMeta(progress);
                 const leftText = progress.total_size
-                    ? `${downloaded} / ${total} (${percent}%)`
+                    ? `${downloaded} / ${total} (${percent}%)${isPaused ? ' - Paused' : ''}`
                     : '<span class="mr-info-accent-text">Connecting...</span>';
+                let actionClass = canCancel ? 'cancel-download-btn mr-btn mr-btn-danger mr-btn-sm' : '';
+                let actionText = canCancel ? 'Cancel' : '';
+                let actionsHtml = '';
+                if (canCancel && isAria2 && isPaused) {
+                    actionClass = 'resume-download-btn mr-btn mr-btn-primary mr-btn-sm';
+                    actionText = 'Resume';
+                } else if (canCancel && isAria2 && status === 'downloading') {
+                    actionClass = 'pause-download-btn mr-btn mr-btn-secondary mr-btn-sm';
+                    actionText = 'Pause';
+                }
+                if (canCancel && isAria2 && (isPaused || status === 'downloading')) {
+                    const safeDownloadId = this.escapeHtml(String(downloadId));
+                    const toggleButton = isPaused
+                        ? `<button class="resume-download-btn mr-btn mr-btn-primary mr-btn-sm" data-download-id="${safeDownloadId}">Resume</button>`
+                        : `<button class="pause-download-btn mr-btn mr-btn-secondary mr-btn-sm" data-download-id="${safeDownloadId}">Pause</button>`;
+                    actionsHtml = `${toggleButton}<button class="cancel-download-btn mr-btn mr-btn-danger mr-btn-sm" data-download-id="${safeDownloadId}">Cancel</button>`;
+                }
                 progressDiv.innerHTML = this.renderProgressWithAction({
                     percent,
                     leftText,
                     rightText: progressMeta,
-                    actionClass: canCancel ? 'cancel-download-btn mr-btn mr-btn-danger mr-btn-sm' : '',
-                    actionText: canCancel ? 'Cancel' : '',
+                    actionClass,
+                    actionText,
                     actionDataAttr: canCancel ? `data-download-id="${downloadId}"` : '',
+                    actionsHtml,
                     contextMenuModel: this.getDownloadFolderContext(progress, snapshot)
                 });
-                this.attachDownloadCancelHandler(progressDiv, downloadId);
+                this.attachDownloadActionHandlers(progressDiv, downloadId);
             } else if (status === 'cancelled') {
                 progressDiv.innerHTML = this.renderStatusMessage('Download cancelled - incomplete file removed', 'warning');
             } else if (status === 'cancelling') {
@@ -896,13 +942,17 @@ export const resolveDownloadMethods = {
             const percent = Number(progress.progress);
             downloadBtn.disabled = true;
             downloadBtn.classList.remove('mr-is-success-action', 'mr-btn-primary');
-            const label = Number.isFinite(percent) && percent > 0 ? `Downloading ${Math.round(percent)}%` : 'Starting download...';
+            const label = status === 'paused'
+                ? `Paused ${Number.isFinite(percent) && percent > 0 ? `${Math.round(percent)}%` : ''}`.trim()
+                : (Number.isFinite(percent) && percent > 0 ? `Downloading ${Math.round(percent)}%` : 'Starting download...');
             if (downloadBtn.classList.contains('search-download-btn')) {
                 downloadBtn.innerHTML = getSvgIcon('download');
                 downloadBtn.setAttribute('data-tooltip', label);
                 downloadBtn.setAttribute('aria-label', label);
             } else {
-                downloadBtn.textContent = Number.isFinite(percent) && percent > 0 ? `${Math.round(percent)}%` : 'Starting...';
+                downloadBtn.textContent = status === 'paused'
+                    ? 'Paused'
+                    : (Number.isFinite(percent) && percent > 0 ? `${Math.round(percent)}%` : 'Starting...');
             }
         } else if (status === 'cancelling') {
             downloadBtn.disabled = true;
@@ -1255,7 +1305,8 @@ export const resolveDownloadMethods = {
                 workflowTabId,
                 workflowTabName,
                 workflowTabAriaControls,
-                workflowTabText
+                workflowTabText,
+                downloadBackend: data.download_backend || ''
             };
 
             const snapshot = this.rememberDownloadUiState(
@@ -1266,7 +1317,8 @@ export const resolveDownloadMethods = {
                     progress: 0,
                     filename,
                     path: data.path || '',
-                    directory: data.directory || ''
+                    directory: data.directory || '',
+                    download_backend: data.download_backend || ''
                 },
                 { isActive: true }
             );
@@ -1359,6 +1411,59 @@ export const resolveDownloadMethods = {
         });
     },
 
+    setPendingDownloadStatus(info, status, durationMs = 8000) {
+        if (!info) return;
+        info.pendingDownloadStatus = status;
+        info.pendingDownloadStatusStartedAt = Date.now();
+        info.pendingDownloadStatusUntil = Date.now() + durationMs;
+    },
+
+    clearPendingDownloadStatus(info) {
+        if (!info) return;
+        delete info.pendingDownloadStatus;
+        delete info.pendingDownloadStatusStartedAt;
+        delete info.pendingDownloadStatusUntil;
+    },
+
+    applyPendingDownloadStatus(info, progress = {}) {
+        if (!info?.pendingDownloadStatus) return progress;
+        const desiredStatus = info.pendingDownloadStatus;
+        const currentStatus = progress.status || '';
+        const terminalStatuses = new Set(['completed', 'completed_checking', 'error', 'cancelled', 'cancelling']);
+
+        if (terminalStatuses.has(currentStatus)) {
+            this.clearPendingDownloadStatus(info);
+            return progress;
+        }
+
+        if (
+            currentStatus === desiredStatus &&
+            Date.now() - Number(info.pendingDownloadStatusStartedAt || 0) > 1200
+        ) {
+            this.clearPendingDownloadStatus(info);
+            return progress;
+        }
+
+        if (Date.now() > Number(info.pendingDownloadStatusUntil || 0)) {
+            this.clearPendingDownloadStatus(info);
+            return progress;
+        }
+
+        const canHoldDesiredStatus = (
+            desiredStatus === 'downloading' && currentStatus === 'paused'
+        ) || (
+            desiredStatus === 'paused' && (currentStatus === 'downloading' || currentStatus === 'starting')
+        );
+        if (!canHoldDesiredStatus) return progress;
+
+        return {
+            ...progress,
+            backend_status: currentStatus,
+            status: desiredStatus,
+            speed: desiredStatus === 'paused' ? 0 : progress.speed
+        };
+    },
+
     /**
      * Poll download progress
      */
@@ -1367,18 +1472,23 @@ export const resolveDownloadMethods = {
         if (!info) return;
 
         try {
-            const progress = await this.fetchJson(`/model_resolver/progress/${downloadId}`, { silent: true }, 'Get download progress');
+            let progress = await this.fetchJson(`/model_resolver/progress/${downloadId}`, { silent: true }, 'Get download progress');
+            progress = this.applyPendingDownloadStatus(info, progress);
             const snapshot = this.rememberDownloadUiState(downloadId, info, progress, { isActive: true });
             const { progressDiv, downloadBtn } = this.resolveDownloadUiElements(info);
             const { missing, category } = info;
             const downloadFolderContext = this.getDownloadFolderContext(progress, info);
 
-            if (progress.status === 'downloading' || progress.status === 'starting') {
+            if (progress.status === 'downloading' || progress.status === 'starting' || progress.status === 'paused') {
                 this.renderDownloadSnapshot(downloadId, snapshot, { progressDiv, downloadBtn });
-                this.updateQueuePanel?.();
+                if (typeof this.requestQueuePanelUpdate === 'function') {
+                    this.requestQueuePanelUpdate();
+                } else {
+                    this.updateQueuePanel?.();
+                }
 
                 // Continue polling
-                setTimeout(() => this.pollDownloadProgress(downloadId), 1000);
+                setTimeout(() => this.pollDownloadProgress(downloadId), progress.status === 'paused' ? 1500 : 1000);
 
             } else if (progress.status === 'completed') {
                 const alreadyExists = Boolean(progress.already_exists);
@@ -1485,33 +1595,127 @@ export const resolveDownloadMethods = {
     /**
      * Cancel an active download
      */
-    async cancelDownload(downloadId) {
-        try {
-            await this.fetchJson(`/model_resolver/cancel/${downloadId}`, {
-                method: 'POST'
-            }, 'Cancel download');
+    cancelDownload(downloadId) {
+        const info = this.activeDownloads[downloadId];
+        if (info) {
+            this.clearPendingDownloadStatus(info);
+            const snapshot = this.rememberDownloadUiState(
+                downloadId,
+                info,
+                { ...(info.lastProgress || {}), status: 'cancelling' },
+                {
+                    status: 'cancelling',
+                    message: 'Cancelling download...',
+                    type: 'info',
+                    isActive: true
+                }
+            );
+            const elements = this.resolveDownloadUiElements(info);
+            this.renderDownloadSnapshot(downloadId, snapshot, elements);
+            this.updateQueuePanel?.();
+        }
 
-            const info = this.activeDownloads[downloadId];
-            if (info) {
+        this.fetchJson(`/model_resolver/cancel/${downloadId}`, {
+            method: 'POST'
+        }, 'Cancel download').catch((error) => {
+            console.error('Model Resolver: Cancel error:', error);
+            this.showNotification('Failed to cancel download', 'error');
+        });
+    },
+
+    pauseDownload(downloadId) {
+        const info = this.activeDownloads[downloadId];
+        const previousProgress = info?.lastProgress ? { ...info.lastProgress } : null;
+        if (info) {
+            this.setPendingDownloadStatus(info, 'paused');
+            const snapshot = this.rememberDownloadUiState(
+                downloadId,
+                info,
+                { ...(info.lastProgress || {}), status: 'paused', speed: 0 },
+                {
+                    status: 'paused',
+                    message: 'Download paused.',
+                    type: 'info',
+                    isActive: true
+                }
+            );
+            const elements = this.resolveDownloadUiElements(info);
+            this.renderDownloadSnapshot(downloadId, snapshot, elements);
+            this.updateQueuePanel?.();
+        }
+
+        this.fetchJson(`/model_resolver/pause/${downloadId}`, {
+            method: 'POST'
+        }, 'Pause download').then(() => {
+            this.showNotification('Download paused', 'info');
+        }).catch((error) => {
+            console.error('Model Resolver: Pause error:', error);
+            if (info && previousProgress) {
+                this.clearPendingDownloadStatus(info);
                 const snapshot = this.rememberDownloadUiState(
                     downloadId,
                     info,
-                    info.lastProgress || { status: 'cancelling', progress: 0 },
+                    previousProgress,
                     {
-                        status: 'cancelling',
-                        message: 'Cancelling download...',
-                        type: 'info',
+                        status: previousProgress.status || 'downloading',
+                        type: 'error',
                         isActive: true
                     }
                 );
-                this.renderDownloadSnapshot(downloadId, snapshot);
+                const elements = this.resolveDownloadUiElements(info);
+                this.renderDownloadSnapshot(downloadId, snapshot, elements);
                 this.updateQueuePanel?.();
             }
+            this.showNotification(error.message || 'Failed to pause download', 'error');
+        });
+    },
 
-        } catch (error) {
-            console.error('Model Resolver: Cancel error:', error);
-            this.showNotification('Failed to cancel download', 'error');
+    resumeDownload(downloadId) {
+        const info = this.activeDownloads[downloadId];
+        const previousProgress = info?.lastProgress ? { ...info.lastProgress } : null;
+        if (info) {
+            this.setPendingDownloadStatus(info, 'downloading');
+            const snapshot = this.rememberDownloadUiState(
+                downloadId,
+                info,
+                { ...(info.lastProgress || {}), status: 'downloading' },
+                {
+                    status: 'downloading',
+                    message: 'Download resumed.',
+                    type: 'info',
+                    isActive: true
+                }
+            );
+            const elements = this.resolveDownloadUiElements(info);
+            this.renderDownloadSnapshot(downloadId, snapshot, elements);
+            this.updateQueuePanel?.();
+            window.setTimeout(() => this.pollDownloadProgress(downloadId), 250);
         }
+
+        this.fetchJson(`/model_resolver/resume/${downloadId}`, {
+            method: 'POST'
+        }, 'Resume download').then(() => {
+            this.showNotification('Download resumed', 'success');
+        }).catch((error) => {
+            console.error('Model Resolver: Resume error:', error);
+            if (info && previousProgress) {
+                this.clearPendingDownloadStatus(info);
+                const snapshot = this.rememberDownloadUiState(
+                    downloadId,
+                    info,
+                    previousProgress,
+                    {
+                        status: previousProgress.status || 'paused',
+                        type: 'error',
+                        isActive: true
+                    }
+                );
+                const elements = this.resolveDownloadUiElements(info);
+                this.renderDownloadSnapshot(downloadId, snapshot, elements);
+                this.updateQueuePanel?.();
+            }
+            this.showNotification(error.message || 'Failed to resume download', 'error');
+        });
     },
 
     /**

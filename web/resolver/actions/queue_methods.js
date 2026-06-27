@@ -128,6 +128,10 @@ export const queueMethods = {
 
     updateQueuePanel() {
         if (!this.queueList || !this.queueHeader) return;
+        if (this._queuePanelUpdateTimer) {
+            clearTimeout(this._queuePanelUpdateTimer);
+            this._queuePanelUpdateTimer = null;
+        }
         const list = Array.isArray(this.pendingResolutions) ? this.pendingResolutions : [];
         const downloads = this.getActiveQueuePanelDownloads();
         const history = this.getDownloadHistory();
@@ -144,6 +148,15 @@ export const queueMethods = {
         }
 
         this.renderQueuedSelections(list);
+    },
+
+    requestQueuePanelUpdate(delayMs = 180) {
+        if (!this.queueList || !this.queueHeader) return;
+        if (this._queuePanelUpdateTimer) return;
+        this._queuePanelUpdateTimer = setTimeout(() => {
+            this._queuePanelUpdateTimer = null;
+            this.updateQueuePanel();
+        }, delayMs);
     },
 
     updateQueuePanelTabs(queueCount, downloadCount, activeTab) {
@@ -1089,6 +1102,26 @@ export const queueMethods = {
     },
 
     wireDownloadsPanelControls() {
+        const bindInstantAction = (button, handler) => {
+            if (!button || button._hasListener) return;
+            button._hasListener = true;
+            const run = (event) => {
+                event?.preventDefault?.();
+                event?.stopPropagation?.();
+                if (button.disabled) return;
+                if (event?.type === 'click' && button._handledPointerAction) {
+                    button._handledPointerAction = false;
+                    return;
+                }
+                if (event?.type === 'pointerdown') {
+                    button._handledPointerAction = true;
+                }
+                handler();
+            };
+            button.addEventListener('pointerdown', run);
+            button.addEventListener('click', run);
+        };
+
         this.queueList.querySelectorAll('.mr-downloads-subtab').forEach(button => {
             button.addEventListener('click', () => {
                 this.setQueueDownloadsTab(button.dataset.downloadsTab || 'active');
@@ -1096,9 +1129,23 @@ export const queueMethods = {
         });
 
         this.queueList.querySelectorAll('.mr-download-queue-cancel').forEach(button => {
-            button.addEventListener('click', () => {
+            bindInstantAction(button, () => {
                 const downloadId = button.dataset.downloadId;
                 if (downloadId) this.cancelDownload(downloadId);
+            });
+        });
+
+        this.queueList.querySelectorAll('.mr-download-queue-pause').forEach(button => {
+            bindInstantAction(button, () => {
+                const downloadId = button.dataset.downloadId;
+                if (downloadId) this.pauseDownload(downloadId);
+            });
+        });
+
+        this.queueList.querySelectorAll('.mr-download-queue-resume').forEach(button => {
+            bindInstantAction(button, () => {
+                const downloadId = button.dataset.downloadId;
+                if (downloadId) this.resumeDownload(downloadId);
             });
         });
 
@@ -1119,13 +1166,7 @@ export const queueMethods = {
 
     renderQueueDownloads(downloads) {
         this.queueList.innerHTML = this.renderQueueDownloadsHtml(downloads);
-
-        this.queueList.querySelectorAll('.mr-download-queue-cancel').forEach(button => {
-            button.addEventListener('click', () => {
-                const downloadId = button.dataset.downloadId;
-                if (downloadId) this.cancelDownload(downloadId);
-            });
-        });
+        this.wireDownloadsPanelControls();
     },
 
     renderQueueDownloadsHtml(downloads) {
@@ -1135,7 +1176,9 @@ export const queueMethods = {
 
         let html = '<div class="mr-queue-items mr-download-queue-items">';
         for (const { downloadId, info } of downloads) {
-            const progress = info.lastProgress || {};
+            const progress = typeof this.applyPendingDownloadStatus === 'function'
+                ? this.applyPendingDownloadStatus(info, info.lastProgress || {})
+                : (info.lastProgress || {});
             const percent = Math.max(0, Math.min(100, Number(progress.progress) || 0));
             const filename = progress.filename
                 || info.filename
@@ -1148,9 +1191,12 @@ export const queueMethods = {
             const total = progress.total_size ? this.formatBytes(progress.total_size) : '';
             const progressMeta = this.formatDownloadProgressMeta?.(progress) || '';
             const status = progress.status || info.lastStatus || 'starting';
+            const backend = String(progress.download_backend || info.downloadBackend || '').toLowerCase();
+            const isAria2 = backend === 'aria2';
+            const isPaused = status === 'paused';
             const statusLabel = status === 'downloading'
                 ? `${Math.round(percent)}%`
-                : (status === 'starting' ? 'Starting' : status.replace(/_/g, ' '));
+                : (status === 'starting' ? 'Starting' : (isPaused ? 'Paused' : status.replace(/_/g, ' ')));
             const sizeText = total ? `${downloaded} / ${total}` : downloaded;
             const targetPath = progress.directory || info.downloadDirectory || info.downloadPath || '';
             const targetLabel = targetPath ? targetPath.split(/[\/\\]/).filter(Boolean).pop() || targetPath : '';
@@ -1174,6 +1220,9 @@ export const queueMethods = {
             if (category) {
                 html += `<div class="mr-queue-item-meta"><span>Type</span><code>${this.escapeHtml(category)}</code></div>`;
             }
+            if (backend) {
+                html += `<div class="mr-queue-item-meta"><span>Backend</span><code>${this.escapeHtml(backend)}</code></div>`;
+            }
             if (targetLabel) {
                 html += `<div class="mr-queue-item-meta"><span>Folder</span><code data-tooltip="${this.escapeHtml(targetPath)}">${this.escapeHtml(targetLabel)}</code></div>`;
             }
@@ -1181,7 +1230,14 @@ export const queueMethods = {
             html += `<div class="mr-progress-bar"><div class="mr-progress-fill" style="width: ${percent}%;"></div></div>`;
             html += `<div class="mr-progress-text"><span>${this.escapeHtml(sizeText)}</span><span>${this.escapeHtml(progressMeta)}</span></div>`;
             html += `</div>`;
-            html += `<div class="mr-queue-item-actions"><button type="button" class="mr-btn mr-btn-danger mr-btn-sm mr-download-queue-cancel" data-download-id="${this.escapeHtml(downloadId)}">Cancel</button></div>`;
+            html += `<div class="mr-queue-item-actions">`;
+            if (isAria2 && isPaused) {
+                html += `<button type="button" class="mr-btn mr-btn-primary mr-btn-sm mr-download-queue-resume" data-download-id="${this.escapeHtml(downloadId)}">Resume</button>`;
+            } else if (isAria2 && status === 'downloading') {
+                html += `<button type="button" class="mr-btn mr-btn-secondary mr-btn-sm mr-download-queue-pause" data-download-id="${this.escapeHtml(downloadId)}">Pause</button>`;
+            }
+            html += `<button type="button" class="mr-btn mr-btn-danger mr-btn-sm mr-download-queue-cancel" data-download-id="${this.escapeHtml(downloadId)}">Cancel</button>`;
+            html += `</div>`;
             html += `</div>`;
         }
         html += '</div>';

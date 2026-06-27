@@ -131,6 +131,9 @@ class ModelResolverExtension:
                     get_progress,
                     get_all_progress,
                     cancel_download,
+                    pause_download,
+                    resume_download,
+                    get_aria2_status,
                     get_download_directory,
                     get_metadata_sidecar_path,
                     normalize_download_category,
@@ -3460,6 +3463,7 @@ class ModelResolverExtension:
                             "category": category,
                             "path": target_path,
                             "directory": target_directory,
+                            "download_backend": settings.get("download_backend", "python"),
                         }
                     )
 
@@ -3491,6 +3495,42 @@ class ModelResolverExtension:
                     download_id = request.match_info["download_id"]
                     cancel_download(download_id)
                     return web.json_response({"success": True})
+
+                @routes.post("/model_resolver/pause/{download_id}")
+                @json_api_endpoint("pause", return_success_on_error=True)
+                async def pause_download_route(request):
+                    """Pause an aria2 download."""
+                    download_id = request.match_info["download_id"]
+                    result = pause_download(download_id)
+                    status = 200 if result.get("success") else 400
+                    return web.json_response(result, status=status)
+
+                @routes.post("/model_resolver/resume/{download_id}")
+                @json_api_endpoint("resume", return_success_on_error=True)
+                async def resume_download_route(request):
+                    """Resume an aria2 download."""
+                    download_id = request.match_info["download_id"]
+                    result = resume_download(download_id)
+                    status = 200 if result.get("success") else 400
+                    return web.json_response(result, status=status)
+
+                @routes.get("/model_resolver/aria2/status")
+                @json_api_endpoint("aria2 status")
+                async def aria2_status_route(request):
+                    """Report aria2 availability using saved settings."""
+                    settings = await asyncio.to_thread(load_resolver_settings)
+                    return web.json_response(await asyncio.to_thread(get_aria2_status, settings))
+
+                @routes.post("/model_resolver/aria2/status")
+                @json_api_endpoint("aria2 status POST")
+                async def aria2_status_check_route(request):
+                    """Report aria2 availability using an optional unsaved aria2c path."""
+                    payload = await request.json()
+                    settings = await asyncio.to_thread(load_resolver_settings)
+                    if isinstance(payload, dict) and "aria2c_path" in payload:
+                        settings = dict(settings)
+                        settings["aria2c_path"] = payload.get("aria2c_path", "")
+                    return web.json_response(await asyncio.to_thread(get_aria2_status, settings))
 
                 @routes.get("/model_resolver/directories")
                 @json_api_endpoint("directories")
