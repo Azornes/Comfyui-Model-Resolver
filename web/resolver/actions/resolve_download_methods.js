@@ -1374,7 +1374,8 @@ export const resolveDownloadMethods = {
                     path_metadata: pathMetadata,
                     download_metadata: downloadMetadata,
                     hf_token: tokens.hf_token,
-                    civitai_key: tokens.civitai_key
+                    civitai_key: tokens.civitai_key,
+                    civitai_session_token: tokens.civitai_session_token
                 })
             }, 'Start download');
 

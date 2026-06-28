@@ -17,7 +17,7 @@ import requests
 from typing import Dict, Any, Optional, Callable, List
 from pathlib import Path
 from collections import deque
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 from .log_system.log_funcs import (
     log_debug,
@@ -52,6 +52,11 @@ SPEED_HISTORY_SIZE = 5  # Number of samples for smoothing
 CHUNK_SIZE = 1024 * 1024  # 1MB chunks for faster downloads
 CLI_LOG_INTERVAL = 5  # Log progress to CLI every N seconds
 ARIA2_RPC_TIMEOUT = (2, 5)  # local JSON-RPC should respond quickly
+DOWNLOAD_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/126.0.0.0 Safari/537.36"
+)
 
 from .settings import CATEGORY_MAP, load_settings, normalize_download_backend, normalize_download_category
 
@@ -112,6 +117,94 @@ def _strip_sensitive_url_params(value: str) -> str:
     if not changed:
         return value
     return urlunparse(parsed._replace(query=urlencode(filtered, doseq=True)))
+
+
+def _clean_http_header_value(value: Any) -> str:
+    return str(value or "").replace("\r", "").replace("\n", "").strip()
+
+
+def _get_header_value(headers: Dict[str, str], key: str) -> str:
+    key_lower = key.lower()
+    for existing_key, value in headers.items():
+        if str(existing_key).lower() == key_lower:
+            return str(value or "")
+    return ""
+
+
+def _set_header_default(headers: Dict[str, str], key: str, value: str) -> None:
+    if not _get_header_value(headers, key):
+        headers[key] = value
+
+
+def build_download_headers(
+    url: str,
+    headers: Optional[Dict[str, str]] = None,
+) -> Dict[str, str]:
+    """Build request headers shared by the Python and aria2 download backends."""
+    request_headers: Dict[str, str] = {}
+    for key, value in (headers or {}).items():
+        clean_key = _clean_http_header_value(key)
+        clean_value = _clean_http_header_value(value)
+        if clean_key and clean_value:
+            request_headers[clean_key] = clean_value
+
+    _set_header_default(request_headers, "User-Agent", DOWNLOAD_USER_AGENT)
+    _set_header_default(request_headers, "Accept", "*/*")
+    _set_header_default(request_headers, "Accept-Encoding", "identity")
+
+    host = urlparse(str(url or "")).netloc.lower()
+    if host in {"civitai.com", "www.civitai.com", "civitai.red", "www.civitai.red"}:
+        _set_header_default(request_headers, "Referer", "https://civitai.com/")
+        _set_header_default(request_headers, "Origin", "https://civitai.com")
+
+    return request_headers
+
+
+def _is_civitai_api_download_url(url: str) -> bool:
+    parsed = urlparse(str(url or ""))
+    host = parsed.netloc.lower()
+    return (
+        host in {"civitai.com", "www.civitai.com", "civitai.red", "www.civitai.red"}
+        and parsed.path.startswith("/api/download/")
+    )
+
+
+def _resolve_civitai_download_url_for_aria2(
+    url: str,
+    headers: Optional[Dict[str, str]] = None,
+) -> str:
+    """Resolve CivitAI's API download redirect before handing the URL to aria2."""
+    if not _is_civitai_api_download_url(url):
+        return url
+
+    response = None
+    try:
+        response = requests.get(
+            url,
+            headers=build_download_headers(url, headers),
+            allow_redirects=False,
+            stream=True,
+            timeout=20,
+        )
+        if response.status_code not in {301, 302, 303, 307, 308}:
+            return url
+
+        location = response.headers.get("Location") or response.headers.get("location")
+        if not location:
+            return url
+
+        resolved_url = urljoin(url, location.strip())
+        log_debug("Resolved CivitAI download redirect for aria2")
+        return resolved_url
+    except Exception as exc:
+        log_warn(f"Could not pre-resolve CivitAI download URL for aria2: {exc}")
+        return url
+    finally:
+        if response is not None:
+            try:
+                response.close()
+            except Exception:
+                pass
 
 
 def _json_safe_metadata(value: Any, depth: int = 0) -> Any:
@@ -943,6 +1036,13 @@ def download_file_with_aria2(
     try:
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
         _ensure_aria2_daemon(settings)
+        aria2_url = _resolve_civitai_download_url_for_aria2(url, headers)
+        aria2_headers = (
+            None
+            if aria2_url != url and _is_civitai_api_download_url(url)
+            else headers
+        )
+        request_headers = build_download_headers(aria2_url, aria2_headers)
 
         options: Dict[str, Any] = {
             "dir": os.path.dirname(dest_path),
@@ -954,11 +1054,24 @@ def download_file_with_aria2(
             "allow-overwrite": "true",
             "auto-file-renaming": "false",
             "file-allocation": "none",
+            "no-want-digest-header": "true",
         }
-        if headers:
-            options["header"] = [f"{key}: {value}" for key, value in headers.items()]
+        user_agent = _get_header_value(request_headers, "User-Agent")
+        referer = _get_header_value(request_headers, "Referer")
+        if user_agent:
+            options["user-agent"] = user_agent
+        if referer:
+            options["referer"] = referer
 
-        gid = _aria2_rpc("aria2.addUri", [[url], options])
+        header_values = [
+            f"{key}: {value}"
+            for key, value in request_headers.items()
+            if str(key).lower() not in {"user-agent", "referer"}
+        ]
+        if header_values:
+            options["header"] = header_values
+
+        gid = _aria2_rpc("aria2.addUri", [[aria2_url], options])
         if not isinstance(gid, str) or not gid:
             raise Aria2Error("aria2 did not return a download gid")
 
@@ -1187,10 +1300,11 @@ def download_file(
         )
         log_info(f"Starting download: {filename}")
         log_info(f"Source: {source}")
-        log_info(f"URL: {url}")
+        log_info(f"URL: {_strip_sensitive_url_params(url)}")
 
         # Start download
-        response = requests.get(url, headers=headers, stream=True, timeout=30)
+        request_headers = build_download_headers(url, headers)
+        response = requests.get(url, headers=request_headers, stream=True, timeout=30)
         response.raise_for_status()
 
         # Get total size

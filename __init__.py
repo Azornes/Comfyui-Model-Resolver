@@ -3340,11 +3340,18 @@ class ModelResolverExtension:
                         hf_token = data.get("hf_token", "")
                         if hf_token:
                             headers["Authorization"] = f"Bearer {hf_token}"
-                    elif "civitai.com" in url:
+                    elif "civitai.com" in url or "civitai.red" in url:
                         civitai_key = data.get("civitai_key", "")
                         if civitai_key and "token=" not in url:
                             url += (
                                 f"{'&' if '?' in url else '?'}token={civitai_key}"
+                            )
+                        civitai_session_token = str(
+                            data.get("civitai_session_token", "") or ""
+                        ).strip()
+                        if civitai_session_token:
+                            headers["Cookie"] = (
+                                f"__Secure-civitai-token={civitai_session_token}"
                             )
 
                     def _first_metadata_value(*values):
