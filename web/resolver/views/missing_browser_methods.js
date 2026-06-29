@@ -217,6 +217,29 @@ export const missingBrowserMethods = {
         return `<span class="mr-node-folder-count-badge" data-tooltip="${this.escapeHtml(tooltip)}" tabindex="0" aria-label="${this.escapeHtml(ariaLabel)}">${this.escapeHtml(String(folderCount))}</span>`;
     },
 
+    renderMissingAutoDownloadBadge(missing = {}, options = {}) {
+        if (!missing?.auto_download_capable && !missing?.auto_download_candidate) return '';
+
+        const source = String(missing.input_choice_source || '').toLowerCase();
+        const sourceLabel = source === 'hybrid'
+            ? 'hybrid preset/folder list'
+            : source === 'workflow_schema'
+                ? 'workflow model widget'
+                : 'preset list';
+        const isCandidate = Boolean(missing.auto_download_candidate);
+        const tooltip = isCandidate
+            ? `This value comes from the custom node ${sourceLabel}, but the file was not found in local model folders.\nThe node may download it automatically when the workflow runs.`
+            : `This value comes from a custom node ${sourceLabel} that can download selected models automatically.\nThe file is already available locally.`;
+        const compact = Boolean(options.compact);
+        const content = compact
+            ? getSvgIcon('cloudDownload', 'currentColor', 'mr-auto-download-badge-icon')
+            : 'Auto download';
+        const classes = compact
+            ? 'mr-auto-download-badge is-compact'
+            : 'mr-auto-download-badge';
+        return `<span class="${classes}" data-tooltip="${this.escapeHtml(tooltip)}" tabindex="0" aria-label="Auto download capable">${content}</span>`;
+    },
+
     getBestLocalMatch(missing = {}, minConfidence = 0) {
         const matches = Array.isArray(missing.matches) ? missing.matches : [];
         return matches
@@ -566,7 +589,10 @@ export const missingBrowserMethods = {
                         ${isResolved ? `<span class="mr-missing-row-resolved-icon" data-tooltip="Model resolved">${getSvgIcon('circleCheckBig')}</span>` : ''}
                         <span class="mr-missing-row-model-details">
                             <span class="mr-missing-row-name" data-tooltip="${this.escapeHtml(filename)}">${this.escapeHtml(filename)}</span>
-                            ${rowNodeHtml}
+                            <span class="mr-missing-row-meta-line">
+                                ${rowNodeHtml}
+                                ${this.renderMissingAutoDownloadBadge(missing, { compact: true })}
+                            </span>
                         </span>
                     </span>
                     <span class="mr-missing-row-type ${typeColorClass}">${this.escapeHtml(typeLabel)}</span>
@@ -1643,6 +1669,7 @@ export const missingBrowserMethods = {
         }
         html += `${nodeChipText}</span>`;
         html += this.renderMissingNodeFolderBadge(missing);
+        html += this.renderMissingAutoDownloadBadge(missing);
         html += `</div>`;
         html += `</div>`;
         html += `</div>`;

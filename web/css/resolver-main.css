@@ -865,6 +865,13 @@
     gap: 2px;
 }
 
+.mr-missing-row-meta-line {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
 .mr-missing-row-name,
 .mr-missing-row-node,
 .mr-missing-row-best {
@@ -1364,6 +1371,45 @@
     border-color: rgba(114, 211, 138, 0.46);
     background: rgba(114, 211, 138, 0.16);
     color: #e6ffe9;
+    outline: none;
+}
+
+.mr-auto-download-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 18px;
+    padding: 0 7px;
+    border-radius: 999px;
+    border: 1px solid rgba(89, 170, 255, 0.3);
+    background: rgba(89, 170, 255, 0.11);
+    color: #c7e2ff;
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: 0.01em;
+    cursor: help;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.mr-auto-download-badge.is-compact {
+    width: 20px;
+    height: 20px;
+    padding: 0;
+}
+
+.mr-auto-download-badge-icon {
+    width: 13px;
+    height: 13px;
+    display: block;
+}
+
+.mr-auto-download-badge:hover,
+.mr-auto-download-badge:focus-visible {
+    border-color: rgba(89, 170, 255, 0.5);
+    background: rgba(89, 170, 255, 0.17);
+    color: #ecf6ff;
     outline: none;
 }
 

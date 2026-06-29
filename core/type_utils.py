@@ -175,6 +175,9 @@ CATEGORY_MAP = {
     "clip_vision": "clip_vision",
     "ipadapter": "ipadapter",
     "ip_adapter": "ipadapter",
+    "seedvr2": "seedvr2",
+    "seedvr2_dit": "seedvr2",
+    "seedvr2_vae": "seedvr2",
     "default": "upscale_models",
 }
 

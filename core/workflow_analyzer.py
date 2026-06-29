@@ -263,6 +263,8 @@ MODEL_OUTPUT_TYPE_TO_CATEGORY = {
     "MODEL_PATCH": "model_patches",
     "PHOTOMAKER": "photomaker",
     "OPTICAL_FLOW": "optical_flow",
+    "SEEDVR2_DIT": "seedvr2",
+    "SEEDVR2_VAE": "seedvr2",
 }
 
 # Keys within dict-type widget values that contain model file references.
@@ -298,6 +300,13 @@ _DYNAMIC_NODE_WIDGET_CATEGORY_LOCK = threading.RLock()
 # These ComfyUI INPUT_TYPES entries become widgets in widgets_values. Typed graph
 # inputs like MODEL or CLIP are links, so they should not shift widget indexes.
 _WIDGET_INPUT_TYPES = {"BOOLEAN", "COMBO", "FLOAT", "INT", "STRING"}
+WORKFLOW_MODEL_WIDGET_NAMES = {
+    "model",
+    "model_name",
+    "model_file",
+    "file_name",
+    "filename",
+}
 
 
 def normalize_widget_name(value: Any) -> str:
@@ -403,6 +412,13 @@ def get_widget_name_hint(node: Dict[str, Any], widget_index: int) -> str:
     return candidates[0] if candidates else ""
 
 
+def is_workflow_model_widget_candidate(node: Dict[str, Any], widget_index: int) -> bool:
+    return any(
+        normalize_widget_name(candidate) in WORKFLOW_MODEL_WIDGET_NAMES
+        for candidate in get_widget_name_candidates(node, widget_index)
+    )
+
+
 def _ordered_unique_categories(values: List[Any]) -> List[str]:
     return _unique_strings([value for value in values if value])
 
@@ -414,6 +430,59 @@ def _merge_category_hints(
         return
 
     target[key] = _ordered_unique_categories(target.get(key, []) + categories)
+
+
+def _merge_choice_info(target: Dict[Any, Dict[str, Any]], key: Any, info: Dict[str, Any]) -> None:
+    if not isinstance(info, dict):
+        return
+
+    current = target.get(key, {})
+    sources = _ordered_unique_categories(
+        [
+            source
+            for source in [current.get("source"), info.get("source")]
+            if str(source or "").lower() != "unknown"
+        ]
+    )
+    if "hybrid" in sources or ("folder_paths" in sources and "static" in sources):
+        source = "hybrid"
+    else:
+        source = sources[0] if sources else "unknown"
+
+    target[key] = {
+        "source": source,
+        "choices": _ordered_unique_categories(
+            list(current.get("choices") or []) + list(info.get("choices") or [])
+        ),
+    }
+
+
+def _summarize_choice_info_for_log(info_by_key: Dict[Any, Dict[str, Any]]) -> Dict[Any, Dict[str, Any]]:
+    summary: Dict[Any, Dict[str, Any]] = {}
+    if not isinstance(info_by_key, dict):
+        return summary
+
+    for key, info in info_by_key.items():
+        if not isinstance(info, dict):
+            continue
+        summary[key] = {
+            "source": info.get("source", "unknown"),
+            "choice_count": len(info.get("choices") or []),
+        }
+    return summary
+
+
+def _summarize_dynamic_hints_for_log(hints: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "by_name": hints.get("by_name", {}),
+        "by_index": hints.get("by_index", {}),
+        "choice_info_by_name": _summarize_choice_info_for_log(
+            hints.get("choice_info_by_name", {})
+        ),
+        "choice_info_by_index": _summarize_choice_info_for_log(
+            hints.get("choice_info_by_index", {})
+        ),
+    }
 
 
 def _get_folder_paths_module() -> Any:
@@ -499,6 +568,84 @@ def _extract_categories_from_value(
     return _ordered_unique_categories(categories)
 
 
+def _flatten_combo_choice_values(
+    value: Any,
+    depth: int = 0,
+    seen: Optional[Set[int]] = None,
+) -> List[str]:
+    if depth > 6:
+        return []
+
+    if isinstance(value, str):
+        return [value]
+
+    if not isinstance(value, (list, tuple, set)):
+        return []
+
+    if seen is None:
+        seen = set()
+
+    value_id = id(value)
+    if value_id in seen:
+        return []
+    seen.add(value_id)
+
+    choices: List[str] = []
+    for item in value:
+        choices.extend(_flatten_combo_choice_values(item, depth + 1, seen))
+    return _ordered_unique_categories(choices)
+
+
+def _get_combo_choice_values(spec: Any) -> List[str]:
+    if not isinstance(spec, (list, tuple)) or not spec:
+        return []
+
+    input_type = spec[0]
+    if not isinstance(input_type, (list, tuple, set)):
+        return []
+
+    return _flatten_combo_choice_values(input_type)
+
+
+def _choice_contains_category_sentinel(
+    value: Any,
+    sentinel_to_category: Dict[str, str],
+) -> bool:
+    text = str(value or "")
+    return any(sentinel and sentinel in text for sentinel in sentinel_to_category)
+
+
+def _get_widget_choice_info_from_spec(
+    spec: Any,
+    sentinel_to_category: Dict[str, str],
+) -> Dict[str, Any]:
+    choices = _get_combo_choice_values(spec)
+    if not choices:
+        return {}
+
+    has_folder_choices = any(
+        _choice_contains_category_sentinel(choice, sentinel_to_category)
+        for choice in choices
+    )
+    static_choices = [
+        choice
+        for choice in choices
+        if not _choice_contains_category_sentinel(choice, sentinel_to_category)
+    ]
+
+    if has_folder_choices and static_choices:
+        source = "hybrid"
+    elif has_folder_choices:
+        source = "folder_paths"
+    else:
+        source = "static"
+
+    return {
+        "source": source,
+        "choices": static_choices,
+    }
+
+
 def _is_input_type_widget_spec(spec: Any) -> bool:
     if not isinstance(spec, (list, tuple)) or not spec:
         return False
@@ -529,20 +676,116 @@ def _iter_widget_input_type_entries(
     return entries
 
 
+def _empty_dynamic_hints() -> Dict[str, Any]:
+    return {
+        "by_name": {},
+        "by_index": {},
+        "choice_info_by_name": {},
+        "choice_info_by_index": {},
+    }
+
+
+def _schema_input_name(input_obj: Any) -> str:
+    for key in ("id", "name", "display_name"):
+        value = getattr(input_obj, key, None)
+        if value:
+            return str(value).strip()
+    return ""
+
+
+def _schema_input_io_type(input_obj: Any) -> str:
+    get_io_type = getattr(input_obj, "get_io_type", None)
+    if callable(get_io_type):
+        try:
+            return str(get_io_type() or "").strip().upper()
+        except Exception:
+            pass
+    return str(getattr(input_obj, "io_type", "") or "").strip().upper()
+
+
+def _is_schema_input_widget(input_obj: Any) -> bool:
+    io_type = _schema_input_io_type(input_obj)
+    return io_type in _WIDGET_INPUT_TYPES
+
+
+def _iter_schema_input_entries(schema: Any) -> List[tuple[str, Any, bool]]:
+    inputs = getattr(schema, "inputs", None)
+    if not isinstance(inputs, list):
+        return []
+
+    entries: List[tuple[str, Any, bool]] = []
+    for input_obj in inputs:
+        expanded_inputs = []
+        get_all = getattr(input_obj, "get_all", None)
+        if callable(get_all):
+            try:
+                expanded_inputs = get_all()
+            except Exception:
+                expanded_inputs = []
+        if not expanded_inputs:
+            expanded_inputs = [input_obj]
+
+        for expanded_input in expanded_inputs:
+            entries.append(
+                (
+                    _schema_input_name(expanded_input),
+                    expanded_input,
+                    _is_schema_input_widget(expanded_input),
+                )
+            )
+    return entries
+
+
+def _schema_input_choice_info(
+    input_obj: Any,
+    sentinel_to_category: Dict[str, str],
+) -> Dict[str, Any]:
+    options = getattr(input_obj, "options", None)
+    if not isinstance(options, (list, tuple, set)):
+        return {}
+    return _get_widget_choice_info_from_spec((list(options),), sentinel_to_category)
+
+
+def _merge_dynamic_hint_entry(
+    hints: Dict[str, Any],
+    normalized_name: str,
+    widget_index: Optional[int],
+    categories: List[str],
+    choice_info: Dict[str, Any],
+) -> None:
+    if normalized_name:
+        _merge_category_hints(hints["by_name"], normalized_name, categories)
+        if choice_info:
+            _merge_choice_info(
+                hints["choice_info_by_name"],
+                normalized_name,
+                choice_info,
+            )
+
+    if widget_index is not None:
+        if categories:
+            _merge_category_hints(hints["by_index"], widget_index, categories)
+        if choice_info:
+            _merge_choice_info(
+                hints["choice_info_by_index"],
+                widget_index,
+                choice_info,
+            )
+
+
 def _build_dynamic_node_widget_category_hints(node_type: str) -> Dict[str, Any]:
-    empty_hints = {"by_name": {}, "by_index": {}}
+    empty_hints = _empty_dynamic_hints()
     node_class = _get_comfy_node_class(node_type)
     if node_class is None:
         return empty_hints
 
     input_types_getter = getattr(node_class, "INPUT_TYPES", None)
-    if not callable(input_types_getter):
+    schema_getter = getattr(node_class, "define_schema", None)
+    if not callable(input_types_getter) and not callable(schema_getter):
         return empty_hints
 
     folder_paths_module = _get_folder_paths_module()
     get_filename_list = getattr(folder_paths_module, "get_filename_list", None)
-    if folder_paths_module is None or not callable(get_filename_list):
-        return empty_hints
 
     sentinel_to_category: Dict[str, str] = {}
 
@@ -553,19 +796,32 @@ def _build_dynamic_node_widget_category_hints(node_type: str) -> Dict[str, Any]:
         return [sentinel]
 
     input_types_func = getattr(input_types_getter, "__func__", input_types_getter)
-    input_types_globals = getattr(input_types_func, "__globals__", {})
+    schema_func = getattr(schema_getter, "__func__", schema_getter)
     patched_globals: List[tuple[Dict[str, Any], str, Any]] = []
+    patched_folder_paths = False
+
+    def patch_get_filename_list_global(callable_obj: Any) -> None:
+        if not callable(callable_obj) or not callable(get_filename_list):
+            return
+
+        globals_dict = getattr(callable_obj, "__globals__", {})
+        if not isinstance(globals_dict, dict):
+            return
+
+        for global_name, global_value in list(globals_dict.items()):
+            if global_value is get_filename_list:
+                globals_dict[global_name] = traced_get_filename_list
+                patched_globals.append((globals_dict, global_name, global_value))
 
     try:
-        setattr(folder_paths_module, "get_filename_list", traced_get_filename_list)
-        if isinstance(input_types_globals, dict):
-            for global_name, global_value in list(input_types_globals.items()):
-                if global_value is get_filename_list:
-                    input_types_globals[global_name] = traced_get_filename_list
-                    patched_globals.append(
-                        (input_types_globals, global_name, global_value)
-                    )
-        input_types = input_types_getter()
+        if folder_paths_module is not None and callable(get_filename_list):
+            setattr(folder_paths_module, "get_filename_list", traced_get_filename_list)
+            patched_folder_paths = True
+            patch_get_filename_list_global(input_types_func)
+            patch_get_filename_list_global(schema_func)
+
+        input_types = input_types_getter() if callable(input_types_getter) else None
+        schema = schema_getter() if callable(schema_getter) else None
     except Exception as exc:
         log_debug(
             f"Could not infer dynamic model widget categories for {node_type}: {exc}"
@@ -574,29 +830,56 @@ def _build_dynamic_node_widget_category_hints(node_type: str) -> Dict[str, Any]:
     finally:
         for global_scope, global_name, global_value in patched_globals:
             global_scope[global_name] = global_value
-        setattr(folder_paths_module, "get_filename_list", get_filename_list)
+        if patched_folder_paths:
+            setattr(folder_paths_module, "get_filename_list", get_filename_list)
 
-    if not sentinel_to_category or not isinstance(input_types, dict):
+    if not isinstance(input_types, dict) and schema is None:
         return empty_hints
 
-    hints = {"by_name": {}, "by_index": {}}
+    hints = _empty_dynamic_hints()
     widget_index = 0
 
     for input_name, spec in _iter_widget_input_type_entries(input_types):
         categories = _extract_categories_from_value(spec, sentinel_to_category)
+        choice_info = _get_widget_choice_info_from_spec(spec, sentinel_to_category)
         normalized_name = normalize_widget_name(input_name)
-
-        if normalized_name:
-            _merge_category_hints(hints["by_name"], normalized_name, categories)
-
+        entry_widget_index = widget_index if _is_input_type_widget_spec(spec) else None
+        _merge_dynamic_hint_entry(
+            hints,
+            normalized_name,
+            entry_widget_index,
+            categories,
+            choice_info,
+        )
         if _is_input_type_widget_spec(spec):
-            if categories:
-                _merge_category_hints(hints["by_index"], widget_index, categories)
             widget_index += 1
 
-    if hints["by_name"] or hints["by_index"]:
+    for input_name, input_obj, is_widget in _iter_schema_input_entries(schema):
+        categories = _extract_categories_from_value(
+            getattr(input_obj, "options", None),
+            sentinel_to_category,
+        )
+        choice_info = _schema_input_choice_info(input_obj, sentinel_to_category)
+        normalized_name = normalize_widget_name(input_name)
+        _merge_dynamic_hint_entry(
+            hints,
+            normalized_name,
+            widget_index if is_widget else None,
+            categories,
+            choice_info,
+        )
+        if is_widget:
+            widget_index += 1
+
+    if (
+        hints["by_name"]
+        or hints["by_index"]
+        or hints["choice_info_by_name"]
+        or hints["choice_info_by_index"]
+    ):
         log_debug(
-            f"Inferred dynamic model widget categories for {node_type}: {hints}"
+            "Inferred dynamic model widget categories for "
+            f"{node_type}: {_summarize_dynamic_hints_for_log(hints)}"
         )
 
     return hints
@@ -637,6 +920,99 @@ def get_dynamic_widget_category_hints(
         categories.extend(by_index.get(widget_index, []))
 
     return _ordered_unique_categories(categories)
+
+
+def _normalize_choice_for_match(value: Any) -> str:
+    return (
+        str(value or "")
+        .strip()
+        .replace("\\", "/")
+        .lower()
+    )
+
+
+def _merge_widget_choice_info_values(
+    current: Dict[str, Any],
+    candidate: Dict[str, Any],
+) -> Dict[str, Any]:
+    if not isinstance(candidate, dict):
+        return current
+
+    sources = _ordered_unique_categories(
+        [
+            source
+            for source in [current.get("source"), candidate.get("source")]
+            if str(source or "").lower() != "unknown"
+        ]
+    )
+    if "hybrid" in sources or ("folder_paths" in sources and "static" in sources):
+        source = "hybrid"
+    else:
+        source = sources[0] if sources else "unknown"
+
+    return {
+        "source": source,
+        "choices": _ordered_unique_categories(
+            list(current.get("choices") or []) + list(candidate.get("choices") or [])
+        ),
+    }
+
+
+def get_dynamic_widget_choice_info(
+    node: Dict[str, Any], widget_index: int
+) -> Dict[str, Any]:
+    hints = get_dynamic_node_widget_category_hints(str(node.get("type", "") or ""))
+    info: Dict[str, Any] = {"source": "unknown", "choices": []}
+
+    by_name = hints.get("choice_info_by_name", {})
+    if isinstance(by_name, dict):
+        for candidate in get_widget_name_candidates(node, widget_index):
+            candidate_info = by_name.get(normalize_widget_name(candidate), {})
+            info = _merge_widget_choice_info_values(info, candidate_info)
+
+    by_index = hints.get("choice_info_by_index", {})
+    if isinstance(by_index, dict):
+        info = _merge_widget_choice_info_values(info, by_index.get(widget_index, {}))
+
+    return info
+
+
+def is_static_or_hybrid_widget_choice(value: Any, choice_info: Dict[str, Any]) -> bool:
+    source = str(choice_info.get("source") or "").strip().lower()
+    if source not in {"static", "hybrid"}:
+        return False
+
+    target = _normalize_choice_for_match(value)
+    if not target:
+        return False
+
+    choices = choice_info.get("choices") or []
+    return any(_normalize_choice_for_match(choice) == target for choice in choices)
+
+
+def static_or_hybrid_choice_looks_like_model(
+    value: Any, choice_info: Dict[str, Any]
+) -> bool:
+    if is_model_filename(value):
+        return True
+
+    if not isinstance(value, str):
+        return False
+
+    value_text = value.strip()
+    if not value_text:
+        return False
+
+    if "/" in value_text or "\\" in value_text:
+        return True
+
+    target = _normalize_choice_for_match(value_text)
+    choices = choice_info.get("choices") or []
+    for choice in choices:
+        if _normalize_choice_for_match(choice) == target and is_model_filename(choice):
+            return True
+
+    return False
 
 
 MODEL_WIDGET_PLACEHOLDERS = {
@@ -1111,13 +1487,48 @@ def get_node_model_info(
     for idx, value in enumerate(widgets_values):
         widget_name = get_widget_name_hint(node, idx)
         model_widget_folder_key_hints = get_dynamic_widget_category_hints(node, idx)
+        model_widget_choice_info = get_dynamic_widget_choice_info(node, idx)
         model_widget_category_hints = get_model_widget_category_hints(node, idx)
         model_widget_category_hint = (
             model_widget_category_hints[0] if model_widget_category_hints else None
         )
+        input_choice_source = str(
+            model_widget_choice_info.get("source") or "unknown"
+        ).strip().lower()
+        static_input_choice_matches_value = is_static_or_hybrid_widget_choice(
+            value,
+            model_widget_choice_info,
+        )
+        static_input_choice_looks_like_model = static_or_hybrid_choice_looks_like_model(
+            value,
+            model_widget_choice_info,
+        )
+        output_category_hint = get_node_output_category_hint(node)
+        workflow_schema_model_candidate = bool(
+            input_choice_source == "unknown"
+            and output_category_hint
+            and is_workflow_model_widget_candidate(node, idx)
+            and is_model_filename(value)
+        )
+        if workflow_schema_model_candidate:
+            input_choice_source = "workflow_schema"
+        input_choice_matches_value = bool(
+            static_input_choice_matches_value or workflow_schema_model_candidate
+        )
+        input_choice_looks_like_model = bool(
+            static_input_choice_looks_like_model or workflow_schema_model_candidate
+        )
+        schema_output_category_hint = (
+            output_category_hint
+            if input_choice_matches_value
+            and input_choice_source in {"static", "hybrid", "workflow_schema"}
+            and input_choice_looks_like_model
+            else None
+        )
         effective_category_hint = (
             model_widget_category_hint
             or NODE_TYPE_TO_CATEGORY_HINTS.get(node_type)
+            or schema_output_category_hint
         )
         categories_to_try_for_widget = (
             model_widget_category_hints
@@ -1126,7 +1537,10 @@ def get_node_model_info(
         )
 
         if not should_scan_as_model_reference(
-            value, declared_model_widget=bool(model_widget_category_hint)
+            value,
+            declared_model_widget=bool(
+                model_widget_category_hint or schema_output_category_hint
+            ),
         ):
             # Check for dict-type widget values containing model references (e.g. Power Lora Loader)
             # Some nodes store model info as objects like {"on": true, "lora": "name.safetensors", "strength": 1.0}
@@ -1254,6 +1668,13 @@ def get_node_model_info(
             full_path = None
             exists = False
 
+        auto_download_capable = bool(
+            input_choice_matches_value
+            and input_choice_source in {"static", "hybrid", "workflow_schema"}
+            and input_choice_looks_like_model
+        )
+        auto_download_candidate = bool(not exists and auto_download_capable)
+
         model_refs.append(
             {
                 "node_id": node_id,
@@ -1269,6 +1690,10 @@ def get_node_model_info(
                 or ([category] if category else []),
                 "full_path": full_path,
                 "exists": exists,
+                "input_choice_source": input_choice_source,
+                "input_choice_matches_value": input_choice_matches_value,
+                "auto_download_capable": auto_download_capable,
+                "auto_download_candidate": auto_download_candidate,
                 "is_urn": False,
                 "connected": is_active,
             }
@@ -1680,7 +2105,22 @@ def identify_missing_models(
                 }
             else:
                 # Duplicate - just add to the node refs list
-                missing_by_filename[filename]["all_node_refs"].append(model_ref.copy())
+                existing = missing_by_filename[filename]
+                existing["all_node_refs"].append(model_ref.copy())
+                if model_ref.get("auto_download_capable"):
+                    existing["auto_download_capable"] = True
+                if model_ref.get("auto_download_candidate"):
+                    existing["auto_download_candidate"] = True
+                if model_ref.get("input_choice_matches_value"):
+                    existing["input_choice_matches_value"] = True
+                existing_source = str(existing.get("input_choice_source") or "").lower()
+                model_source = str(model_ref.get("input_choice_source") or "").lower()
+                if existing_source != "hybrid" and model_source in {
+                    "static",
+                    "hybrid",
+                    "workflow_schema",
+                }:
+                    existing["input_choice_source"] = model_source
 
     # Return deduplicated list
     return list(missing_by_filename.values())
