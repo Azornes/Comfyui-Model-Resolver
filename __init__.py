@@ -139,6 +139,7 @@ class ModelResolverExtension:
                     normalize_download_category,
                     write_lora_manager_metadata,
                 )
+                from .core.aria2_installer import Aria2InstallError, install_aria2_engine
                 from .core.sources.popular import (
                     get_popular_model_url,
                     search_popular_models,
@@ -3538,6 +3539,32 @@ class ModelResolverExtension:
                         settings = dict(settings)
                         settings["aria2c_path"] = payload.get("aria2c_path", "")
                     return web.json_response(await asyncio.to_thread(get_aria2_status, settings))
+
+                @routes.post("/model_resolver/aria2/install")
+                @json_api_endpoint("aria2 install")
+                async def aria2_install_route(request):
+                    """Download official aria2c binary and save its path."""
+                    try:
+                        payload = await request.json()
+                    except Exception:
+                        payload = {}
+                    force = False
+                    if isinstance(payload, dict):
+                        force = to_bool(payload.get("force"), False)
+                    try:
+                        install_result = await asyncio.to_thread(install_aria2_engine, force)
+                    except Aria2InstallError as exc:
+                        self.logger.warning(f"Model Resolver aria2 install failed: {exc}")
+                        return web.json_response({"success": False, "error": str(exc)}, status=500)
+                    settings = await asyncio.to_thread(
+                        save_resolver_settings,
+                        {
+                            "aria2c_path": install_result.get("aria2c_path", ""),
+                            "download_backend": "aria2",
+                        },
+                    )
+                    install_result["settings"] = settings
+                    return web.json_response(install_result)
 
                 @routes.get("/model_resolver/directories")
                 @json_api_endpoint("directories")

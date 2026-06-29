@@ -235,7 +235,7 @@ export const optionsMethods = {
                                             <h5 class="mr-options-subsection-title">Download Engine</h5>
                                             <span class="mr-tooltip-badge" data-tooltip="Choose how model files are downloaded. aria2 requires the external aria2c executable and is intended for large downloads.">?</span>
                                         </div>
-                                        <div class="mr-options-number-row">
+                                        <div class="mr-options-number-row mr-options-wide-row">
                                             <div class="mr-options-number-copy">
                                                 <span class="mr-options-label">Download backend</span>
                                             </div>
@@ -243,22 +243,31 @@ export const optionsMethods = {
                                                 ${renderDownloadBackendOptions(tokens.download_backend)}
                                             </select>
                                         </div>
-                                        <div class="mr-options-number-row">
-                                            <div class="mr-options-number-copy">
-                                                <span class="mr-options-label">aria2c path <span class="mr-tooltip-badge" data-tooltip="Optional full path to aria2c/aria2c.exe. Leave empty to use aria2c from your system PATH.">?</span></span>
+                                        <div class="mr-options-dependent-block mr-options-aria2-setting">
+                                            <div class="mr-options-number-row mr-options-wide-row">
+                                                <div class="mr-options-number-copy">
+                                                    <span class="mr-options-label">aria2c path <span class="mr-tooltip-badge" data-tooltip="Optional full path to aria2c/aria2c.exe. Leave empty to use aria2c from your system PATH.">?</span></span>
+                                                </div>
+                                                <input id="mr-options-aria2c-path" class="mr-options-input" type="text" value="${this.escapeHtml(tokens.aria2c_path || '')}" placeholder="Leave empty to use aria2c from PATH">
                                             </div>
-                                            <input id="mr-options-aria2c-path" class="mr-options-input" type="text" value="${this.escapeHtml(tokens.aria2c_path || '')}" placeholder="Leave empty to use aria2c from PATH">
+                                            <div class="mr-options-db-actions">
+                                                <button id="mr-options-aria2-install" type="button" class="mr-btn mr-btn-primary">${getSvgIcon('download')} Install aria2</button>
+                                                <button id="mr-options-aria2-check" type="button" class="mr-btn mr-btn-secondary">${getSvgIcon('refreshCw')} Check aria2</button>
+                                                <a class="mr-options-inline-link" href="https://github.com/Azornes/Comfyui-Model-Resolver/wiki/Aria2-Download-Backend" target="_blank" rel="noopener noreferrer">Setup guide</a>
+                                            </div>
+                                            <div id="mr-options-aria2-status" class="mr-options-db-message">aria2 requires aria2c installed or a configured executable path.</div>
                                         </div>
-                                        <div class="mr-options-db-actions">
-                                            <button id="mr-options-aria2-check" type="button" class="mr-btn mr-btn-secondary">${getSvgIcon('refreshCw')} Check aria2</button>
-                                            <a class="mr-options-inline-link" href="https://github.com/willmiao/ComfyUI-Lora-Manager/wiki/Aria2-Download-Backend-(Experimental)" target="_blank" rel="noopener noreferrer">Setup guide</a>
-                                        </div>
-                                        <div id="mr-options-aria2-status" class="mr-options-db-message">Python downloader is used by default. aria2 requires aria2c installed or a configured executable path.</div>
                                     </div>
                                 </div>
                                 <div class="mr-options-panel">
-                                    <div class="mr-options-toggle-list">
-                                        ${sourceDefaultsRows}
+                                    <div class="mr-options-stack">
+                                        <div class="mr-options-subsection-head">
+                                            <h5 class="mr-options-subsection-title">Search Sources</h5>
+                                            <span class="mr-tooltip-badge" data-tooltip="Choose which sources Model Resolver can use when searching for downloadable model matches.">?</span>
+                                        </div>
+                                        <div class="mr-options-toggle-list">
+                                            ${sourceDefaultsRows}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -666,8 +675,10 @@ export const optionsMethods = {
         const autoRefreshComfyModelsInput = this.contentElement.querySelector('#mr-options-auto-refresh-comfy-models');
         const downloadBackendInput = this.contentElement.querySelector('#mr-options-download-backend');
         const aria2cPathInput = this.contentElement.querySelector('#mr-options-aria2c-path');
+        const aria2InstallBtn = this.contentElement.querySelector('#mr-options-aria2-install');
         const aria2CheckBtn = this.contentElement.querySelector('#mr-options-aria2-check');
         const aria2StatusEl = this.contentElement.querySelector('#mr-options-aria2-status');
+        const aria2SettingEls = Array.from(this.contentElement.querySelectorAll('.mr-options-aria2-setting'));
         const downloadPathModeInput = this.contentElement.querySelector('#mr-options-download-path-mode');
         const defaultRootSelectInputs = Array.from(this.contentElement.querySelectorAll('.mr-options-default-root'));
         const templatePresetInputs = Array.from(this.contentElement.querySelectorAll('.mr-options-template-preset'));
@@ -779,6 +790,14 @@ export const optionsMethods = {
             if (mode) aria2StatusEl.classList.add(mode);
         };
 
+        const syncAria2OptionsVisibility = () => {
+            const backend = this.normalizeDownloadBackend(downloadBackendInput?.value || tokens.download_backend);
+            const showAria2 = backend === 'aria2';
+            aria2SettingEls.forEach((element) => {
+                element.hidden = !showAria2;
+            });
+        };
+
         const checkAria2Status = async ({ useUnsavedPath = true } = {}) => {
             if (aria2CheckBtn) aria2CheckBtn.disabled = true;
             setAria2Status('Checking aria2...', 'is-pending');
@@ -802,6 +821,47 @@ export const optionsMethods = {
             } catch (error) {
                 setAria2Status(error.message || 'aria2 check failed.', 'is-invalid');
             } finally {
+                if (aria2CheckBtn) aria2CheckBtn.disabled = false;
+            }
+        };
+
+        const installAria2 = async () => {
+            if (aria2InstallBtn) aria2InstallBtn.disabled = true;
+            if (aria2CheckBtn) aria2CheckBtn.disabled = true;
+            setAria2Status('Downloading and installing aria2 from official GitHub releases...', 'is-pending');
+            try {
+                const data = await this.fetchJson('/model_resolver/aria2/install', {
+                    method: 'POST',
+                    body: JSON.stringify({}),
+                    silent: true
+                }, 'Install aria2');
+
+                if (!data?.success || !data?.aria2c_path) {
+                    throw new Error(data?.error || 'aria2 install did not return an executable path.');
+                }
+
+                if (aria2cPathInput) {
+                    aria2cPathInput.value = data.aria2c_path;
+                    aria2cPathInput.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+                if (downloadBackendInput) {
+                    downloadBackendInput.value = 'aria2';
+                    downloadBackendInput.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+
+                tokens.aria2c_path = data.aria2c_path;
+                tokens.download_backend = 'aria2';
+                localStorage.setItem('ModelResolver.aria2cPath', data.aria2c_path);
+                localStorage.setItem('ModelResolver.downloadBackend', 'aria2');
+
+                const versionText = data.version ? ` ${data.version}` : '';
+                const installedText = data.already_installed ? 'already installed' : 'installed';
+                setAria2Status(`aria2${versionText} ${installedText}: ${data.aria2c_path}`, 'is-valid');
+                await checkAria2Status({ useUnsavedPath: true });
+            } catch (error) {
+                setAria2Status(error.message || 'aria2 install failed.', 'is-invalid');
+            } finally {
+                if (aria2InstallBtn) aria2InstallBtn.disabled = false;
                 if (aria2CheckBtn) aria2CheckBtn.disabled = false;
             }
         };
@@ -1585,7 +1645,25 @@ export const optionsMethods = {
             });
         }
 
-        if (tokens.download_backend === 'aria2') {
+        if (aria2InstallBtn) {
+            aria2InstallBtn.addEventListener('click', () => {
+                installAria2();
+            });
+        }
+
+        if (downloadBackendInput) {
+            downloadBackendInput.addEventListener('change', () => {
+                const backend = this.normalizeDownloadBackend(downloadBackendInput.value);
+                syncAria2OptionsVisibility();
+                if (backend === 'aria2') {
+                    checkAria2Status({ useUnsavedPath: true });
+                }
+            });
+        }
+
+        syncAria2OptionsVisibility();
+
+        if (this.normalizeDownloadBackend(tokens.download_backend) === 'aria2') {
             checkAria2Status({ useUnsavedPath: false });
         }
 

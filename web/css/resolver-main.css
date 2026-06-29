@@ -6842,6 +6842,14 @@ a.mr-image-preview-resource-name:hover {
     min-width: 0;
 }
 
+.mr-options-wide-row {
+    grid-template-columns: minmax(150px, 220px) minmax(260px, 1fr);
+}
+
+.mr-options-aria2-setting[hidden] {
+    display: none !important;
+}
+
 .mr-options-path-mode-row {
     grid-template-columns: minmax(150px, 1fr) minmax(220px, 280px);
 }
@@ -6921,6 +6929,10 @@ a.mr-image-preview-resource-name:hover {
 
     .mr-options-path-mode-row {
         grid-template-columns: minmax(120px, 1fr) minmax(220px, 260px);
+    }
+
+    .mr-options-wide-row {
+        grid-template-columns: minmax(120px, 180px) minmax(220px, 1fr);
     }
 
     .mr-options-toggle-row {
