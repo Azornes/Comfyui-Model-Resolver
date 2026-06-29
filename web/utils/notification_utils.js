@@ -25,7 +25,10 @@ const CONFIG = {
     CSS_PREFIX: "mr-",
 
     // Logger module tag/name
-    LOGGER_NAME: "NotificationUtils"
+    LOGGER_NAME: "NotificationUtils",
+
+    // Shared global container ID to stack notifications across different custom nodes/projects
+    SHARED_CONTAINER_ID: "az-toast-container"
 };
 
 // ==========================================
@@ -143,7 +146,7 @@ export function showNotification(message, typeOrBgColor = "info", durationOrOpti
                             cancelAnimationFrame(stored.animationFrame);
                         }
                         activeNotifications.delete(message);
-                        const container = document.getElementById(`${CONFIG.CSS_PREFIX}notification-container`);
+                        const container = document.getElementById(CONFIG.SHARED_CONTAINER_ID);
                         if (container && container.children.length === 0) {
                             container.remove();
                         }
@@ -169,10 +172,10 @@ export function showNotification(message, typeOrBgColor = "info", durationOrOpti
     }
 
     // --- Get or create the main notification container ---
-    let container = document.getElementById(`${CONFIG.CSS_PREFIX}notification-container`);
+    let container = document.getElementById(CONFIG.SHARED_CONTAINER_ID);
     if (!container) {
         container = document.createElement('div');
-        container.id = `${CONFIG.CSS_PREFIX}notification-container`;
+        container.id = CONFIG.SHARED_CONTAINER_ID;
         container.style.cssText = `
             position: fixed;
             top: 24px;
