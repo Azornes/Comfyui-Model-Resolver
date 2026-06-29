@@ -455,8 +455,16 @@ export const missingBrowserMethods = {
     },
 
     getVisibleMissingModels(missingModels = []) {
-        if (this.showResolvedModels) return missingModels;
-        return missingModels.filter(missing => !this.isMissingModelResolved(missing));
+        const resolvedFilteredModels = this.showResolvedModels
+            ? missingModels
+            : missingModels.filter(missing => !this.isMissingModelResolved(missing));
+
+        if (this.showAutoDownloadModels) return resolvedFilteredModels;
+        return resolvedFilteredModels.filter(missing => !this.isAutoDownloadModel(missing));
+    },
+
+    isAutoDownloadModel(missing = {}) {
+        return Boolean(missing?.auto_download_capable || missing?.auto_download_candidate);
     },
 
     getResolvedMissingCount(missingModels = []) {
@@ -498,10 +506,13 @@ export const missingBrowserMethods = {
 
     renderMissingModelsBrowser(missingModels, selectedKey, totalMissing, activeCount, hasAny100Match, options = {}) {
         const hiddenResolvedCount = Number(options.hiddenResolvedCount || 0);
+        const hiddenAutoDownloadCount = Number(options.hiddenAutoDownloadCount || 0);
+        const autoDownloadCount = Number(options.autoDownloadCount || 0);
         const resolvedCount = Number(options.resolvedCount || 0);
         const rawMissingCount = Number(options.rawMissingCount ?? totalMissing);
         const missingCount = Number(options.missingCount ?? rawMissingCount);
         const resolvedToggleCount = this.showResolvedModels ? resolvedCount : hiddenResolvedCount;
+        const autoDownloadToggleCount = this.showAutoDownloadModels ? autoDownloadCount : hiddenAutoDownloadCount;
         const stats = this.getMissingModelSummaryStats(missingModels);
         const detailIndex = missingModels.findIndex(missing => this.getMissingModelKey(missing) === selectedKey);
         const detailMissing = detailIndex >= 0 ? missingModels[detailIndex] : null;
@@ -509,6 +520,8 @@ export const missingBrowserMethods = {
             ? `${activeCount} downloading`
             : hiddenResolvedCount > 0
             ? `${hiddenResolvedCount} resolved hidden`
+            : hiddenAutoDownloadCount > 0
+            ? `${hiddenAutoDownloadCount} auto-download hidden`
             : (hasAny100Match ? 'Auto-link ready for exact matches' : 'Review matches or search online');
         const listLayout = this.getMissingModelsListLayout(missingModels);
         let savedDetailWidth = null;
@@ -541,6 +554,11 @@ export const missingBrowserMethods = {
                                 <input id="mr-show-resolved-models" type="checkbox" ${this.showResolvedModels ? 'checked' : ''}>
                                 <span>Show resolved</span>
                                 ${resolvedToggleCount > 0 ? `<em>${resolvedToggleCount}</em>` : ''}
+                            </label>
+                            <label class="mr-missing-resolved-toggle" data-tooltip="Show models selected from custom nodes that can download models automatically.">
+                                <input id="mr-show-auto-download-models" type="checkbox" ${this.showAutoDownloadModels ? 'checked' : ''}>
+                                <span>Show auto-download</span>
+                                ${autoDownloadToggleCount > 0 ? `<em>${autoDownloadToggleCount}</em>` : ''}
                             </label>
                             <button id="mr-refresh-missing-analysis" type="button" class="mr-btn mr-btn-secondary mr-btn-sm mr-missing-refresh-btn" data-tooltip="Re-analyze workflow and refresh local matches">
                                 <span class="mr-refresh-spin-target">${getSvgIcon('refreshCw')}</span> Refresh
@@ -635,6 +653,18 @@ export const missingBrowserMethods = {
                 this.showResolvedModels = Boolean(showResolvedToggle.checked);
                 try {
                     localStorage.setItem(this.showResolvedModelsStorageKey, this.showResolvedModels ? '1' : '0');
+                } catch (e) {}
+                this.displayMissingModels(container, data);
+            });
+        }
+
+        const showAutoDownloadToggle = container.querySelector('#mr-show-auto-download-models');
+        if (showAutoDownloadToggle && showAutoDownloadToggle.dataset.mlAutoDownloadBound !== 'true') {
+            showAutoDownloadToggle.dataset.mlAutoDownloadBound = 'true';
+            showAutoDownloadToggle.addEventListener('change', () => {
+                this.showAutoDownloadModels = Boolean(showAutoDownloadToggle.checked);
+                try {
+                    localStorage.setItem(this.showAutoDownloadModelsStorageKey, this.showAutoDownloadModels ? '1' : '0');
                 } catch (e) {}
                 this.displayMissingModels(container, data);
             });
@@ -1447,7 +1477,16 @@ export const missingBrowserMethods = {
         const resolvedCount = resolvedMissingCount + resolvedModels.length;
         const unresolvedMissingCount = Math.max(0, rawMissingCount - resolvedMissingCount);
         const hiddenResolvedCount = this.showResolvedModels ? 0 : resolvedCount;
-        const visibleMissingModels = this.getVisibleMissingModels(allModelsForDisplay);
+        const resolvedFilteredModels = this.showResolvedModels
+            ? allModelsForDisplay
+            : allModelsForDisplay.filter(missing => !this.isMissingModelResolved(missing));
+        const autoDownloadCount = resolvedFilteredModels.reduce((count, missing) => (
+            count + (this.isAutoDownloadModel(missing) ? 1 : 0)
+        ), 0);
+        const hiddenAutoDownloadCount = this.showAutoDownloadModels ? 0 : autoDownloadCount;
+        const visibleMissingModels = this.showAutoDownloadModels
+            ? resolvedFilteredModels
+            : resolvedFilteredModels.filter(missing => !this.isAutoDownloadModel(missing));
         this.missingModels = visibleMissingModels;
         this.syncBatchSelectionForMissingModels(visibleMissingModels);
 
@@ -1556,7 +1595,14 @@ export const missingBrowserMethods = {
             sortedMissingModels.length,
             activeCount,
             hasAny100Match,
-            { hiddenResolvedCount, resolvedCount, rawMissingCount, missingCount: unresolvedMissingCount }
+            {
+                hiddenResolvedCount,
+                hiddenAutoDownloadCount,
+                autoDownloadCount,
+                resolvedCount,
+                rawMissingCount,
+                missingCount: unresolvedMissingCount,
+            }
         );
         this.wireMissingModelsBrowser(container, data, sortedMissingModels);
         this.restoreMissingListScroll(container, listScrollSnapshot);

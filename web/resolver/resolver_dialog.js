@@ -71,11 +71,20 @@ export class ResolverManagerDialog extends ComfyDialog {
         this.sidebarOpenModeStorageKey = "model_resolver_sidebar_open_mode";
         this.missingBrowserSplitStorageKey = "model_resolver_missing_browser_detail_w";
         this.showResolvedModelsStorageKey = "model_resolver_show_resolved_models";
+        this.showAutoDownloadModelsStorageKey = "model_resolver_show_auto_download_models";
         this.localMatchAlternativesCollapsedStorageKey = "model_resolver_local_match_alternatives_collapsed";
         try {
             this.showResolvedModels = localStorage.getItem(this.showResolvedModelsStorageKey) === '1';
         } catch (e) {
             this.showResolvedModels = false;
+        }
+        try {
+            const storedShowAutoDownload = localStorage.getItem(this.showAutoDownloadModelsStorageKey);
+            this.showAutoDownloadModels = storedShowAutoDownload === null
+                ? true
+                : storedShowAutoDownload === '1';
+        } catch (e) {
+            this.showAutoDownloadModels = true;
         }
         try {
             this.localMatchAlternativesCollapsed = localStorage.getItem(this.localMatchAlternativesCollapsedStorageKey) === '1';
