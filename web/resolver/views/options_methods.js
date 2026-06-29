@@ -250,12 +250,38 @@ export const optionsMethods = {
                                                 </div>
                                                 <input id="mr-options-aria2c-path" class="mr-options-input" type="text" value="${this.escapeHtml(tokens.aria2c_path || '')}" placeholder="Leave empty to use aria2c from PATH">
                                             </div>
+                                            <div class="mr-options-db-summary mr-options-aria2-summary">
+                                                <div class="mr-options-db-row">
+                                                    <span>Backend</span>
+                                                    <strong id="mr-options-aria2-backend-state">aria2</strong>
+                                                </div>
+                                                <div class="mr-options-db-row">
+                                                    <span>Status</span>
+                                                    <strong id="mr-options-aria2-availability">Not checked</strong>
+                                                </div>
+                                                <div class="mr-options-db-row">
+                                                    <span>Daemon</span>
+                                                    <span class="mr-options-aria2-daemon-cell">
+                                                        <button id="mr-options-aria2-stop" type="button" class="mr-btn mr-btn-secondary mr-btn-sm" hidden>Stop</button>
+                                                        <strong id="mr-options-aria2-daemon">Not checked</strong>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <label class="mr-options-toggle-row mr-options-compact-toggle-row">
+                                                <div class="mr-options-toggle-copy">
+                                                    <span class="mr-options-toggle-title">Auto-stop daemon after 5 minutes idle <span class="mr-tooltip-badge" data-tooltip="When enabled, Model Resolver stops only the aria2 daemon it started itself after 5 minutes without active downloads. It will not stop external aria2 processes.">?</span></span>
+                                                </div>
+                                                <span class="mr-options-toggle-control">
+                                                    <input id="mr-options-aria2-auto-stop" class="mr-options-switch-input" type="checkbox" ${tokens.aria2_auto_stop_daemon ? 'checked' : ''}>
+                                                    <span class="mr-options-switch"></span>
+                                                </span>
+                                            </label>
                                             <div class="mr-options-db-actions">
                                                 <button id="mr-options-aria2-install" type="button" class="mr-btn mr-btn-primary">${getSvgIcon('download')} Install aria2</button>
                                                 <button id="mr-options-aria2-check" type="button" class="mr-btn mr-btn-secondary">${getSvgIcon('refreshCw')} Check aria2</button>
                                                 <a class="mr-options-inline-link" href="https://github.com/Azornes/Comfyui-Model-Resolver/wiki/Aria2-Download-Backend" target="_blank" rel="noopener noreferrer">Setup guide</a>
                                             </div>
-                                            <div id="mr-options-aria2-status" class="mr-options-db-message">aria2 requires aria2c installed or a configured executable path.</div>
+                                            <div id="mr-options-aria2-status" class="mr-options-db-message" hidden></div>
                                         </div>
                                     </div>
                                 </div>
@@ -677,7 +703,12 @@ export const optionsMethods = {
         const aria2cPathInput = this.contentElement.querySelector('#mr-options-aria2c-path');
         const aria2InstallBtn = this.contentElement.querySelector('#mr-options-aria2-install');
         const aria2CheckBtn = this.contentElement.querySelector('#mr-options-aria2-check');
+        const aria2StopBtn = this.contentElement.querySelector('#mr-options-aria2-stop');
         const aria2StatusEl = this.contentElement.querySelector('#mr-options-aria2-status');
+        const aria2BackendStateEl = this.contentElement.querySelector('#mr-options-aria2-backend-state');
+        const aria2AvailabilityEl = this.contentElement.querySelector('#mr-options-aria2-availability');
+        const aria2DaemonEl = this.contentElement.querySelector('#mr-options-aria2-daemon');
+        const aria2AutoStopInput = this.contentElement.querySelector('#mr-options-aria2-auto-stop');
         const aria2SettingEls = Array.from(this.contentElement.querySelectorAll('.mr-options-aria2-setting'));
         const downloadPathModeInput = this.contentElement.querySelector('#mr-options-download-path-mode');
         const defaultRootSelectInputs = Array.from(this.contentElement.querySelectorAll('.mr-options-default-root'));
@@ -735,6 +766,7 @@ export const optionsMethods = {
             autoRefreshComfyModelsInput,
             downloadBackendInput,
             aria2cPathInput,
+            aria2AutoStopInput,
             downloadPathModeInput,
             ...defaultRootSelectInputs,
             ...templatePresetInputs,
@@ -785,9 +817,75 @@ export const optionsMethods = {
 
         const setAria2Status = (text, mode = '') => {
             if (!aria2StatusEl) return;
+            aria2StatusEl.hidden = !text;
             aria2StatusEl.textContent = text;
             aria2StatusEl.classList.remove('is-valid', 'is-invalid', 'is-pending');
             if (mode) aria2StatusEl.classList.add(mode);
+        };
+
+        const setAria2SummaryValue = (element, text, mode = '') => {
+            if (!element) return;
+            element.textContent = text;
+            element.classList.remove('is-valid', 'is-invalid', 'is-pending');
+            if (mode) element.classList.add(mode);
+        };
+
+        const syncAria2DaemonButton = (data = {}) => {
+            if (!aria2StopBtn) return;
+            const available = data.available === true;
+            const running = Boolean(data.running);
+            aria2StopBtn.hidden = !available;
+            aria2StopBtn.dataset.action = running ? 'stop' : 'start';
+            aria2StopBtn.textContent = running ? 'Stop' : 'Start';
+            aria2StopBtn.disabled = running && data.can_stop === false;
+            aria2StopBtn.title = aria2StopBtn.disabled
+                ? 'Cannot stop while aria2 has active downloads'
+                : (running
+                    ? 'Stop aria2 daemon started by Model Resolver'
+                    : 'Start aria2 daemon now');
+        };
+
+        const renderAria2Summary = (data = {}, state = 'idle') => {
+            const backend = this.normalizeDownloadBackend(data.backend || downloadBackendInput?.value || tokens.download_backend);
+            const version = String(data.version || '').trim();
+            const backendLabel = backend === 'aria2'
+                ? `aria2${version ? ` ${version}` : ''}`
+                : 'Python';
+
+            setAria2SummaryValue(aria2BackendStateEl, backendLabel);
+
+            if (state === 'checking') {
+                syncAria2DaemonButton({ available: false, running: false });
+                setAria2SummaryValue(aria2AvailabilityEl, 'Checking...', 'is-pending');
+                setAria2SummaryValue(aria2DaemonEl, 'Checking...', 'is-pending');
+                return;
+            }
+
+            if (state === 'installing') {
+                syncAria2DaemonButton({ available: false, running: false });
+                setAria2SummaryValue(aria2AvailabilityEl, 'Installing...', 'is-pending');
+                setAria2SummaryValue(aria2DaemonEl, 'Not started');
+                return;
+            }
+
+            if (data && typeof data.available === 'boolean') {
+                syncAria2DaemonButton(data);
+                setAria2SummaryValue(
+                    aria2AvailabilityEl,
+                    data.available ? 'Available' : 'Not found',
+                    data.available ? 'is-valid' : 'is-invalid'
+                );
+                setAria2SummaryValue(
+                    aria2DaemonEl,
+                    data.running ? 'Running' : 'Starts on first download',
+                    data.running ? 'is-valid' : ''
+                );
+                return;
+            }
+
+            syncAria2DaemonButton({ available: false, running: false });
+            setAria2SummaryValue(aria2AvailabilityEl, 'Not checked');
+            setAria2SummaryValue(aria2DaemonEl, 'Not checked');
         };
 
         const syncAria2OptionsVisibility = () => {
@@ -796,11 +894,13 @@ export const optionsMethods = {
             aria2SettingEls.forEach((element) => {
                 element.hidden = !showAria2;
             });
+            renderAria2Summary({ backend });
         };
 
         const checkAria2Status = async ({ useUnsavedPath = true } = {}) => {
             if (aria2CheckBtn) aria2CheckBtn.disabled = true;
-            setAria2Status('Checking aria2...', 'is-pending');
+            setAria2Status('');
+            renderAria2Summary({ backend: 'aria2' }, 'checking');
             try {
                 const data = await this.fetchJson('/model_resolver/aria2/status', {
                     method: 'POST',
@@ -811,15 +911,24 @@ export const optionsMethods = {
                     }),
                     silent: true
                 }, 'Check aria2');
+                renderAria2Summary({
+                    ...data,
+                    backend: downloadBackendInput?.value || data.backend
+                });
                 if (data?.available) {
-                    const path = data.resolved_path || 'aria2c from PATH';
-                    const runningText = data.running ? ' Daemon is running.' : ' Daemon will start on first aria2 download.';
-                    setAria2Status(`aria2 is available: ${path}.${runningText}`, 'is-valid');
+                    setAria2Status('');
                 } else {
                     setAria2Status(data?.error || 'aria2c was not found. Install aria2 or configure the aria2c path.', 'is-invalid');
                 }
             } catch (error) {
                 setAria2Status(error.message || 'aria2 check failed.', 'is-invalid');
+                renderAria2Summary({
+                    backend: 'aria2',
+                    configured_path: aria2cPathInput?.value || '',
+                    resolved_path: '',
+                    available: false,
+                    running: false
+                });
             } finally {
                 if (aria2CheckBtn) aria2CheckBtn.disabled = false;
             }
@@ -828,7 +937,8 @@ export const optionsMethods = {
         const installAria2 = async () => {
             if (aria2InstallBtn) aria2InstallBtn.disabled = true;
             if (aria2CheckBtn) aria2CheckBtn.disabled = true;
-            setAria2Status('Downloading and installing aria2 from official GitHub releases...', 'is-pending');
+            setAria2Status('');
+            renderAria2Summary({ backend: 'aria2' }, 'installing');
             try {
                 const data = await this.fetchJson('/model_resolver/aria2/install', {
                     method: 'POST',
@@ -854,15 +964,101 @@ export const optionsMethods = {
                 localStorage.setItem('ModelResolver.aria2cPath', data.aria2c_path);
                 localStorage.setItem('ModelResolver.downloadBackend', 'aria2');
 
-                const versionText = data.version ? ` ${data.version}` : '';
-                const installedText = data.already_installed ? 'already installed' : 'installed';
-                setAria2Status(`aria2${versionText} ${installedText}: ${data.aria2c_path}`, 'is-valid');
+                setAria2Status('');
+                renderAria2Summary({
+                    backend: 'aria2',
+                    configured_path: data.aria2c_path,
+                    resolved_path: data.aria2c_path,
+                    available: true,
+                    version: data.version,
+                    running: false
+                });
                 await checkAria2Status({ useUnsavedPath: true });
             } catch (error) {
                 setAria2Status(error.message || 'aria2 install failed.', 'is-invalid');
+                renderAria2Summary({
+                    backend: 'aria2',
+                    configured_path: aria2cPathInput?.value || '',
+                    resolved_path: '',
+                    available: false,
+                    running: false
+                });
             } finally {
                 if (aria2InstallBtn) aria2InstallBtn.disabled = false;
                 if (aria2CheckBtn) aria2CheckBtn.disabled = false;
+            }
+        };
+
+        const requestAria2Control = async (endpoint, { method = 'POST', body = {} } = {}) => {
+            const response = await api.fetchApi(endpoint, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                ...(method === 'POST' ? { body: JSON.stringify(body) } : {})
+            });
+            if (!response.ok) {
+                let errorMsg = `Server returned ${response.status}: ${response.statusText}`;
+                try {
+                    const errData = await response.json();
+                    if (errData?.error) errorMsg = errData.error;
+                } catch (_) {}
+                const error = new Error(errorMsg);
+                error.status = response.status;
+                throw error;
+            }
+            return response.json();
+        };
+
+        const startAria2 = async () => {
+            if (aria2StopBtn) aria2StopBtn.disabled = true;
+            setAria2Status('');
+            setAria2SummaryValue(aria2DaemonEl, 'Starting...', 'is-pending');
+            let refreshed = false;
+            try {
+                const result = await requestAria2Control('/model_resolver/aria2/start', {
+                    body: {
+                        aria2c_path: aria2cPathInput?.value || ''
+                    }
+                });
+                if (!result?.success) {
+                    throw new Error(result?.error || 'Could not start aria2 daemon.');
+                }
+                await checkAria2Status({ useUnsavedPath: true });
+                refreshed = true;
+            } catch (error) {
+                const message = error.message || 'aria2 start failed.';
+                await checkAria2Status({ useUnsavedPath: true });
+                refreshed = true;
+                setAria2Status(message, 'is-invalid');
+            } finally {
+                if (!refreshed && aria2StopBtn) aria2StopBtn.disabled = false;
+            }
+        };
+
+        const stopAria2 = async () => {
+            if (aria2StopBtn) aria2StopBtn.disabled = true;
+            setAria2Status('');
+            setAria2SummaryValue(aria2DaemonEl, 'Stopping...', 'is-pending');
+            let refreshed = false;
+            try {
+                let result;
+                try {
+                    result = await requestAria2Control('/model_resolver/aria2/stop');
+                } catch (error) {
+                    if (error?.status !== 405) throw error;
+                    result = await requestAria2Control('/model_resolver/aria2/stop', { method: 'GET' });
+                }
+                if (!result?.success) {
+                    throw new Error(result?.error || 'Could not stop aria2 daemon.');
+                }
+                await checkAria2Status({ useUnsavedPath: true });
+                refreshed = true;
+            } catch (error) {
+                const message = error.message || 'aria2 stop failed.';
+                await checkAria2Status({ useUnsavedPath: true });
+                refreshed = true;
+                setAria2Status(message, 'is-invalid');
+            } finally {
+                if (!refreshed && aria2StopBtn) aria2StopBtn.disabled = false;
             }
         };
 
@@ -1651,6 +1847,26 @@ export const optionsMethods = {
             });
         }
 
+        if (aria2StopBtn) {
+            aria2StopBtn.addEventListener('click', () => {
+                if (aria2StopBtn.dataset.action === 'start') {
+                    startAria2();
+                } else {
+                    stopAria2();
+                }
+            });
+        }
+
+        if (aria2cPathInput) {
+            aria2cPathInput.addEventListener('input', () => {
+                renderAria2Summary({
+                    backend: downloadBackendInput?.value || tokens.download_backend,
+                    configured_path: aria2cPathInput.value
+                });
+                setAria2Status('');
+            });
+        }
+
         if (downloadBackendInput) {
             downloadBackendInput.addEventListener('change', () => {
                 const backend = this.normalizeDownloadBackend(downloadBackendInput.value);
@@ -1774,6 +1990,7 @@ export const optionsMethods = {
                     auto_refresh_comfy_models_after_apply: Boolean(autoRefreshComfyModelsInput?.checked),
                     download_backend:              downloadBackend,
                     aria2c_path:                    aria2cPathInput?.value?.trim() || '',
+                    aria2_auto_stop_daemon:          Boolean(aria2AutoStopInput?.checked),
                     download_path_mode:            downloadPathMode,
                     download_path_templates:       downloadPathTemplates,
                     base_model_path_mappings:      baseModelPathMappings,
@@ -1801,6 +2018,7 @@ export const optionsMethods = {
                 localStorage.setItem('ModelResolver.autoRefreshComfyModelsAfterApply', newSettings.auto_refresh_comfy_models_after_apply ? 'true' : 'false');
                 localStorage.setItem('ModelResolver.downloadBackend',        newSettings.download_backend);
                 localStorage.setItem('ModelResolver.aria2cPath',             newSettings.aria2c_path);
+                localStorage.setItem('ModelResolver.aria2AutoStopDaemon',    newSettings.aria2_auto_stop_daemon ? 'true' : 'false');
                 localStorage.setItem('ModelResolver.downloadPathMode',       newSettings.download_path_mode);
                 localStorage.setItem('ModelResolver.downloadPathTemplates',  JSON.stringify(newSettings.download_path_templates));
                 localStorage.setItem('ModelResolver.baseModelPathMappings',  JSON.stringify(newSettings.base_model_path_mappings));
@@ -1885,6 +2103,7 @@ export const optionsMethods = {
             search_source_enabled,
             download_backend: this.normalizeDownloadBackend(localStorage.getItem('ModelResolver.downloadBackend') || 'python'),
             aria2c_path: localStorage.getItem('ModelResolver.aria2cPath') || '',
+            aria2_auto_stop_daemon: localStorage.getItem('ModelResolver.aria2AutoStopDaemon') !== 'false',
             download_path_mode: this.getDownloadPathMode(),
             download_path_templates: this.getDownloadPathTemplates(),
             base_model_path_mappings: this.getBaseModelPathMappings(),
@@ -1944,6 +2163,8 @@ export const optionsMethods = {
                 localStorage.setItem('ModelResolver.downloadBackend',        this.normalizeDownloadBackend(data.download_backend));
             if (data.aria2c_path !== undefined)
                 localStorage.setItem('ModelResolver.aria2cPath',             String(data.aria2c_path || ''));
+            if (data.aria2_auto_stop_daemon !== undefined)
+                localStorage.setItem('ModelResolver.aria2AutoStopDaemon',    data.aria2_auto_stop_daemon ? 'true' : 'false');
             if (data.download_path_mode !== undefined)
                 localStorage.setItem('ModelResolver.downloadPathMode',       this.normalizeDownloadPathMode(data.download_path_mode));
             if (data.download_path_templates !== undefined)

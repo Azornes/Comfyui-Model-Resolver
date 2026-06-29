@@ -6211,6 +6211,30 @@ a.mr-image-preview-resource-name:hover {
     text-align: right;
 }
 
+.mr-options-db-row strong.is-pending {
+    color: var(--mr-text-secondary);
+}
+
+.mr-options-db-row strong.is-valid {
+    color: var(--mr-color-success);
+}
+
+.mr-options-db-row strong.is-invalid {
+    color: var(--mr-color-error-light);
+}
+
+.mr-options-aria2-summary .mr-options-db-row {
+    align-items: flex-start;
+}
+
+.mr-options-aria2-daemon-cell {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    min-width: 0;
+}
+
 .mr-options-db-message {
     margin-top: 10px;
     color: var(--mr-text-secondary);
@@ -6738,6 +6762,10 @@ a.mr-image-preview-resource-name:hover {
 
 .mr-options-toggle-row:hover {
     background: transparent;
+}
+
+.mr-options-compact-toggle-row {
+    padding: 10px 0;
 }
 
 .mr-options-toggle-copy {

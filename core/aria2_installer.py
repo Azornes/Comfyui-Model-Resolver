@@ -32,6 +32,20 @@ def _safe_name(value: Any) -> str:
     return safe.strip("._") or "aria2"
 
 
+def _normalize_version(value: Any) -> str:
+    text = str(value or "").strip()
+    lower = text.lower()
+    if lower.startswith("release-"):
+        text = text[len("release-"):]
+    elif lower.startswith("v") and len(text) > 1 and text[1].isdigit():
+        text = text[1:]
+    return _safe_name(text or "latest")
+
+
+def _canonical_install_dir(version: Any) -> Path:
+    return ARIA2_INSTALL_ROOT / _normalize_version(version)
+
+
 def _machine_bits(machine: str) -> str:
     machine = str(machine or "").lower()
     if machine in {"amd64", "x86_64", "x64", "arm64", "aarch64"}:
@@ -241,7 +255,19 @@ def _find_existing_install(exe_name: str) -> Optional[Path]:
             candidates.append(path)
     if not candidates:
         return None
-    candidates.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+
+    def candidate_key(path: Path) -> tuple:
+        try:
+            relative_depth = len(path.relative_to(ARIA2_INSTALL_ROOT).parts)
+        except ValueError:
+            relative_depth = 999
+        try:
+            modified = path.stat().st_mtime
+        except OSError:
+            modified = 0
+        return (1 if relative_depth <= 2 else 0, modified)
+
+    candidates.sort(key=candidate_key, reverse=True)
     return candidates[0]
 
 
@@ -253,10 +279,67 @@ def _existing_install_metadata(executable: Path) -> Dict[str, str]:
         parts = ()
 
     return {
-        "version": parts[0] if parts else "",
-        "asset": parts[1] if len(parts) > 1 else "",
+        "version": _normalize_version(parts[0] if parts else ""),
+        "asset": parts[1] if len(parts) > 2 else "",
         "install_dir": str(executable.parent),
     }
+
+
+def _copy_directory_contents(source: Path, destination: Path) -> None:
+    source_abs = source.resolve()
+    destination_abs = destination.resolve()
+    if source_abs == destination_abs:
+        return
+    _assert_within_install_root(destination_abs)
+    destination_abs.mkdir(parents=True, exist_ok=True)
+    for child in source_abs.iterdir():
+        target = destination_abs / child.name
+        _assert_within_install_root(target)
+        if child.is_dir():
+            if target.exists() and not target.is_dir():
+                target.unlink()
+            shutil.copytree(child, target, dirs_exist_ok=True)
+        else:
+            if target.exists() and target.is_dir():
+                shutil.rmtree(target)
+            shutil.copy2(child, target)
+
+
+def _cleanup_legacy_install_dirs() -> None:
+    if not ARIA2_INSTALL_ROOT.exists():
+        return
+    for child in ARIA2_INSTALL_ROOT.iterdir():
+        if not child.is_dir() or not child.name.lower().startswith("release-"):
+            continue
+        _assert_within_install_root(child)
+        shutil.rmtree(child, ignore_errors=True)
+
+
+def _migrate_existing_install(executable: Path, exe_name: str) -> Path:
+    metadata = _existing_install_metadata(executable)
+    version = metadata.get("version") or "latest"
+    canonical_dir = _canonical_install_dir(version)
+    canonical_executable = canonical_dir / exe_name
+    try:
+        if executable.resolve() == canonical_executable.resolve():
+            return executable
+    except OSError:
+        pass
+
+    _assert_within_install_root(canonical_dir)
+    if canonical_dir.exists():
+        _assert_within_install_root(canonical_dir)
+        shutil.rmtree(canonical_dir)
+    canonical_dir.mkdir(parents=True, exist_ok=True)
+    _copy_directory_contents(executable.parent, canonical_dir)
+
+    migrated_executable = _find_executable(canonical_dir, exe_name)
+    if not migrated_executable:
+        raise Aria2InstallError(
+            f"Could not migrate existing aria2 install to {canonical_dir}."
+        )
+    _cleanup_legacy_install_dirs()
+    return migrated_executable
 
 
 def _download_file(url: str, destination: Path) -> int:
@@ -295,6 +378,8 @@ def install_aria2_engine(force: bool = False) -> Dict[str, Any]:
     if not force:
         existing_executable = _find_existing_install(tokens["exe_name"])
         if existing_executable and existing_executable.exists():
+            existing_executable = _migrate_existing_install(existing_executable, tokens["exe_name"])
+            _cleanup_legacy_install_dirs()
             _chmod_executable(existing_executable)
             existing_metadata = _existing_install_metadata(existing_executable)
             return {
@@ -310,12 +395,13 @@ def install_aria2_engine(force: bool = False) -> Dict[str, Any]:
     release = _fetch_latest_release()
     asset = _select_release_asset(release, tokens)
     tag_name = str(release.get("tag_name") or "latest").strip() or "latest"
+    version = _normalize_version(tag_name)
     asset_name = _asset_name(asset)
     asset_url = _asset_url(asset)
     if not asset_url:
         raise Aria2InstallError(f"aria2 release asset {asset_name or '<unknown>'} has no download URL.")
 
-    install_dir = ARIA2_INSTALL_ROOT / _safe_name(tag_name) / _safe_name(Path(asset_name).stem)
+    install_dir = _canonical_install_dir(version)
     _assert_within_install_root(install_dir)
     existing_executable = _find_executable(install_dir, tokens["exe_name"])
     if existing_executable and existing_executable.exists() and not force:
@@ -324,7 +410,7 @@ def install_aria2_engine(force: bool = False) -> Dict[str, Any]:
             "success": True,
             "already_installed": True,
             "aria2c_path": str(existing_executable),
-            "version": tag_name,
+            "version": version,
             "asset": asset_name,
             "platform": tokens["label"],
             "install_dir": str(install_dir),
@@ -336,13 +422,21 @@ def install_aria2_engine(force: bool = False) -> Dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="model-resolver-aria2-") as tmp_dir_text:
         tmp_dir = Path(tmp_dir_text)
         archive_path = tmp_dir / asset_name
+        extract_dir = tmp_dir / "extract"
         downloaded_bytes = _download_file(asset_url, archive_path)
+        extract_dir.mkdir(parents=True, exist_ok=True)
+        _extract_archive(archive_path, extract_dir)
+        extracted_executable = _find_executable(extract_dir, tokens["exe_name"])
+        if not extracted_executable:
+            raise Aria2InstallError(
+                f"Installed aria2 archive did not contain {tokens['exe_name']}."
+            )
 
         if install_dir.exists():
             _assert_within_install_root(install_dir)
             shutil.rmtree(install_dir)
         install_dir.mkdir(parents=True, exist_ok=True)
-        _extract_archive(archive_path, install_dir)
+        _copy_directory_contents(extracted_executable.parent, install_dir)
 
     executable = _find_executable(install_dir, tokens["exe_name"])
     if not executable:
@@ -350,12 +444,13 @@ def install_aria2_engine(force: bool = False) -> Dict[str, Any]:
             f"Installed aria2 archive did not contain {tokens['exe_name']}."
         )
     _chmod_executable(executable)
+    _cleanup_legacy_install_dirs()
 
     return {
         "success": True,
         "already_installed": False,
         "aria2c_path": str(executable),
-        "version": tag_name,
+        "version": version,
         "asset": asset_name,
         "platform": tokens["label"],
         "install_dir": str(install_dir),

@@ -165,6 +165,9 @@ def normalize_settings(settings: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
     data = dict(settings or {})
     data["download_backend"] = normalize_download_backend(data.get("download_backend"))
     data["aria2c_path"] = str(data.get("aria2c_path") or "").strip()
+    data["aria2_auto_stop_daemon"] = bool_setting(
+        data.get("aria2_auto_stop_daemon"), True
+    )
     data["auto_refresh_comfy_models_after_apply"] = bool_setting(
         data.get("auto_refresh_comfy_models_after_apply"), True
     )

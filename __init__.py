@@ -134,6 +134,8 @@ class ModelResolverExtension:
                     pause_download,
                     resume_download,
                     get_aria2_status,
+                    start_aria2_daemon,
+                    stop_aria2_daemon,
                     get_download_directory,
                     get_metadata_sidecar_path,
                     normalize_download_category,
@@ -3539,6 +3541,31 @@ class ModelResolverExtension:
                         settings = dict(settings)
                         settings["aria2c_path"] = payload.get("aria2c_path", "")
                     return web.json_response(await asyncio.to_thread(get_aria2_status, settings))
+
+                @routes.post("/model_resolver/aria2/start")
+                @json_api_endpoint("aria2 start", return_success_on_error=True)
+                async def aria2_start_route(request):
+                    """Start the aria2 daemon without starting a download."""
+                    try:
+                        payload = await request.json()
+                    except Exception:
+                        payload = {}
+                    settings = await asyncio.to_thread(load_resolver_settings)
+                    if isinstance(payload, dict) and "aria2c_path" in payload:
+                        settings = dict(settings)
+                        settings["aria2c_path"] = payload.get("aria2c_path", "")
+                    result = await asyncio.to_thread(start_aria2_daemon, settings)
+                    status = 200 if result.get("success") else 400
+                    return web.json_response(result, status=status)
+
+                @routes.get("/model_resolver/aria2/stop")
+                @routes.post("/model_resolver/aria2/stop")
+                @json_api_endpoint("aria2 stop", return_success_on_error=True)
+                async def aria2_stop_route(request):
+                    """Stop the aria2 daemon started by Model Resolver."""
+                    result = await asyncio.to_thread(stop_aria2_daemon)
+                    status = 200 if result.get("success") else 400
+                    return web.json_response(result, status=status)
 
                 @routes.post("/model_resolver/aria2/install")
                 @json_api_endpoint("aria2 install")
