@@ -1,4 +1,4 @@
-﻿.model-resolver-backdrop {
+.model-resolver-backdrop {
     position: fixed;
     inset: 0;
     background: transparent;
@@ -594,60 +594,6 @@
     -webkit-backdrop-filter: blur(8px);
 }
 
-.mr-notification {
-    position: fixed;
-    top: 0;
-    left: 50%;
-    display: flex;
-    align-items: center;
-    gap: var(--mr-spacing-12);
-    min-width: 300px;
-    max-width: 600px;
-    padding: var(--mr-spacing-12) var(--mr-spacing-24);
-    color: #fff;
-    font-size: var(--mr-font-lg);
-    font-weight: 500;
-    text-align: center;
-    transform: translateX(-50%);
-    border-radius: 0 0 var(--mr-ui-radius-sm) var(--mr-ui-radius-sm);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-    z-index: var(--mr-z-notification);
-    animation: mr-slide-down 0.3s ease;
-}
-
-.mr-notification--success {
-    background: #28a745;
-}
-
-.mr-notification--error {
-    background: #dc3545;
-}
-
-.mr-notification--info {
-    background: #007acc;
-}
-
-.mr-notification-icon {
-    font-size: var(--mr-font-2xl);
-    font-weight: 700;
-}
-
-.mr-notification-close {
-    width: var(--mr-spacing-24);
-    height: var(--mr-spacing-24);
-    margin-left: auto;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    opacity: 0.8;
-    color: #fff;
-    font-size: var(--mr-font-3xl);
-    cursor: pointer;
-    background: none;
-    border: none;
-    border-radius: var(--mr-radius-md);
-}
 
 .mr-popup-auto-resolve-btn,
 .model-resolver-floating-button {

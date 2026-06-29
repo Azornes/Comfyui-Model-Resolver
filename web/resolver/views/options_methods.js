@@ -1000,7 +1000,7 @@ export const optionsMethods = {
                 try {
                     const errData = await response.json();
                     if (errData?.error) errorMsg = errData.error;
-                } catch (_) {}
+                } catch (_) { }
                 const error = new Error(errorMsg);
                 error.status = response.status;
                 throw error;
@@ -1976,63 +1976,63 @@ export const optionsMethods = {
                 });
 
                 const newSettings = {
-                    civitai_key:                 civitaiInput?.value || '',
-                    civitai_session_token:        civitaiSessionInput?.value || '',
-                    civitai_use_trpc_search:      Boolean(civitaiUseTrpcSearchInput?.checked),
-                    civitai_use_html_fallback:    Boolean(civitaiUseHtmlFallbackInput?.checked),
-                    civitai_candidate_limit:      civitaiCandidateLimit,
-                    hf_token:                     hfInput?.value || '',
-                    hf_use_api_search:            Boolean(hfUseApiSearchInput?.checked),
-                    hf_use_comfy_org_fallback:    Boolean(hfUseComfyOrgFallbackInput?.checked),
-                    hf_use_brave_fallback:        Boolean(hfUseBraveFallbackInput?.checked),
-                    auto_fill_base_model:          Boolean(autoFillBaseModelInput?.checked),
-                    auto_fill_subfolder:           Boolean(autoFillSubfolderInput?.checked),
+                    civitai_key: civitaiInput?.value || '',
+                    civitai_session_token: civitaiSessionInput?.value || '',
+                    civitai_use_trpc_search: Boolean(civitaiUseTrpcSearchInput?.checked),
+                    civitai_use_html_fallback: Boolean(civitaiUseHtmlFallbackInput?.checked),
+                    civitai_candidate_limit: civitaiCandidateLimit,
+                    hf_token: hfInput?.value || '',
+                    hf_use_api_search: Boolean(hfUseApiSearchInput?.checked),
+                    hf_use_comfy_org_fallback: Boolean(hfUseComfyOrgFallbackInput?.checked),
+                    hf_use_brave_fallback: Boolean(hfUseBraveFallbackInput?.checked),
+                    auto_fill_base_model: Boolean(autoFillBaseModelInput?.checked),
+                    auto_fill_subfolder: Boolean(autoFillSubfolderInput?.checked),
                     auto_refresh_comfy_models_after_apply: Boolean(autoRefreshComfyModelsInput?.checked),
-                    download_backend:              downloadBackend,
-                    aria2c_path:                    aria2cPathInput?.value?.trim() || '',
-                    aria2_auto_stop_daemon:          Boolean(aria2AutoStopInput?.checked),
-                    download_path_mode:            downloadPathMode,
-                    download_path_templates:       downloadPathTemplates,
-                    base_model_path_mappings:      baseModelPathMappings,
+                    download_backend: downloadBackend,
+                    aria2c_path: aria2cPathInput?.value?.trim() || '',
+                    aria2_auto_stop_daemon: Boolean(aria2AutoStopInput?.checked),
+                    download_path_mode: downloadPathMode,
+                    download_path_templates: downloadPathTemplates,
+                    base_model_path_mappings: baseModelPathMappings,
                     ...defaultRootSettings,
-                    frontend_logs_enabled:         Boolean(frontendLogsEnabledInput?.checked),
-                    backend_logs_enabled:          Boolean(backendLogsEnabledInput?.checked),
-                    frontend_log_level:            normalizeLogLevel(frontendLogLevelInput?.value || tokens.frontend_log_level),
-                    backend_log_level:             normalizeLogLevel(backendLogLevelInput?.value || tokens.backend_log_level),
-                    brave_search_api_key:         braveInput?.value || '',
-                    search_source_enabled:        sourceEnabled,
+                    frontend_logs_enabled: Boolean(frontendLogsEnabledInput?.checked),
+                    backend_logs_enabled: Boolean(backendLogsEnabledInput?.checked),
+                    frontend_log_level: normalizeLogLevel(frontendLogLevelInput?.value || tokens.frontend_log_level),
+                    backend_log_level: normalizeLogLevel(backendLogLevelInput?.value || tokens.backend_log_level),
+                    brave_search_api_key: braveInput?.value || '',
+                    search_source_enabled: sourceEnabled,
                 };
 
                 // 1. Write to localStorage (fast local cache)
-                localStorage.setItem('ModelResolver.civitaiApiKey',          newSettings.civitai_key);
-                localStorage.setItem('ModelResolver.civitaiSessionToken',    newSettings.civitai_session_token);
-                localStorage.setItem('ModelResolver.civitaiUseTrpcSearch',   newSettings.civitai_use_trpc_search ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.civitaiApiKey', newSettings.civitai_key);
+                localStorage.setItem('ModelResolver.civitaiSessionToken', newSettings.civitai_session_token);
+                localStorage.setItem('ModelResolver.civitaiUseTrpcSearch', newSettings.civitai_use_trpc_search ? 'true' : 'false');
                 localStorage.setItem('ModelResolver.civitaiUseHtmlFallback', newSettings.civitai_use_html_fallback ? 'true' : 'false');
-                localStorage.setItem('ModelResolver.huggingFaceToken',       newSettings.hf_token);
-                localStorage.setItem('ModelResolver.braveSearchApiKey',      newSettings.brave_search_api_key);
-                localStorage.setItem('ModelResolver.hfUseApiSearch',         newSettings.hf_use_api_search ? 'true' : 'false');
-                localStorage.setItem('ModelResolver.hfUseComfyOrgFallback',  newSettings.hf_use_comfy_org_fallback ? 'true' : 'false');
-                localStorage.setItem('ModelResolver.hfUseBraveFallback',     newSettings.hf_use_brave_fallback ? 'true' : 'false');
-                localStorage.setItem('ModelResolver.autoFillBaseModel',      newSettings.auto_fill_base_model ? 'true' : 'false');
-                localStorage.setItem('ModelResolver.autoFillSubfolder',      newSettings.auto_fill_subfolder ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.huggingFaceToken', newSettings.hf_token);
+                localStorage.setItem('ModelResolver.braveSearchApiKey', newSettings.brave_search_api_key);
+                localStorage.setItem('ModelResolver.hfUseApiSearch', newSettings.hf_use_api_search ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.hfUseComfyOrgFallback', newSettings.hf_use_comfy_org_fallback ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.hfUseBraveFallback', newSettings.hf_use_brave_fallback ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.autoFillBaseModel', newSettings.auto_fill_base_model ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.autoFillSubfolder', newSettings.auto_fill_subfolder ? 'true' : 'false');
                 localStorage.setItem('ModelResolver.autoRefreshComfyModelsAfterApply', newSettings.auto_refresh_comfy_models_after_apply ? 'true' : 'false');
-                localStorage.setItem('ModelResolver.downloadBackend',        newSettings.download_backend);
-                localStorage.setItem('ModelResolver.aria2cPath',             newSettings.aria2c_path);
-                localStorage.setItem('ModelResolver.aria2AutoStopDaemon',    newSettings.aria2_auto_stop_daemon ? 'true' : 'false');
-                localStorage.setItem('ModelResolver.downloadPathMode',       newSettings.download_path_mode);
-                localStorage.setItem('ModelResolver.downloadPathTemplates',  JSON.stringify(newSettings.download_path_templates));
-                localStorage.setItem('ModelResolver.baseModelPathMappings',  JSON.stringify(newSettings.base_model_path_mappings));
+                localStorage.setItem('ModelResolver.downloadBackend', newSettings.download_backend);
+                localStorage.setItem('ModelResolver.aria2cPath', newSettings.aria2c_path);
+                localStorage.setItem('ModelResolver.aria2AutoStopDaemon', newSettings.aria2_auto_stop_daemon ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.downloadPathMode', newSettings.download_path_mode);
+                localStorage.setItem('ModelResolver.downloadPathTemplates', JSON.stringify(newSettings.download_path_templates));
+                localStorage.setItem('ModelResolver.baseModelPathMappings', JSON.stringify(newSettings.base_model_path_mappings));
                 defaultRootSelectInputs.forEach((select) => {
                     const storageKey = select.dataset.storageKey;
                     if (storageKey) {
                         localStorage.setItem(storageKey, select.value || '');
                     }
                 });
-                localStorage.setItem('ModelResolver.frontendLogsEnabled',    newSettings.frontend_logs_enabled ? 'true' : 'false');
-                localStorage.setItem('ModelResolver.backendLogsEnabled',     newSettings.backend_logs_enabled ? 'true' : 'false');
-                localStorage.setItem('ModelResolver.frontendLogLevel',       newSettings.frontend_log_level);
-                localStorage.setItem('ModelResolver.backendLogLevel',        newSettings.backend_log_level);
-                localStorage.setItem('ModelResolver.civitaiCandidateLimit',  `${civitaiCandidateLimit}`);
+                localStorage.setItem('ModelResolver.frontendLogsEnabled', newSettings.frontend_logs_enabled ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.backendLogsEnabled', newSettings.backend_logs_enabled ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.frontendLogLevel', newSettings.frontend_log_level);
+                localStorage.setItem('ModelResolver.backendLogLevel', newSettings.backend_log_level);
+                localStorage.setItem('ModelResolver.civitaiCandidateLimit', `${civitaiCandidateLimit}`);
                 Object.entries(sourceEnabled).forEach(([key, val]) => {
                     localStorage.setItem(key, val ? 'true' : 'false');
                 });
@@ -2138,54 +2138,54 @@ export const optionsMethods = {
                 }
             };
 
-            sync('ModelResolver.civitaiApiKey',          data.civitai_key);
-            sync('ModelResolver.civitaiSessionToken',    data.civitai_session_token);
-            sync('ModelResolver.huggingFaceToken',       data.hf_token);
-            sync('ModelResolver.braveSearchApiKey',      data.brave_search_api_key);
+            sync('ModelResolver.civitaiApiKey', data.civitai_key);
+            sync('ModelResolver.civitaiSessionToken', data.civitai_session_token);
+            sync('ModelResolver.huggingFaceToken', data.hf_token);
+            sync('ModelResolver.braveSearchApiKey', data.brave_search_api_key);
 
             if (data.civitai_use_trpc_search !== undefined)
-                localStorage.setItem('ModelResolver.civitaiUseTrpcSearch',   data.civitai_use_trpc_search ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.civitaiUseTrpcSearch', data.civitai_use_trpc_search ? 'true' : 'false');
             if (data.civitai_use_html_fallback !== undefined)
                 localStorage.setItem('ModelResolver.civitaiUseHtmlFallback', data.civitai_use_html_fallback ? 'true' : 'false');
             if (data.hf_use_api_search !== undefined)
-                localStorage.setItem('ModelResolver.hfUseApiSearch',         data.hf_use_api_search ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.hfUseApiSearch', data.hf_use_api_search ? 'true' : 'false');
             if (data.hf_use_comfy_org_fallback !== undefined)
-                localStorage.setItem('ModelResolver.hfUseComfyOrgFallback',  data.hf_use_comfy_org_fallback ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.hfUseComfyOrgFallback', data.hf_use_comfy_org_fallback ? 'true' : 'false');
             if (data.hf_use_brave_fallback !== undefined)
-                localStorage.setItem('ModelResolver.hfUseBraveFallback',     data.hf_use_brave_fallback ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.hfUseBraveFallback', data.hf_use_brave_fallback ? 'true' : 'false');
             if (data.auto_fill_base_model !== undefined)
-                localStorage.setItem('ModelResolver.autoFillBaseModel',      data.auto_fill_base_model ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.autoFillBaseModel', data.auto_fill_base_model ? 'true' : 'false');
             if (data.auto_fill_subfolder !== undefined)
-                localStorage.setItem('ModelResolver.autoFillSubfolder',      data.auto_fill_subfolder ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.autoFillSubfolder', data.auto_fill_subfolder ? 'true' : 'false');
             if (data.auto_refresh_comfy_models_after_apply !== undefined)
                 localStorage.setItem('ModelResolver.autoRefreshComfyModelsAfterApply', data.auto_refresh_comfy_models_after_apply ? 'true' : 'false');
             if (data.download_backend !== undefined)
-                localStorage.setItem('ModelResolver.downloadBackend',        this.normalizeDownloadBackend(data.download_backend));
+                localStorage.setItem('ModelResolver.downloadBackend', this.normalizeDownloadBackend(data.download_backend));
             if (data.aria2c_path !== undefined)
-                localStorage.setItem('ModelResolver.aria2cPath',             String(data.aria2c_path || ''));
+                localStorage.setItem('ModelResolver.aria2cPath', String(data.aria2c_path || ''));
             if (data.aria2_auto_stop_daemon !== undefined)
-                localStorage.setItem('ModelResolver.aria2AutoStopDaemon',    data.aria2_auto_stop_daemon ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.aria2AutoStopDaemon', data.aria2_auto_stop_daemon ? 'true' : 'false');
             if (data.download_path_mode !== undefined)
-                localStorage.setItem('ModelResolver.downloadPathMode',       this.normalizeDownloadPathMode(data.download_path_mode));
+                localStorage.setItem('ModelResolver.downloadPathMode', this.normalizeDownloadPathMode(data.download_path_mode));
             if (data.download_path_templates !== undefined)
-                localStorage.setItem('ModelResolver.downloadPathTemplates',  JSON.stringify(data.download_path_templates || {}));
+                localStorage.setItem('ModelResolver.downloadPathTemplates', JSON.stringify(data.download_path_templates || {}));
             if (data.base_model_path_mappings !== undefined)
-                localStorage.setItem('ModelResolver.baseModelPathMappings',  JSON.stringify(data.base_model_path_mappings || {}));
+                localStorage.setItem('ModelResolver.baseModelPathMappings', JSON.stringify(data.base_model_path_mappings || {}));
             this.getDefaultRootCategoryDefinitions().forEach((item) => {
                 if (data[item.settingKey] !== undefined) {
                     localStorage.setItem(item.storageKey, String(data[item.settingKey] || ''));
                 }
             });
             if (data.civitai_candidate_limit !== undefined)
-                localStorage.setItem('ModelResolver.civitaiCandidateLimit',  `${data.civitai_candidate_limit}`);
+                localStorage.setItem('ModelResolver.civitaiCandidateLimit', `${data.civitai_candidate_limit}`);
             if (data.frontend_logs_enabled !== undefined)
-                localStorage.setItem('ModelResolver.frontendLogsEnabled',    data.frontend_logs_enabled ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.frontendLogsEnabled', data.frontend_logs_enabled ? 'true' : 'false');
             if (data.backend_logs_enabled !== undefined)
-                localStorage.setItem('ModelResolver.backendLogsEnabled',     data.backend_logs_enabled ? 'true' : 'false');
+                localStorage.setItem('ModelResolver.backendLogsEnabled', data.backend_logs_enabled ? 'true' : 'false');
             if (data.frontend_log_level !== undefined)
-                localStorage.setItem('ModelResolver.frontendLogLevel',       String(data.frontend_log_level || 'DEBUG').toUpperCase());
+                localStorage.setItem('ModelResolver.frontendLogLevel', String(data.frontend_log_level || 'DEBUG').toUpperCase());
             if (data.backend_log_level !== undefined)
-                localStorage.setItem('ModelResolver.backendLogLevel',        String(data.backend_log_level || 'DEBUG').toUpperCase());
+                localStorage.setItem('ModelResolver.backendLogLevel', String(data.backend_log_level || 'DEBUG').toUpperCase());
 
             // Source-enabled flags stored as a nested object
             if (data.search_source_enabled && typeof data.search_source_enabled === 'object') {

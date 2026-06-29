@@ -5,6 +5,7 @@ import { createModuleLogger } from "../log_system/log_funcs.js";
 import { logger as frontendLogger } from "../log_system/logger.js";
 import { loadStylesWhenNeeded } from "../utils/css_loader.js";
 import { ResolverManagerDialog } from "./resolver_dialog.js";
+import { showNotification } from "../utils/notification_utils.js";
 
 const log = createModuleLogger('model_resolver');
 
@@ -747,7 +748,7 @@ export class ModelResolver {
             await showPromise;
         } catch (error) {
             console.error("🔗 Model Resolver: Error creating/showing dialog:", error);
-            alert("Error opening Model Resolver: " + error.message);
+            showNotification("Error opening Model Resolver: " + error.message, "error");
         }
     }
 }

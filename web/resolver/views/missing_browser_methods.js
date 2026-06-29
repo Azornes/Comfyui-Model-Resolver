@@ -3,6 +3,8 @@ import { api } from "../../../../../scripts/api.js";
 import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
 import { createFloatingTreePicker } from "../utils/tree_picker.js";
+import { showNotification as showNotificationUtils } from "../../utils/notification_utils.js";
+
 export const missingBrowserMethods = {
     getMissingFilename(missing = {}) {
         return missing.original_path?.split('/').pop()?.split('\\').pop() || missing.name || 'Missing model';
@@ -1797,72 +1799,8 @@ export const missingBrowserMethods = {
      * Show a notification banner (similar to ComfyUI's "Reconnecting" banner)
      */
     showNotification(message, type = 'success', options = {}) {
-        // Build children array, filtering out nulls
-        const children = [];
-        const contextMenuModel = options?.contextMenuModel || null;
-        const notificationProps = {
-            className: `mr-notification mr-notification--${type}${contextMenuModel ? ' mr-download-folder-context' : ''}`
-        };
-
-        if (contextMenuModel) {
-            Object.assign(notificationProps, this.getContextMenuProps?.(contextMenuModel) || {});
-        }
-
-        if (type === 'success') {
-            children.push($el("span", {
-                textContent: "✓",
-                className: "mr-notification-icon"
-            }));
-        } else if (type === 'error') {
-            children.push($el("span", {
-                textContent: "×",
-                className: "mr-notification-icon"
-            }));
-        } else if (type === 'info') {
-            children.push($el("span", {
-                textContent: "ℹ",
-                className: "mr-notification-icon"
-            }));
-        }
-
-        // Create notification banner
-        const notification = $el("div", notificationProps, [
-            ...children,
-            $el("span", {
-                textContent: message
-            }),
-            $el("button", {
-                className: "mr-notification-close",
-                textContent: "×",
-                onclick: () => {
-                    if (notification.parentNode) {
-                        notification.style.opacity = "0";
-                        notification.style.transform = "translateX(-50%) translateY(-100%)";
-                        setTimeout(() => {
-                            if (notification.parentNode) {
-                                notification.parentNode.removeChild(notification);
-                            }
-                        }, 300);
-                    }
-                }
-            })
-        ]);
-
-        document.body.appendChild(notification);
-
-        // Auto-dismiss after 4 seconds for success, 6 seconds for errors
-        const dismissTime = type === 'success' ? 4000 : 6000;
-        setTimeout(() => {
-            if (notification.parentNode) {
-                notification.style.opacity = "0";
-                notification.style.transform = "translateX(-50%) translateY(-100%)";
-                setTimeout(() => {
-                    if (notification.parentNode) {
-                        notification.parentNode.removeChild(notification);
-                    }
-                }, 300);
-            }
-        }, dismissTime);
+        const duration = type === 'success' ? 4000 : (type === 'error' ? 6000 : 3000);
+        showNotificationUtils(message, type, duration, false, options);
     },
 
     refreshMissingListRow(missing, options = {}) {
