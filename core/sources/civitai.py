@@ -30,13 +30,9 @@ from ..type_utils import (
 )
 from ..progress import report_progress
 from ..path_utils import calculate_file_sha256
-from ..log_system.log_funcs import (
-    log_debug,
-    log_info,
-    log_warn,
-    log_error,
-    log_exception,
-)
+from ..log_system.log_funcs import create_module_logger
+log = create_module_logger(__name__)
+
 
 CIVITAI_API_URL = "https://civitai.com/api/v1"
 
@@ -198,7 +194,7 @@ def _find_model_title_match_in_model(
     model_name = model_data.get("name", "")
     title_confidence = calculate_model_title_confidence(title_query, model_name)
     if title_confidence < MODEL_TITLE_MATCH_THRESHOLD:
-        log_debug(
+        log.debug(
             f"CivitAI title candidate rejected: model_id={model_id}, query={title_query}, model_name={model_name}, confidence={title_confidence}"
         )
         return None
@@ -218,7 +214,7 @@ def _find_model_title_match_in_model(
             if _base_model_matches(version.get("baseModel"), base_model_context)
         ]
         if not versions:
-            log_debug(
+            log.debug(
                 f"CivitAI title candidate rejected by base model: model_id={model_id}, base={base_model_context}"
             )
             return None
@@ -242,7 +238,7 @@ def _find_model_title_match_in_model(
         result["confidence"] = title_confidence
         result["title_confidence"] = title_confidence
         result["version_name"] = version.get("name", "")
-        log_info(
+        log.info(
             f"CivitAI model-title match: query={title_query}, model_id={model_id}, model_name={model_name}, version_id={result.get('version_id')}, filename={result.get('filename')}, confidence={title_confidence}, base={result.get('base_model')}"
         )
         return result
@@ -265,7 +261,7 @@ def _find_matching_file_in_versions(
     for version in versions:
         version_id = version.get("id")
         files = version.get("files", [])
-        log_debug(
+        log.debug(
             f"CivitAI checking version_id={version_id} with {len(files)} files"
         )
 
@@ -434,18 +430,18 @@ def _search_civitai_trpc_candidates(
     if session_token:
         headers["Cookie"] = f"__Secure-civitai-token={session_token}"
 
-    log_info(
+    log.info(
         f"CivitAI tRPC search start: filename={filename}, model_type={model_type}, session_token={'yes' if session_token else 'no'}, url={url}"
     )
 
     try:
         response = requests.get(url, headers=headers, timeout=timeout)
     except Exception as e:
-        log_warn(f"CivitAI tRPC request failed for filename={filename}: {e}")
+        log.warn(f"CivitAI tRPC request failed for filename={filename}: {e}")
         return []
 
     text_preview = response.text[:800].replace("\n", " ").replace("\r", " ")
-    log_info(
+    log.info(
         f"CivitAI tRPC response: status={response.status_code}, content_type={response.headers.get('content-type')}, text_preview={text_preview}"
     )
 
@@ -455,11 +451,11 @@ def _search_civitai_trpc_candidates(
     try:
         payload = response.json()
     except Exception as e:
-        log_warn(f"CivitAI tRPC JSON parse failed for filename={filename}: {e}")
+        log.warn(f"CivitAI tRPC JSON parse failed for filename={filename}: {e}")
         return []
 
     candidates = _extract_trpc_model_candidates(payload, limit=limit)
-    log_info(
+    log.info(
         f"CivitAI tRPC extracted {len(candidates)} candidates for filename={filename}: {candidates}"
     )
     return candidates
@@ -470,17 +466,17 @@ def _search_civitai_red_candidates(
 ) -> List[Dict[str, int]]:
     """Search civitai.red by full filename and return model/version candidates."""
     search_url = f"https://civitai.red/models?query={quote(filename)}"
-    log_info(f"CivitAI.red search start: filename={filename}, url={search_url}")
+    log.info(f"CivitAI.red search start: filename={filename}, url={search_url}")
 
     response = requests.get(search_url, timeout=timeout)
     if response.status_code != 200:
-        log_warn(
+        log.warn(
             f"CivitAI.red search returned {response.status_code} for filename={filename}"
         )
         return []
 
     candidates = _extract_civitai_red_candidates(response.text, limit=limit)
-    log_info(
+    log.info(
         f"CivitAI.red search extracted {len(candidates)} candidates for filename={filename}"
     )
     return candidates
@@ -539,7 +535,7 @@ def _find_civitai_file_in_model(
     def resolved_version_matches(resolved: Dict[str, Any]) -> bool:
         expected_filename = str(resolved.get("expected_filename", "")).lower()
         expected_base = os.path.splitext(expected_filename)[0]
-        log_debug(
+        log.debug(
             f"CivitAI resolved version filename check: expected_filename={resolved.get('expected_filename')}, target_filename={filename}"
         )
         if expected_filename == filename_lower:
@@ -569,7 +565,7 @@ def _find_civitai_file_in_model(
         f"{CIVITAI_API_URL}/models/{model_id}", headers=headers, timeout=15
     )
     if response.status_code != 200:
-        log_warn(f"CivitAI model lookup returned {response.status_code} for model_id={model_id}")
+        log.warn(f"CivitAI model lookup returned {response.status_code} for model_id={model_id}")
         return None
 
     data = response.json()
@@ -591,7 +587,7 @@ def _find_civitai_file_in_model(
         others = [v for v in versions if v.get("id") != preferred_version_id]
         versions = preferred + others
 
-    log_debug(
+    log.debug(
         f"CivitAI model lookup model_id={model_id} returned {len(versions)} versions"
     )
 
@@ -613,7 +609,7 @@ def _find_civitai_file_in_model(
                 ranking_score = confidence + _base_model_score(
                     resolved.get("base_model"), base_model_context
                 )
-                log_debug(
+                log.debug(
                     f"CivitAI resolved version confidence: model_id={model_id}, version_id={version_id}, expected_filename={expected_filename}, confidence={confidence}"
                 )
                 if ranking_score > best_resolved_confidence:
@@ -626,12 +622,12 @@ def _find_civitai_file_in_model(
 
         files = version.get("files", [])
         file_names = [f.get("name", "") for f in files if isinstance(f, dict)]
-        log_debug(
+        log.debug(
             f"CivitAI version file names: model_id={model_id}, version_id={version_id}, files={file_names}"
         )
 
     if best_resolved_result and best_resolved_confidence >= 50.0:
-        log_info(
+        log.info(
             f"CivitAI best probable match: model_id={model_id}, version_id={best_resolved_result.get('version_id')}, filename={best_resolved_result.get('filename')}, confidence={best_resolved_confidence}"
         )
         return best_resolved_result
@@ -654,7 +650,7 @@ def _find_civitai_file_in_model(
             calculate_filename_confidence(filename, result.get("filename", "")),
         )
         if match["match_type"] == "similar":
-            log_info(
+            log.info(
                 f"CivitAI version-list probable match: model_id={model_id}, version_id={result.get('version_id')}, filename={result.get('filename')}, confidence={result['confidence']}"
             )
         if _base_model_matches(result.get("base_model"), base_model_context):
@@ -768,7 +764,7 @@ def search_civitai_for_file(
         f"civit_{filename}_exact{exact_only}_type{model_type_key}_base{base_model_key}_session{session_key}_limit{candidate_limit}_{methods_key}"
     )
     if cache_key in _search_cache:
-        log_debug(f"CivitAI search cache hit for {filename} (exact_only={exact_only})")
+        log.debug(f"CivitAI search cache hit for {filename} (exact_only={exact_only})")
         _report_progress(
             progress_callback,
             "cache",
@@ -865,7 +861,7 @@ def search_civitai_for_file(
                 candidate_index=candidate_index,
                 candidate_count=total_candidates,
             )
-            log_info(
+            log.info(
                 f"CivitAI candidate check: model_id={model_id}, preferred_version_id={version_id}, filename={filename}"
             )
             result = _find_civitai_file_in_model(
@@ -889,7 +885,7 @@ def search_civitai_for_file(
                         version_id=result.get("version_id"),
                         confidence=confidence,
                     )
-                    log_info(
+                    log.info(
                         f"Found exact CivitAI match for {filename}: model_id={result.get('model_id')}, version_id={result.get('version_id')}, candidate_limit={candidate_limit}"
                     )
                     return result
@@ -908,7 +904,7 @@ def search_civitai_for_file(
                 version_id=best_result.get("version_id"),
                 confidence=best_confidence,
             )
-            log_info(
+            log.info(
                 f"Found best CivitAI match for {filename}: model_id={best_result.get('model_id')}, version_id={best_result.get('version_id')}, confidence={best_confidence}, candidate_limit={candidate_limit}"
             )
             return best_result
@@ -925,13 +921,13 @@ def search_civitai_for_file(
             checked_candidate_count=len(candidates_to_check),
             candidate_limit=candidate_limit,
         )
-        log_info(
+        log.info(
             f"CivitAI search no result: filename={filename}, trpc_candidates={len(trpc_candidates)}, html_candidates={len(html_candidates)}, checked_candidates={len(candidates_to_check)}, candidate_limit={candidate_limit}"
         )
         return None
 
     except Exception as e:
-        log_exception(f"CivitAI search error for {filename}: {e}")
+        log.exception(f"CivitAI search error for {filename}: {e}")
         _report_progress(
             progress_callback,
             "error",
@@ -1013,7 +1009,7 @@ def search_civitai(
                     results.append(result)
 
     except Exception as e:
-        log_error(f"CivitAI search error: {e}")
+        log.error(f"CivitAI search error: {e}")
 
     return results
 
@@ -1061,7 +1057,7 @@ def get_civitai_model_details(
         timeout=20,
     )
     if response.status_code != 200:
-        log_warn(f"CivitAI model details returned {response.status_code}: model_id={model_id}")
+        log.warn(f"CivitAI model details returned {response.status_code}: model_id={model_id}")
         return None
 
     data = response.json()
@@ -1141,7 +1137,7 @@ def _enrich_model_info_with_details(
     try:
         details = get_civitai_model_details(model_id, version_id, api_key)
     except Exception as exc:
-        log_debug(f"CivitAI details enrichment failed for model_id={model_id}: {exc}")
+        log.debug(f"CivitAI details enrichment failed for model_id={model_id}: {exc}")
         return result
 
     if not details:
@@ -1203,7 +1199,7 @@ def search_civitai_by_hash(
             }
 
     except Exception as e:
-        log_error(f"CivitAI hash lookup error: {e}")
+        log.error(f"CivitAI hash lookup error: {e}")
 
     return None
 
@@ -1237,7 +1233,7 @@ def resolve_urn(
         response = requests.get(url, headers=headers, params=params, timeout=15)
 
         if response.status_code != 200:
-            log_warn(f"CivitAI URN resolve failed: {response.status_code}")
+            log.warn(f"CivitAI URN resolve failed: {response.status_code}")
             _urn_cache[cache_key] = None
             return None
 
@@ -1245,7 +1241,7 @@ def resolve_urn(
         versions = data.get("modelVersions", [])
 
         if not versions:
-            log_warn(f"No versions found for model {model_id}/version {version_id}")
+            log.warn(f"No versions found for model {model_id}/version {version_id}")
             _urn_cache[cache_key] = None
             return None
 
@@ -1257,7 +1253,7 @@ def resolve_urn(
                 break
 
         if not target_version:
-            log_warn(f"Version {version_id} not found in model {model_id}")
+            log.warn(f"Version {version_id} not found in model {model_id}")
             _urn_cache[cache_key] = None
             return None
 
@@ -1274,7 +1270,7 @@ def resolve_urn(
             primary_file = files[0]  # Fallback to first
 
         if not primary_file:
-            log_warn(f"No files found for version {version_id}")
+            log.warn(f"No files found for version {version_id}")
             _urn_cache[cache_key] = None
             return None
 
@@ -1300,13 +1296,13 @@ def resolve_urn(
         }
 
         _urn_cache[cache_key] = result
-        log_info(
+        log.info(
             f"CivitAI resolved urn={model_id}@{version_id} file={result['expected_filename']}"
         )
         return result
 
     except Exception as e:
-        log_error(f"CivitAI URN resolve error for {model_id}@{version_id}: {e}")
+        log.error(f"CivitAI URN resolve error for {model_id}@{version_id}: {e}")
         _urn_cache[cache_key] = None
         return None
 
@@ -1400,21 +1396,21 @@ def get_model_info_by_hash(
                 api_key,
             )
             _hash_cache[cache_key] = result
-            log_info(f"Found model by hash {file_hash}: {result.get('model_name')}")
+            log.info(f"Found model by hash {file_hash}: {result.get('model_name')}")
             return result
 
         elif response.status_code == 404:
-            log_info(f"Model not found on CivitAI for hash {file_hash}")
+            log.info(f"Model not found on CivitAI for hash {file_hash}")
             _hash_cache[cache_key] = None
             return None
         else:
-            log_warn(
+            log.warn(
                 f"CivitAI hash lookup returned {response.status_code} for {file_hash}"
             )
             return None
 
     except Exception as e:
-        log_error(f"Error looking up model by hash {file_hash}: {e}")
+        log.error(f"Error looking up model by hash {file_hash}: {e}")
         return None
 
     cache_key = f"hash_{file_hash}"
@@ -1473,21 +1469,21 @@ def get_model_info_by_hash(
                 api_key,
             )
             _hash_cache[cache_key] = result
-            log_info(f"Found model by hash {file_hash}: {result.get('model_name')}")
+            log.info(f"Found model by hash {file_hash}: {result.get('model_name')}")
             return result
 
         elif response.status_code == 404:
-            log_info(f"Model not found on CivitAI for hash {file_hash}")
+            log.info(f"Model not found on CivitAI for hash {file_hash}")
             _hash_cache[cache_key] = None
             return None
         else:
-            log_warn(
+            log.warn(
                 f"CivitAI hash lookup returned {response.status_code} for {file_hash}"
             )
             return None
 
     except Exception as e:
-        log_error(f"Error looking up model by hash {file_hash}: {e}")
+        log.error(f"Error looking up model by hash {file_hash}: {e}")
         return None
 
 
@@ -1613,7 +1609,7 @@ def _get_metadata_file_path(model_path: str) -> str:
         if name:
             path = os.path.join(directory, name)
             if os.path.exists(path):
-                log_info(f"Found metadata file: {path}")
+                log.info(f"Found metadata file: {path}")
                 return path
 
     return ""
@@ -1665,10 +1661,10 @@ def _read_model_metadata(metadata_path: str) -> Optional[Dict[str, Any]]:
         ):
             return None
 
-        log_info(f"Successfully read metadata from: {metadata_path}")
+        log.info(f"Successfully read metadata from: {metadata_path}")
         return data
     except Exception as e:
-        log_debug(f"Error reading metadata file {metadata_path}: {e}")
+        log.debug(f"Error reading metadata file {metadata_path}: {e}")
         return None
 
 
@@ -1946,16 +1942,16 @@ def get_model_info_for_file(
     Returns:
         Dict with model info from CivitAI, or None if not found
     """
-    log_info(f"get_model_info_for_file called with: {file_path}")
+    log.info(f"get_model_info_for_file called with: {file_path}")
 
     # First check for metadata file
     metadata_path = _get_metadata_file_path(file_path)
-    log_info(f"Looking for metadata file, checked: {metadata_path}")
+    log.info(f"Looking for metadata file, checked: {metadata_path}")
 
     if metadata_path:
         metadata = _read_model_metadata(metadata_path)
         if metadata:
-            log_info(f"Using metadata file for {file_path}")
+            log.info(f"Using metadata file for {file_path}")
             result = _metadata_to_model_info(metadata)
             result["file_path"] = file_path
             result["metadata_path"] = metadata_path
@@ -1974,7 +1970,7 @@ def get_model_info_for_file(
             metadata_files = [
                 f for f in files if "metadata" in f.lower() or f.endswith(".json")
             ]
-            log_info(f"Files in {directory}: {metadata_files}")
+            log.info(f"Files in {directory}: {metadata_files}")
 
     if local_only:
         filename = os.path.basename(file_path)

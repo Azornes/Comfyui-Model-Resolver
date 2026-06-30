@@ -10,13 +10,9 @@ import json
 from typing import Dict, Any, List, Optional, Tuple, Callable
 from urllib.parse import unquote
 
-from .log_system.log_funcs import (
-    log_debug,
-    log_info,
-    log_warn,
-    log_error,
-    log_exception,
-)
+from .log_system.log_funcs import create_module_logger
+log = create_module_logger(__name__)
+
 from .scanner import get_model_files
 from .workflow_analyzer import (
     NESTED_MODEL_KEYS,
@@ -452,7 +448,7 @@ def search_local_matches_by_hash(
             with open(metadata_path, "r", encoding="utf-8") as handle:
                 metadata = json.load(handle)
         except Exception as exc:
-            log_debug(f"Could not read metadata sidecar for hash match: {metadata_path} ({exc})")
+            log.debug(f"Could not read metadata sidecar for hash match: {metadata_path} ({exc})")
             continue
 
         metadata_hashes = _extract_model_sha256_from_metadata(metadata, model)
@@ -730,7 +726,7 @@ def analyze_and_find_matches(
 
     # Extract URLs from workflow (node.properties.models + regex)
     workflow_urls = extract_workflow_urls(workflow_json)
-    log_debug(f"Extracted {len(workflow_urls)} URLs from workflow")
+    log.debug(f"Extracted {len(workflow_urls)} URLs from workflow")
 
     if progress_callback:
         progress_callback(
@@ -938,10 +934,10 @@ def analyze_and_find_matches(
         is_lora_v2 = missing.get("is_lora_v2")
         exists = missing.get("exists")
         name = missing.get("name") or missing.get("original_path", "")
-        log_debug(f"Checking {name}: is_lora_v2={is_lora_v2}, exists={exists}")
+        log.debug(f"Checking {name}: is_lora_v2={is_lora_v2}, exists={exists}")
 
         if is_lora_v2 and exists:
-            log_info(f"Skipping LoraManager lora {name} - already exists locally")
+            log.info(f"Skipping LoraManager lora {name} - already exists locally")
             continue
 
         missing_with_matches.append({

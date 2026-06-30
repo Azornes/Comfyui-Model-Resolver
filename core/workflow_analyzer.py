@@ -9,20 +9,16 @@ import re
 import threading
 from typing import List, Dict, Any, Optional, Set
 
-from .log_system.log_funcs import (
-    log_debug,
-    log_info,
-    log_warn,
-    log_error,
-    log_exception,
-)
+from .log_system.log_funcs import create_module_logger
+log = create_module_logger(__name__)
+
 
 # Import folder_paths lazily - it may not be available until ComfyUI is initialized
 try:
     import folder_paths
 except ImportError:
     folder_paths = None
-    log_warn("Model Resolver: folder_paths not available yet - will retry later")
+    log.warn("Model Resolver: folder_paths not available yet - will retry later")
 
 
 # Common model file extensions
@@ -823,7 +819,7 @@ def _build_dynamic_node_widget_category_hints(node_type: str) -> Dict[str, Any]:
         input_types = input_types_getter() if callable(input_types_getter) else None
         schema = schema_getter() if callable(schema_getter) else None
     except Exception as exc:
-        log_debug(
+        log.debug(
             f"Could not infer dynamic model widget categories for {node_type}: {exc}"
         )
         return empty_hints
@@ -877,7 +873,7 @@ def _build_dynamic_node_widget_category_hints(node_type: str) -> Dict[str, Any]:
         or hints["choice_info_by_name"]
         or hints["choice_info_by_index"]
     ):
-        log_debug(
+        log.debug(
             "Inferred dynamic model widget categories for "
             f"{node_type}: {_summarize_dynamic_hints_for_log(hints)}"
         )
@@ -1317,7 +1313,7 @@ def try_resolve_model_path(
 
             folder_paths = fp
         except ImportError:
-            log_error("Model Resolver: folder_paths not available")
+            log.error("Model Resolver: folder_paths not available")
             return None
 
     # If categories not provided, try all categories
@@ -1456,7 +1452,7 @@ def get_node_model_info(
                                     if lora_exists:
                                         break
 
-                        log_debug(
+                        log.debug(
                             f"Lora {name}: exists={lora_exists}, path={lora_full_path}"
                         )
 
@@ -2030,7 +2026,7 @@ def analyze_workflow_models(
                     )
             all_model_refs.extend(model_refs)
         except Exception as e:
-            log_warn(f"Error analyzing node {node.get('id', 'unknown')}: {e}")
+            log.warn(f"Error analyzing node {node.get('id', 'unknown')}: {e}")
             continue
 
     # Recursively analyze subgraphs (definitions already loaded above)
@@ -2042,7 +2038,7 @@ def analyze_workflow_models(
         subgraph_name = subgraph.get("name", subgraph_id)
         subgraph_nodes = subgraph.get("nodes", [])
 
-        log_debug(
+        log.debug(
             f"Analyzing subgraph: {subgraph_name} (ID: {subgraph_id}) with {len(subgraph_nodes)} nodes"
         )
 
@@ -2063,7 +2059,7 @@ def analyze_workflow_models(
                     _apply_promoted_widget_locator(ref, promoted_widget_contexts)
                 all_model_refs.extend(model_refs)
             except Exception as e:
-                log_warn(
+                log.warn(
                     f"Error analyzing subgraph node {node.get('id', 'unknown')}: {e}"
                 )
                 continue

@@ -4,7 +4,7 @@ Model Sources Module
 Provides search functionality for finding models from various sources.
 """
 
-from ..log_system.log_funcs import log_debug, log_info, log_warn, log_error, log_exception
+from ..log_system.log_funcs import create_module_logger  # noqa: F401
 
 from .popular import search_popular_models, get_popular_model_url
 from .model_list import search_model_list, search_model_list_multiple

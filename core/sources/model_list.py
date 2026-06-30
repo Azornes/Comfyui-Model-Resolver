@@ -15,13 +15,9 @@ from urllib.request import Request, urlopen
 
 from ..matcher import normalize_filename, calculate_similarity
 
-from ..log_system.log_funcs import (
-    log_debug,
-    log_info,
-    log_warn,
-    log_error,
-    log_exception,
-)
+from ..log_system.log_funcs import create_module_logger
+log = create_module_logger(__name__)
+
 
 from ..path_utils import METADATA_DIR
 MODEL_LIST_FILE = os.path.join(METADATA_DIR, "model-list.json")
@@ -80,7 +76,7 @@ def _get_local_model_list_sha() -> str:
         header = f"blob {len(content)}\0".encode("utf-8")
         return hashlib.sha1(header + content).hexdigest()
     except Exception as e:
-        log_warn(f"Error calculating model-list.json SHA: {e}")
+        log.warn(f"Error calculating model-list.json SHA: {e}")
         return ""
 
 
@@ -110,7 +106,7 @@ def _load_model_list() -> List[Dict]:
 
     data = read_json_safe(MODEL_LIST_FILE, {})
     _model_list_cache = data.get("models", [])
-    log_info(
+    log.info(
         f"Loaded {len(_model_list_cache)} models from model-list.json"
     )
     return _model_list_cache

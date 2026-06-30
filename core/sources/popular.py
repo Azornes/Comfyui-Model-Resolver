@@ -12,13 +12,9 @@ import tempfile
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
 
-from ..log_system.log_funcs import (
-    log_debug,
-    log_info,
-    log_warn,
-    log_error,
-    log_exception,
-)
+from ..log_system.log_funcs import create_module_logger
+log = create_module_logger(__name__)
+
 
 from ..path_utils import METADATA_DIR, read_json_safe, write_json_atomic
 POPULAR_MODELS_FILE = os.path.join(METADATA_DIR, "popular-models.json")
@@ -93,7 +89,7 @@ def load_base_model_aliases() -> Dict[str, List[str]]:
 
                     aliases_dict[normalized_name] = normalized_tokens
     except Exception as e:
-        log_error(f"Error loading base model aliases: {e}")
+        log.error(f"Error loading base model aliases: {e}")
 
     # Fallback to hardcoded defaults if file is missing/corrupted
     if not aliases_dict:
@@ -289,7 +285,7 @@ def get_base_models_status(check_remote: bool = False) -> Dict[str, Any]:
                     "update_available": new_models_found
                 })
         except Exception as e:
-            log_warn(f"Error checking remote base models: {e}")
+            log.warn(f"Error checking remote base models: {e}")
             
     return status
 

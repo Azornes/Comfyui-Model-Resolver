@@ -25,14 +25,7 @@ if not __package__ or __package__ == "":
         sys.modules[package_name] = current_module
         if not hasattr(current_module, "__path__"):
             current_module.__path__ = [this_dir]
-from .core.log_system.log_funcs import (
-    create_module_logger,
-    log_debug,
-    log_info,
-    log_error,
-    log_exception,
-    log_warn,
-)
+from .core.log_system.log_funcs import create_module_logger
 from .core.log_system.config import LOG_LEVEL as BACKEND_DEFAULT_LOG_LEVEL
 from .core.log_system.logger import LogLevel, logger as backend_log_controller
 
@@ -673,11 +666,11 @@ class ModelResolverExtension:
 
                     write_json_atomic(resolved_metadata_path, metadata, indent=2)
                     metadata_updated = True
-                    log_info(
+                    self.logger.info(
                         f"Calculated SHA256 and updated metadata: {resolved_metadata_path}"
                     )
                 except Exception as metadata_error:
-                    log_warn(
+                    self.logger.warning(
                         f"Could not update metadata with calculated SHA256 for {normalized_path}: {metadata_error}"
                     )
 
@@ -854,7 +847,7 @@ class ModelResolverExtension:
                             message="Hash calculation cancelled",
                         )
                     except Exception as exc:
-                        log_exception(f"Hash calculation failed for {normalized_path}: {exc}")
+                        self.logger.exception(f"Hash calculation failed for {normalized_path}: {exc}")
                         update_hash_progress(
                             progress_id,
                             status="error",
@@ -2210,9 +2203,9 @@ class ModelResolverExtension:
                             if result and (
                                 not isinstance(result, list) or len(result) > 0
                             ):
-                                log_info(f"Search [{source_name}] found {details}")
+                                self.logger.info(f"Search [{source_name}] found {details}")
                             else:
-                                log_info(f"Search [{source_name}] miss {details}")
+                                self.logger.info(f"Search [{source_name}] miss {details}")
 
                         data = await request.json()
                         filename = data.get("filename", "")
@@ -2330,13 +2323,13 @@ class ModelResolverExtension:
                                 clear_civarchive_search_cache()
                             if search_lora_manager_archive_source:
                                 clear_lora_manager_archive_search_cache()
-                            log_debug(
+                            self.logger.debug(
                                 "Force search enabled: cleared cache "
                                 + format_log_fields(sources=sorted(normalized_sources))
                             )
                         raise_if_search_cancelled(progress_source)
 
-                        log_info(
+                        self.logger.info(
                             f"Search [{','.join(sorted(normalized_sources))}] request "
                             + format_log_fields(
                                 file=filename,
@@ -2549,7 +2542,7 @@ class ModelResolverExtension:
                                             force_rescan=force_search,
                                         )
                                     except Exception as hash_error:
-                                        log_warn(
+                                        self.logger.warning(
                                             f"Local metadata hash lookup failed for {source_key}:{sha256}: {hash_error}"
                                         )
                                         continue
@@ -2575,7 +2568,7 @@ class ModelResolverExtension:
                                         matches.append(enriched)
 
                             if matches:
-                                log_info(
+                                self.logger.info(
                                     "Search local hash matches "
                                     + format_log_fields(count=len(matches))
                                 )
@@ -2647,7 +2640,7 @@ class ModelResolverExtension:
                                 initial_percent,
                             )
                             start_fields = log_start_fields or {"file": filename}
-                            log_info(
+                            self.logger.info(
                                 f"Search [{source_key}] start "
                                 + format_log_fields(**start_fields)
                             )
@@ -2700,7 +2693,7 @@ class ModelResolverExtension:
                                     f"Retrying {any_model_label} any model",
                                     72,
                                 )
-                                log_info(
+                                self.logger.info(
                                     f"Search [{source_key}] retry any model "
                                     + format_log_fields(
                                         file=filename,
@@ -2899,7 +2892,7 @@ class ModelResolverExtension:
                                             "Searching CivitAI fallback",
                                             58,
                                         )
-                                        log_info(
+                                        self.logger.info(
                                             "Search [civitai] URN ids missing; falling back"
                                         )
                                         civitai_results = search_civitai(
@@ -3024,7 +3017,7 @@ class ModelResolverExtension:
 
                             def handle_civarchive_error(e):
                                 error_message = f"CivArchive search failed: {e}"
-                                log_warn(error_message)
+                                self.logger.warning(error_message)
                                 update_search_progress(
                                     progress_id,
                                     "civarchive",
@@ -3108,7 +3101,7 @@ class ModelResolverExtension:
                             )
 
                         if len(search_tasks) > 1:
-                            log_debug(
+                            self.logger.debug(
                                 "Search sources async "
                                 + format_log_fields(count=len(search_tasks))
                             )
@@ -3138,7 +3131,7 @@ class ModelResolverExtension:
                         results["local_hash_matches"] = collect_local_hash_matches(results)
                         raise_if_search_cancelled(progress_source)
 
-                        log_info(
+                        self.logger.info(
                             f"Search [{','.join(results['searched_sources'])}] done "
                             + format_log_fields(
                                 found=results["found"],
@@ -3165,7 +3158,7 @@ class ModelResolverExtension:
                             status="cancelled",
                             cancelled=True,
                         )
-                        log_info(
+                        self.logger.info(
                             "Search cancelled "
                             + format_log_fields(
                                 source=progress_source if "progress_source" in locals() else "",
@@ -3192,7 +3185,7 @@ class ModelResolverExtension:
                             100,
                             status="error",
                         )
-                        log_exception(f"Model Resolver search error: {e}")
+                        self.logger.exception(f"Model Resolver search error: {e}")
                         return web.json_response({"error": str(e)}, status=500)
 
                 @routes.post("/model_resolver/clear-search-cache")
@@ -3207,7 +3200,7 @@ class ModelResolverExtension:
                     reload_model_list()
                     invalidate_model_files_cache()
                     self.search_result_timestamps.clear()
-                    log_info("Cleared backend search caches")
+                    self.logger.info("Cleared backend search caches")
                     return web.json_response({"success": True, "cleared": "all"})
 
                 async def _check_credential_helper(request, payload_key, check_func, log_name):
@@ -3217,7 +3210,7 @@ class ModelResolverExtension:
                         result = await asyncio.to_thread(check_func, val)
                         return web.json_response(result)
                     except Exception as e:
-                        log_exception(f"{log_name} check error: {e}")
+                        self.logger.exception(f"{log_name} check error: {e}")
                         return web.json_response({"error": str(e)}, status=500)
 
                 @routes.post("/model_resolver/civitai/session-token/check")
@@ -3992,10 +3985,11 @@ class ModelResolverExtension:
 
 
 # Initialize the extension
+_module_log = create_module_logger(__name__)
 try:
     extension = ModelResolverExtension()
     extension.initialize()
 except Exception as e:
-    log_error(
+    _module_log.error(
         f"ComfyUI Model Resolver extension initialization failed: {e}", exc_info=True
     )

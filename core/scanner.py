@@ -8,13 +8,9 @@ import os
 import time
 from typing import List, Dict, Tuple, Optional
 
-from .log_system.log_funcs import (
-    log_debug,
-    log_info,
-    log_warn,
-    log_error,
-    log_exception,
-)
+from .log_system.log_funcs import create_module_logger
+log = create_module_logger(__name__)
+
 
 from .path_utils import get_path_identity
 from .type_utils import MODEL_EXTENSIONS
@@ -24,7 +20,7 @@ try:
     import folder_paths
 except ImportError:
     folder_paths = None
-    log_warn("Model Resolver: folder_paths not available yet - will retry later")
+    log.warn("Model Resolver: folder_paths not available yet - will retry later")
 
 _MODEL_FILES_CACHE: Optional[List[Dict[str, str]]] = None
 _MODEL_FILES_CACHE_AT: float = 0.0
@@ -70,7 +66,7 @@ def get_model_directories() -> Dict[str, Tuple[List[str], set]]:
 
             folder_paths = fp
         except ImportError:
-            log_error("Model Resolver: folder_paths still not available")
+            log.error("Model Resolver: folder_paths still not available")
             return {}
 
     return folder_paths.folder_names_and_paths.copy()
@@ -100,7 +96,7 @@ def scan_directory(
     models = []
 
     if not os.path.exists(directory) or not os.path.isdir(directory):
-        # log_debug(f"Directory does not exist or is not accessible: {directory}")
+        # log.debug(f"Directory does not exist or is not accessible: {directory}")
         return models
 
     try:
@@ -196,7 +192,7 @@ def scan_directory(
                         }
                     )
     except (OSError, PermissionError) as e:
-        log_warn(f"Error scanning directory {directory}: {e}")
+        log.warn(f"Error scanning directory {directory}: {e}")
 
     return models
 
@@ -235,7 +231,7 @@ def scan_all_directories() -> List[Dict[str, str]]:
                 raw_exts = value.get("extensions") or []
             else:
                 # Unknown format; skip category
-                log_debug(
+                log.debug(
                     f"Unexpected folder_paths format for category {category}: {type(value)}"
                 )
                 continue
@@ -246,7 +242,7 @@ def scan_all_directories() -> List[Dict[str, str]]:
             elif raw_exts:
                 extensions = {str(raw_exts).lower()}
         except Exception as e:
-            log_warn(f"Error interpreting folder_paths entry for {category}: {e}")
+            log.warn(f"Error interpreting folder_paths entry for {category}: {e}")
             continue
 
         for directory_path in paths:
@@ -270,9 +266,9 @@ def scan_all_directories() -> List[Dict[str, str]]:
                     if identity:
                         seen_models.add(model_key)
                     all_models.append(model)
-                #log_debug(f"Found {len(models)} models in {category}/{directory_path}")
+                #log.debug(f"Found {len(models)} models in {category}/{directory_path}")
             except Exception as e:
-                log_warn(f"Error scanning {category} directory {directory_path}: {e}")
+                log.warn(f"Error scanning {category} directory {directory_path}: {e}")
 
     return all_models
 

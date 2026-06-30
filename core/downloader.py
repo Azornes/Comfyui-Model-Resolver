@@ -19,13 +19,9 @@ from pathlib import Path
 from collections import deque
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
-from .log_system.log_funcs import (
-    log_debug,
-    log_info,
-    log_warn,
-    log_error,
-    log_exception,
-)
+from .log_system.log_funcs import create_module_logger
+log = create_module_logger(__name__)
+
 from .resolver import normalize_sha256
 from .path_utils import is_path_within, get_path_identity, write_json_atomic, read_json_safe, get_comfy_root_path, calculate_file_sha256 as _calculate_file_sha256
 from .type_utils import as_dict, as_list, first_non_empty
@@ -197,10 +193,10 @@ def _resolve_civitai_download_url_for_aria2(
             return url
 
         resolved_url = urljoin(url, location.strip())
-        log_debug("Resolved CivitAI download redirect for aria2")
+        log.debug("Resolved CivitAI download redirect for aria2")
         return resolved_url
     except Exception as exc:
-        log_warn(f"Could not pre-resolve CivitAI download URL for aria2: {exc}")
+        log.warn(f"Could not pre-resolve CivitAI download URL for aria2: {exc}")
         return url
     finally:
         if response is not None:
@@ -378,7 +374,7 @@ def read_completed_metadata_sha256(file_path: str) -> str:
 
     hash_status = str(payload.get("hash_status") or "completed").strip().lower()
     if hash_status != "completed":
-        log_debug(
+        log.debug(
             f"Skipping metadata SHA256 for {metadata_path}: hash_status={hash_status}"
         )
         return ""
@@ -629,10 +625,10 @@ def write_lora_manager_metadata(
     try:
         payload = build_lora_manager_metadata(dest_path, metadata, category, source_url)
         write_json_atomic(metadata_path, payload, indent=2)
-        log_info(f"Metadata saved: {metadata_path}")
+        log.info(f"Metadata saved: {metadata_path}")
         return metadata_path
     except Exception as e:
-        log_warn(f"Could not save metadata sidecar for {dest_path}: {e}")
+        log.warn(f"Could not save metadata sidecar for {dest_path}: {e}")
         return None
 
 
@@ -760,7 +756,7 @@ def get_download_directory(category: str, preferred_base_directory: str = "") ->
             if fallback_paths:
                 return _choose_preferred_path(fallback_paths, all_names[0])
     except Exception as e:
-        log_debug(f"Could not get folder path for {folder_key}: {e}")
+        log.debug(f"Could not get folder path for {folder_key}: {e}")
 
     return None
 
@@ -984,7 +980,7 @@ def stop_aria2_daemon(reason: str = "manual") -> Dict[str, Any]:
         aria2_rpc_secret = ""
         aria2_process_started_by_resolver = False
 
-    log_info(f"aria2 RPC daemon stopped ({reason})")
+    log.info(f"aria2 RPC daemon stopped ({reason})")
     return {"success": True, "stopped": True, "message": "aria2 daemon stopped"}
 
 
@@ -1090,7 +1086,7 @@ def _ensure_aria2_daemon(settings: Optional[Dict[str, Any]] = None) -> None:
         if os.name == "nt":
             creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
-        log_info(f"Starting aria2 RPC daemon from {executable}")
+        log.info(f"Starting aria2 RPC daemon from {executable}")
         aria2_process = subprocess.Popen(
             command,
             stdout=subprocess.DEVNULL,
@@ -1164,7 +1160,7 @@ def _delete_partial_download_files(dest_path: str) -> None:
             if path and os.path.exists(path):
                 os.remove(path)
         except Exception as exc:
-            log_warn(f"Could not delete incomplete download file {path}: {exc}")
+            log.warn(f"Could not delete incomplete download file {path}: {exc}")
 
 
 def download_file_with_aria2(
@@ -1251,7 +1247,7 @@ def download_file_with_aria2(
             download_progress[download_id]["aria2_gid"] = gid
             download_progress[download_id]["status"] = "downloading"
 
-        log_info(f"Starting aria2 download: {filename}")
+        log.info(f"Starting aria2 download: {filename}")
         last_cli_log = start_time
 
         while True:
@@ -1302,7 +1298,7 @@ def download_file_with_aria2(
             if now - last_cli_log >= CLI_LOG_INTERVAL and mapped_status == "downloading":
                 last_cli_log = now
                 total_str = format_bytes(total_size) if total_size else "?"
-                log_info(
+                log.info(
                     f"aria2 progress: {format_bytes(downloaded)} / {total_str} ({progress}%) - {format_bytes(speed)}/s"
                 )
 
@@ -1339,8 +1335,8 @@ def download_file_with_aria2(
                 )
                 elapsed = time.time() - start_time
                 avg_speed = size / elapsed if elapsed > 0 else 0
-                log_info(f"✓ aria2 download complete: {filename}")
-                log_info(
+                log.info(f"✓ aria2 download complete: {filename}")
+                log.info(
                     f"Size: {format_bytes(size)}, Time: {elapsed:.1f}s, Avg speed: {format_bytes(int(avg_speed))}/s"
                 )
                 return result
@@ -1372,8 +1368,8 @@ def download_file_with_aria2(
                 download_progress[download_id]["error"] = error_msg
                 download_progress[download_id]["speed"] = 0
         result["error"] = error_msg
-        log_error(f"✗ aria2 download failed: {filename}")
-        log_error(f"Error: {error_msg}")
+        log.error(f"✗ aria2 download failed: {filename}")
+        log.error(f"Error: {error_msg}")
         return result
     finally:
         with aria2_lock:
@@ -1469,9 +1465,9 @@ def download_file(
             if "civitai.com" in url
             else "URL"
         )
-        log_info(f"Starting download: {filename}")
-        log_info(f"Source: {source}")
-        log_info(f"URL: {_strip_sensitive_url_params(url)}")
+        log.info(f"Starting download: {filename}")
+        log.info(f"Source: {source}")
+        log.info(f"URL: {_strip_sensitive_url_params(url)}")
 
         # Start download
         request_headers = build_download_headers(url, headers)
@@ -1481,7 +1477,7 @@ def download_file(
         # Get total size
         total_size = int(response.headers.get("content-length", 0))
         total_size_str = format_bytes(total_size) if total_size > 0 else "unknown"
-        log_info(f"Size: {total_size_str}")
+        log.info(f"Size: {total_size_str}")
 
         with download_lock:
             download_progress[download_id]["total_size"] = total_size
@@ -1548,7 +1544,7 @@ def download_file(
                                 format_bytes(total_size) if total_size > 0 else "?"
                             )
                             speed_str = format_bytes(int(smoothed_speed)) + "/s"
-                            log_info(
+                            log.info(
                                 f"Progress: {downloaded_str} / {total_str} ({progress_pct}%) - {speed_str}"
                             )
                     else:
@@ -1572,17 +1568,17 @@ def download_file(
             try:
                 if os.path.exists(dest_path):
                     os.remove(dest_path)
-                    log_info(f"Cancelled: {filename} - incomplete file deleted")
+                    log.info(f"Cancelled: {filename} - incomplete file deleted")
                 else:
-                    log_info(f"Cancelled: {filename} - no file to delete")
+                    log.info(f"Cancelled: {filename} - no file to delete")
             except Exception as e:
-                log_warn(f"Could not delete incomplete file {dest_path}: {e}")
+                log.warn(f"Could not delete incomplete file {dest_path}: {e}")
                 # Try harder on Windows - sometimes the file handle takes a moment to release
                 try:
                     time.sleep(0.5)  # time is already imported at module level
                     if os.path.exists(dest_path):
                         os.remove(dest_path)
-                        log_info(
+                        log.info(
                             f"Cancelled: {filename} - incomplete file deleted (delayed)"
                         )
                 except Exception:
@@ -1614,8 +1610,8 @@ def download_file(
         # CLI completion log
         elapsed = time.time() - start_time
         avg_speed = downloaded / elapsed if elapsed > 0 else 0
-        log_info(f"✓ Download complete: {filename}")
-        log_info(
+        log.info(f"✓ Download complete: {filename}")
+        log.info(
             f"Size: {format_bytes(downloaded)}, Time: {elapsed:.1f}s, Avg speed: {format_bytes(int(avg_speed))}/s"
         )
 
@@ -1642,8 +1638,8 @@ def download_file(
         result["error"] = error_msg
 
         # CLI error log
-        log_error(f"✗ Download failed: {os.path.basename(dest_path)}")
-        log_error(f"Error: {error_msg}")
+        log.error(f"✗ Download failed: {os.path.basename(dest_path)}")
+        log.error(f"Error: {error_msg}")
 
         # Clean up partial file
         try:
@@ -1660,9 +1656,9 @@ def download_file(
         result["error"] = error_msg
 
         # CLI error log
-        log_error(f"✗ Download failed: {os.path.basename(dest_path)}")
-        log_error(f"Error: {error_msg}")
-        log_error(f"Download error: {e}", exc_info=True)
+        log.error(f"✗ Download failed: {os.path.basename(dest_path)}")
+        log.error(f"Error: {error_msg}")
+        log.error(f"Download error: {e}", exc_info=True)
 
     return result
 
@@ -1720,9 +1716,9 @@ def download_model(
             existing_sha256 = metadata_sha256
             if metadata_sha256:
                 if metadata_sha256 == expected_sha256:
-                    log_info(f"File exists, metadata SHA256 matches: {dest_path}")
+                    log.info(f"File exists, metadata SHA256 matches: {dest_path}")
                 else:
-                    log_info(
+                    log.info(
                         "File exists, metadata SHA256 differs from source; "
                         f"verifying file content: {dest_path}"
                     )
@@ -1731,13 +1727,13 @@ def download_model(
             try:
                 if not existing_sha256:
                     sha256_source = "file"
-                    log_info(f"File exists, verifying SHA256: {dest_path}")
+                    log.info(f"File exists, verifying SHA256: {dest_path}")
                     existing_sha256 = calculate_file_sha256(dest_path)
             except Exception as e:
                 error_msg = (
                     f"File already exists and its SHA256 could not be verified: {dest_path}"
                 )
-                log_warn(f"{error_msg} ({e})")
+                log.warn(f"{error_msg} ({e})")
                 return {
                     "success": False,
                     "download_id": download_id,
@@ -1777,7 +1773,7 @@ def download_model(
                         )
                         if metadata_path:
                             download_progress[download_id]["metadata_path"] = metadata_path
-                log_info(f"{message} Path: {dest_path}")
+                log.info(f"{message} Path: {dest_path}")
                 return {
                     "success": True,
                     "download_id": download_id,
@@ -1793,7 +1789,7 @@ def download_model(
                 "File already exists, but its SHA256 does not match the selected "
                 f"source: {dest_path}"
             )
-            log_warn(
+            log.warn(
                 f"{error_msg} (existing={existing_sha256}, expected={expected_sha256})"
             )
             return {
@@ -1838,7 +1834,7 @@ def _force_remove_aria2_transfer(download_id: str, gid: str) -> None:
     try:
         _aria2_rpc("aria2.forceRemove", [gid])
     except Exception as exc:
-        log_warn(f"Could not cancel aria2 download {download_id}: {exc}")
+        log.warn(f"Could not cancel aria2 download {download_id}: {exc}")
 
 
 def _get_aria2_action_lock(download_id: str) -> threading.Lock:
@@ -1899,7 +1895,7 @@ def _run_aria2_desired_state_worker(download_id: str) -> None:
             if _aria2_action_error_is_ok(desired_status, str(exc)):
                 _set_download_progress_status(download_id, desired_status, speed=0 if desired_status == "paused" else download_progress.get(download_id, {}).get("speed", 0))
             else:
-                log_warn(f"aria2 {desired_status} action failed for {download_id}: {exc}")
+                log.warn(f"aria2 {desired_status} action failed for {download_id}: {exc}")
 
         with aria2_lock:
             latest = aria2_desired_states.get(download_id)

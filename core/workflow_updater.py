@@ -7,13 +7,9 @@ Updates workflow JSON by replacing model paths in nodes.
 import os
 from typing import Dict, Any, List, Optional
 
-from .log_system.log_funcs import (
-    log_debug,
-    log_info,
-    log_warn,
-    log_error,
-    log_exception,
-)
+from .log_system.log_funcs import create_module_logger
+log = create_module_logger(__name__)
+
 
 
 def convert_to_relative_path(
@@ -205,13 +201,13 @@ def update_model_path(
 
     if not node:
         location = f"subgraph {subgraph_id}" if subgraph_id else "top-level"
-        log_warn(f"Node {node_id} not found in {location}")
+        log.warn(f"Node {node_id} not found in {location}")
         return False
 
     widgets_values = node.get("widgets_values", [])
 
     if widget_index >= len(widgets_values):
-        log_warn(f"Widget index {widget_index} out of range for node {node_id}")
+        log.warn(f"Widget index {widget_index} out of range for node {node_id}")
         return False
 
     # Get category from resolved_model if not provided
@@ -221,7 +217,7 @@ def update_model_path(
     # Check if this is a LoraManager (LoraLoaderV2) node with is_lora_v2 flag
     is_lora_v2 = mapping.get("is_lora_v2") if mapping else False
     original_lora_name = mapping.get("original_lora_name") if mapping else None
-    log_info(
+    log.info(
         f"@@ update_model_path: node={node_id}, idx={widget_index}, is_lora_v2={is_lora_v2}, original={original_lora_name}"
     )
 
@@ -229,7 +225,7 @@ def update_model_path(
     if is_lora_v2 and original_lora_name and widget_index == 2:
         # For LoraManager, we need to update the name in the lora list (widgets_values[2])
         lora_list = widgets_values[2]
-        log_info(
+        log.info(
             f">>> LoraManager: original_lora={original_lora_name}, widget_index={widget_index}, list_type={type(lora_list)}"
         )
 
@@ -246,7 +242,7 @@ def update_model_path(
                     if "." in new_lora_name:
                         new_lora_name = new_lora_name.rsplit(".", 1)[0]
 
-            log_debug(
+            log.debug(
                 f"LoraManager update: original={original_lora_name}, new={new_lora_name}"
             )
 
@@ -261,14 +257,14 @@ def update_model_path(
                         if lora_name_in_list == original_stripped:
                             lora_item["name"] = new_lora_name
                             updated = True
-                            log_info(
+                            log.info(
                                 f"Updated LoraManager lora (exact): {original_lora_name} -> {new_lora_name}"
                             )
                             break
                         elif lora_name_in_list.lower() == original_stripped.lower():
                             lora_item["name"] = new_lora_name
                             updated = True
-                            log_info(
+                            log.info(
                                 f"Updated LoraManager lora (case-insensitive): {original_lora_name} -> {new_lora_name}"
                             )
                             break
@@ -287,18 +283,18 @@ def update_model_path(
                         )
                         widgets_values[1] = new_text
 
-                    log_info(
+                    log.info(
                         f"Updated node {node_id} LoraManager lora list - new text: {widgets_values[1]}"
                     )
                     return True
                 else:
                     # Log the actual lora list for debugging
-                    log_warn(
+                    log.warn(
                         f"Lora '{original_lora_name}' not found in lora list. Available: {[li.get('name') for li in lora_list if isinstance(li, dict)]}"
                     )
                     return False
         else:
-            log_warn(
+            log.warn(
                 f"LoraManager widget_index == 2 but lora_list is not a list: {type(lora_list)}"
             )
             return False
@@ -323,12 +319,12 @@ def update_model_path(
     nested_key = mapping.get("nested_key") if mapping else None
     if nested_key and isinstance(widgets_values[widget_index], dict):
         widgets_values[widget_index][nested_key] = relative_path
-        log_debug(
+        log.debug(
             f"Updated node {node_id}, widget {widget_index}[{nested_key}] to: {relative_path}"
         )
     else:
         widgets_values[widget_index] = relative_path
-        log_debug(f"Updated node {node_id}, widget {widget_index} to: {relative_path}")
+        log.debug(f"Updated node {node_id}, widget {widget_index} to: {relative_path}")
     return True
 
 
@@ -361,7 +357,7 @@ def update_workflow_nodes(
         resolved_path = mapping.get("resolved_path")
 
         if not all([node_id is not None, widget_index is not None, resolved_path]):
-            log_warn(f"Invalid mapping: {mapping}")
+            log.warn(f"Invalid mapping: {mapping}")
             continue
 
         # Try to get base_directory from resolved_model if provided
@@ -398,5 +394,5 @@ def update_workflow_nodes(
         if success:
             updated_count += 1
 
-    log_info(f"Updated {updated_count} model paths in workflow")
+    log.info(f"Updated {updated_count} model paths in workflow")
     return workflow

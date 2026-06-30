@@ -1,7 +1,7 @@
 """
 @author: Azornes
 @title: AzLogs
-@version: 1.5.7
+@version: 2.0.0
 @description: Logging Setup - Central logging system
 
 Features:
@@ -18,6 +18,7 @@ import json
 import re
 import logging
 import time
+import threading
 from enum import IntEnum
 from logging.handlers import RotatingFileHandler
 import traceback
@@ -308,6 +309,7 @@ class AzLogsLogger:
         self.enabled = True
         self.loggers = {}
         self.file_handlers = {}
+        self._lock = threading.RLock()
 
         # Load configuration from environment variables
         self._load_config_from_env()
@@ -433,89 +435,102 @@ class AzLogsLogger:
     def _get_file_handler(self, module):
         """Get or create a shared rotating file handler for the root module."""
         log_file = self._get_log_file(module)
+        # Fast path without lock
         if log_file in self.file_handlers:
             return self.file_handlers[log_file]
 
-        os.makedirs(self.config["log_dir"], exist_ok=True)
-        file_handler = SafeRotatingFileHandler(
-            log_file,
-            maxBytes=self.config["max_file_size_mb"] * 1024 * 1024,
-            backupCount=self.config["backup_count"],
-            encoding="utf-8",
-        )
-        file_formatter = ColoredFormatter(
-            datefmt="%Y-%m-%d %H:%M:%S",
-            use_colors=False,
-            source_field_width=self.config["source_field_width"],
-            include_milliseconds=True,
-        )
-        file_handler.setFormatter(file_formatter)
-        self.file_handlers[log_file] = file_handler
-        return file_handler
+        with self._lock:
+            # Double-check after acquiring lock
+            if log_file in self.file_handlers:
+                return self.file_handlers[log_file]
+
+            os.makedirs(self.config["log_dir"], exist_ok=True)
+            file_handler = SafeRotatingFileHandler(
+                log_file,
+                maxBytes=self.config["max_file_size_mb"] * 1024 * 1024,
+                backupCount=self.config["backup_count"],
+                encoding="utf-8",
+            )
+            file_formatter = ColoredFormatter(
+                datefmt="%Y-%m-%d %H:%M:%S",
+                use_colors=False,
+                source_field_width=self.config["source_field_width"],
+                include_milliseconds=True,
+            )
+            file_handler.setFormatter(file_formatter)
+            self.file_handlers[log_file] = file_handler
+            return file_handler
 
     def reset_loggers(self):
         """Remove configured handlers so new settings are applied cleanly."""
-        handlers_to_close = set()
+        with self._lock:
+            handlers_to_close = set()
 
-        for module in self.loggers:
-            configured_logger = logging.getLogger(f"azlogs.{module}")
-            for handler in list(configured_logger.handlers):
-                configured_logger.removeHandler(handler)
-                if isinstance(handler, RotatingFileHandler):
-                    handlers_to_close.add(handler)
+            for module in self.loggers:
+                configured_logger = logging.getLogger(f"azlogs.{module}")
+                for handler in list(configured_logger.handlers):
+                    configured_logger.removeHandler(handler)
+                    if isinstance(handler, RotatingFileHandler):
+                        handlers_to_close.add(handler)
 
-        for handler in self.file_handlers.values():
-            handlers_to_close.add(handler)
+            for handler in self.file_handlers.values():
+                handlers_to_close.add(handler)
 
-        for handler in handlers_to_close:
-            handler.close()
+            for handler in handlers_to_close:
+                handler.close()
 
-        self.loggers = {}
-        self.file_handlers = {}
+            self.loggers = {}
+            self.file_handlers = {}
         return self
 
     def _get_logger(self, module):
         """Get or create a logger for the module"""
+        # Fast path without lock
         if module in self.loggers:
             return self.loggers[module]
 
-        # Create new logger
-        logger = logging.getLogger(f"azlogs.{module}")
-        logger.setLevel(logging.DEBUG)  # Set lowest level, filtering will be done later
-        logger.propagate = False
+        with self._lock:
+            # Double-check after acquiring lock
+            if module in self.loggers:
+                return self.loggers[module]
 
-        # Add console handler
-        if self.config["use_colors"]:
-            _enable_windows_virtual_terminal_processing()
+            # Create new logger
+            new_logger = logging.getLogger(f"azlogs.{module}")
+            new_logger.setLevel(logging.DEBUG)  # Set lowest level, filtering will be done later
+            new_logger.propagate = False
 
-        console_stream = _get_console_output_stream()
-        console_handler = DirectConsoleHandler(console_stream)
-        console_formatter = ColoredFormatter(
-            fmt="[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s",
-            datefmt=self.config["timestamp_format"],
-            use_colors=self.config["use_colors"],
-            level_field_width=self.config["level_field_width"],
-            source_field_width=self.config["source_field_width"],
-            include_brackets=False,
-        )
-        console_handler.setFormatter(console_formatter)
-        logger.addHandler(console_handler)
+            # Add console handler
+            if self.config["use_colors"]:
+                _enable_windows_virtual_terminal_processing()
 
-        # Add file handler if file logging is enabled
-        if self.config["log_to_file"]:
-            try:
-                file_handler = self._get_file_handler(module)
-                logger.addHandler(file_handler)
-            except OSError as e:
-                self.config["log_to_file"] = False
-                logger.warning(
-                    "AzLogs: disabling file logging after handler setup failed for %s: %s",
-                    self._get_log_file(module),
-                    e,
-                )
+            console_stream = _get_console_output_stream()
+            console_handler = DirectConsoleHandler(console_stream)
+            console_formatter = ColoredFormatter(
+                fmt="[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s",
+                datefmt=self.config["timestamp_format"],
+                use_colors=self.config["use_colors"],
+                level_field_width=self.config["level_field_width"],
+                source_field_width=self.config["source_field_width"],
+                include_brackets=False,
+            )
+            console_handler.setFormatter(console_formatter)
+            new_logger.addHandler(console_handler)
 
-        self.loggers[module] = logger
-        return logger
+            # Add file handler if file logging is enabled
+            if self.config["log_to_file"]:
+                try:
+                    file_handler = self._get_file_handler(module)
+                    new_logger.addHandler(file_handler)
+                except OSError as e:
+                    self.config["log_to_file"] = False
+                    new_logger.warning(
+                        "AzLogs: disabling file logging after handler setup failed for %s: %s",
+                        self._get_log_file(module),
+                        e,
+                    )
+
+            self.loggers[module] = new_logger
+            return new_logger
 
     def log(self, module, level, *args, **kwargs):
         """Write log"""

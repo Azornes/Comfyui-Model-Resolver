@@ -178,8 +178,9 @@ def calculate_file_sha256(file_path: str, chunk_size: int = 131072) -> Optional[
                     sha256_hash.update(byte_block)
         return sha256_hash.hexdigest()
     except Exception as e:
-        from .log_system.log_funcs import log_error
-        log_error(f"Error computing hash for {file_path}: {e}")
+        from .log_system.log_funcs import create_module_logger
+        _log = create_module_logger(__name__)
+        _log.error(f"Error computing hash for {file_path}: {e}")
         return None
 
 
@@ -191,8 +192,9 @@ def read_json_safe(file_path: str, default: Any = None) -> Any:
         with open(file_path, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        from .log_system.log_funcs import log_warn
-        log_warn(f"Error reading JSON from {os.path.basename(file_path)}: {e}")
+        from .log_system.log_funcs import create_module_logger
+        _log = create_module_logger(__name__)
+        _log.warning(f"Error reading JSON from {os.path.basename(file_path)}: {e}")
         return default
 
 

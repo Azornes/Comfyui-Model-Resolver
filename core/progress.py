@@ -5,7 +5,8 @@ Unified utility for reporting progress of asynchronous search and download opera
 """
 
 from typing import Dict, Any, Optional, Callable
-from .log_system.log_funcs import log_debug
+from .log_system.log_funcs import create_module_logger
+log = create_module_logger(__name__)
 
 
 def report_progress(
@@ -39,4 +40,4 @@ def report_progress(
     try:
         progress_callback(payload)
     except Exception as e:
-        log_debug(f"{error_context} failed: {e}")
+        log.debug(f"{error_context} failed: {e}")

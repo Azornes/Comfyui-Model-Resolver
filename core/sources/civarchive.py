@@ -31,12 +31,9 @@ from ..type_utils import (
     get_version_sort_key,
 )
 from ..progress import report_progress
-from ..log_system.log_funcs import (
-    log_debug,
-    log_info,
-    log_warn,
-    log_exception,
-)
+from ..log_system.log_funcs import create_module_logger
+log = create_module_logger(__name__)
+
 
 _coerce_int = to_int
 
@@ -152,7 +149,7 @@ def _extract_next_data(html_text: str) -> Dict[str, Any]:
     try:
         return json.loads(html.unescape(match.group(1)))
     except Exception as e:
-        log_warn(f"CivArchive search JSON parse failed: {e}")
+        log.warn(f"CivArchive search JSON parse failed: {e}")
         return {}
 
 
@@ -173,7 +170,7 @@ def _request_json(
                 timeout=timeout,
             )
         except Exception as e:
-            log_warn(f"CivArchive API request failed: path={path}, error={e}")
+            log.warn(f"CivArchive API request failed: path={path}, error={e}")
             return None
 
         if response.status_code != 429 or attempt == 1:
@@ -188,7 +185,7 @@ def _request_json(
 
     if response is None or response.status_code != 200:
         status = response.status_code if response is not None else "no-response"
-        log_debug(
+        log.debug(
             f"CivArchive API returned {status}: path={path}, params={params}"
         )
         return None
@@ -196,7 +193,7 @@ def _request_json(
     try:
         return response.json()
     except Exception as e:
-        log_warn(f"CivArchive API JSON parse failed: path={path}, error={e}")
+        log.warn(f"CivArchive API JSON parse failed: path={path}, error={e}")
         return None
 
 
@@ -226,11 +223,11 @@ def _request_page_text(
             timeout=timeout,
         )
     except Exception as e:
-        log_warn(f"CivArchive page request failed: url={url}, error={e}")
+        log.warn(f"CivArchive page request failed: url={url}, error={e}")
         return None
 
     if response.status_code != 200:
-        log_debug(f"CivArchive page returned {response.status_code}: url={url}")
+        log.debug(f"CivArchive page returned {response.status_code}: url={url}")
         return None
 
     return response.text
@@ -487,11 +484,11 @@ def _search_page(
             timeout=timeout,
         )
     except Exception as e:
-        log_warn(f"CivArchive search request failed: query={query}, error={e}")
+        log.warn(f"CivArchive search request failed: query={query}, error={e}")
         raise CivArchiveSearchError(str(e)) from e
 
     if response.status_code != 200:
-        log_warn(
+        log.warn(
             f"CivArchive search returned {response.status_code}: query={query}"
         )
         raise CivArchiveSearchError(f"HTTP {response.status_code}")
@@ -506,7 +503,7 @@ def _search_page(
     if not isinstance(results, list):
         return []
 
-    log_info(
+    log.info(
         f"CivArchive search returned {len(results)} candidates for query={query}"
     )
     return [result for result in results if isinstance(result, dict)]
@@ -690,7 +687,7 @@ def _fetch_remote_file_size_bytes(url: Any, timeout: int = 15) -> Optional[int]:
         finally:
             response.close()
     except Exception as e:
-        log_debug(f"CivArchive size HEAD failed: url={probe_url}, error={e}")
+        log.debug(f"CivArchive size HEAD failed: url={probe_url}, error={e}")
 
     if not size:
         try:
@@ -707,7 +704,7 @@ def _fetch_remote_file_size_bytes(url: Any, timeout: int = 15) -> Optional[int]:
             finally:
                 response.close()
         except Exception as e:
-            log_debug(f"CivArchive size range request failed: url={probe_url}, error={e}")
+            log.debug(f"CivArchive size range request failed: url={probe_url}, error={e}")
 
     _download_size_cache[probe_url] = size
     return size
@@ -1398,7 +1395,7 @@ def _find_model_title_match_in_model_details(
     model_name = model_details.get("name", "")
     title_confidence = calculate_model_title_confidence(title_query, model_name)
     if title_confidence < MODEL_TITLE_MATCH_THRESHOLD:
-        log_debug(
+        log.debug(
             f"CivArchive title candidate rejected: model_id={model_id}, query={title_query}, model_name={model_name}, confidence={title_confidence}"
         )
         return None
@@ -1443,13 +1440,13 @@ def _find_model_title_match_in_model_details(
 
         result["confidence"] = title_confidence
         result["title_confidence"] = title_confidence
-        log_info(
+        log.info(
             f"CivArchive model-title match: query={title_query}, model_id={model_id}, model_name={model_name}, version_id={result.get('version_id')}, filename={result.get('filename')}, confidence={title_confidence}, base={result.get('base_model')}"
         )
         return result
 
     if rejected_by_base_model:
-        log_debug(
+        log.debug(
             f"CivArchive title candidate rejected by base model: model_id={model_id}, base={base_model_context}"
         )
 
@@ -2476,7 +2473,7 @@ def search_civarchive_for_file(
     except CivArchiveSearchError:
         raise
     except Exception as e:
-        log_exception(f"CivArchive search error for {normalized_filename}: {e}")
+        log.exception(f"CivArchive search error for {normalized_filename}: {e}")
         _report_progress(
             progress_callback,
             "error",

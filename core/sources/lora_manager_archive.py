@@ -20,13 +20,9 @@ from ..matcher import (
 )
 from ..type_utils import select_primary_model_file
 from ..progress import report_progress
-from ..log_system.log_funcs import (
-    log_debug,
-    log_info,
-    log_warn,
-    log_error,
-    log_exception,
-)
+from ..log_system.log_funcs import create_module_logger
+log = create_module_logger(__name__)
+
 
 DEFAULT_LORA_MANAGER_DIR = "comfyui-lora-manager"
 DEFAULT_DB_RELATIVE_PATH = os.path.join("civitai", "civitai.sqlite")
@@ -100,12 +96,12 @@ def get_lora_manager_archive_db_path() -> Optional[str]:
     for candidate in candidates:
         if candidate and os.path.exists(candidate):
             _db_path_cache = os.path.abspath(candidate)
-            log_info(
+            log.info(
                 f"LoRA Manager archive DB found at {_db_path_cache}"
             )
             return _db_path_cache
 
-    log_debug("LoRA Manager archive DB not found")
+    log.debug("LoRA Manager archive DB not found")
     return None
 
 
@@ -126,7 +122,7 @@ def _connect_readonly() -> Optional[sqlite3.Connection]:
         conn.row_factory = sqlite3.Row
         return conn
     except Exception as e:
-        log_warn(f"Failed to open LoRA Manager archive DB: {e}")
+        log.warn(f"Failed to open LoRA Manager archive DB: {e}")
         return None
 
 
@@ -574,7 +570,7 @@ def search_lora_manager_archive(
         )
         if not candidate_rows:
             elapsed = time.perf_counter() - started_at
-            log_info(
+            log.info(
                 f"LoRA Manager archive query={normalized_query} type={normalized_type or 'all'} results=0 candidates=0 elapsed={elapsed:.3f}s"
             )
             _search_cache[cache_key] = []
@@ -670,7 +666,7 @@ def search_lora_manager_archive(
         results = results[:limit]
         _search_cache[cache_key] = list(results)
         elapsed = time.perf_counter() - started_at
-        log_info(
+        log.info(
             f"LoRA Manager archive query={normalized_query} type={normalized_type or 'all'} results={len(results)} candidates={len(candidate_rows)} elapsed={elapsed:.3f}s"
         )
         _report_progress(
@@ -683,7 +679,7 @@ def search_lora_manager_archive(
         )
         return results
     except Exception as e:
-        log_exception(f"LoRA Manager archive search error for {query}: {e}")
+        log.exception(f"LoRA Manager archive search error for {query}: {e}")
         _report_progress(
             progress_callback,
             "error",

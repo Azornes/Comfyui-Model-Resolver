@@ -14,13 +14,9 @@ from typing import Dict, Any, Optional, List, Callable
 from urllib.parse import urlparse, quote
 
 from ..progress import report_progress
-from ..log_system.log_funcs import (
-    log_debug,
-    log_info,
-    log_warn,
-    log_error,
-    log_exception,
-)
+from ..log_system.log_funcs import create_module_logger
+log = create_module_logger(__name__)
+
 from ..path_utils import write_json_atomic, METADATA_DIR
 from ..type_utils import check_credential_http
 
@@ -163,7 +159,7 @@ def _read_persistent_author_indexes() -> Dict[str, Any]:
             data["authors"] = {}
         return data
     except Exception as e:
-        log_debug(f"Error reading HuggingFace author index cache: {e}")
+        log.debug(f"Error reading HuggingFace author index cache: {e}")
         return {"version": HF_AUTHOR_INDEX_CACHE_VERSION, "authors": {}}
 
 
@@ -177,7 +173,7 @@ def _write_persistent_author_index(author: str, index: Dict[str, Any]) -> None:
             separators=(",", ":"),
         )
     except Exception as e:
-        log_debug(f"Error writing HuggingFace author index cache: {e}")
+        log.debug(f"Error writing HuggingFace author index cache: {e}")
 
 
 def _build_author_index_from_models(
@@ -225,7 +221,7 @@ def _fetch_author_index(author: str, headers: Dict[str, str], limit: int = 200):
             timeout=15,
         )
         if response.status_code != 200:
-            log_debug(
+            log.debug(
                 f"HuggingFace author index returned {response.status_code} for author={author}"
             )
             return None
@@ -235,12 +231,12 @@ def _fetch_author_index(author: str, headers: Dict[str, str], limit: int = 200):
             return None
 
         index = _build_author_index_from_models(author, repos)
-        log_info(
+        log.info(
             f"HuggingFace author index refreshed for author={author}: repos={index['repo_count']}, files={index['file_count']}"
         )
         return index
     except Exception as e:
-        log_debug(f"Error refreshing HuggingFace author index for author={author}: {e}")
+        log.debug(f"Error refreshing HuggingFace author index for author={author}: {e}")
         return None
 
 
@@ -262,7 +258,7 @@ def _get_author_index(
             )
             if not force_refresh and _is_author_index_fresh(persistent_index):
                 _author_index_cache[cache_key] = persistent_index
-                log_debug(f"HuggingFace author index cache hit for author={author}")
+                log.debug(f"HuggingFace author index cache hit for author={author}")
                 return persistent_index
 
         fresh_index = _fetch_author_index(author, headers=headers)
@@ -273,7 +269,7 @@ def _get_author_index(
             return fresh_index
 
         if persistent_index:
-            log_warn(
+            log.warn(
                 f"Using stale HuggingFace author index for author={author}; refresh failed"
             )
             _author_index_cache[cache_key] = persistent_index
@@ -451,7 +447,7 @@ def _fetch_remote_file_size_bytes(
         finally:
             response.close()
     except Exception as e:
-        log_debug(f"HuggingFace size HEAD failed: url={probe_url}, error={e}")
+        log.debug(f"HuggingFace size HEAD failed: url={probe_url}, error={e}")
 
     if not size:
         try:
@@ -468,7 +464,7 @@ def _fetch_remote_file_size_bytes(
             finally:
                 response.close()
         except Exception as e:
-            log_debug(f"HuggingFace size range request failed: url={probe_url}, error={e}")
+            log.debug(f"HuggingFace size range request failed: url={probe_url}, error={e}")
 
     _download_size_cache[cache_key] = size
     return size
@@ -533,13 +529,13 @@ def _get_repo_tree(
             timeout=15,
         )
         if response.status_code != 200:
-            log_debug(
+            log.debug(
                 f"HuggingFace tree request returned {response.status_code} for repo={repo_id}, branch={branch}"
             )
             return None
         return response.json()
     except Exception as e:
-        log_debug(f"Error getting HuggingFace tree for {repo_id}@{branch}: {e}")
+        log.debug(f"Error getting HuggingFace tree for {repo_id}@{branch}: {e}")
         return None
 
 
@@ -689,7 +685,7 @@ def _get_repos_by_author(
             timeout=15,
         )
         if response.status_code != 200:
-            log_debug(
+            log.debug(
                 f"HuggingFace author search returned {response.status_code} for author={author}"
             )
             return []
@@ -697,7 +693,7 @@ def _get_repos_by_author(
         repos = response.json()
         return [repo.get("id", "") for repo in repos if repo.get("id")]
     except Exception as e:
-        log_debug(f"Error getting HuggingFace repos for author={author}: {e}")
+        log.debug(f"Error getting HuggingFace repos for author={author}: {e}")
         return []
 
 
@@ -727,7 +723,7 @@ def _search_brave_for_huggingface_candidates(
             BRAVE_SEARCH_API_URL, headers=headers, params=params, timeout=15
         )
         if response.status_code != 200:
-            log_warn(
+            log.warn(
                 f"Brave search returned {response.status_code} for query={query}"
             )
             return []
@@ -769,7 +765,7 @@ def _search_brave_for_huggingface_candidates(
                 }
             )
     except Exception as e:
-        log_debug(f"Brave search error for filename={filename}: {e}")
+        log.debug(f"Brave search error for filename={filename}: {e}")
 
     return candidates
 
@@ -810,7 +806,7 @@ def search_huggingface_for_file(
     )
     cache_key = f"hf_{filename}_exact{exact_only}_{token_key}_{brave_key}_{methods_key}"
     if cache_key in _search_cache:
-        log_debug(f"HuggingFace cache hit file={filename} exact={exact_only}")
+        log.debug(f"HuggingFace cache hit file={filename} exact={exact_only}")
         _report_progress(
             progress_callback,
             "cache",
@@ -824,7 +820,7 @@ def search_huggingface_for_file(
         if token:
             headers["Authorization"] = f"Bearer {token}"
 
-        log_info(f"HuggingFace start file={filename} exact={exact_only}")
+        log.info(f"HuggingFace start file={filename} exact={exact_only}")
 
         repos_to_check = []
         seen_repos = set()
@@ -845,13 +841,13 @@ def search_huggingface_for_file(
                 search_url = f"{HF_API_URL}/models?search={quote(search_query)}&limit=20"
                 response = requests.get(search_url, headers=headers, timeout=10)
                 if response.status_code != 200:
-                    log_warn(
+                    log.warn(
                         f"HuggingFace API status={response.status_code} query={search_query}"
                     )
                     continue
 
                 repos = response.json()
-                log_info(f"HuggingFace API query={search_query} repos={len(repos)}")
+                log.info(f"HuggingFace API query={search_query} repos={len(repos)}")
 
                 for repo in repos:
                     repo_id = repo.get("id", "")
@@ -885,12 +881,12 @@ def search_huggingface_for_file(
                 candidate_index=repo_index,
                 candidate_count=repo_count,
             )
-            log_debug(f"HuggingFace check repo={repo_id} file={filename}")
+            log.debug(f"HuggingFace check repo={repo_id} file={filename}")
             files = _get_repo_tree(repo_id, headers=headers)
             if not files:
                 continue
 
-            log_debug(f"HuggingFace tree repo={repo_id} files={len(files)}")
+            log.debug(f"HuggingFace tree repo={repo_id} files={len(files)}")
             result = _find_matching_file_in_repo(
                 repo_id,
                 files,
@@ -908,7 +904,7 @@ def search_huggingface_for_file(
                     repo=repo_id,
                     match_type=result.get("match_type"),
                 )
-                log_info(
+                log.info(
                     f"HuggingFace found match={result['match_type']} file={filename} repo={repo_id} path={result['path']}"
                 )
                 return result
@@ -950,18 +946,18 @@ def search_huggingface_for_file(
                             repo=result.get("repo_id"),
                             match_type=result.get("match_type"),
                         )
-                        log_info(
+                        log.info(
                             f"HuggingFace found source=author_index match={result['match_type']} file={filename} repo={result['repo_id']} path={result['path']}"
                         )
                         return result
 
-                    log_debug(
+                    log.debug(
                         f"HuggingFace author_index miss author={author} file={filename} repos={index.get('repo_count', 0)} files={index.get('file_count', 0)}"
                     )
                     continue
 
                 repos = _get_repos_by_author(author, headers=headers)
-                log_info(f"HuggingFace author_fallback author={author} repos={len(repos)}")
+                log.info(f"HuggingFace author_fallback author={author} repos={len(repos)}")
                 for repo_id in repos:
                     if repo_id not in seen_repos:
                         seen_repos.add(repo_id)
@@ -986,7 +982,7 @@ def search_huggingface_for_file(
                 candidate_index=repo_index,
                 candidate_count=fallback_repo_count,
             )
-            log_debug(
+            log.debug(
                 f"HuggingFace author_fallback check repo={repo_id} file={filename}"
             )
             files = _get_repo_tree(repo_id, headers=headers)
@@ -1010,7 +1006,7 @@ def search_huggingface_for_file(
                     repo=repo_id,
                     match_type=result.get("match_type"),
                 )
-                log_info(
+                log.info(
                     f"HuggingFace found source=author_fallback match={result['match_type']} file={filename} repo={repo_id} path={result['path']}"
                 )
                 return result
@@ -1027,7 +1023,7 @@ def search_huggingface_for_file(
             if use_brave_fallback
             else []
         )
-        log_info(f"HuggingFace brave_fallback file={filename} candidates={len(brave_candidates)}")
+        log.info(f"HuggingFace brave_fallback file={filename} candidates={len(brave_candidates)}")
         _report_progress(
             progress_callback,
             "brave_candidates",
@@ -1071,7 +1067,7 @@ def search_huggingface_for_file(
                     repo=repo_id,
                     match_type=result.get("match_type"),
                 )
-                log_info(
+                log.info(
                     f"HuggingFace found source=brave_fallback match=exact file={filename} repo={repo_id} path={result['path']}"
                 )
                 return result
@@ -1087,13 +1083,13 @@ def search_huggingface_for_file(
             author_repo_count=author_fallback_repo_count,
             brave_candidate_count=len(brave_candidates),
         )
-        log_info(
+        log.info(
             f"HuggingFace miss file={filename} repos={len(repos_to_check)} author_repos={author_fallback_repo_count} brave={len(brave_candidates)}"
         )
         return None
 
     except Exception as e:
-        log_exception(f"HuggingFace search error for {filename}: {e}")
+        log.exception(f"HuggingFace search error for {filename}: {e}")
         _report_progress(
             progress_callback,
             "error",
@@ -1145,7 +1141,7 @@ def search_huggingface(
                 )
 
     except Exception as e:
-        log_error(f"HuggingFace search error: {e}")
+        log.error(f"HuggingFace search error: {e}")
 
     return results
 
@@ -1180,6 +1176,6 @@ def get_repo_files(repo: str, token: Optional[str] = None) -> List[Dict[str, Any
                     )
 
     except Exception as e:
-        log_error(f"Error getting repo files: {e}")
+        log.error(f"Error getting repo files: {e}")
 
     return files

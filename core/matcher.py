@@ -10,7 +10,8 @@ import heapq
 from typing import List, Dict, Tuple, Optional
 from difflib import SequenceMatcher
 
-from .log_system.log_funcs import log_debug, log_info, log_warn, log_error, log_exception
+from .log_system.log_funcs import create_module_logger
+log = create_module_logger(__name__)
 
 try:
     from rapidfuzz import fuzz as rapidfuzz_fuzz
