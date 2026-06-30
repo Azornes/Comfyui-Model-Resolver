@@ -1774,9 +1774,6 @@ export const optionsMethods = {
                 }
 
                 if (appliedCount > 0 || mappingCount > 0) {
-                    if (appliedCount > 0 && downloadPathModeInput) {
-                        downloadPathModeInput.value = 'template';
-                    }
                     syncAllTemplateControls();
                     setStatus('You have unsaved changes.', 'is-dirty');
                     const mappingText = mappingCount
