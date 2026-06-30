@@ -74,6 +74,57 @@ DEFAULT_CONFIG = {
 }
 
 
+_WINDOWS_VT_PROCESSING_ENABLED = False
+
+
+def _enable_windows_virtual_terminal_processing():
+    """Enable ANSI escape sequence handling for classic Windows consoles."""
+    global _WINDOWS_VT_PROCESSING_ENABLED
+    if _WINDOWS_VT_PROCESSING_ENABLED or os.name != "nt":
+        return
+
+    try:
+        import ctypes
+
+        enable_virtual_terminal_processing = 0x0004
+        std_handles = (-11, -12)
+        invalid_handle_value = ctypes.c_void_p(-1).value
+
+        kernel32 = ctypes.windll.kernel32
+        kernel32.GetStdHandle.restype = ctypes.c_void_p
+        enabled_any = False
+        for std_handle in std_handles:
+            handle = kernel32.GetStdHandle(std_handle)
+            if handle in (None, 0, invalid_handle_value):
+                continue
+
+            mode = ctypes.c_uint32()
+            if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+                continue
+
+            new_mode = mode.value | enable_virtual_terminal_processing
+            if new_mode != mode.value:
+                kernel32.SetConsoleMode(handle, new_mode)
+
+            enabled_any = True
+
+        _WINDOWS_VT_PROCESSING_ENABLED = enabled_any
+    except Exception:
+        return
+
+
+def _get_console_output_stream():
+    """Return the console stream that preserves ANSI colors under wrapped launchers."""
+    for stream_name in ("__stdout__", "__stderr__", "stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        if stream is None:
+            continue
+        if getattr(stream, "closed", False):
+            continue
+        return stream
+    return None
+
+
 class ColoredFormatter(logging.Formatter):
     """Formatter that adds colors to console logs"""
 
@@ -165,13 +216,13 @@ class ColoredFormatter(logging.Formatter):
         if not rgb:
             return text
         r, g, b = rgb
-        return f"\033[1m\033[48;2;{r};{g};{b};97m {text} {COLORS['RESET']}"
+        return f"\033[1;97;48;2;{r};{g};{b}m {text} {COLORS['RESET']}"
 
     def _color_timestamp(self, text):
-        return f"{COLORS['TIME_BG']} {text} {COLORS['RESET']}"
+        return f"\033[97;48;2;38;63;76m {text} {COLORS['RESET']}"
 
     def _color_root_label(self, text):
-        return f"{COLORS['TIME_BG']} {text} {COLORS['RESET']}"
+        return f"\033[97;48;2;38;63;76m {text} {COLORS['RESET']}"
 
     def _color_separator(self, levelname, text):
         rgb = LEVEL_THEME.get(levelname)
@@ -265,6 +316,9 @@ class AzLogsLogger:
     def configure(self, config):
         """Configure the logger"""
         self.config.update(config)
+
+        if self.config.get("use_colors"):
+            _enable_windows_virtual_terminal_processing()
 
         # If file logging is enabled, ensure the directory exists
         if self.config.get("log_to_file") and self.config.get("log_dir"):
@@ -381,7 +435,11 @@ class AzLogsLogger:
         logger.propagate = False
 
         # Add console handler
-        console_handler = logging.StreamHandler(sys.stdout)
+        if self.config["use_colors"]:
+            _enable_windows_virtual_terminal_processing()
+
+        console_stream = _get_console_output_stream()
+        console_handler = logging.StreamHandler(console_stream)
         console_formatter = ColoredFormatter(
             fmt="[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s",
             datefmt=self.config["timestamp_format"],
