@@ -11,8 +11,6 @@ Modules:
 - sources: Search integrations (HuggingFace, CivitAI, popular models)
 """
 
-from .log_system.log_funcs import create_module_logger
-from .log_system.logger import logger
 from .resolver import analyze_and_find_matches, apply_resolution
 from .scanner import get_model_files
 from .matcher import find_matches
@@ -23,6 +21,4 @@ __all__ = [
     "apply_resolution",
     "get_model_files",
     "find_matches",
-    "logger",
-    "create_module_logger",
 ]
