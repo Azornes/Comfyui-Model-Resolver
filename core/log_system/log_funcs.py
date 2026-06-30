@@ -64,10 +64,28 @@ def _normalize_module_name(module_name):
 
     Strips common prefixes (custom_nodes, project aliases) and ``__init__``
     suffixes to produce a clean, readable module path.
+
+    ComfyUI sets ``__name__`` to hybrid values like
+    ``E:\\...\\comfyui-model-resolver.core.sources.model_list`` where the
+    first dotted segment is a full OS path.  We detect this and convert
+    the path portion to a dotted name before applying the normal logic.
     """
     module_name = str(module_name or "").strip()
     if not module_name or module_name == "__main__":
         return _default_module_name
+
+    # --- path-to-dots conversion (required for ComfyUI's __name__) ---
+    if os.sep in module_name or "/" in module_name:
+        # Replace all path separators with dots so the rest of the logic
+        # can work uniformly on dotted segments.
+        normalized = module_name.replace("\\", ".").replace("/", ".")
+        # Remove drive letter prefix (e.g. "E:." → "")
+        if len(normalized) >= 2 and normalized[1] == ":":
+            normalized = normalized[2:].lstrip(".")
+        # Strip .py extension if present
+        if normalized.endswith(".py"):
+            normalized = normalized[:-3]
+        module_name = normalized
 
     parts = [p for p in module_name.split(".") if p]
     if not parts:
