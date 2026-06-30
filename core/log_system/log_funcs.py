@@ -15,7 +15,7 @@ _project_root = None
 _default_module_name = __name__
 
 try:
-    from .logger import logger, LogLevel, debug, info, warn, error, exception
+    from .logger import logger, LogLevel, debug, info, warn, error, exception, fatal
     from .config import LOG_LEVEL, LOG_MODULE_NAME, USE_COLORS, PROJECT_ALIASES
 
     def _find_project_root(start_path):
@@ -62,37 +62,14 @@ except ImportError as e:
 def _normalize_module_name(module_name):
     """Normalize a dotted module name for display in logs.
 
-    Strips common prefixes (custom_nodes, project aliases) and __init__
+    Strips common prefixes (custom_nodes, project aliases) and ``__init__``
     suffixes to produce a clean, readable module path.
     """
     module_name = str(module_name or "").strip()
-    if not module_name:
+    if not module_name or module_name == "__main__":
         return _default_module_name
 
-    if module_name == "__main__":
-        return _default_module_name
-
-    # If it is a path (contains slashes or is absolute), normalize it to a relative dotted path first
-    if os.sep in module_name or "/" in module_name or os.path.isabs(module_name):
-        normalized_path = module_name.replace("/", os.sep).replace("\\", os.sep)
-        path_no_ext = os.path.splitext(normalized_path)[0]
-        if _project_root:
-            try:
-                relative_path = os.path.relpath(path_no_ext, _project_root)
-            except ValueError:
-                relative_path = os.path.basename(path_no_ext)
-        else:
-            relative_path = os.path.basename(path_no_ext)
-
-        if relative_path == ".":
-            module_name = ""
-        else:
-            module_name = relative_path.replace(os.sep, ".")
-
-    if not module_name:
-        return _default_module_name
-
-    parts = [part for part in module_name.split(".") if part]
+    parts = [p for p in module_name.split(".") if p]
     if not parts:
         return _default_module_name
 
@@ -106,7 +83,8 @@ def _normalize_module_name(module_name):
 
     # Strip custom_nodes.<package_name> prefix
     if "custom_nodes" in parts:
-        parts = parts[parts.index("custom_nodes") + 2:]
+        idx = parts.index("custom_nodes")
+        parts = parts[idx + 2:]  # skip custom_nodes + package folder
 
     # Strip project aliases from config
     for alias in PROJECT_ALIASES:
@@ -123,6 +101,15 @@ def _normalize_module_name(module_name):
     return cleaned or _default_module_name
 
 
+# Number of internal call frames between ModuleLogger methods and
+# Python's logging.Logger.log().  Used to compute the correct
+# ``stacklevel`` so that log records report the *caller's* file and
+# line number instead of an internal wrapper.
+#
+# Call chain: ModuleLogger.method → module-level func → AzLogsLogger.log → logging.Logger.log
+_INTERNAL_FRAMES = 3
+
+
 class ModuleLogger:
     """Per-module logger with a fixed module name.
 
@@ -130,6 +117,7 @@ class ModuleLogger:
         log = create_module_logger(__name__)
         log.debug("message")
         log.info("message")
+        log.info("downloaded", extra={"model": "xyz"})
     """
 
     def __init__(self, module_name):
@@ -137,21 +125,21 @@ class ModuleLogger:
 
     def debug(self, *args, **kwargs):
         if _initialized:
-            kwargs.setdefault("stacklevel", 4)
+            kwargs["stacklevel"] = kwargs.pop("stacklevel", 1) + _INTERNAL_FRAMES
             debug(self.module_name, *args, **kwargs)
         else:
             print(f"[DEBUG] [{self.module_name}]", *args)
 
     def info(self, *args, **kwargs):
         if _initialized:
-            kwargs.setdefault("stacklevel", 4)
+            kwargs["stacklevel"] = kwargs.pop("stacklevel", 1) + _INTERNAL_FRAMES
             info(self.module_name, *args, **kwargs)
         else:
             print(f"[INFO] [{self.module_name}]", *args)
 
     def warning(self, *args, **kwargs):
         if _initialized:
-            kwargs.setdefault("stacklevel", 4)
+            kwargs["stacklevel"] = kwargs.pop("stacklevel", 1) + _INTERNAL_FRAMES
             warn(self.module_name, *args, **kwargs)
         else:
             print(f"[WARN] [{self.module_name}]", *args)
@@ -161,17 +149,25 @@ class ModuleLogger:
 
     def error(self, *args, **kwargs):
         if _initialized:
-            kwargs.setdefault("stacklevel", 4)
+            kwargs["stacklevel"] = kwargs.pop("stacklevel", 1) + _INTERNAL_FRAMES
             error(self.module_name, *args, **kwargs)
         else:
             print(f"[ERROR] [{self.module_name}]", *args)
 
-    def exception(self, *args):
+    def exception(self, *args, **kwargs):
         if _initialized:
-            exception(self.module_name, *args, stacklevel=4)
+            kwargs["stacklevel"] = kwargs.pop("stacklevel", 1) + _INTERNAL_FRAMES
+            exception(self.module_name, *args, **kwargs)
         else:
             print(f"[ERROR] [{self.module_name}]", *args)
             traceback.print_exc()
+
+    def fatal(self, *args, **kwargs):
+        if _initialized:
+            kwargs["stacklevel"] = kwargs.pop("stacklevel", 1) + _INTERNAL_FRAMES
+            fatal(self.module_name, *args, **kwargs)
+        else:
+            print(f"[FATAL] [{self.module_name}]", *args)
 
 
 def create_module_logger(module_name=None):
@@ -186,5 +182,3 @@ def create_module_logger(module_name=None):
     """
     resolved_name = _normalize_module_name(module_name or _default_module_name)
     return ModuleLogger(resolved_name)
-
-

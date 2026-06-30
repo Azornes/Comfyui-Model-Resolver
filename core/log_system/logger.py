@@ -30,6 +30,7 @@ class LogLevel(IntEnum):
     INFO = 20
     WARN = 30
     ERROR = 40
+    FATAL = 50
     NONE = 100
 
 
@@ -39,25 +40,20 @@ LEVEL_MAP = {
     LogLevel.INFO: logging.INFO,
     LogLevel.WARN: logging.WARNING,
     LogLevel.ERROR: logging.ERROR,
+    LogLevel.FATAL: logging.CRITICAL,
     LogLevel.NONE: logging.CRITICAL + 1,
 }
 
-# ANSI colors for different log levels
-COLORS = {
-    LogLevel.DEBUG: "\033[90m",  # Gray
-    LogLevel.INFO: "\033[94m",  # Blue
-    LogLevel.WARN: "\033[93m",  # Yellow
-    LogLevel.ERROR: "\033[91m",  # Red
-    "TIME_BG": "\033[48;2;38;63;76;97m",  # #263f4c background, white text
-    "MESSAGE": "\033[96m",  # Cyan
-    "RESET": "\033[0m",  # Reset
-}
+# ANSI reset sequence (all coloring uses LEVEL_THEME RGB values)
+ANSI_RESET = "\033[0m"
 
+# RGB color theme per log level
 LEVEL_THEME = {
-    "DEBUG": (155, 89, 182),  # #9B59B6
-    "INFO": (46, 204, 113),  # #2ECC71
-    "WARN": (243, 156, 18),  # #F39C12
-    "ERROR": (192, 57, 43),  # #C0392B
+    "DEBUG": (155, 89, 182),     # #9B59B6
+    "INFO": (46, 204, 113),      # #2ECC71
+    "WARN": (243, 156, 18),      # #F39C12
+    "ERROR": (192, 57, 43),      # #C0392B
+    "FATAL": (231, 76, 60),      # #E74C3C — brighter red than ERROR
 }
 
 # Default configuration
@@ -246,7 +242,12 @@ class ColoredFormatter(logging.Formatter):
         return parts[0], parts[1]
 
     def _display_level_name(self, levelname):
-        return "WARN" if levelname == "WARNING" else str(levelname or "")
+        name = str(levelname or "")
+        if name == "WARNING":
+            return "WARN"
+        if name == "CRITICAL":
+            return "FATAL"
+        return name
 
     def _format_level(self, levelname):
         if self.include_brackets:
@@ -267,27 +268,28 @@ class ColoredFormatter(logging.Formatter):
         if not rgb:
             return text
         r, g, b = rgb
-        return f"\033[1;97;48;2;{r};{g};{b}m {text} {COLORS['RESET']}"
+        return f"\033[1;97;48;2;{r};{g};{b}m {text} {ANSI_RESET}"
 
     def _color_timestamp(self, text):
-        return f"\033[97;48;2;38;63;76m {text} {COLORS['RESET']}"
+        return f"\033[97;48;2;38;63;76m {text} {ANSI_RESET}"
 
     def _color_root_label(self, text):
-        return f"\033[97;48;2;38;63;76m {text} {COLORS['RESET']}"
+        return f"\033[97;48;2;38;63;76m {text} {ANSI_RESET}"
 
     def _color_separator(self, levelname, text):
         rgb = LEVEL_THEME.get(levelname)
         if not rgb:
             return text
         r, g, b = rgb
-        return f"\033[48;2;{r};{g};{b}m{text}{COLORS['RESET']}"
+        return f"\033[48;2;{r};{g};{b}m{text}{ANSI_RESET}"
 
     def _color_message(self, levelname, text):
         rgb = LEVEL_THEME.get(levelname)
         if not rgb:
-            return f"{COLORS['MESSAGE']}{text}{COLORS['RESET']}"
+            # Fallback: cyan for unknown levels
+            return f"\033[96m{text}{ANSI_RESET}"
         r, g, b = rgb
-        return f"\033[38;2;{r};{g};{b}m{text}{COLORS['RESET']}"
+        return f"\033[38;2;{r};{g};{b}m{text}{ANSI_RESET}"
 
 
 class AzLogsLogger:
@@ -377,9 +379,9 @@ class AzLogsLogger:
             try:
                 os.makedirs(self.config["log_dir"], exist_ok=True)
             except OSError as e:
-                # This is a critical situation, so use print
+                # This is a fatal situation, so use print
                 print(
-                    f"[CRITICAL] Could not create log directory: {self.config['log_dir']}. Error: {e}"
+                    f"[FATAL] Could not create log directory: {self.config['log_dir']}. Error: {e}"
                 )
                 traceback.print_exc()
                 # Disable file logging to avoid further errors
@@ -542,15 +544,16 @@ class AzLogsLogger:
         # Convert arguments to string
         message = " ".join(str(arg) for arg in args)
 
-        # Add exception info if provided
+        # Extract known kwargs
         exc_info = kwargs.get("exc_info", None)
         stacklevel = kwargs.get("stacklevel", 1)
+        extra = kwargs.get("extra", None)
 
         # Map LogLevel to logging level
         log_level = LEVEL_MAP.get(level, logging.INFO)
 
         # Write log
-        logger.log(log_level, message, exc_info=exc_info, stacklevel=stacklevel)
+        logger.log(log_level, message, exc_info=exc_info, stacklevel=stacklevel, extra=extra)
 
     def debug(self, module, *args, **kwargs):
         """Log at DEBUG level"""
@@ -572,6 +575,10 @@ class AzLogsLogger:
         """Log exception at ERROR level"""
         kwargs["exc_info"] = True
         self.log(module, LogLevel.ERROR, *args, **kwargs)
+
+    def fatal(self, module, *args, **kwargs):
+        """Log at FATAL level"""
+        self.log(module, LogLevel.FATAL, *args, **kwargs)
 
 
 # Singleton
@@ -603,6 +610,11 @@ def exception(module, *args, **kwargs):
     """Log exception at ERROR level"""
     kwargs["exc_info"] = True
     logger.log(module, LogLevel.ERROR, *args, **kwargs)
+
+
+def fatal(module, *args, **kwargs):
+    """Log at FATAL level"""
+    logger.log(module, LogLevel.FATAL, *args, **kwargs)
 
 
 # Function to quickly enable/disable debugging
