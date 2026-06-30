@@ -1,7 +1,7 @@
 """
 @author: Azornes
 @title: AzLogs
-@version: 1.5.6
+@version: 1.5.7
 @description: Logging Initializator
 """
 # ruff: noqa: T201
@@ -44,7 +44,11 @@ try:
         {
             "log_to_file": True,
             "log_dir": os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs"),
-            "use_colors": USE_COLORS,
+            "use_colors": (
+                    logger.config["use_colors"]
+                    if "AZLOGS_USE_COLORS" in os.environ
+                    else USE_COLORS
+            ),
         }
     )
 
