@@ -6259,6 +6259,13 @@ a.mr-image-preview-resource-name:hover {
     height: 14px;
 }
 
+.mr-options-export-status {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    margin-top: 0;
+}
+
 #model-resolver-modal .mr-options-shell .mr-btn.mr-btn-primary,
 #model-resolver-modal .mr-options-shell .mr-btn.mr-btn-primary:hover:not(:disabled) {
     color: #101010;

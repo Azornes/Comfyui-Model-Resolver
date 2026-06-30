@@ -638,6 +638,10 @@ export const optionsMethods = {
                                                     ${renderLogLevelOptions(tokens.frontend_log_level)}
                                                 </select>
                                             </div>
+                                            <div class="mr-options-db-actions mr-options-export-actions">
+                                                <button id="mr-options-export-frontend-logs" type="button" class="mr-btn mr-btn-secondary">${getSvgIcon('download')} Export Frontend Logs</button>
+                                                <span id="mr-options-export-frontend-logs-status" class="mr-options-db-message mr-options-export-status">Ready to export frontend logs.</span>
+                                            </div>
                                         </div>
                                         <label class="mr-options-toggle-row">
                                             <div class="mr-options-toggle-copy">
@@ -656,6 +660,10 @@ export const optionsMethods = {
                                                 <select id="mr-options-backend-log-level" class="mr-options-input">
                                                     ${renderLogLevelOptions(tokens.backend_log_level)}
                                                 </select>
+                                            </div>
+                                            <div class="mr-options-db-actions mr-options-export-actions">
+                                                <button id="mr-options-export-backend-logs" type="button" class="mr-btn mr-btn-secondary">${getSvgIcon('download')} Export Backend Logs</button>
+                                                <span id="mr-options-export-backend-logs-status" class="mr-options-db-message mr-options-export-status">Ready to export backend logs.</span>
                                             </div>
                                         </div>
                                     </div>
@@ -722,6 +730,10 @@ export const optionsMethods = {
         const backendLogsEnabledInput = this.contentElement.querySelector('#mr-options-backend-logs-enabled');
         const frontendLogLevelInput = this.contentElement.querySelector('#mr-options-frontend-log-level');
         const backendLogLevelInput = this.contentElement.querySelector('#mr-options-backend-log-level');
+        const exportFrontendLogsBtn = this.contentElement.querySelector('#mr-options-export-frontend-logs');
+        const exportBackendLogsBtn = this.contentElement.querySelector('#mr-options-export-backend-logs');
+        const exportFrontendLogsStatus = this.contentElement.querySelector('#mr-options-export-frontend-logs-status');
+        const exportBackendLogsStatus = this.contentElement.querySelector('#mr-options-export-backend-logs-status');
         const hfTokenCheckBtn = this.contentElement.querySelector('#mr-options-hf-token-check');
         const hfTokenCheckStatus = this.contentElement.querySelector('#mr-options-hf-token-check-status');
         const braveKeyCheckBtn = this.contentElement.querySelector('#mr-options-brave-key-check');
@@ -783,6 +795,85 @@ export const optionsMethods = {
             status.textContent = text;
             status.classList.remove('is-dirty', 'is-saved');
             if (mode) status.classList.add(mode);
+        };
+
+        const setExportLogsStatus = (statusEl, text) => {
+            if (statusEl) statusEl.textContent = text;
+        };
+
+        const parseDownloadFilename = (header, fallback) => {
+            const value = String(header || '');
+            const utf8Match = value.match(/filename\*=UTF-8''([^;]+)/i);
+            if (utf8Match?.[1]) {
+                try {
+                    return decodeURIComponent(utf8Match[1].trim().replace(/^"|"$/g, ''));
+                } catch (error) {
+                    return utf8Match[1].trim().replace(/^"|"$/g, '') || fallback;
+                }
+            }
+            const match = value.match(/filename="?([^";]+)"?/i);
+            return match?.[1]?.trim() || fallback;
+        };
+
+        const downloadBlob = (blob, filename) => {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        };
+
+        const exportFrontendLogs = () => {
+            try {
+                if (exportFrontendLogsBtn) exportFrontendLogsBtn.disabled = true;
+                const exported = frontendLogger.exportLogs('txt');
+                if (!exported) {
+                    setExportLogsStatus(exportFrontendLogsStatus, 'No frontend logs captured yet.');
+                    this.showNotification('No frontend logs to export', 'warning');
+                    return;
+                }
+                setExportLogsStatus(exportFrontendLogsStatus, 'Frontend logs exported.');
+                this.showNotification('Frontend logs exported', 'success');
+            } catch (error) {
+                console.error('Model Resolver: frontend log export failed:', error);
+                setExportLogsStatus(exportFrontendLogsStatus, error.message || 'Frontend log export failed.');
+                this.showNotification('Frontend log export failed', 'error');
+            } finally {
+                if (exportFrontendLogsBtn) exportFrontendLogsBtn.disabled = false;
+            }
+        };
+
+        const exportBackendLogs = async () => {
+            try {
+                if (exportBackendLogsBtn) exportBackendLogsBtn.disabled = true;
+                setExportLogsStatus(exportBackendLogsStatus, 'Preparing backend logs...');
+                const response = await api.fetchApi('/model_resolver/logs/backend/export');
+                if (!response.ok) {
+                    let errorMsg = `Server returned ${response.status}: ${response.statusText}`;
+                    try {
+                        const errData = await response.json();
+                        if (errData?.error) errorMsg = errData.error;
+                    } catch (_) { }
+                    throw new Error(errorMsg);
+                }
+                const blob = await response.blob();
+                const filename = parseDownloadFilename(
+                    response.headers.get('Content-Disposition'),
+                    `model_resolver_backend_logs_${new Date().toISOString().replace(/[:.]/g, '-')}.txt`
+                );
+                downloadBlob(blob, filename);
+                setExportLogsStatus(exportBackendLogsStatus, 'Backend logs exported.');
+                this.showNotification('Backend logs exported', 'success');
+            } catch (error) {
+                console.error('Model Resolver: backend log export failed:', error);
+                setExportLogsStatus(exportBackendLogsStatus, error.message || 'Backend log export failed.');
+                this.showNotification('Backend log export failed', 'error');
+            } finally {
+                if (exportBackendLogsBtn) exportBackendLogsBtn.disabled = false;
+            }
         };
 
         const formatOptionDate = (value) => {
@@ -1820,6 +1911,18 @@ export const optionsMethods = {
         if (hfIndexRefreshBtn) {
             hfIndexRefreshBtn.addEventListener('click', () => {
                 refreshHfIndex();
+            });
+        }
+
+        if (exportFrontendLogsBtn) {
+            exportFrontendLogsBtn.addEventListener('click', () => {
+                exportFrontendLogs();
+            });
+        }
+
+        if (exportBackendLogsBtn) {
+            exportBackendLogsBtn.addEventListener('click', () => {
+                exportBackendLogs();
             });
         }
 

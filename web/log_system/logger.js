@@ -221,11 +221,11 @@ class Logger {
             callsite,
             time: new Date()
         };
+        this.logs.push(logData);
+        if (this.logs.length > this.config.maxStoredLogs) {
+            this.logs.shift();
+        }
         if (this.config.saveToStorage) {
-            this.logs.push(logData);
-            if (this.logs.length > this.config.maxStoredLogs) {
-                this.logs.shift();
-            }
             this.saveLogs();
         }
         this.printToConsole(logData);
@@ -662,13 +662,13 @@ class Logger {
     exportLogs(format = 'json') {
         if (this.logs.length === 0) {
             console.warn('No logs to export');
-            return;
+            return false;
         }
         let content;
         let mimeType;
         let extension;
         if (format === 'json') {
-            content = JSON.stringify(this.logs, null, 2);
+            content = JSON.stringify(this.logs.map((log) => this.serializeLogEntry(log)), null, 2);
             mimeType = 'application/json';
             extension = 'json';
         }
@@ -690,6 +690,7 @@ class Logger {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+        return true;
     }
     /**
      * Log at DEBUG level
