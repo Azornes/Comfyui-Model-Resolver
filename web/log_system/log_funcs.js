@@ -25,7 +25,8 @@ export function createModuleLogger(moduleName) {
         debug: (...args) => logger.debug(moduleName, ...args),
         info: (...args) => logger.info(moduleName, ...args),
         warn: (...args) => logger.warn(moduleName, ...args),
-        error: (...args) => logger.error(moduleName, ...args)
+        error: (...args) => logger.error(moduleName, ...args),
+        fatal: (...args) => logger.fatal(moduleName, ...args)
     };
 }
 /**

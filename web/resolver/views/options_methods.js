@@ -131,7 +131,7 @@ export const optionsMethods = {
                 `;
             })
             .join('');
-        const logLevelValues = ['DEBUG', 'INFO', 'WARN', 'ERROR', 'NONE'];
+        const logLevelValues = ['DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL', 'NONE'];
         const normalizeLogLevel = (value) => {
             const normalized = String(value || '').trim().toUpperCase();
             return logLevelValues.includes(normalized) ? normalized : 'DEBUG';

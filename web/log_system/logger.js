@@ -50,7 +50,8 @@ export const LogLevel = {
     INFO: 1,
     WARN: 2,
     ERROR: 3,
-    NONE: 4
+    FATAL: 4,
+    NONE: 5
 };
 const DEFAULT_CONFIG = {
     enabled: true,
@@ -69,18 +70,21 @@ const COLORS = {
     [LogLevel.INFO]: '#2ECC71',
     [LogLevel.WARN]: '#F39C12',
     [LogLevel.ERROR]: '#C0392B',
+    [LogLevel.FATAL]: '#E74C3C',
 };
 const LEVEL_NAMES = {
     [LogLevel.DEBUG]: 'DEBUG',
     [LogLevel.INFO]: 'INFO',
     [LogLevel.WARN]: 'WARN',
     [LogLevel.ERROR]: 'ERROR',
+    [LogLevel.FATAL]: 'FATAL',
 };
 const CONSOLE_METHODS = {
     [LogLevel.DEBUG]: 'debug',
     [LogLevel.INFO]: 'info',
     [LogLevel.WARN]: 'warn',
     [LogLevel.ERROR]: 'error',
+    [LogLevel.FATAL]: 'error',
 };
 const TIME_BG = '#263f4c';
 const LEVEL_WIDTH = 5;
@@ -724,12 +728,21 @@ class Logger {
     error(module, ...args) {
         this.log(module, LogLevel.ERROR, ...args);
     }
+    /**
+     * Log at FATAL level
+     * @param {string} module - Module name
+     * @param {any[]} args - Arguments to log
+     */
+    fatal(module, ...args) {
+        this.log(module, LogLevel.FATAL, ...args);
+    }
 }
 export const logger = new Logger();
 export const debug = (module, ...args) => logger.debug(module, ...args);
 export const info = (module, ...args) => logger.info(module, ...args);
 export const warn = (module, ...args) => logger.warn(module, ...args);
 export const error = (module, ...args) => logger.error(module, ...args);
+export const fatal = (module, ...args) => logger.fatal(module, ...args);
 if (typeof window !== 'undefined') {
     window[WINDOW_LOGGER_KEY] = logger;
 }

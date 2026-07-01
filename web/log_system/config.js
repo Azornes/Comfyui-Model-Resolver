@@ -1,11 +1,11 @@
-﻿/**
+/**
 author: Azornes
 title: AzLogs
 version: 1.5.6
 description: Logging Configuration
 */
 // Log level for development.
-// Possible values: 'DEBUG', 'INFO', 'WARN', 'ERROR', 'NONE'
+// Possible values: 'DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL', 'NONE'
 export const LOG_LEVEL = 'DEBUG';
 
 // Logger module name. Set to null to use the default project name.
