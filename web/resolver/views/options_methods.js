@@ -1572,7 +1572,8 @@ export const optionsMethods = {
             });
         };
 
-        const addBaseModelMappingRow = (baseModel = '', pathValue = '') => {
+        const addBaseModelMappingRow = (baseModel = '', pathValue = '', options = {}) => {
+            const shouldRefresh = options.refresh !== false;
             if (!baseModelMappingsContainer) return;
 
             const row = document.createElement('div');
@@ -1611,7 +1612,9 @@ export const optionsMethods = {
             });
 
             baseModelMappingsContainer.appendChild(row);
-            refreshBaseModelMappingOptions();
+            if (shouldRefresh) {
+                refreshBaseModelMappingOptions();
+            }
             this.bindTooltips(row);
         };
 
@@ -1624,8 +1627,9 @@ export const optionsMethods = {
                 return;
             }
             entries.forEach(([baseModel, pathValue]) => {
-                addBaseModelMappingRow(baseModel, pathValue);
+                addBaseModelMappingRow(baseModel, pathValue, { refresh: false });
             });
+            refreshBaseModelMappingOptions();
         };
 
         const renderTemplatePreview = (template) => {
