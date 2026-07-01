@@ -165,6 +165,15 @@ export class ResolverManagerDialog extends ComfyDialog {
             $el("div.mr-context-menu-divider.mr-context-menu-divider-folder", {
                 "data-menu-divider": "folder"
             }),
+            $el("div.mr-context-menu-item.mr-context-menu-action-compare-hashes", {
+                "data-menu-action": "compareHashes",
+                onclick: () => this.handleContextMenuAction('compareHashes')
+            }, [
+                $el("span.mr-context-menu-item-icon", {
+                    innerHTML: getSvgIcon('hash', 'currentColor', 'mr-context-menu-item-svg')
+                }),
+                $el("span", { textContent: "Compare Hashes" })
+            ]),
             $el("div.mr-context-menu-item.mr-context-menu-action-open-folder", {
                 "data-menu-action": "openFolder",
                 onclick: () => this.handleContextMenuAction('openFolder')

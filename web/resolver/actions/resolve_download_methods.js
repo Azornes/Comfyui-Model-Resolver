@@ -457,6 +457,10 @@ export const resolveDownloadMethods = {
         const targetPath = directory || filePath;
         if (!targetPath) return null;
 
+        const missing = info?.missing || progress?.missing || null;
+        const missingKey = missing ? this.getMissingModelKey?.(missing) : (info?.missing_key || progress?.missing_key || '');
+        const missingSearchKey = missing ? this.getMissingSearchKey?.(missing) : (info?.missing_search_key || progress?.missing_search_key || '');
+
         return {
             context_scope: 'download_folder',
             name: progress?.filename || info?.filename || 'Download',
@@ -466,7 +470,9 @@ export const resolveDownloadMethods = {
             folder_path: directory || targetPath,
             download_directory: directory || '',
             download_path: filePath || '',
-            category: info?.category || progress?.category || ''
+            category: info?.category || progress?.category || '',
+            missing_key: missingKey || '',
+            missing_search_key: missingSearchKey || ''
         };
     },
 

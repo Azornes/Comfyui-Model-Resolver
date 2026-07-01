@@ -479,6 +479,68 @@ def search_local_matches_by_hash(
     return matches
 
 
+def get_local_model_hash_metadata(
+    model_path: str,
+    model: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Return SHA256 hashes already stored in sidecar metadata for a local model.
+
+    This intentionally does not hash model files. It only reads metadata sidecars
+    next to the selected local model, so callers can do quick hash comparisons.
+    """
+    raw_path = str(model_path or "").strip()
+    if not raw_path:
+        return {"exists": False, "metadata_path": "", "hashes": [], "sha256": ""}
+
+    normalized_path = os.path.abspath(os.path.normpath(raw_path))
+    exists = os.path.exists(normalized_path)
+    model_info: Dict[str, Any] = {
+        **(model if isinstance(model, dict) else {}),
+        "path": normalized_path,
+    }
+    model_info.setdefault("filename", os.path.basename(normalized_path))
+    model_info.setdefault("relative_path", model_info.get("filename", ""))
+
+    first_metadata_path = ""
+    last_hash_status = ""
+    for metadata_path in _metadata_sidecar_candidates(normalized_path):
+        if not os.path.exists(metadata_path):
+            continue
+
+        if not first_metadata_path:
+            first_metadata_path = metadata_path
+
+        try:
+            with open(metadata_path, "r", encoding="utf-8") as handle:
+                metadata = json.load(handle)
+        except Exception as exc:
+            log.debug(f"Could not read metadata sidecar for local hash lookup: {metadata_path} ({exc})")
+            continue
+
+        if not isinstance(metadata, dict):
+            continue
+
+        last_hash_status = str(metadata.get("hash_status") or "").strip()
+        hashes = _extract_model_sha256_from_metadata(metadata, model_info)
+        if hashes:
+            return {
+                "exists": exists,
+                "metadata_path": metadata_path,
+                "hash_status": last_hash_status,
+                "hashes": hashes,
+                "sha256": hashes[0],
+            }
+
+    return {
+        "exists": exists,
+        "metadata_path": first_metadata_path,
+        "hash_status": last_hash_status,
+        "hashes": [],
+        "sha256": "",
+    }
+
+
 def extract_workflow_urls(workflow_json: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     """
     Extract model URLs from workflow JSON.

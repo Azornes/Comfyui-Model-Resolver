@@ -2637,6 +2637,19 @@
     color: #72d38a;
 }
 
+.mr-search-match-hash {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 20px;
+    padding: 2px 7px;
+    border: 1px solid rgba(125, 211, 252, 0.22);
+    border-radius: var(--mr-missing-control-radius, var(--mr-ui-radius-sm));
+    line-height: 1;
+    color: #7dd3fc;
+    background: rgba(125, 211, 252, 0.12);
+}
+
 .mr-search-match-medium {
     color: #f1cf64;
 }

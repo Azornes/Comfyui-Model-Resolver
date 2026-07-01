@@ -93,6 +93,7 @@ class ModelResolverExtension:
                 from .core.resolver import (
                     analyze_and_find_matches,
                     apply_resolution,
+                    get_local_model_hash_metadata,
                     normalize_sha256,
                     search_local_matches_by_hash,
                     search_local_matches,
@@ -521,6 +522,30 @@ class ModelResolverExtension:
                     force_rescan=force_rescan,
                 )
                 return web.json_response({"matches": matches})
+
+            @routes.post("/model_resolver/local-model-hashes")
+            @json_api_endpoint("local-model-hashes")
+            async def local_model_hashes(request):
+                """Return SHA256 hashes already stored in local sidecar metadata."""
+                data = await request.json()
+                model = data.get("model") if isinstance(data.get("model"), dict) else {}
+                path = (
+                    data.get("path")
+                    or data.get("file_path")
+                    or data.get("resolved_path")
+                    or model.get("path")
+                    or model.get("resolved_path")
+                    or ""
+                )
+
+                if not path:
+                    return web.json_response(
+                        {"error": "path is required"}, status=400
+                    )
+
+                return web.json_response(
+                    get_local_model_hash_metadata(path, model=model)
+                )
 
             @routes.post("/model_resolver/open-containing-folder")
             @json_api_endpoint("open-containing-folder")

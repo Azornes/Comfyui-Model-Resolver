@@ -29,19 +29,24 @@ export const modelInfoMethods = {
         const isDownloadRootContext = model?.context_scope === 'download_root';
         const isDownloadQueueContext = model?.context_scope === 'download_queue';
         const isDownloadHistoryContext = model?.context_scope === 'download_history';
+        const isLocalModelContext = model?.context_scope === 'local_model' || model?.context_scope === 'local_match';
         const isFolderOnlyContext = isDownloadFolderContext || isDownloadRootContext;
         const isSourceModelContext = !isDownloadTableContext && !isFolderOnlyContext && !isDownloadQueueContext && !isDownloadHistoryContext;
         const hasLocalPath = Boolean(model?.open_path || model?.folder_path || model?.download_directory || model?.directory || model?.path || model?.resolved_path);
         const showOpenFolder = !isDownloadTableContext && hasLocalPath;
+        const showCompareHashes = (isLocalModelContext || isDownloadFolderContext)
+            && hasLocalPath
+            && Boolean(model?.missing_key || model?.missing_search_key);
         const showSwitchWorkflow = (isDownloadQueueContext || isDownloadHistoryContext) && Boolean(this.canSwitchToDownloadWorkflow?.(model));
         this.setContextMenuItemVisible('showInfo', isSourceModelContext);
         this.setContextMenuItemVisible('showMore', canShowMore);
         this.setContextMenuItemVisible('civitai', isSourceModelContext);
         this.setContextMenuItemVisible('switchWorkflow', showSwitchWorkflow);
+        this.setContextMenuItemVisible('compareHashes', showCompareHashes);
         this.setContextMenuItemVisible('openFolder', showOpenFolder);
         this.setContextMenuDividerVisible('source', isSourceModelContext || canShowMore);
         this.setContextMenuDividerVisible('workflow', showSwitchWorkflow && (isSourceModelContext || canShowMore));
-        this.setContextMenuDividerVisible('folder', showOpenFolder && (isSourceModelContext || canShowMore || showSwitchWorkflow));
+        this.setContextMenuDividerVisible('folder', (showCompareHashes || showOpenFolder) && (isSourceModelContext || canShowMore || showSwitchWorkflow));
 
         const openFolderLabel = this.contextMenu.querySelector('.mr-context-menu-action-open-folder span:last-child');
         if (openFolderLabel) {
@@ -86,6 +91,8 @@ export const modelInfoMethods = {
             this.openInCivitAI(model);
         } else if (action === 'openFolder') {
             this.openContainingFolder(model);
+        } else if (action === 'compareHashes') {
+            this.compareLocalModelHashesWithCurrentFinding(model);
         } else if (action === 'switchWorkflow') {
             this.switchToDownloadWorkflow(model);
         } else if (action === 'showInfo') {
@@ -132,6 +139,227 @@ export const modelInfoMethods = {
     getMissingByKey(key = '') {
         if (!key) return null;
         return (this.missingModels || []).find(missing => this.getMissingModelKey?.(missing) === key) || null;
+    },
+
+    getMissingForHashCompareContext(model = {}) {
+        const missingKey = String(model?.missing_key || '').trim();
+        if (missingKey) {
+            const byMissingKey = this.getMissingByKey(missingKey);
+            if (byMissingKey) return byMissingKey;
+        }
+
+        const searchKey = String(model?.missing_search_key || '').trim();
+        if (searchKey && typeof this.getMissingSearchKey === 'function') {
+            return (this.missingModels || []).find(missing => this.getMissingSearchKey(missing) === searchKey) || null;
+        }
+
+        return null;
+    },
+
+    normalizeSha256ForCompare(value = '') {
+        let text = String(value || '').trim();
+        text = text.replace(/^sha256[:=]/i, '').trim().toLowerCase();
+        return /^[a-f0-9]{64}$/.test(text) ? text : '';
+    },
+
+    formatSha256Short(value = '') {
+        const hash = this.normalizeSha256ForCompare(value) || String(value || '').trim();
+        if (hash.length <= 18) return hash;
+        return `${hash.slice(0, 8)}...${hash.slice(-8)}`;
+    },
+
+    collectHashCandidatesForCompare(value, source = 'metadata', seen = new Set(), depth = 0) {
+        const candidates = [];
+        if (value === undefined || value === null || depth > 5) return candidates;
+
+        const addHash = (rawValue, hashSource = source) => {
+            const hash = this.normalizeSha256ForCompare(rawValue);
+            if (!hash || seen.has(hash)) return;
+            seen.add(hash);
+            candidates.push({ hash, source: hashSource || source || 'metadata' });
+        };
+
+        if (typeof value === 'string' || typeof value === 'number') {
+            addHash(value);
+            return candidates;
+        }
+
+        if (Array.isArray(value)) {
+            value.forEach(item => {
+                candidates.push(...this.collectHashCandidatesForCompare(item, source, seen, depth + 1));
+            });
+            return candidates;
+        }
+
+        if (typeof value !== 'object') return candidates;
+
+        [
+            ['local_match_sha256', 'local match'],
+            ['sha256', source],
+            ['hash', source],
+            ['SHA256', source],
+            ['file_hash', source],
+            ['fileHash', source]
+        ].forEach(([key, label]) => addHash(value[key], label));
+
+        const hashes = value.hashes;
+        if (Array.isArray(hashes)) {
+            candidates.push(...this.collectHashCandidatesForCompare(hashes, source, seen, depth + 1));
+        } else if (hashes && typeof hashes === 'object') {
+            ['SHA256', 'sha256', 'hash'].forEach(key => addHash(hashes[key], source));
+        }
+
+        [
+            ['file_info', value.file_info],
+            ['file', value.file],
+            ['selected_file', value.selected_file],
+            ['path_metadata', value.path_metadata],
+            ['download_metadata', value.download_metadata],
+            ['metadata', value.metadata],
+            ['selected_version', value.selected_version || value.selectedVersion],
+            ['version', value.version],
+            ['civitai', value.civitai]
+        ].forEach(([key, nestedValue]) => {
+            if (nestedValue !== undefined && nestedValue !== null) {
+                candidates.push(...this.collectHashCandidatesForCompare(nestedValue, `${source} ${key}`, seen, depth + 1));
+            }
+        });
+
+        ['files', 'mirrors', 'download_files', 'downloadFiles', 'modelVersions', 'versions'].forEach(key => {
+            if (Array.isArray(value[key])) {
+                candidates.push(...this.collectHashCandidatesForCompare(value[key], `${source} ${key}`, seen, depth + 1));
+            }
+        });
+
+        return candidates;
+    },
+
+    getLocalHashCandidatesForCompare(model = {}) {
+        const seen = new Set();
+        return this.collectHashCandidatesForCompare(model, 'local model metadata', seen);
+    },
+
+    getLocalHashComparePath(model = {}) {
+        return model?.open_path
+            || model?.resolved_path
+            || model?.path
+            || model?.file_path
+            || '';
+    },
+
+    async fetchLocalHashCandidatesForCompare(model = {}) {
+        const path = this.getLocalHashComparePath(model);
+        if (!path) {
+            return { candidates: [], data: null };
+        }
+
+        const data = await this.fetchJson('/model_resolver/local-model-hashes', {
+            method: 'POST',
+            silent: true,
+            body: JSON.stringify({ path, model })
+        }, 'Read local model hash metadata');
+
+        return {
+            data,
+            candidates: this.collectHashCandidatesForCompare(data, 'local metadata', new Set())
+        };
+    },
+
+    markSearchResultHashBadgesForMissing(missing = {}, sha256 = '') {
+        const hash = this.normalizeSha256ForCompare(sha256);
+        if (!missing || !hash) return false;
+
+        const markIfMatches = (result, sourceLabel = 'result') => {
+            if (!result || typeof result !== 'object') return false;
+            const hashes = this.collectHashCandidatesForCompare(result, sourceLabel, new Set());
+            if (!hashes.some(candidate => candidate.hash === hash)) return false;
+
+            result.hash_verified = true;
+            result.hash_verified_sha256 = hash;
+            return true;
+        };
+
+        const state = this.getSearchState?.(missing)
+            || this.searchResultCache?.get(this.getMissingSearchKey?.(missing));
+        const results = state?.results || {};
+        const sources = [
+            ['download_source', missing.download_source],
+            ['popular', results.popular],
+            ['model_list', results.model_list],
+            ['huggingface', results.huggingface],
+            ['civitai', results.civitai],
+            ['civarchive', results.civarchive],
+            ['lora_manager_archive', results.lora_manager_archive]
+        ];
+        let changed = false;
+
+        sources.forEach(([sourceKey, value]) => {
+            if (Array.isArray(value)) {
+                value.forEach(item => {
+                    changed = markIfMatches(item, sourceKey) || changed;
+                });
+                return;
+            }
+            changed = markIfMatches(value, sourceKey) || changed;
+        });
+
+        if (changed && state) {
+            const workflowKey = this.getWorkflowScopedQueueKey?.();
+            this.persistSearchStateForWorkflow?.(workflowKey, missing, state);
+            this.refreshSearchUiForMissing?.(missing, state, { workflowKey });
+        }
+        return changed;
+    },
+
+    async compareLocalModelHashesWithCurrentFinding(model = {}) {
+        const missing = this.getMissingForHashCompareContext(model);
+        if (!missing) {
+            this.showNotification?.('Cannot find the search results for this model.', 'warning');
+            return;
+        }
+
+        let localHashes = this.getLocalHashCandidatesForCompare(model);
+        let metadataResult = null;
+        if (!localHashes.length) {
+            try {
+                const lookup = await this.fetchLocalHashCandidatesForCompare(model);
+                metadataResult = lookup.data;
+                localHashes = lookup.candidates;
+            } catch (error) {
+                this.showNotification?.(`Local hash metadata lookup failed: ${error?.message || error}`, 'error');
+                return;
+            }
+        }
+
+        const filename = model.filename
+            || model.name
+            || String(this.getLocalHashComparePath(model) || '').split(/[\/\\]/).pop()
+            || 'Selected local model';
+        if (!localHashes.length) {
+            const metadataPath = metadataResult?.metadata_path || model.metadata_path || '';
+            this.showNotification?.(
+                metadataPath
+                    ? 'Local metadata exists, but no completed SHA256 hash was found.'
+                    : 'No local SHA256 metadata found for this model.',
+                'warning'
+            );
+            return;
+        }
+
+        const marked = localHashes.some(candidate => (
+            this.markSearchResultHashBadgesForMissing(missing, candidate.hash)
+        ));
+        if (marked) {
+            return;
+        }
+
+        const localPreview = localHashes
+            .map(candidate => this.formatSha256Short(candidate.hash))
+            .join(', ');
+        this.showNotification?.(
+            `No search result hash matches ${filename} (${localPreview}).`,
+            'warning'
+        );
     },
 
     async openContainingFolder(model) {
