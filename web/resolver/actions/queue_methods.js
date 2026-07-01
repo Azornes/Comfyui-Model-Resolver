@@ -195,71 +195,6 @@ export const queueMethods = {
         );
     },
 
-    scheduleQueuePanelOpenUpdate(delayMs = 80) {
-        if (!this.queueElement || !this.queueList || !this.queueHeader) return;
-        if (this._queuePanelOpenFrame) {
-            cancelAnimationFrame(this._queuePanelOpenFrame);
-            this._queuePanelOpenFrame = null;
-        }
-        if (this._queuePanelOpenTimer) {
-            clearTimeout(this._queuePanelOpenTimer);
-            this._queuePanelOpenTimer = null;
-        }
-
-        const runUpdate = () => {
-            this._queuePanelOpenTimer = null;
-            document.getElementById('model-resolver-body')?.classList.remove('mr-queue-opening-layout');
-            this.updateQueuePanel({ force: true });
-            this.queueElement?.classList?.remove('mr-queue-opening');
-            this.stabilizeQueueSplitLayout();
-        };
-        const scheduleTimer = () => {
-            this._queuePanelOpenFrame = null;
-            this._queuePanelOpenTimer = setTimeout(runUpdate, delayMs);
-        };
-
-        this._queuePanelOpenFrame = requestAnimationFrame(scheduleTimer);
-    },
-
-    scheduleQueuePanelReveal() {
-        if (!this.queueElement || !this.queueList || !this.queueHeader) return;
-        this.cancelQueuePanelReveal();
-
-        const reveal = () => {
-            this._queuePanelRevealFrame = null;
-            if (this.queueCollapsed || this.activeTab !== 'missing') return;
-            this.queueElement?.classList?.add('mr-queue-opening');
-            document.getElementById('model-resolver-body')?.classList.add('mr-queue-opening-layout');
-            this.updateQueueVisibility();
-            this.scheduleQueuePanelOpenUpdate();
-        };
-
-        this._queuePanelRevealFrame = requestAnimationFrame(() => {
-            this._queuePanelRevealFrame = requestAnimationFrame(reveal);
-        });
-    },
-
-    cancelQueuePanelReveal() {
-        if (this._queuePanelRevealFrame) {
-            cancelAnimationFrame(this._queuePanelRevealFrame);
-            this._queuePanelRevealFrame = null;
-        }
-    },
-
-    cancelQueuePanelOpenUpdate() {
-        this.cancelQueuePanelReveal();
-        if (this._queuePanelOpenFrame) {
-            cancelAnimationFrame(this._queuePanelOpenFrame);
-            this._queuePanelOpenFrame = null;
-        }
-        if (this._queuePanelOpenTimer) {
-            clearTimeout(this._queuePanelOpenTimer);
-            this._queuePanelOpenTimer = null;
-        }
-        this.queueElement?.classList?.remove('mr-queue-opening');
-        document.getElementById('model-resolver-body')?.classList.remove('mr-queue-opening-layout');
-    },
-
     clearQueueContentSplitFlex() {
         if (!(this.contentElement instanceof HTMLElement)) return;
         this.contentElement.style.removeProperty('flex-basis');
@@ -1608,7 +1543,7 @@ export const queueMethods = {
         this.setQueueCollapsed(!this.queueCollapsed);
     },
 
-    setQueueCollapsed(collapsed, { persist = true, updatePanel = true, deferOpen = false } = {}) {
+    setQueueCollapsed(collapsed, { persist = true, updatePanel = true } = {}) {
         const nextCollapsed = !!collapsed;
         const wasCollapsed = !!this.queueCollapsed;
         const opening = wasCollapsed && !nextCollapsed;
@@ -1616,23 +1551,10 @@ export const queueMethods = {
         if (persist) {
             this.persistQueueCollapsedState(this.queueCollapsed, opening ? 500 : 0);
         }
-        if (opening && deferOpen) {
-            this.updateQueueToggleIcon();
-            this.scheduleQueuePanelReveal();
-            return;
-        }
-        if (opening) {
-            this.queueElement?.classList?.add('mr-queue-opening');
-            document.getElementById('model-resolver-body')?.classList.add('mr-queue-opening-layout');
-        } else {
-            this.cancelQueuePanelOpenUpdate();
-        }
         this.updateQueueVisibility();
         if (!updatePanel) return;
-        if (opening) {
-            this.scheduleQueuePanelOpenUpdate();
-        } else if (this.isQueuePanelVisible()) {
-            this.updateQueuePanel();
+        if (opening || this.isQueuePanelVisible()) {
+            this.updateQueuePanel({ force: opening });
         } else {
             this._queuePanelDirty = true;
         }
@@ -1726,9 +1648,10 @@ export const queueMethods = {
 
         this.updateQueueToggleIcon();
         if (showQueuePanel && this._queuePanelDirty) {
-            this.queueElement?.classList?.add('mr-queue-opening');
-            document.getElementById('model-resolver-body')?.classList.add('mr-queue-opening-layout');
-            this.scheduleQueuePanelOpenUpdate();
+            this.updateQueuePanel({ force: true });
+            if (!this._splitDragging) {
+                this.stabilizeQueueSplitLayout();
+            }
         }
     },
 
@@ -1756,7 +1679,7 @@ export const queueMethods = {
         }
         event?.preventDefault?.();
         event?.stopPropagation?.();
-        this.setQueueCollapsed(!this.queueCollapsed, { deferOpen: true });
+        this.setQueueCollapsed(!this.queueCollapsed);
     },
 
     startQueueEdgeDrag(event) {
@@ -1765,65 +1688,8 @@ export const queueMethods = {
         event.preventDefault?.();
         event.stopPropagation?.();
         this._suppressQueueEdgeClick = true;
-        this.setQueueCollapsed(false, { deferOpen: true });
 
-        this.clearQueueEdgeDragCandidate();
-        const usingPointerEvents = event.type === 'pointerdown';
-        this._queueEdgeDragCandidate = {
-            startX: event.clientX,
-            startY: event.clientY,
-            openedOnPointerDown: true
-        };
-        this._onQueueEdgeCandidateMove = (moveEvent) => this.onQueueEdgeDragCandidateMove(moveEvent);
-        this._onQueueEdgeCandidateUp = () => {
-            const shouldClearSuppress = !!this._queueEdgeDragCandidate?.openedOnPointerDown;
-            this.clearQueueEdgeDragCandidate();
-            if (shouldClearSuppress) {
-                setTimeout(() => { this._suppressQueueEdgeClick = false; }, 0);
-            }
-        };
-        this._queueEdgeCandidateMoveEvent = usingPointerEvents ? 'pointermove' : 'mousemove';
-        this._queueEdgeCandidateUpEvent = usingPointerEvents ? 'pointerup' : 'mouseup';
-        this._queueEdgeCandidateCancelEvent = usingPointerEvents ? 'pointercancel' : null;
-        document.addEventListener(this._queueEdgeCandidateMoveEvent, this._onQueueEdgeCandidateMove, true);
-        document.addEventListener(this._queueEdgeCandidateUpEvent, this._onQueueEdgeCandidateUp, { once: true, capture: true });
-        if (this._queueEdgeCandidateCancelEvent) {
-            document.addEventListener(this._queueEdgeCandidateCancelEvent, this._onQueueEdgeCandidateUp, { once: true, capture: true });
-        }
-    },
-
-    onQueueEdgeDragCandidateMove(event) {
-        const candidate = this._queueEdgeDragCandidate;
-        if (!candidate) return;
-
-        const dx = event.clientX - candidate.startX;
-        const dy = event.clientY - candidate.startY;
-        if ((dx * dx) + (dy * dy) < 16) return;
-
-        event.preventDefault();
-        event.stopPropagation();
-        this.clearQueueEdgeDragCandidate();
-        this._suppressQueueEdgeClick = true;
-        this.beginQueueEdgeDrag(candidate.startX, event);
-        this.onSplitDrag(event);
-    },
-
-    clearQueueEdgeDragCandidate() {
-        if (this._onQueueEdgeCandidateMove && this._queueEdgeCandidateMoveEvent) {
-            document.removeEventListener(this._queueEdgeCandidateMoveEvent, this._onQueueEdgeCandidateMove, true);
-        }
-        if (this._onQueueEdgeCandidateUp && this._queueEdgeCandidateUpEvent) {
-            document.removeEventListener(this._queueEdgeCandidateUpEvent, this._onQueueEdgeCandidateUp, true);
-        }
-        if (this._onQueueEdgeCandidateUp && this._queueEdgeCandidateCancelEvent) {
-            document.removeEventListener(this._queueEdgeCandidateCancelEvent, this._onQueueEdgeCandidateUp, true);
-        }
-        this._queueEdgeDragCandidate = null;
-        this._onQueueEdgeCandidateMove = null;
-        this._onQueueEdgeCandidateUp = null;
-        this._queueEdgeCandidateMoveEvent = null;
-        this._queueEdgeCandidateUpEvent = null;
-        this._queueEdgeCandidateCancelEvent = null;
+        this.beginQueueEdgeDrag(event.clientX, event);
     },
 
     beginQueueEdgeDrag(startX, sourceEvent = null) {
@@ -2005,7 +1871,6 @@ export const queueMethods = {
             e?.stopPropagation?.();
             if (!this.queueElement || !this.contentElement) return;
 
-            this.cancelQueuePanelOpenUpdate();
             this._queueSplitLastContainerWidth = this.getQueueSplitContainerWidth();
             const bounds = this.getQueueSplitBounds(this._queueSplitLastContainerWidth, { edgeOpen });
             const currentWidth = this.getQueuePaneWidth(this.queueElement) || 320;
@@ -2061,8 +1926,7 @@ export const queueMethods = {
                 this.updateQueueToggleIcon();
             }
             if (this._queuePanelDirty) {
-                this.queueElement?.classList?.add('mr-queue-opening');
-                this.scheduleQueuePanelOpenUpdate();
+                this.updateQueuePanel({ force: true });
             }
         }
         const previewCollapsed = this._splitEdgeOpen
@@ -2073,6 +1937,14 @@ export const queueMethods = {
             const body = document.getElementById('model-resolver-body');
             body?.classList.toggle('mr-queue-preview-collapsed', previewCollapsed);
             this.queueElement.style.display = previewCollapsed ? 'none' : '';
+            if (previewCollapsed) {
+                const collapsedBounds = this.getQueueSplitBounds(this._splitStart.containerWidth, { edgeOpen: true });
+                this.applyQueueSplitWidth(0, {
+                    bounds: collapsedBounds,
+                    containerWidth: this._splitStart.containerWidth,
+                    skipIfUnchanged: true
+                });
+            }
         }
         if (this._splitPreviewCollapsed) return;
         this.applyQueueSplitWidth(this._pendingSplitWidth, {
@@ -2121,10 +1993,8 @@ export const queueMethods = {
             } catch (e) { }
             this.queueCollapsed = false;
             this.persistQueueCollapsedState(false, 500);
-            this.queueElement?.classList?.add('mr-queue-opening');
-            document.getElementById('model-resolver-body')?.classList.add('mr-queue-opening-layout');
             this.updateQueueVisibility();
-            this.scheduleQueuePanelOpenUpdate();
+            this.updateQueuePanel({ force: true });
             this._splitEdgeOpen = false;
             this._pendingSplitWidth = null;
             this._appliedSplitWidth = null;

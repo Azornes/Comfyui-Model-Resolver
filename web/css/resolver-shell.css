@@ -209,24 +209,6 @@
     background: var(--mr-bg, #121212);
 }
 
-#model-resolver-queue.mr-queue-opening .mr-queue-stack {
-    content-visibility: hidden;
-    contain-intrinsic-size: 320px 420px;
-}
-
-#model-resolver-body.mr-queue-opening-layout #model-resolver-queue {
-    position: absolute;
-    top: 8px;
-    right: 6px;
-    bottom: 6px;
-    z-index: 998;
-    box-shadow: -12px 0 24px rgba(0, 0, 0, 0.24);
-}
-
-#model-resolver-body.mr-queue-opening-layout #model-resolver-splitter {
-    display: none !important;
-}
-
 #model-resolver-splitter {
     position: relative;
     width: 10px;
