@@ -1947,11 +1947,18 @@ export const queueMethods = {
             }
         }
         if (this._splitPreviewCollapsed) return;
-        this.applyQueueSplitWidth(this._pendingSplitWidth, {
-            bounds,
-            containerWidth: this._splitStart.containerWidth,
-            skipIfUnchanged: true
-        });
+
+        if (!this._splitDragFrame) {
+            this._splitDragFrame = requestAnimationFrame(() => {
+                this._splitDragFrame = null;
+                if (!this._splitDragging || this._splitPreviewCollapsed) return;
+                this.applyQueueSplitWidth(this._pendingSplitWidth, {
+                    bounds: this._splitStart?.bounds || bounds,
+                    containerWidth: this._splitStart?.containerWidth,
+                    skipIfUnchanged: true
+                });
+            });
+        }
     },
 
     endSplitDrag(e = null) {

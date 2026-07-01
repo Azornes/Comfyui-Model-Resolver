@@ -1023,13 +1023,20 @@ export const missingBrowserMethods = {
         if (this._pendingMissingBrowserSplitWidth === this._appliedMissingBrowserSplitWidth) return;
         if (!this._missingBrowserSplitDetailPane) return;
         this.activateMissingBrowserSplitUi();
-        this.applyMissingBrowserDetailWidth(this._missingBrowserSplitDetailPane, this._pendingMissingBrowserSplitWidth, {
-            browserWidth: this._missingBrowserSplitStart.browserWidth,
-            availableWidth: this._missingBrowserSplitStart.availableWidth,
-            splitBounds: this._missingBrowserSplitStart.bounds,
-            skipIfUnchanged: true
-        });
-        this._appliedMissingBrowserSplitWidth = this._pendingMissingBrowserSplitWidth;
+
+        if (!this._missingBrowserSplitFrame) {
+            this._missingBrowserSplitFrame = requestAnimationFrame(() => {
+                this._missingBrowserSplitFrame = null;
+                if (!this._missingBrowserSplitDragging || !this._missingBrowserSplitDetailPane) return;
+                this.applyMissingBrowserDetailWidth(this._missingBrowserSplitDetailPane, this._pendingMissingBrowserSplitWidth, {
+                    browserWidth: this._missingBrowserSplitStart?.browserWidth,
+                    availableWidth: this._missingBrowserSplitStart?.availableWidth,
+                    splitBounds: this._missingBrowserSplitStart?.bounds,
+                    skipIfUnchanged: true
+                });
+                this._appliedMissingBrowserSplitWidth = this._pendingMissingBrowserSplitWidth;
+            });
+        }
     },
 
     endMissingBrowserSplitDrag(event = null) {

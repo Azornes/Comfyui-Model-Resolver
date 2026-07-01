@@ -728,6 +728,8 @@
 }
 
 #model-resolver-modal .mr-missing-list-row {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 64px;
     width: 100%;
     min-height: 64px;
     padding: 9px 12px 9px 8px;

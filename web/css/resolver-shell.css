@@ -426,6 +426,8 @@
 }
 
 .mr-queue-item {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 54px;
     display: grid;
     gap: 4px;
     padding: 10px 0;
