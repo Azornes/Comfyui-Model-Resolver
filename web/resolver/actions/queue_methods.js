@@ -1772,7 +1772,6 @@ export const queueMethods = {
         this._queueEdgeDragCandidate = {
             startX: event.clientX,
             startY: event.clientY,
-            previousCursor: document.body.style.cursor,
             openedOnPointerDown: true
         };
         this._onQueueEdgeCandidateMove = (moveEvent) => this.onQueueEdgeDragCandidateMove(moveEvent);
@@ -1805,7 +1804,7 @@ export const queueMethods = {
         event.stopPropagation();
         this.clearQueueEdgeDragCandidate();
         this._suppressQueueEdgeClick = true;
-        this.beginQueueEdgeDrag(candidate.startX, candidate.previousCursor, event);
+        this.beginQueueEdgeDrag(candidate.startX, event);
         this.onSplitDrag(event);
     },
 
@@ -1827,11 +1826,10 @@ export const queueMethods = {
         this._queueEdgeCandidateCancelEvent = null;
     },
 
-    beginQueueEdgeDrag(startX, previousCursor = document.body.style.cursor, sourceEvent = null) {
+    beginQueueEdgeDrag(startX, sourceEvent = null) {
         const dragStartX = Number(startX);
         if (!Number.isFinite(dragStartX)) return;
         const usePointerEvents = String(sourceEvent?.type || '').startsWith('pointer');
-        document.body.style.cursor = 'col-resize';
         this._suppressQueueEdgeClick = true;
         this.splitterElement.style.display = '';
         document.getElementById('model-resolver-body')?.classList.add('mr-queue-preview-collapsed');
@@ -1845,7 +1843,7 @@ export const queueMethods = {
                 preventDefault: () => {},
                 stopPropagation: () => {}
             },
-            { startWidth: 0, edgeOpen: true, previousCursor, startCollapsedPreview: true }
+            { startWidth: 0, edgeOpen: true, startCollapsedPreview: true }
         );
     },
 
@@ -1957,13 +1955,13 @@ export const queueMethods = {
             return false;
         }
 
-        this.contentElement.style.flexBasis = contentValue;
-        this.contentElement.style.flexGrow = '0';
-        this.contentElement.style.flexShrink = '0';
-        this.queueElement.style.width = queueValue;
-        this.queueElement.style.flexBasis = queueValue;
-        this.queueElement.style.flexGrow = '0';
-        this.queueElement.style.flexShrink = '0';
+        if (this.contentElement.style.flexBasis !== contentValue) this.contentElement.style.flexBasis = contentValue;
+        if (this.contentElement.style.flexGrow !== '0') this.contentElement.style.flexGrow = '0';
+        if (this.contentElement.style.flexShrink !== '0') this.contentElement.style.flexShrink = '0';
+        if (this.queueElement.style.width !== queueValue) this.queueElement.style.width = queueValue;
+        if (this.queueElement.style.flexBasis !== queueValue) this.queueElement.style.flexBasis = queueValue;
+        if (this.queueElement.style.flexGrow !== '0') this.queueElement.style.flexGrow = '0';
+        if (this.queueElement.style.flexShrink !== '0') this.queueElement.style.flexShrink = '0';
         this._appliedSplitWidth = nextWidth;
         return true;
     },
@@ -1983,7 +1981,7 @@ export const queueMethods = {
         });
     },
 
-    deferQueueSplitReleaseUi(body, pointerId, previousUserSelect, previousCursor, fallbackCursor) {
+    deferQueueSplitReleaseUi(body) {
         if (this._queueSplitReleaseCleanupFrame) {
             cancelAnimationFrame(this._queueSplitReleaseCleanupFrame);
             this._queueSplitReleaseCleanupFrame = null;
@@ -1991,20 +1989,7 @@ export const queueMethods = {
 
         const restore = () => {
             this._queueSplitReleaseCleanupFrame = null;
-            body?.classList?.remove('mr-is-resizing-queue');
             body?.classList?.remove('mr-queue-preview-collapsed');
-            if (pointerId !== undefined && this.splitterElement?.releasePointerCapture) {
-                try {
-                    this.splitterElement.releasePointerCapture(pointerId);
-                } catch (error) { }
-            }
-            const cursor = previousCursor !== null && previousCursor !== undefined
-                ? previousCursor
-                : (fallbackCursor || '');
-            try {
-                document.body.style.userSelect = previousUserSelect || '';
-                document.body.style.cursor = cursor;
-            } catch (e) { }
         };
 
         this._queueSplitReleaseCleanupFrame = requestAnimationFrame(() => {
@@ -2013,14 +1998,13 @@ export const queueMethods = {
     },
 
     // Begin split drag for resizable panels
-    startSplitDrag(e, { startWidth = null, edgeOpen = false, previousCursor = null, startCollapsedPreview = false } = {}) {
+    startSplitDrag(e, { startWidth = null, edgeOpen = false, startCollapsedPreview = false } = {}) {
         try {
             if (e?.button !== undefined && e.button !== 0) return;
             e?.preventDefault?.();
             e?.stopPropagation?.();
             if (!this.queueElement || !this.contentElement) return;
 
-            const body = this.getQueueSplitBody();
             this.cancelQueuePanelOpenUpdate();
             this._queueSplitLastContainerWidth = this.getQueueSplitContainerWidth();
             const bounds = this.getQueueSplitBounds(this._queueSplitLastContainerWidth, { edgeOpen });
@@ -2028,7 +2012,6 @@ export const queueMethods = {
             const initialWidth = Math.round(Math.max(bounds.min, Math.min(bounds.max, Number.isFinite(startWidth) ? startWidth : currentWidth)));
 
             this._splitDragging = true;
-            body?.classList.add('mr-is-resizing-queue');
             if (!startCollapsedPreview) {
                 this.applyQueueSplitWidth(initialWidth, {
                     bounds,
@@ -2047,16 +2030,6 @@ export const queueMethods = {
             this._splitPreviewCollapsed = !!startCollapsedPreview;
             this._splitEdgeOpen = !!edgeOpen;
             this._splitEdgeOpenedPastThreshold = false;
-            this._splitPreviousCursor = previousCursor;
-            this._prevUserSelect = document.body.style.userSelect;
-            this._prevQueueSplitCursor = document.body.style.cursor;
-            document.body.style.userSelect = 'none';
-            document.body.style.cursor = 'col-resize';
-            if (e?.pointerId !== undefined && this.splitterElement?.setPointerCapture) {
-                try {
-                    this.splitterElement.setPointerCapture(e.pointerId);
-                } catch (error) { }
-            }
             this._onSplitMove = (ev) => this.onSplitDrag(ev);
             this._onSplitUp = (ev) => this.endSplitDrag(ev);
             this._splitMoveEvent = e?.type === 'pointerdown' ? 'pointermove' : 'mousemove';
@@ -2113,10 +2086,6 @@ export const queueMethods = {
         if (!this._splitDragging) return;
         e?.preventDefault?.();
         e?.stopPropagation?.();
-        const releasePointerId = e?.pointerId;
-        const previousUserSelect = this._prevUserSelect;
-        const previousCursor = this._splitPreviousCursor;
-        const fallbackCursor = this._prevQueueSplitCursor;
         this._splitDragging = false;
         if (this._splitDragFrame) {
             cancelAnimationFrame(this._splitDragFrame);
@@ -2160,10 +2129,7 @@ export const queueMethods = {
             this._pendingSplitWidth = null;
             this._appliedSplitWidth = null;
             this._splitPreviewCollapsed = false;
-            this.deferQueueSplitReleaseUi(body, releasePointerId, previousUserSelect, previousCursor, fallbackCursor);
-            this._splitPreviousCursor = null;
-            this._prevQueueSplitCursor = null;
-            this._prevUserSelect = null;
+            this.deferQueueSplitReleaseUi(body);
             this._splitEdgeOpenedPastThreshold = false;
             setTimeout(() => { this._suppressQueueEdgeClick = false; }, 0);
             return;
@@ -2184,10 +2150,7 @@ export const queueMethods = {
             this._splitPreviewCollapsed = false;
             this._splitEdgeOpen = false;
             this._splitEdgeOpenedPastThreshold = false;
-            this.deferQueueSplitReleaseUi(body, releasePointerId, previousUserSelect, previousCursor, fallbackCursor);
-            this._splitPreviousCursor = null;
-            this._prevQueueSplitCursor = null;
-            this._prevUserSelect = null;
+            this.deferQueueSplitReleaseUi(body);
             this.setQueueCollapsed(true);
             setTimeout(() => { this._suppressQueueEdgeClick = false; }, 0);
             return;
@@ -2205,10 +2168,7 @@ export const queueMethods = {
         this._splitPreviewCollapsed = false;
         this._splitEdgeOpen = false;
         this._splitEdgeOpenedPastThreshold = false;
-        this.deferQueueSplitReleaseUi(body, releasePointerId, previousUserSelect, previousCursor, fallbackCursor);
-        this._splitPreviousCursor = null;
-        this._prevQueueSplitCursor = null;
-        this._prevUserSelect = null;
+        this.deferQueueSplitReleaseUi(body);
         this._splitMoveEvent = null;
         this._splitUpEvent = null;
         this._splitCancelEvent = null;

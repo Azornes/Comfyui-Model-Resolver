@@ -227,12 +227,6 @@
     display: none !important;
 }
 
-#model-resolver-body.mr-is-resizing-queue #model-resolver-content,
-#model-resolver-body.mr-is-resizing-queue #model-resolver-queue {
-    pointer-events: none;
-    user-select: none;
-}
-
 #model-resolver-splitter {
     position: relative;
     width: 10px;
@@ -260,7 +254,6 @@
 
 #model-resolver-splitter:hover::before,
 #model-resolver-splitter:focus-visible::before,
-#model-resolver-body.mr-is-resizing-queue #model-resolver-splitter::before,
 #model-resolver-body.mr-queue-preview-collapsed #model-resolver-splitter::before {
     background: rgba(114, 211, 138, 0.78);
     box-shadow: 0 0 0 3px rgba(114, 211, 138, 0.12);
