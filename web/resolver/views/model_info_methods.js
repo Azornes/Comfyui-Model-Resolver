@@ -24,6 +24,8 @@ export const modelInfoMethods = {
 
         this._contextMenuModel = model;
         const canShowMore = this.canShowSourceDetails(model);
+        const sourceLink = this.getContextMenuSourceLink(this.getContextMenuSourceLookupModel(model));
+        const showSourceLink = Boolean(sourceLink?.url);
         const isDownloadTableContext = model?.context_scope === 'download_table';
         const isDownloadFolderContext = model?.context_scope === 'download_folder';
         const isDownloadRootContext = model?.context_scope === 'download_root';
@@ -40,13 +42,15 @@ export const modelInfoMethods = {
         const showSwitchWorkflow = (isDownloadQueueContext || isDownloadHistoryContext) && Boolean(this.canSwitchToDownloadWorkflow?.(model));
         this.setContextMenuItemVisible('showInfo', isSourceModelContext);
         this.setContextMenuItemVisible('showMore', canShowMore);
-        this.setContextMenuItemVisible('civitai', isSourceModelContext);
+        this.setContextMenuItemVisible('source', showSourceLink);
+        this.setContextMenuItemVisible('civitai', false);
         this.setContextMenuItemVisible('switchWorkflow', showSwitchWorkflow);
         this.setContextMenuItemVisible('compareHashes', showCompareHashes);
         this.setContextMenuItemVisible('openFolder', showOpenFolder);
-        this.setContextMenuDividerVisible('source', isSourceModelContext || canShowMore);
-        this.setContextMenuDividerVisible('workflow', showSwitchWorkflow && (isSourceModelContext || canShowMore));
-        this.setContextMenuDividerVisible('folder', (showCompareHashes || showOpenFolder) && (isSourceModelContext || canShowMore || showSwitchWorkflow));
+        this.setContextMenuDividerVisible('source', showSourceLink && (isSourceModelContext || canShowMore));
+        this.setContextMenuDividerVisible('workflow', showSwitchWorkflow && (isSourceModelContext || canShowMore || showSourceLink));
+        this.setContextMenuDividerVisible('folder', (showCompareHashes || showOpenFolder) && (isSourceModelContext || canShowMore || showSourceLink || showSwitchWorkflow));
+        this.updateContextMenuSourceItem(sourceLink);
 
         const openFolderLabel = this.contextMenu.querySelector('.mr-context-menu-action-open-folder span:last-child');
         if (openFolderLabel) {
@@ -67,6 +71,8 @@ export const modelInfoMethods = {
         if (rect.bottom > window.innerHeight) {
             this.contextMenu.style.top = `${window.innerHeight - rect.height - 10}px`;
         }
+
+        this.refreshContextMenuSourceLink(model);
     },
 
     /**
@@ -87,8 +93,8 @@ export const modelInfoMethods = {
 
         if (!model) return;
 
-        if (action === 'civitai') {
-            this.openInCivitAI(model);
+        if (action === 'source' || action === 'civitai') {
+            this.openModelSourceLink(model);
         } else if (action === 'openFolder') {
             this.openContainingFolder(model);
         } else if (action === 'compareHashes') {
@@ -127,6 +133,372 @@ export const modelInfoMethods = {
                 item.style.setProperty('display', 'none', 'important');
             }
         });
+    },
+
+    clampContextMenuToViewport() {
+        if (!this.contextMenu || this.contextMenu.style.display === 'none') return;
+        const rect = this.contextMenu.getBoundingClientRect();
+        if (rect.right > window.innerWidth) {
+            this.contextMenu.style.left = `${Math.max(10, window.innerWidth - rect.width - 10)}px`;
+        }
+        if (rect.bottom > window.innerHeight) {
+            this.contextMenu.style.top = `${Math.max(10, window.innerHeight - rect.height - 10)}px`;
+        }
+    },
+
+    getContextMenuSourceConfig(key = '') {
+        const normalized = String(key || '').toLowerCase().replace(/[-\s]+/g, '_');
+        const configs = {
+            civitai: { key: 'civitai', label: 'CivitAI', icon: 'civitai' },
+            civarchive: { key: 'civarchive', label: 'CivArchive', icon: 'civarchive' },
+            huggingface: { key: 'huggingface', label: 'HuggingFace', icon: 'huggingface' },
+            lora_manager_archive: { key: 'lora_manager_archive', label: 'LoRA Archive', icon: 'loraManager' }
+        };
+        return configs[normalized] || { key: normalized || 'source', label: 'Source', icon: 'externalLink' };
+    },
+
+    getContextMenuSourceKeyFromText(value = '') {
+        const text = String(value || '').toLowerCase();
+        if (!text) return '';
+        if (text.includes('huggingface') || text.includes('hugging face')) return 'huggingface';
+        if (text.includes('civarchive') || text.includes('civ archive')) return 'civarchive';
+        if (text.includes('civitai') || text.includes('civitai.red')) return 'civitai';
+        if (text.includes('lora_manager_archive') || text.includes('lora archive')) return 'lora_manager_archive';
+        return '';
+    },
+
+    getContextMenuSourceKeyFromUrl(value = '') {
+        const url = String(value || '').trim();
+        if (!url) return '';
+
+        try {
+            const parsed = new URL(url, window.location.origin);
+            const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+            if (host === 'huggingface.co' || host.endsWith('.huggingface.co')) return 'huggingface';
+            if (host === 'civarchive.com' || host.endsWith('.civarchive.com')) return 'civarchive';
+            if (host === 'civitai.com' || host.endsWith('.civitai.com') || host === 'civitai.red' || host.endsWith('.civitai.red')) return 'civitai';
+        } catch (error) {
+            return this.getContextMenuSourceKeyFromText(url);
+        }
+
+        return this.getContextMenuSourceKeyFromText(url);
+    },
+
+    getContextMenuSourceKey(model = {}) {
+        return this.getContextMenuSourceKeyFromText(model?.details_source)
+            || this.getContextMenuSourceKeyFromText(model?.source)
+            || this.getContextMenuSourceKeyFromText(model?.source_name)
+            || this.getContextMenuSourceKeyFromText(model?.sourceName)
+            || this.getContextMenuSourceKeyFromText(model?.metadata_source)
+            || this.getContextMenuSourceKeyFromText(model?.metadataSource)
+            || '';
+    },
+
+    getContextMenuSourceUrlCandidates(model = {}) {
+        const candidates = [];
+        const seen = new Set();
+        const add = (value) => {
+            const url = String(value || '').trim();
+            if (!url || seen.has(url)) return;
+            seen.add(url);
+            candidates.push(url);
+        };
+        const addFrom = (value) => {
+            if (!value || typeof value !== 'object') return;
+            [
+                'version_url',
+                'versionUrl',
+                'model_url',
+                'modelUrl',
+                'workflow_model_url',
+                'workflowModelUrl',
+                'platform_url',
+                'platformUrl',
+                'source_url',
+                'sourceUrl',
+                'page_url',
+                'pageUrl',
+                'html_url',
+                'htmlUrl',
+                'github_url',
+                'githubUrl',
+                'civitai_url',
+                'civitaiUrl',
+                'creator_url',
+                'creatorUrl',
+                'openUrl',
+                'url'
+            ].forEach(key => add(value[key]));
+        };
+
+        addFrom(model);
+        [
+            model?.metadata,
+            model?.path_metadata || model?.pathMetadata,
+            model?.download_metadata || model?.downloadMetadata,
+            model?.selected_version || model?.selectedVersion,
+            model?.civitai_details || model?.civitaiDetails,
+            model?.version,
+            model?.civitai,
+            model?.civarchive,
+            model?.huggingface
+        ].forEach(addFrom);
+
+        const repoId = model?.repo_id || model?.repo || model?.repository || '';
+        if (repoId) {
+            add(`https://huggingface.co/${repoId}`);
+        }
+
+        return candidates;
+    },
+
+    normalizeContextMenuSourceUrl(value = '', sourceKey = '') {
+        const url = String(value || '').trim();
+        if (!url) return '';
+        if (/^https?:\/\//i.test(url)) return url;
+        if (!url.startsWith('/')) return '';
+
+        if (sourceKey === 'civarchive') return `https://civarchive.com${url}`;
+        if (sourceKey === 'civitai') return `https://civitai.com${url}`;
+        if (sourceKey === 'huggingface') return `https://huggingface.co${url}`;
+        return '';
+    },
+
+    buildContextMenuSourceUrlFromIds(model = {}, sourceKey = '') {
+        const modelId = model?.model_id || model?.modelId || model?.civitai_model_id || model?.civitaiModelId || model?.id || '';
+        const versionId = model?.version_id || model?.versionId || model?.modelVersionId || model?.civitai_model_version_id || model?.civitaiModelVersionId || '';
+        if (sourceKey === 'civitai' && modelId) {
+            return `https://civitai.com/models/${modelId}${versionId ? `?modelVersionId=${versionId}` : ''}`;
+        }
+        if (sourceKey === 'civarchive' && modelId) {
+            return `https://civarchive.com/models/${modelId}${versionId ? `?modelVersionId=${versionId}` : ''}`;
+        }
+
+        const repoId = model?.repo_id || model?.repo || model?.repository || '';
+        if (sourceKey === 'huggingface' && repoId) {
+            return `https://huggingface.co/${repoId}`;
+        }
+
+        return '';
+    },
+
+    getContextMenuSourceLink(model = {}) {
+        const fallbackKey = this.getContextMenuSourceKey(model);
+        const candidates = this.getContextMenuSourceUrlCandidates(model);
+
+        for (const candidate of candidates) {
+            const candidateKey = this.getContextMenuSourceKeyFromUrl(candidate) || fallbackKey;
+            const normalizedUrl = this.normalizeContextMenuSourceUrl(candidate, candidateKey);
+            if (!normalizedUrl) continue;
+
+            const cardUrl = this.getModelCardUrl?.(normalizedUrl) || normalizedUrl;
+            const sourceKey = this.getContextMenuSourceKeyFromUrl(cardUrl)
+                || this.getContextMenuSourceKeyFromUrl(normalizedUrl)
+                || candidateKey;
+            const config = this.getContextMenuSourceConfig(sourceKey);
+            return {
+                ...config,
+                url: cardUrl
+            };
+        }
+
+        const builtUrl = this.buildContextMenuSourceUrlFromIds(model, fallbackKey);
+        if (builtUrl) {
+            const config = this.getContextMenuSourceConfig(fallbackKey);
+            return {
+                ...config,
+                url: builtUrl
+            };
+        }
+
+        return null;
+    },
+
+    getContextMenuSourceLookupPath(model = {}) {
+        return model?.open_path
+            || model?.resolved_path
+            || model?.file_path
+            || model?.full_path
+            || model?.path
+            || '';
+    },
+
+    getContextMenuSourceLookupKey(model = {}) {
+        const path = String(this.getContextMenuSourceLookupPath(model) || '').trim();
+        return path ? path.replace(/\\/g, '/').toLowerCase() : '';
+    },
+
+    getContextMenuSourceLookupModel(model = {}) {
+        const key = this.getContextMenuSourceLookupKey(model);
+        const cached = key && this._contextMenuSourceLookupCache instanceof Map
+            ? this._contextMenuSourceLookupCache.get(key)
+            : null;
+        const data = cached?.data && typeof cached.data === 'object' ? cached.data : null;
+        if (!data) return model;
+
+        const merged = { ...model, metadata: data };
+        Object.entries(data).forEach(([field, value]) => {
+            if (value === undefined || value === null || value === '') return;
+            merged[field] = value;
+        });
+        return merged;
+    },
+
+    rememberContextMenuSourceMetadata(data = {}) {
+        if (!data || typeof data !== 'object') return;
+
+        const paths = [
+            data.open_path,
+            data.openPath,
+            data.resolved_path,
+            data.resolvedPath,
+            data.file_path,
+            data.filePath,
+            data.full_path,
+            data.fullPath,
+            data.path
+        ].map(value => String(value || '').trim()).filter(Boolean);
+        const keys = [...new Set(paths.map(path => this.getContextMenuSourceLookupKey({ path })).filter(Boolean))];
+        if (!keys.length) return;
+
+        if (!(this._contextMenuSourceLookupCache instanceof Map)) {
+            this._contextMenuSourceLookupCache = new Map();
+        }
+
+        keys.forEach(key => {
+            const existing = this._contextMenuSourceLookupCache.get(key)?.data || {};
+            const merged = { ...(existing && typeof existing === 'object' ? existing : {}), ...data };
+            this._contextMenuSourceLookupCache.set(key, { data: merged });
+        });
+
+        if (this.contextMenu?.style.display !== 'none' && this._contextMenuModel) {
+            const activeKey = this.getContextMenuSourceLookupKey(this._contextMenuModel);
+            if (keys.includes(activeKey)) {
+                const sourceLink = this.getContextMenuSourceLink(this.getContextMenuSourceLookupModel(this._contextMenuModel));
+                this.applyContextMenuSourceLink(this._contextMenuModel, sourceLink);
+            }
+        }
+    },
+
+    getContextMenuSourceLookupFilename(model = {}) {
+        return model?.filename
+            || model?.name
+            || model?.original_path?.split(/[\/\\]/).pop()
+            || String(this.getContextMenuSourceLookupPath(model) || '').split(/[\/\\]/).pop()
+            || '';
+    },
+
+    canLookupContextMenuSourceMetadata(model = {}, sourceLink = null) {
+        if (sourceLink?.url) return false;
+        if (!this.getContextMenuSourceLookupPath(model)) return false;
+
+        const scope = String(model?.context_scope || '').toLowerCase();
+        return [
+            'local_model',
+            'local_match',
+            'download_folder',
+            'download_queue',
+            'download_history',
+            ''
+        ].includes(scope);
+    },
+
+    applyContextMenuSourceLink(model = {}, sourceLink = null) {
+        if (!this.contextMenu) return;
+
+        const canShowMore = this.canShowSourceDetails(model);
+        const isDownloadTableContext = model?.context_scope === 'download_table';
+        const isDownloadFolderContext = model?.context_scope === 'download_folder';
+        const isDownloadRootContext = model?.context_scope === 'download_root';
+        const isDownloadQueueContext = model?.context_scope === 'download_queue';
+        const isDownloadHistoryContext = model?.context_scope === 'download_history';
+        const isFolderOnlyContext = isDownloadFolderContext || isDownloadRootContext;
+        const isSourceModelContext = !isDownloadTableContext && !isFolderOnlyContext && !isDownloadQueueContext && !isDownloadHistoryContext;
+        const hasLocalPath = Boolean(model?.open_path || model?.folder_path || model?.download_directory || model?.directory || model?.path || model?.resolved_path);
+        const showOpenFolder = !isDownloadTableContext && hasLocalPath;
+        const showCompareHashes = (model?.context_scope === 'local_model' || model?.context_scope === 'local_match' || isDownloadFolderContext)
+            && hasLocalPath
+            && Boolean(model?.missing_key || model?.missing_search_key);
+        const showSwitchWorkflow = (isDownloadQueueContext || isDownloadHistoryContext) && Boolean(this.canSwitchToDownloadWorkflow?.(model));
+        const showSourceLink = Boolean(sourceLink?.url);
+
+        this.setContextMenuItemVisible('source', showSourceLink);
+        this.setContextMenuItemVisible('civitai', false);
+        this.setContextMenuDividerVisible('source', showSourceLink && (isSourceModelContext || canShowMore));
+        this.setContextMenuDividerVisible('workflow', showSwitchWorkflow && (isSourceModelContext || canShowMore || showSourceLink));
+        this.setContextMenuDividerVisible('folder', (showCompareHashes || showOpenFolder) && (isSourceModelContext || canShowMore || showSourceLink || showSwitchWorkflow));
+        this.updateContextMenuSourceItem(sourceLink);
+        this.clampContextMenuToViewport();
+    },
+
+    async refreshContextMenuSourceLink(model = {}) {
+        const initialSourceLink = this.getContextMenuSourceLink(this.getContextMenuSourceLookupModel(model));
+        if (!this.canLookupContextMenuSourceMetadata(model, initialSourceLink)) return;
+
+        const key = this.getContextMenuSourceLookupKey(model);
+        const filename = this.getContextMenuSourceLookupFilename(model);
+        const path = this.getContextMenuSourceLookupPath(model);
+        if (!key || !filename || !path) return;
+
+        if (!(this._contextMenuSourceLookupCache instanceof Map)) {
+            this._contextMenuSourceLookupCache = new Map();
+        }
+
+        const token = ++this._contextMenuSourceLookupToken;
+        let cached = this._contextMenuSourceLookupCache.get(key);
+        try {
+            if (!cached?.promise && !cached?.data) {
+                const promise = this.fetchJson('/model_resolver/civitai-search', {
+                    method: 'POST',
+                    silent: true,
+                    body: JSON.stringify({
+                        filename,
+                        category: model.category || '',
+                        resolved_path: path,
+                        local_only: true
+                    })
+                }, 'Read local source metadata');
+                cached = { promise };
+                this._contextMenuSourceLookupCache.set(key, cached);
+                const data = await promise;
+                cached = { data };
+                this._contextMenuSourceLookupCache.set(key, cached);
+            } else if (cached.promise) {
+                const data = await cached.promise;
+                cached = { data };
+                this._contextMenuSourceLookupCache.set(key, cached);
+            }
+        } catch (error) {
+            this._contextMenuSourceLookupCache.set(key, { data: null, error });
+            return;
+        }
+
+        if (token !== this._contextMenuSourceLookupToken) return;
+        if (this.contextMenu?.style.display === 'none') return;
+        if (this.getContextMenuSourceLookupKey(this._contextMenuModel || {}) !== key) return;
+
+        const refreshedModel = this.getContextMenuSourceLookupModel(model);
+        const sourceLink = this.getContextMenuSourceLink(refreshedModel);
+        this.applyContextMenuSourceLink(model, sourceLink);
+    },
+
+    updateContextMenuSourceItem(sourceLink = null) {
+        if (!this.contextMenu) return;
+        const sourceItem = this.contextMenu.querySelector('.mr-context-menu-action-source, [data-menu-action="source"]');
+        if (!sourceItem) return;
+
+        const iconEl = sourceItem.querySelector('.mr-context-menu-item-icon');
+        const labelEl = sourceItem.querySelector('span:last-child');
+        const config = sourceLink || this.getContextMenuSourceConfig('');
+        if (iconEl) {
+            iconEl.innerHTML = getSvgIcon(config.icon || 'externalLink', 'currentColor', 'mr-context-menu-item-svg')
+                || getSvgIcon('externalLink', 'currentColor', 'mr-context-menu-item-svg');
+        }
+        if (labelEl) {
+            labelEl.textContent = sourceLink?.label
+                ? `Open in ${sourceLink.label}`
+                : 'Open Source';
+        }
     },
 
     canShowSourceDetails(model = {}) {
@@ -503,6 +875,16 @@ export const modelInfoMethods = {
         } catch (error) {
             // Already logged and notified inside fetchJson
         }
+    },
+
+    openModelSourceLink(model = {}) {
+        const sourceLink = this.getContextMenuSourceLink(this.getContextMenuSourceLookupModel(model));
+        if (!sourceLink?.url) {
+            this.showNotification?.('No source page URL available for this model.', 'info');
+            return;
+        }
+
+        window.open(sourceLink.url, '_blank', 'noopener,noreferrer');
     },
 
     /**
@@ -1481,11 +1863,14 @@ export const modelInfoMethods = {
             ) {
                 return;
             }
-            this.updateInfoDialogWithData(dialog, { ...fallbackData, ...data, civitai_checked: false });
+            const localData = { ...fallbackData, ...data, civitai_checked: false };
+            this.rememberContextMenuSourceMetadata(localData);
+            this.updateInfoDialogWithData(dialog, localData);
         } catch (e) {
             if (dialog._localInfoRequestId !== requestId || dialog._infoDialogCivitaiFetchStarted) {
                 return;
             }
+            this.rememberContextMenuSourceMetadata(fallbackData);
             this.updateInfoDialogWithData(dialog, fallbackData);
         }
     },
@@ -1564,6 +1949,7 @@ export const modelInfoMethods = {
                 civitai_checked: true
             };
             dialog._infoDialogData = merged;
+            this.rememberContextMenuSourceMetadata(merged);
             this.updateInfoDialogWithData(dialog, merged);
             if (merged.url || merged.version_url) {
                 this.showNotification?.(
@@ -1575,22 +1961,25 @@ export const modelInfoMethods = {
             }
         } catch (error) {
             this.showNotification?.(`Metadata fetch failed: ${error?.message || error}`, 'error');
-            this.updateInfoDialogWithData(dialog, {
+            const failedData = {
                 ...(dialog._infoDialogData || data),
                 metadata_checked: true,
                 civitai_checked: true
-            });
+            };
+            this.rememberContextMenuSourceMetadata(failedData);
+            this.updateInfoDialogWithData(dialog, failedData);
         } finally {
             setFetchingState(false);
         }
     },
 
     getInfoMetadataSourceKey(data = {}) {
-        const source = String(data.details_source || data.source || '').toLowerCase();
-        const url = String(data.version_url || data.url || data.platform_url || '').toLowerCase();
-        if (source.includes('huggingface') || url.includes('huggingface.co')) return 'huggingface';
-        if (source.includes('civarchive') || url.includes('civarchive.com')) return 'civarchive';
-        if (source.includes('civitai') || url.includes('civitai.com') || url.includes('civitai.red')) return 'civitai';
+        const sourceKey = this.getContextMenuSourceKey(data);
+        if (sourceKey) return sourceKey;
+        for (const url of this.getContextMenuSourceUrlCandidates(data)) {
+            const key = this.getContextMenuSourceKeyFromUrl(url);
+            if (key) return key;
+        }
         return 'metadata';
     },
 
@@ -1599,13 +1988,16 @@ export const modelInfoMethods = {
         if (key === 'huggingface') return 'HuggingFace';
         if (key === 'civarchive') return 'CivArchive';
         if (key === 'civitai') return 'CivitAI';
+        if (key === 'lora_manager_archive') return 'LoRA Archive';
         return 'metadata source';
     },
 
     getInfoMetadataSourceIcon(data = {}) {
         const key = this.getInfoMetadataSourceKey(data);
         if (key === 'huggingface') return getSvgIcon('huggingface', 'currentColor', 'mr-info-external-link-icon');
+        if (key === 'civarchive') return getSvgIcon('civarchive', 'currentColor', 'mr-info-external-link-icon');
         if (key === 'civitai') return getSvgIcon('civitai', 'currentColor', 'mr-info-external-link-icon');
+        if (key === 'lora_manager_archive') return getSvgIcon('loraManager', 'currentColor', 'mr-info-external-link-icon');
         return getSvgIcon('externalLink', 'currentColor', 'mr-info-external-link-icon');
     },
 
@@ -1629,6 +2021,7 @@ export const modelInfoMethods = {
             return;
         }
         dialog._infoDialogData = { ...(dialog._infoDialogData || {}), ...data };
+        this.rememberContextMenuSourceMetadata(dialog._infoDialogData);
 
         // Update title
         const titleEl = dialog.querySelector('.mr-info-dialog-title');

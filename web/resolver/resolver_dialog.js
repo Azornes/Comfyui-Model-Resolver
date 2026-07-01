@@ -109,6 +109,8 @@ export class ResolverManagerDialog extends ComfyDialog {
         this._workflowRefreshExpectedRoute = null;
         this._workflowRefreshPreviousSignature = null;
         this._comfyModelCatalogRefreshPromise = null;
+        this._contextMenuSourceLookupCache = new Map();
+        this._contextMenuSourceLookupToken = 0;
         this._boundHandleViewportResize = () => this.scheduleModalViewportClamp(true);
 
         // Create backdrop overlay for click-outside-to-close
@@ -141,14 +143,14 @@ export class ResolverManagerDialog extends ComfyDialog {
             $el("div.mr-context-menu-divider.mr-context-menu-divider-source", {
                 "data-menu-divider": "source"
             }),
-            $el("div.mr-context-menu-item.mr-context-menu-action-civitai", {
-                "data-menu-action": "civitai",
-                onclick: () => this.handleContextMenuAction('civitai')
+            $el("div.mr-context-menu-item.mr-context-menu-action-source", {
+                "data-menu-action": "source",
+                onclick: () => this.handleContextMenuAction('source')
             }, [
                 $el("span.mr-context-menu-item-icon", {
-                    innerHTML: getSvgIcon('civitai', 'currentColor', 'mr-context-menu-item-svg')
+                    innerHTML: getSvgIcon('externalLink', 'currentColor', 'mr-context-menu-item-svg')
                 }),
-                $el("span", { textContent: "Open in CivitAI" })
+                $el("span", { textContent: "Open Source" })
             ]),
             $el("div.mr-context-menu-divider.mr-context-menu-divider-workflow", {
                 "data-menu-divider": "workflow"
