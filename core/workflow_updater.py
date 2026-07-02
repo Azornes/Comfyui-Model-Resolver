@@ -9,6 +9,7 @@ from typing import Dict, Any, List, Optional
 
 from .log_system import create_module_logger
 log = create_module_logger(__name__)
+from .path_utils import is_path_within
 
 
 
@@ -108,11 +109,8 @@ def get_base_directory_for_model(
             category_paths = folder_paths.get_folder_paths(category)
             # Find which base directory this path belongs to
             for base_dir in category_paths:
-                try:
-                    if os.path.commonpath([full_path, base_dir]) == base_dir:
-                        return base_dir
-                except (ValueError, FileNotFoundError):
-                    continue
+                if is_path_within(full_path, base_dir):
+                    return base_dir
 
     return None
 

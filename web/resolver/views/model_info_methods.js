@@ -2,7 +2,7 @@ import { app } from "../../../../../scripts/app.js";
 import { api } from "../../../../../scripts/api.js";
 import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
-import { escapeHtml, escapeJsString, sanitizeDescriptionHtml } from "../utils/html_utils.js";
+import { sanitizeDescriptionHtml } from "../utils/html_utils.js";
 import { getModelCardUrl } from "../utils/url_utils.js";
 import { getCivitaiModelUrl } from "../globals.js";
 export const modelInfoMethods = {
@@ -1261,13 +1261,7 @@ export const modelInfoMethods = {
         return dialog;
     },
 
-    escapeHtml(value) {
-        return escapeHtml(value);
-    },
 
-    escapeJsString(value) {
-        return escapeJsString(value);
-    },
 
     truncateText(value, maxLength = 160) {
         const text = String(value ?? '').trim();

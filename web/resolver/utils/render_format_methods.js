@@ -2,6 +2,8 @@ import { app } from "../../../../../scripts/app.js";
 import { api } from "../../../../../scripts/api.js";
 import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
+import { escapeHtml, escapeJsString } from "./html_utils.js";
+
 export const renderFormatMethods = {
     encodeContextMenuModel(context = null) {
         if (!context) return '';
@@ -343,6 +345,14 @@ export const renderFormatMethods = {
 
     hasModelExtension(value) {
         return hasModelExtension(value);
+    },
+
+    escapeHtml(value) {
+        return escapeHtml(value);
+    },
+
+    escapeJsString(value) {
+        return escapeJsString(value);
     }
 };
 

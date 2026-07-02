@@ -801,9 +801,19 @@ def _select_primary_file(files: List[Dict[str, Any]]) -> Optional[Dict[str, Any]
     return select_primary_model_file(files)
 
 
-def _collect_download_urls(file_info: Dict[str, Any]) -> List[str]:
+def _collect_download_urls_unified(
+    file_info: Dict[str, Any],
+    prioritize_civitai_last: bool = False,
+    skip_file_if_dead: bool = False,
+    check_download_urls_list: bool = False,
+    download_url_keys: Tuple[str, ...] = ("downloadUrl",),
+) -> List[str]:
     urls: List[str] = []
+    if skip_file_if_dead and _archive_link_is_dead(file_info):
+        return urls
+
     expected_filename = file_info.get("filename") or file_info.get("name") or ""
+    dead_urls = set()
     mirrors = file_info.get("mirrors") or []
     if not isinstance(mirrors, list):
         mirrors = [mirrors]
@@ -812,6 +822,9 @@ def _collect_download_urls(file_info: Dict[str, Any]) -> List[str]:
         if not isinstance(mirror, dict):
             continue
         if _archive_link_is_dead(mirror):
+            dead_url = _normalize_download_url(mirror.get("url"))
+            if dead_url:
+                dead_urls.add(dead_url)
             continue
         url = _normalize_download_url(mirror.get("url"))
         mirror_filename = mirror.get("filename") or mirror.get("name") or expected_filename
@@ -822,21 +835,51 @@ def _collect_download_urls(file_info: Dict[str, Any]) -> List[str]:
         ):
             urls.append(url)
 
-    download_url = None
-    if not _archive_link_is_dead(file_info):
-        download_url = _normalize_download_url(file_info.get("downloadUrl"))
-    if (
-        download_url
-        and _download_url_looks_like_model_file(download_url, expected_filename)
-        and download_url not in urls
-    ):
-        urls.append(download_url)
+    if check_download_urls_list:
+        raw_urls = file_info.get("download_urls") or []
+        if not isinstance(raw_urls, list):
+            raw_urls = [raw_urls]
+        for raw_url in raw_urls:
+            url = _normalize_download_url(raw_url)
+            if (
+                url
+                and url not in dead_urls
+                and _download_url_looks_like_model_file(url, expected_filename)
+                and url not in urls
+            ):
+                urls.append(url)
 
-    non_civitai_urls = [
-        url for url in urls if not url.startswith(CIVITAI_DOWNLOAD_URL_PREFIXES)
-    ]
-    civitai_urls = [url for url in urls if url.startswith(CIVITAI_DOWNLOAD_URL_PREFIXES)]
-    return non_civitai_urls + civitai_urls
+    if not _archive_link_is_dead(file_info):
+        for key in download_url_keys:
+            url = _normalize_download_url(file_info.get(key))
+            if (
+                url
+                and url not in dead_urls
+                and _download_url_looks_like_model_file(url, expected_filename)
+                and url not in urls
+            ):
+                urls.append(url)
+
+    if prioritize_civitai_last:
+        non_civitai_urls = [
+            url for url in urls if not url.startswith(CIVITAI_DOWNLOAD_URL_PREFIXES)
+        ]
+        civitai_urls = [
+            url for url in urls if url.startswith(CIVITAI_DOWNLOAD_URL_PREFIXES)
+        ]
+        return non_civitai_urls + civitai_urls
+
+    return urls
+
+
+def _collect_download_urls(file_info: Dict[str, Any]) -> List[str]:
+    return _collect_download_urls_unified(
+        file_info,
+        prioritize_civitai_last=True,
+        skip_file_if_dead=False,
+        check_download_urls_list=False,
+        download_url_keys=("downloadUrl",),
+    )
 
 
 def _normalize_archive_mirrors(file_info: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -1111,57 +1154,13 @@ def get_civarchive_model_details(
 
 
 def _collect_normalized_download_urls(file_info: Dict[str, Any]) -> List[str]:
-    urls: List[str] = []
-    if _archive_link_is_dead(file_info):
-        return urls
-
-    expected_filename = file_info.get("filename") or file_info.get("name") or ""
-    dead_urls = set()
-    mirrors = file_info.get("mirrors") or []
-    if not isinstance(mirrors, list):
-        mirrors = [mirrors]
-    for mirror in mirrors:
-        if not isinstance(mirror, dict):
-            continue
-        if _archive_link_is_dead(mirror):
-            dead_url = _normalize_download_url(mirror.get("url"))
-            if dead_url:
-                dead_urls.add(dead_url)
-            continue
-        url = _normalize_download_url(mirror.get("url"))
-        mirror_filename = mirror.get("filename") or mirror.get("name") or expected_filename
-        if (
-            url
-            and _download_url_looks_like_model_file(url, mirror_filename)
-            and url not in urls
-        ):
-            urls.append(url)
-
-    raw_urls = file_info.get("download_urls") or []
-    if not isinstance(raw_urls, list):
-        raw_urls = [raw_urls]
-
-    for raw_url in raw_urls:
-        url = _normalize_download_url(raw_url)
-        if (
-            url
-            and url not in dead_urls
-            and _download_url_looks_like_model_file(url, expected_filename)
-            and url not in urls
-        ):
-            urls.append(url)
-
-    for key in ("download_url", "downloadUrl"):
-        url = _normalize_download_url(file_info.get(key))
-        if (
-            url
-            and url not in dead_urls
-            and _download_url_looks_like_model_file(url, expected_filename)
-            and url not in urls
-        ):
-            urls.append(url)
-
-    return urls
+    return _collect_download_urls_unified(
+        file_info,
+        prioritize_civitai_last=False,
+        skip_file_if_dead=True,
+        check_download_urls_list=True,
+        download_url_keys=("download_url", "downloadUrl"),
+    )
 
 
 def _select_primary_model_file(files: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
