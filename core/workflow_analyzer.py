@@ -7,7 +7,7 @@ Extracts model references from workflow JSON and identifies missing models.
 import os
 import re
 import threading
-from typing import List, Dict, Any, Optional, Set
+from typing import List, Dict, Any, Optional, Set, Callable
 
 from .log_system import create_module_logger
 log = create_module_logger(__name__)
@@ -1897,12 +1897,15 @@ def _apply_promoted_widget_locator(
 def analyze_workflow_models(
     workflow_json: Dict[str, Any],
     available_models: Optional[List[Dict[str, Any]]] = None,
+    progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Extract all model references from a workflow, including nested subgraphs.
 
     Args:
         workflow_json: Complete workflow JSON dictionary
+        available_models: Optional list of local model records for existence checks
+        progress_callback: Optional callback called while workflow nodes are scanned
 
     Returns:
         List of model reference dictionaries (same format as get_node_model_info)
@@ -1913,15 +1916,59 @@ def analyze_workflow_models(
     # Get subgraph definitions first to check if node types are subgraph UUIDs
     definitions = workflow_json.get("definitions", {})
     subgraphs = definitions.get("subgraphs", [])
-    subgraph_lookup = {sg.get("id"): sg.get("name", sg.get("id")) for sg in subgraphs}
+    if not isinstance(subgraphs, list):
+        subgraphs = []
+    subgraph_lookup = {
+        sg.get("id"): sg.get("name", sg.get("id"))
+        for sg in subgraphs
+        if isinstance(sg, dict)
+    }
     promoted_widget_contexts = _build_promoted_widget_contexts(
         workflow_json, subgraphs
     )
 
     # Analyze top-level nodes
     nodes = workflow_json.get("nodes", [])
+    if not isinstance(nodes, list):
+        nodes = []
+    total_nodes = len(nodes) + sum(
+        len(subgraph_nodes)
+        for subgraph in subgraphs
+        if isinstance(subgraph, dict)
+        for subgraph_nodes in [subgraph.get("nodes", [])]
+        if isinstance(subgraph_nodes, list)
+    )
+    processed_nodes = 0
+
+    def report_node_progress(node: Dict[str, Any], subgraph_name: Optional[str] = None) -> None:
+        nonlocal processed_nodes
+        processed_nodes += 1
+        if not progress_callback:
+            return
+
+        node_type = node.get("type", "")
+        payload = {
+            "stage": "analyzing",
+            "message": f"Analyzing workflow node {processed_nodes} of {total_nodes}",
+            "current": processed_nodes,
+            "total": total_nodes,
+            "node_id": node.get("id"),
+            "node_type": node_type,
+        }
+        if subgraph_name:
+            payload["subgraph_name"] = subgraph_name
+            payload["message"] = (
+                f"Analyzing subgraph node {processed_nodes} of {total_nodes}"
+            )
+
+        try:
+            progress_callback(payload)
+        except Exception as e:
+            log.debug(f"Workflow analysis progress callback failed: {e}")
+
     for node in nodes:
         try:
+            report_node_progress(node)
             model_refs = get_node_model_info(node, available_models=available_models)
             node_type = node.get("type", "")
 
@@ -1952,14 +1999,15 @@ def analyze_workflow_models(
             log.warning(f"Error analyzing node {node.get('id', 'unknown')}: {e}")
             continue
 
-    # Recursively analyze subgraphs (definitions already loaded above)
-    if not subgraphs:  # Re-get if not loaded above
-        subgraphs = definitions.get("subgraphs", [])
-
+    # Recursively analyze subgraphs
     for subgraph in subgraphs:
+        if not isinstance(subgraph, dict):
+            continue
         subgraph_id = subgraph.get("id")
         subgraph_name = subgraph.get("name", subgraph_id)
         subgraph_nodes = subgraph.get("nodes", [])
+        if not isinstance(subgraph_nodes, list):
+            subgraph_nodes = []
 
         log.debug(
             f"Analyzing subgraph: {subgraph_name} (ID: {subgraph_id}) with {len(subgraph_nodes)} nodes"
@@ -1967,6 +2015,7 @@ def analyze_workflow_models(
 
         for node in subgraph_nodes:
             try:
+                report_node_progress(node, subgraph_name)
                 model_refs = get_node_model_info(node, available_models=available_models)
                 # Mark as belonging to this subgraph definition
                 for ref in model_refs:

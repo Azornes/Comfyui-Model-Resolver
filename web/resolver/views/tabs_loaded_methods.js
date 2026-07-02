@@ -43,6 +43,7 @@ export const tabsLoadedMethods = {
         }
         if (this.activeTab !== 'loaded') {
             this._loadedModelsLoadToken = null;
+            this._loadedModelsProgressToken = null;
         }
         this.hideTooltip();
         this.animateTabContentTransition();
@@ -74,6 +75,7 @@ export const tabsLoadedMethods = {
         if (!this.contentElement) return;
 
         this._loadedModelsLoadToken = null;
+        this._loadedModelsProgressToken = null;
         let loadToken = null;
         const shouldRenderLoadedModels = () => (
             this.activeTab === 'loaded' &&
@@ -110,14 +112,32 @@ export const tabsLoadedMethods = {
                 return;
             }
 
+            const loadedProgressId = `loaded-progress-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            this._loadedModelsProgressToken = loadedProgressId;
             if (shouldRenderLoadedModels()) {
-                this.contentElement.innerHTML = '<p>Loading loaded models...</p>';
+                this.contentElement.innerHTML = this.renderLoadedModelsProgress({
+                    status: 'starting',
+                    stage: 'starting',
+                    message: 'Preparing loaded model scan...',
+                    percent: 0,
+                    current: 0,
+                    total: 0
+                });
             }
 
-            const data = await this.fetchJson('/model_resolver/loaded', {
-                method: 'POST',
-                body: JSON.stringify({ workflow })
-            }, 'Fetch loaded models');
+            const progressPromise = this.pollLoadedModelsProgress(loadedProgressId, loadedProgressId);
+            let data;
+            try {
+                data = await this.fetchJson('/model_resolver/loaded', {
+                    method: 'POST',
+                    body: JSON.stringify({ workflow, loaded_id: loadedProgressId })
+                }, 'Fetch loaded models');
+            } finally {
+                if (this._loadedModelsProgressToken === loadedProgressId) {
+                    this._loadedModelsProgressToken = null;
+                }
+                await progressPromise;
+            }
             if (this._loadedModelsLoadToken === loadToken) {
                 this.cachedLoadedModelsSignature = workflowSignature;
                 this.cachedLoadedModelsData = data;

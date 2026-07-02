@@ -224,6 +224,29 @@ export const renderFormatMethods = {
         `;
     },
 
+    renderLoadedModelsProgress(progress = {}) {
+        const current = Number(progress.current) || 0;
+        const total = Number(progress.total) || 0;
+        const explicitPercent = Number(progress.percent);
+        const percent = Number.isFinite(explicitPercent)
+            ? Math.max(0, Math.min(100, Math.round(explicitPercent)))
+            : (total > 0 ? Math.max(0, Math.min(100, Math.round((current / total) * 100))) : 0);
+        const message = progress.message || 'Loading loaded models...';
+        const detail = total > 0 ? `${current} / ${total}` : 'Preparing...';
+        const nodeType = progress.node_type ? this.escapeHtml(String(progress.node_type)) : '';
+
+        return `
+            <div class="mr-download-section">
+                <div class="mr-status-inline">
+                    ${this.getStatusBadge('Loading', 'info')}
+                    <span class="mr-download-info">${this.escapeHtml(message)}</span>
+                </div>
+                ${this.renderProgressBar(percent, detail, `${percent}%`)}
+                ${nodeType ? `<div class="mr-download-info">${nodeType}</div>` : ''}
+            </div>
+        `;
+    },
+
     async pollAnalysisProgress(analysisId, token) {
         while (this._analysisProgressToken === token) {
             try {
@@ -246,6 +269,38 @@ export const renderFormatMethods = {
                 }
             } catch (error) {
                 console.warn('Model Resolver: analysis progress polling failed', error);
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 250));
+        }
+    },
+
+    async pollLoadedModelsProgress(loadedId, token) {
+        while (this._loadedModelsProgressToken === token) {
+            try {
+                const progress = await this.fetchJson(`/model_resolver/loaded-progress/${encodeURIComponent(loadedId)}`, {
+                    silent: true
+                }, 'Poll loaded models progress');
+                if (progress?.status === 'unknown') {
+                    await new Promise(resolve => setTimeout(resolve, 250));
+                    continue;
+                }
+                if (
+                    progress &&
+                    this.contentElement &&
+                    this._loadedModelsProgressToken === token &&
+                    this.activeTab === 'loaded'
+                ) {
+                    this.contentElement.innerHTML = this.renderLoadedModelsProgress(progress);
+                    if (progress.status === 'completed' || progress.status === 'error') {
+                        if (this._loadedModelsProgressToken === token) {
+                            this._loadedModelsProgressToken = null;
+                        }
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.warn('Model Resolver: loaded models progress polling failed', error);
             }
 
             await new Promise(resolve => setTimeout(resolve, 250));

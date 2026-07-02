@@ -138,6 +138,7 @@ class ModelResolverExtension:
         self.routes_setup = False
         self.logger = create_module_logger(__name__)
         self.analysis_progress = JobProgressTracker("Analyzing...")
+        self.loaded_progress = JobProgressTracker("Loading loaded models...")
         self.search_tracker = JobProgressTracker("Searching...")
         self.hash_tracker = JobProgressTracker("Preparing hash calculation...")
         self.search_result_timestamps = {}
@@ -971,191 +972,439 @@ class ModelResolverExtension:
                 """Get all currently loaded models in the workflow."""
                 data = await request.json()
                 workflow_json = data.get("workflow")
+                loaded_id = str(
+                    data.get("loaded_id") or data.get("progress_id") or ""
+                ).strip()
 
                 if not workflow_json:
                     return web.json_response(
                         {"error": "Workflow JSON is required"}, status=400
                     )
+                if not isinstance(workflow_json, dict):
+                    return web.json_response(
+                        {"error": "Workflow JSON must be an object"}, status=400
+                    )
 
-                # Import workflow analyzer to extract models
-                from .core.workflow_analyzer import (
-                    analyze_workflow_models,
-                    try_resolve_model_path,
-                    is_model_filename,
-                    URN_REGEX,
-                    URN_TYPE_MAP,
-                )
+                def update_loaded_progress(
+                    stage,
+                    message,
+                    percent=None,
+                    status="running",
+                    current=0,
+                    total=0,
+                    **payload,
+                ):
+                    if not loaded_id:
+                        return
+                    self.loaded_progress.update(
+                        loaded_id,
+                        status=status,
+                        stage=stage,
+                        message=message,
+                        percent=percent,
+                        current=current,
+                        total=total,
+                        **payload,
+                    )
 
-                # Get available models for existence checking
-                available_models = get_model_files()
-                available_paths = {m.get("path") for m in available_models}
-                # Create lookup for full paths by filename (with and without extension)
-                path_by_filename = {}
-                for m in available_models:
-                    rel_path = m.get("relative_path", "")
-                    if rel_path:
-                        filename = get_filename_from_path(rel_path)
-                        path_by_filename[filename] = m.get("path")
-                        # Also add without extension for matching (simple approach)
-                        if "." in filename:
-                            filename_no_ext = filename.rsplit(".", 1)[0]
-                            if filename_no_ext not in path_by_filename:
-                                path_by_filename[filename_no_ext] = m.get("path")
-                        # Add the full relative path as key too
-                        path_by_filename[rel_path] = m.get("path")
+                def get_workflow_node_count():
+                    node_count = 0
+                    nodes = workflow_json.get("nodes", [])
+                    if isinstance(nodes, list):
+                        node_count += len(nodes)
 
-                # Also use folder_paths.get_full_path() to get paths
-                import folder_paths
+                    definitions = workflow_json.get("definitions", {})
+                    subgraphs = (
+                        definitions.get("subgraphs", [])
+                        if isinstance(definitions, dict)
+                        else []
+                    )
+                    if isinstance(subgraphs, list):
+                        for subgraph in subgraphs:
+                            if not isinstance(subgraph, dict):
+                                continue
+                            subgraph_nodes = subgraph.get("nodes", [])
+                            if isinstance(subgraph_nodes, list):
+                                node_count += len(subgraph_nodes)
+                    return node_count
 
-                for cat in [
-                    "loras",
-                    "checkpoints",
-                    "vae",
-                    "controlnet",
-                    "upscale_models",
-                ]:
+                def interpolate_percent(start, end, current, total):
+                    if not total:
+                        return start
                     try:
-                        filenames = folder_paths.get_filename_list(cat)
-                        for fn in filenames:
-                            full_path = folder_paths.get_full_path(cat, fn)
-                            if (
-                                full_path
-                                and full_path not in path_by_filename.values()
-                            ):
-                                path_by_filename[fn] = full_path
-                                fn_no_ext = (
-                                    fn.rsplit(".", 1)[0] if "." in fn else fn
-                                )
-                                if fn_no_ext not in path_by_filename:
-                                    path_by_filename[fn_no_ext] = full_path
-                    except Exception:
-                        pass
+                        ratio = max(0.0, min(1.0, float(current) / float(total)))
+                    except (TypeError, ValueError, ZeroDivisionError):
+                        ratio = 0.0
+                    return start + ((end - start) * ratio)
 
-                # Analyze workflow to get all model references
-                all_model_refs = analyze_workflow_models(
-                    workflow_json, available_models=available_models
+                def build_loaded_models_response():
+                    from .core.workflow_analyzer import (
+                        analyze_workflow_models,
+                        URN_TYPE_MAP,
+                    )
+
+                    update_loaded_progress(
+                        "scanning",
+                        "Scanning local model index...",
+                        percent=5,
+                    )
+
+                    # Get available models for existence checking
+                    available_models = get_model_files()
+
+                    # Create lookup for full paths by filename (with and without extension)
+                    path_by_filename = {}
+                    total_local_models = len(available_models)
+                    update_loaded_progress(
+                        "indexing",
+                        f"Indexing {total_local_models} local models...",
+                        percent=15,
+                        current=0,
+                        total=total_local_models,
+                    )
+                    for index, model_info in enumerate(available_models, start=1):
+                        rel_path = model_info.get("relative_path", "")
+                        if rel_path:
+                            filename = get_filename_from_path(rel_path)
+                            path_by_filename[filename] = model_info.get("path")
+                            # Also add without extension for matching (simple approach)
+                            if "." in filename:
+                                filename_no_ext = filename.rsplit(".", 1)[0]
+                                if filename_no_ext not in path_by_filename:
+                                    path_by_filename[filename_no_ext] = model_info.get("path")
+                            # Add the full relative path as key too
+                            path_by_filename[rel_path] = model_info.get("path")
+
+                        if (
+                            total_local_models
+                            and (index == total_local_models or index % 250 == 0)
+                        ):
+                            update_loaded_progress(
+                                "indexing",
+                                f"Indexing local model {index} of {total_local_models}",
+                                percent=interpolate_percent(
+                                    15, 25, index, total_local_models
+                                ),
+                                current=index,
+                                total=total_local_models,
+                            )
+
+                    # Also use folder_paths.get_full_path() to get paths
+                    try:
+                        import folder_paths
+                    except Exception:
+                        folder_paths = None
+
+                    folder_categories = [
+                        "loras",
+                        "checkpoints",
+                        "vae",
+                        "controlnet",
+                        "upscale_models",
+                    ]
+                    if folder_paths:
+                        for index, category_name in enumerate(folder_categories, start=1):
+                            update_loaded_progress(
+                                "indexing",
+                                f"Reading {category_name} model list...",
+                                percent=interpolate_percent(
+                                    25, 35, index - 1, len(folder_categories)
+                                ),
+                                current=index - 1,
+                                total=len(folder_categories),
+                            )
+                            try:
+                                filenames = folder_paths.get_filename_list(category_name)
+                                for filename in filenames:
+                                    full_path = folder_paths.get_full_path(
+                                        category_name, filename
+                                    )
+                                    if (
+                                        full_path
+                                        and full_path not in path_by_filename.values()
+                                    ):
+                                        path_by_filename[filename] = full_path
+                                        filename_no_ext = (
+                                            filename.rsplit(".", 1)[0]
+                                            if "." in filename
+                                            else filename
+                                        )
+                                        if filename_no_ext not in path_by_filename:
+                                            path_by_filename[filename_no_ext] = full_path
+                            except Exception:
+                                pass
+
+                    workflow_node_count = get_workflow_node_count()
+                    update_loaded_progress(
+                        "analyzing",
+                        "Analyzing workflow nodes...",
+                        percent=35,
+                        current=0,
+                        total=workflow_node_count,
+                    )
+
+                    def update_workflow_analysis_progress(payload):
+                        progress_payload = dict(payload or {})
+                        current = progress_payload.pop("current", 0)
+                        total = progress_payload.pop("total", workflow_node_count)
+                        stage = progress_payload.pop("stage", "analyzing")
+                        message = progress_payload.pop(
+                            "message", "Analyzing workflow nodes..."
+                        )
+                        progress_payload.pop("percent", None)
+                        update_loaded_progress(
+                            stage,
+                            message,
+                            percent=interpolate_percent(35, 78, current, total),
+                            current=current,
+                            total=total,
+                            **progress_payload,
+                        )
+
+                    # Analyze workflow to get all model references
+                    all_model_refs = analyze_workflow_models(
+                        workflow_json,
+                        available_models=available_models,
+                        progress_callback=update_workflow_analysis_progress,
+                    )
+
+                    # Also extract from node.properties.models
+                    workflow_nodes = workflow_json.get("nodes", [])
+                    nodes = list(workflow_nodes) if isinstance(workflow_nodes, list) else []
+                    definitions = workflow_json.get("definitions", {})
+                    subgraphs = (
+                        definitions.get("subgraphs", [])
+                        if isinstance(definitions, dict)
+                        else []
+                    )
+                    for subgraph in subgraphs:
+                        if isinstance(subgraph, dict):
+                            subgraph_nodes = subgraph.get("nodes", [])
+                            if isinstance(subgraph_nodes, list):
+                                nodes.extend(subgraph_nodes)
+
+                    # Collect all loaded models with their values
+                    loaded_models = []
+                    total_refs = len(all_model_refs)
+                    update_loaded_progress(
+                        "building",
+                        "Building loaded models list...",
+                        percent=78,
+                        current=0,
+                        total=total_refs,
+                    )
+
+                    # Process each model reference from analyze_workflow_models
+                    for index, ref in enumerate(all_model_refs, start=1):
+                        if total_refs and (index == total_refs or index % 50 == 0):
+                            update_loaded_progress(
+                                "building",
+                                f"Building loaded model {index} of {total_refs}",
+                                percent=interpolate_percent(78, 94, index, total_refs),
+                                current=index,
+                                total=total_refs,
+                            )
+
+                        original_path = ref.get("original_path", "")
+                        node_id = ref.get("node_id")
+                        widget_index = ref.get("widget_index")
+                        node_type = ref.get("node_type", "")
+                        category = ref.get("category", "unknown")
+
+                        # Determine model name and strength
+                        model_name = get_filename_from_path(original_path)
+                        strength = None
+
+                        # For standard LoraLoader nodes, strength is in next widget_value
+                        if (
+                            node_type in ["LoraLoader", "LoraLoaderModelOnly"]
+                            and isinstance(widget_index, int)
+                        ):
+                            # Find the node in workflow to get strength value
+                            for node in nodes:
+                                if str(node.get("id")) == str(node_id):
+                                    widgets_values = node.get("widgets_values", [])
+                                    if (
+                                        isinstance(widgets_values, list)
+                                        and len(widgets_values) > widget_index + 1
+                                    ):
+                                        try:
+                                            strength = float(
+                                                widgets_values[widget_index + 1]
+                                            )
+                                        except (ValueError, TypeError):
+                                            strength = 1.0
+                                    break
+
+                        if ref.get("strength") is not None:
+                            strength = ref.get("strength")
+
+                        # For text-based lora loaders (LoraLoaderV2, LoraManager), get strength from ref
+                        if ref.get("is_lora_v2"):
+                            strength = ref.get("strength")
+                            model_name = ref.get("name", model_name)
+
+                        # Check if model exists locally
+                        exists = ref.get("exists", False)
+
+                        # If URN, resolve to display name
+                        if ref.get("is_urn"):
+                            urn = ref.get("urn", {})
+                            # Use model name from URN as display name
+                            model_name = (
+                                f"urn:{urn.get('type', 'model')}:{urn.get('model_id')}"
+                            )
+                            category = urn.get("type", category)
+                            if category in URN_TYPE_MAP:
+                                category = URN_TYPE_MAP[category]
+
+                        loaded_models.append(
+                            {
+                                "name": model_name,
+                                "category": category,
+                                "node_id": node_id,
+                                "widget_index": widget_index,
+                                "node_type": node_type,
+                                "exists": exists,
+                                "strength": strength,
+                                "original_path": original_path,
+                                "is_urn": ref.get("is_urn", False),
+                                "is_lora_v2": ref.get("is_lora_v2", False),
+                                "active": ref.get("active"),
+                                "connected": ref.get("connected", True),
+                                "resolved_path": (
+                                    path_by_filename.get(model_name)
+                                    or path_by_filename.get(original_path)
+                                ),
+                            }
+                        )
+
+                    # Also check node.properties.models for embedded models
+                    total_nodes = len(nodes)
+                    for node_index, node in enumerate(nodes, start=1):
+                        if total_nodes and (
+                            node_index == total_nodes or node_index % 50 == 0
+                        ):
+                            update_loaded_progress(
+                                "embedded",
+                                "Checking embedded model metadata...",
+                                percent=interpolate_percent(
+                                    94, 98, node_index, total_nodes
+                                ),
+                                current=node_index,
+                                total=total_nodes,
+                            )
+
+                        node_type = node.get("type", "")
+                        properties = node.get("properties", {})
+                        if not isinstance(properties, dict):
+                            properties = {}
+                        models_list = properties.get("models", [])
+                        if not isinstance(models_list, list):
+                            models_list = []
+
+                        for model_info in models_list:
+                            if isinstance(model_info, dict):
+                                name = model_info.get("name", "")
+                                directory = model_info.get("directory", "")
+
+                                if name:
+                                    # Check if this model is already in loaded_models
+                                    existing = next(
+                                        (
+                                            model
+                                            for model in loaded_models
+                                            if model.get("original_path") == name
+                                        ),
+                                        None,
+                                    )
+                                    if not existing:
+                                        loaded_models.append(
+                                            {
+                                                "name": get_filename_from_path(name),
+                                                "category": directory or "checkpoints",
+                                                "node_id": node.get("id"),
+                                                "widget_index": None,
+                                                "node_type": node_type,
+                                                "exists": True,  # Embedded models are loaded
+                                                "strength": None,
+                                                "original_path": name,
+                                                "is_urn": False,
+                                            }
+                                        )
+
+                    update_loaded_progress(
+                        "finalizing",
+                        "Loaded models ready",
+                        percent=99,
+                        current=len(loaded_models),
+                        total=len(loaded_models),
+                    )
+                    return {
+                        "loaded_models": loaded_models,
+                        "total": len(loaded_models),
+                    }
+
+                update_loaded_progress(
+                    "starting",
+                    "Preparing loaded model scan...",
+                    percent=0,
+                    status="starting",
+                    current=0,
+                    total=0,
                 )
 
-                # Also extract from node.properties.models
-                nodes = list(workflow_json.get("nodes", []))
-                definitions = workflow_json.get("definitions", {})
-                subgraphs = definitions.get("subgraphs", [])
-                for subgraph in subgraphs:
-                    nodes.extend(subgraph.get("nodes", []))
+                try:
+                    result = await asyncio.to_thread(build_loaded_models_response)
+                except Exception as e:
+                    update_loaded_progress(
+                        "error",
+                        str(e),
+                        percent=100,
+                        status="error",
+                        current=0,
+                        total=0,
+                    )
+                    self.logger.error(
+                        f"Model Resolver loaded models error: {e}", exc_info=True
+                    )
+                    return web.json_response({"error": str(e)}, status=500)
 
-                # Collect all loaded models with their values
-                loaded_models = []
+                update_loaded_progress(
+                    "completed",
+                    "Loaded models ready",
+                    percent=100,
+                    status="completed",
+                    current=result.get("total", 0),
+                    total=result.get("total", 0),
+                )
+                return web.json_response(result)
 
-                # Process each model reference from analyze_workflow_models
-                for ref in all_model_refs:
-                    original_path = ref.get("original_path", "")
-                    node_id = ref.get("node_id")
-                    widget_index = ref.get("widget_index")
-                    node_type = ref.get("node_type", "")
-                    category = ref.get("category", "unknown")
+            @routes.get("/model_resolver/loaded-progress/{loaded_id}")
+            @json_api_endpoint("loaded-progress")
+            async def get_loaded_models_progress(request):
+                """Get loaded models inspection progress."""
+                loaded_id = request.match_info.get("loaded_id", "").strip()
+                if not loaded_id:
+                    return web.json_response(
+                        {"error": "Loaded progress ID is required"}, status=400
+                    )
 
-                    # Determine model name and strength
-                    model_name = get_filename_from_path(original_path)
-                    strength = None
-
-                    # For standard LoraLoader nodes, strength is in next widget_value
-                    if node_type in ["LoraLoader", "LoraLoaderModelOnly"]:
-                        # Find the node in workflow to get strength value
-                        for node in nodes:
-                            if str(node.get("id")) == str(node_id):
-                                widgets_values = node.get("widgets_values", [])
-                                if len(widgets_values) > widget_index + 1:
-                                    try:
-                                        strength = float(
-                                            widgets_values[widget_index + 1]
-                                        )
-                                    except (ValueError, TypeError):
-                                        strength = 1.0
-                                break
-
-                    if ref.get("strength") is not None:
-                        strength = ref.get("strength")
-
-                    # For text-based lora loaders (LoraLoaderV2, LoraManager), get strength from ref
-                    if ref.get("is_lora_v2"):
-                        strength = ref.get("strength")
-                        model_name = ref.get("name", model_name)
-
-                    # Check if model exists locally
-                    exists = ref.get("exists", False)
-
-                    # If URN, resolve to display name
-                    if ref.get("is_urn"):
-                        urn = ref.get("urn", {})
-                        # Use model name from URN as display name
-                        model_name = (
-                            f"urn:{urn.get('type', 'model')}:{urn.get('model_id')}"
-                        )
-                        category = urn.get("type", category)
-                        if category in URN_TYPE_MAP:
-                            category = URN_TYPE_MAP[category]
-
-                    loaded_models.append(
+                self.loaded_progress.cleanup()
+                progress = self.loaded_progress.get(loaded_id)
+                if not progress:
+                    return web.json_response(
                         {
-                            "name": model_name,
-                            "category": category,
-                            "node_id": node_id,
-                            "widget_index": widget_index,
-                            "node_type": node_type,
-                            "exists": exists,
-                            "strength": strength,
-                            "original_path": original_path,
-                            "is_urn": ref.get("is_urn", False),
-                            "is_lora_v2": ref.get("is_lora_v2", False),
-                            "active": ref.get("active"),
-                            "connected": ref.get("connected", True),
-                            "resolved_path": (
-                                path_by_filename.get(model_name)
-                                or path_by_filename.get(original_path)
-                            ),
+                            "status": "unknown",
+                            "stage": "unknown",
+                            "message": "No loaded models progress available",
+                            "percent": 0,
+                            "current": 0,
+                            "total": 0,
                         }
                     )
 
-                # Also check node.properties.models for embedded models
-                for node in nodes:
-                    node_type = node.get("type", "")
-                    properties = node.get("properties", {})
-                    models_list = properties.get("models", [])
-
-                    for model_info in models_list:
-                        if isinstance(model_info, dict):
-                            name = model_info.get("name", "")
-                            url = model_info.get("url", "")
-                            directory = model_info.get("directory", "")
-
-                            if name:
-                                # Check if this model is already in loaded_models
-                                existing = next(
-                                    (
-                                        m
-                                        for m in loaded_models
-                                        if m.get("original_path") == name
-                                    ),
-                                    None,
-                                )
-                                if not existing:
-                                    loaded_models.append(
-                                        {
-                                            "name": get_filename_from_path(name),
-                                            "category": directory or "checkpoints",
-                                            "node_id": node.get("id"),
-                                            "widget_index": None,
-                                            "node_type": node_type,
-                                            "exists": True,  # Embedded models are loaded
-                                            "strength": None,
-                                            "original_path": name,
-                                            "is_urn": False,
-                                        }
-                                    )
-
-                return web.json_response(
-                    {"loaded_models": loaded_models, "total": len(loaded_models)}
-                )
+                return web.json_response(progress)
 
             # ==================== MODEL METADATA LOOKUP ROUTE ====================
 

@@ -99,6 +99,7 @@ export class ResolverManagerDialog extends ComfyDialog {
         this._analysisProgressToken = null;
         this._workflowDataLoadToken = null;
         this._loadedModelsLoadToken = null;
+        this._loadedModelsProgressToken = null;
         this._locateAnimationFrame = null;
         this._viewportClampFrame = null;
         this.activeWorkflowRouteKey = this.getActiveWorkflowRouteKey();

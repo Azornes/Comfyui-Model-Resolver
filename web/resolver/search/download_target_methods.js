@@ -2504,6 +2504,7 @@ export const downloadTargetMethods = {
         this._analysisProgressToken = null;
         this._workflowDataLoadToken = null;
         this._loadedModelsLoadToken = null;
+        this._loadedModelsProgressToken = null;
 
         await this.ensureCapabilitiesLoaded();
         await this.ensureBaseModelsLoaded();
