@@ -29,6 +29,7 @@ from ..type_utils import (
     check_credential_http,
     DEFAULT_BROWSER_USER_AGENT,
     parse_civitai_model_path,
+    normalize_model_image,
 )
 from ..progress import report_progress, get_progress_reporter
 from ..path_utils import calculate_file_sha256, get_filename_from_path
@@ -155,12 +156,6 @@ def _build_civitai_result_from_version(
 
 
 
-def _version_sort_key(version: Dict[str, Any]) -> tuple:
-    return get_version_sort_key(version)
-
-
-def _select_primary_model_file(files: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    return select_primary_model_file(files)
 
 
 def _find_model_title_match_in_model(
@@ -199,10 +194,10 @@ def _find_model_title_match_in_model(
             )
             return None
 
-    versions = sorted(versions, key=_version_sort_key, reverse=True)
+    versions = sorted(versions, key=get_version_sort_key, reverse=True)
 
     for version in versions:
-        file_info = _select_primary_model_file(version.get("files") or [])
+        file_info = select_primary_model_file(version.get("files") or [])
         if not file_info:
             continue
 
@@ -636,40 +631,6 @@ def _find_civitai_file_in_model(
 
     return None
 
-
-def _extract_civitai_image_id(image_url: str) -> Optional[str]:
-    """
-    Extract a CivitAI image ID from an image CDN URL.
-    Example:
-    https://image.civitai.com/.../width=1800/1917130.jpeg -> 1917130
-    """
-    if not image_url:
-        return None
-
-    match = re.search(r"/(\d+)(?:\.[A-Za-z0-9]+)?(?:[?#].*)?$", image_url)
-    if match:
-        return match.group(1)
-
-    return None
-
-
-def _build_civitai_image_url(img: Dict[str, Any]) -> str:
-    """
-    Build a stable CivitAI image page URL from available image metadata.
-    """
-    civitai_url = img.get("civitaiUrl")
-    if civitai_url:
-        return civitai_url
-
-    image_id = img.get("id")
-    if image_id is not None:
-        return f"https://civitai.com/images/{image_id}"
-
-    extracted_id = _extract_civitai_image_id(img.get("url", ""))
-    if extracted_id:
-        return f"https://civitai.com/images/{extracted_id}"
-
-    return ""
 
 
 def parse_civitai_url(url: str) -> Optional[Dict[str, Any]]:
@@ -1275,17 +1236,6 @@ def resolve_urn(
         return None
 
 
-def _get_sha256_hash(file_path: str) -> Optional[str]:
-    """
-    Compute sha256 hash of a file by reading it in chunks.
-
-    Args:
-        file_path: Full path to the file
-
-    Returns:
-        SHA256 hash as hex string, or None if file doesn't exist
-    """
-    return calculate_file_sha256(file_path)
 
 
 def get_model_info_by_hash(
@@ -1499,48 +1449,8 @@ def _extract_model_images(version_info: Dict[str, Any]) -> List[Dict[str, Any]]:
         if not isinstance(img, dict):
             continue
 
-        # Get the image URL
-        img_url = img.get("url", "")
-        if not img_url:
-            continue
-
-        # Get metadata from image info (may be nested in 'meta' object)
-        meta = img.get("meta", {})
-        if not isinstance(meta, dict):
-            meta = {}
-
-        img_info = {
-            "url": img_url,
-            "civitaiUrl": _build_civitai_image_url(img),
-            "seed": img.get("seed") or meta.get("seed"),
-            "steps": img.get("steps") or meta.get("steps"),
-            "cfg": img.get("cfg") or meta.get("cfg") or meta.get("cfgScale"),
-            "denoise": img.get("denoise") or meta.get("denoise"),
-            "scheduler": img.get("scheduler") or meta.get("scheduler"),
-            "sampler": img.get("sampler") or meta.get("sampler"),
-            "model": img.get("model") or meta.get("model") or meta.get("Model"),
-            "positive": img.get("positive") or meta.get("prompt"),
-            "negative": (
-                img.get("negative")
-                or meta.get("negative_prompt")
-                or meta.get("negativePrompt")
-                or meta.get("Negative prompt")
-            ),
-            "clip_skip": img.get("clipSkip") or meta.get("Clip skip") or meta.get("clipSkip"),
-            "width": img.get("width") or meta.get("width"),
-            "height": img.get("height") or meta.get("height"),
-            "resources": (
-                img.get("resources")
-                or img.get("additionalResources")
-                or meta.get("resources")
-                or meta.get("additionalResources")
-                or []
-            ),
-            "metadata": meta,
-        }
-
-        # Only add if we have at least a URL
-        if img_info["url"]:
+        img_info = normalize_model_image(img)
+        if img_info.get("url"):
             images.append(img_info)
 
     return images
@@ -1721,37 +1631,9 @@ def _metadata_to_model_info(metadata: Dict[str, Any]) -> Dict[str, Any]:
         or []
     ):
         if isinstance(img, dict) and img.get("url"):
-            img_meta = img.get("meta") or {}
-            images.append(
-                {
-                    "url": img.get("url", ""),
-                    "civitaiUrl": _build_civitai_image_url(img),
-                    "seed": img_meta.get("seed"),
-                    "steps": img_meta.get("steps"),
-                    "cfg": img_meta.get("cfg") or img_meta.get("cfgScale"),
-                    "denoise": img_meta.get("denoise"),
-                    "scheduler": img_meta.get("scheduler"),
-                    "sampler": img_meta.get("sampler"),
-                    "model": img_meta.get("model") or img_meta.get("Model"),
-                    "positive": img_meta.get("prompt"),
-                    "negative": (
-                        img_meta.get("negative_prompt")
-                        or img_meta.get("negativePrompt")
-                        or img_meta.get("Negative prompt")
-                    ),
-                    "clip_skip": img_meta.get("Clip skip") or img_meta.get("clipSkip"),
-                    "width": img.get("width") or img_meta.get("width"),
-                    "height": img.get("height") or img_meta.get("height"),
-                    "resources": (
-                        img.get("resources")
-                        or img.get("additionalResources")
-                        or img_meta.get("resources")
-                        or img_meta.get("additionalResources")
-                        or []
-                    ),
-                    "metadata": img_meta,
-                }
-            )
+            img_info = normalize_model_image(img)
+            if img_info.get("url"):
+                images.append(img_info)
 
     # Get trained words from common sidecar shapes, including LoRA Manager metadata.
     trained_words = _normalize_metadata_trained_words(
@@ -1961,7 +1843,7 @@ def get_model_info_for_file(
         return result
 
     # If no metadata file, compute hash and look up on CivitAI
-    file_hash = _get_sha256_hash(file_path)
+    file_hash = calculate_file_sha256(file_path)
     if not file_hash:
         return None
 

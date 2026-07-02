@@ -31,10 +31,10 @@ from ..type_utils import (
     parse_size_to_bytes,
     get_version_sort_key,
     DEFAULT_BROWSER_USER_AGENT,
-    parse_size_header as _parse_size_header,
-    parse_content_range_size as _parse_content_range_size,
-    extract_response_file_size as _response_file_size,
     parse_civitai_model_path,
+    fetch_remote_file_size,
+    looks_like_model_file,
+    normalize_model_image,
 )
 from ..progress import report_progress, get_progress_reporter
 from ..log_system.log_funcs import create_module_logger
@@ -569,20 +569,8 @@ def _download_url_looks_like_model_file(
     normalized = _normalize_download_url(url)
     if not normalized:
         return False
+    return looks_like_model_file(normalized, expected_filename)
 
-    parsed = urlparse(normalized)
-    host = parsed.netloc.lower()
-    path = unquote(parsed.path or "")
-    if host.endswith("huggingface.co") and path.startswith("/spaces/"):
-        return False
-    if normalized.startswith(CIVITAI_DOWNLOAD_URL_PREFIXES):
-        return True
-
-    basename = get_filename_from_path(path).lower()
-    expected = get_filename_from_path(str(expected_filename or "")).lower()
-    if expected and basename == expected:
-        return True
-    return _has_known_model_extension(basename)
 
 
 def _archive_link_is_dead(item: Dict[str, Any]) -> bool:
@@ -633,41 +621,10 @@ def _fetch_remote_file_size_bytes(url: Any, timeout: int = 15) -> Optional[int]:
     if probe_url in _download_size_cache:
         return _download_size_cache[probe_url]
 
-    size = None
-    try:
-        response = requests.head(
-            probe_url,
-            headers=REQUEST_HEADERS,
-            allow_redirects=True,
-            timeout=timeout,
-        )
-        try:
-            if response.status_code < 400:
-                size = _response_file_size(response)
-        finally:
-            response.close()
-    except Exception as e:
-        log.debug(f"CivArchive size HEAD failed: url={probe_url}, error={e}")
-
-    if not size:
-        try:
-            response = requests.get(
-                probe_url,
-                headers={**REQUEST_HEADERS, "Range": "bytes=0-0"},
-                allow_redirects=True,
-                stream=True,
-                timeout=timeout,
-            )
-            try:
-                if response.status_code < 400:
-                    size = _response_file_size(response)
-            finally:
-                response.close()
-        except Exception as e:
-            log.debug(f"CivArchive size range request failed: url={probe_url}, error={e}")
-
+    size = fetch_remote_file_size(probe_url, headers=REQUEST_HEADERS, timeout=timeout)
     _download_size_cache[probe_url] = size
     return size
+
 
 
 def _resolve_file_size_bytes(
@@ -972,21 +929,8 @@ def _normalize_archive_mirrors(file_info: Dict[str, Any]) -> List[Dict[str, Any]
 
 
 def _normalize_archive_image(image: Dict[str, Any]) -> Dict[str, Any]:
-    meta = image.get("meta") if isinstance(image.get("meta"), dict) else {}
-    return {
-        "url": image.get("url") or image.get("imageUrl") or image.get("src"),
-        "civitaiUrl": image.get("civitaiUrl") or image.get("postUrl"),
-        "seed": image.get("seed") or meta.get("seed"),
-        "steps": image.get("steps") or meta.get("steps"),
-        "cfg": image.get("cfg") or meta.get("cfg"),
-        "sampler": image.get("sampler") or meta.get("sampler"),
-        "model": image.get("model") or meta.get("model") or meta.get("Model"),
-        "positive": image.get("positive") or image.get("prompt") or meta.get("prompt"),
-        "negative": image.get("negative") or meta.get("negative_prompt") or meta.get("negativePrompt"),
-        "width": image.get("width") or meta.get("width"),
-        "height": image.get("height") or meta.get("height"),
-        "metadata": meta,
-    }
+    return normalize_model_image(image)
+
 
 
 def _normalize_archive_file(file_info: Dict[str, Any], model_id: Optional[int], version_id: Optional[int]) -> Dict[str, Any]:
@@ -1197,8 +1141,6 @@ def get_civarchive_model_details(
 
 
 
-def _version_sort_key(version: Dict[str, Any]) -> tuple:
-    return get_version_sort_key(version)
 
 
 def _collect_normalized_download_urls(file_info: Dict[str, Any]) -> List[str]:
@@ -1374,7 +1316,7 @@ def _find_model_title_match_in_model_details(
     if not versions:
         return None
 
-    versions = sorted(versions, key=_version_sort_key, reverse=True)
+    versions = sorted(versions, key=get_version_sort_key, reverse=True)
     rejected_by_base_model = False
 
     for version in versions:

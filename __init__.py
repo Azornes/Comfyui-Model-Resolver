@@ -1448,31 +1448,8 @@ class ModelResolverExtension:
                     )
 
                 def result_url_looks_like_model_file(url, expected_filename=""):
-                    text = str(url or "").strip()
-                    if not text.startswith(("http://", "https://")):
-                        return False
-                    try:
-                        from urllib.parse import unquote as _unquote, urlparse as _urlparse
-                        parsed = _urlparse(text)
-                        host = parsed.netloc.lower()
-                        path = _unquote(parsed.path or "")
-                    except Exception:
-                        host = ""
-                        path = text
-                    if host.endswith("huggingface.co") and path.startswith("/spaces/"):
-                        return False
-                    if (
-                        host.endswith("civitai.com")
-                        or host.endswith("civitai.red")
-                    ) and path.startswith("/api/download/"):
-                        return True
-
-                    basename = _os.path.basename(path).lower()
-                    expected = _os.path.basename(str(expected_filename or "")).lower()
-                    if expected and basename == expected:
-                        return True
-                    model_extensions = MODEL_EXTENSIONS
-                    return _os.path.splitext(basename)[1].lower() in model_extensions
+                    from core.type_utils import looks_like_model_file
+                    return looks_like_model_file(url, expected_filename)
 
                 def collect_result_download_urls(result):
                     urls = []

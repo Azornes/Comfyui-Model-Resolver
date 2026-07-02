@@ -526,3 +526,144 @@ def parse_civitai_model_path(path: str, query_string: str) -> Optional[Dict[str,
         return result
     return None
 
+
+def fetch_remote_file_size(
+    url: str,
+    headers: Optional[Dict[str, str]] = None,
+    timeout: int = 15,
+) -> Optional[int]:
+    """
+    Sprawdza rozmiar zdalnego pliku wykonując zapytanie HEAD i opcjonalnie GET Range=bytes=0-0.
+    """
+    import requests
+    request_headers = {**(headers or {}), "Accept-Encoding": "identity"}
+    
+    size = None
+    try:
+        response = requests.head(
+            url,
+            headers=request_headers,
+            allow_redirects=True,
+            timeout=timeout,
+        )
+        try:
+            if response.status_code < 400:
+                size = extract_response_file_size(response)
+        finally:
+            response.close()
+    except Exception:
+        pass
+
+    if not size:
+        try:
+            response = requests.get(
+                url,
+                headers={**request_headers, "Range": "bytes=0-0"},
+                allow_redirects=True,
+                stream=True,
+                timeout=timeout,
+            )
+            try:
+                if response.status_code < 400:
+                    size = extract_response_file_size(response)
+            finally:
+                response.close()
+        except Exception:
+            pass
+
+    return size
+
+
+def looks_like_model_file(url: str, expected_filename: str = "") -> bool:
+    """
+    Walidacja, czy dany link URL wygląda na poprawny plik modelu.
+    """
+    import os
+    from urllib.parse import unquote, urlparse
+
+    text = str(url or "").strip()
+    if not text.startswith(("http://", "https://")):
+        return False
+    try:
+        parsed = urlparse(text)
+        host = parsed.netloc.lower()
+        path = unquote(parsed.path or "")
+    except Exception:
+        host = ""
+        path = text
+
+    if host.endswith("huggingface.co") and path.startswith("/spaces/"):
+        return False
+    
+    # Civitai/CivArchive api/download url prefix check
+    if (
+        host.endswith("civitai.com")
+        or host.endswith("civitai.red")
+        or host.endswith("civarchive.com")
+    ) and "/api/download/" in path:
+        return True
+
+    basename = os.path.basename(path).lower()
+    expected = os.path.basename(str(expected_filename or "")).lower()
+    if expected and basename == expected:
+        return True
+
+    ext = os.path.splitext(basename)[1].lower()
+    return ext in MODEL_EXTENSIONS
+
+
+def normalize_model_image(image_data: Dict[str, Any], default_civitai_url: str = "") -> Dict[str, Any]:
+    """
+    Normalizuje metadane obrazu pochodzące z różnych API do jednolitego słownika.
+    """
+    if not isinstance(image_data, dict):
+        return {}
+
+    meta = image_data.get("meta")
+    if not isinstance(meta, dict):
+        meta = {}
+
+    url = image_data.get("url") or image_data.get("imageUrl") or image_data.get("src") or ""
+    
+    civitai_url = image_data.get("civitaiUrl") or image_data.get("postUrl") or default_civitai_url
+    if not civitai_url and isinstance(image_data.get("id"), (int, str)):
+        civitai_url = f"https://civitai.com/images/{image_data.get('id')}"
+
+    if not civitai_url and url:
+        import re
+        match = re.search(r"/(\d+)(?:\.[A-Za-z0-9]+)?(?:[?#].*)?$", str(url))
+        if match:
+            civitai_url = f"https://civitai.com/images/{match.group(1)}"
+
+
+    return {
+        "url": url,
+        "civitaiUrl": civitai_url,
+        "seed": image_data.get("seed") or meta.get("seed"),
+        "steps": image_data.get("steps") or meta.get("steps"),
+        "cfg": image_data.get("cfg") or meta.get("cfg") or meta.get("cfgScale"),
+        "denoise": image_data.get("denoise") or meta.get("denoise"),
+        "scheduler": image_data.get("scheduler") or meta.get("scheduler"),
+        "sampler": image_data.get("sampler") or meta.get("sampler"),
+        "model": image_data.get("model") or meta.get("model") or meta.get("Model"),
+        "positive": image_data.get("positive") or image_data.get("prompt") or meta.get("prompt"),
+        "negative": (
+            image_data.get("negative")
+            or meta.get("negative_prompt")
+            or meta.get("negativePrompt")
+            or meta.get("Negative prompt")
+        ),
+        "clip_skip": image_data.get("clipSkip") or meta.get("Clip skip") or meta.get("clipSkip"),
+        "width": image_data.get("width") or meta.get("width"),
+        "height": image_data.get("height") or meta.get("height"),
+        "resources": (
+            image_data.get("resources")
+            or image_data.get("additionalResources")
+            or meta.get("resources")
+            or meta.get("additionalResources")
+            or []
+        ),
+        "metadata": meta,
+    }
+
+

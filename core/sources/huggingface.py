@@ -18,7 +18,7 @@ from ..log_system.log_funcs import create_module_logger
 log = create_module_logger(__name__)
 
 from ..path_utils import write_json_atomic, METADATA_DIR
-from ..type_utils import check_credential_http, parse_size_header as _parse_size_header, parse_content_range_size as _parse_content_range_size, extract_response_file_size as _response_file_size
+from ..type_utils import check_credential_http, parse_size_header as _parse_size_header, fetch_remote_file_size
 
 HF_API_URL = "https://huggingface.co/api"
 HF_AUTHOR_FALLBACKS = ["Comfy-Org"]
@@ -383,41 +383,10 @@ def _fetch_remote_file_size_bytes(
     if cache_key in _download_size_cache:
         return _download_size_cache[cache_key]
 
-    size = None
-    try:
-        response = requests.head(
-            probe_url,
-            headers=request_headers,
-            allow_redirects=True,
-            timeout=timeout,
-        )
-        try:
-            if response.status_code < 400:
-                size = _response_file_size(response)
-        finally:
-            response.close()
-    except Exception as e:
-        log.debug(f"HuggingFace size HEAD failed: url={probe_url}, error={e}")
-
-    if not size:
-        try:
-            response = requests.get(
-                probe_url,
-                headers={**request_headers, "Range": "bytes=0-0"},
-                allow_redirects=True,
-                stream=True,
-                timeout=timeout,
-            )
-            try:
-                if response.status_code < 400:
-                    size = _response_file_size(response)
-            finally:
-                response.close()
-        except Exception as e:
-            log.debug(f"HuggingFace size range request failed: url={probe_url}, error={e}")
-
+    size = fetch_remote_file_size(probe_url, headers=request_headers, timeout=timeout)
     _download_size_cache[cache_key] = size
     return size
+
 
 
 def clean_filename_for_search(filename: str) -> str:

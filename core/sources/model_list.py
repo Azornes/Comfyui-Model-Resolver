@@ -19,7 +19,7 @@ from ..log_system.log_funcs import create_module_logger
 log = create_module_logger(__name__)
 
 
-from ..path_utils import METADATA_DIR
+from ..path_utils import METADATA_DIR, read_json_safe, write_json_atomic
 MODEL_LIST_FILE = os.path.join(METADATA_DIR, "model-list.json")
 MODEL_LIST_META_FILE = os.path.join(METADATA_DIR, "model-list.meta.json")
 MODEL_LIST_SOURCE_URL = (
@@ -50,23 +50,14 @@ def _fetch_json_url(url: str) -> Dict[str, Any]:
         return json.loads(response.read().decode("utf-8"))
 
 
-def _read_json_file(path: str, default: Any) -> Any:
-    return read_json_safe(path, default)
-
-
-from ..path_utils import write_json_atomic, read_json_safe
-
-
-def _write_json_file_atomic(path: str, data: Any):
-    write_json_atomic(path, data, indent=2)
 
 
 def _read_model_list_file() -> Dict[str, Any]:
-    return _read_json_file(MODEL_LIST_FILE, {"models": []})
+    return read_json_safe(MODEL_LIST_FILE, {"models": []})
 
 
 def _read_model_list_meta() -> Dict[str, Any]:
-    return _read_json_file(MODEL_LIST_META_FILE, {})
+    return read_json_safe(MODEL_LIST_META_FILE, {})
 
 
 def _get_local_model_list_sha() -> str:
@@ -164,7 +155,7 @@ def update_model_list_from_remote() -> Dict[str, Any]:
     if os.path.exists(MODEL_LIST_FILE):
         shutil.copy2(MODEL_LIST_FILE, f"{MODEL_LIST_FILE}.bak")
 
-    _write_json_file_atomic(MODEL_LIST_FILE, data)
+    write_json_atomic(MODEL_LIST_FILE, data, indent=2)
     meta = {
         "source": "Comfy-Org/ComfyUI-Manager",
         "source_url": MODEL_LIST_SOURCE_URL,
@@ -175,7 +166,7 @@ def update_model_list_from_remote() -> Dict[str, Any]:
         "model_count": len(models),
         "updated_at": _utc_now_iso(),
     }
-    _write_json_file_atomic(MODEL_LIST_META_FILE, meta)
+    write_json_atomic(MODEL_LIST_META_FILE, meta, indent=2)
     reload_model_list()
 
     return {

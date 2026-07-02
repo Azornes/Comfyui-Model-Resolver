@@ -315,17 +315,10 @@ def _metadata_sidecar_candidates(model_path: str) -> List[str]:
     return unique
 
 
-def _as_dict(value: Any) -> Dict[str, Any]:
-    return as_dict(value)
-
-
-def _as_list(value: Any) -> List[Any]:
-    return as_list(value)
-
 
 def _collect_hashes_from_container(value: Any) -> List[str]:
-    container = _as_dict(value)
-    hashes = _as_dict(container.get("hashes"))
+    container = as_dict(value)
+    hashes = as_dict(container.get("hashes"))
     return [
         normalize_sha256(candidate)
         for candidate in (
@@ -382,11 +375,11 @@ def _extract_model_sha256_from_metadata(
 
     nested_file_lists = [
         metadata.get("files"),
-        _as_dict(metadata.get("selected_version")).get("files"),
-        _as_dict(metadata.get("civitai")).get("files"),
+        as_dict(metadata.get("selected_version")).get("files"),
+        as_dict(metadata.get("civitai")).get("files"),
     ]
     for file_list in nested_file_lists:
-        for file_info in _as_list(file_list):
+        for file_info in as_list(file_list):
             if isinstance(file_info, dict) and _metadata_file_matches_model(file_info, model):
                 values.extend(_collect_hashes_from_container(file_info))
 

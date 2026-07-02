@@ -171,9 +171,6 @@ def _extract_search_tokens(query: str) -> Dict[str, List[str]]:
     }
 
 
-def _extract_primary_file(files: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    return select_primary_model_file(files)
-
 
 def _load_version_files(
     conn: sqlite3.Connection, version_id: int
@@ -428,7 +425,7 @@ def _build_result_from_row(
     model_id = row["model_id"]
     version_id = row["version_id"]
     files = _load_version_files(conn, version_id)
-    primary_file = _extract_primary_file(files)
+    primary_file = select_primary_model_file(files)
     filename = (
         primary_file.get("name")
         if primary_file
