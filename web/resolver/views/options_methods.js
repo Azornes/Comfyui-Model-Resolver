@@ -876,15 +876,11 @@ export const optionsMethods = {
             try {
                 if (exportBackendLogsBtn) exportBackendLogsBtn.disabled = true;
                 setExportLogsStatus(exportBackendLogsStatus, 'Preparing backend logs...');
-                const response = await api.fetchApi('/model_resolver/logs/backend/export');
-                if (!response.ok) {
-                    let errorMsg = `Server returned ${response.status}: ${response.statusText}`;
-                    try {
-                        const errData = await response.json();
-                        if (errData?.error) errorMsg = errData.error;
-                    } catch (_) { }
-                    throw new Error(errorMsg);
-                }
+                const response = await this.fetchJson(
+                    '/model_resolver/logs/backend/export',
+                    { raw: true },
+                    'Export backend logs'
+                );
                 const blob = await response.blob();
                 const filename = parseDownloadFilename(
                     response.headers.get('Content-Disposition'),
@@ -894,9 +890,7 @@ export const optionsMethods = {
                 setExportLogsStatus(exportBackendLogsStatus, 'Backend logs exported.');
                 this.showNotification('Backend logs exported', 'success');
             } catch (error) {
-                console.error('Model Resolver: backend log export failed:', error);
                 setExportLogsStatus(exportBackendLogsStatus, error.message || 'Backend log export failed.');
-                this.showNotification('Backend log export failed', 'error');
             } finally {
                 if (exportBackendLogsBtn) exportBackendLogsBtn.disabled = false;
             }

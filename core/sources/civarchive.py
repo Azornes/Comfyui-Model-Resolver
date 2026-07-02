@@ -38,6 +38,7 @@ from ..type_utils import (
     fetch_remote_file_size_cached,
     clear_remote_size_cache,
     extract_trained_words,
+    extract_file_size,
 )
 from ..progress import report_progress, get_progress_reporter
 from ..log_system import create_module_logger
@@ -89,35 +90,8 @@ def is_civarchive_available() -> bool:
     return True
 
 
-def _extract_file_size_bytes(file_info: Dict[str, Any]) -> Optional[int]:
-    if not isinstance(file_info, dict):
-        return None
+# _extract_file_size_bytes removed in favor of extract_file_size from type_utils
 
-    for key in ("sizeKB", "size_kb"):
-        val = file_info.get(key)
-        if val is not None and val != "":
-            try:
-                return int(float(val) * 1024)
-            except (TypeError, ValueError):
-                pass
-
-    for key in ("sizeBytes", "size_bytes", "fileSize", "file_size", "bytes", "size"):
-        val = file_info.get(key)
-        if val is not None and val != "":
-            size = parse_size_to_bytes(val)
-            if size:
-                return size
-
-    mirrors = file_info.get("mirrors") or []
-    if not isinstance(mirrors, list):
-        mirrors = [mirrors]
-    for mirror in mirrors:
-        if isinstance(mirror, dict):
-            size = _extract_file_size_bytes(mirror)
-            if size:
-                return size
-
-    return None
 
 
 def _normalize_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -628,7 +602,7 @@ def _resolve_file_size_bytes(
     file_info: Dict[str, Any],
     download_urls: Optional[List[str]] = None,
 ) -> Optional[int]:
-    size = _extract_file_size_bytes(file_info)
+    size = extract_file_size(file_info)
     if size:
         return size
 
@@ -800,8 +774,8 @@ def _merge_top_file_mirrors(
         mirror_url = mirror.get("url")
         if mirror_url and not any(existing.get("url") == mirror_url for existing in mirrors):
             mirrors.append(mirror)
-        if not _extract_file_size_bytes(target):
-            target_size_bytes = _extract_file_size_bytes(top_file)
+        if not extract_file_size(target):
+            target_size_bytes = extract_file_size(top_file)
             if target_size_bytes:
                 target["sizeBytes"] = target_size_bytes
 
@@ -940,7 +914,7 @@ def _normalize_archive_file(file_info: Dict[str, Any], model_id: Optional[int], 
         "id": transformed.get("id"),
         "name": transformed.get("name"),
         "type": transformed.get("type"),
-        "size": _extract_file_size_bytes(transformed),
+        "size": extract_file_size(transformed),
         "download_url": download_urls[0] if download_urls else transformed.get("downloadUrl"),
         "download_urls": download_urls,
         "primary": bool(transformed.get("primary")),

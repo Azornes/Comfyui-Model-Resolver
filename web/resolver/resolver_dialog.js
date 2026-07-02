@@ -256,6 +256,9 @@ export class ResolverManagerDialog extends ComfyDialog {
             if (response.status === 204) {
                 return null;
             }
+            if (options.raw) {
+                return response;
+            }
             return await response.json();
         } catch (error) {
             console.error(`Model Resolver: ${errorContext} failed:`, error);

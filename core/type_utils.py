@@ -809,4 +809,51 @@ def clear_remote_size_cache() -> None:
     _remote_size_cache.clear()
 
 
+def extract_file_size(file_info: Dict[str, Any]) -> Optional[int]:
+    """
+    Extracts file size in bytes from various metadata formats (HuggingFace, CivitAI, CivArchive).
+    """
+    if not isinstance(file_info, dict):
+        return None
+
+    # 1. Check direct sizeKB or size_kb keys (e.g. from CivArchive or CivitAI)
+    for key in ("sizeKB", "size_kb"):
+        val = file_info.get(key)
+        if val is not None and val != "":
+            try:
+                return int(float(val) * 1024)
+            except (TypeError, ValueError):
+                pass
+
+    # 2. Check direct size bytes keys
+    for key in ("sizeBytes", "size_bytes", "fileSize", "file_size", "bytes", "size"):
+        val = file_info.get(key)
+        if val is not None and val != "":
+            size = parse_size_header(val)
+            if size:
+                return size
+
+    # 3. Check nested LFS info (common in HuggingFace API metadata)
+    lfs_info = file_info.get("lfs")
+    if isinstance(lfs_info, dict):
+        for key in ("size", "sizeBytes", "size_bytes"):
+            size = parse_size_header(lfs_info.get(key))
+            if size:
+                return size
+
+    # 4. Check nested CivArchive mirrors list
+    mirrors = file_info.get("mirrors")
+    if mirrors:
+        if not isinstance(mirrors, list):
+            mirrors = [mirrors]
+        for mirror in mirrors:
+            if isinstance(mirror, dict):
+                size = extract_file_size(mirror)
+                if size:
+                    return size
+
+    return None
+
+
+
 

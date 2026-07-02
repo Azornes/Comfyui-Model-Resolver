@@ -59,9 +59,20 @@ class JobProgressTracker:
                 self.progress.pop(pid, None)
             self.cancelled.difference_update(expired)
 
-    def update(self, progress_id, **payload):
+    def update(self, progress_id, source=None, stage=None, message=None, percent=None, status=None, **payload):
         if not progress_id:
             return
+        if source is not None:
+            payload["source"] = source
+        if stage is not None:
+            payload["stage"] = stage
+        if message is not None:
+            payload["message"] = message
+        if percent is not None:
+            payload["percent"] = percent
+        if status is not None:
+            payload["status"] = status
+
         now = time.time()
         with self.lock:
             current = self.progress.get(progress_id, {})
@@ -126,7 +137,7 @@ class ModelResolverExtension:
     def __init__(self):
         self.routes_setup = False
         self.logger = create_module_logger(__name__)
-        self.analysis_progress = {}
+        self.analysis_progress = JobProgressTracker("Analyzing...")
         self.search_tracker = JobProgressTracker("Searching...")
         self.hash_tracker = JobProgressTracker("Preparing hash calculation...")
         self.search_result_timestamps = {}
@@ -349,24 +360,24 @@ class ModelResolverExtension:
                         )
 
                     if analysis_id:
-                        self.analysis_progress[analysis_id] = {
-                            "status": "starting",
-                            "stage": "starting",
-                            "message": "Starting analysis...",
-                            "current": 0,
-                            "total": 0,
-                        }
+                        self.analysis_progress.update(
+                            analysis_id,
+                            status="starting",
+                            stage="starting",
+                            message="Starting analysis...",
+                            current=0,
+                            total=0,
+                        )
 
                     def update_analysis_progress(payload):
                         if not analysis_id:
                             return
-                        self.analysis_progress[analysis_id] = {
-                            **self.analysis_progress.get(analysis_id, {}),
-                            **payload,
-                            "status": "running"
-                            if payload.get("stage") != "completed"
-                            else "completed",
-                        }
+                        status = "running" if payload.get("stage") != "completed" else "completed"
+                        self.analysis_progress.update(
+                            analysis_id,
+                            status=status,
+                            **payload
+                        )
 
                     # Analyze and find matches
                     result = await asyncio.to_thread(
@@ -497,25 +508,26 @@ class ModelResolverExtension:
                                 # when user clicks "Search Online" button, not automatically
 
                     if analysis_id:
-                        self.analysis_progress[analysis_id] = {
-                            **self.analysis_progress.get(analysis_id, {}),
-                            "status": "completed",
-                            "stage": "completed",
-                            "message": "Analysis complete",
-                            "current": result.get("total_missing", 0),
-                            "total": result.get("total_missing", 0),
-                        }
+                        self.analysis_progress.update(
+                            analysis_id,
+                            status="completed",
+                            stage="completed",
+                            message="Analysis complete",
+                            current=result.get("total_missing", 0),
+                            total=result.get("total_missing", 0),
+                        )
 
                     return web.json_response(result)
                 except Exception as e:
                     if "analysis_id" in locals() and analysis_id:
-                        self.analysis_progress[analysis_id] = {
-                            "status": "error",
-                            "stage": "error",
-                            "message": str(e),
-                            "current": 0,
-                            "total": 0,
-                        }
+                        self.analysis_progress.update(
+                            analysis_id,
+                            status="error",
+                            stage="error",
+                            message=str(e),
+                            current=0,
+                            total=0,
+                        )
                     self.logger.error(f"Model Resolver analyze error: {e}", exc_info=True)
                     return web.json_response({"error": str(e)}, status=500)
 
@@ -529,6 +541,7 @@ class ModelResolverExtension:
                         {"error": "Analysis ID is required"}, status=400
                     )
 
+                self.analysis_progress.cleanup()
                 progress = self.analysis_progress.get(analysis_id)
                 if not progress:
                     return web.json_response(
@@ -647,17 +660,7 @@ class ModelResolverExtension:
 
                 return web.json_response({"success": True})
 
-            def cleanup_hash_progress(max_age_seconds=300):
-                self.hash_tracker.cleanup(max_age_seconds)
-
-            def update_hash_progress(progress_id, **payload):
-                self.hash_tracker.update(progress_id, **payload)
-
-            def is_hash_progress_cancelled(progress_id):
-                return self.hash_tracker.is_cancelled(progress_id)
-
-            def mark_hash_progress_cancelled(progress_id):
-                return self.hash_tracker.mark_cancelled(progress_id, "Stopping hash calculation...")
+            # cleanup_hash_progress, update_hash_progress, is_hash_progress_cancelled, and mark_hash_progress_cancelled removed
 
             class HashCalculationCancelled(Exception):
                 pass
@@ -743,7 +746,7 @@ class ModelResolverExtension:
                 last_update = 0.0
                 chunk_size = 1024 * 1024 * 4
 
-                update_hash_progress(
+                self.hash_tracker.update(
                     progress_id,
                     status="running",
                     stage="hashing",
@@ -759,12 +762,12 @@ class ModelResolverExtension:
                             continue
                         sha256_hash.update(chunk)
                         bytes_read += len(chunk)
-                        if is_hash_progress_cancelled(progress_id):
+                        if self.hash_tracker.is_cancelled(progress_id):
                             percent = 0 if total_bytes <= 0 else min(
                                 98,
                                 (bytes_read / total_bytes) * 98,
                             )
-                            update_hash_progress(
+                            self.hash_tracker.update(
                                 progress_id,
                                 status="cancelled",
                                 stage="cancelled",
@@ -780,7 +783,7 @@ class ModelResolverExtension:
                                 98,
                                 (bytes_read / total_bytes) * 98,
                             )
-                            update_hash_progress(
+                            self.hash_tracker.update(
                                 progress_id,
                                 status="running",
                                 stage="hashing",
@@ -850,7 +853,7 @@ class ModelResolverExtension:
                         {"error": error}, status=404
                     )
 
-                cleanup_hash_progress()
+                self.hash_tracker.cleanup()
                 progress_id = f"hash_{uuid.uuid4().hex}"
                 self.hash_tracker.update(
                     progress_id,
@@ -867,9 +870,9 @@ class ModelResolverExtension:
                             normalized_path,
                             progress_id=progress_id,
                         )
-                        if is_hash_progress_cancelled(progress_id):
+                        if self.hash_tracker.is_cancelled(progress_id):
                             raise HashCalculationCancelled()
-                        update_hash_progress(
+                        self.hash_tracker.update(
                             progress_id,
                             status="running",
                             stage="metadata",
@@ -881,7 +884,7 @@ class ModelResolverExtension:
                             metadata_path,
                             sha256,
                         )
-                        update_hash_progress(
+                        self.hash_tracker.update(
                             progress_id,
                             status="done",
                             stage="done",
@@ -894,7 +897,7 @@ class ModelResolverExtension:
                             metadata_updated=metadata_updated,
                         )
                     except HashCalculationCancelled:
-                        update_hash_progress(
+                        self.hash_tracker.update(
                             progress_id,
                             status="cancelled",
                             stage="cancelled",
@@ -902,7 +905,7 @@ class ModelResolverExtension:
                         )
                     except Exception as exc:
                         self.logger.exception(f"Hash calculation failed for {normalized_path}: {exc}")
-                        update_hash_progress(
+                        self.hash_tracker.update(
                             progress_id,
                             status="error",
                             stage="error",
@@ -924,7 +927,7 @@ class ModelResolverExtension:
             async def calculate_file_hash_progress_route(request):
                 """Return progress for a background SHA256 calculation."""
                 progress_id = request.match_info.get("progress_id", "").strip()
-                cleanup_hash_progress()
+                self.hash_tracker.cleanup()
                 progress = self.hash_tracker.get(progress_id)
                 if not progress:
                     return web.json_response(
@@ -941,7 +944,7 @@ class ModelResolverExtension:
                     return web.json_response(
                         {"error": "progress_id is required"}, status=400
                     )
-                cancelled = mark_hash_progress_cancelled(progress_id)
+                cancelled = self.hash_tracker.mark_cancelled(progress_id, "Stopping hash calculation...")
                 return web.json_response(
                     {
                         "success": True,
@@ -1979,43 +1982,14 @@ class ModelResolverExtension:
                     dedupe_local_base_directories,
                 )
 
-                def cleanup_search_progress(max_age_seconds=300):
-                    self.search_tracker.cleanup(max_age_seconds)
-
-                def is_search_progress_cancelled(progress_id):
-                    return self.search_tracker.is_cancelled(progress_id)
-
-                def mark_search_progress_cancelled(progress_id, source=""):
-                    res = self.search_tracker.mark_cancelled(progress_id, "Cancelled")
-                    if res and source:
-                        self.search_tracker.update(progress_id, source=source)
-                    return res
-
-                def update_search_progress(
-                    progress_id,
-                    source="",
-                    stage="running",
-                    message="Searching...",
-                    percent=None,
-                    status="running",
-                    **extra,
-                ):
-                    self.search_tracker.update(
-                        progress_id,
-                        source=source,
-                        stage=stage,
-                        message=message,
-                        percent=percent,
-                        status=status,
-                        **extra
-                    )
+                # cleanup_search_progress, is_search_progress_cancelled, mark_search_progress_cancelled, and update_search_progress removed
 
                 @routes.get("/model_resolver/search-progress/{progress_id}")
                 @json_api_endpoint("search-progress")
                 async def get_search_progress_route(request):
                     """Return live progress for an in-flight source search."""
                     progress_id = request.match_info.get("progress_id", "")
-                    cleanup_search_progress()
+                    self.search_tracker.cleanup()
                     progress = self.search_tracker.get(progress_id)
                     if not progress:
                         return web.json_response({"exists": False})
@@ -2030,7 +2004,7 @@ class ModelResolverExtension:
                         return web.json_response(
                             {"error": "Progress ID is required"}, status=400
                         )
-                    marked = mark_search_progress_cancelled(progress_id)
+                    marked = self.search_tracker.mark_cancelled(progress_id, "Cancelled")
                     return web.json_response(
                         {"success": True, "cancelled": marked, "progress_id": progress_id}
                     )
@@ -2045,7 +2019,7 @@ class ModelResolverExtension:
                             pass
 
                         def raise_if_search_cancelled(source=""):
-                            if is_search_progress_cancelled(progress_id):
+                            if self.search_tracker.is_cancelled(progress_id):
                                 raise SearchCancelled("Search cancelled")
 
                         def format_log_value(value):
@@ -2212,7 +2186,7 @@ class ModelResolverExtension:
                             )
                         force_search = to_bool(data.get("force_search"), False)
 
-                        update_search_progress(
+                        self.search_tracker.update(
                             progress_id,
                             progress_source,
                             "starting",
@@ -2222,7 +2196,7 @@ class ModelResolverExtension:
                         raise_if_search_cancelled(progress_source)
 
                         if force_search:
-                            update_search_progress(
+                            self.search_tracker.update(
                                 progress_id,
                                 progress_source,
                                 "cache",
@@ -2444,7 +2418,7 @@ class ModelResolverExtension:
                                         continue
                                     seen_hash_sources.add(hash_source_key)
 
-                                    update_search_progress(
+                                    self.search_tracker.update(
                                         progress_id,
                                         progress_source,
                                         "local_hash",
@@ -2525,7 +2499,7 @@ class ModelResolverExtension:
                                     except (TypeError, ValueError):
                                         percent = None
 
-                                update_search_progress(
+                                self.search_tracker.update(
                                     progress_id,
                                     source_key,
                                     stage,
@@ -2549,7 +2523,7 @@ class ModelResolverExtension:
                             if initial_message is None:
                                 initial_message = f"Querying {source_key.capitalize()}"
                             raise_if_search_cancelled(source_key)
-                            update_search_progress(
+                            self.search_tracker.update(
                                 progress_id,
                                 source_key,
                                 initial_stage,
@@ -2573,7 +2547,7 @@ class ModelResolverExtension:
                                     "lora_manager_archive": "LoRA Manager archive checked",
                                 }
                                 done_msg = done_messages.get(source_key, f"{source_key} checked")
-                                update_search_progress(
+                                self.search_tracker.update(
                                     progress_id,
                                     source_key,
                                     "done",
@@ -2603,7 +2577,7 @@ class ModelResolverExtension:
 
                             if not res and base_model_context:
                                 raise_if_search_cancelled(source_key)
-                                update_search_progress(
+                                self.search_tracker.update(
                                     progress_id,
                                     source_key,
                                     "any_model",
@@ -2635,7 +2609,7 @@ class ModelResolverExtension:
 
                                 popular_info = get_popular_model_url(filename)
                                 log_search_result("popular", popular_info)
-                                update_search_progress(
+                                self.search_tracker.update(
                                     progress_id,
                                     "local",
                                     "model_list",
@@ -2726,7 +2700,7 @@ class ModelResolverExtension:
                                     version_id_val = data.get("version_id")
 
                                     if model_id_val and version_id_val:
-                                        update_search_progress(
+                                        self.search_tracker.update(
                                             progress_id,
                                             "civitai",
                                             "urn",
@@ -2735,7 +2709,7 @@ class ModelResolverExtension:
                                         )
                                         model_info = resolve_urn(model_id_val, version_id_val)
                                         if model_info:
-                                            update_search_progress(
+                                            self.search_tracker.update(
                                                 progress_id,
                                                 "civitai",
                                                 "file",
@@ -2802,7 +2776,7 @@ class ModelResolverExtension:
                                                 },
                                             )
                                     elif category:
-                                        update_search_progress(
+                                        self.search_tracker.update(
                                             progress_id,
                                             "civitai",
                                             "fallback",
@@ -2882,7 +2856,7 @@ class ModelResolverExtension:
                                     model_id_val = data.get("model_id")
                                     version_id_val = data.get("version_id")
                                     if model_id_val and version_id_val:
-                                        update_search_progress(
+                                        self.search_tracker.update(
                                             progress_id,
                                             "civarchive",
                                             "urn",
@@ -2935,7 +2909,7 @@ class ModelResolverExtension:
                             def handle_civarchive_error(e):
                                 error_message = f"CivArchive search failed: {e}"
                                 self.logger.warning(error_message)
-                                update_search_progress(
+                                self.search_tracker.update(
                                     progress_id,
                                     "civarchive",
                                     "error",
@@ -3022,7 +2996,7 @@ class ModelResolverExtension:
                                 "Search sources async "
                                 + format_log_fields(count=len(search_tasks))
                             )
-                        update_search_progress(
+                        self.search_tracker.update(
                             progress_id,
                             progress_source,
                             "running",
@@ -3054,7 +3028,7 @@ class ModelResolverExtension:
                                 found=results["found"],
                             )
                         )
-                        update_search_progress(
+                        self.search_tracker.update(
                             progress_id,
                             progress_source,
                             "completed",
@@ -3066,7 +3040,7 @@ class ModelResolverExtension:
                         return web.json_response(results)
 
                     except SearchCancelled:
-                        update_search_progress(
+                        self.search_tracker.update(
                             progress_id if "progress_id" in locals() else "",
                             progress_source if "progress_source" in locals() else "",
                             "cancelled",
@@ -3094,7 +3068,7 @@ class ModelResolverExtension:
                         )
 
                     except Exception as e:
-                        update_search_progress(
+                        self.search_tracker.update(
                             progress_id if "progress_id" in locals() else "",
                             progress_source if "progress_source" in locals() else "",
                             "error",

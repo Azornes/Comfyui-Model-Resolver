@@ -137,6 +137,20 @@ export const tabsLoadedMethods = {
         }
     },
 
+    getModelNameAndStrength(model) {
+        const fullName = model.name || model.original_path?.split(/[\/\\]/).pop() || 'Unknown';
+        const name = this.stripModelExtension(fullName);
+        const strength = model.strength !== null && model.strength !== undefined 
+            ? model.strength.toFixed(2) 
+            : null;
+        return { name, strength };
+    },
+
+    getModelToken(model, category) {
+        const { name, strength } = this.getModelNameAndStrength(model);
+        return `<${this.getCategoryTokenName(category)}:${name}:${strength || '1.00'}>`;
+    },
+
     displayLoadedModels(container, data) {
         const loadedModels = data.loaded_models || [];
         const total = data.total || 0;
@@ -168,21 +182,11 @@ export const tabsLoadedMethods = {
         const activeCount = Object.values(byCategory).reduce((sum, cat) => sum + cat.active.length, 0);
         const inactiveCount = Object.values(byCategory).reduce((sum, cat) => sum + cat.inactive.length, 0);
 
-        const stripModelExtension = (value) => this.stripModelExtension(value || 'Unknown');
-
         const buildCategoryStrings = (filter) => {
             const result = {};
             for (const [category, modelsObj] of Object.entries(byCategory)) {
-                const displayCat = this.getCategoryTokenName(category);
                 const models = filter === 'active' ? modelsObj.active : filter === 'inactive' ? modelsObj.inactive : [...modelsObj.active, ...modelsObj.inactive];
-                const parts = models.map(model => {
-                    const fullName = model.name || model.original_path?.split(/[\/\\]/).pop() || 'Unknown';
-                    const name = stripModelExtension(fullName);
-                    const strength = model.strength !== null && model.strength !== undefined
-                        ? model.strength.toFixed(2)
-                        : '1.00';
-                    return `<${displayCat}:${name}:${strength}>`;
-                });
+                const parts = models.map(model => this.getModelToken(model, category));
                 result[category] = parts.join(' ');
             }
             return Object.values(result).join(' ');
@@ -193,12 +197,6 @@ export const tabsLoadedMethods = {
         const allString = buildCategoryStrings('all');
 
         const copyIcon = getSvgIcon('copy', 'currentColor', 'mr-copy-btn-icon');
-        const modelToken = (model, category) => {
-            const fullName = model.name || model.original_path?.split(/[\/\\]/).pop() || 'Unknown';
-            const name = stripModelExtension(fullName);
-            const strength = model.strength !== null && model.strength !== undefined ? model.strength.toFixed(2) : '1.00';
-            return `<${this.getCategoryTokenName(category)}:${name}:${strength}>`;
-        };
         const copyButtonHtml = (text, extraClass = '') => `
             <button class="mr-btn-filter mr-btn-copy-compact ${extraClass}" onclick="window.MLCopy(${this.escapeJsString(text)}, this)">
                 ${copyIcon}<span>Copy</span>
@@ -240,7 +238,7 @@ export const tabsLoadedMethods = {
             </div>`;
 
             if (hasActive) {
-                const activeStr = modelsObj.active.map(m => modelToken(m, category)).join(' ');
+                const activeStr = modelsObj.active.map(m => this.getModelToken(m, category)).join(' ');
 
                 html += `<div class="mr-model-group mr-model-group-active">
                     <div class="mr-model-group-head">
@@ -250,16 +248,14 @@ export const tabsLoadedMethods = {
                     <div class="mr-model-chip-list">`;
 
                 for (const model of modelsObj.active) {
-                    const fullName = model.name || model.original_path?.split(/[\/\\]/).pop() || 'Unknown';
-                    const name = this.stripModelExtension(fullName);
-                    const strength = model.strength !== null && model.strength !== undefined ? model.strength.toFixed(2) : null;
+                    const { name, strength } = this.getModelNameAndStrength(model);
                     html += `<span class="mr-model-chip"${this.getContextMenuAttrs(model)}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
                 }
                 html += `</div></div>`;
             }
 
             if (hasInactive) {
-                const inactiveStr = modelsObj.inactive.map(m => modelToken(m, category)).join(' ');
+                const inactiveStr = modelsObj.inactive.map(m => this.getModelToken(m, category)).join(' ');
 
                 html += `<div class="mr-model-group mr-model-group-inactive">
                     <div class="mr-model-group-head">
@@ -269,9 +265,7 @@ export const tabsLoadedMethods = {
                     <div class="mr-model-chip-list mr-model-chip-list-inactive">`;
 
                 for (const model of modelsObj.inactive) {
-                    const fullName = model.name || model.original_path?.split(/[\/\\]/).pop() || 'Unknown';
-                    const name = this.stripModelExtension(fullName);
-                    const strength = model.strength !== null && model.strength !== undefined ? model.strength.toFixed(2) : null;
+                    const { name, strength } = this.getModelNameAndStrength(model);
                     html += `<span class="mr-model-chip"${this.getContextMenuAttrs(model)}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
                 }
                 html += `</div></div>`;

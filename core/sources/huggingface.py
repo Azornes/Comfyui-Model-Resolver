@@ -18,7 +18,7 @@ from ..log_system import create_module_logger
 log = create_module_logger(__name__)
 
 from ..path_utils import write_json_atomic, METADATA_DIR, read_json_safe
-from ..type_utils import check_credential_http, parse_size_header as _parse_size_header, fetch_remote_file_size, fetch_remote_file_size_cached, clear_remote_size_cache
+from ..type_utils import check_credential_http, parse_size_header as _parse_size_header, fetch_remote_file_size, fetch_remote_file_size_cached, clear_remote_size_cache, extract_file_size
 from ..matcher import build_filename_search_queries
 
 HF_API_URL = "https://huggingface.co/api"
@@ -329,22 +329,8 @@ def get_huggingface_download_url(repo: str, filename: str, branch: str = "main")
 
 
 
-def _extract_file_info_size(file_info: Dict[str, Any]) -> Optional[int]:
-    if not isinstance(file_info, dict):
-        return None
+# _extract_file_info_size removed in favor of extract_file_size from type_utils
 
-    for key in ("size", "sizeBytes", "size_bytes", "fileSize", "file_size", "bytes"):
-        size = _parse_size_header(file_info.get(key))
-        if size:
-            return size
-
-    lfs_info = file_info.get("lfs") if isinstance(file_info.get("lfs"), dict) else {}
-    for key in ("size", "sizeBytes", "size_bytes"):
-        size = _parse_size_header(lfs_info.get(key))
-        if size:
-            return size
-
-    return None
 
 
 def _normalize_huggingface_size_probe_url(url: str) -> Optional[str]:
@@ -404,7 +390,7 @@ def _build_huggingface_result(
         or lfs_info.get("oid")
     )
     download_url = get_huggingface_download_url(repo_id, file_path)
-    size = _extract_file_info_size(file_info)
+    size = extract_file_size(file_info)
     if not size:
         size = _fetch_remote_file_size_bytes(download_url, headers=headers)
     return {
@@ -1052,7 +1038,7 @@ def get_repo_files(repo: str, token: Optional[str] = None) -> List[Dict[str, Any
                     (".safetensors", ".ckpt", ".pt", ".bin", ".pth", ".onnx", ".gguf")
                 ):
                     url = get_huggingface_download_url(repo, path)
-                    size = _extract_file_info_size(item)
+                    size = extract_file_size(item)
                     if not size:
                         size = _fetch_remote_file_size_bytes(url, headers=headers)
                     files.append(
