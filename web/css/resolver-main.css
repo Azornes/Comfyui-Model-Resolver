@@ -2496,6 +2496,7 @@
 .mr-search-results-table th,
 .mr-search-results-table td {
     padding: 7px 10px;
+    border: none;
     border-bottom: 1px solid rgba(255, 255, 255, 0.065);
     vertical-align: middle;
 }
@@ -7956,7 +7957,8 @@ a.mr-image-preview-resource-name:hover {
 
 #model-resolver-modal .mr-missing-detail-pane .mr-search-results-table td {
     padding: 9px 10px;
-    border-bottom-color: rgba(255, 255, 255, 0.055);
+    border: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.055);
 }
 
 #model-resolver-modal .mr-missing-detail-pane .mr-search-results-table tr:hover td {
