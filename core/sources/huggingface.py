@@ -17,7 +17,7 @@ from ..progress import report_progress, get_progress_reporter
 from ..log_system import create_module_logger
 log = create_module_logger(__name__)
 
-from ..path_utils import write_json_atomic, METADATA_DIR
+from ..path_utils import write_json_atomic, METADATA_DIR, read_json_safe
 from ..type_utils import check_credential_http, parse_size_header as _parse_size_header, fetch_remote_file_size
 
 HF_API_URL = "https://huggingface.co/api"
@@ -133,20 +133,13 @@ def _is_author_index_fresh(index: Optional[Dict[str, Any]]) -> bool:
 
 
 def _read_persistent_author_indexes() -> Dict[str, Any]:
-    if not os.path.exists(HF_AUTHOR_INDEX_CACHE_PATH):
+    default_val = {"version": HF_AUTHOR_INDEX_CACHE_VERSION, "authors": {}}
+    data = read_json_safe(HF_AUTHOR_INDEX_CACHE_PATH, default_val)
+    if not isinstance(data, dict) or data.get("version") != HF_AUTHOR_INDEX_CACHE_VERSION:
         return {"version": HF_AUTHOR_INDEX_CACHE_VERSION, "authors": {}}
-
-    try:
-        with open(HF_AUTHOR_INDEX_CACHE_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if data.get("version") != HF_AUTHOR_INDEX_CACHE_VERSION:
-            return {"version": HF_AUTHOR_INDEX_CACHE_VERSION, "authors": {}}
-        if not isinstance(data.get("authors"), dict):
-            data["authors"] = {}
-        return data
-    except Exception as e:
-        log.debug(f"Error reading HuggingFace author index cache: {e}")
-        return {"version": HF_AUTHOR_INDEX_CACHE_VERSION, "authors": {}}
+    if not isinstance(data.get("authors"), dict):
+        data["authors"] = {}
+    return data
 
 
 def _write_persistent_author_index(author: str, index: Dict[str, Any]) -> None:

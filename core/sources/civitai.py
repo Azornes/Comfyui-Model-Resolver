@@ -32,7 +32,7 @@ from ..type_utils import (
     normalize_model_image,
 )
 from ..progress import report_progress, get_progress_reporter
-from ..path_utils import calculate_file_sha256, get_filename_from_path
+from ..path_utils import calculate_file_sha256, get_filename_from_path, read_json_safe
 from ..log_system import create_module_logger
 log = create_module_logger(__name__)
 
@@ -1498,17 +1498,11 @@ def _read_model_metadata(metadata_path: str) -> Optional[Dict[str, Any]]:
     Read model metadata from a JSON file.
     Returns the metadata if found and valid, None otherwise.
     """
-    if not metadata_path or not os.path.exists(metadata_path):
+    data = read_json_safe(metadata_path, None)
+    if not isinstance(data, dict):
         return None
 
     try:
-        with open(metadata_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        # Validate it's a valid metadata file with CivitAI info
-        if not isinstance(data, dict):
-            return None
-
         files = _as_metadata_list(data.get("files"))
         file_hashes = [
             _as_metadata_dict(file_info).get("hashes")
@@ -1542,7 +1536,7 @@ def _read_model_metadata(metadata_path: str) -> Optional[Dict[str, Any]]:
         log.info(f"Successfully read metadata from: {metadata_path}")
         return data
     except Exception as e:
-        log.debug(f"Error reading metadata file {metadata_path}: {e}")
+        log.debug(f"Error parsing metadata file {metadata_path}: {e}")
         return None
 
 

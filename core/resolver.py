@@ -43,6 +43,7 @@ from .path_utils import (
     prefer_local_base_directory,
     dedupe_local_base_directories,
     get_filename_from_path,
+    read_json_safe,
 )
 
 
@@ -438,11 +439,9 @@ def search_local_matches_by_hash(
         if not metadata_path:
             continue
 
-        try:
-            with open(metadata_path, "r", encoding="utf-8") as handle:
-                metadata = json.load(handle)
-        except Exception as exc:
-            log.debug(f"Could not read metadata sidecar for hash match: {metadata_path} ({exc})")
+        metadata = read_json_safe(metadata_path, None)
+        if not isinstance(metadata, dict) or not metadata:
+            log.debug(f"Could not read metadata sidecar for hash match: {metadata_path}")
             continue
 
         metadata_hashes = _extract_model_sha256_from_metadata(metadata, model)
@@ -505,14 +504,9 @@ def get_local_model_hash_metadata(
         if not first_metadata_path:
             first_metadata_path = metadata_path
 
-        try:
-            with open(metadata_path, "r", encoding="utf-8") as handle:
-                metadata = json.load(handle)
-        except Exception as exc:
-            log.debug(f"Could not read metadata sidecar for local hash lookup: {metadata_path} ({exc})")
-            continue
-
-        if not isinstance(metadata, dict):
+        metadata = read_json_safe(metadata_path, None)
+        if not isinstance(metadata, dict) or not metadata:
+            log.debug(f"Could not read metadata sidecar for local hash lookup: {metadata_path}")
             continue
 
         last_hash_status = str(metadata.get("hash_status") or "").strip()
