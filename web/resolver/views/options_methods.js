@@ -1081,22 +1081,11 @@ export const optionsMethods = {
         };
 
         const requestAria2Control = async (endpoint, { method = 'POST', body = {} } = {}) => {
-            const response = await api.fetchApi(endpoint, {
+            return this.fetchJson(endpoint, {
                 method,
-                headers: { 'Content-Type': 'application/json' },
-                ...(method === 'POST' ? { body: JSON.stringify(body) } : {})
-            });
-            if (!response.ok) {
-                let errorMsg = `Server returned ${response.status}: ${response.statusText}`;
-                try {
-                    const errData = await response.json();
-                    if (errData?.error) errorMsg = errData.error;
-                } catch (_) { }
-                const error = new Error(errorMsg);
-                error.status = response.status;
-                throw error;
-            }
-            return response.json();
+                ...(method === 'POST' ? { body: JSON.stringify(body) } : {}),
+                silent: true
+            }, 'Aria2 Control');
         };
 
         const startAria2 = async () => {

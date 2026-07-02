@@ -29,8 +29,9 @@ from ..type_utils import (
     select_primary_model_file,
     parse_size_to_bytes,
     get_version_sort_key,
+    DEFAULT_BROWSER_USER_AGENT,
 )
-from ..progress import report_progress
+from ..progress import report_progress, get_progress_reporter
 from ..log_system.log_funcs import create_module_logger
 log = create_module_logger(__name__)
 
@@ -57,11 +58,7 @@ _download_size_cache: Dict[str, Optional[int]] = {}
 
 REQUEST_HEADERS = {
     "accept": "application/json,text/html;q=0.9,*/*;q=0.8",
-    "user-agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/147.0.0.0 Safari/537.36"
-    ),
+    "user-agent": DEFAULT_BROWSER_USER_AGENT,
 }
 
 # Imported CIVARCHIVE_API_TYPE_MAP
@@ -77,21 +74,7 @@ def clear_search_cache():
     _download_size_cache.clear()
 
 
-def _report_progress(
-    progress_callback: Optional[Callable[[Dict[str, Any]], None]],
-    stage: str,
-    message: str,
-    percent: Optional[float] = None,
-    **extra: Any,
-) -> None:
-    report_progress(
-        progress_callback,
-        stage,
-        message,
-        percent,
-        error_context="CivArchive progress callback",
-        **extra,
-    )
+_report_progress = get_progress_reporter("CivArchive progress callback")
 
 
 def is_civarchive_available() -> bool:

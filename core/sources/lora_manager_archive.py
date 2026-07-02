@@ -19,7 +19,7 @@ from ..matcher import (
     calculate_candidate_rank,
 )
 from ..type_utils import select_primary_model_file
-from ..progress import report_progress
+from ..progress import report_progress, get_progress_reporter
 from ..log_system.log_funcs import create_module_logger
 log = create_module_logger(__name__)
 
@@ -54,21 +54,7 @@ def clear_search_cache():
     _db_path_cache = None
 
 
-def _report_progress(
-    progress_callback: Optional[Callable[[Dict[str, Any]], None]],
-    stage: str,
-    message: str,
-    percent: Optional[float] = None,
-    **extra: Any,
-) -> None:
-    report_progress(
-        progress_callback,
-        stage,
-        message,
-        percent,
-        error_context="LoRA Manager archive progress callback",
-        **extra,
-    )
+_report_progress = get_progress_reporter("LoRA Manager archive progress callback")
 
 
 def get_lora_manager_archive_db_path() -> Optional[str]:

@@ -13,7 +13,7 @@ import requests
 from typing import Dict, Any, Optional, List, Callable
 from urllib.parse import urlparse, quote
 
-from ..progress import report_progress
+from ..progress import report_progress, get_progress_reporter
 from ..log_system.log_funcs import create_module_logger
 log = create_module_logger(__name__)
 
@@ -46,21 +46,7 @@ def clear_search_cache():
         _author_index_cache.clear()
 
 
-def _report_progress(
-    progress_callback: Optional[Callable[[Dict[str, Any]], None]],
-    stage: str,
-    message: str,
-    percent: Optional[float] = None,
-    **extra: Any,
-) -> None:
-    report_progress(
-        progress_callback,
-        stage,
-        message,
-        percent,
-        error_context="HuggingFace progress callback",
-        **extra,
-    )
+_report_progress = get_progress_reporter("HuggingFace progress callback")
 
 
 def check_huggingface_token(token: Optional[str]) -> Dict[str, Any]:

@@ -449,6 +449,14 @@ def format_size_bytes(bytes_value: Any, include_space: bool = True) -> Optional[
     return f"{val:.1f}{space}{sizes[i]}"
 
 
+DEFAULT_BROWSER_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/147.0.0.0 Safari/537.36"
+)
+
+
+
 
 
 

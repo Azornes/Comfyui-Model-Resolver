@@ -27,8 +27,9 @@ from ..type_utils import (
     parse_size_to_bytes,
     get_version_sort_key,
     check_credential_http,
+    DEFAULT_BROWSER_USER_AGENT,
 )
-from ..progress import report_progress
+from ..progress import report_progress, get_progress_reporter
 from ..path_utils import calculate_file_sha256
 from ..log_system.log_funcs import create_module_logger
 log = create_module_logger(__name__)
@@ -57,21 +58,7 @@ def clear_search_cache():
     _hash_cache.clear()
 
 
-def _report_progress(
-    progress_callback: Optional[Callable[[Dict[str, Any]], None]],
-    stage: str,
-    message: str,
-    percent: Optional[float] = None,
-    **extra: Any,
-) -> None:
-    report_progress(
-        progress_callback,
-        stage,
-        message,
-        percent,
-        error_context="CivitAI progress callback",
-        **extra,
-    )
+_report_progress = get_progress_reporter("CivitAI progress callback")
 
 
 def check_civitai_session_token(session_token: Optional[str]) -> Dict[str, Any]:
@@ -88,11 +75,7 @@ def check_civitai_session_token(session_token: Optional[str]) -> Dict[str, Any]:
     headers = {
         "accept": "application/json",
         "Cookie": f"__Secure-civitai-token={token}",
-        "user-agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/147.0.0.0 Safari/537.36"
-        ),
+        "user-agent": DEFAULT_BROWSER_USER_AGENT,
     }
 
     def get_user(data):
@@ -121,11 +104,7 @@ def check_civitai_api_key(api_key: Optional[str]) -> Dict[str, Any]:
     headers = {
         "accept": "application/json",
         "Authorization": f"Bearer {key}",
-        "user-agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/147.0.0.0 Safari/537.36"
-        ),
+        "user-agent": DEFAULT_BROWSER_USER_AGENT,
     }
 
     def get_user(data):
@@ -419,11 +398,7 @@ def _search_civitai_trpc_candidates(
         "accept": "application/json",
         "content-type": "application/json",
         "referer": f"https://civitai.red/models?query={quote(filename)}",
-        "user-agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/147.0.0.0 Safari/537.36"
-        ),
+        "user-agent": DEFAULT_BROWSER_USER_AGENT,
         "x-client": "web",
         "x-client-version": "5.0.1657",
     }
