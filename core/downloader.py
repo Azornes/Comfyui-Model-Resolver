@@ -23,7 +23,7 @@ from .log_system.log_funcs import create_module_logger
 log = create_module_logger(__name__)
 
 from .resolver import normalize_sha256
-from .path_utils import is_path_within, get_path_identity, write_json_atomic, read_json_safe, get_comfy_root_path, calculate_file_sha256 as _calculate_file_sha256
+from .path_utils import is_path_within, get_path_identity, write_json_atomic, read_json_safe, get_comfy_root_path, calculate_file_sha256 as _calculate_file_sha256, get_filename_from_path
 from .type_utils import as_dict, as_list, first_non_empty, format_size_bytes as format_bytes
 
 try:
@@ -310,7 +310,7 @@ def _find_metadata_file_info(
         if isinstance(value, dict):
             return value
 
-    filename_lower = os.path.basename(str(filename or "")).lower()
+    filename_lower = get_filename_from_path(str(filename or "")).lower()
     file_lists = [
         source.get("files"),
         selected_version.get("files"),
@@ -404,7 +404,7 @@ def build_lora_manager_metadata(
         source.get("selected_version") or details.get("selected_version")
     )
 
-    basename = os.path.basename(dest_path)
+    basename = get_filename_from_path(dest_path)
     file_name = os.path.splitext(basename)[0]
     filename = _first_present(
         source.get("filename"),
@@ -679,7 +679,7 @@ def get_download_directory(category: str, preferred_base_directory: str = "") ->
         comfy_root = get_comfy_root_path(folder_paths)
 
         def _basename(path_value: str) -> str:
-            return os.path.basename(os.path.normpath(path_value)).lower()
+            return get_filename_from_path(os.path.normpath(path_value)).lower()
 
         def _prefer_redirected(candidate_paths: List[str]) -> Optional[str]:
             if not candidate_paths:
@@ -1170,7 +1170,7 @@ def download_file_with_aria2(
         "size": 0,
     }
     start_time = time.time()
-    filename = os.path.basename(dest_path)
+    filename = get_filename_from_path(dest_path)
 
     with download_lock:
         download_progress[download_id] = {
@@ -1431,7 +1431,7 @@ def download_file(
             "progress": 0,
             "total_size": 0,
             "downloaded": 0,
-            "filename": os.path.basename(dest_path),
+            "filename": get_filename_from_path(dest_path),
             "path": dest_path,
             "directory": os.path.dirname(dest_path),
             "url": url,
@@ -1446,7 +1446,7 @@ def download_file(
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
 
         # Verbose logging - what model and from where
-        filename = os.path.basename(dest_path)
+        filename = get_filename_from_path(dest_path)
         source = (
             "HuggingFace"
             if "huggingface.co" in url
@@ -1627,7 +1627,7 @@ def download_file(
         result["error"] = error_msg
 
         # CLI error log
-        log.error(f"✗ Download failed: {os.path.basename(dest_path)}")
+        log.error(f"✗ Download failed: {get_filename_from_path(dest_path)}")
         log.error(f"Error: {error_msg}")
 
         # Clean up partial file
@@ -1645,7 +1645,7 @@ def download_file(
         result["error"] = error_msg
 
         # CLI error log
-        log.error(f"✗ Download failed: {os.path.basename(dest_path)}")
+        log.error(f"✗ Download failed: {get_filename_from_path(dest_path)}")
         log.error(f"Error: {error_msg}")
         log.error(f"Download error: {e}", exc_info=True)
 

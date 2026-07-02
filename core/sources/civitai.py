@@ -30,7 +30,7 @@ from ..type_utils import (
     DEFAULT_BROWSER_USER_AGENT,
 )
 from ..progress import report_progress, get_progress_reporter
-from ..path_utils import calculate_file_sha256
+from ..path_utils import calculate_file_sha256, get_filename_from_path
 from ..log_system.log_funcs import create_module_logger
 log = create_module_logger(__name__)
 
@@ -469,7 +469,7 @@ def _find_civitai_file_in_model(
     filename_lower = filename.lower()
     filename_base = os.path.splitext(filename_lower)[0]
     allow_model_title_match = not exact_only and not _has_known_model_extension(
-        os.path.basename(filename)
+        get_filename_from_path(filename)
     )
 
     def build_result_from_resolved_version(
@@ -1564,7 +1564,7 @@ def _get_metadata_file_path(model_path: str) -> str:
 
     # Get directory and filename
     directory = os.path.dirname(model_path)
-    filename = os.path.basename(model_path)
+    filename = get_filename_from_path(model_path)
 
     # Try different variations of the metadata file name
     base_name = filename.rsplit(".", 1)[0] if "." in filename else filename
@@ -1948,7 +1948,7 @@ def get_model_info_for_file(
             log.info(f"Files in {directory}: {metadata_files}")
 
     if local_only:
-        filename = os.path.basename(file_path)
+        filename = get_filename_from_path(file_path)
         stem = os.path.splitext(filename)[0]
         result = {
             "source": "local",

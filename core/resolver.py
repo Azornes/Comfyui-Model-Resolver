@@ -42,6 +42,7 @@ from .path_utils import (
     is_path_within,
     prefer_local_base_directory,
     dedupe_local_base_directories,
+    get_filename_from_path,
 )
 
 
@@ -54,13 +55,13 @@ def get_workflow_url_info_for_filename(
     if filename in workflow_urls:
         return workflow_urls[filename]
 
-    filename_stem = strip_known_model_extension(os.path.basename(filename)).lower()
+    filename_stem = strip_known_model_extension(get_filename_from_path(filename)).lower()
     if not filename_stem:
         return None
 
     for workflow_filename, url_info in workflow_urls.items():
         workflow_stem = strip_known_model_extension(
-            os.path.basename(workflow_filename)
+            get_filename_from_path(workflow_filename)
         ).lower()
         if workflow_stem == filename_stem:
             return url_info
@@ -294,7 +295,7 @@ def _metadata_sidecar_candidates(model_path: str) -> List[str]:
         return []
 
     directory = os.path.dirname(model_path)
-    filename = os.path.basename(model_path)
+    filename = get_filename_from_path(model_path)
     stem, _ = os.path.splitext(filename)
 
     candidates = [
@@ -340,9 +341,9 @@ def _collect_hashes_from_container(value: Any) -> List[str]:
 
 
 def _metadata_file_matches_model(file_info: Dict[str, Any], model: Dict[str, Any]) -> bool:
-    model_filename = str(model.get("filename") or os.path.basename(model.get("path", ""))).lower()
+    model_filename = str(model.get("filename") or get_filename_from_path(model.get("path", ""))).lower()
     model_relative = str(model.get("relative_path") or "").replace("\\", "/").lower()
-    model_stem = strip_known_model_extension(os.path.basename(model_filename)).lower()
+    model_stem = strip_known_model_extension(get_filename_from_path(model_filename)).lower()
 
     candidates = [
         file_info.get("name"),
@@ -352,7 +353,7 @@ def _metadata_file_matches_model(file_info: Dict[str, Any], model: Dict[str, Any
     ]
     for candidate in candidates:
         text = str(candidate or "").replace("\\", "/").lower()
-        basename = os.path.basename(text)
+        basename = get_filename_from_path(text)
         stem = strip_known_model_extension(basename).lower()
         if text and model_relative and text == model_relative:
             return True
@@ -463,7 +464,7 @@ def search_local_matches_by_hash(
         matches.append(
             {
                 "model": model_with_metadata,
-                "filename": model.get("filename") or os.path.basename(model_path),
+                "filename": model.get("filename") or get_filename_from_path(model_path),
                 "similarity": 1.0,
                 "confidence": 100.0,
                 "match_type": "hash",
@@ -499,7 +500,7 @@ def get_local_model_hash_metadata(
         **(model if isinstance(model, dict) else {}),
         "path": normalized_path,
     }
-    model_info.setdefault("filename", os.path.basename(normalized_path))
+    model_info.setdefault("filename", get_filename_from_path(normalized_path))
     model_info.setdefault("relative_path", model_info.get("filename", ""))
 
     first_metadata_path = ""
@@ -846,7 +847,7 @@ def analyze_and_find_matches(
     # Enrich missing models with workflow URLs
     for missing in missing_models:
         original_path = missing.get("original_path", "")
-        filename = os.path.basename(original_path)
+        filename = get_filename_from_path(original_path)
 
         url_info = get_workflow_url_info_for_filename(workflow_urls, filename)
         if url_info:

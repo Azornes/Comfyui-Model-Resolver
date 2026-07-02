@@ -456,7 +456,50 @@ DEFAULT_BROWSER_USER_AGENT = (
 )
 
 
+def parse_size_header(value: Any) -> Optional[int]:
+    """Safely parse a size value (like a header) to bytes with fallback."""
+    if value is None or value == "":
+        return None
+    try:
+        size = int(str(value).strip())
+        return size if size > 0 else None
+    except (TypeError, ValueError):
+        size = parse_size_to_bytes(value)
+        return size if size and size > 0 else None
 
 
+def parse_content_range_size(value: Any) -> Optional[int]:
+    """Extract total size from a Content-Range header value."""
+    if not value:
+        return None
+    match = re.search(r"/(\d+)\s*$", str(value))
+    if not match:
+        return None
+    return parse_size_header(match.group(1))
 
 
+def extract_response_file_size(response: Any) -> Optional[int]:
+    """Extract file size from various HTTP response headers."""
+    if response is None:
+        return None
+
+    # Check Content-Range first
+    size = parse_content_range_size(response.headers.get("Content-Range"))
+    if size:
+        return size
+
+    # Try other common size headers
+    for key in (
+        "x-linked-size",
+        "x-file-size",
+        "x-goog-stored-content-length",
+        "content-length",
+    ):
+        size = parse_size_header(response.headers.get(key))
+        if size:
+            content_type = (response.headers.get("content-type") or "").lower()
+            if key == "content-length" and "text/html" in content_type:
+                continue
+            return size
+
+    return None

@@ -23,6 +23,7 @@ from ..matcher import (
     base_model_score as _base_model_score,
     calculate_candidate_rank,
 )
+from ..path_utils import get_filename_from_path
 from ..type_utils import (
     to_int,
     CIVARCHIVE_API_TYPE_MAP,
@@ -30,6 +31,9 @@ from ..type_utils import (
     parse_size_to_bytes,
     get_version_sort_key,
     DEFAULT_BROWSER_USER_AGENT,
+    parse_size_header as _parse_size_header,
+    parse_content_range_size as _parse_content_range_size,
+    extract_response_file_size as _response_file_size,
 )
 from ..progress import report_progress, get_progress_reporter
 from ..log_system.log_funcs import create_module_logger
@@ -582,8 +586,8 @@ def _download_url_looks_like_model_file(
     if normalized.startswith(CIVITAI_DOWNLOAD_URL_PREFIXES):
         return True
 
-    basename = os.path.basename(path).lower()
-    expected = os.path.basename(str(expected_filename or "")).lower()
+    basename = get_filename_from_path(path).lower()
+    expected = get_filename_from_path(str(expected_filename or "")).lower()
     if expected and basename == expected:
         return True
     return _has_known_model_extension(basename)
@@ -628,25 +632,6 @@ def _prepare_size_probe_url(url: Any) -> Optional[str]:
     return normalized
 
 
-def _response_file_size(response: requests.Response) -> Optional[int]:
-    size = _parse_content_range_size(response.headers.get("Content-Range"))
-    if size:
-        return size
-
-    for key in (
-        "x-linked-size",
-        "x-file-size",
-        "x-goog-stored-content-length",
-        "content-length",
-    ):
-        size = _parse_size_header(response.headers.get(key))
-        if size:
-            content_type = (response.headers.get("content-type") or "").lower()
-            if key == "content-length" and "text/html" in content_type:
-                continue
-            return size
-
-    return None
 
 
 def _fetch_remote_file_size_bytes(url: Any, timeout: int = 15) -> Optional[int]:
@@ -1436,24 +1421,6 @@ def _find_model_title_match_in_model_details(
     return None
 
 
-def _parse_size_header(value: Any) -> Optional[int]:
-    if value is None or value == "":
-        return None
-    try:
-        size = int(str(value).strip())
-        return size if size > 0 else None
-    except (TypeError, ValueError):
-        size = parse_size_to_bytes(value)
-        return size if size and size > 0 else None
-
-
-def _parse_content_range_size(value: Any) -> Optional[int]:
-    if not value:
-        return None
-    match = re.search(r"/(\d+)\s*$", str(value))
-    if not match:
-        return None
-    return _parse_size_header(match.group(1))
 
 
 def _build_result_from_model_details(
@@ -1941,7 +1908,7 @@ def _build_result_from_search_candidate(
     parsed: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
     candidate_name = _candidate_display_name(candidate)
-    query_basename = os.path.basename(query or "").strip()
+    query_basename = get_filename_from_path(query or "").strip()
     filename = (
         candidate.get("filename")
         or candidate.get("fileName")
@@ -2187,7 +2154,7 @@ def _is_hash_verified_exact_match(result: Optional[Dict[str, Any]], confidence: 
 
 
 def _build_search_queries(filename: str) -> List[str]:
-    basename = os.path.basename(filename or "").strip()
+    basename = get_filename_from_path(filename or "").strip()
     stem = os.path.splitext(basename)[0].strip()
     simplified = re.sub(
         r"[-_]?(fp16|fp32|fp8|fp4|bf16|e4m3fn|scaled|pruned|emaonly|mixed|q4|q8)$",
@@ -2318,7 +2285,7 @@ def search_civarchive_for_file(
     best_rank = -9999.0
     seen = set()
     allow_model_title_match = not exact_only and not _has_known_model_extension(
-        os.path.basename(normalized_filename)
+        get_filename_from_path(normalized_filename)
     )
 
     try:

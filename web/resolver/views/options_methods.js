@@ -4,6 +4,32 @@ import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
 import { LOG_LEVEL as DEFAULT_FRONTEND_LOG_LEVEL } from "../../log_system/config.js";
 import { logger as frontendLogger } from "../../log_system/logger.js";
+const SETTINGS_MAP = [
+    { serverKey: 'civitai_key', localKey: 'ModelResolver.civitaiApiKey', type: 'string', default: '' },
+    { serverKey: 'civitai_session_token', localKey: 'ModelResolver.civitaiSessionToken', type: 'string', default: '' },
+    { serverKey: 'civitai_use_trpc_search', localKey: 'ModelResolver.civitaiUseTrpcSearch', type: 'boolean', default: true },
+    { serverKey: 'civitai_use_html_fallback', localKey: 'ModelResolver.civitaiUseHtmlFallback', type: 'boolean', default: true },
+    { serverKey: 'hf_token', localKey: 'ModelResolver.huggingFaceToken', type: 'string', default: '' },
+    { serverKey: 'brave_search_api_key', localKey: 'ModelResolver.braveSearchApiKey', type: 'string', default: '' },
+    { serverKey: 'hf_use_api_search', localKey: 'ModelResolver.hfUseApiSearch', type: 'boolean', default: true },
+    { serverKey: 'hf_use_comfy_org_fallback', localKey: 'ModelResolver.hfUseComfyOrgFallback', type: 'boolean', default: true },
+    { serverKey: 'hf_use_brave_fallback', localKey: 'ModelResolver.hfUseBraveFallback', type: 'boolean', default: true },
+    { serverKey: 'auto_fill_base_model', localKey: 'ModelResolver.autoFillBaseModel', type: 'boolean', default: true },
+    { serverKey: 'auto_fill_subfolder', localKey: 'ModelResolver.autoFillSubfolder', type: 'boolean', default: true },
+    { serverKey: 'auto_refresh_comfy_models_after_apply', localKey: 'ModelResolver.autoRefreshComfyModelsAfterApply', type: 'boolean', default: true },
+    { serverKey: 'download_backend', localKey: 'ModelResolver.downloadBackend', type: 'backend', default: 'python' },
+    { serverKey: 'aria2c_path', localKey: 'ModelResolver.aria2cPath', type: 'string', default: '' },
+    { serverKey: 'aria2_auto_stop_daemon', localKey: 'ModelResolver.aria2AutoStopDaemon', type: 'boolean', default: true },
+    { serverKey: 'download_path_mode', localKey: 'ModelResolver.downloadPathMode', type: 'pathMode', default: 'suggested' },
+    { serverKey: 'download_path_templates', localKey: 'ModelResolver.downloadPathTemplates', type: 'json', default: {} },
+    { serverKey: 'base_model_path_mappings', localKey: 'ModelResolver.baseModelPathMappings', type: 'json', default: {} },
+    { serverKey: 'frontend_logs_enabled', localKey: 'ModelResolver.frontendLogsEnabled', type: 'frontendLogsEnabled', default: true },
+    { serverKey: 'backend_logs_enabled', localKey: 'ModelResolver.backendLogsEnabled', type: 'backendLogsEnabled', default: true },
+    { serverKey: 'frontend_log_level', localKey: 'ModelResolver.frontendLogLevel', type: 'string', default: 'DEBUG' },
+    { serverKey: 'backend_log_level', localKey: 'ModelResolver.backendLogLevel', type: 'string', default: 'DEBUG' },
+    { serverKey: 'civitai_candidate_limit', localKey: 'ModelResolver.civitaiCandidateLimit', type: 'candidateLimit', default: 5 },
+];
+
 export const optionsMethods = {
     displayOptions() {
         if (!this.contentElement) return;
@@ -2106,35 +2132,22 @@ export const optionsMethods = {
                 };
 
                 // 1. Write to localStorage (fast local cache)
-                localStorage.setItem('ModelResolver.civitaiApiKey', newSettings.civitai_key);
-                localStorage.setItem('ModelResolver.civitaiSessionToken', newSettings.civitai_session_token);
-                localStorage.setItem('ModelResolver.civitaiUseTrpcSearch', newSettings.civitai_use_trpc_search ? 'true' : 'false');
-                localStorage.setItem('ModelResolver.civitaiUseHtmlFallback', newSettings.civitai_use_html_fallback ? 'true' : 'false');
-                localStorage.setItem('ModelResolver.huggingFaceToken', newSettings.hf_token);
-                localStorage.setItem('ModelResolver.braveSearchApiKey', newSettings.brave_search_api_key);
-                localStorage.setItem('ModelResolver.hfUseApiSearch', newSettings.hf_use_api_search ? 'true' : 'false');
-                localStorage.setItem('ModelResolver.hfUseComfyOrgFallback', newSettings.hf_use_comfy_org_fallback ? 'true' : 'false');
-                localStorage.setItem('ModelResolver.hfUseBraveFallback', newSettings.hf_use_brave_fallback ? 'true' : 'false');
-                localStorage.setItem('ModelResolver.autoFillBaseModel', newSettings.auto_fill_base_model ? 'true' : 'false');
-                localStorage.setItem('ModelResolver.autoFillSubfolder', newSettings.auto_fill_subfolder ? 'true' : 'false');
-                localStorage.setItem('ModelResolver.autoRefreshComfyModelsAfterApply', newSettings.auto_refresh_comfy_models_after_apply ? 'true' : 'false');
-                localStorage.setItem('ModelResolver.downloadBackend', newSettings.download_backend);
-                localStorage.setItem('ModelResolver.aria2cPath', newSettings.aria2c_path);
-                localStorage.setItem('ModelResolver.aria2AutoStopDaemon', newSettings.aria2_auto_stop_daemon ? 'true' : 'false');
-                localStorage.setItem('ModelResolver.downloadPathMode', newSettings.download_path_mode);
-                localStorage.setItem('ModelResolver.downloadPathTemplates', JSON.stringify(newSettings.download_path_templates));
-                localStorage.setItem('ModelResolver.baseModelPathMappings', JSON.stringify(newSettings.base_model_path_mappings));
+                for (const opt of SETTINGS_MAP) {
+                    const val = newSettings[opt.serverKey];
+                    if (opt.type === 'boolean' || opt.type === 'frontendLogsEnabled' || opt.type === 'backendLogsEnabled') {
+                        localStorage.setItem(opt.localKey, val ? 'true' : 'false');
+                    } else if (opt.type === 'json') {
+                        localStorage.setItem(opt.localKey, JSON.stringify(val));
+                    } else {
+                        localStorage.setItem(opt.localKey, String(val ?? ''));
+                    }
+                }
                 defaultRootSelectInputs.forEach((select) => {
                     const storageKey = select.dataset.storageKey;
                     if (storageKey) {
                         localStorage.setItem(storageKey, select.value || '');
                     }
                 });
-                localStorage.setItem('ModelResolver.frontendLogsEnabled', newSettings.frontend_logs_enabled ? 'true' : 'false');
-                localStorage.setItem('ModelResolver.backendLogsEnabled', newSettings.backend_logs_enabled ? 'true' : 'false');
-                localStorage.setItem('ModelResolver.frontendLogLevel', newSettings.frontend_log_level);
-                localStorage.setItem('ModelResolver.backendLogLevel', newSettings.backend_log_level);
-                localStorage.setItem('ModelResolver.civitaiCandidateLimit', `${civitaiCandidateLimit}`);
                 Object.entries(sourceEnabled).forEach(([key, val]) => {
                     localStorage.setItem(key, val ? 'true' : 'false');
                 });
@@ -2170,45 +2183,35 @@ export const optionsMethods = {
     },
 
     getStoredTokens() {
-        const civitaiCandidateLimitRaw = parseInt(localStorage.getItem('ModelResolver.civitaiCandidateLimit') || '5', 10);
-        const civitai_candidate_limit = Number.isFinite(civitaiCandidateLimitRaw)
-            ? Math.min(20, Math.max(1, civitaiCandidateLimitRaw))
-            : 5;
-        const search_source_enabled = this.getSearchSourceEnabledMap();
-        const storedFrontendLogsEnabled = localStorage.getItem('ModelResolver.frontendLogsEnabled');
-        const storedBackendLogsEnabled = localStorage.getItem('ModelResolver.backendLogsEnabled');
-        const storedFrontendLogLevel = localStorage.getItem('ModelResolver.frontendLogLevel');
-        const storedBackendLogLevel = localStorage.getItem('ModelResolver.backendLogLevel');
-
+        const tokens = {};
+        for (const opt of SETTINGS_MAP) {
+            const raw = localStorage.getItem(opt.localKey);
+            if (opt.type === 'boolean') {
+                tokens[opt.serverKey] = raw === null ? opt.default : raw !== 'false';
+            } else if (opt.type === 'json') {
+                try {
+                    tokens[opt.serverKey] = raw ? JSON.parse(raw) : opt.default;
+                } catch (e) {
+                    tokens[opt.serverKey] = opt.default;
+                }
+            } else if (opt.type === 'backend') {
+                tokens[opt.serverKey] = this.normalizeDownloadBackend(raw || opt.default);
+            } else if (opt.type === 'pathMode') {
+                tokens[opt.serverKey] = this.normalizeDownloadPathMode(raw || opt.default);
+            } else if (opt.type === 'frontendLogsEnabled') {
+                tokens[opt.serverKey] = raw === null ? (frontendLogger.enabled !== false) : raw !== 'false';
+            } else if (opt.type === 'backendLogsEnabled') {
+                tokens[opt.serverKey] = raw === null ? true : raw !== 'false';
+            } else if (opt.type === 'candidateLimit') {
+                const limit = parseInt(raw || String(opt.default), 10);
+                tokens[opt.serverKey] = Number.isFinite(limit) ? Math.min(20, Math.max(1, limit)) : opt.default;
+            } else {
+                tokens[opt.serverKey] = raw || opt.default;
+            }
+        }
+        tokens.search_source_enabled = this.getSearchSourceEnabledMap();
         return {
-            civitai_key: localStorage.getItem('ModelResolver.civitaiApiKey') || '',
-            civitai_session_token: localStorage.getItem('ModelResolver.civitaiSessionToken') || '',
-            hf_token: localStorage.getItem('ModelResolver.huggingFaceToken') || '',
-            brave_search_api_key: localStorage.getItem('ModelResolver.braveSearchApiKey') || '',
-            civitai_use_trpc_search: localStorage.getItem('ModelResolver.civitaiUseTrpcSearch') !== 'false',
-            civitai_use_html_fallback: localStorage.getItem('ModelResolver.civitaiUseHtmlFallback') !== 'false',
-            hf_use_api_search: localStorage.getItem('ModelResolver.hfUseApiSearch') !== 'false',
-            hf_use_comfy_org_fallback: localStorage.getItem('ModelResolver.hfUseComfyOrgFallback') !== 'false',
-            hf_use_brave_fallback: localStorage.getItem('ModelResolver.hfUseBraveFallback') !== 'false',
-            auto_fill_base_model: localStorage.getItem('ModelResolver.autoFillBaseModel') !== 'false',
-            auto_fill_subfolder: localStorage.getItem('ModelResolver.autoFillSubfolder') !== 'false',
-            auto_refresh_comfy_models_after_apply: localStorage.getItem('ModelResolver.autoRefreshComfyModelsAfterApply') !== 'false',
-            frontend_logs_enabled: storedFrontendLogsEnabled === null
-                ? frontendLogger.enabled !== false
-                : storedFrontendLogsEnabled !== 'false',
-            backend_logs_enabled: storedBackendLogsEnabled === null
-                ? true
-                : storedBackendLogsEnabled !== 'false',
-            frontend_log_level: storedFrontendLogLevel || DEFAULT_FRONTEND_LOG_LEVEL,
-            backend_log_level: storedBackendLogLevel || 'DEBUG',
-            civitai_candidate_limit,
-            search_source_enabled,
-            download_backend: this.normalizeDownloadBackend(localStorage.getItem('ModelResolver.downloadBackend') || 'python'),
-            aria2c_path: localStorage.getItem('ModelResolver.aria2cPath') || '',
-            aria2_auto_stop_daemon: localStorage.getItem('ModelResolver.aria2AutoStopDaemon') !== 'false',
-            download_path_mode: this.getDownloadPathMode(),
-            download_path_templates: this.getDownloadPathTemplates(),
-            base_model_path_mappings: this.getBaseModelPathMappings(),
+            ...tokens,
             ...this.getDefaultRootSettings()
         };
     },
@@ -2232,62 +2235,29 @@ export const optionsMethods = {
                 return;
             }
 
-            // Helper: write to localStorage only when the value from server is
-            // non-empty, so we don't overwrite a key the user already has locally.
-            const sync = (localKey, serverValue) => {
-                if (serverValue !== undefined && serverValue !== null && serverValue !== '') {
-                    localStorage.setItem(localKey, serverValue);
+            for (const opt of SETTINGS_MAP) {
+                const serverValue = data[opt.serverKey];
+                if (serverValue === undefined) continue;
+
+                if (opt.type === 'boolean' || opt.type === 'frontendLogsEnabled' || opt.type === 'backendLogsEnabled') {
+                    localStorage.setItem(opt.localKey, serverValue ? 'true' : 'false');
+                } else if (opt.type === 'json') {
+                    localStorage.setItem(opt.localKey, JSON.stringify(serverValue || {}));
+                } else if (opt.type === 'backend') {
+                    localStorage.setItem(opt.localKey, this.normalizeDownloadBackend(serverValue));
+                } else if (opt.type === 'pathMode') {
+                    localStorage.setItem(opt.localKey, this.normalizeDownloadPathMode(serverValue));
+                } else {
+                    if (serverValue !== null && serverValue !== '') {
+                        localStorage.setItem(opt.localKey, String(serverValue));
+                    }
                 }
-            };
-
-            sync('ModelResolver.civitaiApiKey', data.civitai_key);
-            sync('ModelResolver.civitaiSessionToken', data.civitai_session_token);
-            sync('ModelResolver.huggingFaceToken', data.hf_token);
-            sync('ModelResolver.braveSearchApiKey', data.brave_search_api_key);
-
-            if (data.civitai_use_trpc_search !== undefined)
-                localStorage.setItem('ModelResolver.civitaiUseTrpcSearch', data.civitai_use_trpc_search ? 'true' : 'false');
-            if (data.civitai_use_html_fallback !== undefined)
-                localStorage.setItem('ModelResolver.civitaiUseHtmlFallback', data.civitai_use_html_fallback ? 'true' : 'false');
-            if (data.hf_use_api_search !== undefined)
-                localStorage.setItem('ModelResolver.hfUseApiSearch', data.hf_use_api_search ? 'true' : 'false');
-            if (data.hf_use_comfy_org_fallback !== undefined)
-                localStorage.setItem('ModelResolver.hfUseComfyOrgFallback', data.hf_use_comfy_org_fallback ? 'true' : 'false');
-            if (data.hf_use_brave_fallback !== undefined)
-                localStorage.setItem('ModelResolver.hfUseBraveFallback', data.hf_use_brave_fallback ? 'true' : 'false');
-            if (data.auto_fill_base_model !== undefined)
-                localStorage.setItem('ModelResolver.autoFillBaseModel', data.auto_fill_base_model ? 'true' : 'false');
-            if (data.auto_fill_subfolder !== undefined)
-                localStorage.setItem('ModelResolver.autoFillSubfolder', data.auto_fill_subfolder ? 'true' : 'false');
-            if (data.auto_refresh_comfy_models_after_apply !== undefined)
-                localStorage.setItem('ModelResolver.autoRefreshComfyModelsAfterApply', data.auto_refresh_comfy_models_after_apply ? 'true' : 'false');
-            if (data.download_backend !== undefined)
-                localStorage.setItem('ModelResolver.downloadBackend', this.normalizeDownloadBackend(data.download_backend));
-            if (data.aria2c_path !== undefined)
-                localStorage.setItem('ModelResolver.aria2cPath', String(data.aria2c_path || ''));
-            if (data.aria2_auto_stop_daemon !== undefined)
-                localStorage.setItem('ModelResolver.aria2AutoStopDaemon', data.aria2_auto_stop_daemon ? 'true' : 'false');
-            if (data.download_path_mode !== undefined)
-                localStorage.setItem('ModelResolver.downloadPathMode', this.normalizeDownloadPathMode(data.download_path_mode));
-            if (data.download_path_templates !== undefined)
-                localStorage.setItem('ModelResolver.downloadPathTemplates', JSON.stringify(data.download_path_templates || {}));
-            if (data.base_model_path_mappings !== undefined)
-                localStorage.setItem('ModelResolver.baseModelPathMappings', JSON.stringify(data.base_model_path_mappings || {}));
+            }
             this.getDefaultRootCategoryDefinitions().forEach((item) => {
                 if (data[item.settingKey] !== undefined) {
                     localStorage.setItem(item.storageKey, String(data[item.settingKey] || ''));
                 }
             });
-            if (data.civitai_candidate_limit !== undefined)
-                localStorage.setItem('ModelResolver.civitaiCandidateLimit', `${data.civitai_candidate_limit}`);
-            if (data.frontend_logs_enabled !== undefined)
-                localStorage.setItem('ModelResolver.frontendLogsEnabled', data.frontend_logs_enabled ? 'true' : 'false');
-            if (data.backend_logs_enabled !== undefined)
-                localStorage.setItem('ModelResolver.backendLogsEnabled', data.backend_logs_enabled ? 'true' : 'false');
-            if (data.frontend_log_level !== undefined)
-                localStorage.setItem('ModelResolver.frontendLogLevel', String(data.frontend_log_level || 'DEBUG').toUpperCase());
-            if (data.backend_log_level !== undefined)
-                localStorage.setItem('ModelResolver.backendLogLevel', String(data.backend_log_level || 'DEBUG').toUpperCase());
 
             // Source-enabled flags stored as a nested object
             if (data.search_source_enabled && typeof data.search_source_enabled === 'object') {

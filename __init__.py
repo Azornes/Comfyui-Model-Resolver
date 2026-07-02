@@ -1320,28 +1320,17 @@ class ModelResolverExtension:
                         "metadata_checked": bool(civitai_checked),
                         "civitai_checked": bool(civitai_checked),
                     }
-
-                def normalize_sha256_value(value):
-                    text = str(value or "").strip().lower()
-                    if text.startswith("sha256:"):
-                        text = text.split(":", 1)[1].strip()
-                    if len(text) == 64 and all(
-                        ch in "0123456789abcdef" for ch in text
-                    ):
-                        return text
-                    return ""
-
                 def extract_result_sha256(result):
                     if not isinstance(result, dict):
                         return ""
                     for key in ("sha256", "hash"):
-                        normalized = normalize_sha256_value(result.get(key))
+                        normalized = normalize_sha256(result.get(key))
                         if normalized:
                             return normalized
                     hashes = result.get("hashes")
                     if isinstance(hashes, dict):
                         for key in ("SHA256", "sha256", "Sha256"):
-                            normalized = normalize_sha256_value(hashes.get(key))
+                            normalized = normalize_sha256(hashes.get(key))
                             if normalized:
                                 return normalized
                     return ""

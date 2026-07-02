@@ -18,7 +18,7 @@ from ..log_system.log_funcs import create_module_logger
 log = create_module_logger(__name__)
 
 from ..path_utils import write_json_atomic, METADATA_DIR
-from ..type_utils import check_credential_http
+from ..type_utils import check_credential_http, parse_size_header as _parse_size_header, parse_content_range_size as _parse_content_range_size, extract_response_file_size as _response_file_size
 
 HF_API_URL = "https://huggingface.co/api"
 HF_AUTHOR_FALLBACKS = ["Comfy-Org"]
@@ -334,23 +334,6 @@ def get_huggingface_download_url(repo: str, filename: str, branch: str = "main")
     return f"https://huggingface.co/{repo}/resolve/{branch}/{quote(filename)}"
 
 
-def _parse_size_header(value: Any) -> Optional[int]:
-    if value is None or value == "":
-        return None
-    try:
-        size = int(str(value).strip())
-        return size if size > 0 else None
-    except (TypeError, ValueError):
-        return None
-
-
-def _parse_content_range_size(value: Any) -> Optional[int]:
-    if not value:
-        return None
-    match = re.search(r"/(\d+)\s*$", str(value))
-    if not match:
-        return None
-    return _parse_size_header(match.group(1))
 
 
 def _extract_file_info_size(file_info: Dict[str, Any]) -> Optional[int]:
@@ -383,25 +366,6 @@ def _normalize_huggingface_size_probe_url(url: str) -> Optional[str]:
     return value
 
 
-def _response_file_size(response: requests.Response) -> Optional[int]:
-    size = _parse_content_range_size(response.headers.get("Content-Range"))
-    if size:
-        return size
-
-    for key in (
-        "x-linked-size",
-        "x-file-size",
-        "x-goog-stored-content-length",
-        "content-length",
-    ):
-        size = _parse_size_header(response.headers.get(key))
-        if size:
-            content_type = (response.headers.get("content-type") or "").lower()
-            if key == "content-length" and "text/html" in content_type:
-                continue
-            return size
-
-    return None
 
 
 def _fetch_remote_file_size_bytes(
