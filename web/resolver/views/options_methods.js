@@ -1215,47 +1215,74 @@ export const optionsMethods = {
             }
         };
 
-        const loadModelListStatus = async (checkRemote = false) => {
+        const executeOptionsTask = async ({
+            setBusy,
+            stateEl,
+            messageEl,
+            loadingText,
+            startingMessageText,
+            endpoint,
+            fetchOptions = {},
+            errorContext,
+            successCallback,
+            successAction,
+            errorFallbackText,
+            notificationErrorText
+        }) => {
             try {
-                setModelListBusy(true);
-                if (modelListStateEl) {
-                    modelListStateEl.textContent = checkRemote ? 'Checking GitHub...' : 'Loading...';
+                setBusy(true);
+                if (stateEl) stateEl.textContent = loadingText;
+                if (messageEl && startingMessageText) messageEl.textContent = startingMessageText;
+                const data = await this.fetchJson(endpoint, fetchOptions, errorContext);
+                if (successAction) {
+                    await successAction(data);
                 }
-                const data = await this.fetchJson(`/model_resolver/model-list/status${checkRemote ? '?check_remote=1' : ''}`, {}, 'Load model list status');
-                renderModelListStatus(data, checkRemote);
+                successCallback(data);
                 return data;
             } catch (error) {
-                console.error('Model Resolver: model-list status error:', error);
-                if (modelListStateEl) modelListStateEl.textContent = 'Error';
-                if (modelListMessageEl) modelListMessageEl.textContent = error.message || 'Failed to read Local Database status.';
+                console.error(`Model Resolver: ${errorContext} error:`, error);
+                if (stateEl) stateEl.textContent = 'Error';
+                if (messageEl) messageEl.textContent = error.message || errorFallbackText;
+                if (notificationErrorText) {
+                    this.showNotification(notificationErrorText, 'error');
+                }
                 return null;
             } finally {
-                setModelListBusy(false);
+                setBusy(false);
             }
         };
 
-        const updateModelList = async () => {
-            try {
-                setModelListBusy(true);
-                if (modelListStateEl) modelListStateEl.textContent = 'Updating...';
-                if (modelListMessageEl) modelListMessageEl.textContent = 'Downloading latest ComfyUI-Manager model-list.json...';
-                const data = await this.fetchJson('/model_resolver/model-list/update', {
-                    method: 'POST'
-                }, 'Update model list');
+        const loadModelListStatus = (checkRemote = false) => executeOptionsTask({
+            setBusy: setModelListBusy,
+            stateEl: modelListStateEl,
+            loadingText: checkRemote ? 'Checking GitHub...' : 'Loading...',
+            endpoint: `/model_resolver/model-list/status${checkRemote ? '?check_remote=1' : ''}`,
+            errorContext: 'Model-list status',
+            successCallback: (data) => renderModelListStatus(data, checkRemote),
+            errorFallbackText: 'Failed to read Local Database status.'
+        });
+
+        const updateModelList = () => executeOptionsTask({
+            setBusy: setModelListBusy,
+            stateEl: modelListStateEl,
+            messageEl: modelListMessageEl,
+            loadingText: 'Updating...',
+            startingMessageText: 'Downloading latest ComfyUI-Manager model-list.json...',
+            endpoint: '/model_resolver/model-list/update',
+            fetchOptions: { method: 'POST' },
+            errorContext: 'Update model list',
+            successAction: async () => {
                 await this.clearSearchCaches();
+            },
+            successCallback: (data) => {
                 renderModelListStatus(data, false);
                 if (modelListStateEl) modelListStateEl.textContent = 'Updated';
                 if (modelListMessageEl) modelListMessageEl.textContent = `Local Database updated. ${Number(data.local_count || 0).toLocaleString()} models loaded.`;
                 this.showNotification('Local Database updated', 'success');
-            } catch (error) {
-                console.error('Model Resolver: model-list update error:', error);
-                if (modelListStateEl) modelListStateEl.textContent = 'Error';
-                if (modelListMessageEl) modelListMessageEl.textContent = error.message || 'Failed to update Local Database.';
-                this.showNotification('Local Database update failed', 'error');
-            } finally {
-                setModelListBusy(false);
-            }
-        };
+            },
+            errorFallbackText: 'Failed to update Local Database.',
+            notificationErrorText: 'Local Database update failed'
+        });
 
         const renderBaseModelsStatus = (data = {}, checkedRemote = false) => {
             if (baseModelsCountEl) {
@@ -1286,24 +1313,15 @@ export const optionsMethods = {
             }
         };
 
-        const loadBaseModelsStatus = async (checkRemote = false) => {
-            try {
-                setBaseModelsBusy(true);
-                if (baseModelsStateEl) {
-                    baseModelsStateEl.textContent = checkRemote ? 'Checking CivitAI...' : 'Loading...';
-                }
-                const data = await this.fetchJson(`/model_resolver/base-models/status${checkRemote ? '?check_remote=1' : ''}`, {}, 'Load base models status');
-                renderBaseModelsStatus(data, checkRemote);
-                return data;
-            } catch (error) {
-                console.error('Model Resolver: base-models status error:', error);
-                if (baseModelsStateEl) baseModelsStateEl.textContent = 'Error';
-                if (baseModelsMessageEl) baseModelsMessageEl.textContent = error.message || 'Failed to read Base Models status.';
-                return null;
-            } finally {
-                setBaseModelsBusy(false);
-            }
-        };
+        const loadBaseModelsStatus = (checkRemote = false) => executeOptionsTask({
+            setBusy: setBaseModelsBusy,
+            stateEl: baseModelsStateEl,
+            loadingText: checkRemote ? 'Checking CivitAI...' : 'Loading...',
+            endpoint: `/model_resolver/base-models/status${checkRemote ? '?check_remote=1' : ''}`,
+            errorContext: 'Load base models status',
+            successCallback: (data) => renderBaseModelsStatus(data, checkRemote),
+            errorFallbackText: 'Failed to read Base Models status.'
+        });
 
         const formatNewBaseModelsSummary = (models = [], maxVisible = 6) => {
             const names = Array.isArray(models)
@@ -1317,19 +1335,21 @@ export const optionsMethods = {
             return `${visible.join(', ')}${suffix}`;
         };
 
-        const updateBaseModels = async () => {
-            try {
-                setBaseModelsBusy(true);
-                if (baseModelsStateEl) baseModelsStateEl.textContent = 'Updating...';
-                if (baseModelsMessageEl) baseModelsMessageEl.textContent = 'Downloading latest base models from CivitAI...';
-                const data = await this.fetchJson('/model_resolver/base-models/update', {
-                    method: 'POST'
-                }, 'Update base models');
+        const updateBaseModels = () => executeOptionsTask({
+            setBusy: setBaseModelsBusy,
+            stateEl: baseModelsStateEl,
+            messageEl: baseModelsMessageEl,
+            loadingText: 'Updating...',
+            startingMessageText: 'Downloading latest base models from CivitAI...',
+            endpoint: '/model_resolver/base-models/update',
+            fetchOptions: { method: 'POST' },
+            errorContext: 'Update base models',
+            successAction: async () => {
                 await this.clearSearchCaches();
-                // Invalidate the in-memory cache so the base model dropdown
-                // reloads fresh data from the server next time it is opened.
                 this.baseModels = null;
                 await this.ensureBaseModelsLoaded();
+            },
+            successCallback: (data) => {
                 renderBaseModelsStatus(data, false);
                 if (baseModelsStateEl) baseModelsStateEl.textContent = 'Updated';
                 const newModelsSummary = formatNewBaseModelsSummary(data.new_models_added_list);
@@ -1344,15 +1364,10 @@ export const optionsMethods = {
                         : 'Base Models updated. No new models added.',
                     'success'
                 );
-            } catch (error) {
-                console.error('Model Resolver: base-models update error:', error);
-                if (baseModelsStateEl) baseModelsStateEl.textContent = 'Error';
-                if (baseModelsMessageEl) baseModelsMessageEl.textContent = error.message || 'Failed to update Base Models.';
-                this.showNotification('Base Models update failed', 'error');
-            } finally {
-                setBaseModelsBusy(false);
-            }
-        };
+            },
+            errorFallbackText: 'Failed to update Base Models.',
+            notificationErrorText: 'Base Models update failed'
+        });
 
         const renderHfIndexStatus = (data = {}) => {
             if (hfIndexCountEl) {
@@ -1385,48 +1400,42 @@ export const optionsMethods = {
             }
         };
 
-        const loadHfIndexStatus = async () => {
-            try {
-                setHfIndexBusy(true);
-                if (hfIndexStateEl) hfIndexStateEl.textContent = 'Loading...';
-                const data = await this.fetchJson('/model_resolver/huggingface/author-index/status', {}, 'Load HuggingFace index status');
-                renderHfIndexStatus(data);
-                return data;
-            } catch (error) {
-                console.error('Model Resolver: HuggingFace index status error:', error);
-                if (hfIndexStateEl) hfIndexStateEl.textContent = 'Error';
-                if (hfIndexMessageEl) hfIndexMessageEl.textContent = error.message || 'Failed to read HuggingFace index status.';
-                return null;
-            } finally {
-                setHfIndexBusy(false);
-            }
-        };
+        const loadHfIndexStatus = () => executeOptionsTask({
+            setBusy: setHfIndexBusy,
+            stateEl: hfIndexStateEl,
+            loadingText: 'Loading...',
+            endpoint: '/model_resolver/huggingface/author-index/status',
+            errorContext: 'Load HuggingFace index status',
+            successCallback: renderHfIndexStatus,
+            errorFallbackText: 'Failed to read HuggingFace index status.'
+        });
 
-        const refreshHfIndex = async () => {
-            try {
-                setHfIndexBusy(true);
-                if (hfIndexStateEl) hfIndexStateEl.textContent = 'Refreshing...';
-                if (hfIndexMessageEl) hfIndexMessageEl.textContent = 'Downloading Comfy-Org file index from HuggingFace...';
-                const data = await this.fetchJson('/model_resolver/huggingface/author-index/refresh', {
-                    method: 'POST',
-                    body: JSON.stringify({ hf_token: hfInput?.value || '' })
-                }, 'Refresh HuggingFace index');
+        const refreshHfIndex = () => executeOptionsTask({
+            setBusy: setHfIndexBusy,
+            stateEl: hfIndexStateEl,
+            messageEl: hfIndexMessageEl,
+            loadingText: 'Refreshing...',
+            startingMessageText: 'Downloading Comfy-Org file index from HuggingFace...',
+            endpoint: '/model_resolver/huggingface/author-index/refresh',
+            fetchOptions: {
+                method: 'POST',
+                body: JSON.stringify({ hf_token: hfInput?.value || '' })
+            },
+            errorContext: 'Refresh HuggingFace index',
+            successAction: async (data) => {
                 if (data?.success === false) {
                     throw new Error(data.error || 'Refresh failed');
                 }
                 await this.clearSearchCaches();
+            },
+            successCallback: (data) => {
                 renderHfIndexStatus(data);
                 if (hfIndexStateEl) hfIndexStateEl.textContent = 'Refreshed';
                 this.showNotification('HuggingFace Comfy-Org index refreshed', 'success');
-            } catch (error) {
-                console.error('Model Resolver: HuggingFace index refresh error:', error);
-                if (hfIndexStateEl) hfIndexStateEl.textContent = 'Error';
-                if (hfIndexMessageEl) hfIndexMessageEl.textContent = error.message || 'Failed to refresh HuggingFace index.';
-                this.showNotification('HuggingFace index refresh failed', 'error');
-            } finally {
-                setHfIndexBusy(false);
-            }
-        };
+            },
+            errorFallbackText: 'Failed to refresh HuggingFace index.',
+            notificationErrorText: 'HuggingFace index refresh failed'
+        });
 
         const clearAllCachesFromOptions = async () => {
             try {

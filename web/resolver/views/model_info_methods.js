@@ -325,7 +325,7 @@ export const modelInfoMethods = {
 
     getContextMenuSourceLookupKey(model = {}) {
         const path = String(this.getContextMenuSourceLookupPath(model) || '').trim();
-        return path ? path.replace(/\\/g, '/').toLowerCase() : '';
+        return path ? this.normalizePathToForward(path).toLowerCase() : '';
     },
 
     getContextMenuSourceLookupModel(model = {}) {
@@ -1296,14 +1296,14 @@ export const modelInfoMethods = {
 
         if (!location) {
             const fullPath = data.file_path || data.filePath || data.resolved_path || data.resolvedPath || data.full_path || data.fullPath || data.path || '';
-            const normalizedFullPath = String(fullPath || '').replace(/\\/g, '/');
+            const normalizedFullPath = this.normalizePathToForward(fullPath);
             const lastSlash = normalizedFullPath.lastIndexOf('/');
             if (lastSlash > 0) {
                 location = normalizedFullPath.slice(0, lastSlash + 1);
             }
         }
 
-        location = String(location || '').trim().replace(/\\/g, '/');
+        location = this.normalizePathToForward(location);
         if (location && !location.endsWith('/')) {
             location += '/';
         }

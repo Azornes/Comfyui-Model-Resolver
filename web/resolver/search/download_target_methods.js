@@ -672,8 +672,7 @@ export const downloadTargetMethods = {
     },
 
     normalizeDownloadSubfolderPath(value = '') {
-        return String(value || '')
-            .replace(/\//g, '\\')
+        return this.normalizePathToBackward(value)
             .split('\\')
             .map(part => part.trim())
             .filter(part => part && part !== '.' && part !== '..')
@@ -910,8 +909,7 @@ export const downloadTargetMethods = {
     },
 
     normalizeDownloadPathTemplate(template = '') {
-        return String(template || '')
-            .replace(/\\/g, '/')
+        return this.normalizePathToForward(template)
             .split('/')
             .map(part => part.trim())
             .filter(part => part && part !== '.' && part !== '..')
@@ -1027,8 +1025,7 @@ export const downloadTargetMethods = {
     },
 
     normalizeTemplateSubfolder(value = '') {
-        return String(value || '')
-            .replace(/\\/g, '/')
+        return this.normalizePathToForward(value)
             .split('/')
             .map(part => this.sanitizeDownloadPathSegment(part))
             .filter(part => part && part !== '.' && part !== '..')
@@ -2004,8 +2001,7 @@ export const downloadTargetMethods = {
             });
         };
 
-        const normalizeSubfolderPath = (value = '') => String(value || '')
-            .replace(/\//g, '\\')
+        const normalizeSubfolderPath = (value = '') => this.normalizePathToBackward(value)
             .split('\\')
             .map(part => part.trim())
             .filter(part => part && part !== '.')

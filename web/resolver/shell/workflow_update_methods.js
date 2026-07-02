@@ -191,7 +191,7 @@ export const workflowUpdateMethods = {
     },
 
     normalizeComfyCatalogValue(value = '') {
-        return String(value || '').trim().replace(/\\/g, '/');
+        return this.normalizePathToForward(value);
     },
 
     applyComfyNodeDefs(nodeDefs = {}) {

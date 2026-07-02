@@ -140,7 +140,7 @@ export const missingBrowserMethods = {
         }
 
         const usesBackslash = cleanPath.includes('\\');
-        const normalizedPath = cleanPath.replace(/\\/g, '/').replace(/\/+$/g, '');
+        const normalizedPath = this.normalizePathToForward(cleanPath).replace(/\/+$/g, '');
         const parts = normalizedPath.split('/').filter(Boolean);
         const leaf = (parts[parts.length - 1] || '').toLowerCase();
         const parent = (parts[parts.length - 2] || '').toLowerCase();
@@ -151,7 +151,7 @@ export const missingBrowserMethods = {
 
         if (rawSuffix && leaf === rawSuffix && parent === canonicalLeaf) {
             const parentPath = parts.slice(0, -1).join('/');
-            return usesBackslash ? parentPath.replace(/\//g, '\\') : parentPath;
+            return usesBackslash ? this.normalizePathToBackward(parentPath) : parentPath;
         }
         return cleanPath;
     },
@@ -1274,8 +1274,7 @@ export const missingBrowserMethods = {
 
         const getAllModels = () => Array.isArray(this.allModels) ? this.allModels : [];
         let localModelLoadToken = 0;
-        const normalizeModelPath = (value = '') => String(value || '')
-            .replace(/\//g, '\\')
+        const normalizeModelPath = (value = '') => this.normalizePathToBackward(value)
             .split('\\')
             .map(part => part.trim())
             .filter(Boolean)

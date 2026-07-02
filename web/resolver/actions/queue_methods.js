@@ -2290,7 +2290,7 @@ export const queueMethods = {
     },
 
     normalizeResolvedSelectionToken(value = '', { basename = false, stem = false } = {}) {
-        let text = String(value || '').trim().replace(/\\/g, '/').toLowerCase();
+        let text = this.normalizePathToForward(value).toLowerCase();
         if (!text) return '';
         if (basename) {
             text = text.split('/').pop() || text;

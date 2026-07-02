@@ -322,5 +322,13 @@ export const renderFormatMethods = {
     estimateTextWidth(value, charPx = 6, minPx = 40, maxPx = 180) {
         const length = String(value || '').length;
         return Math.max(minPx, Math.min(maxPx, Math.ceil(length * charPx)));
+    },
+
+    normalizePathToForward(value) {
+        return String(value || '').trim().replace(/\\/g, '/');
+    },
+
+    normalizePathToBackward(value) {
+        return String(value || '').trim().replace(/\//g, '\\');
     }
 };
