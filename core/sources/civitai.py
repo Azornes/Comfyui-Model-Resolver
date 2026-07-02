@@ -640,6 +640,8 @@ def parse_civitai_url(url: str) -> Optional[Dict[str, Any]]:
     """
     Parse a CivitAI URL to extract model/version info.
     """
+    if not isinstance(url, str) or not url.strip():
+        return None
     parsed = urlparse(url)
     if "civitai.com" not in parsed.netloc:
         return None
