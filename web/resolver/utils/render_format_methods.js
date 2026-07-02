@@ -77,6 +77,11 @@ export const renderFormatMethods = {
         return `<span class="mr-badge mr-badge-${variant}">${label}</span>`;
     },
 
+    getFilenameFromPath(path) {
+        if (!path) return '';
+        return path.split(/[\/\\]/).pop() || path;
+    },
+
     /**
      * Format a filename with smart truncation
      * @param {string} path - Full path or filename
@@ -87,7 +92,7 @@ export const renderFormatMethods = {
         if (!path) return { display: 'Unknown', full: 'Unknown' };
 
         // Extract just the filename from path
-        const filename = path.split(/[\/\\]/).pop() || path;
+        const filename = this.getFilenameFromPath(path);
 
         if (filename.length <= maxLength) {
             return { display: filename, full: filename };

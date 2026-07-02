@@ -8,7 +8,7 @@ import { startSplitterDrag } from "../utils/splitter_drag.js";
 
 export const missingBrowserMethods = {
     getMissingFilename(missing = {}) {
-        return missing.original_path?.split('/').pop()?.split('\\').pop() || missing.name || 'Missing model';
+        return this.getFilenameFromPath(missing.original_path) || missing.name || 'Missing model';
     },
 
     getMissingLocateTarget(missing = {}) {
@@ -419,7 +419,7 @@ export const missingBrowserMethods = {
 
     normalizeResolvedWorkflowModel(model = {}) {
         const originalPath = model.original_path || model.name || model.filename || '';
-        const filename = originalPath.split('/').pop()?.split('\\').pop() || originalPath || 'Resolved model';
+        const filename = this.getFilenameFromPath(originalPath) || originalPath || 'Resolved model';
         const fullPath = model.full_path || model.path || '';
         const relativePath = model.relative_path || originalPath || filename;
         const category = model.category || 'unknown';
@@ -2107,7 +2107,7 @@ export const missingBrowserMethods = {
         html += `<div class="mr-column">`;
         html += `<div class="mr-column-header">Download</div>`;
 
-        const filename = missing.original_path?.split('/').pop()?.split('\\').pop() || '';
+        const filename = this.getFilenameFromPath(missing.original_path);
         const downloadSource = missing.download_source;
         const urnDownloadId = `urn-download-${missing.node_id}-${missing.widget_index}`;
 

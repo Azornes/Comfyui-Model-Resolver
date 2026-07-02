@@ -2428,7 +2428,7 @@ export const queueMethods = {
             category: selection.category || sourceMissing?.category || resolvedModel.category || 'unknown',
             original_path: resolvedRelativePath,
             name: resolvedRelativePath,
-            filename: resolvedModel.filename || resolvedRelativePath.split('/').pop()?.split('\\').pop() || resolvedRelativePath,
+            filename: resolvedModel.filename || this.getFilenameFromPath(resolvedRelativePath) || resolvedRelativePath,
             relative_path: resolvedRelativePath,
             full_path: resolvedModel.path || selection.resolved_path || sourceMissing?.full_path || '',
             path: resolvedModel.path || selection.resolved_path || '',

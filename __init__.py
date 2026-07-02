@@ -183,7 +183,7 @@ class ModelResolverExtension:
                     read_json_safe,
                     write_json_atomic,
                 )
-                from .core.type_utils import first_non_empty, to_int, to_bool
+                from .core.type_utils import first_non_empty, to_int, to_bool, MODEL_EXTENSIONS, format_size_bytes
                 from .core.settings import (
                     TEMPLATE_KEY_ALIASES,
                     bool_setting as resolver_bool_setting,
@@ -404,10 +404,8 @@ class ModelResolverExtension:
                             )
 
                             if not has_perfect_match:
-                                filename = (
+                                filename = get_filename_from_path(
                                     missing.get("original_path", "")
-                                    .split("/")[-1]
-                                    .split("\\")[-1]
                                 )
 
                                 # 0. Check workflow URL first (highest priority - directly from workflow)
@@ -1148,9 +1146,7 @@ class ModelResolverExtension:
                                 if not existing:
                                     loaded_models.append(
                                         {
-                                            "name": name.split("/")[-1].split("\\")[
-                                                -1
-                                            ],
+                                            "name": get_filename_from_path(name),
                                             "category": directory or "checkpoints",
                                             "node_id": node.get("id"),
                                             "widget_index": None,
@@ -1485,18 +1481,7 @@ class ModelResolverExtension:
                     expected = _os.path.basename(str(expected_filename or "")).lower()
                     if expected and basename == expected:
                         return True
-                    model_extensions = {
-                        ".safetensors",
-                        ".ckpt",
-                        ".pt",
-                        ".pth",
-                        ".bin",
-                        ".gguf",
-                        ".onnx",
-                        ".pb",
-                        ".pkl",
-                        ".pickle",
-                    }
+                    model_extensions = MODEL_EXTENSIONS
                     return _os.path.splitext(basename)[1].lower() in model_extensions
 
                 def collect_result_download_urls(result):
@@ -2131,21 +2116,7 @@ class ModelResolverExtension:
                             return text
 
                         def format_log_size(value):
-                            if value is None or value == "":
-                                return None
-                            if isinstance(value, str):
-                                return value
-                            try:
-                                size = float(value)
-                            except (TypeError, ValueError):
-                                return str(value)
-
-                            units = ("B", "KB", "MB", "GB", "TB")
-                            unit_index = 0
-                            while size >= 1024 and unit_index < len(units) - 1:
-                                size /= 1024
-                                unit_index += 1
-                            return f"{size:.1f}{units[unit_index]}"
+                            return format_size_bytes(value, include_space=False)
 
                         def format_log_fields(**fields):
                             parts = []

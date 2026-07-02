@@ -1060,8 +1060,7 @@ export const downloadTargetMethods = {
         const filename = merged.downloadFilename
             || merged.filename
             || merged.file_name
-            || missing.original_path?.split('/').pop()?.split('\\').pop()
-            || '';
+            || this.getFilenameFromPath(missing.original_path);
         const modelName = merged.model_name || merged.model || merged.name || filename.replace(/\.[^.]+$/, '') || '';
         const creator = merged.creator
             || (merged.creator_username ? { username: merged.creator_username } : null)
@@ -1117,8 +1116,7 @@ export const downloadTargetMethods = {
             || merged.filename
             || merged.file_name
             || pathMetadata.filename
-            || missing.original_path?.split('/').pop()?.split('\\').pop()
-            || '';
+            || this.getFilenameFromPath(missing.original_path);
         const modelName = merged.model_name
             || merged.model
             || merged.name

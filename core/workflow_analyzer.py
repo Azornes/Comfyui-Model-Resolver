@@ -21,21 +21,7 @@ except ImportError:
     log.warn("Model Resolver: folder_paths not available yet - will retry later")
 
 
-# Common model file extensions
-MODEL_EXTENSIONS = {
-    ".ckpt",
-    ".pt",
-    ".pt2",
-    ".bin",
-    ".pth",
-    ".safetensors",
-    ".pkl",
-    ".sft",
-    ".onnx",
-    ".gguf",
-}
-
-from .type_utils import URN_TYPE_MAP
+from .type_utils import URN_TYPE_MAP, MODEL_EXTENSIONS
 
 URN_REGEX = re.compile(r"^urn:air:([^:]+):([^:]+):([^:]+):(\d+)@(\d+)$")
 

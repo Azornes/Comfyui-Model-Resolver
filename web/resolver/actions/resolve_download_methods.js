@@ -239,7 +239,7 @@ export const resolveDownloadMethods = {
 
         const state = this.searchResultCache.get(this.getMissingSearchKey(missing));
         const results = state?.results || {};
-        const filename = missing.original_path?.split('/').pop()?.split('\\').pop() || '';
+        const filename = this.getFilenameFromPath(missing.original_path);
         const first = (value) => Array.isArray(value) ? value[0] : value;
         const candidates = [
             {
@@ -447,8 +447,7 @@ export const resolveDownloadMethods = {
         return downloadedFilename
             || missing.civitai_info?.expected_filename
             || missing.download_source?.filename
-            || missing.original_path?.split('/').pop()?.split('\\').pop()
-            || '';
+            || this.getFilenameFromPath(missing.original_path);
     },
 
     getDownloadFolderContext(progress = {}, info = {}) {
@@ -1178,7 +1177,7 @@ export const resolveDownloadMethods = {
         const minRefreshFeedback = new Promise(resolve => setTimeout(resolve, 420));
         const refreshAnimation = this.startRefreshButtonAnimation?.(button);
         const body = this.contentElement?.querySelector(`#local-matches-body-${this.getMissingModelDomKey(missing)}`);
-        const displayName = targetFilename.split('/').pop()?.split('\\').pop() || targetFilename;
+        const displayName = this.getFilenameFromPath(targetFilename) || targetFilename;
         const missingKey = this.getMissingModelKey(missing);
         const currentMissing = (this.missingModels || []).find(item => this.getMissingModelKey(item) === missingKey) || missing;
         const previousMatches = this.cloneLocalMatches?.(currentMissing.matches || missing.matches || []) || [];
@@ -1500,7 +1499,7 @@ export const resolveDownloadMethods = {
             return;
         }
 
-        const originalFilename = missing.original_path?.split('/').pop()?.split('\\').pop() || 'model.safetensors';
+        const originalFilename = this.getFilenameFromPath(missing.original_path) || 'model.safetensors';
         const filename = source.filename || originalFilename;
         const targetSelection = this.getDownloadTargetSelection(missing, source.directory || missing.category || 'checkpoints');
         const downloadBtn = this.contentElement?.querySelector(`#${this.getDownloadButtonElementId(missing)}`);
@@ -1836,7 +1835,7 @@ export const resolveDownloadMethods = {
      * Search online for a model
      */
     async searchOnline(missing, { workflowKey = this.getWorkflowScopedQueueKey(), forceSearch = false } = {}) {
-        let filename = missing.original_path?.split('/').pop()?.split('\\').pop() || '';
+        let filename = this.getFilenameFromPath(missing.original_path);
         let category = missing.category || this.getNodeTypeDownloadCategory?.(missing.node_type) || '';
         const state = this.getSearchStateForWorkflow(workflowKey, missing);
         const missingSearchKey = this.getMissingSearchKey(missing);
@@ -2551,7 +2550,7 @@ export const resolveDownloadMethods = {
         addRow(knownDownloadRow);
 
         if (popular) {
-            const popularFilename = popular.filename || missing.original_path?.split('/').pop()?.split('\\').pop() || '';
+            const popularFilename = popular.filename || this.getFilenameFromPath(missing.original_path);
             const missingCategory = this.getMissingDownloadCategory?.(missing, 'checkpoints') || missing.category || 'checkpoints';
             const popularSize = popular.size
                 || (
@@ -2616,7 +2615,7 @@ export const resolveDownloadMethods = {
         }
 
         if (civarchiveResult && civarchiveResult.download_url) {
-            const archiveFilename = civarchiveResult.filename || missing.original_path?.split('/').pop()?.split('\\').pop() || '';
+            const archiveFilename = civarchiveResult.filename || this.getFilenameFromPath(missing.original_path);
             const archiveName = civarchiveResult.name || archiveFilename || 'Model';
             const archiveCategory = this.getSourceResultDownloadCategory?.(
                 civarchiveResult,
@@ -2652,7 +2651,7 @@ export const resolveDownloadMethods = {
         }
 
         if (loraManagerArchiveResult && loraManagerArchiveResult.download_url) {
-            const archiveFilename = loraManagerArchiveResult.filename || missing.original_path?.split('/').pop()?.split('\\').pop() || '';
+            const archiveFilename = loraManagerArchiveResult.filename || this.getFilenameFromPath(missing.original_path);
             const archiveName = loraManagerArchiveResult.name || archiveFilename;
             const archiveCategory = this.getSourceResultDownloadCategory?.(
                 loraManagerArchiveResult,

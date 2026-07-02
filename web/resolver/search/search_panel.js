@@ -1677,7 +1677,7 @@ export const searchPanelMethods = {
     getDownloadSourceTableRow(missing, downloadSource = {}) {
         if (!downloadSource?.url) return null;
 
-        const originalFilename = missing.original_path?.split('/').pop()?.split('\\').pop() || '';
+        const originalFilename = this.getFilenameFromPath(missing.original_path);
         const downloadFilename = downloadSource.filename || originalFilename || 'model';
         const isFromWorkflow = downloadSource.url_source === 'workflow';
         const source = downloadSource.source || (isFromWorkflow ? 'workflow' : 'online');

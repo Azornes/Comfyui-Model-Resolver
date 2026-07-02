@@ -55,6 +55,8 @@ MODEL_EXTENSIONS = {
     ".sft",
     ".onnx",
     ".gguf",
+    ".pb",
+    ".pickle",
 }
 
 
@@ -420,6 +422,32 @@ def check_credential_http(
             "status": "error",
             "message": str(e),
         }
+
+
+def format_size_bytes(bytes_value: Any, include_space: bool = True) -> Optional[str]:
+    """Format bytes to human readable string (e.g., 1.5 GB or 1.5GB)."""
+    if bytes_value is None or bytes_value == "":
+        return None
+    if isinstance(bytes_value, str) and not bytes_value.strip().replace(".", "", 1).isdigit():
+        return bytes_value
+    try:
+        val = float(bytes_value)
+    except (TypeError, ValueError):
+        return str(bytes_value)
+
+    if val <= 0:
+        return f"0{ ' B' if include_space else 'B' }"
+
+    k = 1024
+    sizes = ["B", "KB", "MB", "GB", "TB"]
+    i = 0
+    while val >= k and i < len(sizes) - 1:
+        val /= k
+        i += 1
+
+    space = " " if include_space else ""
+    return f"{val:.1f}{space}{sizes[i]}"
+
 
 
 

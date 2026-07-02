@@ -24,7 +24,7 @@ log = create_module_logger(__name__)
 
 from .resolver import normalize_sha256
 from .path_utils import is_path_within, get_path_identity, write_json_atomic, read_json_safe, get_comfy_root_path, calculate_file_sha256 as _calculate_file_sha256
-from .type_utils import as_dict, as_list, first_non_empty
+from .type_utils import as_dict, as_list, first_non_empty, format_size_bytes as format_bytes
 
 try:
     import folder_paths
@@ -632,17 +632,6 @@ def write_lora_manager_metadata(
         return None
 
 
-def format_bytes(bytes_value: int) -> str:
-    """Format bytes to human readable string (e.g., 1.5 GB)."""
-    if bytes_value == 0:
-        return "0 B"
-    k = 1024
-    sizes = ["B", "KB", "MB", "GB", "TB"]
-    i = 0
-    while bytes_value >= k and i < len(sizes) - 1:
-        bytes_value /= k
-        i += 1
-    return f"{bytes_value:.1f} {sizes[i]}"
 
 
 # Imported from .settings
