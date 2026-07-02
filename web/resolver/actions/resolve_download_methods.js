@@ -557,35 +557,135 @@ export const resolveDownloadMethods = {
 
     getLocalMatchIdentity(match = {}) {
         const model = match.model || {};
-        return [
-            model.path || match.path || '',
-            model.relative_path || '',
-            model.filename || match.filename || '',
-            model.category || match.category || ''
-        ].map(value => String(value || '').trim().toLowerCase()).join('::');
+        return this.getLocalMatchIdentityKeys(match)[0] || '';
+    },
+
+    normalizeLocalMatchPathIdentity(value = '') {
+        return String(value || '')
+            .trim()
+            .replace(/\\/g, '/')
+            .replace(/\/+/g, '/')
+            .toLowerCase();
+    },
+
+    getLocalMatchAbsolutePathIdentity(match = {}) {
+        const model = match.model || {};
+        return this.normalizeLocalMatchPathIdentity(
+            model.path
+            || model.resolved_path
+            || match.path
+            || match.resolved_path
+            || ''
+        );
+    },
+
+    getLocalMatchRelativePathIdentity(match = {}) {
+        const model = match.model || {};
+        const category = String(model.category || match.category || '').trim().toLowerCase();
+        const relativePath = this.normalizeLocalMatchPathIdentity(model.relative_path || match.relative_path || '');
+        return relativePath ? `${category}::${relativePath}` : '';
+    },
+
+    getLocalMatchIdentityKeys(match = {}) {
+        const model = match.model || {};
+        const normalizeText = (value = '') => String(value || '').trim().toLowerCase();
+        const category = normalizeText(model.category || match.category || '');
+        const filename = normalizeText(model.filename || match.filename || '');
+        const keys = [];
+        const seen = new Set();
+        const addKey = (kind, ...parts) => {
+            const value = [kind, ...parts].map(part => String(part || '').trim()).join('::');
+            if (!value.replace(/:/g, '') || seen.has(value)) return;
+            seen.add(value);
+            keys.push(value);
+        };
+
+        const absolutePath = this.getLocalMatchAbsolutePathIdentity(match);
+        const relativePath = this.normalizeLocalMatchPathIdentity(model.relative_path || match.relative_path || '');
+
+        if (absolutePath) addKey('path', absolutePath);
+        if (relativePath) addKey('relative', category, relativePath);
+        if (filename) addKey('filename', category, filename);
+
+        return keys;
+    },
+
+    canMergeLocalMatches(previous = {}, next = {}, matchedKey = '') {
+        if (!String(matchedKey || '').startsWith('filename::')) return true;
+
+        const previousAbsolute = this.getLocalMatchAbsolutePathIdentity(previous);
+        const nextAbsolute = this.getLocalMatchAbsolutePathIdentity(next);
+        if (previousAbsolute && nextAbsolute && previousAbsolute !== nextAbsolute) {
+            return false;
+        }
+
+        const previousRelative = this.getLocalMatchRelativePathIdentity(previous);
+        const nextRelative = this.getLocalMatchRelativePathIdentity(next);
+        if (previousRelative && nextRelative && previousRelative !== nextRelative) {
+            return false;
+        }
+
+        return true;
+    },
+
+    isHashLocalMatch(match = {}) {
+        return Boolean(match?.hash_match || match?.match_type === 'hash');
+    },
+
+    shouldReplaceLocalMatch(previous = {}, next = {}) {
+        const previousConfidence = Number(previous.confidence || 0);
+        const nextConfidence = Number(next.confidence || 0);
+        if (nextConfidence !== previousConfidence) {
+            return nextConfidence > previousConfidence;
+        }
+        if (this.isHashLocalMatch(next) !== this.isHashLocalMatch(previous)) {
+            return this.isHashLocalMatch(next);
+        }
+        return false;
     },
 
     mergeLocalMatches(existingMatches = [], restoredMatches = []) {
         const merged = [];
-        const byIdentity = new Map();
+        const byKey = new Map();
+        const keysByMatch = new Map();
+
+        const rememberMatch = (match, keys) => {
+            keysByMatch.set(match, keys);
+            keys.forEach(key => byKey.set(key, match));
+        };
 
         const addMatch = (match) => {
             if (!match || typeof match !== 'object') return;
-            const identity = this.getLocalMatchIdentity(match);
-            if (!identity.replace(/:/g, '')) return;
+            const keys = this.getLocalMatchIdentityKeys(match);
+            if (!keys.length) return;
 
-            const previous = byIdentity.get(identity);
-            if (!previous || Number(match.confidence || 0) > Number(previous.confidence || 0)) {
-                byIdentity.set(identity, match);
+            const previousEntry = keys
+                .map(key => ({ key, match: byKey.get(key) }))
+                .find(entry => entry.match && this.canMergeLocalMatches(entry.match, match, entry.key));
+            const previous = previousEntry?.match;
+            if (!previous) {
+                merged.push(match);
+                rememberMatch(match, keys);
+                return;
+            }
+
+            if (this.shouldReplaceLocalMatch(previous, match)) {
+                const index = merged.indexOf(previous);
+                if (index !== -1) {
+                    merged[index] = match;
+                }
+                const previousKeys = keysByMatch.get(previous) || [];
+                const combinedKeys = Array.from(new Set([...previousKeys, ...keys]));
+                keysByMatch.delete(previous);
+                rememberMatch(match, combinedKeys);
+            } else {
+                const previousKeys = keysByMatch.get(previous) || [];
+                rememberMatch(previous, Array.from(new Set([...previousKeys, ...keys])));
             }
         };
 
         existingMatches.forEach(addMatch);
         restoredMatches.forEach(addMatch);
-
-        for (const match of byIdentity.values()) {
-            merged.push(match);
-        }
 
         return merged.sort((a, b) => Number(b.confidence || 0) - Number(a.confidence || 0));
     },
@@ -637,6 +737,7 @@ export const resolveDownloadMethods = {
         }
 
         this.refreshLocalMatchesUiForMissing?.(currentMissing);
+        this.refreshSearchUiForMissing?.(currentMissing, state || null, { workflowKey });
         return hashMatches;
     },
 
@@ -2299,6 +2400,8 @@ export const resolveDownloadMethods = {
     wireSearchDownloadButtons(container, missing) {
         if (!container) return;
 
+        this.wireSearchHashMatchHighlights?.(container);
+
         const downloadBtns = container.querySelectorAll('.search-download-btn');
         downloadBtns.forEach(btn => {
             btn.addEventListener('click', () => {
@@ -2497,6 +2600,13 @@ export const resolveDownloadMethods = {
         const civarchiveResult = results.civarchive ? (Array.isArray(results.civarchive) ? results.civarchive[0] : results.civarchive) : null;
         const loraManagerArchiveResult = results.lora_manager_archive ? (Array.isArray(results.lora_manager_archive) ? results.lora_manager_archive[0] : results.lora_manager_archive) : null;
         const knownDownloadRow = this.getDownloadSourceTableRow(missing, missing.download_source);
+        const localHashMatches = [
+            ...(Array.isArray(results.local_hash_matches) ? results.local_hash_matches : []),
+            ...(Array.isArray(missing.matches) ? missing.matches.filter(match => match?.hash_lookup_source) : [])
+        ];
+        const getHashMatchIdentities = (sourceKey, result) => (
+            this.getLocalHashMatchIdentitiesForResult?.(localHashMatches, sourceKey, result) || []
+        );
         const hasResults = knownDownloadRow || popular || modelListResult || hfResult || civitaiResult || civarchiveResult || loraManagerArchiveResult;
         const progressHtml = this.renderSearchProgress(state);
         const hasActiveProgress = this.hasActiveSearchProgress(state);
@@ -2574,7 +2684,8 @@ export const resolveDownloadMethods = {
                 downloadFilename: popularFilename,
                 category: popular.directory || missingCategory,
                 openUrl: getModelCardUrl(popular.url),
-                searchedAt: this.getSearchResultTimestamp(popular)
+                searchedAt: this.getSearchResultTimestamp(popular),
+                localHashMatchIdentities: getHashMatchIdentities('popular', popular)
             });
         }
 
@@ -2592,7 +2703,8 @@ export const resolveDownloadMethods = {
                 downloadFilename: modelListResult.filename,
                 category: modelListResult.directory || missingCategory,
                 openUrl: getModelCardUrl(modelListResult.url),
-                searchedAt: this.getSearchResultTimestamp(modelListResult)
+                searchedAt: this.getSearchResultTimestamp(modelListResult),
+                localHashMatchIdentities: getHashMatchIdentities('model_list', modelListResult)
             });
         }
 
@@ -2612,7 +2724,8 @@ export const resolveDownloadMethods = {
                 downloadFilename: hfResult.filename,
                 category: missingCategory,
                 openUrl: hfModelUrl,
-                searchedAt: this.getSearchResultTimestamp(hfResult)
+                searchedAt: this.getSearchResultTimestamp(hfResult),
+                localHashMatchIdentities: getHashMatchIdentities('huggingface', hfResult)
             });
         }
 
@@ -2643,6 +2756,7 @@ export const resolveDownloadMethods = {
                 category: archiveCategory,
                 openUrl: civarchiveResult.url,
                 searchedAt: this.getSearchResultTimestamp(civarchiveResult),
+                localHashMatchIdentities: getHashMatchIdentities('civarchive', civarchiveResult),
                 detailsContext: {
                     ...civarchiveResult,
                     details_source: 'civarchive',
@@ -2674,6 +2788,7 @@ export const resolveDownloadMethods = {
                 category: archiveCategory,
                 openUrl: loraManagerArchiveResult.url || getModelCardUrl(loraManagerArchiveResult.download_url),
                 searchedAt: this.getSearchResultTimestamp(loraManagerArchiveResult),
+                localHashMatchIdentities: getHashMatchIdentities('lora_manager_archive', loraManagerArchiveResult),
                 detailsContext: {
                     ...loraManagerArchiveResult,
                     source: 'lora_manager_archive',
@@ -2711,6 +2826,7 @@ export const resolveDownloadMethods = {
                 category: civitaiCategory,
                 openUrl: modelUrl,
                 searchedAt: this.getSearchResultTimestamp(civitaiResult),
+                localHashMatchIdentities: getHashMatchIdentities('civitai', civitaiResult),
                 detailsContext: {
                     ...civitaiResult,
                     name: modelName,

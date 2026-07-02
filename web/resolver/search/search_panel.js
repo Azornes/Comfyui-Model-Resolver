@@ -1676,6 +1676,79 @@ export const searchPanelMethods = {
         return { label: fallbackLabel, className: fallbackClass };
     },
 
+    normalizeSearchResultSha256(value = '') {
+        let text = String(value || '').trim();
+        text = text.replace(/^sha256[:=]/i, '').trim().toLowerCase();
+        return /^[a-f0-9]{64}$/.test(text) ? text : '';
+    },
+
+    getSearchResultSha256(result = {}) {
+        if (!result || typeof result !== 'object') return '';
+
+        const hashes = result.hashes && typeof result.hashes === 'object' ? result.hashes : {};
+        const fileInfo = result.file_info && typeof result.file_info === 'object' ? result.file_info : {};
+        const fileHashes = fileInfo.hashes && typeof fileInfo.hashes === 'object' ? fileInfo.hashes : {};
+        const candidates = [
+            result.hash_verified_sha256,
+            result.sha256,
+            result.hash,
+            hashes.SHA256,
+            hashes.sha256,
+            fileInfo.sha256,
+            fileInfo.hash,
+            fileHashes.SHA256,
+            fileHashes.sha256
+        ];
+
+        for (const candidate of candidates) {
+            const hash = this.normalizeSearchResultSha256(candidate);
+            if (hash) return hash;
+        }
+        return '';
+    },
+
+    normalizeHashLookupSourceKey(source = '') {
+        return String(source || '')
+            .trim()
+            .toLowerCase()
+            .replace(/-/g, '_');
+    },
+
+    getLocalHashMatchIdentitiesForResult(hashMatches = [], sourceKey = '', sourceResult = {}) {
+        const identities = [];
+        const seen = new Set();
+        const addIdentity = (identity) => {
+            const normalized = String(identity || '').trim();
+            if (!normalized || seen.has(normalized)) return;
+            seen.add(normalized);
+            identities.push(normalized);
+        };
+
+        if (Array.isArray(sourceResult?.hash_verified_local_match_identities)) {
+            sourceResult.hash_verified_local_match_identities.forEach(addIdentity);
+        }
+
+        const normalizedSource = this.normalizeHashLookupSourceKey(sourceKey);
+        const sourceHash = this.getSearchResultSha256(sourceResult);
+        if (!Array.isArray(hashMatches) || !hashMatches.length || !normalizedSource) {
+            return identities;
+        }
+
+        hashMatches.forEach(match => {
+            if (!match || typeof match !== 'object') return;
+
+            const matchSource = this.normalizeHashLookupSourceKey(match.hash_lookup_source || '');
+            if (!matchSource || matchSource !== normalizedSource) return;
+
+            const matchHash = this.normalizeSearchResultSha256(this.getLocalMatchHash(match));
+            if (sourceHash && matchHash !== sourceHash) return;
+
+            addIdentity(this.getLocalMatchIdentity?.(match) || '');
+        });
+
+        return identities;
+    },
+
     getDownloadSourceTableRow(missing, downloadSource = {}) {
         if (!downloadSource?.url) return null;
 
@@ -1742,6 +1815,9 @@ export const searchPanelMethods = {
                 category: rowCategory
             }
             : null;
+        const localHashMatches = Array.isArray(missing.matches)
+            ? missing.matches.filter(match => match?.hash_lookup_source)
+            : [];
 
         return {
             sourceKey,
@@ -1759,6 +1835,11 @@ export const searchPanelMethods = {
             category: rowCategory,
             openUrl: modelUrl,
             searchedAt: this.getSearchResultTimestamp(downloadSource),
+            localHashMatchIdentities: this.getLocalHashMatchIdentitiesForResult?.(
+                localHashMatches,
+                source,
+                downloadSource
+            ) || [],
             pathMetadata: rowPathMetadata,
             downloadMetadata: this.getDownloadMetadata(missing, rowDetailsContext || {
                 ...downloadSource,
@@ -1839,6 +1920,16 @@ export const searchPanelMethods = {
             const filename = row.filename && row.filename !== row.model ? this.escapeHtml(row.filename) : '';
             const match = row.match || { label: 'Match', className: 'neutral' };
             const matchClass = String(match.className || 'neutral').replace(/[^a-z0-9_-]/gi, '');
+            const localHashMatchIdentities = Array.isArray(row.localHashMatchIdentities)
+                ? row.localHashMatchIdentities.filter(Boolean)
+                : [];
+            const hashMatchTargetData = localHashMatchIdentities.length
+                ? encodeURIComponent(JSON.stringify(localHashMatchIdentities))
+                : '';
+            const hashMatchTargetClass = hashMatchTargetData ? ' mr-search-match-has-local-target' : '';
+            const hashMatchTargetAttrs = hashMatchTargetData
+                ? ` data-local-match-identities="${this.escapeHtml(hashMatchTargetData)}" tabindex="0"`
+                : '';
             const size = this.escapeHtml(row.size || '-');
             const downloadUrl = row.downloadUrl || '';
             const openUrl = row.openUrl || '';
@@ -1909,7 +2000,7 @@ export const searchPanelMethods = {
                             ${secondary || filename ? `<small>${secondary || filename}</small>` : ''}
                         </div>
                     </td>
-                    <td><span class="mr-search-match mr-search-match-${matchClass}">${this.escapeHtml(match.label)}</span></td>
+                    <td><span class="mr-search-match mr-search-match-${matchClass}${hashMatchTargetClass}"${hashMatchTargetAttrs}>${this.escapeHtml(match.label)}</span></td>
                     <td class="mr-search-size">${size}</td>
                     <td><div class="mr-search-result-actions">${actions}</div></td>
                 </tr>
@@ -2031,10 +2122,12 @@ export const searchPanelMethods = {
     getLocalMatchContextData(missing = {}, match = {}) {
         const hash = this.getLocalMatchHash(match);
         const metadataPath = match.metadata_path || match.model?.metadata_path || '';
+        const identity = this.getLocalMatchIdentity?.(match) || '';
         return {
             context_scope: 'local_match',
             missing_key: this.getMissingModelKey?.(missing) || '',
             missing_search_key: this.getMissingSearchKey?.(missing) || '',
+            local_match_identity: identity,
             local_match_confidence: match.confidence || 0,
             local_match_sha256: hash,
             sha256: hash || match.model?.sha256 || '',
@@ -2046,11 +2139,13 @@ export const searchPanelMethods = {
 
     renderLocalMatchStatus(match = {}) {
         const confidence = Number(match.confidence || 0);
-        const label = confidence === 100 ? 'Exact' : 'Partial';
-        const className = confidence === 100
-            ? 'mr-match-status-exact'
-            : 'mr-match-status-partial';
-        return `<span class="mr-match-status ${className}">${label}</span>`;
+        const isHashMatch = Boolean(match.hash_match || match.match_type === 'hash');
+        const label = isHashMatch ? 'Hash' : (confidence === 100 ? 'Exact' : 'Partial');
+        const className = isHashMatch
+            ? 'mr-match-status-hash'
+            : (confidence === 100 ? 'mr-match-status-exact' : 'mr-match-status-partial');
+        const attrs = isHashMatch ? ' tabindex="0"' : '';
+        return `<span class="mr-match-status ${className}"${attrs}>${label}</span>`;
     },
 
     areLocalMatchAlternativesCollapsed() {
@@ -2107,8 +2202,13 @@ export const searchPanelMethods = {
                     match.filename || '',
                     this.getLocalMatchContextData(missing, match)
                 );
+                const localMatchIdentity = this.getLocalMatchIdentity?.(match) || '';
+                const identityAttr = localMatchIdentity
+                    ? ` data-local-match-identity="${this.escapeHtml(localMatchIdentity)}"`
+                    : '';
+                const rowClass = `mr-match-row${isBestMatch ? ' mr-best-match' : ''}`;
 
-                html += `<div class="mr-match-row ${isBestMatch ? 'mr-best-match' : ''}"${this.getContextMenuAttrs(contextModel)}>`;
+                html += `<div class="${rowClass}"${identityAttr}${this.getContextMenuAttrs(contextModel)}>`;
                 html += this.getConfidenceBadge(match.confidence);
                 html += `<span class="mr-match-filename" data-tooltip="${this.escapeHtml(matchPath)}">${this.escapeHtml(matchPath)}</span>`;
                 html += this.renderLocalMatchStatus(match);
@@ -2137,7 +2237,11 @@ export const searchPanelMethods = {
                         this.getLocalMatchContextData(missing, match)
                     );
                     const matchPath = match.model?.relative_path || match.model?.path || match.path || match.filename || '';
-                    html += `<div class="mr-match-row"${this.getContextMenuAttrs(contextModel)}>`;
+                    const localMatchIdentity = this.getLocalMatchIdentity?.(match) || '';
+                    const identityAttr = localMatchIdentity
+                        ? ` data-local-match-identity="${this.escapeHtml(localMatchIdentity)}"`
+                        : '';
+                    html += `<div class="mr-match-row"${identityAttr}${this.getContextMenuAttrs(contextModel)}>`;
                     html += this.getConfidenceBadge(match.confidence);
                     html += `<span class="mr-match-filename" data-tooltip="${this.escapeHtml(matchPath)}">${this.escapeHtml(matchPath)}</span>`;
                     html += this.renderLocalMatchStatus(match);
@@ -2195,6 +2299,94 @@ export const searchPanelMethods = {
                 }
             }
         }
+
+        this.wireLocalHashMatchResultHighlights?.(container);
+    },
+
+    decodeLocalMatchIdentityList(value = '') {
+        try {
+            const decoded = decodeURIComponent(String(value || ''));
+            const parsed = JSON.parse(decoded);
+            return Array.isArray(parsed)
+                ? parsed.map(item => String(item || '').trim()).filter(Boolean)
+                : [];
+        } catch (_error) {
+            return [];
+        }
+    },
+
+    setLocalHashMatchHighlight(container, identities = [], highlighted = false) {
+        if (!container || !Array.isArray(identities) || !identities.length) return;
+
+        const identitySet = new Set(identities);
+        const scope = container.closest?.('.mr-columns')
+            || container.closest?.('.mr-missing-detail-pane')
+            || this.contentElement
+            || document;
+
+        scope.querySelectorAll('.mr-match-row[data-local-match-identity]').forEach(row => {
+            const identity = row.dataset.localMatchIdentity || '';
+            if (identitySet.has(identity)) {
+                row.classList.toggle('mr-local-match-hash-highlight', highlighted);
+            }
+        });
+    },
+
+    setSearchHashResultHighlight(container, identity = '', highlighted = false) {
+        const normalizedIdentity = String(identity || '').trim();
+        if (!container || !normalizedIdentity) return;
+
+        const scope = container.closest?.('.mr-columns')
+            || container.closest?.('.mr-missing-detail-pane')
+            || this.contentElement
+            || document;
+
+        scope.querySelectorAll('.mr-search-match[data-local-match-identities]').forEach(badge => {
+            const identities = this.decodeLocalMatchIdentityList(badge.dataset.localMatchIdentities || '');
+            if (!identities.includes(normalizedIdentity)) return;
+
+            badge.classList.toggle('mr-search-match-linked-highlight', highlighted);
+            const row = badge.closest('tr');
+            if (row) {
+                row.classList.toggle('mr-search-result-hash-highlight', highlighted);
+            }
+        });
+    },
+
+    wireLocalHashMatchResultHighlights(container) {
+        if (!container) return;
+
+        container.querySelectorAll('.mr-match-row[data-local-match-identity] .mr-match-status-hash').forEach(badge => {
+            if (badge.dataset.searchResultHoverBound === 'true') return;
+            badge.dataset.searchResultHoverBound = 'true';
+
+            const getIdentity = () => badge.closest('.mr-match-row')?.dataset.localMatchIdentity || '';
+            const showHighlight = () => this.setSearchHashResultHighlight(container, getIdentity(), true);
+            const hideHighlight = () => this.setSearchHashResultHighlight(container, getIdentity(), false);
+
+            badge.addEventListener('mouseenter', showHighlight);
+            badge.addEventListener('mouseleave', hideHighlight);
+            badge.addEventListener('focus', showHighlight);
+            badge.addEventListener('blur', hideHighlight);
+        });
+    },
+
+    wireSearchHashMatchHighlights(container) {
+        if (!container) return;
+
+        container.querySelectorAll('.mr-search-match[data-local-match-identities]').forEach(badge => {
+            if (badge.dataset.localMatchHoverBound === 'true') return;
+            badge.dataset.localMatchHoverBound = 'true';
+
+            const getIdentities = () => this.decodeLocalMatchIdentityList(badge.dataset.localMatchIdentities || '');
+            const showHighlight = () => this.setLocalHashMatchHighlight(container, getIdentities(), true);
+            const hideHighlight = () => this.setLocalHashMatchHighlight(container, getIdentities(), false);
+
+            badge.addEventListener('mouseenter', showHighlight);
+            badge.addEventListener('mouseleave', hideHighlight);
+            badge.addEventListener('focus', showHighlight);
+            badge.addEventListener('blur', hideHighlight);
+        });
     },
 
     getUrnIds(missing = {}) {

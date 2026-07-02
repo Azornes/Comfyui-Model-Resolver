@@ -1077,7 +1077,7 @@ def _enrich_model_info_with_details(
     if not details:
         return result
 
-    selected_version = _as_metadata_dict(details.get("selected_version"))
+    selected_version = as_dict(details.get("selected_version"))
     result["model_name"] = result.get("model_name") or details.get("name")
     result["model_type"] = result.get("model_type") or details.get("type")
     result["description"] = (
@@ -1335,80 +1335,6 @@ def get_model_info_by_hash(
     except Exception as e:
         log.error(f"Error looking up model by hash {file_hash}: {e}")
         return None
-
-    cache_key = f"hash_{file_hash}"
-
-    if use_cache and cache_key in _hash_cache:
-        return _hash_cache[cache_key]
-
-    api_url = f"{CIVITAI_API_URL}/model-versions/by-hash/{file_hash}"
-
-    try:
-        headers = {}
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
-
-        response = requests.get(api_url, headers=headers, timeout=15)
-
-        if response.status_code == 200:
-            data = response.json()
-
-            # Extract useful info from the response
-            model_info = data.get("model", {})
-            version_info = data
-
-            # Get model_id from top level or nested model object
-            model_id = data.get("modelId") or model_info.get("id")
-
-            # Extract images with metadata
-            images = _extract_model_images(version_info)
-
-            result = {
-                "source": "civitai",
-                "model_id": model_id,
-                "model_name": model_info.get("name"),
-                "model_type": model_info.get("type"),
-                "version_id": version_info.get("id"),
-                "version_name": version_info.get("name"),
-                "sha256": file_hash,
-                "url": f"https://civitai.com/models/{model_id}" if model_id else None,
-                "version_url": f"https://civitai.com/models/{model_id}?modelVersionId={version_info.get('id')}"
-                if model_id
-                else None,
-                "download_url": version_info.get("downloadUrl"),
-                "base_model": version_info.get("baseModel"),
-                "tags": model_info.get("tags", []),
-                "trained_words": extract_trained_words(version_info),
-                "images": images,
-                "clip_skip": version_info.get("clipSkip"),
-                "description": version_info.get("description", ""),
-                "model_description": model_info.get("description", ""),
-            }
-
-            result = _enrich_model_info_with_details(
-                result,
-                model_id,
-                version_info.get("id"),
-                api_key,
-            )
-            _hash_cache[cache_key] = result
-            log.info(f"Found model by hash {file_hash}: {result.get('model_name')}")
-            return result
-
-        elif response.status_code == 404:
-            log.info(f"Model not found on CivitAI for hash {file_hash}")
-            _hash_cache[cache_key] = None
-            return None
-        else:
-            log.warning(
-                f"CivitAI hash lookup returned {response.status_code} for {file_hash}"
-            )
-            return None
-
-    except Exception as e:
-        log.error(f"Error looking up model by hash {file_hash}: {e}")
-        return None
-
 
 def _extract_model_images(version_info: Dict[str, Any]) -> List[Dict[str, Any]]:
     """

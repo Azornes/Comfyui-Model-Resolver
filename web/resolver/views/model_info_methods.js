@@ -874,10 +874,18 @@ export const modelInfoMethods = {
         );
     },
 
-    markSearchResultHashBadgesForMissing(missing = {}, sha256 = '') {
+    getHashCompareLocalMatchIdentity(model = {}) {
+        const explicitIdentity = String(model?.local_match_identity || '').trim();
+        if (explicitIdentity) return explicitIdentity;
+
+        return this.getLocalMatchIdentity?.({ model }) || '';
+    },
+
+    markSearchResultHashBadgesForMissing(missing = {}, sha256 = '', options = {}) {
         const hash = this.normalizeSha256ForCompare(sha256);
         if (!missing || !hash) return [];
 
+        const localMatchIdentity = String(options.localMatchIdentity || '').trim();
         const markIfMatches = (result, sourceLabel = 'result') => {
             if (!result || typeof result !== 'object') return null;
             const hashes = this.collectHashCandidatesForCompare(result, sourceLabel, new Set());
@@ -885,6 +893,15 @@ export const modelInfoMethods = {
 
             result.hash_verified = true;
             result.hash_verified_sha256 = hash;
+            if (localMatchIdentity) {
+                const identities = Array.isArray(result.hash_verified_local_match_identities)
+                    ? result.hash_verified_local_match_identities
+                    : [];
+                if (!identities.includes(localMatchIdentity)) {
+                    identities.push(localMatchIdentity);
+                }
+                result.hash_verified_local_match_identities = identities;
+            }
             return {
                 sourceKey: sourceLabel,
                 sourceLabel: this.getHashCompareSourceLabel(sourceLabel, result),
@@ -980,9 +997,12 @@ export const modelInfoMethods = {
         }
 
         const hashMatches = [];
+        const localMatchIdentity = this.getHashCompareLocalMatchIdentity(model);
         localHashes.forEach(candidate => {
             hashMatches.push(
-                ...this.markSearchResultHashBadgesForMissing(missing, candidate.hash)
+                ...this.markSearchResultHashBadgesForMissing(missing, candidate.hash, {
+                    localMatchIdentity
+                })
             );
         });
         if (hashMatches.length) {

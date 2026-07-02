@@ -202,6 +202,7 @@ class ModelResolverExtension:
                     normalize_sha256,
                     extract_sha256_from_metadata,
                     fetch_remote_file_size_cached,
+                    looks_like_model_file,
                 )
                 from .core.settings import (
                     TEMPLATE_KEY_ALIASES,
@@ -1679,7 +1680,6 @@ class ModelResolverExtension:
                     )
 
                 def result_url_looks_like_model_file(url, expected_filename=""):
-                    from core.type_utils import looks_like_model_file
                     return looks_like_model_file(url, expected_filename)
 
                 def collect_result_download_urls(result):
