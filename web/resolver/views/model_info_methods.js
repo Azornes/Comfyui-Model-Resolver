@@ -781,18 +781,114 @@ export const modelInfoMethods = {
         }
     },
 
+    getHashCompareSourceLabel(sourceKey = '', result = {}) {
+        const explicitLabel = result?.sourceLabel || result?.source_label || '';
+        if (explicitLabel) return String(explicitLabel);
+
+        const rawSource = String(result?.source || result?.details_source || sourceKey || '').toLowerCase().replace(/-/g, '_');
+        const sourceLabels = {
+            download_source: 'Selected source',
+            popular: 'Popular',
+            model_list: 'Local Database',
+            huggingface: 'HuggingFace',
+            civitai: 'CivitAI',
+            civarchive: 'CivArchive',
+            lora_manager_archive: 'LoRA Archive',
+            lora_archive: 'LoRA Archive',
+            workflow: 'Workflow',
+            online: 'Online'
+        };
+
+        return sourceLabels[rawSource]
+            || sourceLabels[String(sourceKey || '').toLowerCase().replace(/-/g, '_')]
+            || String(sourceKey || 'Source').replace(/[_-]+/g, ' ');
+    },
+
+    getHashCompareResultName(result = {}) {
+        const primary = result?.name
+            || result?.model_name
+            || result?.modelName
+            || result?.repo_id
+            || result?.repo
+            || result?.filename
+            || result?.path
+            || result?.model_url
+            || result?.url
+            || 'Model';
+        const version = result?.version_name || result?.versionName || result?.version || '';
+        const display = this.getVersionedModelName?.(String(primary), String(version || ''))
+            || String(primary);
+        return this.truncateText?.(display, 96) || display;
+    },
+
+    getHashCompareResultUrl(result = {}) {
+        return String(
+            result?.version_url
+            || result?.model_url
+            || result?.platform_url
+            || result?.source_url
+            || result?.openUrl
+            || result?.url
+            || result?.download_url
+            || ''
+        ).trim();
+    },
+
+    dedupeHashCompareMatches(matches = []) {
+        const seen = new Set();
+        const unique = [];
+        matches.forEach(match => {
+            if (!match) return;
+            const key = [
+                match.sourceLabel || match.sourceKey || '',
+                match.name || '',
+                match.url || '',
+                match.sha256 || ''
+            ].map(value => String(value || '').toLowerCase()).join('::');
+            if (seen.has(key)) return;
+            seen.add(key);
+            unique.push(match);
+        });
+        return unique;
+    },
+
+    showHashCompareSuccessNotification(filename = 'Selected local model', matches = []) {
+        const uniqueMatches = this.dedupeHashCompareMatches(matches);
+        if (!uniqueMatches.length) return;
+
+        const visibleMatches = uniqueMatches.slice(0, 6);
+        const lines = visibleMatches.map(match => (
+            `- ${match.sourceLabel || 'Source'}: ${match.name || 'Model'}`
+        ));
+        if (uniqueMatches.length > visibleMatches.length) {
+            lines.push(`- +${uniqueMatches.length - visibleMatches.length} more`);
+        }
+
+        this.showNotification?.(
+            `Hash match found for ${filename}:\n${lines.join('\n')}`,
+            'success',
+            { duration: 7000 }
+        );
+    },
+
     markSearchResultHashBadgesForMissing(missing = {}, sha256 = '') {
         const hash = this.normalizeSha256ForCompare(sha256);
-        if (!missing || !hash) return false;
+        if (!missing || !hash) return [];
 
         const markIfMatches = (result, sourceLabel = 'result') => {
-            if (!result || typeof result !== 'object') return false;
+            if (!result || typeof result !== 'object') return null;
             const hashes = this.collectHashCandidatesForCompare(result, sourceLabel, new Set());
-            if (!hashes.some(candidate => candidate.hash === hash)) return false;
+            if (!hashes.some(candidate => candidate.hash === hash)) return null;
 
             result.hash_verified = true;
             result.hash_verified_sha256 = hash;
-            return true;
+            return {
+                sourceKey: sourceLabel,
+                sourceLabel: this.getHashCompareSourceLabel(sourceLabel, result),
+                name: this.getHashCompareResultName(result),
+                url: this.getHashCompareResultUrl(result),
+                sha256: hash
+            };
         };
 
         const state = this.getSearchState?.(missing)
@@ -808,15 +904,24 @@ export const modelInfoMethods = {
             ['lora_manager_archive', results.lora_manager_archive]
         ];
         let changed = false;
+        const matches = [];
 
         sources.forEach(([sourceKey, value]) => {
             if (Array.isArray(value)) {
                 value.forEach(item => {
-                    changed = markIfMatches(item, sourceKey) || changed;
+                    const match = markIfMatches(item, sourceKey);
+                    if (match) {
+                        matches.push(match);
+                        changed = true;
+                    }
                 });
                 return;
             }
-            changed = markIfMatches(value, sourceKey) || changed;
+            const match = markIfMatches(value, sourceKey);
+            if (match) {
+                matches.push(match);
+                changed = true;
+            }
         });
 
         if (changed && state) {
@@ -824,7 +929,7 @@ export const modelInfoMethods = {
             this.persistSearchStateForWorkflow?.(workflowKey, missing, state);
             this.refreshSearchUiForMissing?.(missing, state, { workflowKey });
         }
-        return changed;
+        return matches;
     },
 
     async compareLocalModelHashesWithCurrentFinding(model = {}) {
@@ -871,10 +976,14 @@ export const modelInfoMethods = {
             return;
         }
 
-        const marked = localHashes.some(candidate => (
-            this.markSearchResultHashBadgesForMissing(missing, candidate.hash)
-        ));
-        if (marked) {
+        const hashMatches = [];
+        localHashes.forEach(candidate => {
+            hashMatches.push(
+                ...this.markSearchResultHashBadgesForMissing(missing, candidate.hash)
+            );
+        });
+        if (hashMatches.length) {
+            this.showHashCompareSuccessNotification(filename, hashMatches);
             return;
         }
 
