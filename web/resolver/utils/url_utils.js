@@ -3,10 +3,10 @@
  */
 
 /**
- * Parsuje adres URL pobierania i zwraca adres karty modelu (Model Card).
- * Obsługuje platformy HuggingFace oraz CivitAI.
+ * Parses the download URL and returns the model card URL.
+ * Supports HuggingFace and CivitAI platforms.
  * @param {string} downloadUrl 
- * @returns {string|null} URL karty modelu lub null w przypadku niepowodzenia
+ * @returns {string|null} Model card URL or null on failure
  */
 export function getModelCardUrl(downloadUrl) {
     if (!downloadUrl) return null;
