@@ -16,7 +16,7 @@ from ..log_system import create_module_logger
 log = create_module_logger(__name__)
 
 
-from ..path_utils import METADATA_DIR, read_json_safe, write_json_atomic
+from ..path_utils import METADATA_DIR, read_json_safe, write_json_atomic, save_catalog_with_backup
 POPULAR_MODELS_FILE = os.path.join(METADATA_DIR, "popular-models.json")
 MODEL_ALIASES_FILE = os.path.join(METADATA_DIR, "model-aliases.json")
 BASE_MODELS_FILE = os.path.join(METADATA_DIR, "base-models.json")

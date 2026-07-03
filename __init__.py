@@ -4258,22 +4258,21 @@ class ModelResolverExtension:
                     return web.json_response(result, status=status)
 
                 @routes.get("/model_resolver/aria2/status")
+                @routes.post("/model_resolver/aria2/status")
                 @json_api_endpoint("aria2 status")
                 async def aria2_status_route(request):
-                    """Report aria2 availability using saved settings."""
+                    """Report aria2 availability using saved settings, with optional override via POST."""
                     settings = await asyncio.to_thread(load_resolver_settings)
+                    if request.method == "POST":
+                        try:
+                            payload = await request.json()
+                            if isinstance(payload, dict) and "aria2c_path" in payload:
+                                settings = dict(settings)
+                                settings["aria2c_path"] = payload.get("aria2c_path", "")
+                        except Exception:
+                            pass
                     return web.json_response(await asyncio.to_thread(get_aria2_status, settings))
 
-                @routes.post("/model_resolver/aria2/status")
-                @json_api_endpoint("aria2 status POST")
-                async def aria2_status_check_route(request):
-                    """Report aria2 availability using an optional unsaved aria2c path."""
-                    payload = await request.json()
-                    settings = await asyncio.to_thread(load_resolver_settings)
-                    if isinstance(payload, dict) and "aria2c_path" in payload:
-                        settings = dict(settings)
-                        settings["aria2c_path"] = payload.get("aria2c_path", "")
-                    return web.json_response(await asyncio.to_thread(get_aria2_status, settings))
 
                 @routes.post("/model_resolver/aria2/start")
                 @json_api_endpoint("aria2 start", return_success_on_error=True)

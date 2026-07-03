@@ -5,13 +5,12 @@ Search the ComfyUI Manager model-list.json database with fuzzy matching.
 """
 
 import os
-import json
 import hashlib
 import shutil
 import tempfile
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
-from urllib.request import Request, urlopen
+import requests
 
 from ..matcher import normalize_filename, calculate_similarity
 
@@ -39,15 +38,13 @@ def _utc_now_iso() -> str:
 
 
 def _fetch_json_url(url: str) -> Dict[str, Any]:
-    request = Request(
-        url,
-        headers={
-            "Accept": "application/json",
-            "User-Agent": "comfyui-model-resolver",
-        },
-    )
-    with urlopen(request, timeout=HTTP_TIMEOUT) as response:
-        return json.loads(response.read().decode("utf-8"))
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": "comfyui-model-resolver",
+    }
+    response = requests.get(url, headers=headers, timeout=HTTP_TIMEOUT)
+    response.raise_for_status()
+    return response.json()
 
 
 
@@ -173,14 +170,7 @@ def update_model_list_from_remote() -> Dict[str, Any]:
     }
 
 
-def _normalize_filename(filename: str) -> str:
-    """Normalize filename for comparison."""
-    return normalize_filename(filename)
 
-
-def _similarity(a: str, b: str) -> float:
-    """Calculate similarity between two strings."""
-    return calculate_similarity(a, b)
 
 
 def search_model_list(
@@ -204,7 +194,7 @@ def search_model_list(
 
     filename_lower = filename.lower()
     filename_base = os.path.splitext(filename_lower)[0]
-    filename_norm = _normalize_filename(filename)
+    filename_norm = normalize_filename(filename)
 
     # 1. Exact match first (always try this)
     for model in models:
@@ -241,7 +231,7 @@ def search_model_list(
         if filename_base in model_base or model_base in filename_base:
             url = model.get("url", "")
             if url:
-                score = _similarity(filename_norm, _normalize_filename(model_filename))
+                score = calculate_similarity(filename_norm, normalize_filename(model_filename))
                 return {
                     "source": "model_list",
                     "filename": model_filename,
@@ -263,8 +253,8 @@ def search_model_list(
         if not model_filename:
             continue
 
-        model_norm = _normalize_filename(model_filename)
-        score = _similarity(filename_norm, model_norm)
+        model_norm = normalize_filename(model_filename)
+        score = calculate_similarity(filename_norm, model_norm)
 
         if score > best_score and score > 0.5:  # Require 50% similarity
             url = model.get("url", "")
@@ -300,7 +290,7 @@ def search_model_list_multiple(filename: str, limit: int = 5) -> List[Dict[str, 
     if not models:
         return []
 
-    filename_norm = _normalize_filename(filename)
+    filename_norm = normalize_filename(filename)
     results = []
 
     for model in models:
@@ -308,8 +298,8 @@ def search_model_list_multiple(filename: str, limit: int = 5) -> List[Dict[str, 
         if not model_filename:
             continue
 
-        model_norm = _normalize_filename(model_filename)
-        score = _similarity(filename_norm, model_norm)
+        model_norm = normalize_filename(model_filename)
+        score = calculate_similarity(filename_norm, model_norm)
 
         if score > 0.4:  # Minimum 40% similarity
             url = model.get("url", "")

@@ -24,7 +24,7 @@ log = create_module_logger(__name__)
 
 from .resolver import invalidate_local_hash_match_cache, normalize_sha256
 from .scanner import invalidate_model_files_cache
-from .path_utils import is_path_within, get_path_identity, write_json_atomic, read_json_safe, get_comfy_root_path, calculate_file_sha256 as _calculate_file_sha256, get_filename_from_path
+from .path_utils import is_path_within, get_path_identity, write_json_atomic, read_json_safe, get_comfy_root_path, calculate_file_sha256, get_filename_from_path
 from .type_utils import as_dict, as_list, first_non_empty, format_size_bytes as format_bytes, DEFAULT_BROWSER_USER_AGENT, extract_response_file_size, normalize_category_to_model_type
 
 try:
@@ -373,11 +373,6 @@ def read_completed_metadata_sha256(file_path: str) -> str:
         return ""
 
     return normalize_sha256(payload.get("sha256") or payload.get("hash"))
-
-
-def calculate_file_sha256(file_path: str) -> str:
-    """Calculate SHA256 for an existing local file."""
-    return _calculate_file_sha256(file_path) or ""
 
 
 def build_lora_manager_metadata(
@@ -1714,7 +1709,7 @@ def download_model(
                 if not existing_sha256:
                     sha256_source = "file"
                     log.info(f"File exists, verifying SHA256: {dest_path}")
-                    existing_sha256 = calculate_file_sha256(dest_path)
+                    existing_sha256 = calculate_file_sha256(dest_path) or ""
             except Exception as e:
                 error_msg = (
                     f"File already exists and its SHA256 could not be verified: {dest_path}"

@@ -942,8 +942,6 @@ def _normalize_archive_mirrors(file_info: Dict[str, Any]) -> List[Dict[str, Any]
     return non_civitai + civitai
 
 
-def _normalize_archive_image(image: Dict[str, Any]) -> Dict[str, Any]:
-    return normalize_model_image(image)
 
 
 
@@ -988,7 +986,7 @@ def _normalize_archive_version(
     if not isinstance(raw_images, list):
         raw_images = [raw_images]
     images = [
-        _normalize_archive_image(image)
+        normalize_model_image(image)
         for image in raw_images
         if isinstance(image, dict) and (image.get("url") or image.get("imageUrl") or image.get("src"))
     ]
