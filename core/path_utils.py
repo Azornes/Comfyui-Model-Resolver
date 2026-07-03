@@ -234,6 +234,7 @@ def find_metadata_sidecar_path(model_path: str) -> str:
 
     directory = os.path.dirname(model_path)
     filename = get_filename_from_path(model_path)
+    normalized_model_path = os.path.normcase(os.path.abspath(model_path))
 
     # Base name without extension
     base_name = filename.rsplit(".", 1)[0] if "." in filename else filename
@@ -252,6 +253,8 @@ def find_metadata_sidecar_path(model_path: str) -> str:
     for name in possible_names:
         if name:
             path = os.path.join(directory, name)
+            if os.path.normcase(os.path.abspath(path)) == normalized_model_path:
+                continue
             if os.path.exists(path):
                 return path
 

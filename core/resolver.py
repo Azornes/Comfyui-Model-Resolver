@@ -69,6 +69,22 @@ def _clone_hash_match(match: Dict[str, Any]) -> Dict[str, Any]:
     return cloned
 
 
+def _is_local_hash_match_candidate(model: Dict[str, Any]) -> bool:
+    model_path = str(model.get("path") or "").strip()
+    if not model_path:
+        return False
+
+    if os.path.isdir(model_path):
+        return True
+
+    filename = get_filename_from_path(model_path).lower()
+    if filename.endswith((".metadata.json", ".civitai.info")):
+        return False
+
+    file_ext = os.path.splitext(filename)[1].lower()
+    return file_ext in _MODEL_EXTENSIONS
+
+
 def _build_local_hash_match_cache(
     available_models: List[Dict[str, Any]],
 ) -> Dict[str, List[Dict[str, Any]]]:
@@ -76,6 +92,9 @@ def _build_local_hash_match_cache(
     seen_entries = set()
 
     for model in available_models:
+        if not _is_local_hash_match_candidate(model):
+            continue
+
         model_path = model.get("path", "")
         if not model_path:
             continue
