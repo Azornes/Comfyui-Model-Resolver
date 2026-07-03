@@ -7,6 +7,7 @@ Integrates all components to provide high-level API for model linking.
 import os
 import re
 import json
+import threading
 from typing import Dict, Any, List, Optional, Tuple, Callable
 from urllib.parse import unquote
 
@@ -49,6 +50,102 @@ from .path_utils import (
 
 
 # Imported from .matcher
+
+_LOCAL_HASH_MATCH_CACHE_LOCK = threading.Lock()
+_LOCAL_HASH_MATCH_CACHE: Optional[Dict[str, List[Dict[str, Any]]]] = None
+
+
+def invalidate_local_hash_match_cache() -> None:
+    """Clear the in-memory SHA256 -> local model match index."""
+    global _LOCAL_HASH_MATCH_CACHE
+    with _LOCAL_HASH_MATCH_CACHE_LOCK:
+        _LOCAL_HASH_MATCH_CACHE = None
+
+
+def _clone_hash_match(match: Dict[str, Any]) -> Dict[str, Any]:
+    cloned = dict(match)
+    if isinstance(cloned.get("model"), dict):
+        cloned["model"] = dict(cloned["model"])
+    return cloned
+
+
+def _build_local_hash_match_cache(
+    available_models: List[Dict[str, Any]],
+) -> Dict[str, List[Dict[str, Any]]]:
+    index: Dict[str, List[Dict[str, Any]]] = {}
+    seen_entries = set()
+
+    for model in available_models:
+        model_path = model.get("path", "")
+        if not model_path:
+            continue
+
+        metadata_path = find_metadata_sidecar_path(model_path)
+        if not metadata_path:
+            continue
+
+        metadata = read_json_safe(metadata_path, None)
+        if not isinstance(metadata, dict) or not metadata:
+            log.debug(f"Could not read metadata sidecar for hash match: {metadata_path}")
+            continue
+
+        metadata_hashes = _extract_model_sha256_from_metadata(metadata, model)
+        if not metadata_hashes:
+            continue
+
+        model_filename = model.get("filename") or get_filename_from_path(model_path)
+        for metadata_hash in metadata_hashes:
+            normalized_hash = normalize_sha256(metadata_hash)
+            if not normalized_hash:
+                continue
+
+            try:
+                model_identity = get_path_identity(model_path)
+            except (OSError, ValueError):
+                model_identity = os.path.normcase(os.path.abspath(model_path))
+            entry_key = (normalized_hash, model_identity or model_path)
+            if entry_key in seen_entries:
+                continue
+            seen_entries.add(entry_key)
+
+            model_with_metadata = {
+                **model,
+                "sha256": normalized_hash,
+                "metadata_path": metadata_path,
+            }
+            index.setdefault(normalized_hash, []).append(
+                {
+                    "model": model_with_metadata,
+                    "filename": model_filename,
+                    "similarity": 1.0,
+                    "confidence": 100.0,
+                    "match_type": "hash",
+                    "hash_match": True,
+                    "hash_source": "metadata",
+                    "sha256": normalized_hash,
+                    "metadata_path": metadata_path,
+                }
+            )
+
+    return index
+
+
+def _get_local_hash_match_cache(force_rescan: bool = False) -> Dict[str, List[Dict[str, Any]]]:
+    global _LOCAL_HASH_MATCH_CACHE
+    if force_rescan:
+        invalidate_local_hash_match_cache()
+
+    with _LOCAL_HASH_MATCH_CACHE_LOCK:
+        if _LOCAL_HASH_MATCH_CACHE is not None:
+            return _LOCAL_HASH_MATCH_CACHE
+
+    available_models = get_model_files(force_rescan=force_rescan)
+    index = _build_local_hash_match_cache(available_models)
+
+    with _LOCAL_HASH_MATCH_CACHE_LOCK:
+        if _LOCAL_HASH_MATCH_CACHE is None:
+            _LOCAL_HASH_MATCH_CACHE = index
+        return _LOCAL_HASH_MATCH_CACHE
 
 
 def get_workflow_url_info_for_filename(
@@ -351,57 +448,18 @@ def search_local_matches_by_hash(
     if not normalized_hash:
         return []
 
-    available_models = get_model_files(force_rescan=force_rescan)
+    index = _get_local_hash_match_cache(force_rescan=force_rescan)
+    matches = [_clone_hash_match(match) for match in index.get(normalized_hash, [])]
+
     if category and category != "unknown":
-        preferred_models = [
-            model for model in available_models if model.get("category") == category
-        ]
-        other_models = [
-            model for model in available_models if model.get("category") != category
-        ]
-        available_models = preferred_models + other_models
-
-    matches: List[Dict[str, Any]] = []
-
-    for model in available_models:
-        model_path = model.get("path", "")
-        if not model_path:
-            continue
-
-        metadata_path = find_metadata_sidecar_path(model_path)
-        if not metadata_path:
-            continue
-
-        metadata = read_json_safe(metadata_path, None)
-        if not isinstance(metadata, dict) or not metadata:
-            log.debug(f"Could not read metadata sidecar for hash match: {metadata_path}")
-            continue
-
-        metadata_hashes = _extract_model_sha256_from_metadata(metadata, model)
-        if normalized_hash not in metadata_hashes:
-            continue
-
-        model_with_metadata = {
-            **model,
-            "sha256": normalized_hash,
-            "metadata_path": metadata_path,
-        }
-        matches.append(
-            {
-                "model": model_with_metadata,
-                "filename": model.get("filename") or get_filename_from_path(model_path),
-                "similarity": 1.0,
-                "confidence": 100.0,
-                "match_type": "hash",
-                "hash_match": True,
-                "hash_source": "metadata",
-                "sha256": normalized_hash,
-                "metadata_path": metadata_path,
-            }
+        matches.sort(
+            key=lambda match: 0
+            if match.get("model", {}).get("category") == category
+            else 1
         )
-        if max_matches > 0 and len(matches) >= max_matches:
-            break
 
+    if max_matches > 0:
+        return matches[:max_matches]
     return matches
 
 

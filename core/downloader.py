@@ -22,7 +22,8 @@ from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 from .log_system import create_module_logger
 log = create_module_logger(__name__)
 
-from .resolver import normalize_sha256
+from .resolver import invalidate_local_hash_match_cache, normalize_sha256
+from .scanner import invalidate_model_files_cache
 from .path_utils import is_path_within, get_path_identity, write_json_atomic, read_json_safe, get_comfy_root_path, calculate_file_sha256 as _calculate_file_sha256, get_filename_from_path
 from .type_utils import as_dict, as_list, first_non_empty, format_size_bytes as format_bytes, DEFAULT_BROWSER_USER_AGENT, extract_response_file_size
 
@@ -1324,6 +1325,8 @@ def download_file_with_aria2(
                 log.info(
                     f"Size: {format_bytes(size)}, Time: {elapsed:.1f}s, Avg speed: {format_bytes(int(avg_speed))}/s"
                 )
+                invalidate_model_files_cache()
+                invalidate_local_hash_match_cache()
                 return result
 
             if state == "error":
@@ -1599,6 +1602,8 @@ def download_file(
         log.info(
             f"Size: {format_bytes(downloaded)}, Time: {elapsed:.1f}s, Avg speed: {format_bytes(int(avg_speed))}/s"
         )
+        invalidate_model_files_cache()
+        invalidate_local_hash_match_cache()
 
     except requests.exceptions.RequestException as e:
         error_msg = str(e)

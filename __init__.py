@@ -183,6 +183,7 @@ class ModelResolverExtension:
                     analyze_and_find_matches,
                     apply_resolution,
                     get_local_model_hash_metadata,
+                    invalidate_local_hash_match_cache,
                     search_local_matches_by_hash,
                     search_local_matches,
                 )
@@ -351,6 +352,8 @@ class ModelResolverExtension:
                         if isinstance(force_rescan, bool)
                         else str(force_rescan).lower() in {"1", "true", "yes"}
                     )
+                    if force_rescan:
+                        invalidate_local_hash_match_cache()
 
                     if workflow_json is None:
                         return web.json_response(
@@ -591,6 +594,8 @@ class ModelResolverExtension:
                 filename = data.get("filename", "")
                 category = data.get("category", "")
                 force_rescan = to_bool(data.get("force_rescan"), False)
+                if force_rescan:
+                    invalidate_local_hash_match_cache()
 
                 if not filename:
                     return web.json_response(
@@ -1018,6 +1023,8 @@ class ModelResolverExtension:
                     or request.query.get("force_rescan")
                     or ""
                 ).lower() in {"1", "true", "yes"}
+                if force_rescan:
+                    invalidate_local_hash_match_cache()
                 models = get_model_files(force_rescan=force_rescan)
                 return web.json_response(models)
 
@@ -3381,6 +3388,7 @@ class ModelResolverExtension:
                     reload_popular_databases()
                     reload_model_list()
                     invalidate_model_files_cache()
+                    invalidate_local_hash_match_cache()
                     self.search_result_timestamps.clear()
                     self.logger.info("Cleared backend search caches")
                     return web.json_response({"success": True, "cleared": "all"})
