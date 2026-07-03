@@ -40,6 +40,7 @@ export const searchPanelMethods = {
                 civitai: null,
                 civarchive: null,
                 lora_manager_archive: null,
+                custom: [],
                 local_hash_matches: []
             },
             lastAttemptSources: [],
@@ -463,6 +464,10 @@ export const searchPanelMethods = {
         return `${this.getSearchIconHtml()} <span class="mr-search-btn-text">${labelHtml}</span>`;
     },
 
+    renderCustomUrlButtonContent(text = 'Add') {
+        return `<span class="mr-btn-icon" aria-hidden="true">${getSvgIcon('link')}</span><span>${this.escapeHtml(text)}</span>`;
+    },
+
     getBackgroundSearchJobKey(workflowKey, missingSearchKey) {
         return `${workflowKey || 'workflow'}\n${missingSearchKey || 'missing'}`;
     },
@@ -643,6 +648,9 @@ export const searchPanelMethods = {
             civitai: pickResult('civitai'),
             civarchive: pickResult('civarchive'),
             lora_manager_archive: pickResult('lora_manager_archive'),
+            custom: Array.isArray(newResults.custom)
+                ? newResults.custom
+                : (Array.isArray(existingResults.custom) ? existingResults.custom : []),
             local_hash_matches: localHashMatches
         };
     },
@@ -799,7 +807,15 @@ export const searchPanelMethods = {
      * Return true when at least one downloadable source was found
      */
     hasSearchResults(data = {}) {
-        return !!(data.popular || data.model_list || data.huggingface || data.civitai || data.civarchive || data.lora_manager_archive);
+        return !!(
+            data.popular
+            || data.model_list
+            || data.huggingface
+            || data.civitai
+            || data.civarchive
+            || data.lora_manager_archive
+            || (Array.isArray(data.custom) && data.custom.length)
+        );
     },
 
     isAnyModelSearchResult(result) {
@@ -858,6 +874,7 @@ export const searchPanelMethods = {
             civitai: results.civitai || null,
             civarchive: results.civarchive || null,
             lora_manager_archive: results.lora_manager_archive || null,
+            custom: Array.isArray(results.custom) ? results.custom : [],
             local_hash_matches: Array.isArray(results.local_hash_matches) ? results.local_hash_matches : []
         };
         for (const key of this.getSearchResultKeysForSources(sources)) {
@@ -884,7 +901,8 @@ export const searchPanelMethods = {
             huggingface: 'HuggingFace',
             civitai: 'CivitAI',
             civarchive: 'CivArchive',
-            lora_manager_archive: 'LoRA Manager Archive'
+            lora_manager_archive: 'LoRA Manager Archive',
+            custom: 'Custom URL'
         };
         return labels[source] || source;
     },
@@ -1562,6 +1580,7 @@ export const searchPanelMethods = {
             'lora-archive': 'loraManager',
             lora_manager_archive: 'loraManager',
             'lora-manager-archive': 'loraManager',
+            custom: 'link',
             local: 'comfyui',
             'workflow-url': 'link',
             workflow: 'link',
@@ -1660,6 +1679,9 @@ export const searchPanelMethods = {
         if (matchType === 'model_title') {
             return { label: 'Title', className: 'strong' };
         }
+        if (matchType === 'custom_url' || result.custom_url || result.url_source === 'custom') {
+            return { label: 'Provided', className: 'strong' };
+        }
 
         const confidence = Number(result.confidence);
         if (Number.isFinite(confidence) && confidence > 0) {
@@ -1749,7 +1771,8 @@ export const searchPanelMethods = {
             stateResults.huggingface,
             stateResults.civitai,
             stateResults.civarchive,
-            stateResults.lora_manager_archive
+            stateResults.lora_manager_archive,
+            ...(Array.isArray(stateResults.custom) ? stateResults.custom : [])
         ].forEach(addResult);
 
         return hashes;
@@ -1939,6 +1962,87 @@ export const searchPanelMethods = {
         };
     },
 
+    getCustomUrlResultTableRow(missing, result = {}, hashLabelMap = null, localHashMatches = []) {
+        if (!result || typeof result !== 'object') return null;
+
+        const source = String(result.source || result.details_source || 'custom').toLowerCase().replace(/-/g, '_');
+        const sourceLabels = {
+            huggingface: 'HuggingFace',
+            civitai: 'CivitAI',
+            civarchive: 'CivArchive',
+            custom: 'Custom URL'
+        };
+        const sourceKeys = {
+            huggingface: 'huggingface',
+            civitai: 'civitai',
+            civarchive: 'civarchive',
+            custom: 'custom'
+        };
+        const downloadUrl = result.download_url || result.downloadUrl || result.url || '';
+        if (!downloadUrl) return null;
+
+        const originalFilename = this.getFilenameFromPath(missing.original_path);
+        const filename = result.filename || this.getFilenameFromPath(result.path || downloadUrl) || originalFilename || 'model';
+        const modelName = result.name || result.model_name || result.repo_id || result.repo || filename;
+        const category = this.getSourceResultDownloadCategory?.(
+            result,
+            this.getMissingDownloadCategory?.(missing, 'checkpoints') || missing.category || 'checkpoints',
+            missing
+        ) || this.getMissingDownloadCategory?.(missing, 'checkpoints') || missing.category || 'checkpoints';
+        const openUrl = source === 'huggingface'
+            ? (result.page_url || result.version_url || getModelCardUrl(downloadUrl) || result.url)
+            : (result.version_url || result.url || result.platform_url || getModelCardUrl(downloadUrl));
+        const version = result.version_name || '';
+        const secondary = source === 'huggingface'
+            ? [result.path && result.path !== filename ? result.path : ''].filter(Boolean).join(' / ')
+            : [
+                modelName && modelName !== filename ? filename : '',
+                result.type || '',
+                result.base_model || ''
+            ].filter(Boolean).join(' / ');
+        const detailsContext = ['civitai', 'civarchive'].includes(source) && (result.model_id || result.modelId)
+            ? {
+                ...result,
+                source,
+                details_source: source,
+                model_id: result.model_id || result.modelId,
+                version_id: result.version_id || result.versionId,
+                name: modelName,
+                filename,
+                missing_key: this.getMissingModelKey(missing),
+                category
+            }
+            : null;
+        const localHashMatchIdentities = this.getLocalHashMatchIdentitiesForResult?.(
+            localHashMatches,
+            source,
+            result
+        ) || [];
+        const hashMatchLabel = this.getHashMatchLabelForSearchResult?.(
+            result,
+            hashLabelMap,
+            localHashMatchIdentities
+        ) || '';
+
+        return {
+            sourceKey: sourceKeys[source] || 'custom',
+            sourceLabel: sourceLabels[source] || 'Custom URL',
+            model: modelName,
+            version,
+            filename,
+            secondary,
+            match: this.getSearchResultMatchDisplay(result, 'Provided', 'strong', hashMatchLabel),
+            size: this.formatSearchResultSize(result),
+            downloadUrl,
+            downloadFilename: filename,
+            category,
+            openUrl,
+            searchedAt: this.getSearchResultTimestamp(result),
+            localHashMatchIdentities,
+            detailsContext
+        };
+    },
+
     renderKnownDownloadPanel(missing, downloadSource) {
         let html = `<div class="mr-download-section">`;
         html += this.renderSearchControls(missing, { buttonText: 'Search Again' });
@@ -2102,6 +2206,8 @@ export const searchPanelMethods = {
         const searchSourceListId = `search-source-list-${missing.node_id}-${missing.widget_index}`;
         const searchBaseSelectId = `search-base-select-${missing.node_id}-${missing.widget_index}`;
         const searchBaseListId = `search-base-list-${missing.node_id}-${missing.widget_index}`;
+        const customUrlAddId = `custom-url-add-${missing.node_id}-${missing.widget_index}`;
+        const customUrlInputId = `custom-url-${missing.node_id}-${missing.widget_index}`;
         const state = this.getSearchState(missing);
         const selectedSource = state.selectedSource || 'all';
         const selectedBaseModel = state.selectedBaseModel || this.getDefaultSearchBaseModel();
@@ -2129,6 +2235,18 @@ export const searchPanelMethods = {
         html += `<input id="${searchBaseSelectId}" class="mr-download-target-input mr-search-base-select" type="text" autocomplete="off" data-value="${this.escapeHtml(selectedBaseModel)}" data-missing-search-key="${this.escapeHtml(this.getMissingSearchKey(missing))}" value="${this.escapeHtml(this.getSearchBaseModelLabel(selectedBaseModel, missing))}">`;
         html += `<div id="${searchBaseListId}" class="mr-download-target-list mr-search-base-list"></div>`;
         html += `</div>`;
+        html += `</div>`;
+        html += `</div>`;
+        html += `<div class="mr-custom-url-bar">`;
+        html += `<div class="mr-search-source-picker mr-custom-url-button-picker">`;
+        html += `<label class="mr-search-source-picker-label" for="${customUrlAddId}">Link</label>`;
+        html += `<button id="${customUrlAddId}" class="mr-btn mr-btn-link mr-custom-url-add-btn" type="button">`;
+        html += this.renderCustomUrlButtonContent('Add');
+        html += `</button>`;
+        html += `</div>`;
+        html += `<div class="mr-search-source-picker mr-custom-url-input-picker">`;
+        html += `<label class="mr-search-source-picker-label" for="${customUrlInputId}">URL</label>`;
+        html += `<input id="${customUrlInputId}" class="mr-download-target-input mr-custom-url-input" type="text" autocomplete="off" spellcheck="false" placeholder="https://...">`;
         html += `</div>`;
         html += `</div>`;
         return html;

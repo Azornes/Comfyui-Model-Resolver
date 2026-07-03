@@ -250,6 +250,8 @@ class ModelResolverExtension:
                 )
                 from .core.sources.huggingface import (
                     search_huggingface_for_file,
+                    parse_huggingface_url,
+                    get_huggingface_download_url,
                     get_author_fallback_index_status,
                     refresh_author_fallback_index,
                     check_huggingface_token,
@@ -259,6 +261,7 @@ class ModelResolverExtension:
                 from .core.sources.civitai import (
                     search_civitai_for_file,
                     search_civitai,
+                    parse_civitai_url,
                     get_civitai_download_url,
                     get_civitai_model_details,
                     resolve_urn,
@@ -270,6 +273,7 @@ class ModelResolverExtension:
                     CivArchiveSearchError,
                     is_civarchive_available,
                     search_civarchive_for_file,
+                    parse_civarchive_url,
                     resolve_civarchive_by_hash,
                     resolve_civarchive_model_version,
                     get_civarchive_model_details,
@@ -2174,6 +2178,617 @@ class ModelResolverExtension:
                         self.logger.warning(
                             f"Remote metadata no-match sidecar save failed: {metadata_error}"
                         )
+                return web.json_response(response)
+
+            def _select_custom_url_file(files, expected_filename=""):
+                """Pick the most likely downloadable model file from provider details."""
+                if not isinstance(files, list):
+                    files = [files] if files else []
+
+                candidates = [item for item in files if isinstance(item, dict)]
+                if not candidates:
+                    return {}
+
+                expected = os.path.basename(str(expected_filename or "")).lower()
+
+                def file_name(file_info):
+                    return str(
+                        file_info.get("name")
+                        or file_info.get("filename")
+                        or file_info.get("path")
+                        or ""
+                    ).strip()
+
+                def has_download(file_info):
+                    return bool(
+                        file_info.get("download_url")
+                        or file_info.get("downloadUrl")
+                        or file_info.get("url")
+                    )
+
+                if expected:
+                    for file_info in candidates:
+                        if os.path.basename(file_name(file_info)).lower() == expected:
+                            return file_info
+
+                for file_info in candidates:
+                    if file_info.get("primary") and has_download(file_info):
+                        return file_info
+
+                for file_info in candidates:
+                    if str(file_info.get("type") or "").lower() == "model" and has_download(file_info):
+                        return file_info
+
+                for file_info in candidates:
+                    if has_download(file_info):
+                        return file_info
+
+                return candidates[0]
+
+            def _custom_result_timestamp():
+                return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+            def _quote_url_path(value):
+                from urllib.parse import quote as _quote
+
+                return _quote(str(value or "").replace("\\", "/"), safe="/")
+
+            def _build_civitai_custom_result(details, expected_filename="", api_key=None):
+                if not isinstance(details, dict):
+                    return None
+
+                selected_version = (
+                    details.get("selected_version")
+                    if isinstance(details.get("selected_version"), dict)
+                    else {}
+                )
+                version_id = details.get("version_id") or selected_version.get("id")
+                model_id = details.get("model_id")
+                file_info = _select_custom_url_file(
+                    selected_version.get("files") or [],
+                    expected_filename,
+                )
+                filename = (
+                    file_info.get("name")
+                    or file_info.get("filename")
+                    or os.path.basename(str(expected_filename or ""))
+                    or details.get("name")
+                    or f"civitai-{version_id or model_id}"
+                )
+                download_url = (
+                    file_info.get("download_url")
+                    or file_info.get("downloadUrl")
+                    or (get_civitai_download_url(version_id, api_key) if version_id else "")
+                )
+                if not download_url:
+                    return None
+
+                hashes = (
+                    file_info.get("hashes")
+                    if isinstance(file_info.get("hashes"), dict)
+                    else {}
+                )
+                sha256 = (
+                    file_info.get("sha256")
+                    or file_info.get("hash")
+                    or hashes.get("SHA256")
+                    or hashes.get("sha256")
+                )
+                version_url = (
+                    details.get("version_url")
+                    or selected_version.get("url")
+                    or (
+                        f"https://civitai.com/models/{model_id}?modelVersionId={version_id}"
+                        if model_id and version_id
+                        else details.get("url")
+                    )
+                )
+                return {
+                    "source": "civitai",
+                    "details_source": "civitai",
+                    "model_id": model_id,
+                    "version_id": version_id,
+                    "name": details.get("name") or filename,
+                    "version_name": selected_version.get("name") or "",
+                    "type": details.get("type") or file_info.get("type") or "",
+                    "filename": filename,
+                    "url": version_url or details.get("url"),
+                    "version_url": version_url or details.get("url"),
+                    "download_url": download_url,
+                    "size": file_info.get("size"),
+                    "base_model": selected_version.get("base_model"),
+                    "tags": details.get("tags") or [],
+                    "trained_words": selected_version.get("trained_words") or [],
+                    "images": details.get("images") or selected_version.get("images") or [],
+                    "description": selected_version.get("description")
+                    or details.get("description")
+                    or "",
+                    "model_description": details.get("description") or "",
+                    "sha256": sha256,
+                    "hashes": hashes,
+                    "match_type": "custom_url",
+                    "custom_url": True,
+                }
+
+            def _resolve_civitai_version_custom_result(version_id, expected_filename="", api_key=None):
+                try:
+                    import requests
+                except Exception:
+                    requests = None
+
+                if not requests or not version_id:
+                    return None
+
+                headers = {}
+                if api_key:
+                    headers["Authorization"] = f"Bearer {api_key}"
+
+                try:
+                    response = requests.get(
+                        f"https://civitai.com/api/v1/model-versions/{version_id}",
+                        headers=headers,
+                        timeout=20,
+                    )
+                    try:
+                        if response.status_code != 200:
+                            return None
+                        data = response.json()
+                    finally:
+                        response.close()
+                except Exception as e:
+                    self.logger.warning(
+                        f"CivitAI custom URL version lookup failed: version_id={version_id}, error={e}"
+                    )
+                    return None
+
+                model_block = data.get("model") if isinstance(data.get("model"), dict) else {}
+                model_id = data.get("modelId") or data.get("model_id") or model_block.get("id")
+                if model_id:
+                    try:
+                        details = get_civitai_model_details(model_id, version_id, api_key)
+                        result = _build_civitai_custom_result(
+                            details,
+                            expected_filename=expected_filename,
+                            api_key=api_key,
+                        )
+                        if result:
+                            return result
+                    except Exception as e:
+                        self.logger.warning(
+                            f"CivitAI custom URL details lookup failed: model_id={model_id}, version_id={version_id}, error={e}"
+                        )
+
+                file_info = _select_custom_url_file(data.get("files") or [], expected_filename)
+                hashes = (
+                    file_info.get("hashes")
+                    if isinstance(file_info.get("hashes"), dict)
+                    else {}
+                )
+                sha256 = (
+                    file_info.get("sha256")
+                    or file_info.get("hash")
+                    or hashes.get("SHA256")
+                    or hashes.get("sha256")
+                )
+                filename = (
+                    file_info.get("name")
+                    or file_info.get("filename")
+                    or os.path.basename(str(expected_filename or ""))
+                    or f"civitai-{version_id}"
+                )
+                download_url = (
+                    file_info.get("downloadUrl")
+                    or file_info.get("download_url")
+                    or get_civitai_download_url(version_id, api_key)
+                )
+                model_url = (
+                    f"https://civitai.com/models/{model_id}?modelVersionId={version_id}"
+                    if model_id
+                    else f"https://civitai.com/api/download/models/{version_id}"
+                )
+                return {
+                    "source": "civitai",
+                    "details_source": "civitai",
+                    "model_id": model_id,
+                    "version_id": version_id,
+                    "name": model_block.get("name") or data.get("modelName") or filename,
+                    "version_name": data.get("name") or "",
+                    "type": model_block.get("type") or data.get("modelType") or file_info.get("type") or "",
+                    "filename": filename,
+                    "url": model_url,
+                    "version_url": model_url,
+                    "download_url": download_url,
+                    "size": file_info.get("size")
+                    or ((file_info.get("sizeKB") or 0) * 1024 if file_info.get("sizeKB") else None),
+                    "base_model": data.get("baseModel"),
+                    "tags": model_block.get("tags") or [],
+                    "trained_words": data.get("trainedWords") or data.get("trained_words") or [],
+                    "images": data.get("images") or [],
+                    "description": data.get("description") or "",
+                    "sha256": sha256,
+                    "hashes": hashes,
+                    "match_type": "custom_url",
+                    "custom_url": True,
+                }
+
+            def _build_civarchive_custom_result(details, expected_filename=""):
+                if not isinstance(details, dict):
+                    return None
+
+                selected_version = (
+                    details.get("selected_version")
+                    if isinstance(details.get("selected_version"), dict)
+                    else {}
+                )
+                file_info = _select_custom_url_file(
+                    selected_version.get("files") or [],
+                    expected_filename,
+                )
+                download_urls = file_info.get("download_urls") or []
+                if not isinstance(download_urls, list):
+                    download_urls = [download_urls]
+                download_url = (
+                    file_info.get("download_url")
+                    or file_info.get("downloadUrl")
+                    or (download_urls[0] if download_urls else "")
+                )
+                if not download_url:
+                    return None
+
+                filename = (
+                    file_info.get("name")
+                    or file_info.get("filename")
+                    or os.path.basename(str(expected_filename or ""))
+                    or details.get("name")
+                    or "model"
+                )
+                hashes = (
+                    file_info.get("hashes")
+                    if isinstance(file_info.get("hashes"), dict)
+                    else {}
+                )
+                sha256 = (
+                    file_info.get("sha256")
+                    or file_info.get("hash")
+                    or hashes.get("SHA256")
+                    or hashes.get("sha256")
+                )
+                version_id = details.get("version_id") or selected_version.get("id")
+                model_id = details.get("model_id")
+                version_url = (
+                    details.get("version_url")
+                    or selected_version.get("url")
+                    or (
+                        f"https://civarchive.com/models/{model_id}?modelVersionId={version_id}"
+                        if model_id and version_id
+                        else details.get("url")
+                    )
+                )
+                return {
+                    "source": "civarchive",
+                    "details_source": "civarchive",
+                    "model_id": model_id,
+                    "version_id": version_id,
+                    "name": details.get("name") or filename,
+                    "version_name": selected_version.get("name") or "",
+                    "type": details.get("type") or file_info.get("type") or "",
+                    "filename": filename,
+                    "url": version_url or details.get("url"),
+                    "version_url": version_url or details.get("url"),
+                    "platform_url": details.get("platform_url")
+                    or selected_version.get("platform_url"),
+                    "download_url": download_url,
+                    "download_urls": [url for url in download_urls if url],
+                    "size": file_info.get("size"),
+                    "base_model": selected_version.get("base_model"),
+                    "tags": details.get("tags") or [],
+                    "trained_words": selected_version.get("trained_words") or [],
+                    "images": details.get("images") or selected_version.get("images") or [],
+                    "description": selected_version.get("description")
+                    or details.get("description")
+                    or "",
+                    "sha256": sha256,
+                    "hash": sha256,
+                    "hashes": hashes,
+                    "platform": details.get("platform"),
+                    "match_type": "custom_url",
+                    "custom_url": True,
+                }
+
+            def _build_huggingface_custom_result(url, expected_filename="", token=None):
+                from urllib.parse import unquote
+
+                parsed = parse_huggingface_url(url)
+                if not parsed:
+                    return None
+
+                repo_id = parsed.get("repo") or ""
+                branch = parsed.get("branch") or "main"
+                file_path = unquote(parsed.get("filename") or "")
+                if not repo_id or not file_path:
+                    return None
+
+                filename = os.path.basename(file_path.replace("\\", "/"))
+                download_url = get_huggingface_download_url(repo_id, file_path, branch)
+                if not looks_like_model_file(download_url, expected_filename or filename):
+                    return None
+
+                headers = {}
+                if token:
+                    headers["Authorization"] = f"Bearer {token}"
+                size = fetch_remote_file_size_cached(
+                    download_url,
+                    headers=headers,
+                    timeout=10,
+                )
+                page_url = (
+                    f"https://huggingface.co/{repo_id}/blob/{branch}/{_quote_url_path(file_path)}"
+                )
+                return {
+                    "source": "huggingface",
+                    "details_source": "huggingface",
+                    "repo_id": repo_id,
+                    "repo": repo_id,
+                    "path": file_path,
+                    "filename": filename,
+                    "name": repo_id,
+                    "url": download_url,
+                    "download_url": download_url,
+                    "page_url": page_url,
+                    "version_url": page_url,
+                    "size": size,
+                    "match_type": "custom_url",
+                    "custom_url": True,
+                }
+
+            def _build_direct_custom_download_result(url, source, expected_filename=""):
+                from urllib.parse import urlparse
+
+                if not looks_like_model_file(url, expected_filename):
+                    return None
+
+                parsed = urlparse(url)
+                filename = (
+                    os.path.basename(parsed.path)
+                    or os.path.basename(str(expected_filename or ""))
+                    or "model"
+                )
+                if expected_filename and "." in os.path.basename(str(expected_filename)):
+                    filename = os.path.basename(str(expected_filename))
+                source = str(source or "custom").strip().lower()
+                source_label = {
+                    "civarchive": "CivArchive",
+                    "civitai": "CivitAI",
+                    "huggingface": "HuggingFace",
+                }.get(source, "Custom URL")
+                return {
+                    "source": source,
+                    "details_source": source,
+                    "name": source_label,
+                    "filename": filename,
+                    "url": url,
+                    "version_url": url,
+                    "download_url": url,
+                    "match_type": "custom_url",
+                    "custom_url": True,
+                }
+
+            def _collect_custom_url_local_hash_matches(result, category):
+                source_key = str(result.get("source") or "custom").strip().lower()
+                sha256 = normalize_sha256(extract_sha256_from_metadata(result))
+                if not sha256:
+                    return []
+
+                try:
+                    matches = search_local_matches_by_hash(
+                        sha256,
+                        category=category or None,
+                        max_matches=20,
+                    )
+                except Exception as hash_error:
+                    self.logger.warning(
+                        f"Custom URL local metadata hash lookup failed for {source_key}:{sha256}: {hash_error}"
+                    )
+                    return []
+
+                return [
+                    {
+                        **match,
+                        "hash_lookup_source": source_key,
+                        "hash_lookup_filename": result.get("filename")
+                        or result.get("path")
+                        or "",
+                        "hash_lookup_sha256": sha256,
+                    }
+                    for match in matches
+                ]
+
+            @routes.post("/model_resolver/custom-url")
+            @json_api_endpoint("custom-url")
+            async def custom_url(request):
+                """Resolve a user-provided provider URL into a normal search result."""
+                data = await request.json()
+                raw_url = str(data.get("url") or data.get("custom_url") or "").strip()
+                if not raw_url:
+                    return web.json_response(
+                        {"error": "URL is required"}, status=400
+                    )
+
+                if raw_url.startswith("hf://"):
+                    normalized_url = raw_url
+                else:
+                    from urllib.parse import urlparse
+
+                    parsed_input = urlparse(raw_url)
+                    if parsed_input.scheme not in {"http", "https"}:
+                        return web.json_response(
+                            {"error": "Only http, https, and hf:// URLs are supported"},
+                            status=400,
+                        )
+                    normalized_url = raw_url
+
+                category = data.get("category") or ""
+                expected_filename = (
+                    data.get("filename")
+                    or get_filename_from_path(data.get("original_path") or "")
+                    or ""
+                )
+                civitai_key = data.get("civitai_key", "")
+                hf_token = data.get("hf_token", "")
+
+                result = None
+                source = ""
+                try:
+                    civitai_parsed = parse_civitai_url(normalized_url)
+                except Exception:
+                    civitai_parsed = None
+                try:
+                    civarchive_parsed = parse_civarchive_url(normalized_url)
+                except Exception:
+                    civarchive_parsed = None
+
+                if civitai_parsed:
+                    source = "civitai"
+                    model_id = civitai_parsed.get("model_id")
+                    version_id = civitai_parsed.get("version_id")
+                    if model_id:
+                        details = await asyncio.to_thread(
+                            get_civitai_model_details,
+                            model_id,
+                            version_id,
+                            civitai_key or None,
+                        )
+                        result = _build_civitai_custom_result(
+                            details,
+                            expected_filename=expected_filename,
+                            api_key=civitai_key or None,
+                        )
+                    elif version_id:
+                        result = await asyncio.to_thread(
+                            _resolve_civitai_version_custom_result,
+                            version_id,
+                            expected_filename,
+                            civitai_key or None,
+                        )
+                    if not result and version_id:
+                        result = {
+                            "source": "civitai",
+                            "details_source": "civitai",
+                            "version_id": version_id,
+                            "name": expected_filename or f"CivitAI version {version_id}",
+                            "filename": expected_filename or f"civitai-{version_id}",
+                            "url": normalized_url,
+                            "version_url": normalized_url,
+                            "download_url": get_civitai_download_url(
+                                version_id,
+                                civitai_key or None,
+                            ),
+                            "match_type": "custom_url",
+                            "custom_url": True,
+                        }
+                elif civarchive_parsed:
+                    source = "civarchive"
+                    if civarchive_parsed.get("sha256"):
+                        result = await asyncio.to_thread(
+                            resolve_civarchive_by_hash,
+                            civarchive_parsed.get("sha256"),
+                            expected_filename,
+                            False,
+                            normalize_category_to_model_type(category),
+                        )
+                    else:
+                        model_id = civarchive_parsed.get("model_id")
+                        version_id = civarchive_parsed.get("version_id")
+                        if model_id:
+                            result = await asyncio.to_thread(
+                                resolve_civarchive_model_version,
+                                model_id,
+                                version_id,
+                                expected_filename or str(model_id),
+                                False,
+                                True,
+                            )
+                            if not result:
+                                details = await asyncio.to_thread(
+                                    get_civarchive_model_details,
+                                    model_id,
+                                    version_id,
+                                    True,
+                                )
+                                result = _build_civarchive_custom_result(
+                                    details,
+                                    expected_filename=expected_filename,
+                                )
+                    if result:
+                        result = dict(result)
+                        result["source"] = "civarchive"
+                        result["details_source"] = "civarchive"
+                        result["match_type"] = "custom_url"
+                        result["custom_url"] = True
+                else:
+                    from urllib.parse import urlparse
+
+                    parsed_direct = urlparse(normalized_url)
+                    direct_host = parsed_direct.netloc.lower()
+                    if (
+                        direct_host.endswith("civarchive.com")
+                        and "/api/download/" in parsed_direct.path
+                    ):
+                        source = "civarchive"
+                        result = _build_direct_custom_download_result(
+                            normalized_url,
+                            "civarchive",
+                            expected_filename,
+                        )
+                    else:
+                        result = await asyncio.to_thread(
+                            _build_huggingface_custom_result,
+                            normalized_url,
+                            expected_filename,
+                            hf_token or None,
+                        )
+                        if result:
+                            source = "huggingface"
+
+                if not result:
+                    return web.json_response(
+                        {
+                            "error": (
+                                "Unsupported or unresolved URL. Use a HuggingFace file URL, "
+                                "CivitAI model/download URL, or CivArchive model/hash URL."
+                            )
+                        },
+                        status=400,
+                    )
+
+                result = dict(result)
+                result["provided_url"] = normalized_url
+                result["url_source"] = "custom"
+                result["searched_at"] = result.get("searched_at") or _custom_result_timestamp()
+                result.setdefault("category", category)
+                if expected_filename and not result.get("filename"):
+                    result["filename"] = expected_filename
+
+                if not (result.get("download_url") or result.get("url")):
+                    return web.json_response(
+                        {"error": "The URL resolved, but no download URL was found"},
+                        status=400,
+                    )
+
+                source = source or result.get("source") or "custom"
+                local_hash_matches = _collect_custom_url_local_hash_matches(
+                    result,
+                    category,
+                )
+                response = {
+                    "success": True,
+                    "source": source,
+                    "result": result,
+                    "custom": [result],
+                    "searched_sources": ["custom"],
+                    "local_hash_matches": local_hash_matches,
+                }
+                response[source] = result
                 return web.json_response(response)
 
             @routes.post("/model_resolver/model-details")

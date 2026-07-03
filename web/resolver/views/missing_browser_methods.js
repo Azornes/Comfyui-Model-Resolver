@@ -301,6 +301,13 @@ export const missingBrowserMethods = {
             candidates.push(results.lora_manager_archive);
         }
 
+        if (['huggingface', 'civitai', 'civarchive'].includes(source)) {
+            const customResults = Array.isArray(results.custom) ? results.custom : [];
+            customResults
+                .filter(result => String(result?.source || '').toLowerCase().replace(/-/g, '_') === source)
+                .forEach(result => candidates.push(result));
+        }
+
         const downloadSource = missing.download_source || {};
         const mappedDownloadSource = {
             model_list: 'local',

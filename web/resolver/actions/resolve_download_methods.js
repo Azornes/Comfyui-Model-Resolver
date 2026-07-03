@@ -2017,6 +2017,111 @@ export const resolveDownloadMethods = {
     },
 
     /**
+     * Add a user-provided provider URL to the cached search results.
+     */
+    async addCustomUrlResult(missing, inputEl, addBtn, { workflowKey = this.getWorkflowScopedQueueKey() } = {}) {
+        const url = String(inputEl?.value || '').trim();
+        if (!url) {
+            this.showNotification?.('Paste a URL first.', 'warning');
+            inputEl?.focus?.();
+            return;
+        }
+
+        const state = this.getSearchStateForWorkflow(workflowKey, missing);
+        const tokens = this.getStoredTokens();
+        const originalButtonHtml = addBtn?.innerHTML || '';
+        if (addBtn) {
+            addBtn.disabled = true;
+            addBtn.innerHTML = this.renderCustomUrlButtonContent?.('Adding') || 'Adding';
+        }
+        if (inputEl) {
+            inputEl.disabled = true;
+        }
+
+        try {
+            const filename = this.getFilenameFromPath(missing.original_path);
+            const data = await this.fetchJson('/model_resolver/custom-url', {
+                method: 'POST',
+                body: JSON.stringify({
+                    url,
+                    filename,
+                    original_path: missing.original_path || '',
+                    category: missing.category || this.getNodeTypeDownloadCategory?.(missing.node_type) || '',
+                    civitai_key: tokens.civitai_key,
+                    hf_token: tokens.hf_token
+                }),
+                silent: true
+            }, 'Add custom URL');
+
+            const result = data?.result || (Array.isArray(data?.custom) ? data.custom[0] : null);
+            if (!result || typeof result !== 'object') {
+                throw new Error('The URL did not resolve to a downloadable model.');
+            }
+
+            const searchedAt = new Date().toISOString();
+            const customResult = this.withSearchResultTimestamp?.(result, result.searched_at || searchedAt) || result;
+            const currentResults = state.results || this.createEmptySearchState().results;
+            const existingCustom = Array.isArray(currentResults.custom) ? currentResults.custom : [];
+            const nextSignature = this.getSearchResultSignature(customResult) || (customResult.provided_url || url);
+            const nextCustom = [
+                ...existingCustom.filter(existing => (
+                    (this.getSearchResultSignature(existing) || existing.provided_url || '') !== nextSignature
+                )),
+                customResult
+            ];
+            const localHashMatches = this.mergeLocalMatches
+                ? this.mergeLocalMatches(
+                    Array.isArray(currentResults.local_hash_matches) ? currentResults.local_hash_matches : [],
+                    Array.isArray(data.local_hash_matches) ? data.local_hash_matches : []
+                )
+                : [
+                    ...(Array.isArray(currentResults.local_hash_matches) ? currentResults.local_hash_matches : []),
+                    ...(Array.isArray(data.local_hash_matches) ? data.local_hash_matches : [])
+                ];
+
+            state.results = {
+                ...currentResults,
+                custom: nextCustom,
+                local_hash_matches: localHashMatches
+            };
+            state.lastAttemptSources = Array.from(new Set([
+                ...(Array.isArray(state.lastAttemptSources) ? state.lastAttemptSources : []),
+                'custom'
+            ]));
+            state.lastAttemptFound = true;
+            state.lastAttemptError = null;
+
+            if (customResult.source === 'civitai' || customResult.source === 'civarchive') {
+                missing.civitai_search_result = {
+                    base_model: customResult.base_model,
+                    tags: customResult.tags || [],
+                    trained_words: customResult.trained_words || [],
+                    filename: customResult.filename,
+                    name: customResult.name,
+                    type: customResult.type
+                };
+            }
+
+            this.persistSearchStateForWorkflow(workflowKey, missing, state);
+            this.refreshSearchUiForMissing(missing, state, { workflowKey });
+            this.applySearchResultSuggestion?.(missing);
+            if (inputEl) inputEl.value = '';
+            this.showNotification?.('Link added.', 'success');
+        } catch (error) {
+            console.error('Model Resolver: custom URL add failed:', error);
+            this.showNotification?.(error.message || 'Failed to add link.', 'error');
+        } finally {
+            if (addBtn) {
+                addBtn.disabled = false;
+                addBtn.innerHTML = originalButtonHtml || (this.renderCustomUrlButtonContent?.('Add') || 'Add');
+            }
+            if (inputEl) {
+                inputEl.disabled = false;
+            }
+        }
+    },
+
+    /**
      * Search online for a model
      */
     async searchOnline(missing, { workflowKey = this.getWorkflowScopedQueueKey(), forceSearch = false } = {}) {
@@ -2558,6 +2663,19 @@ export const resolveDownloadMethods = {
             });
         }
 
+        const customUrlInput = container.querySelector(`#custom-url-${missing.node_id}-${missing.widget_index}`);
+        const customUrlAddBtn = container.querySelector(`#custom-url-add-${missing.node_id}-${missing.widget_index}`);
+        if (customUrlInput && customUrlAddBtn && customUrlAddBtn.dataset.mlCustomUrlBound !== 'true') {
+            customUrlAddBtn.dataset.mlCustomUrlBound = 'true';
+            const submitCustomUrl = () => this.addCustomUrlResult(missing, customUrlInput, customUrlAddBtn);
+            customUrlAddBtn.addEventListener('click', submitCustomUrl);
+            customUrlInput.addEventListener('keydown', (event) => {
+                if (event.key !== 'Enter') return;
+                event.preventDefault();
+                submitCustomUrl();
+            });
+        }
+
         const sourceSelect = container.querySelector(`#search-source-select-${missing.node_id}-${missing.widget_index}`);
         const sourceList = container.querySelector(`#search-source-list-${missing.node_id}-${missing.widget_index}`);
         if (sourceSelect && sourceList && sourceSelect.dataset.mlSearchSourceBound !== 'true') {
@@ -2683,6 +2801,9 @@ export const resolveDownloadMethods = {
         const civitaiResult = results.civitai ? (Array.isArray(results.civitai) ? results.civitai[0] : results.civitai) : null;
         const civarchiveResult = results.civarchive ? (Array.isArray(results.civarchive) ? results.civarchive[0] : results.civarchive) : null;
         const loraManagerArchiveResult = results.lora_manager_archive ? (Array.isArray(results.lora_manager_archive) ? results.lora_manager_archive[0] : results.lora_manager_archive) : null;
+        const customResults = Array.isArray(results.custom)
+            ? results.custom.filter(result => result && typeof result === 'object')
+            : [];
         const localHashMatches = [
             ...(Array.isArray(results.local_hash_matches) ? results.local_hash_matches : []),
             ...(Array.isArray(missing.matches) ? missing.matches.filter(match => match?.hash_lookup_source) : [])
@@ -2700,7 +2821,7 @@ export const resolveDownloadMethods = {
             };
         };
         const knownDownloadRow = this.getDownloadSourceTableRow(missing, missing.download_source, hashLabelMap);
-        const hasResults = knownDownloadRow || popular || modelListResult || hfResult || civitaiResult || civarchiveResult || loraManagerArchiveResult;
+        const hasResults = knownDownloadRow || popular || modelListResult || hfResult || civitaiResult || civarchiveResult || loraManagerArchiveResult || customResults.length;
         const progressHtml = this.renderSearchProgress(state);
         const hasActiveProgress = this.hasActiveSearchProgress(state);
 
@@ -2936,6 +3057,15 @@ export const resolveDownloadMethods = {
                 }
             });
         }
+
+        customResults.forEach((customResult) => {
+            addRow(this.getCustomUrlResultTableRow(
+                missing,
+                customResult,
+                hashLabelMap,
+                localHashMatches
+            ));
+        });
 
         const html = `${progressHtml}${statusHtml}${this.renderSearchResultsTable(rows)}`;
         container.innerHTML = html;
