@@ -743,12 +743,30 @@ def extract_sha256_from_metadata(metadata: Any) -> str:
                 if normalized:
                     return normalized
 
+    # Obsługa słownika file_info (np. z popular/model_list)
+    file_info = metadata.get("file_info")
+    if isinstance(file_info, dict):
+        for key in ("sha256", "hash", "SHA256", "Sha256"):
+            val = file_info.get(key)
+            if val:
+                normalized = normalize_sha256(val)
+                if normalized:
+                    return normalized
+        f_hashes = file_info.get("hashes")
+        if isinstance(f_hashes, dict):
+            for key in ("SHA256", "sha256", "Sha256", "hash"):
+                val = f_hashes.get(key)
+                if val:
+                    normalized = normalize_sha256(val)
+                    if normalized:
+                        return normalized
+
     # Obsługa zagnieżdżonej listy plików w metadanych Civitai
     files = metadata.get("files")
     if isinstance(files, list):
-        for file_info in files:
-            if isinstance(file_info, dict):
-                f_hashes = file_info.get("hashes")
+        for file_info_item in files:
+            if isinstance(file_info_item, dict):
+                f_hashes = file_info_item.get("hashes")
                 if isinstance(f_hashes, dict):
                     for key in ("SHA256", "sha256", "Sha256", "hash"):
                         val = f_hashes.get(key)
@@ -875,6 +893,44 @@ def extract_file_size(file_info: Dict[str, Any]) -> Optional[int]:
                 if size:
                     return size
 
+    return None
+
+
+def normalize_category_to_model_type(category: str) -> str:
+    """
+    Mapuje nazwę kategorii pobierania/ComfyUI (np. 'checkpoints') na znormalizowany typ modelu (np. 'checkpoint').
+    """
+    if not category:
+        return ""
+    normalized = normalize_download_category(category)
+    type_map = {
+        "checkpoints": "checkpoint",
+        "loras": "lora",
+        "vae": "vae",
+        "text_encoders": "text_encoder",
+        "clip": "clip",
+        "clip_vision": "clip_vision",
+        "controlnet": "controlnet",
+        "upscale_models": "upscale",
+        "diffusion_models": "diffusion_model",
+        "embeddings": "embedding",
+    }
+    return type_map.get(normalized, normalized.rstrip("s"))
+
+
+def check_credential_preconditions(value: Optional[str], token_name: str) -> Optional[Dict[str, Any]]:
+    """
+    Sprawdza, czy poświadczenie (np. token, klucz) nie jest puste.
+    Zwraca standardowy słownik błędu, jeśli poświadczenie jest puste, w przeciwnym razie None.
+    """
+    clean_val = (value or "").strip()
+    if not clean_val:
+        return {
+            "success": False,
+            "valid": False,
+            "status": "missing",
+            "message": f"Paste a {token_name} first.",
+        }
     return None
 
 

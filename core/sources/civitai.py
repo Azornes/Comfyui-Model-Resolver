@@ -76,15 +76,12 @@ def build_civitai_session_cookie(session_token: Optional[str]) -> str:
 
 def check_civitai_session_token(session_token: Optional[str]) -> Dict[str, Any]:
     """Check whether a CivitAI browser session token is accepted by civitai.com."""
-    token = (session_token or "").strip()
-    if not token:
-        return {
-            "success": False,
-            "valid": False,
-            "status": "missing",
-            "message": "Paste a CivitAI session token first.",
-        }
+    from ..type_utils import check_credential_preconditions
+    precheck = check_credential_preconditions(session_token, "CivitAI session token")
+    if precheck:
+        return precheck
 
+    token = (session_token or "").strip()
     headers = {
         "accept": "application/json",
         "Cookie": build_civitai_session_cookie(token),
@@ -105,15 +102,12 @@ def check_civitai_session_token(session_token: Optional[str]) -> Dict[str, Any]:
 
 def check_civitai_api_key(api_key: Optional[str]) -> Dict[str, Any]:
     """Check whether a CivitAI API key is accepted by civitai.com."""
-    key = (api_key or "").strip()
-    if not key:
-        return {
-            "success": False,
-            "valid": False,
-            "status": "missing",
-            "message": "Paste a CivitAI API key first.",
-        }
+    from ..type_utils import check_credential_preconditions
+    precheck = check_credential_preconditions(api_key, "CivitAI API key")
+    if precheck:
+        return precheck
 
+    key = (api_key or "").strip()
     headers = {
         "accept": "application/json",
         "Authorization": f"Bearer {key}",

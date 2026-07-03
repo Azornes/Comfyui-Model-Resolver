@@ -188,7 +188,7 @@ class ModelResolverExtension:
                     search_local_matches,
                 )
                 from .core.path_templates import infer_download_path_templates
-                from .core.scanner import get_model_files, invalidate_model_files_cache
+                from .core.scanner import get_model_files, invalidate_model_files_cache, find_local_file_path
                 from .core.path_utils import (
                     get_filename_from_path,
                     read_json_safe,
@@ -204,6 +204,7 @@ class ModelResolverExtension:
                     extract_sha256_from_metadata,
                     fetch_remote_file_size_cached,
                     looks_like_model_file,
+                    normalize_category_to_model_type,
                 )
                 from .core.settings import (
                     TEMPLATE_KEY_ALIASES,
@@ -1515,33 +1516,8 @@ class ModelResolverExtension:
                 file_path = resolved_path if resolved_path else None
                 file_location = ""
 
-                if not file_path and category:
-                    # Try to find the file in the model directories using folder_paths
-                    try:
-                        import folder_paths
-
-                        folder_type = normalize_download_category(category)
-                        file_path = folder_paths.get_full_path(
-                            folder_type, filename
-                        )
-                    except Exception:
-                        pass
-
-                    # If not found, try scanner
-                    if not file_path:
-                        try:
-                            from .core.scanner import get_model_files
-
-                            available_models = get_model_files()
-                            for m in available_models:
-                                if (
-                                    m.get("relative_path", "").endswith(filename)
-                                    or m.get("filename", "") == filename
-                                ):
-                                    file_path = m.get("path")
-                                    break
-                        except Exception:
-                            pass
+                if not file_path:
+                    file_path = find_local_file_path(filename, category)
 
                 if file_path and _os.path.exists(file_path):
                     file_location = _os.path.dirname(file_path).replace("\\", "/")
@@ -1549,21 +1525,7 @@ class ModelResolverExtension:
                         file_location += "/"
 
                 def infer_model_type_from_category(value):
-                    if not str(value or "").strip():
-                        return ""
-                    normalized = normalize_download_category(value or "")
-                    type_map = {
-                        "checkpoints": "checkpoint",
-                        "loras": "lora",
-                        "vae": "vae",
-                        "text_encoders": "text_encoder",
-                        "clip": "clip",
-                        "clip_vision": "clip_vision",
-                        "controlnet": "controlnet",
-                        "upscale_models": "upscale",
-                        "diffusion_models": "diffusion_model",
-                    }
-                    return type_map.get(normalized, normalized.rstrip("s"))
+                    return normalize_category_to_model_type(value)
 
                 def build_info_response(
                     result=None,
@@ -2668,39 +2630,6 @@ class ModelResolverExtension:
                             elif isinstance(result, dict):
                                 yield result
 
-                        def get_result_sha256(result):
-                            if not isinstance(result, dict):
-                                return ""
-                            hashes = (
-                                result.get("hashes")
-                                if isinstance(result.get("hashes"), dict)
-                                else {}
-                            )
-                            file_info = (
-                                result.get("file_info")
-                                if isinstance(result.get("file_info"), dict)
-                                else {}
-                            )
-                            file_hashes = (
-                                file_info.get("hashes")
-                                if isinstance(file_info.get("hashes"), dict)
-                                else {}
-                            )
-                            for candidate in (
-                                result.get("sha256"),
-                                result.get("hash"),
-                                hashes.get("SHA256"),
-                                hashes.get("sha256"),
-                                file_info.get("sha256"),
-                                file_info.get("hash"),
-                                file_hashes.get("SHA256"),
-                                file_hashes.get("sha256"),
-                            ):
-                                normalized = normalize_sha256(candidate)
-                                if normalized:
-                                    return normalized
-                            return ""
-
                         def collect_local_hash_matches(payload):
                             matches = []
                             seen_match_paths = set()
@@ -2715,7 +2644,7 @@ class ModelResolverExtension:
                             ):
                                 for source_result in iter_result_items(payload.get(source_key)):
                                     raise_if_search_cancelled(source_key)
-                                    sha256 = get_result_sha256(source_result)
+                                    sha256 = extract_sha256_from_metadata(source_result)
                                     if not sha256:
                                         continue
 

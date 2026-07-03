@@ -25,7 +25,7 @@ log = create_module_logger(__name__)
 from .resolver import invalidate_local_hash_match_cache, normalize_sha256
 from .scanner import invalidate_model_files_cache
 from .path_utils import is_path_within, get_path_identity, write_json_atomic, read_json_safe, get_comfy_root_path, calculate_file_sha256 as _calculate_file_sha256, get_filename_from_path
-from .type_utils import as_dict, as_list, first_non_empty, format_size_bytes as format_bytes, DEFAULT_BROWSER_USER_AGENT, extract_response_file_size
+from .type_utils import as_dict, as_list, first_non_empty, format_size_bytes as format_bytes, DEFAULT_BROWSER_USER_AGENT, extract_response_file_size, normalize_category_to_model_type
 
 try:
     import folder_paths
@@ -259,13 +259,9 @@ def get_metadata_sidecar_path(file_path: str) -> str:
 
 
 def _resolve_lora_manager_model_type(category: str, source_type: Any = "") -> str:
-    category_key = normalize_download_category(category)
-    if category_key == "diffusion_models":
-        return "diffusion_model"
-    if category_key == "checkpoints":
-        return "checkpoint"
-    if category_key == "embeddings":
-        return "embedding"
+    res = normalize_category_to_model_type(category)
+    if res in ("checkpoint", "diffusion_model", "embedding"):
+        return res
 
     source_token = (
         str(source_type or "")

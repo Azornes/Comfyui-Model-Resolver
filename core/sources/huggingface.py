@@ -51,15 +51,12 @@ _report_progress = get_progress_reporter("HuggingFace progress callback")
 
 def check_huggingface_token(token: Optional[str]) -> Dict[str, Any]:
     """Check whether a HuggingFace access token is accepted."""
-    value = (token or "").strip()
-    if not value:
-        return {
-            "success": False,
-            "valid": False,
-            "status": "missing",
-            "message": "Paste a HuggingFace token first.",
-        }
+    from ..type_utils import check_credential_preconditions
+    precheck = check_credential_preconditions(token, "HuggingFace token")
+    if precheck:
+        return precheck
 
+    value = (token or "").strip()
     headers = {"Authorization": f"Bearer {value}"}
 
     def get_user(data):
@@ -85,15 +82,12 @@ def check_huggingface_token(token: Optional[str]) -> Dict[str, Any]:
 
 def check_brave_search_api_key(api_key: Optional[str]) -> Dict[str, Any]:
     """Check whether a Brave Search API key is accepted."""
-    key = (api_key or "").strip()
-    if not key:
-        return {
-            "success": False,
-            "valid": False,
-            "status": "missing",
-            "message": "Paste a Brave Search API key first.",
-        }
+    from ..type_utils import check_credential_preconditions
+    precheck = check_credential_preconditions(api_key, "Brave Search API key")
+    if precheck:
+        return precheck
 
+    key = (api_key or "").strip()
     headers = {"X-Subscription-Token": key}
     params = {"q": "test", "count": 1}
 

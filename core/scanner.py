@@ -306,3 +306,43 @@ def get_model_files(force_rescan: bool = False) -> List[Dict[str, str]]:
     _MODEL_FILES_CACHE = models
     _MODEL_FILES_CACHE_AT = now
     return models
+
+
+def find_local_file_path(filename: str, category: Optional[str] = None) -> Optional[str]:
+    """
+    Tries to find the absolute path of a model file locally using folder_paths or the local scanner.
+    """
+    if not filename:
+        return None
+
+    global folder_paths
+    if folder_paths is None:
+        try:
+            import folder_paths as fp
+            folder_paths = fp
+        except ImportError:
+            pass
+
+    file_path = None
+    if category and folder_paths is not None:
+        try:
+            from .type_utils import normalize_download_category
+            folder_type = normalize_download_category(category)
+            file_path = folder_paths.get_full_path(folder_type, filename)
+        except Exception:
+            pass
+
+    if not file_path:
+        try:
+            available_models = get_model_files()
+            for m in available_models:
+                if (
+                    m.get("relative_path", "").endswith(filename)
+                    or m.get("filename", "") == filename
+                ):
+                    file_path = m.get("path")
+                    break
+        except Exception:
+            pass
+
+    return file_path
