@@ -205,6 +205,8 @@ class ModelResolverExtension:
                     fetch_remote_file_size_cached,
                     looks_like_model_file,
                     normalize_category_to_model_type,
+                    get_category_folder_keys,
+                    get_enabled_download_categories,
                 )
                 from .core.settings import (
                     TEMPLATE_KEY_ALIASES,
@@ -311,6 +313,42 @@ class ModelResolverExtension:
                     return wrapper
                 return decorator
 
+            def get_progress_response(tracker, request, param_name="progress_id", not_found_payload=None, not_found_status=200, found_wrapper=None):
+                job_id = request.match_info.get(param_name, "").strip()
+                if not job_id:
+                    return web.json_response({"error": f"{param_name} is required"}, status=400)
+                tracker.cleanup()
+                progress = tracker.get(job_id)
+                if not progress:
+                    payload = not_found_payload or {"error": "progress not found"}
+                    return web.json_response(payload, status=not_found_status)
+                if found_wrapper:
+                    return web.json_response(found_wrapper(progress))
+                return web.json_response(progress)
+
+            def cancel_progress_response(tracker, request, param_name="progress_id", cancel_message="Cancelled"):
+                job_id = request.match_info.get(param_name, "").strip()
+                if not job_id:
+                    return web.json_response({"error": f"{param_name} is required"}, status=400)
+                cancelled = tracker.mark_cancelled(job_id, cancel_message)
+                return web.json_response({
+                    "success": True,
+                    "cancelled": cancelled,
+                    "progress_id": job_id,
+                })
+
+            async def get_override_settings_from_request(request):
+                settings = await asyncio.to_thread(load_resolver_settings)
+                if request.method == "POST":
+                    try:
+                        payload = await request.json()
+                        if isinstance(payload, dict) and "aria2c_path" in payload:
+                            settings = dict(settings)
+                            settings["aria2c_path"] = payload.get("aria2c_path", "")
+                    except Exception:
+                        pass
+                return settings
+
             # ==================== BASE MODELS CONFIG ROUTE ====================
 
             @routes.get("/model_resolver/base-models")
@@ -351,12 +389,7 @@ class ModelResolverExtension:
                     data = await request.json()
                     workflow_json = data.get("workflow")
                     analysis_id = str(data.get("analysis_id") or "").strip()
-                    force_rescan = data.get("force_rescan", False)
-                    force_rescan = (
-                        force_rescan
-                        if isinstance(force_rescan, bool)
-                        else str(force_rescan).lower() in {"1", "true", "yes"}
-                    )
+                    force_rescan = to_bool(data.get("force_rescan"), False)
                     if force_rescan:
                         invalidate_local_hash_match_cache()
 
@@ -545,26 +578,18 @@ class ModelResolverExtension:
             @json_api_endpoint("analyze-progress")
             async def get_analyze_progress(request):
                 """Get workflow analysis progress."""
-                analysis_id = request.match_info.get("analysis_id", "").strip()
-                if not analysis_id:
-                    return web.json_response(
-                        {"error": "Analysis ID is required"}, status=400
-                    )
-
-                self.analysis_progress.cleanup()
-                progress = self.analysis_progress.get(analysis_id)
-                if not progress:
-                    return web.json_response(
-                        {
-                            "status": "unknown",
-                            "stage": "unknown",
-                            "message": "No analysis progress available",
-                            "current": 0,
-                            "total": 0,
-                        }
-                    )
-
-                return web.json_response(progress)
+                return get_progress_response(
+                    self.analysis_progress,
+                    request,
+                    param_name="analysis_id",
+                    not_found_payload={
+                        "status": "unknown",
+                        "stage": "unknown",
+                        "message": "No analysis progress available",
+                        "current": 0,
+                        "total": 0,
+                    }
+                )
 
             @routes.post("/model_resolver/resolve")
             @json_api_endpoint("resolve", return_success_on_error=True)
@@ -994,42 +1019,30 @@ class ModelResolverExtension:
             @json_api_endpoint("calculate-file-hash-progress")
             async def calculate_file_hash_progress_route(request):
                 """Return progress for a background SHA256 calculation."""
-                progress_id = request.match_info.get("progress_id", "").strip()
-                self.hash_tracker.cleanup()
-                progress = self.hash_tracker.get(progress_id)
-                if not progress:
-                    return web.json_response(
-                        {"error": "progress not found"}, status=404
-                    )
-                return web.json_response(progress)
+                return get_progress_response(
+                    self.hash_tracker,
+                    request,
+                    not_found_status=404
+                )
 
             @routes.post("/model_resolver/calculate-file-hash/cancel/{progress_id}")
             @json_api_endpoint("calculate-file-hash-cancel")
             async def calculate_file_hash_cancel_route(request):
                 """Cancel a background SHA256 calculation."""
-                progress_id = request.match_info.get("progress_id", "").strip()
-                if not progress_id:
-                    return web.json_response(
-                        {"error": "progress_id is required"}, status=400
-                    )
-                cancelled = self.hash_tracker.mark_cancelled(progress_id, "Stopping hash calculation...")
-                return web.json_response(
-                    {
-                        "success": True,
-                        "cancelled": cancelled,
-                        "progress_id": progress_id,
-                    }
+                return cancel_progress_response(
+                    self.hash_tracker,
+                    request,
+                    cancel_message="Stopping hash calculation..."
                 )
 
             @routes.get("/model_resolver/models")
             @json_api_endpoint("get_models")
             async def get_models(request):
                 """Get list of all available models."""
-                force_rescan = str(
-                    request.query.get("force")
-                    or request.query.get("force_rescan")
-                    or ""
-                ).lower() in {"1", "true", "yes"}
+                force_rescan = to_bool(
+                    request.query.get("force") or request.query.get("force_rescan"),
+                    False
+                )
                 if force_rescan:
                     invalidate_local_hash_match_cache()
                 models = get_model_files(force_rescan=force_rescan)
@@ -1453,27 +1466,19 @@ class ModelResolverExtension:
             @json_api_endpoint("loaded-progress")
             async def get_loaded_models_progress(request):
                 """Get loaded models inspection progress."""
-                loaded_id = request.match_info.get("loaded_id", "").strip()
-                if not loaded_id:
-                    return web.json_response(
-                        {"error": "Loaded progress ID is required"}, status=400
-                    )
-
-                self.loaded_progress.cleanup()
-                progress = self.loaded_progress.get(loaded_id)
-                if not progress:
-                    return web.json_response(
-                        {
-                            "status": "unknown",
-                            "stage": "unknown",
-                            "message": "No loaded models progress available",
-                            "percent": 0,
-                            "current": 0,
-                            "total": 0,
-                        }
-                    )
-
-                return web.json_response(progress)
+                return get_progress_response(
+                    self.loaded_progress,
+                    request,
+                    param_name="loaded_id",
+                    not_found_payload={
+                        "status": "unknown",
+                        "stage": "unknown",
+                        "message": "No loaded models progress available",
+                        "percent": 0,
+                        "current": 0,
+                        "total": 0,
+                    }
+                )
 
             # ==================== MODEL METADATA LOOKUP ROUTE ====================
 
@@ -1489,18 +1494,12 @@ class ModelResolverExtension:
                 force_refresh = to_bool(
                     data.get("force_refresh") or data.get("force"), False
                 )
-                provided_hash = (
+                provided_hash = normalize_sha256(
                     data.get("sha256")
                     or data.get("hash")
                     or data.get("file_hash")
                     or ""
                 )
-                provided_hash = str(provided_hash or "").strip().lower()
-                if not (
-                    len(provided_hash) == 64
-                    and all(ch in "0123456789abcdef" for ch in provided_hash)
-                ):
-                    provided_hash = ""
                 hf_token = data.get("hf_token", "")
                 brave_search_api_key = data.get("brave_search_api_key", "")
                 hf_use_brave_fallback = to_bool(
@@ -1708,9 +1707,6 @@ class ModelResolverExtension:
                         or status in {"dead", "deleted", "unavailable", "missing"}
                     )
 
-                def result_url_looks_like_model_file(url, expected_filename=""):
-                    return looks_like_model_file(url, expected_filename)
-
                 def collect_result_download_urls(result):
                     urls = []
                     if remote_link_is_marked_dead(result):
@@ -1735,7 +1731,7 @@ class ModelResolverExtension:
                             or expected_filename
                         )
                         if (
-                            result_url_looks_like_model_file(url, mirror_filename)
+                            looks_like_model_file(url, mirror_filename)
                             and url not in urls
                         ):
                             urls.append(url)
@@ -1745,7 +1741,7 @@ class ModelResolverExtension:
                     for raw_url in raw_urls:
                         url = str(raw_url or "").strip()
                         if (
-                            result_url_looks_like_model_file(url, expected_filename)
+                            looks_like_model_file(url, expected_filename)
                             and url not in dead_urls
                             and url not in urls
                         ):
@@ -1753,7 +1749,7 @@ class ModelResolverExtension:
                     for key in ("download_url", "downloadUrl"):
                         url = str(result.get(key) or "").strip()
                         if (
-                            result_url_looks_like_model_file(url, expected_filename)
+                            looks_like_model_file(url, expected_filename)
                             and url not in dead_urls
                             and url not in urls
                         ):
@@ -2877,25 +2873,21 @@ class ModelResolverExtension:
                 @json_api_endpoint("search-progress")
                 async def get_search_progress_route(request):
                     """Return live progress for an in-flight source search."""
-                    progress_id = request.match_info.get("progress_id", "")
-                    self.search_tracker.cleanup()
-                    progress = self.search_tracker.get(progress_id)
-                    if not progress:
-                        return web.json_response({"exists": False})
-                    return web.json_response({"exists": True, **progress})
+                    return get_progress_response(
+                        self.search_tracker,
+                        request,
+                        not_found_payload={"exists": False},
+                        found_wrapper=lambda prog: {"exists": True, **prog}
+                    )
 
                 @routes.post("/model_resolver/search-cancel/{progress_id}")
                 @json_api_endpoint("search-cancel", return_success_on_error=True)
                 async def cancel_search_progress_route(request):
                     """Mark an in-flight source search as cancelled."""
-                    progress_id = request.match_info.get("progress_id", "").strip()
-                    if not progress_id:
-                        return web.json_response(
-                            {"error": "Progress ID is required"}, status=400
-                        )
-                    marked = self.search_tracker.mark_cancelled(progress_id, "Cancelled")
-                    return web.json_response(
-                        {"success": True, "cancelled": marked, "progress_id": progress_id}
+                    return cancel_progress_response(
+                        self.search_tracker,
+                        request,
+                        cancel_message="Cancelled"
                     )
 
                 @routes.post("/model_resolver/search")
@@ -4262,15 +4254,7 @@ class ModelResolverExtension:
                 @json_api_endpoint("aria2 status")
                 async def aria2_status_route(request):
                     """Report aria2 availability using saved settings, with optional override via POST."""
-                    settings = await asyncio.to_thread(load_resolver_settings)
-                    if request.method == "POST":
-                        try:
-                            payload = await request.json()
-                            if isinstance(payload, dict) and "aria2c_path" in payload:
-                                settings = dict(settings)
-                                settings["aria2c_path"] = payload.get("aria2c_path", "")
-                        except Exception:
-                            pass
+                    settings = await get_override_settings_from_request(request)
                     return web.json_response(await asyncio.to_thread(get_aria2_status, settings))
 
 
@@ -4278,14 +4262,7 @@ class ModelResolverExtension:
                 @json_api_endpoint("aria2 start", return_success_on_error=True)
                 async def aria2_start_route(request):
                     """Start the aria2 daemon without starting a download."""
-                    try:
-                        payload = await request.json()
-                    except Exception:
-                        payload = {}
-                    settings = await asyncio.to_thread(load_resolver_settings)
-                    if isinstance(payload, dict) and "aria2c_path" in payload:
-                        settings = dict(settings)
-                        settings["aria2c_path"] = payload.get("aria2c_path", "")
+                    settings = await get_override_settings_from_request(request)
                     result = await asyncio.to_thread(start_aria2_daemon, settings)
                     status = 200 if result.get("success") else 400
                     return web.json_response(result, status=status)
@@ -4331,36 +4308,7 @@ class ModelResolverExtension:
                     """Get available model directories."""
                     import folder_paths
 
-                    preferred_categories = [
-                        "checkpoints",
-                        "loras",
-                        "vae",
-                        "controlnet",
-                        "clip",
-                        "clip_vision",
-                        "embeddings",
-                        "upscale_models",
-                        "diffusion_models",
-                        "text_encoders",
-                        "ipadapter",
-                        "sams",
-                        "ultralytics",
-                    ]
-                    skip_categories = {"custom_nodes", "configs"}
-                    categories = []
-                    for cat in [
-                        *preferred_categories,
-                        *folder_paths.folder_names_and_paths.keys(),
-                    ]:
-                        normalized_cat = normalize_download_category(cat)
-                        if (
-                            not normalized_cat
-                            or normalized_cat in skip_categories
-                            or normalized_cat in categories
-                        ):
-                            continue
-                        categories.append(normalized_cat)
-
+                    categories = get_enabled_download_categories(list(folder_paths.folder_names_and_paths.keys()))
                     directories = {}
                     for cat in categories:
                         path = get_download_directory(cat)
@@ -4376,39 +4324,13 @@ class ModelResolverExtension:
                     import os
                     import folder_paths
 
-                    preferred_categories = [
-                        "loras",
-                        "checkpoints",
-                        "diffusion_models",
-                        "embeddings",
-                        "text_encoders",
-                        "vae",
-                        "upscale_models",
-                        "controlnet",
-                        "clip_vision",
-                        "ipadapter",
-                        "sams",
-                        "ultralytics",
-                    ]
-                    skip_categories = {"custom_nodes", "configs"}
                     known_categories = set(folder_paths.folder_names_and_paths.keys())
-                    categories = []
+                    categories = get_enabled_download_categories(list(known_categories))
                     category_source_keys = {}
-                    for cat in [
-                        *preferred_categories,
-                        *known_categories,
-                    ]:
+                    for cat in [*known_categories]:
                         folder_key = normalize_download_category(cat)
-                        if (
-                            not folder_key
-                            or folder_key in skip_categories
-                            or folder_key in categories
-                        ):
-                            if folder_key and folder_key not in skip_categories:
-                                category_source_keys.setdefault(folder_key, []).append(cat)
-                            continue
-                        categories.append(folder_key)
-                        category_source_keys.setdefault(folder_key, []).append(cat)
+                        if folder_key:
+                            category_source_keys.setdefault(folder_key, []).append(cat)
 
                     roots = {}
                     settings = load_resolver_settings()
@@ -4525,11 +4447,7 @@ class ModelResolverExtension:
                         return web.json_response([])
 
                     known_categories = set(folder_paths.folder_names_and_paths.keys())
-                    folder_keys = [category]
-                    if category == "diffusion_models":
-                        folder_keys.append("unet")
-                    elif category == "text_encoders":
-                        folder_keys.append("clip")
+                    folder_keys = get_category_folder_keys(category)
                     available_folder_keys = [
                         folder_key for folder_key in folder_keys if folder_key in known_categories
                     ]

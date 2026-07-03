@@ -934,5 +934,39 @@ def check_credential_preconditions(value: Optional[str], token_name: str) -> Opt
     return None
 
 
+def get_category_folder_keys(category: str) -> list[str]:
+    """
+    Returns associated ComfyUI folder names for a given category.
+    """
+    folder_key = normalize_download_category(category)
+    keys = [folder_key]
+    if folder_key == "diffusion_models":
+        keys.append("unet")
+    elif folder_key == "text_encoders":
+        keys.append("clip")
+    return keys
+
+
+def get_enabled_download_categories(folder_names: list[str]) -> list[str]:
+    """
+    Returns unique normalized download categories, prioritizing preferred ones
+    and filtering out skipped/duplicated categories.
+    """
+    preferred = [
+        "checkpoints", "loras", "vae", "controlnet", "clip",
+        "clip_vision", "embeddings", "upscale_models", "diffusion_models",
+        "text_encoders", "ipadapter", "sams", "ultralytics"
+    ]
+    skip = {"custom_nodes", "configs"}
+    
+    categories = []
+    for cat in [*preferred, *folder_names]:
+        norm = normalize_download_category(cat)
+        if norm and norm not in skip and norm not in categories:
+            categories.append(norm)
+    return categories
+
+
+
 
 
