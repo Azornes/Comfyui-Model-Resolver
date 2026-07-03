@@ -1173,6 +1173,8 @@ export const downloadTargetMethods = {
         if (merged.hashes && typeof merged.hashes === 'object') metadata.hashes = merged.hashes;
         if (merged.file_info && typeof merged.file_info === 'object') metadata.file_info = merged.file_info;
         if (merged.file && typeof merged.file === 'object') metadata.file = merged.file;
+        if (merged.selected_file && typeof merged.selected_file === 'object') metadata.selected_file = merged.selected_file;
+        if (merged.selectedFile && typeof merged.selectedFile === 'object') metadata.selected_file = merged.selectedFile;
         if (Array.isArray(merged.files)) metadata.files = merged.files;
         if (selectedVersion && typeof selectedVersion === 'object') metadata.selected_version = selectedVersion;
         if (merged.civitai && typeof merged.civitai === 'object') metadata.civitai = merged.civitai;

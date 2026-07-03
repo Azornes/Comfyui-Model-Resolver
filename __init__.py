@@ -630,6 +630,60 @@ class ModelResolverExtension:
                     get_local_model_hash_metadata(path, model=model)
                 )
 
+            @routes.post("/model_resolver/local-matches-by-hash")
+            @json_api_endpoint("local-matches-by-hash")
+            async def local_matches_by_hash(request):
+                """Search local model metadata sidecars for a remote SHA256."""
+                data = await request.json()
+                sha256 = normalize_sha256(
+                    data.get("sha256")
+                    or data.get("hash")
+                    or data.get("SHA256")
+                    or ""
+                )
+                if not sha256:
+                    return web.json_response(
+                        {"error": "sha256 is required"}, status=400
+                    )
+
+                category = data.get("category", "")
+                source = str(
+                    data.get("source")
+                    or data.get("hash_lookup_source")
+                    or "download_source"
+                ).strip().lower().replace("-", "_")
+                filename = (
+                    data.get("filename")
+                    or data.get("path")
+                    or data.get("model_name")
+                    or ""
+                )
+                max_matches = to_int(data.get("max_matches"), 20)
+                force_rescan = to_bool(data.get("force_rescan"), False)
+
+                matches = search_local_matches_by_hash(
+                    sha256,
+                    category=category or None,
+                    max_matches=max_matches,
+                    force_rescan=force_rescan,
+                )
+                enriched_matches = [
+                    {
+                        **match,
+                        "hash_lookup_source": source or "download_source",
+                        "hash_lookup_filename": filename,
+                        "hash_lookup_sha256": sha256,
+                    }
+                    for match in matches
+                ]
+                return web.json_response(
+                    {
+                        "sha256": sha256,
+                        "local_hash_matches": enriched_matches,
+                        "matches": enriched_matches,
+                    }
+                )
+
             @routes.post("/model_resolver/open-containing-folder")
             @json_api_endpoint("open-containing-folder")
             async def open_containing_folder(request):
@@ -2635,37 +2689,27 @@ class ModelResolverExtension:
                                     return normalized
                             return ""
 
-                        def is_hash_lookup_candidate(result):
-                            if not isinstance(result, dict):
-                                return False
-                            try:
-                                confidence = float(result.get("confidence") or 0)
-                            except (TypeError, ValueError):
-                                confidence = 0.0
-                            if confidence >= 100.0:
-                                return True
-                            match_type = str(result.get("match_type") or "").lower()
-                            if match_type in {"exact", "model_title", "title"}:
-                                return True
-                            return confidence >= 95.0
-
                         def collect_local_hash_matches(payload):
                             matches = []
                             seen_match_paths = set()
-                            seen_hash_sources = set()
-                            for source_key in ("huggingface", "civitai", "civarchive"):
+                            seen_hashes = set()
+                            for source_key in (
+                                "huggingface",
+                                "civitai",
+                                "civarchive",
+                                "lora_manager_archive",
+                                "popular",
+                                "model_list",
+                            ):
                                 for source_result in iter_result_items(payload.get(source_key)):
                                     raise_if_search_cancelled(source_key)
-                                    if not is_hash_lookup_candidate(source_result):
-                                        continue
                                     sha256 = get_result_sha256(source_result)
                                     if not sha256:
                                         continue
 
-                                    hash_source_key = (source_key, sha256)
-                                    if hash_source_key in seen_hash_sources:
+                                    if sha256 in seen_hashes:
                                         continue
-                                    seen_hash_sources.add(hash_source_key)
+                                    seen_hashes.add(sha256)
 
                                     self.search_tracker.update(
                                         progress_id,
@@ -2704,6 +2748,7 @@ class ModelResolverExtension:
                                             "hash_lookup_filename": source_result.get("filename")
                                             or source_result.get("path")
                                             or filename,
+                                            "hash_lookup_sha256": sha256,
                                         }
                                         matches.append(enriched)
 

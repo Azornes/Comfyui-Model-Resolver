@@ -2869,6 +2869,30 @@ export const modelInfoMethods = {
             const preferredMirror = this.getSourceModelPreferredMirror(file, contextModel, mirrors);
             const preferredDownloadUrl = preferredMirror?.url || file.download_url;
             const preferredFilename = preferredMirror?.filename || file.name || contextModel.filename || data.name || 'model';
+            const fileHash = this.getSourceModelFileHash(file);
+            const fileHashes = file.hashes && typeof file.hashes === 'object'
+                ? { ...file.hashes }
+                : (fileHash ? { SHA256: fileHash } : {});
+            const selectedFile = {
+                ...file,
+                name: preferredFilename,
+                filename: preferredFilename,
+                download_url: preferredDownloadUrl
+            };
+            if (fileHash) {
+                selectedFile.sha256 = selectedFile.sha256 || fileHash;
+                selectedFile.hash = selectedFile.hash || fileHash;
+            }
+            if (Object.keys(fileHashes).length) {
+                selectedFile.hashes = { ...fileHashes };
+            }
+            const selectedVersion = {
+                id: version.id || data.version_id || contextModel.version_id,
+                name: version.name || '',
+                base_model: version.base_model || contextModel.base_model || '',
+                trained_words: version.trained_words || version.trainedWords || [],
+                files: [selectedFile]
+            };
             const payload = {
                 source: data.source || contextModel.details_source || contextModel.source,
                 model_id: data.model_id || contextModel.model_id,
@@ -2880,6 +2904,13 @@ export const modelInfoMethods = {
                 download_url: preferredDownloadUrl,
                 url: version.url || data.version_url || data.url,
                 size: file.size,
+                sha256: fileHash,
+                hash: fileHash,
+                hashes: Object.keys(fileHashes).length ? fileHashes : undefined,
+                file_info: selectedFile,
+                file: selectedFile,
+                selected_file: selectedFile,
+                selected_version: selectedVersion,
                 base_model: version.base_model || contextModel.base_model,
                 tags: data.tags || [],
                 match_type: 'selected',
@@ -3042,12 +3073,49 @@ export const modelInfoMethods = {
                         </div>
                         <div class="mr-model-details-mirror-list">
                             ${group.items.map((mirror) => {
+                                const mirrorHash = this.getSourceModelFileHash(mirror) || basePayload.sha256 || basePayload.hash || '';
+                                const mirrorHashes = mirror.hashes && typeof mirror.hashes === 'object'
+                                    ? { ...mirror.hashes }
+                                    : (
+                                        basePayload.hashes && typeof basePayload.hashes === 'object'
+                                            ? { ...basePayload.hashes }
+                                            : (mirrorHash ? { SHA256: mirrorHash } : {})
+                                    );
+                                const mirrorFilename = mirror.filename || basePayload.filename || 'Download mirror';
+                                const mirrorFileInfo = {
+                                    ...(basePayload.file_info && typeof basePayload.file_info === 'object' ? basePayload.file_info : {}),
+                                    ...mirror,
+                                    name: mirrorFilename,
+                                    filename: mirrorFilename,
+                                    download_url: mirror.url,
+                                    url: mirror.url
+                                };
+                                if (mirrorHash) {
+                                    mirrorFileInfo.sha256 = mirrorFileInfo.sha256 || mirrorHash;
+                                    mirrorFileInfo.hash = mirrorFileInfo.hash || mirrorHash;
+                                }
+                                if (Object.keys(mirrorHashes).length) {
+                                    mirrorFileInfo.hashes = { ...mirrorHashes };
+                                }
+                                const mirrorSelectedVersion = basePayload.selected_version && typeof basePayload.selected_version === 'object'
+                                    ? {
+                                        ...basePayload.selected_version,
+                                        files: [mirrorFileInfo]
+                                    }
+                                    : undefined;
                                 const payload = {
                                     ...basePayload,
                                     download_url: mirror.url,
-                                    filename: mirror.filename || basePayload.filename,
+                                    filename: mirrorFilename,
                                     mirror_source: mirror.source || this.getSourceModelMirrorHost(mirror.url),
-                                    mirror_index: mirror._index
+                                    mirror_index: mirror._index,
+                                    sha256: mirrorHash,
+                                    hash: mirrorHash,
+                                    hashes: Object.keys(mirrorHashes).length ? mirrorHashes : undefined,
+                                    file_info: mirrorFileInfo,
+                                    file: mirrorFileInfo,
+                                    selected_file: mirrorFileInfo,
+                                    selected_version: mirrorSelectedVersion
                                 };
                                 const meta = this.getSourceModelMirrorMeta(mirror, mirror._index === 0);
                                 const isDead = this.isSourceModelMirrorDead(mirror);
@@ -3321,6 +3389,13 @@ export const modelInfoMethods = {
 
         const sourceKey = String(selection.source || contextModel.details_source || contextModel.source || '').toLowerCase();
         const selectedBaseModel = selection.base_model || contextModel.base_model || '';
+        const selectionHashes = selection.hashes && typeof selection.hashes === 'object' ? selection.hashes : {};
+        const selectionFile = selection.file_info || selection.selected_file || selection.file || null;
+        const selectionFileHashes = selectionFile?.hashes && typeof selectionFile.hashes === 'object' ? selectionFile.hashes : {};
+        const selectionSha256 = this.getSourceModelFileHash?.(selection)
+            || this.getSourceModelFileHash?.(selectionFile || {})
+            || String(selection.sha256 || selection.hash || selectionHashes.SHA256 || selectionHashes.sha256 || selectionFileHashes.SHA256 || selectionFileHashes.sha256 || '').trim();
+        const selectionSelectedVersion = selection.selected_version || selection.selectedVersion || null;
         const sourceResult = {
             source: sourceKey,
             model_id: selection.model_id,
@@ -3333,11 +3408,22 @@ export const modelInfoMethods = {
             download_url: selection.download_url,
             size: selection.size,
             base_model: selectedBaseModel,
+            sha256: selectionSha256,
+            hash: selectionSha256,
             tags: selection.tags || [],
             match_type: selection.match_type || 'selected',
             confidence: selection.confidence || 100,
             searchedAt: new Date().toISOString()
         };
+        if (Object.keys(selectionHashes).length) sourceResult.hashes = selectionHashes;
+        if (selectionFile && typeof selectionFile === 'object') {
+            sourceResult.file_info = selectionFile;
+            sourceResult.file = selectionFile;
+            sourceResult.selected_file = selectionFile;
+        }
+        if (selectionSelectedVersion && typeof selectionSelectedVersion === 'object') {
+            sourceResult.selected_version = selectionSelectedVersion;
+        }
 
         missing.download_source = {
             ...sourceResult,
@@ -3370,6 +3456,10 @@ export const modelInfoMethods = {
         this.refreshSearchBaseModelLabels?.();
         this.updateBatchFooterButtons?.();
         this.persistSearchStateForActiveWorkflow?.();
+        this.syncRemoteHashMatchesForResult?.(missing, sourceResult, { sourceKey })
+            ?.catch?.(error => {
+                console.warn('Model Resolver: failed to sync selected model hash:', error);
+            });
         this.showNotification?.(`Selected ${selection.filename || selection.name || 'model version'}.`, 'success');
     },
 

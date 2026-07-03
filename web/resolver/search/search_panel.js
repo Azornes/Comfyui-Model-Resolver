@@ -1647,10 +1647,11 @@ export const searchPanelMethods = {
         return typeof result.size === 'number' ? this.formatBytes(result.size) : String(result.size);
     },
 
-    getSearchResultMatchDisplay(result = {}, fallbackLabel = 'Match', fallbackClass = 'neutral') {
+    getSearchResultMatchDisplay(result = {}, fallbackLabel = 'Match', fallbackClass = 'neutral', hashLabel = '') {
         const matchType = String(result.match_type || '').toLowerCase();
-        if (result.hash_verified || result.hash_verified_sha256 || matchType === 'hash') {
-            return { label: 'Hash', className: 'hash' };
+        const resolvedHashLabel = String(hashLabel || result.hash_match_label || result.hashLabel || '').trim();
+        if (resolvedHashLabel || result.hash_verified || result.hash_verified_sha256 || matchType === 'hash') {
+            return { label: resolvedHashLabel || 'Hash', className: 'hash' };
         }
 
         if (matchType === 'exact') {
@@ -1707,6 +1708,77 @@ export const searchPanelMethods = {
         return '';
     },
 
+    collectHashLabelMapHashes(missing = {}, results = null) {
+        const hashes = [];
+        const seen = new Set();
+        const addHash = (value) => {
+            const hash = this.normalizeSearchResultSha256?.(value)
+                || String(value || '').trim().toLowerCase();
+            if (!hash || !/^[a-f0-9]{64}$/.test(hash) || seen.has(hash)) return;
+            seen.add(hash);
+            hashes.push(hash);
+        };
+        const addMatch = (match) => {
+            if (!match || typeof match !== 'object') return;
+            if (!(match.hash_match || match.match_type === 'hash' || match.hash_lookup_source)) return;
+            addHash(this.getLocalMatchHash?.(match) || match.sha256 || match.hash);
+        };
+        const addResult = (result) => {
+            if (Array.isArray(result)) {
+                result.forEach(addResult);
+                return;
+            }
+            if (!result || typeof result !== 'object') return;
+            const matchType = String(result.match_type || '').toLowerCase();
+            if (!(result.hash_verified || result.hash_verified_sha256 || matchType === 'hash')) return;
+            addHash(this.getSearchResultSha256?.(result) || result.sha256 || result.hash);
+        };
+
+        (Array.isArray(missing.matches) ? missing.matches : []).forEach(addMatch);
+
+        const stateResults = results
+            || this.getSearchState?.(missing)?.results
+            || this.searchResultCache?.get?.(this.getMissingSearchKey?.(missing))?.results
+            || {};
+        (Array.isArray(stateResults.local_hash_matches) ? stateResults.local_hash_matches : []).forEach(addMatch);
+
+        [
+            missing.download_source,
+            stateResults.popular,
+            stateResults.model_list,
+            stateResults.huggingface,
+            stateResults.civitai,
+            stateResults.civarchive,
+            stateResults.lora_manager_archive
+        ].forEach(addResult);
+
+        return hashes;
+    },
+
+    getHashMatchLabelMap(missing = {}, results = null) {
+        const hashes = this.collectHashLabelMapHashes?.(missing, results) || [];
+        const labelMap = new Map();
+        if (!hashes.length) return labelMap;
+
+        const useNumbers = hashes.length > 1;
+        hashes.forEach((hash, index) => {
+            labelMap.set(hash, useNumbers ? `Hash ${index + 1}` : 'Hash');
+        });
+        return labelMap;
+    },
+
+    getHashMatchLabelForSearchResult(result = {}, hashLabelMap = null, identities = []) {
+        const hash = this.getSearchResultSha256?.(result) || '';
+        const label = hash && hashLabelMap?.get?.(hash) ? hashLabelMap.get(hash) : '';
+        if (!label) return '';
+
+        const matchType = String(result.match_type || '').toLowerCase();
+        const hasLinkedLocalMatch = Array.isArray(identities) && identities.length > 0;
+        return (hasLinkedLocalMatch || result.hash_verified || result.hash_verified_sha256 || matchType === 'hash')
+            ? label
+            : '';
+    },
+
     normalizeHashLookupSourceKey(source = '') {
         return String(source || '')
             .trim()
@@ -1738,10 +1810,12 @@ export const searchPanelMethods = {
             if (!match || typeof match !== 'object') return;
 
             const matchSource = this.normalizeHashLookupSourceKey(match.hash_lookup_source || '');
-            if (!matchSource || matchSource !== normalizedSource) return;
-
             const matchHash = this.normalizeSearchResultSha256(this.getLocalMatchHash(match));
-            if (sourceHash && matchHash !== sourceHash) return;
+            if (sourceHash) {
+                if (matchHash !== sourceHash) return;
+            } else if (!matchSource || matchSource !== normalizedSource) {
+                return;
+            }
 
             addIdentity(this.getLocalMatchIdentity?.(match) || '');
         });
@@ -1749,7 +1823,7 @@ export const searchPanelMethods = {
         return identities;
     },
 
-    getDownloadSourceTableRow(missing, downloadSource = {}) {
+    getDownloadSourceTableRow(missing, downloadSource = {}, hashLabelMap = null) {
         if (!downloadSource?.url) return null;
 
         const originalFilename = this.getFilenameFromPath(missing.original_path);
@@ -1818,6 +1892,17 @@ export const searchPanelMethods = {
         const localHashMatches = Array.isArray(missing.matches)
             ? missing.matches.filter(match => match?.hash_lookup_source)
             : [];
+        const localHashMatchIdentities = this.getLocalHashMatchIdentitiesForResult?.(
+            localHashMatches,
+            source,
+            downloadSource
+        ) || [];
+        const resolvedHashLabelMap = hashLabelMap || this.getHashMatchLabelMap?.(missing) || null;
+        const hashMatchLabel = this.getHashMatchLabelForSearchResult?.(
+            downloadSource,
+            resolvedHashLabelMap,
+            localHashMatchIdentities
+        ) || '';
 
         return {
             sourceKey,
@@ -1826,20 +1911,13 @@ export const searchPanelMethods = {
             version: modelParts.version,
             filename: downloadFilename,
             secondary: secondaryParts.join(' / '),
-            match: isFromWorkflow
-                ? { label: 'Provided', className: 'strong' }
-                : this.getSearchResultMatchDisplay(downloadSource, 'Known', 'strong'),
             size: this.formatSearchResultSize(downloadSource),
             downloadUrl: downloadSource.url,
             downloadFilename,
             category: rowCategory,
             openUrl: modelUrl,
             searchedAt: this.getSearchResultTimestamp(downloadSource),
-            localHashMatchIdentities: this.getLocalHashMatchIdentitiesForResult?.(
-                localHashMatches,
-                source,
-                downloadSource
-            ) || [],
+            localHashMatchIdentities,
             pathMetadata: rowPathMetadata,
             downloadMetadata: this.getDownloadMetadata(missing, rowDetailsContext || {
                 ...downloadSource,
@@ -1854,7 +1932,10 @@ export const searchPanelMethods = {
                 openUrl: modelUrl,
                 pathMetadata: rowPathMetadata
             }),
-            detailsContext: rowDetailsContext
+            detailsContext: rowDetailsContext,
+            match: isFromWorkflow
+                ? { label: 'Provided', className: 'strong' }
+                : this.getSearchResultMatchDisplay(downloadSource, 'Known', 'strong', hashMatchLabel)
         };
     },
 
@@ -2137,10 +2218,24 @@ export const searchPanelMethods = {
         };
     },
 
-    renderLocalMatchStatus(match = {}) {
+    renderLocalMatchStatus(match = {}, hashLabelMap = null) {
         const confidence = Number(match.confidence || 0);
         const isHashMatch = Boolean(match.hash_match || match.match_type === 'hash');
-        const label = isHashMatch ? 'Hash' : (confidence === 100 ? 'Exact' : 'Partial');
+        const model = match.model || {};
+        const hashes = model.hashes && typeof model.hashes === 'object' ? model.hashes : {};
+        const normalizedHash = String(
+            match.sha256
+            || match.hash
+            || model.sha256
+            || model.hash
+            || hashes.SHA256
+            || hashes.sha256
+            || ''
+        ).trim().toLowerCase();
+        const hashLabel = normalizedHash && hashLabelMap?.get?.(normalizedHash)
+            ? hashLabelMap.get(normalizedHash)
+            : '';
+        const label = isHashMatch ? (hashLabel || 'Hash') : (confidence === 100 ? 'Exact' : 'Partial');
         const className = isHashMatch
             ? 'mr-match-status-hash'
             : (confidence === 100 ? 'mr-match-status-exact' : 'mr-match-status-partial');
@@ -2178,6 +2273,7 @@ export const searchPanelMethods = {
         const hasMatches = filteredMatches.length > 0;
         const perfectMatches = filteredMatches.filter(m => m.confidence === 100);
         const otherMatches = filteredMatches.filter(m => m.confidence < 100 && m.confidence >= 70);
+        const hashLabelMap = this.getHashMatchLabelMap?.(missing) || null;
 
         let html = '';
 
@@ -2211,7 +2307,7 @@ export const searchPanelMethods = {
                 html += `<div class="${rowClass}"${identityAttr}${this.getContextMenuAttrs(contextModel)}>`;
                 html += this.getConfidenceBadge(match.confidence);
                 html += `<span class="mr-match-filename" data-tooltip="${this.escapeHtml(matchPath)}">${this.escapeHtml(matchPath)}</span>`;
-                html += this.renderLocalMatchStatus(match);
+                html += this.renderLocalMatchStatus(match, hashLabelMap);
                 html += `<button id="${buttonId}" class="mr-btn mr-btn-secondary mr-btn-sm mr-btn-icon-only mr-local-link-btn" data-tooltip="Link this local match" aria-label="Link this local match">`;
                 html += getSvgIcon('link');
                 html += `</button>`;
@@ -2244,7 +2340,7 @@ export const searchPanelMethods = {
                     html += `<div class="mr-match-row"${identityAttr}${this.getContextMenuAttrs(contextModel)}>`;
                     html += this.getConfidenceBadge(match.confidence);
                     html += `<span class="mr-match-filename" data-tooltip="${this.escapeHtml(matchPath)}">${this.escapeHtml(matchPath)}</span>`;
-                    html += this.renderLocalMatchStatus(match);
+                    html += this.renderLocalMatchStatus(match, hashLabelMap);
                     html += `<button id="${altBtnId}" class="mr-btn mr-btn-secondary mr-btn-sm mr-btn-icon-only mr-local-link-btn" data-tooltip="Link this local match" aria-label="Link this local match">${getSvgIcon('link')}</button>`;
                     html += `</div>`;
                 }
