@@ -27,6 +27,15 @@ export const missingBrowserMethods = {
         };
     },
 
+    getMissingReferenceCount(missing = {}) {
+        if (Array.isArray(missing.all_node_refs) && missing.all_node_refs.length > 0) {
+            return missing.all_node_refs.length;
+        }
+
+        const count = Number(missing.reference_count || 0);
+        return Number.isFinite(count) && count > 0 ? count : 1;
+    },
+
     getMissingNodeDisplay(missing = {}) {
         const locateTarget = this.getMissingLocateTarget(missing);
         const isSubgraphNode = locateTarget.nodeType && locateTarget.nodeType.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
@@ -45,20 +54,29 @@ export const missingBrowserMethods = {
             : (missing.promoted_inner_node_title || missing.promoted_inner_node_type || '');
         const customNodeTitle = String(promotedDetail || locateTarget.nodeTitle || missing.node_title || '').trim();
         const hasCustomNodeTitle = customNodeTitle && customNodeTitle !== nodeLabel;
-        const text = hasCustomNodeTitle
+        const baseText = hasCustomNodeTitle
             ? `${nodeLabel} #${nodeId} · ${customNodeTitle}`
             : `${nodeLabel} #${nodeId}`;
+        const referenceCount = this.getMissingReferenceCount(missing);
+        const extraReferenceCount = Math.max(0, referenceCount - 1);
+        const text = extraReferenceCount > 0
+            ? `${baseText} + ${extraReferenceCount} ref${extraReferenceCount === 1 ? '' : 's'}`
+            : baseText;
+        const locateTooltip = missing.locate_via_promoted_widget
+            ? 'Center this subgraph node in the ComfyUI graph.'
+            : locateTarget.isTopLevel === false
+            ? 'Open this subgraph and center the node in the ComfyUI graph.'
+            : 'Center this node in the ComfyUI graph.';
 
         return {
             label: nodeLabel,
             text,
             canLocate: nodeId !== '',
             locateTarget,
-            locateTooltip: missing.locate_via_promoted_widget
-                ? 'Center this subgraph node in the ComfyUI graph.'
-                : locateTarget.isTopLevel === false
-                ? 'Open this subgraph and center the node in the ComfyUI graph.'
-                : 'Center this node in the ComfyUI graph.'
+            referenceCount,
+            locateTooltip: extraReferenceCount > 0
+                ? `${locateTooltip} This missing model is used by ${referenceCount} workflow references; this centers the first one.`
+                : locateTooltip
         };
     },
 

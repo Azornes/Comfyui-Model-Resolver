@@ -44,7 +44,8 @@ export const resolveDownloadMethods = {
                 subgraph_id: ref.subgraph_id,
                 is_top_level: ref.is_top_level,
                 is_lora_v2: ref.is_lora_v2,
-                original_lora_name: ref.name || ref.original_path
+                original_lora_name: ref.name || ref.original_path,
+                nested_key: ref.nested_key
             }));
 
             const data = await this.fetchJson('/model_resolver/resolve', {
@@ -104,24 +105,42 @@ export const resolveDownloadMethods = {
 
             // Collect all 100% matches
             const resolutions = [];
+            const seenResolutionKeys = new Set();
             for (const missing of missingModels) {
                 const matches = missing.matches || [];
                 const perfectMatch = matches.find((m) => m.confidence === 100);
 
                 if (perfectMatch && perfectMatch.model) {
-                    resolutions.push({
-                        missing_key: this.getMissingModelKey?.(missing),
-                        missing_search_key: this.getMissingSearchKey?.(missing),
-                        node_id: missing.node_id,
-                        widget_index: missing.widget_index,
-                        resolved_path: perfectMatch.model.path,
-                        category: missing.category,
-                        resolved_model: perfectMatch.model,
-                        subgraph_id: missing.subgraph_id,  // Include subgraph_id for subgraph nodes
-                        is_top_level: missing.is_top_level,  // True for top-level nodes, False for nodes in subgraph definitions
-                        is_lora_v2: missing.is_lora_v2,
-                        original_lora_name: missing.name || missing.original_path
-                    });
+                    const nodeRefs = Array.isArray(missing.all_node_refs) && missing.all_node_refs.length
+                        ? missing.all_node_refs
+                        : [missing];
+                    for (const ref of nodeRefs) {
+                        const resolutionKey = [
+                            ref.node_id ?? '',
+                            ref.widget_index ?? '',
+                            ref.subgraph_id || '',
+                            ref.is_top_level !== false ? 'T' : 'F',
+                            ref.nested_key || '',
+                            ref.name || ref.original_path || ''
+                        ].join(':');
+                        if (seenResolutionKeys.has(resolutionKey)) continue;
+                        seenResolutionKeys.add(resolutionKey);
+
+                        resolutions.push({
+                            missing_key: this.getMissingModelKey?.(missing),
+                            missing_search_key: this.getMissingSearchKey?.(missing),
+                            node_id: ref.node_id,
+                            widget_index: ref.widget_index,
+                            resolved_path: perfectMatch.model.path,
+                            category: ref.category || missing.category,
+                            resolved_model: perfectMatch.model,
+                            subgraph_id: ref.subgraph_id,  // Include subgraph_id for subgraph nodes
+                            is_top_level: ref.is_top_level,  // True for top-level nodes, False for nodes in subgraph definitions
+                            is_lora_v2: ref.is_lora_v2,
+                            original_lora_name: ref.name || ref.original_path,
+                            nested_key: ref.nested_key
+                        });
+                    }
                 }
             }
 
