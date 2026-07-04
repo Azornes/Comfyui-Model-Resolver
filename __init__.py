@@ -4325,6 +4325,7 @@ class ModelResolverExtension:
                     import folder_paths
 
                     known_categories = set(folder_paths.folder_names_and_paths.keys())
+                    skip_categories = {"custom_nodes", "configs"}
                     categories = get_enabled_download_categories(list(known_categories))
                     category_source_keys = {}
                     for cat in [*known_categories]:

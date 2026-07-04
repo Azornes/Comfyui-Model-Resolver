@@ -8,6 +8,70 @@ import { ResolverManagerDialog } from "./resolver_dialog.js";
 import { showNotification } from "../utils/notification_utils.js";
 
 const log = createModuleLogger('model_resolver');
+export const MODEL_RESOLVER_OPEN_COMMAND_ID = "ModelResolver.OpenModelResolver";
+export const MODEL_RESOLVER_OPEN_DEFAULT_KEYBINDING = Object.freeze({
+    commandId: MODEL_RESOLVER_OPEN_COMMAND_ID,
+    combo: Object.freeze({ key: "|", ctrl: true, shift: true }),
+    targetElementId: "graph-canvas",
+});
+
+const OPEN_TOOLTIP_BASE = "Open Model Resolver to find or download missing workflow models.";
+const KEYBINDING_NEW_SETTING_ID = "Comfy.Keybinding.NewBindings";
+const KEYBINDING_UNSET_SETTING_ID = "Comfy.Keybinding.UnsetBindings";
+
+function getKeybindingSetting(id) {
+    try {
+        const value = app.ui?.settings?.getSettingValue?.(id);
+        return Array.isArray(value) ? value : [];
+    } catch (error) {
+        return [];
+    }
+}
+
+function serializeKeybindingCombo(combo = {}) {
+    return [
+        String(combo.key || "").toUpperCase(),
+        String(Boolean(combo.ctrl)),
+        String(Boolean(combo.alt)),
+        String(Boolean(combo.shift)),
+    ].join(":");
+}
+
+function keybindingsEqual(left, right) {
+    return Boolean(
+        left
+        && right
+        && left.commandId === right.commandId
+        && (left.targetElementId || "") === (right.targetElementId || "")
+        && serializeKeybindingCombo(left.combo) === serializeKeybindingCombo(right.combo)
+    );
+}
+
+function getComboLabel(combo = {}) {
+    const parts = [];
+    if (combo.ctrl) parts.push("Ctrl");
+    if (combo.alt) parts.push("Alt");
+    if (combo.shift) parts.push("Shift");
+
+    const keyLabels = {
+        " ": "Space",
+        ArrowUp: "Up",
+        ArrowDown: "Down",
+        ArrowLeft: "Left",
+        ArrowRight: "Right",
+        Backspace: "Backspace",
+        Delete: "Delete",
+        Enter: "Enter",
+        Escape: "Esc",
+        Tab: "Tab",
+    };
+    const key = String(combo.key || "").trim();
+    if (key) {
+        parts.push(keyLabels[key] || (key.length === 1 ? key.toUpperCase() : key));
+    }
+
+    return parts.join("+");
+}
 
 function applyStoredFrontendLoggingPreference() {
     const stored = localStorage.getItem('ModelResolver.frontendLogsEnabled');
@@ -28,7 +92,9 @@ export class ModelResolver {
         this.buttonId = "model-resolver-button";
         this.sidebarTabId = "comfyui-model-resolver";
         this.sidebarRegistered = false;
-        this.openTooltip = "Open Model Resolver to find or download missing workflow models. Shortcut: Ctrl+Shift+L.";
+        this.openTooltipTargets = new Set();
+        this.openTooltip = this.buildOpenTooltip();
+        this.openTooltipRefreshFrame = null;
         this.dialog = null;
         this.isCheckingMissing = false;  // Prevent multiple simultaneous checks
         this.lastCheckedWorkflow = null;  // Track to avoid duplicate checks
@@ -47,13 +113,7 @@ export class ModelResolver {
             window.ModelResolverDialog = this.dialog;
         }
 
-        // Register keyboard shortcut (Ctrl+Shift+L)
-        document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'l') {
-                e.preventDefault();
-                this.openResolverManager();
-            }
-        });
+        this.setupOpenShortcutTooltipTracking();
 
         // Listen for workflow load events to auto-check for missing models
         this.setupAutoOpenOnMissingModels();
@@ -105,6 +165,109 @@ export class ModelResolver {
             window.__ModelResolverSidebarToggleOwner?.handleSidebarButtonClick(event);
         };
         document.addEventListener('click', window.__ModelResolverSidebarToggleHandler, true);
+    }
+
+    setupOpenShortcutTooltipTracking() {
+        window.__ModelResolverShortcutTooltipOwner = this;
+        this.refreshOpenTooltip();
+
+        if (window.__ModelResolverShortcutTooltipHandlersAttached) return;
+        window.__ModelResolverShortcutTooltipHandlersAttached = true;
+
+        const refreshHandler = () => {
+            window.__ModelResolverShortcutTooltipOwner?.scheduleOpenTooltipRefresh();
+        };
+        app.ui?.settings?.addEventListener?.(`${KEYBINDING_NEW_SETTING_ID}.change`, refreshHandler);
+        app.ui?.settings?.addEventListener?.(`${KEYBINDING_UNSET_SETTING_ID}.change`, refreshHandler);
+        window.addEventListener('storage', (event) => {
+            if (
+                event.key === KEYBINDING_NEW_SETTING_ID
+                || event.key === KEYBINDING_UNSET_SETTING_ID
+            ) {
+                refreshHandler();
+            }
+        });
+    }
+
+    scheduleOpenTooltipRefresh() {
+        if (this.openTooltipRefreshFrame) {
+            cancelAnimationFrame(this.openTooltipRefreshFrame);
+        }
+        this.openTooltipRefreshFrame = requestAnimationFrame(() => {
+            this.openTooltipRefreshFrame = null;
+            this.refreshOpenTooltip();
+        });
+    }
+
+    getOpenKeybindings() {
+        const byCombo = {
+            [serializeKeybindingCombo(MODEL_RESOLVER_OPEN_DEFAULT_KEYBINDING.combo)]: MODEL_RESOLVER_OPEN_DEFAULT_KEYBINDING,
+        };
+
+        for (const keybinding of getKeybindingSetting(KEYBINDING_UNSET_SETTING_ID)) {
+            const serializedCombo = serializeKeybindingCombo(keybinding?.combo);
+            if (keybindingsEqual(byCombo[serializedCombo], keybinding)) {
+                delete byCombo[serializedCombo];
+            }
+        }
+
+        for (const keybinding of getKeybindingSetting(KEYBINDING_NEW_SETTING_ID)) {
+            if (!keybinding?.combo) continue;
+            byCombo[serializeKeybindingCombo(keybinding.combo)] = keybinding;
+        }
+
+        return Object.values(byCombo)
+            .filter((keybinding) => keybinding?.commandId === MODEL_RESOLVER_OPEN_COMMAND_ID);
+    }
+
+    buildOpenTooltip() {
+        const shortcutLabels = this.getOpenKeybindings()
+            .map((keybinding) => getComboLabel(keybinding.combo))
+            .filter(Boolean);
+
+        if (shortcutLabels.length === 0) {
+            return `${OPEN_TOOLTIP_BASE} Shortcut: not assigned.`;
+        }
+
+        const label = shortcutLabels.length === 1 ? "Shortcut" : "Shortcuts";
+        return `${OPEN_TOOLTIP_BASE} ${label}: ${shortcutLabels.join(", ")}.`;
+    }
+
+    refreshOpenTooltip() {
+        this.openTooltip = this.buildOpenTooltip();
+        this.applyOpenTooltipToTargets();
+    }
+
+    trackOpenTooltipTarget(target) {
+        if (!(target instanceof HTMLElement)) return;
+        this.openTooltipTargets.add(target);
+        this.applyTooltipToElement(target);
+    }
+
+    applyTooltipToElement(target) {
+        if (!(target instanceof HTMLElement)) return;
+        if (this.dialog?.setTooltip) {
+            this.dialog.setTooltip(target, this.openTooltip);
+        } else {
+            target.setAttribute("data-tooltip", this.openTooltip);
+            target.removeAttribute("title");
+        }
+    }
+
+    applyOpenTooltipToTargets() {
+        const liveTargets = new Set();
+        for (const target of this.openTooltipTargets) {
+            if (!(target instanceof HTMLElement) || !target.isConnected) continue;
+            liveTargets.add(target);
+            this.applyTooltipToElement(target);
+        }
+        this.openTooltipTargets = liveTargets;
+
+        document.querySelectorAll(`.${this.sidebarTabId}-tab-button`).forEach((button) => {
+            if (button instanceof HTMLElement) {
+                this.applyTooltipToElement(button);
+            }
+        });
     }
 
     handleSidebarButtonClick(event) {
@@ -184,7 +347,7 @@ export class ModelResolver {
                 classList: "comfyui-button comfyui-menu-mobile-collapse"
             }).element;
             ModelResolverButton.id = this.buttonId;
-            this.dialog.setTooltip(ModelResolverButton, this.openTooltip);
+            this.trackOpenTooltipTarget(ModelResolverButton);
             this.buttonGroup = new ComfyButtonGroup(
                 ModelResolverButton
             );
@@ -724,7 +887,7 @@ export class ModelResolver {
         });
 
         document.body.appendChild(this.resolverButton);
-        this.dialog?.setTooltip(this.resolverButton, "Open Model Resolver to find or download missing workflow models. Shortcut: Ctrl+Shift+L.");
+        this.trackOpenTooltipTarget(this.resolverButton);
     }
 
     async openResolverManager(options = {}) {
