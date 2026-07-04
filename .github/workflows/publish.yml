@@ -22,9 +22,26 @@ jobs:
     if: ${{ github.repository == 'Azornes/Comfyui-Model-Resolver' }}
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+
+      - name: Check registry token
+        env:
+          REGISTRY_ACCESS_TOKEN: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
+        run: |
+          if [ -z "$REGISTRY_ACCESS_TOKEN" ]; then
+            echo "::error title=Missing REGISTRY_ACCESS_TOKEN::Create a Comfy Registry publishing API key and add it as a repository secret named REGISTRY_ACCESS_TOKEN."
+            exit 1
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+
+      - name: Install comfy-cli
+        run: python -m pip install --upgrade comfy-cli
 
       - name: Publish Custom Node
-        uses: Comfy-Org/publish-node-action@main
-        with:
-          personal_access_token: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
+        env:
+          REGISTRY_ACCESS_TOKEN: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
+        run: comfy --skip-prompt --no-enable-telemetry env comfy node publish --token "$REGISTRY_ACCESS_TOKEN"
