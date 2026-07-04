@@ -2361,6 +2361,56 @@ export const searchPanelMethods = {
         return `<span class="mr-match-status ${className}"${attrs}>${label}</span>`;
     },
 
+    getLocalMatchCategory(match = {}) {
+        const model = match.model && typeof match.model === 'object' ? match.model : {};
+        const candidates = [
+            model.category,
+            match.category,
+            model.directory,
+            match.directory
+        ];
+        for (const candidate of candidates) {
+            const raw = String(candidate || '').trim();
+            if (!raw || /[\/\\]/.test(raw) || /^[a-z]:/i.test(raw)) continue;
+            const normalized = this.normalizeDownloadCategory?.(raw) || raw;
+            if (normalized && normalized !== 'unknown') return normalized;
+        }
+        return '';
+    },
+
+    getLocalMatchBadFolderWarning(missing = {}, match = {}) {
+        const matchCategory = this.getLocalMatchCategory?.(match) || '';
+        if (!matchCategory) return null;
+
+        const supportedCategories = (this.getMissingSupportedDownloadCategories?.(missing) || [])
+            .map(category => this.normalizeDownloadCategory?.(category) || String(category || '').trim())
+            .filter(category => category && category !== 'unknown');
+        const supported = Array.from(new Set(supportedCategories));
+        if (!supported.length || supported.includes(matchCategory)) return null;
+
+        const matchLabel = this.getCategoryDisplayName?.(matchCategory) || matchCategory;
+        const supportedLabels = supported.map(category => this.getCategoryDisplayName?.(category) || category);
+        const supportedText = supportedLabels.length === 1
+            ? supportedLabels[0]
+            : `one of: ${supportedLabels.join(', ')}`;
+
+        return {
+            matchCategory,
+            supportedCategories: supported,
+            tooltip: `This local file is in ${matchLabel}, but this node likely accepts ${supportedText}. Linking it may leave the model missing; move or copy the file to a supported model folder.`
+        };
+    },
+
+    renderLocalMatchBadFolderBadge(missing = {}, match = {}) {
+        const warning = this.getLocalMatchBadFolderWarning?.(missing, match);
+        if (!warning) return '';
+        return `<span class="mr-match-status mr-match-status-bad-folder" tabindex="0" data-tooltip="${this.escapeHtml(warning.tooltip)}">Bad folder</span>`;
+    },
+
+    renderLocalMatchStatusGroup(missing = {}, match = {}, hashLabelMap = null) {
+        return `<span class="mr-match-status-group">${this.renderLocalMatchStatus(match, hashLabelMap)}${this.renderLocalMatchBadFolderBadge(missing, match)}</span>`;
+    },
+
     areLocalMatchAlternativesCollapsed() {
         if (typeof this.localMatchAlternativesCollapsed === 'boolean') {
             return this.localMatchAlternativesCollapsed;
@@ -2425,7 +2475,7 @@ export const searchPanelMethods = {
                 html += `<div class="${rowClass}"${identityAttr}${this.getContextMenuAttrs(contextModel)}>`;
                 html += this.getConfidenceBadge(match.confidence);
                 html += `<span class="mr-match-filename" data-tooltip="${this.escapeHtml(matchPath)}">${this.escapeHtml(matchPath)}</span>`;
-                html += this.renderLocalMatchStatus(match, hashLabelMap);
+                html += this.renderLocalMatchStatusGroup(missing, match, hashLabelMap);
                 html += `<button id="${buttonId}" class="mr-btn mr-btn-secondary mr-btn-sm mr-btn-icon-only mr-local-link-btn" data-tooltip="Link this local match" aria-label="Link this local match">`;
                 html += getSvgIcon('link');
                 html += `</button>`;
@@ -2458,7 +2508,7 @@ export const searchPanelMethods = {
                     html += `<div class="mr-match-row"${identityAttr}${this.getContextMenuAttrs(contextModel)}>`;
                     html += this.getConfidenceBadge(match.confidence);
                     html += `<span class="mr-match-filename" data-tooltip="${this.escapeHtml(matchPath)}">${this.escapeHtml(matchPath)}</span>`;
-                    html += this.renderLocalMatchStatus(match, hashLabelMap);
+                    html += this.renderLocalMatchStatusGroup(missing, match, hashLabelMap);
                     html += `<button id="${altBtnId}" class="mr-btn mr-btn-secondary mr-btn-sm mr-btn-icon-only mr-local-link-btn" data-tooltip="Link this local match" aria-label="Link this local match">${getSvgIcon('link')}</button>`;
                     html += `</div>`;
                 }
@@ -2515,6 +2565,7 @@ export const searchPanelMethods = {
         }
 
         this.wireLocalHashMatchResultHighlights?.(container);
+        this.bindTooltips?.(container);
     },
 
     decodeLocalMatchIdentityList(value = '') {

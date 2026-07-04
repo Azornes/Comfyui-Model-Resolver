@@ -102,6 +102,7 @@ export const downloadTargetMethods = {
             textual_inversion: 'embeddings',
             upscaler: 'upscale_models',
             unet: 'diffusion_models',
+            unet_gguf: 'diffusion_models',
             diffusion_model: 'diffusion_models',
             diffusion_models: 'diffusion_models',
             clip: 'text_encoders',

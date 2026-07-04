@@ -1886,6 +1886,15 @@
     white-space: nowrap;
 }
 
+.mr-match-status-group {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 5px;
+    min-width: 0;
+    flex-wrap: wrap;
+}
+
 .mr-match-status-exact {
     color: #72d38a;
     background: rgba(114, 211, 138, 0.10);
@@ -1905,6 +1914,18 @@
 .mr-match-status-partial {
     color: #f1cf64;
     background: rgba(241, 207, 100, 0.10);
+}
+
+.mr-match-status-bad-folder {
+    color: #fca5a5;
+    background: rgba(248, 113, 113, 0.12);
+    box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.22);
+    cursor: help;
+}
+
+.mr-match-status-bad-folder:focus-visible {
+    outline: 2px solid rgba(248, 113, 113, 0.58);
+    outline-offset: 2px;
 }
 
 .mr-local-alternatives-toggle {

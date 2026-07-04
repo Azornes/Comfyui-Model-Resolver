@@ -167,6 +167,7 @@ CATEGORY_MAP = {
     "gligen": "gligen",
     "diffusers": "diffusers",
     "unet": "diffusion_models",
+    "unet_gguf": "diffusion_models",
     "diffusion_model": "diffusion_models",
     "diffusion_models": "diffusion_models",
     "clip": "text_encoders",
@@ -942,6 +943,7 @@ def get_category_folder_keys(category: str) -> list[str]:
     keys = [folder_key]
     if folder_key == "diffusion_models":
         keys.append("unet")
+        keys.append("unet_gguf")
     elif folder_key == "text_encoders":
         keys.append("clip")
     return keys

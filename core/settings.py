@@ -43,7 +43,7 @@ TEMPLATE_KEY_ALIASES = {
     "loras": ("loras", "lora"),
     "checkpoints": ("checkpoints", "checkpoint"),
     "embeddings": ("embeddings", "embedding"),
-    "diffusion_models": ("diffusion_models", "diffusion_model", "unet"),
+    "diffusion_models": ("diffusion_models", "diffusion_model", "unet", "unet_gguf"),
     "text_encoders": ("text_encoders", "text_encoder", "clip", "clips", "clip_gguf"),
     "controlnet": ("controlnet", "control_net"),
     "vae": ("vae",),
