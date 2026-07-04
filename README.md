@@ -19,7 +19,7 @@
 <p align="center">
   <strong>🔹 <a href="#-installation">Quick Start</a></strong>
   &nbsp; | &nbsp;
-  <strong>⚙️ <a href="#-configuration--settings">Configuration</a></strong>
+  <strong>⚙️ <a href="#%EF%B8%8F-configuration--settings">Configuration</a></strong>
   &nbsp; | &nbsp;
   <strong>⚡ <a href="#-downloader-backends-and-aria2">Aria2 Setup</a></strong>
   &nbsp; | &nbsp;
