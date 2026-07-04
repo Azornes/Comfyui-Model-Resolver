@@ -28,6 +28,8 @@ jobs:
       - name: create gist and download previous count
         id: set_id
         run: |
+          BADGE_DOC="badges/CLONE.md"
+
           if gh secret list | grep -q "GIST_ID"
           then
               echo "GIST_ID found"
@@ -39,7 +41,7 @@ jobs:
                 echo $gist_id | gh secret set GIST_ID
                 echo "GIST=$gist_id" >> $GITHUB_OUTPUT
                 cp clone.json clone_before.json
-                git rm --ignore-unmatch  CLONE.md
+                git rm --ignore-unmatch "$BADGE_DOC" CLONE.md
               fi
           else
               echo "GIST_ID not found. Creating a gist..."
@@ -56,6 +58,8 @@ jobs:
 
       - name: Update gist with latest count
         run: |
+          BADGE_DOC="badges/CLONE.md"
+
           content=$(sed -e 's/\\/\\\\/g' -e 's/\t/\\t/g' -e 's/\"/\\"/g' -e 's/\r//g' "clone.json" | sed -E ':a;N;$!ba;s/\r{0,1}\n/\\n/g')
           echo '{"description": "${{ github.repository }} clone statistics", "files": {"clone.json": {"content": "'"$content"'"}}}' > post_clone.json
           curl -s -X PATCH \
@@ -63,37 +67,38 @@ jobs:
             -H "Content-Type: application/json" \
             -d @post_clone.json https://api.github.com/gists/${{ steps.set_id.outputs.GIST }} > /dev/null 2>&1
 
-          if [ ! -f CLONE.md ]; then
+          if [ ! -f "$BADGE_DOC" ]; then
+            mkdir -p badges
             shields="https://img.shields.io/badge/dynamic/json?color=success&label=Clone&query=count&url="
             shields_for_the_badge="https://img.shields.io/badge/dynamic/json?color=2F80ED&label=Clone&query=count&url="
             url="https://gist.githubusercontent.com/${{ github.actor }}/${{ steps.set_id.outputs.GIST }}/raw/clone.json"
             repo="https://github.com/MShawon/github-clone-count-badge"
-            echo ''> CLONE.md
+            echo ''> "$BADGE_DOC"
             echo '
             **Markdown**
 
-            ```markdown' >> CLONE.md
-            echo "[![GitHub Clones]($shields$url&logo=github)]($repo)" >> CLONE.md
+            ```markdown' >> "$BADGE_DOC"
+            echo "[![GitHub Clones]($shields$url&logo=github)]($repo)" >> "$BADGE_DOC"
             echo '
-            ```' >> CLONE.md
-            echo "[![GitHub Clones]($shields$url&logo=github)]($repo)" >> CLONE.md
+            ```' >> "$BADGE_DOC"
+            echo "[![GitHub Clones]($shields$url&logo=github)]($repo)" >> "$BADGE_DOC"
             echo '
 
             **HTML**
-            ```html' >> CLONE.md
-            echo "<a href='$repo'><img alt='GitHub Clones' src='$shields$url&logo=github'></a>" >> CLONE.md
+            ```html' >> "$BADGE_DOC"
+            echo "<a href='$repo'><img alt='GitHub Clones' src='$shields$url&logo=github'></a>" >> "$BADGE_DOC"
             echo '
-            ```' >> CLONE.md
-            echo "<a href='$repo'><img alt='GitHub Clones' src='$shields$url&logo=github'></a>" >> CLONE.md
+            ```' >> "$BADGE_DOC"
+            echo "<a href='$repo'><img alt='GitHub Clones' src='$shields$url&logo=github'></a>" >> "$BADGE_DOC"
             echo '
 
             **HTML (for-the-badge)**
-            ```html' >> CLONE.md
-            echo "<a href='$repo'><img alt='GitHub Clones' src='$shields_for_the_badge$url&logo=github&style=for-the-badge'></a>" >> CLONE.md
-            echo '```' >> CLONE.md
-            echo "<a href='$repo'><img alt='GitHub Clones' src='$shields_for_the_badge$url&logo=github&style=for-the-badge'></a>" >> CLONE.md
+            ```html' >> "$BADGE_DOC"
+            echo "<a href='$repo'><img alt='GitHub Clones' src='$shields_for_the_badge$url&logo=github&style=for-the-badge'></a>" >> "$BADGE_DOC"
+            echo '```' >> "$BADGE_DOC"
+            echo "<a href='$repo'><img alt='GitHub Clones' src='$shields_for_the_badge$url&logo=github&style=for-the-badge'></a>" >> "$BADGE_DOC"
             
-            git add CLONE.md
+            git add "$BADGE_DOC"
             git config --global user.name "GitHub Action"
             git config --global user.email "action@github.com"
             git commit -m "create clone count badge"

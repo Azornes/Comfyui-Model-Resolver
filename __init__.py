@@ -1,8 +1,7 @@
 """
-@author: Model Resolver Team
+@author: Azornes
 @title: ComfyUI Model Resolver
-@nickname: Model Resolver
-@version: 1.1.0
+@version: 1.0.0
 @description: Extension for resolving missing models and downloading from HuggingFace/CivitAI
 """
 

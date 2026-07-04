@@ -1,0 +1,94 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "pyproject.toml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read project metadata
+        id: metadata
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import re
+          import tomllib
+
+          with open("pyproject.toml", "rb") as handle:
+              data = tomllib.load(handle)
+
+          project = data["project"]
+          version = str(project["version"]).strip()
+          name = str(project["name"]).strip()
+
+          if not re.fullmatch(r"\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", version):
+              raise SystemExit(f"Invalid semantic version in pyproject.toml: {version}")
+
+          print(f"project_name={name}")
+          print(f"version={version}")
+          print(f"tag=v{version}")
+          PY
+
+      - name: Check if tag for this version already exists
+        id: tag_check
+        run: |
+          TAG="${{ steps.metadata.outputs.tag }}"
+          git fetch --force --tags
+
+          if git rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null; then
+            echo "Tag $TAG already exists. Skipping release."
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build release notes
+        id: notes
+        if: steps.tag_check.outputs.exists != 'true'
+        run: |
+          CURRENT_TAG="${{ steps.metadata.outputs.tag }}"
+          PREVIOUS_TAG="$(git tag --list 'v[0-9]*' --sort=-v:refname | grep -vx "$CURRENT_TAG" | head -n 1 || true)"
+
+          if [ -n "$PREVIOUS_TAG" ]; then
+            RANGE="$PREVIOUS_TAG..HEAD"
+            HEADER="Changes since $PREVIOUS_TAG"
+          else
+            RANGE="HEAD"
+            HEADER="Initial release"
+          fi
+
+          {
+            echo "body<<EOF"
+            echo "## $HEADER"
+            echo
+            git log --pretty=format:"- %s (%h)" "$RANGE"
+            echo
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        if: steps.tag_check.outputs.exists != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.metadata.outputs.tag }}
+          name: ComfyUI Model Resolver ${{ steps.metadata.outputs.tag }}
+          body: ${{ steps.notes.outputs.body }}
+          generate_release_notes: true
