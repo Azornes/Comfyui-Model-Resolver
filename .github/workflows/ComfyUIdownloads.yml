@@ -103,12 +103,14 @@ jobs:
           NAME=$(jq -r '.name' top_modelresolver.json)
           BADGE_DOC="badges/DOWNLOADS.md"
 
-          if [ ! -f "$BADGE_DOC" ]; then
+          if [ ! -f "$BADGE_DOC" ] || ! grep -q "Combined HTML (for-the-badge)" "$BADGE_DOC"; then
             mkdir -p badges
             shields="https://img.shields.io/badge/dynamic/json?color=informational&label=TopModelResolver&query=downloads&url="
             shields_for_the_badge="https://img.shields.io/badge/dynamic/json?color=2F80ED&label=TopModelResolver&query=downloads&url="
+            comfy_badge="https://img.shields.io/badge/ComfyUI-1a1a1a?style=for-the-badge&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABwAAAAcCAMAAABF0y+mAAAASFBMVEVHcEwYLtsYLtkXLtkXLdkYLtkWLdcFIdoAD95uerfI1XLR3mq3xIP8/yj0/zvw/0FSYMP5/zKMmKQtPNOuuozj8FOhrZW7x4FMWFFbAAAABnRSTlMAUrPX87KxijklAAAA00lEQVR4AX3SBw6DMAxA0UzbrIzO+9+02GkEpoWP9hPZZs06Hw75aI3k4W/+wkQtnGZNhF1I34BzalQcxkmasY0b9raklNcvLYU1GNiiOeVWauOa/XS526gRyzpV/7HeUOG9Jp6vcsvUrCPeKg/3KBKBQhoTD1dQggPWzPVfFOIgo85/kR4y6oB/8SlIEh7wvmTuKd3wgLVW1sTfRBoR7oWVqy/U2NcrWDYMINE7NUuJuoV+2fhaWmnbjzcOWnRv7XbiLh/Y9dNUqk2y0QcNwTu7wgf+/BhsPUhf4QAAAABJRU5ErkJggg=="
+            combined_downloads="https://img.shields.io/badge/dynamic/json?color=%230D2A4A&label=&query=downloads&url="
             url="https://gist.githubusercontent.com/${{ github.actor }}/${{ steps.set_id.outputs.GIST }}/raw/top_modelresolver.json"
-            repo="https://comfy.org"
+            repo="https://registry.comfy.org/publishers/azornes/nodes/comfyui-model-resolver"
             echo ''> "$BADGE_DOC"
             echo '
             **Markdown**
@@ -133,11 +135,26 @@ jobs:
             echo "<a href='$repo'><img alt='Top Model Resolver Node' src='$shields_for_the_badge$url&style=for-the-badge'></a>" >> "$BADGE_DOC"
             echo '```' >> "$BADGE_DOC"
             echo "<a href='$repo'><img alt='Top Model Resolver Node' src='$shields_for_the_badge$url&style=for-the-badge'></a>" >> "$BADGE_DOC"
+            echo '
+
+            **Combined Markdown (for-the-badge)**
+            ```markdown' >> "$BADGE_DOC"
+            echo "[![ComfyUI]($comfy_badge)![Downloads]($combined_downloads$url&style=for-the-badge)]($repo)" >> "$BADGE_DOC"
+            echo '
+            ```' >> "$BADGE_DOC"
+            echo "[![ComfyUI]($comfy_badge)![Downloads]($combined_downloads$url&style=for-the-badge)]($repo)" >> "$BADGE_DOC"
+            echo '
+
+            **Combined HTML (for-the-badge)**
+            ```html' >> "$BADGE_DOC"
+            echo "<a href='$repo'><img alt='ComfyUI' src='$comfy_badge'><img alt='Downloads' src='$combined_downloads$url&style=for-the-badge'></a>" >> "$BADGE_DOC"
+            echo '```' >> "$BADGE_DOC"
+            echo "<a href='$repo'><img alt='ComfyUI' src='$comfy_badge'><img alt='Downloads' src='$combined_downloads$url&style=for-the-badge'></a>" >> "$BADGE_DOC"
 
             git add "$BADGE_DOC"
             git config --global user.name "GitHub Action"
             git config --global user.email "action@github.com"
-            git commit -m "Create Model Resolver badge"
+            git commit -m "Create or update Model Resolver downloads badge"
           fi
 
       - name: Update Gist
