@@ -84,8 +84,28 @@ export const resolveDownloadMethods = {
         }
     },
 
+    getExactLocalMatchSelections(missingModels = []) {
+        const selections = [];
+        const seenKeys = new Set();
+
+        for (const missing of Array.isArray(missingModels) ? missingModels : []) {
+            const match = this.getBestLocalMatch?.(missing, 100)
+                || (missing.matches || []).find(item => Number(item.confidence || 0) >= 100);
+            if (!match?.model) continue;
+
+            const selection = this.buildResolutionSelection(missing, match.model);
+            const key = this.getResolutionQueueKey(selection);
+            if (!key || seenKeys.has(key)) continue;
+
+            seenKeys.add(key);
+            selections.push(selection);
+        }
+
+        return selections;
+    },
+
     /**
-     * Auto-resolve all 100% confidence matches
+     * Auto-resolve all 100% confidence matches using the same apply path as queued selections.
      * @returns {object|null} The updated workflow if successful, null otherwise
      */
     async autoResolve100Percent() {
@@ -96,94 +116,51 @@ export const resolveDownloadMethods = {
                 return null;
             }
 
-            // Analyze workflow first
-            const analyzeData = await this.fetchJson('/model_resolver/analyze', {
-                method: 'POST',
-                body: JSON.stringify({ workflow })
-            }, 'Analyze workflow');
-            const missingModels = analyzeData.missing_models || [];
+            const workflowSignature = this.getWorkflowSignature?.(workflow);
+            const canUseCurrentAnalysis = Boolean(
+                this.isVisible?.()
+                && workflowSignature
+                && this.activeWorkflowSignature === workflowSignature
+                && this.cachedWorkflowSignature === workflowSignature
+            );
+            let missingModels = canUseCurrentAnalysis && Array.isArray(this.missingModels)
+                ? this.missingModels
+                : [];
+            let selections = this.getExactLocalMatchSelections(missingModels);
 
-            // Collect all 100% matches
-            const resolutions = [];
-            const seenResolutionKeys = new Set();
-            for (const missing of missingModels) {
-                const matches = missing.matches || [];
-                const perfectMatch = matches.find((m) => m.confidence === 100);
-
-                if (perfectMatch && perfectMatch.model) {
-                    const nodeRefs = Array.isArray(missing.all_node_refs) && missing.all_node_refs.length
-                        ? missing.all_node_refs
-                        : [missing];
-                    for (const ref of nodeRefs) {
-                        const resolutionKey = [
-                            ref.node_id ?? '',
-                            ref.widget_index ?? '',
-                            ref.subgraph_id || '',
-                            ref.is_top_level !== false ? 'T' : 'F',
-                            ref.nested_key || '',
-                            ref.name || ref.original_path || ''
-                        ].join(':');
-                        if (seenResolutionKeys.has(resolutionKey)) continue;
-                        seenResolutionKeys.add(resolutionKey);
-
-                        resolutions.push({
-                            missing_key: this.getMissingModelKey?.(missing),
-                            missing_search_key: this.getMissingSearchKey?.(missing),
-                            node_id: ref.node_id,
-                            widget_index: ref.widget_index,
-                            resolved_path: perfectMatch.model.path,
-                            category: ref.category || missing.category,
-                            resolved_model: perfectMatch.model,
-                            subgraph_id: ref.subgraph_id,  // Include subgraph_id for subgraph nodes
-                            is_top_level: ref.is_top_level,  // True for top-level nodes, False for nodes in subgraph definitions
-                            is_lora_v2: ref.is_lora_v2,
-                            original_lora_name: ref.name || ref.original_path,
-                            nested_key: ref.nested_key
-                        });
-                    }
-                }
+            if (
+                canUseCurrentAnalysis
+                && !selections.length
+                && !missingModels.length
+                && Array.isArray(this.cachedAnalysisData?.missing_models)
+            ) {
+                missingModels = this.cachedAnalysisData.missing_models;
+                selections = this.getExactLocalMatchSelections(missingModels);
             }
 
-            if (resolutions.length === 0) {
+            if (!selections.length && !missingModels.length) {
+                const analyzeData = await this.fetchJson('/model_resolver/analyze', {
+                    method: 'POST',
+                    body: JSON.stringify({ workflow })
+                }, 'Analyze workflow');
+                this.applyResolvedSelectionAliasesToAnalysisData?.(analyzeData);
+                this.syncWorkflowScopedQueue?.(workflow);
+                if (workflowSignature) {
+                    this.cachedWorkflowSignature = workflowSignature;
+                }
+                this.cachedAnalysisData = this.cloneAnalysisData?.(analyzeData) || analyzeData;
+                missingModels = Array.isArray(analyzeData.missing_models) ? analyzeData.missing_models : [];
+                this.missingModels = missingModels;
+                selections = this.getExactLocalMatchSelections(missingModels);
+            }
+
+            if (!selections.length) {
                 this.showNotification('No 100% confidence matches found to auto-resolve.', 'error');
                 return null;
             }
 
-            // Apply resolutions
-            const resolveData = await this.fetchJson('/model_resolver/resolve', {
-                method: 'POST',
-                body: JSON.stringify({
-                    workflow,
-                    resolutions
-                })
-            }, 'Resolve models');
-
-            if (resolveData.success) {
-                await this.refreshComfyModelCatalogAfterApply?.(resolveData.workflow, resolutions);
-
-                // Update workflow in ComfyUI
-                await this.updateWorkflowInComfyUI(resolveData.workflow);
-
-                // Show success notification
-                this.showNotification(
-                    `✓ Successfully linked ${resolutions.length} model${resolutions.length > 1 ? 's' : ''}!`,
-                    'success'
-                );
-                this.rememberAppliedResolvedSelections?.(resolutions);
-
-                // Reload dialog using the updated workflow from API response (if dialog is visible)
-                if (this.contentElement) {
-                    this.preserveSearchCacheAcrossNextWorkflowSync = true;
-                    await this.loadWorkflowData(resolveData.workflow, { force: true });
-                }
-
-                // Return the updated workflow for callers who need it
-                return resolveData.workflow;
-            } else {
-                this.showNotification('Failed to resolve models: ' + (resolveData.error || 'Unknown error'), 'error');
-                return null;
-            }
-
+            this.closeFooterMenus?.();
+            return await this.applyPendingResolutionList(selections, { clearAll: false });
         } catch (error) {
             console.error('Model Resolver: Error auto-resolving:', error);
             this.showNotification('Error auto-resolving: ' + error.message, 'error');

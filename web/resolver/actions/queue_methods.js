@@ -2030,17 +2030,9 @@ export const queueMethods = {
     },
 
 
-    /**
-     * Queue a resolution for later batch apply
-     */
-    queueResolution(missing, resolvedModel) {
-        if (!resolvedModel) {
-            this.showNotification('No model selected', 'error');
-            return;
-        }
-
+    buildResolutionSelection(missing, resolvedModel) {
         const missingKey = this.getMissingModelKey(missing);
-        const resolution = {
+        return {
             missing_key: missingKey,
             missing_search_key: this.getMissingSearchKey?.(missing),
             node_id: missing.node_id,
@@ -2061,6 +2053,18 @@ export const queueMethods = {
             node_type: missing.node_type,
             node_label: missing.subgraph_name || missing.node_type
         };
+    },
+
+    /**
+     * Queue a resolution for later batch apply
+     */
+    queueResolution(missing, resolvedModel) {
+        if (!resolvedModel) {
+            this.showNotification('No model selected', 'error');
+            return;
+        }
+
+        const resolution = this.buildResolutionSelection(missing, resolvedModel);
 
         const key = this.getResolutionQueueKey(resolution);
         if (this.pendingIndex.has(key)) {
@@ -2116,7 +2120,7 @@ export const queueMethods = {
     async applyPendingResolutionList(list, { clearAll = false } = {}) {
         if (!list.length) {
             this.showNotification('No selections queued', 'error');
-            return;
+            return null;
         }
 
         try {
@@ -2124,12 +2128,12 @@ export const queueMethods = {
             const applyResolutions = this.expandPendingResolutionsForApply(appliedSelections);
             if (!applyResolutions.length) {
                 this.showNotification('No valid selections to apply', 'error');
-                return;
+                return null;
             }
             const workflow = this.getCurrentWorkflow();
             if (!workflow) {
                 this.showNotification('No workflow loaded', 'error');
-                return;
+                return null;
             }
 
             const data = await this.fetchJson('/model_resolver/resolve', {
@@ -2167,12 +2171,15 @@ export const queueMethods = {
                     : '';
                 this.showNotification(`✓ Linked ${selectionCount} selection${selectionCount > 1 ? 's' : ''}${refText}`, 'success');
                 this.refreshAnalysisInBackground(data.workflow, this.getWorkflowSignature(data.workflow));
+                return data.workflow || null;
             } else {
                 this.showNotification('Failed to apply selections: ' + (data.error || 'Unknown error'), 'error');
+                return null;
             }
         } catch (e) {
             console.error('Model Resolver: applyPendingResolutions error', e);
             this.showNotification('Error applying selections: ' + e.message, 'error');
+            return null;
         }
     },
 
