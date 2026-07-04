@@ -190,6 +190,7 @@ class ModelResolverExtension:
                 from .core.scanner import get_model_files, invalidate_model_files_cache, find_local_file_path
                 from .core.path_utils import (
                     get_filename_from_path,
+                    is_path_in_configured_model_roots,
                     read_json_safe,
                     write_json_atomic,
                 )
@@ -235,6 +236,7 @@ class ModelResolverExtension:
                     get_metadata_sidecar_path,
                     normalize_download_category,
                     write_lora_manager_metadata,
+                    sanitize_download_filename,
                 )
                 from .core.aria2_installer import Aria2InstallError, install_aria2_engine
                 from .core.sources.popular import (
@@ -733,16 +735,20 @@ class ModelResolverExtension:
                         {"error": "path is required"}, status=400
                     )
 
-                normalized_path = os.path.normpath(target_path)
+                normalized_path = os.path.abspath(os.path.normpath(target_path))
                 if not os.path.exists(normalized_path):
                     return web.json_response(
                         {"error": "path does not exist"}, status=404
                     )
+                if not is_path_in_configured_model_roots(normalized_path):
+                    return web.json_response(
+                        {"error": "path is outside configured model directories"},
+                        status=403,
+                    )
 
                 if os.path.isfile(normalized_path):
-                    absolute_path = os.path.abspath(normalized_path)
                     subprocess.Popen(
-                        ["explorer.exe", "/select,", absolute_path],
+                        ["explorer.exe", "/select,", normalized_path],
                         shell=False,
                     )
                 else:
@@ -769,6 +775,8 @@ class ModelResolverExtension:
                 normalized_path = _os.path.abspath(_os.path.normpath(file_path))
                 if not _os.path.exists(normalized_path) or not _os.path.isfile(normalized_path):
                     return "", "file does not exist"
+                if not is_path_in_configured_model_roots(normalized_path):
+                    return "", "file is outside configured model directories"
                 return normalized_path, ""
 
             def write_calculated_hash_metadata(normalized_path, metadata_path, sha256):
@@ -901,8 +909,9 @@ class ModelResolverExtension:
                         {"error": "file_path is required"}, status=400
                     )
                 if error:
+                    status = 403 if error == "file is outside configured model directories" else 404
                     return web.json_response(
-                        {"error": error}, status=404
+                        {"error": error}, status=status
                     )
 
                 sha256 = calculate_sha256_with_progress(normalized_path)
@@ -941,8 +950,9 @@ class ModelResolverExtension:
                         {"error": "file_path is required"}, status=400
                     )
                 if error:
+                    status = 403 if error == "file is outside configured model directories" else 404
                     return web.json_response(
-                        {"error": error}, status=404
+                        {"error": error}, status=status
                     )
 
                 self.hash_tracker.cleanup()
@@ -4055,6 +4065,7 @@ class ModelResolverExtension:
 
                         parsed = urlparse(url)
                         filename = unquote(parsed.path.split("/")[-1])
+                    filename = sanitize_download_filename(filename)
 
                     if not filename:
                         return web.json_response(

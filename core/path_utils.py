@@ -8,7 +8,7 @@ and directory matching to be shared across all modules.
 import os
 import json
 import hashlib
-from typing import Any, Tuple, Optional, Callable
+from typing import Any, Tuple, Optional, Callable, Iterable, List
 
 
 _log = None
@@ -58,11 +58,98 @@ def is_path_within(path_value: Any, root_value: Any) -> bool:
     if not path_value or not root_value:
         return False
     try:
-        path_key = get_path_key(path_value)
-        root_key = get_path_key(root_value)
+        path_key = get_path_identity(str(path_value))
+        root_key = get_path_identity(str(root_value))
         return os.path.commonpath([path_key, root_key]) == root_key
     except Exception:
         return False
+
+
+def _get_folder_paths_module(folder_paths_module: Optional[Any] = None) -> Optional[Any]:
+    if folder_paths_module is not None:
+        return folder_paths_module
+    try:
+        import folder_paths
+        return folder_paths
+    except ImportError:
+        return None
+
+
+def _coerce_folder_paths(value: Any) -> List[str]:
+    if isinstance(value, str):
+        return [value]
+    if not isinstance(value, (list, tuple)):
+        return []
+    if value and isinstance(value[0], (list, tuple, set)):
+        return [str(path) for path in value[0] if path]
+    return [str(path) for path in value if isinstance(path, str) and path]
+
+
+def get_configured_model_roots(
+    folder_paths_module: Optional[Any] = None,
+    *,
+    skip_keys: Optional[Iterable[str]] = None,
+) -> List[str]:
+    """Return all configured ComfyUI model roots, including external model folders."""
+    fp = _get_folder_paths_module(folder_paths_module)
+    if fp is None:
+        return []
+
+    skipped = {str(key).strip().lower() for key in (skip_keys or {"custom_nodes", "configs"})}
+    names = []
+    folder_names_and_paths = getattr(fp, "folder_names_and_paths", None)
+    if isinstance(folder_names_and_paths, dict):
+        names = list(folder_names_and_paths.keys())
+    else:
+        try:
+            get_folder_names = getattr(fp, "get_folder_names", None)
+            if callable(get_folder_names):
+                names = list(get_folder_names() or [])
+        except Exception:
+            names = []
+
+    roots: List[str] = []
+    seen = set()
+    for raw_name in names:
+        name = str(raw_name or "").strip()
+        if not name or name.lower() in skipped:
+            continue
+
+        paths = []
+        try:
+            get_folder_paths = getattr(fp, "get_folder_paths", None)
+            if callable(get_folder_paths):
+                paths = list(get_folder_paths(name) or [])
+        except Exception:
+            paths = []
+
+        if not paths and isinstance(folder_names_and_paths, dict):
+            paths = _coerce_folder_paths(folder_names_and_paths.get(name))
+
+        for path in paths:
+            if not path:
+                continue
+            absolute_path = os.path.abspath(os.path.normpath(str(path)))
+            identity = get_path_identity(absolute_path)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            roots.append(absolute_path)
+
+    return roots
+
+
+def is_path_in_configured_model_roots(
+    path_value: Any,
+    folder_paths_module: Optional[Any] = None,
+) -> bool:
+    """Return True when a path is inside a configured ComfyUI model root."""
+    if not path_value:
+        return False
+    return any(
+        is_path_within(path_value, root)
+        for root in get_configured_model_roots(folder_paths_module)
+    )
 
 
 def prefer_local_base_directory(

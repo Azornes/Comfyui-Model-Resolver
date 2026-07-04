@@ -7,6 +7,7 @@ Handles downloading models from various sources with progress tracking.
 import os
 import json
 import hashlib
+import re
 import secrets
 import shutil
 import socket
@@ -55,7 +56,7 @@ ARIA2_RPC_TIMEOUT = (2, 5)  # local JSON-RPC should respond quickly
 ARIA2_IDLE_STOP_SECONDS = 5 * 60
 DOWNLOAD_USER_AGENT = DEFAULT_BROWSER_USER_AGENT
 
-from .settings import CATEGORY_MAP, load_settings, normalize_download_backend, normalize_download_category
+from .settings import CATEGORY_MAP, load_settings, normalize_download_backend, normalize_download_category, normalize_relative_subfolder
 
 SENSITIVE_METADATA_KEYS = {
     "authorization",
@@ -85,6 +86,18 @@ SENSITIVE_QUERY_KEYS = {
     "sessionid",
     "cookie",
 }
+
+_INVALID_DOWNLOAD_FILENAME_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]+')
+
+
+def sanitize_download_filename(filename: Any) -> str:
+    """Return a safe basename for a downloaded model file."""
+    text = get_filename_from_path(str(filename or "")).strip()
+    text = _INVALID_DOWNLOAD_FILENAME_RE.sub("_", text)
+    text = re.sub(r"\s+", " ", text).strip(" .")
+    if text in {"", ".", ".."}:
+        return ""
+    return text
 
 
 def _is_sensitive_metadata_key(key: Any) -> bool:
@@ -1670,6 +1683,15 @@ def download_model(
     if download_id is None:
         download_id = generate_download_id()
 
+    filename = sanitize_download_filename(filename)
+    if not filename:
+        return {
+            "success": False,
+            "download_id": download_id,
+            "error": "Invalid filename",
+        }
+    subfolder = normalize_relative_subfolder(subfolder)
+
     # Get destination directory
     dest_dir = get_download_directory(category, base_directory)
     if not dest_dir:
@@ -1681,9 +1703,16 @@ def download_model(
 
     # Add subfolder if specified
     if subfolder:
-        dest_dir = os.path.join(dest_dir, subfolder)
+        dest_dir = os.path.join(dest_dir, *subfolder.split("/"))
 
-    dest_path = os.path.join(dest_dir, filename)
+    dest_dir = os.path.abspath(os.path.normpath(dest_dir))
+    dest_path = os.path.abspath(os.path.normpath(os.path.join(dest_dir, filename)))
+    if not is_path_within(dest_path, dest_dir):
+        return {
+            "success": False,
+            "download_id": download_id,
+            "error": "Download target is outside the selected model directory",
+        }
 
     # Check if file already exists
     if os.path.exists(dest_path):
@@ -1976,10 +2005,12 @@ def start_background_download(
         download_id for tracking progress
     """
     download_id = generate_download_id()
+    filename = sanitize_download_filename(filename)
+    subfolder = normalize_relative_subfolder(subfolder)
     initial_directory = get_download_directory(category, base_directory) or ""
     if initial_directory and subfolder:
-        initial_directory = os.path.join(initial_directory, subfolder)
-    initial_path = os.path.join(initial_directory, filename) if initial_directory else ""
+        initial_directory = os.path.join(initial_directory, *subfolder.split("/"))
+    initial_path = os.path.join(initial_directory, filename) if initial_directory and filename else ""
 
     # Pre-initialize progress dict so it's always available for polling
     # even if download fails before download_file is called
