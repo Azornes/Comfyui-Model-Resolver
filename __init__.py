@@ -189,6 +189,7 @@ class ModelResolverExtension:
                 from .core.path_templates import infer_download_path_templates
                 from .core.scanner import get_model_files, invalidate_model_files_cache, find_local_file_path
                 from .core.path_utils import (
+                    extract_safetensors_header_sha256,
                     get_filename_from_path,
                     is_path_in_configured_model_roots,
                     read_json_safe,
@@ -779,7 +780,12 @@ class ModelResolverExtension:
                     return "", "file is outside configured model directories"
                 return normalized_path, ""
 
-            def write_calculated_hash_metadata(normalized_path, metadata_path, sha256):
+            def write_calculated_hash_metadata(
+                normalized_path,
+                metadata_path,
+                sha256,
+                sha256_source="file",
+            ):
                 import os as _os
 
                 model_dir = _os.path.abspath(_os.path.dirname(normalized_path))
@@ -812,6 +818,7 @@ class ModelResolverExtension:
                     metadata["sha256"] = sha256
                     metadata["hashes"] = hashes
                     metadata["hash_status"] = "completed"
+                    metadata["sha256_source"] = sha256_source or "file"
                     metadata["last_checked_at"] = time.time()
                     metadata.setdefault("file_name", stem)
                     metadata.setdefault("model_name", stem)
@@ -824,7 +831,7 @@ class ModelResolverExtension:
                     write_json_atomic(resolved_metadata_path, metadata, indent=2)
                     metadata_updated = True
                     self.logger.info(
-                        f"Calculated SHA256 and updated metadata: {resolved_metadata_path}"
+                        f"Stored SHA256 and updated metadata: {resolved_metadata_path}"
                     )
                 except Exception as metadata_error:
                     self.logger.warning(
@@ -838,6 +845,55 @@ class ModelResolverExtension:
                 from .core.path_utils import calculate_file_sha256 as _calculate_file_sha256_core
 
                 total_bytes = max(0, _os.path.getsize(normalized_path))
+
+                self.hash_tracker.update(
+                    progress_id,
+                    status="running",
+                    stage="header",
+                    message="Checking safetensors header...",
+                    percent=0,
+                    bytes_read=0,
+                    total_bytes=total_bytes,
+                )
+
+                if self.hash_tracker.is_cancelled(progress_id):
+                    raise HashCalculationCancelled()
+
+                is_safetensors = normalized_path.lower().endswith(".safetensors")
+                if is_safetensors:
+                    self.logger.info(
+                        f"Checking safetensors header for SHA256: {normalized_path}"
+                    )
+                else:
+                    self.logger.info(
+                        "Skipping safetensors header lookup for non-safetensors file; "
+                        f"calculating full SHA256: {normalized_path}"
+                    )
+
+                header_sha256 = extract_safetensors_header_sha256(normalized_path)
+                if header_sha256:
+                    self.logger.info(
+                        f"Found SHA256 in safetensors header: {normalized_path}"
+                    )
+                    self.hash_tracker.update(
+                        progress_id,
+                        status="running",
+                        stage="header",
+                        message="Found SHA256 in safetensors header",
+                        percent=98,
+                        bytes_read=0,
+                        total_bytes=total_bytes,
+                        sha256=header_sha256,
+                        hash=header_sha256,
+                        sha256_source="safetensors_header",
+                    )
+                    return header_sha256, "safetensors_header"
+
+                if is_safetensors:
+                    self.logger.info(
+                        "No SHA256 found in safetensors header; calculating full "
+                        f"file SHA256: {normalized_path}"
+                    )
 
                 self.hash_tracker.update(
                     progress_id,
@@ -889,12 +945,14 @@ class ModelResolverExtension:
                         return True
                     return False
 
-                return _calculate_file_sha256_core(
+                sha256 = _calculate_file_sha256_core(
                     normalized_path,
                     chunk_size=1024 * 1024 * 4,
                     on_progress=on_progress,
                     is_cancelled=is_cancelled,
+                    use_safetensors_header=False,
                 )
+                return sha256, "file"
 
             @routes.post("/model_resolver/calculate-file-hash")
             @json_api_endpoint("calculate-file-hash")
@@ -914,7 +972,7 @@ class ModelResolverExtension:
                         {"error": error}, status=status
                     )
 
-                sha256 = calculate_sha256_with_progress(normalized_path)
+                sha256, sha256_source = calculate_sha256_with_progress(normalized_path)
                 if not sha256:
                     return web.json_response(
                         {"error": "could not calculate hash"}, status=500
@@ -923,6 +981,7 @@ class ModelResolverExtension:
                     normalized_path,
                     metadata_path,
                     sha256,
+                    sha256_source,
                 )
 
                 return web.json_response(
@@ -930,6 +989,7 @@ class ModelResolverExtension:
                         "success": True,
                         "sha256": sha256,
                         "hash": sha256,
+                        "sha256_source": sha256_source,
                         "file_path": normalized_path,
                         "metadata_path": resolved_metadata_path,
                         "metadata_updated": metadata_updated,
@@ -968,7 +1028,7 @@ class ModelResolverExtension:
 
                 def run_hash_task():
                     try:
-                        sha256 = calculate_sha256_with_progress(
+                        sha256, sha256_source = calculate_sha256_with_progress(
                             normalized_path,
                             progress_id=progress_id,
                         )
@@ -985,6 +1045,7 @@ class ModelResolverExtension:
                             normalized_path,
                             metadata_path,
                             sha256,
+                            sha256_source,
                         )
                         self.hash_tracker.update(
                             progress_id,
@@ -994,6 +1055,7 @@ class ModelResolverExtension:
                             percent=100,
                             sha256=sha256,
                             hash=sha256,
+                            sha256_source=sha256_source,
                             file_path=normalized_path,
                             metadata_path=resolved_metadata_path,
                             metadata_updated=metadata_updated,

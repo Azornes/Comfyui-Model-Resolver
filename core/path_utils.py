@@ -270,15 +270,137 @@ class HashCalculationCancelled(Exception):
     pass
 
 
+SAFETENSORS_HEADER_MAX_BYTES = 100 * 1024 * 1024
+_SHA256_HEX_CHARS = frozenset("0123456789abcdefABCDEF")
+_NON_SHA256_HASH_KEY_PARTS = (
+    "blake3",
+    "crc32",
+    "md5",
+    "sha1",
+    "autov1",
+    "autov2",
+)
+
+
+def _normalize_header_sha256(value: Any) -> str:
+    if not isinstance(value, str):
+        return ""
+
+    candidate = value.strip()
+    lower_candidate = candidate.lower()
+    if lower_candidate.startswith("sha256:") or lower_candidate.startswith("sha256="):
+        if ":" in candidate:
+            candidate = candidate.split(":", 1)[-1]
+        else:
+            candidate = candidate.split("=", 1)[-1]
+        candidate = candidate.strip()
+        lower_candidate = candidate.lower()
+
+    if lower_candidate.startswith("0x"):
+        candidate = candidate[2:].strip()
+
+    if len(candidate) != 64:
+        return ""
+    if any(char not in _SHA256_HEX_CHARS for char in candidate):
+        return ""
+    return candidate.lower()
+
+
+def extract_safetensors_header_sha256(
+    file_path: str,
+    max_header_size: int = SAFETENSORS_HEADER_MAX_BYTES,
+) -> Optional[str]:
+    """Return an embedded SHA256 from a safetensors metadata header when present."""
+    if not file_path or not str(file_path).lower().endswith(".safetensors"):
+        return None
+
+    try:
+        file_size = os.path.getsize(file_path)
+    except (OSError, ValueError):
+        return None
+
+    if file_size < 8:
+        return None
+
+    try:
+        with open(file_path, "rb") as f:
+            header_size_bytes = f.read(8)
+            if len(header_size_bytes) != 8:
+                return None
+
+            header_size = int.from_bytes(
+                header_size_bytes,
+                byteorder="little",
+                signed=False,
+            )
+            if (
+                header_size <= 0
+                or header_size > max_header_size
+                or header_size > file_size - 8
+            ):
+                return None
+
+            header_bytes = f.read(header_size)
+            if len(header_bytes) != header_size:
+                return None
+
+        header_json = json.loads(header_bytes.decode("utf-8"))
+        if not isinstance(header_json, dict):
+            return None
+
+        metadata = header_json.get("__metadata__")
+        if not isinstance(metadata, dict):
+            return None
+
+        for key in (
+            "modelspec.hash.sha256",
+            "modelspec.hash_sha256",
+            "sha256",
+            "SHA256",
+        ):
+            sha256 = _normalize_header_sha256(metadata.get(key))
+            if sha256:
+                return sha256
+
+        for key, value in metadata.items():
+            key_lower = str(key).lower()
+            if not (
+                "sha256" in key_lower
+                or "hash" in key_lower
+                or "civitai" in key_lower
+            ):
+                continue
+            if any(part in key_lower for part in _NON_SHA256_HASH_KEY_PARTS):
+                continue
+            sha256 = _normalize_header_sha256(value)
+            if sha256:
+                return sha256
+    except Exception as e:
+        _get_log().debug(f"Could not read safetensors header hash for {file_path}: {e}")
+
+    return None
+
+
 def calculate_file_sha256(
     file_path: str,
     chunk_size: int = 131072,
     on_progress: Optional[Callable[[int, int], None]] = None,
     is_cancelled: Optional[Callable[[], bool]] = None,
+    *,
+    use_safetensors_header: bool = True,
+    on_hash_source: Optional[Callable[[str], None]] = None,
 ) -> Optional[str]:
-    """Calculate SHA256 hex digest for an existing local file safely, supporting progress callbacks and cancellation check."""
+    """Return a SHA256 for a local file, preferring safetensors header metadata."""
     if not file_path or not os.path.exists(file_path):
         return None
+
+    if use_safetensors_header:
+        embedded_sha256 = extract_safetensors_header_sha256(file_path)
+        if embedded_sha256:
+            if on_hash_source:
+                on_hash_source("safetensors_header")
+            return embedded_sha256
+
     sha256_hash = hashlib.sha256()
     try:
         total_bytes = os.path.getsize(file_path) if on_progress else 0
@@ -292,6 +414,8 @@ def calculate_file_sha256(
                     bytes_read += len(byte_block)
                     if on_progress:
                         on_progress(bytes_read, total_bytes)
+        if on_hash_source:
+            on_hash_source("file")
         return sha256_hash.hexdigest()
     except HashCalculationCancelled:
         raise

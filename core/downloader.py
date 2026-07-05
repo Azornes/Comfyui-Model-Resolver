@@ -1735,7 +1735,17 @@ def download_model(
                 if not existing_sha256:
                     sha256_source = "file"
                     log.info(f"File exists, verifying SHA256: {dest_path}")
-                    existing_sha256 = calculate_file_sha256(dest_path) or ""
+                    detected_sha256_source = ["file"]
+
+                    def set_detected_sha256_source(source: str) -> None:
+                        if source:
+                            detected_sha256_source[0] = source
+
+                    existing_sha256 = calculate_file_sha256(
+                        dest_path,
+                        on_hash_source=set_detected_sha256_source,
+                    ) or ""
+                    sha256_source = detected_sha256_source[0]
             except Exception as e:
                 error_msg = (
                     f"File already exists and its SHA256 could not be verified: {dest_path}"
