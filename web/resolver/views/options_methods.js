@@ -234,19 +234,24 @@ export const optionsMethods = {
                             </div>
                         </div>
                         <div class="mr-options-sidebar-group">
+                            <div class="mr-options-sidebar-label">Tools</div>
+                            <div class="mr-options-nav">
+                                <button type="button" class="mr-options-nav-btn" data-target="mr-options-section-metadata-audit">
+                                    <span class="mr-options-nav-main">
+                                        <span class="mr-options-nav-icon" aria-hidden="true">${getSvgIcon('hardDrive')}</span>
+                                        <span>Metadata Sizes</span>
+                                    </span>
+                                    <span class="mr-options-nav-meta">07</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mr-options-sidebar-group">
                             <div class="mr-options-sidebar-label">System</div>
                             <div class="mr-options-nav">
                                 <button type="button" class="mr-options-nav-btn" data-target="mr-options-section-maintenance">
                                     <span class="mr-options-nav-main">
                                         <span class="mr-options-nav-icon" aria-hidden="true">${getSvgIcon('wrench')}</span>
                                         <span>Maintenance</span>
-                                    </span>
-                                    <span class="mr-options-nav-meta">07</span>
-                                </button>
-                                <button type="button" class="mr-options-nav-btn" data-target="mr-options-section-metadata-audit">
-                                    <span class="mr-options-nav-main">
-                                        <span class="mr-options-nav-icon" aria-hidden="true">${getSvgIcon('hardDrive')}</span>
-                                        <span>Metadata Sizes</span>
                                     </span>
                                     <span class="mr-options-nav-meta">08</span>
                                 </button>
