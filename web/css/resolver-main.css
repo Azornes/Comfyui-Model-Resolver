@@ -6344,6 +6344,10 @@ a.mr-image-preview-resource-name:hover {
     align-content: stretch;
 }
 
+.mr-options-section-fill .mr-options-build-stack {
+    grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
+}
+
 .mr-options-panel-title {
     margin: 0 0 6px 0;
     font-size: 16px;
@@ -6451,6 +6455,244 @@ a.mr-image-preview-resource-name:hover {
     color: var(--mr-color-error-light);
 }
 
+.mr-options-inline-hint {
+    display: block;
+    margin-top: 3px;
+}
+
+.mr-options-build-tabs {
+    align-self: flex-start;
+    align-items: flex-end;
+    width: fit-content;
+    height: 36px;
+    min-height: 36px;
+    margin-top: 12px;
+    overflow: visible;
+    --mr-tab-active-bg: rgba(20, 20, 24, 0.96);
+}
+
+.mr-options-build-tabs .mr-options-build-tab {
+    gap: 5px;
+    min-width: 94px;
+    padding-right: 18px;
+    padding-left: 18px;
+}
+
+.mr-options-build-tabs .mr-options-build-tab:not(.mr-tab-active):hover,
+.mr-options-build-tabs .mr-options-build-tab:not(.mr-tab-active):focus,
+.mr-options-build-tabs .mr-options-build-tab:not(.mr-tab-active):active,
+.mr-options-build-tabs .mr-options-build-tab.mr-tab-active {
+    padding-right: 18px !important;
+    padding-left: 18px !important;
+}
+
+.mr-options-build-tab-count {
+    position: relative;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 999px;
+    color: var(--mr-text);
+    background: rgba(255, 255, 255, 0.1);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    pointer-events: none;
+}
+
+.mr-options-build-tab.mr-tab-active .mr-options-build-tab-count {
+    background: rgba(255, 255, 255, 0.14);
+}
+
+.mr-options-build-tab-panel {
+    min-width: 0;
+}
+
+.mr-options-build-tab-panel.is-hidden {
+    display: none;
+}
+
+.mr-options-build-progress {
+    display: grid;
+    gap: 8px;
+    margin-top: 10px;
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.14);
+}
+
+.mr-options-build-progress[hidden] {
+    display: none;
+}
+
+.mr-options-build-progress-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--mr-text-secondary);
+    font-size: 12px;
+}
+
+.mr-options-build-progress-head strong {
+    color: var(--mr-text);
+    font-size: 12px;
+}
+
+.mr-options-build-progress-bar {
+    height: 7px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.mr-options-build-progress-bar span {
+    display: block;
+    width: 0;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--mr-accent);
+    transition: width 0.2s ease;
+}
+
+.mr-options-build-current {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+    color: var(--mr-text-secondary);
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.mr-options-build-current span,
+.mr-options-build-current code {
+    overflow-wrap: anywhere;
+}
+
+.mr-options-build-current code {
+    color: var(--mr-text-muted);
+    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    font-size: 11px;
+}
+
+.mr-options-build-worker-list {
+    display: grid;
+    gap: 8px;
+    max-height: 260px;
+    min-height: 0;
+    overflow: auto;
+    padding-right: 2px;
+}
+
+.mr-options-build-worker-list[hidden] {
+    display: none;
+}
+
+.mr-options-build-worker {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+    padding: 8px 9px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.mr-options-build-worker-head,
+.mr-options-build-worker-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+    color: var(--mr-text-secondary);
+    font-size: 11px;
+}
+
+.mr-options-build-worker-head strong {
+    color: var(--mr-text);
+    font-size: 11px;
+}
+
+.mr-options-build-worker-name {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--mr-text);
+    font-size: 12px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mr-options-build-worker code {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--mr-text-muted);
+    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    font-size: 10.5px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mr-options-build-worker-bar {
+    height: 5px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.mr-options-build-worker-bar span {
+    display: block;
+    width: 0;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--mr-color-success);
+    transition: width 0.2s ease;
+}
+
+.mr-options-history-action {
+    display: inline-flex;
+    align-items: center;
+    min-height: 20px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    color: var(--mr-text);
+    background: rgba(255, 255, 255, 0.08);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.mr-options-history-action.is-created {
+    color: var(--mr-color-success);
+    background: rgba(34, 197, 94, 0.1);
+}
+
+.mr-options-history-action.is-updated {
+    color: var(--mr-accent);
+    background: rgba(96, 165, 250, 0.1);
+}
+
+.mr-options-history-action.is-skipped,
+.mr-options-history-action.is-checked {
+    color: var(--mr-text-secondary);
+}
+
+.mr-options-history-action.is-error {
+    color: var(--mr-color-error-light);
+    background: rgba(248, 113, 113, 0.1);
+}
+
+.mr-options-history-action.is-cancelled {
+    color: var(--mr-text-secondary);
+    background: rgba(255, 255, 255, 0.06);
+}
+
 .mr-options-audit-results {
     margin-top: 12px;
     min-width: 0;
@@ -6531,6 +6773,40 @@ a.mr-image-preview-resource-name:hover {
 .mr-options-audit-table th:nth-child(5),
 .mr-options-audit-table td:nth-child(5) {
     width: 12%;
+}
+
+.mr-options-history-table {
+    min-width: 900px;
+}
+
+.mr-options-history-table th:nth-child(1),
+.mr-options-history-table td:nth-child(1) {
+    width: 30%;
+}
+
+.mr-options-history-table th:nth-child(2),
+.mr-options-history-table td:nth-child(2) {
+    width: 12%;
+}
+
+.mr-options-history-table th:nth-child(3),
+.mr-options-history-table td:nth-child(3) {
+    width: 11%;
+}
+
+.mr-options-history-table th:nth-child(4),
+.mr-options-history-table td:nth-child(4) {
+    width: 13%;
+}
+
+.mr-options-history-table th:nth-child(5),
+.mr-options-history-table td:nth-child(5) {
+    width: 8%;
+}
+
+.mr-options-history-table th:nth-child(6),
+.mr-options-history-table td:nth-child(6) {
+    width: 26%;
 }
 
 .mr-options-audit-model {

@@ -140,6 +140,7 @@ class ModelResolverExtension:
         self.loaded_progress = JobProgressTracker("Loading loaded models...")
         self.search_tracker = JobProgressTracker("Searching...")
         self.hash_tracker = JobProgressTracker("Preparing hash calculation...")
+        self.metadata_builder_progress = JobProgressTracker("Building local metadata...")
         self.search_result_timestamps = {}
 
     def initialize(self):
@@ -188,6 +189,10 @@ class ModelResolverExtension:
                 )
                 from .core.path_templates import infer_download_path_templates
                 from .core.metadata_audit import audit_metadata_sizes
+                from .core.metadata_builder import (
+                    build_missing_local_metadata,
+                    get_metadata_build_capabilities,
+                )
                 from .core.scanner import get_model_files, invalidate_model_files_cache, find_local_file_path
                 from .core.path_utils import (
                     extract_safetensors_header_sha256,
@@ -1141,6 +1146,132 @@ class ModelResolverExtension:
                     batch_size=payload.get("batch_size"),
                 )
                 return web.json_response(result)
+
+            @routes.get("/model_resolver/metadata-build/capabilities")
+            @json_api_endpoint("metadata-build-capabilities")
+            async def metadata_build_capabilities_route(request):
+                """Return local CPU and worker limits for the metadata builder."""
+                return web.json_response(get_metadata_build_capabilities())
+
+            @routes.post("/model_resolver/metadata-build/start")
+            @json_api_endpoint("metadata-build-start")
+            async def metadata_build_start_route(request):
+                """Create missing local metadata sidecars and fill missing SHA256 values."""
+                import uuid
+
+                payload = {}
+                try:
+                    if request.can_read_body:
+                        payload = await request.json()
+                except Exception:
+                    payload = {}
+                if not isinstance(payload, dict):
+                    payload = {}
+
+                force_rescan = to_bool(payload.get("force_rescan"), True)
+                worker_count = to_int(payload.get("worker_count"), 0)
+                self.metadata_builder_progress.cleanup()
+                progress_id = f"metadata_build_{uuid.uuid4().hex}"
+                self.metadata_builder_progress.update(
+                    progress_id,
+                    status="queued",
+                    stage="queued",
+                    message="Preparing local metadata build...",
+                    percent=0,
+                    current=0,
+                    total=0,
+                    requested_worker_count=worker_count,
+                )
+
+                def update_metadata_build_progress(progress_payload):
+                    if not isinstance(progress_payload, dict):
+                        return
+                    data = dict(progress_payload)
+                    status = data.pop("status", None)
+                    stage = data.get("stage") or ""
+                    if not status:
+                        if stage == "done":
+                            status = "done"
+                        elif stage == "cancelled":
+                            status = "cancelled"
+                        else:
+                            status = "running"
+                    self.metadata_builder_progress.update(
+                        progress_id,
+                        status=status,
+                        **data,
+                    )
+
+                def is_metadata_build_cancelled():
+                    return self.metadata_builder_progress.is_cancelled(progress_id)
+
+                def run_metadata_build_task():
+                    try:
+                        result = build_missing_local_metadata(
+                            force_rescan=force_rescan,
+                            worker_count=worker_count,
+                            progress_callback=update_metadata_build_progress,
+                            is_cancelled=is_metadata_build_cancelled,
+                        )
+                        if result.get("cancelled") or is_metadata_build_cancelled():
+                            self.metadata_builder_progress.update(
+                                progress_id,
+                                status="cancelled",
+                                stage="cancelled",
+                                message="Metadata build cancelled",
+                                percent=100,
+                                result=result,
+                                **result,
+                            )
+                            return
+
+                        self.metadata_builder_progress.update(
+                            progress_id,
+                            status="done",
+                            stage="done",
+                            message="Local metadata build completed.",
+                            percent=100,
+                            result=result,
+                            **result,
+                        )
+                    except Exception as exc:
+                        self.logger.exception(f"Metadata build failed: {exc}")
+                        self.metadata_builder_progress.update(
+                            progress_id,
+                            status="error",
+                            stage="error",
+                            message=str(exc) or "Metadata build failed",
+                            percent=100,
+                            error=str(exc) or "Metadata build failed",
+                        )
+
+                threading.Thread(target=run_metadata_build_task, daemon=True).start()
+                return web.json_response(
+                    {
+                        "success": True,
+                        "progress_id": progress_id,
+                    }
+                )
+
+            @routes.get("/model_resolver/metadata-build/progress/{progress_id}")
+            @json_api_endpoint("metadata-build-progress")
+            async def metadata_build_progress_route(request):
+                """Return progress for local metadata sidecar creation."""
+                return get_progress_response(
+                    self.metadata_builder_progress,
+                    request,
+                    not_found_status=404,
+                )
+
+            @routes.post("/model_resolver/metadata-build/cancel/{progress_id}")
+            @json_api_endpoint("metadata-build-cancel")
+            async def metadata_build_cancel_route(request):
+                """Cancel local metadata sidecar creation."""
+                return cancel_progress_response(
+                    self.metadata_builder_progress,
+                    request,
+                    cancel_message="Stopping metadata build...",
+                )
 
             @routes.post("/model_resolver/loaded")
             @json_api_endpoint("get_loaded_models")

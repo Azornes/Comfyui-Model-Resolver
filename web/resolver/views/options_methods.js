@@ -243,6 +243,13 @@ export const optionsMethods = {
                                     </span>
                                     <span class="mr-options-nav-meta">07</span>
                                 </button>
+                                <button type="button" class="mr-options-nav-btn" data-target="mr-options-section-metadata-build">
+                                    <span class="mr-options-nav-main">
+                                        <span class="mr-options-nav-icon" aria-hidden="true">${getSvgIcon('fileText')}</span>
+                                        <span>Create Metadata</span>
+                                    </span>
+                                    <span class="mr-options-nav-meta">08</span>
+                                </button>
                             </div>
                         </div>
                         <div class="mr-options-sidebar-group">
@@ -253,7 +260,7 @@ export const optionsMethods = {
                                         <span class="mr-options-nav-icon" aria-hidden="true">${getSvgIcon('wrench')}</span>
                                         <span>Maintenance</span>
                                     </span>
-                                    <span class="mr-options-nav-meta">08</span>
+                                    <span class="mr-options-nav-meta">09</span>
                                 </button>
                             </div>
                         </div>
@@ -773,6 +780,92 @@ export const optionsMethods = {
                                 </div>
                             </div>
                         </section>
+                        <section id="mr-options-section-metadata-build" class="mr-options-card mr-options-section mr-options-section-fill is-hidden">
+                            <div class="mr-options-section-head">
+                                <h4 class="mr-options-section-title">Local Metadata Builder</h4>
+                            </div>
+                            <div class="mr-options-grid">
+                                <div class="mr-options-panel">
+                                    <div class="mr-options-stack mr-options-build-stack">
+                                        <div class="mr-options-db-summary">
+                                            <div class="mr-options-db-row">
+                                                <span>CPU cores</span>
+                                                <strong id="mr-options-metadata-build-cpu">Detecting</strong>
+                                            </div>
+                                            <div class="mr-options-db-row">
+                                                <span>Workers</span>
+                                                <strong id="mr-options-metadata-build-workers">0</strong>
+                                            </div>
+                                            <div class="mr-options-db-row">
+                                                <span>Models scanned</span>
+                                                <strong id="mr-options-metadata-build-scanned">0</strong>
+                                            </div>
+                                            <div class="mr-options-db-row">
+                                                <span>Created</span>
+                                                <strong id="mr-options-metadata-build-created">0</strong>
+                                            </div>
+                                            <div class="mr-options-db-row">
+                                                <span>Updated</span>
+                                                <strong id="mr-options-metadata-build-updated">0</strong>
+                                            </div>
+                                            <div class="mr-options-db-row">
+                                                <span>Already complete</span>
+                                                <strong id="mr-options-metadata-build-skipped">0</strong>
+                                            </div>
+                                            <div class="mr-options-db-row">
+                                                <span>Hashes calculated</span>
+                                                <strong id="mr-options-metadata-build-hashes">0</strong>
+                                            </div>
+                                            <div class="mr-options-db-row">
+                                                <span>Errors</span>
+                                                <strong id="mr-options-metadata-build-errors">0</strong>
+                                            </div>
+                                        </div>
+                                        <div class="mr-options-number-row mr-options-wide-row">
+                                            <div class="mr-options-number-copy">
+                                                <span class="mr-options-label">Concurrent hash workers</span>
+                                                <span id="mr-options-metadata-build-worker-hint" class="mr-options-db-message mr-options-inline-hint">Loading CPU details...</span>
+                                            </div>
+                                            <input id="mr-options-metadata-build-worker-count" class="mr-options-input" type="number" min="1" max="64" step="1" value="1">
+                                        </div>
+                                        <div class="mr-options-db-actions">
+                                            <button id="mr-options-metadata-build-start" type="button" class="mr-btn mr-btn-secondary">${getSvgIcon('fileText')} Build Local Metadata</button>
+                                            <button id="mr-options-metadata-build-cancel" type="button" class="mr-btn mr-btn-secondary" hidden>${getSvgIcon('x')} Cancel</button>
+                                        </div>
+                                        <div id="mr-options-metadata-build-status" class="mr-options-db-message">Not started yet.</div>
+                                        <div class="mr-tabs mr-options-build-tabs" role="tablist" aria-label="Metadata builder views">
+                                            <button type="button" class="mr-tab mr-options-build-tab mr-tab-active is-active" data-build-tab="progress" role="tab" aria-selected="true">
+                                                <span class="mr-tab-label">Progress</span>
+                                            </button>
+                                            <button type="button" class="mr-tab mr-options-build-tab" data-build-tab="history" role="tab" aria-selected="false">
+                                                <span class="mr-tab-label">History</span>
+                                                <span id="mr-options-metadata-build-history-count" class="mr-options-build-tab-count">0</span>
+                                            </button>
+                                        </div>
+                                        <div id="mr-options-metadata-build-progress-panel" class="mr-options-build-tab-panel">
+                                            <div id="mr-options-metadata-build-progress" class="mr-options-build-progress" hidden>
+                                                <div class="mr-options-build-progress-head">
+                                                    <span id="mr-options-metadata-build-stage">Idle</span>
+                                                    <strong id="mr-options-metadata-build-percent">0%</strong>
+                                                </div>
+                                                <div class="mr-options-build-progress-bar" aria-hidden="true">
+                                                    <span id="mr-options-metadata-build-bar"></span>
+                                                </div>
+                                                <div class="mr-options-build-current">
+                                                    <span id="mr-options-metadata-build-current-model">No model selected.</span>
+                                                    <code id="mr-options-metadata-build-current-path"></code>
+                                                    <span id="mr-options-metadata-build-bytes"></span>
+                                                </div>
+                                                <div id="mr-options-metadata-build-worker-list" class="mr-options-build-worker-list"></div>
+                                            </div>
+                                        </div>
+                                        <div id="mr-options-metadata-build-history-panel" class="mr-options-build-tab-panel is-hidden">
+                                            <div id="mr-options-metadata-build-results" class="mr-options-audit-results" hidden></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
                     </div>
                 </div>
             </div>
@@ -861,9 +954,39 @@ export const optionsMethods = {
         const metadataSizeMismatchesEl = this.contentElement.querySelector('#mr-options-metadata-size-mismatches');
         const metadataSizeMissingEl = this.contentElement.querySelector('#mr-options-metadata-size-missing');
         const metadataSizeErrorsEl = this.contentElement.querySelector('#mr-options-metadata-size-errors');
+        const metadataBuildStartBtn = this.contentElement.querySelector('#mr-options-metadata-build-start');
+        const metadataBuildCancelBtn = this.contentElement.querySelector('#mr-options-metadata-build-cancel');
+        const metadataBuildStatus = this.contentElement.querySelector('#mr-options-metadata-build-status');
+        const metadataBuildProgress = this.contentElement.querySelector('#mr-options-metadata-build-progress');
+        const metadataBuildStageEl = this.contentElement.querySelector('#mr-options-metadata-build-stage');
+        const metadataBuildPercentEl = this.contentElement.querySelector('#mr-options-metadata-build-percent');
+        const metadataBuildBarEl = this.contentElement.querySelector('#mr-options-metadata-build-bar');
+        const metadataBuildCurrentModelEl = this.contentElement.querySelector('#mr-options-metadata-build-current-model');
+        const metadataBuildCurrentPathEl = this.contentElement.querySelector('#mr-options-metadata-build-current-path');
+        const metadataBuildBytesEl = this.contentElement.querySelector('#mr-options-metadata-build-bytes');
+        const metadataBuildWorkerListEl = this.contentElement.querySelector('#mr-options-metadata-build-worker-list');
+        const metadataBuildResults = this.contentElement.querySelector('#mr-options-metadata-build-results');
+        const metadataBuildTabButtons = Array.from(this.contentElement.querySelectorAll('.mr-options-build-tab'));
+        const metadataBuildProgressPanel = this.contentElement.querySelector('#mr-options-metadata-build-progress-panel');
+        const metadataBuildHistoryPanel = this.contentElement.querySelector('#mr-options-metadata-build-history-panel');
+        const metadataBuildHistoryCountEl = this.contentElement.querySelector('#mr-options-metadata-build-history-count');
+        const metadataBuildCpuEl = this.contentElement.querySelector('#mr-options-metadata-build-cpu');
+        const metadataBuildWorkersEl = this.contentElement.querySelector('#mr-options-metadata-build-workers');
+        const metadataBuildWorkerInput = this.contentElement.querySelector('#mr-options-metadata-build-worker-count');
+        const metadataBuildWorkerHint = this.contentElement.querySelector('#mr-options-metadata-build-worker-hint');
+        const metadataBuildScannedEl = this.contentElement.querySelector('#mr-options-metadata-build-scanned');
+        const metadataBuildCreatedEl = this.contentElement.querySelector('#mr-options-metadata-build-created');
+        const metadataBuildUpdatedEl = this.contentElement.querySelector('#mr-options-metadata-build-updated');
+        const metadataBuildSkippedEl = this.contentElement.querySelector('#mr-options-metadata-build-skipped');
+        const metadataBuildHashesEl = this.contentElement.querySelector('#mr-options-metadata-build-hashes');
+        const metadataBuildErrorsEl = this.contentElement.querySelector('#mr-options-metadata-build-errors');
         const optionsMain = this.contentElement.querySelector('.mr-options-main');
         const navButtons = Array.from(this.contentElement.querySelectorAll('.mr-options-nav-btn'));
         const optionSections = Array.from(this.contentElement.querySelectorAll('.mr-options-section'));
+        if (this.metadataBuildPollTimer) {
+            window.clearTimeout(this.metadataBuildPollTimer);
+            this.metadataBuildPollTimer = null;
+        }
         const trackedInputs = [
             civitaiInput,
             civitaiSessionInput,
@@ -1174,6 +1297,540 @@ export const optionsMethods = {
                 renderMetadataSizeAuditResults(null);
             } finally {
                 setMetadataSizeAuditBusy(false);
+            }
+        };
+
+        const setMetadataBuildBusy = (busy) => {
+            if (metadataBuildStartBtn) metadataBuildStartBtn.disabled = busy;
+            if (metadataBuildCancelBtn) {
+                metadataBuildCancelBtn.hidden = !busy;
+                metadataBuildCancelBtn.disabled = false;
+            }
+        };
+
+        const setMetadataBuildStatus = (text, mode = '') => {
+            if (!metadataBuildStatus) return;
+            metadataBuildStatus.textContent = text;
+            setStatusMode(metadataBuildStatus, mode);
+        };
+
+        const setMetadataBuildSummaryValue = (element, value, mode = '') => {
+            if (!element) return;
+            element.textContent = formatAuditNumber(value);
+            setStatusMode(element, mode);
+        };
+
+        const setMetadataBuildTab = (tabName = 'progress') => {
+            const activeTab = tabName === 'history' ? 'history' : 'progress';
+            metadataBuildTabButtons.forEach((button) => {
+                const isActive = button.dataset.buildTab === activeTab;
+                button.classList.toggle('is-active', isActive);
+                button.classList.toggle('mr-tab-active', isActive);
+                button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            });
+            metadataBuildProgressPanel?.classList.toggle('is-hidden', activeTab !== 'progress');
+            metadataBuildHistoryPanel?.classList.toggle('is-hidden', activeTab !== 'history');
+            this.metadataBuildActiveTab = activeTab;
+        };
+
+        const getMetadataBuildHistoryKey = (item = {}) => {
+            const path = item.model_path || item.path || item.metadata_path || item.filename || '';
+            const action = item.action || '';
+            const sha = item.sha256 || '';
+            return `${action}::${path}::${sha}`;
+        };
+
+        const appendMetadataBuildHistory = (data = {}) => {
+            if (!this.metadataBuildHistory) this.metadataBuildHistory = [];
+            if (!this.metadataBuildHistoryKeys) this.metadataBuildHistoryKeys = new Set();
+            const source = data?.result && typeof data.result === 'object' ? data.result : data;
+            const items = [];
+            if (Array.isArray(data.history_items)) items.push(...data.history_items);
+            if (Array.isArray(source.history)) items.push(...source.history);
+            if (!items.length && Array.isArray(source.updated)) items.push(...source.updated);
+            items.forEach((rawItem) => {
+                if (!rawItem || typeof rawItem !== 'object') return;
+                const item = { ...rawItem };
+                const key = getMetadataBuildHistoryKey(item);
+                if (!key || this.metadataBuildHistoryKeys.has(key)) return;
+                this.metadataBuildHistoryKeys.add(key);
+                this.metadataBuildHistory.unshift(item);
+            });
+            if (this.metadataBuildHistory.length > 1000) {
+                this.metadataBuildHistory = this.metadataBuildHistory.slice(0, 1000);
+                this.metadataBuildHistoryKeys = new Set(this.metadataBuildHistory.map(getMetadataBuildHistoryKey));
+            }
+            if (metadataBuildHistoryCountEl) {
+                metadataBuildHistoryCountEl.textContent = this.metadataBuildHistory.length.toLocaleString();
+            }
+        };
+
+        const getMetadataBuildWorkerBounds = () => {
+            const capabilities = this.metadataBuildCapabilities || {};
+            const min = Math.max(1, Number(capabilities.min_worker_count || 1));
+            const max = Math.max(min, Number(capabilities.max_worker_count || 64));
+            return { min, max };
+        };
+
+        const normalizeMetadataBuildWorkerCount = () => {
+            const { min, max } = getMetadataBuildWorkerBounds();
+            const fallback = Number(this.metadataBuildCapabilities?.default_worker_count || metadataBuildWorkerInput?.value || 1);
+            const raw = Number(metadataBuildWorkerInput?.value || fallback || 1);
+            const workerCount = Math.max(min, Math.min(max, Number.isFinite(raw) ? Math.round(raw) : fallback));
+            if (metadataBuildWorkerInput) {
+                metadataBuildWorkerInput.min = String(min);
+                metadataBuildWorkerInput.max = String(max);
+                metadataBuildWorkerInput.value = String(workerCount);
+            }
+            return workerCount;
+        };
+
+        const renderMetadataBuildCapabilities = (data = {}) => {
+            this.metadataBuildCapabilities = data && typeof data === 'object' ? data : {};
+            const cpuCount = Number(this.metadataBuildCapabilities.cpu_count || navigator.hardwareConcurrency || 1);
+            const defaultWorkers = Number(this.metadataBuildCapabilities.default_worker_count || Math.min(cpuCount, 4) || 1);
+            const maxWorkers = Number(this.metadataBuildCapabilities.max_worker_count || 64);
+            if (metadataBuildCpuEl) metadataBuildCpuEl.textContent = cpuCount.toLocaleString();
+            if (metadataBuildWorkerInput && !metadataBuildWorkerInput.dataset.userEdited) {
+                metadataBuildWorkerInput.value = String(defaultWorkers);
+            }
+            normalizeMetadataBuildWorkerCount();
+            if (metadataBuildWorkerHint) {
+                metadataBuildWorkerHint.textContent = `CPU cores: ${cpuCount.toLocaleString()}. Max workers: ${maxWorkers.toLocaleString()}.`;
+            }
+            if (metadataBuildWorkersEl) metadataBuildWorkersEl.textContent = normalizeMetadataBuildWorkerCount().toLocaleString();
+        };
+
+        const loadMetadataBuildCapabilities = async () => {
+            try {
+                const data = await this.fetchJson(
+                    '/model_resolver/metadata-build/capabilities',
+                    { silent: true },
+                    'Load metadata build capabilities'
+                );
+                renderMetadataBuildCapabilities(data);
+            } catch (error) {
+                renderMetadataBuildCapabilities({
+                    cpu_count: navigator.hardwareConcurrency || 1,
+                    default_worker_count: Math.min(navigator.hardwareConcurrency || 1, 4),
+                    min_worker_count: 1,
+                    max_worker_count: 64
+                });
+            }
+        };
+
+        const updateMetadataBuildSummary = (data = {}) => {
+            const source = data?.result && typeof data.result === 'object' ? data.result : data;
+            const created = Number(source.created_metadata || 0);
+            const updated = Number(source.updated_metadata || 0);
+            const calculatedHashes = Number(source.calculated_hashes || 0);
+            const errorCount = Number(source.error_count || 0);
+            if (metadataBuildCpuEl && source.cpu_count) {
+                metadataBuildCpuEl.textContent = Number(source.cpu_count || 0).toLocaleString();
+            }
+            if (metadataBuildWorkersEl) {
+                const activeWorkers = Number(source.active_worker_count ?? source.worker_count ?? normalizeMetadataBuildWorkerCount());
+                metadataBuildWorkersEl.textContent = Number.isFinite(activeWorkers) ? activeWorkers.toLocaleString() : '0';
+            }
+            setMetadataBuildSummaryValue(metadataBuildScannedEl, source.scanned_models || source.current || 0);
+            setMetadataBuildSummaryValue(metadataBuildCreatedEl, created, created > 0 ? 'is-valid' : '');
+            setMetadataBuildSummaryValue(metadataBuildUpdatedEl, updated, updated > 0 ? 'is-valid' : '');
+            setMetadataBuildSummaryValue(metadataBuildSkippedEl, source.skipped_complete || 0);
+            setMetadataBuildSummaryValue(metadataBuildHashesEl, calculatedHashes, calculatedHashes > 0 ? 'is-pending' : '');
+            setMetadataBuildSummaryValue(metadataBuildErrorsEl, errorCount, errorCount > 0 ? 'is-invalid' : '');
+        };
+
+        const metadataBuildStageLabels = {
+            queued: 'Queued',
+            scanning: 'Scanning',
+            header: 'Reading header',
+            hashing: 'Calculating SHA256',
+            writing: 'Writing metadata',
+            model_done: 'Processed',
+            done: 'Done',
+            cancelled: 'Cancelled',
+            error: 'Error'
+        };
+
+        const getMetadataBuildWorkerPercent = (item = {}) => {
+            const direct = Number(item.percent);
+            if (Number.isFinite(direct)) {
+                return Math.max(0, Math.min(100, direct));
+            }
+            const bytesRead = Number(item.bytes_read || 0);
+            const totalBytes = Number(item.total_bytes || 0);
+            if (totalBytes > 0) {
+                return Math.max(0, Math.min(100, (bytesRead / totalBytes) * 100));
+            }
+            return 0;
+        };
+
+        const renderMetadataBuildWorkers = (data = {}, activeModels = []) => {
+            if (!metadataBuildWorkerListEl) return;
+            const workerItems = activeModels.length
+                ? activeModels
+                : (data.current_model ? [{
+                    filename: data.current_model,
+                    path: data.current_path || data.metadata_path || '',
+                    stage: data.stage || '',
+                    percent: data.percent || 0,
+                    bytes_read: data.bytes_read || 0,
+                    total_bytes: data.total_bytes || 0
+                }] : []);
+
+            if (!workerItems.length) {
+                metadataBuildWorkerListEl.innerHTML = '';
+                metadataBuildWorkerListEl.hidden = true;
+                return;
+            }
+
+            metadataBuildWorkerListEl.hidden = false;
+            metadataBuildWorkerListEl.innerHTML = workerItems.map((item, index) => {
+                const workerPercent = getMetadataBuildWorkerPercent(item);
+                const stageLabel = metadataBuildStageLabels[item.stage] || item.stage || 'Running';
+                const bytesRead = Number(item.bytes_read || 0);
+                const totalBytes = Number(item.total_bytes || 0);
+                const bytesLabel = totalBytes > 0
+                    ? `${this.formatBytes(bytesRead)} / ${this.formatBytes(totalBytes)}`
+                    : '';
+                const filename = item.filename || 'Model';
+                const path = item.path || '';
+                return `
+                    <div class="mr-options-build-worker">
+                        <div class="mr-options-build-worker-head">
+                            <span>Worker ${index + 1}</span>
+                            <strong>${Math.round(workerPercent)}%</strong>
+                        </div>
+                        <div class="mr-options-build-worker-name" title="${this.escapeHtml(filename)}">${this.escapeHtml(filename)}</div>
+                        <div class="mr-options-build-worker-meta">
+                            <span>${this.escapeHtml(stageLabel)}</span>
+                            ${bytesLabel ? `<span>${this.escapeHtml(bytesLabel)}</span>` : ''}
+                        </div>
+                        ${path ? `<code title="${this.escapeHtml(path)}">${this.escapeHtml(path)}</code>` : ''}
+                        <div class="mr-options-build-worker-bar" aria-hidden="true">
+                            <span style="width: ${workerPercent}%"></span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        };
+
+        const updateMetadataBuildProgressView = (data = {}) => {
+            if (metadataBuildProgress) metadataBuildProgress.hidden = false;
+            const stage = String(data.stage || data.status || '').trim();
+            const percent = Math.max(0, Math.min(100, Number(data.percent || 0)));
+            if (metadataBuildStageEl) metadataBuildStageEl.textContent = metadataBuildStageLabels[stage] || stage || 'Running';
+            if (metadataBuildPercentEl) metadataBuildPercentEl.textContent = `${Math.round(percent)}%`;
+            if (metadataBuildBarEl) metadataBuildBarEl.style.width = `${percent}%`;
+
+            const current = Number(data.current || 0);
+            const total = Number(data.total || data.total_models || 0);
+            const activeModels = Array.isArray(data.active_models) ? data.active_models : [];
+            const currentModel = data.current_model || data.filename || '';
+            const suffix = total > 0 ? ` (${current.toLocaleString()} / ${total.toLocaleString()})` : '';
+            if (metadataBuildCurrentModelEl) {
+                if (activeModels.length) {
+                    metadataBuildCurrentModelEl.textContent = `${activeModels.length.toLocaleString()} active worker${activeModels.length === 1 ? '' : 's'}${suffix}`;
+                } else {
+                    metadataBuildCurrentModelEl.textContent = currentModel
+                        ? `${currentModel}${suffix}`
+                        : (data.message || `Preparing${suffix}`);
+                }
+            }
+            if (metadataBuildCurrentPathEl) {
+                const pathText = activeModels.length
+                    ? ''
+                    : (data.current_path || data.metadata_path || '');
+                metadataBuildCurrentPathEl.textContent = pathText;
+                metadataBuildCurrentPathEl.hidden = !pathText;
+            }
+
+            const bytesRead = Number(data.bytes_read || 0);
+            const totalBytes = Number(data.total_bytes || 0);
+            if (metadataBuildBytesEl) {
+                metadataBuildBytesEl.textContent = activeModels.length
+                    ? ''
+                    : totalBytes > 0
+                    ? `${this.formatBytes(bytesRead)} / ${this.formatBytes(totalBytes)}`
+                    : '';
+            }
+            renderMetadataBuildWorkers(data, activeModels);
+        };
+
+        const renderMetadataBuildResults = (data = null) => {
+            if (!metadataBuildResults) return;
+            const source = data?.result && typeof data.result === 'object' ? data.result : data;
+            const historyItems = Array.isArray(this.metadataBuildHistory)
+                ? this.metadataBuildHistory
+                : [];
+            if (!source && !historyItems.length) {
+                metadataBuildResults.hidden = true;
+                metadataBuildResults.innerHTML = '';
+                return;
+            }
+
+            const fallbackItems = source && Array.isArray(source.history)
+                ? source.history
+                : (source && Array.isArray(source.updated) ? source.updated : []);
+            const displayItems = historyItems.length ? historyItems : fallbackItems;
+            const errors = Array.isArray(source?.errors) ? source.errors : [];
+            const visibleItems = displayItems.slice(0, 500);
+            let html = '';
+
+            if (visibleItems.length) {
+                const rows = visibleItems.map((item) => {
+                    const modelLabel = item.relative_path || item.filename || item.model_path || 'Model';
+                    const modelPath = item.model_path || '';
+                    const metadataPath = item.metadata_path || '';
+                    const shaSource = item.sha256_source || '';
+                    const shaLabel = item.sha256 ? `${String(item.sha256).slice(0, 12)}...` : 'Pending';
+                    const changedFieldList = Array.isArray(item.changed_fields)
+                        ? item.changed_fields.filter(Boolean)
+                        : [];
+                    const changedFields = changedFieldList.join(', ');
+                    const changedFieldsSummary = changedFieldList.length
+                        ? `${changedFieldList.length} field${changedFieldList.length === 1 ? '' : 's'} changed`
+                        : '';
+                    const changedFieldsTitle = changedFields ? ` title="${this.escapeHtml(changedFields)}"` : '';
+                    const action = item.action || 'checked';
+                    const actionClass = String(action).toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+                    const message = item.message || changedFieldsSummary;
+                    const buildContext = modelPath ? {
+                        context_scope: 'local_model',
+                        open_folder_label: 'Show File in Folder',
+                        name: item.filename || modelLabel,
+                        filename: item.filename || modelLabel,
+                        relative_path: item.relative_path || modelLabel,
+                        path: modelPath,
+                        resolved_path: modelPath,
+                        open_path: modelPath,
+                        folder_path: item.base_directory || '',
+                        category: item.category || '',
+                        metadata_path: metadataPath,
+                        size: item.size || 0,
+                        file_size: item.size || 0,
+                        sha256: item.sha256 || '',
+                        context_source: 'metadata_builder'
+                    } : null;
+                    const contextAttrs = buildContext
+                        ? this.getContextMenuAttrs(buildContext, 'Right-click for model options')
+                        : '';
+                    return `
+                        <tr class="mr-options-audit-row ${contextAttrs ? 'is-context-menu' : ''}"${contextAttrs}>
+                            <td>
+                                <div class="mr-options-audit-model">${this.escapeHtml(modelLabel)}</div>
+                                <div class="mr-options-audit-path" title="${this.escapeHtml(modelPath)}">${this.escapeHtml(modelPath)}</div>
+                            </td>
+                            <td>
+                                <span class="mr-options-history-action is-${this.escapeHtml(actionClass)}">${this.escapeHtml(action)}</span>
+                                ${message ? `<div class="mr-options-audit-path"${changedFieldsTitle}>${this.escapeHtml(message)}</div>` : ''}
+                            </td>
+                            <td>${this.escapeHtml(item.category || '')}</td>
+                            <td>
+                                <div>${this.escapeHtml(shaLabel)}</div>
+                                <div class="mr-options-audit-path">${this.escapeHtml(shaSource)}</div>
+                            </td>
+                            <td>${this.escapeHtml(item.size_label || this.formatBytes(item.size || 0))}</td>
+                            <td>
+                                <div class="mr-options-audit-path" title="${this.escapeHtml(metadataPath)}">${this.escapeHtml(metadataPath)}</div>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+                html += `
+                    <div class="mr-options-audit-table-wrap">
+                        <table class="mr-options-audit-table mr-options-history-table">
+                            <thead>
+                                <tr>
+                                    <th>Model</th>
+                                    <th>Action</th>
+                                    <th>Folder</th>
+                                    <th>SHA256</th>
+                                    <th>Size</th>
+                                    <th>Metadata file</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>
+                `;
+                if (displayItems.length > visibleItems.length) {
+                    html += `<div class="mr-options-db-message">Showing latest ${visibleItems.length.toLocaleString()} of ${displayItems.length.toLocaleString()} history items.</div>`;
+                }
+            } else if (source?.cancelled) {
+                html += '<div class="mr-options-audit-empty">Metadata build was cancelled before any history item was captured.</div>';
+            } else {
+                html += '<div class="mr-options-audit-empty">No metadata history captured yet.</div>';
+            }
+
+            if (errors.length) {
+                const errorRows = errors.slice(0, 10).map((item) => {
+                    const targetPath = item.metadata_path || item.model_path || '';
+                    return `<li><span>${this.escapeHtml(item.message || 'Error')}</span><code>${this.escapeHtml(targetPath)}</code></li>`;
+                }).join('');
+                html += `
+                    <div class="mr-options-audit-errors">
+                        <div class="mr-options-audit-errors-title">Write errors</div>
+                        <ul>${errorRows}</ul>
+                    </div>
+                `;
+            }
+
+            metadataBuildResults.innerHTML = html;
+            metadataBuildResults.hidden = false;
+        };
+
+        const stopMetadataBuildPolling = () => {
+            if (this.metadataBuildPollTimer) {
+                window.clearTimeout(this.metadataBuildPollTimer);
+                this.metadataBuildPollTimer = null;
+            }
+        };
+
+        const isMetadataBuildTerminal = (data = {}) => {
+            const statusValue = String(data.status || '').toLowerCase();
+            return ['done', 'error', 'cancelled'].includes(statusValue);
+        };
+
+        const getMetadataBuildProgressKey = (data = {}) => (
+            String(data.progress_id || data?.result?.progress_id || this.metadataBuildProgressId || '').trim()
+        );
+
+        const finishMetadataBuild = (data = {}) => {
+            const progressKey = getMetadataBuildProgressKey(data);
+            if (progressKey && this.metadataBuildFinishedProgressId === progressKey) {
+                return;
+            }
+            if (progressKey) {
+                this.metadataBuildFinishedProgressId = progressKey;
+            }
+
+            appendMetadataBuildHistory(data);
+            const source = data?.result && typeof data.result === 'object' ? data.result : data;
+            setMetadataBuildBusy(false);
+            renderMetadataBuildResults(source);
+
+            if (data.status === 'cancelled' || source.cancelled) {
+                setMetadataBuildStatus(`Metadata build cancelled after ${Number(source.scanned_models || data.current || 0).toLocaleString()} model${Number(source.scanned_models || data.current || 0) === 1 ? '' : 's'}.`, 'is-pending');
+                this.showNotification('Metadata build cancelled', 'warning');
+                return;
+            }
+
+            if (data.status === 'error') {
+                setMetadataBuildStatus(data.message || 'Metadata build failed.', 'is-invalid');
+                this.showNotification('Metadata build failed', 'error');
+                return;
+            }
+
+            const created = Number(source.created_metadata || 0);
+            const updated = Number(source.updated_metadata || 0);
+            const errorCount = Number(source.error_count || 0);
+            const calculatedHashes = Number(source.calculated_hashes || 0);
+            const headerHashes = Number(source.header_hashes || 0);
+            const changed = created + updated;
+            const hashText = ` ${calculatedHashes.toLocaleString()} full SHA256 hash${calculatedHashes === 1 ? '' : 'es'} calculated, ${headerHashes.toLocaleString()} read from headers.`;
+            if (errorCount > 0) {
+                setMetadataBuildStatus(`Metadata build finished with ${errorCount.toLocaleString()} error${errorCount === 1 ? '' : 's'}.${hashText}`, 'is-invalid');
+                this.showNotification('Metadata build finished with errors', 'warning');
+            } else if (changed > 0) {
+                setMetadataBuildStatus(`Created ${created.toLocaleString()} and updated ${updated.toLocaleString()} metadata file${changed === 1 ? '' : 's'}.${hashText}`, 'is-valid');
+                this.showNotification('Local metadata updated', 'success');
+            } else {
+                setMetadataBuildStatus(`Checked ${Number(source.scanned_models || 0).toLocaleString()} model${Number(source.scanned_models || 0) === 1 ? '' : 's'}. All existing metadata already had SHA256.`, 'is-valid');
+                this.showNotification('Local metadata already complete', 'success');
+            }
+        };
+
+        const pollMetadataBuildProgress = async () => {
+            const progressId = this.metadataBuildProgressId;
+            if (!progressId) return;
+            try {
+                const data = await this.fetchJson(
+                    `/model_resolver/metadata-build/progress/${encodeURIComponent(progressId)}`,
+                    { silent: true },
+                    'Metadata build progress'
+                );
+                appendMetadataBuildHistory(data);
+                updateMetadataBuildSummary(data);
+                updateMetadataBuildProgressView(data);
+                renderMetadataBuildResults(data);
+                if (isMetadataBuildTerminal(data)) {
+                    stopMetadataBuildPolling();
+                    finishMetadataBuild(data);
+                    if (this.metadataBuildProgressId === progressId) {
+                        this.metadataBuildProgressId = '';
+                    }
+                    return;
+                }
+                stopMetadataBuildPolling();
+                this.metadataBuildPollTimer = window.setTimeout(() => {
+                    pollMetadataBuildProgress();
+                }, 700);
+            } catch (error) {
+                stopMetadataBuildPolling();
+                this.metadataBuildProgressId = '';
+                setMetadataBuildBusy(false);
+                setMetadataBuildStatus(error.message || 'Metadata build progress failed.', 'is-invalid');
+            }
+        };
+
+        const runMetadataBuild = async () => {
+            stopMetadataBuildPolling();
+            this.metadataBuildProgressId = '';
+            this.metadataBuildFinishedProgressId = '';
+            this.metadataBuildHistory = [];
+            this.metadataBuildHistoryKeys = new Set();
+            if (metadataBuildHistoryCountEl) metadataBuildHistoryCountEl.textContent = '0';
+            setMetadataBuildBusy(true);
+            updateMetadataBuildSummary({});
+            renderMetadataBuildResults(null);
+            setMetadataBuildTab('progress');
+            updateMetadataBuildProgressView({
+                stage: 'queued',
+                message: 'Preparing local metadata build...',
+                percent: 0,
+                current: 0,
+                total: 0
+            });
+            setMetadataBuildStatus('Preparing local metadata build...', 'is-pending');
+            try {
+                const workerCount = normalizeMetadataBuildWorkerCount();
+                const start = await this.fetchJson('/model_resolver/metadata-build/start', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        force_rescan: true,
+                        worker_count: workerCount
+                    })
+                }, 'Start metadata build');
+                if (!start?.progress_id) {
+                    throw new Error('Metadata build did not return a progress id.');
+                }
+                this.metadataBuildProgressId = start.progress_id;
+                setMetadataBuildStatus('Building local metadata...', 'is-pending');
+                pollMetadataBuildProgress();
+            } catch (error) {
+                this.metadataBuildProgressId = '';
+                setMetadataBuildBusy(false);
+                setMetadataBuildStatus(error.message || 'Metadata build failed to start.', 'is-invalid');
+            }
+        };
+
+        const cancelMetadataBuild = async () => {
+            const progressId = this.metadataBuildProgressId;
+            if (!progressId) return;
+            if (metadataBuildCancelBtn) metadataBuildCancelBtn.disabled = true;
+            setMetadataBuildStatus('Stopping metadata build...', 'is-pending');
+            try {
+                await this.fetchJson(
+                    `/model_resolver/metadata-build/cancel/${encodeURIComponent(progressId)}`,
+                    { method: 'POST', silent: true },
+                    'Cancel metadata build'
+                );
+                stopMetadataBuildPolling();
+                pollMetadataBuildProgress();
+            } catch (error) {
+                setMetadataBuildStatus(error.message || 'Could not cancel metadata build.', 'is-invalid');
+                if (metadataBuildCancelBtn) metadataBuildCancelBtn.disabled = false;
             }
         };
 
@@ -1736,6 +2393,7 @@ export const optionsMethods = {
             optionsMain?.classList.toggle(
                 'mr-options-main-fill-section',
                 targetId === 'mr-options-section-metadata-audit'
+                    || targetId === 'mr-options-section-metadata-build'
             );
             setActiveNav(targetId);
         };
@@ -2132,6 +2790,7 @@ export const optionsMethods = {
         };
 
         populateDefaultRootSelects();
+        loadMetadataBuildCapabilities();
 
         setStatus('Saved only on this machine.');
         setVisibleSection('mr-options-section-sources');
@@ -2216,6 +2875,34 @@ export const optionsMethods = {
         if (metadataSizeAuditBtn) {
             metadataSizeAuditBtn.addEventListener('click', () => {
                 runMetadataSizeAudit();
+            });
+        }
+
+        if (metadataBuildStartBtn) {
+            metadataBuildStartBtn.addEventListener('click', () => {
+                runMetadataBuild();
+            });
+        }
+
+        if (metadataBuildCancelBtn) {
+            metadataBuildCancelBtn.addEventListener('click', () => {
+                cancelMetadataBuild();
+            });
+        }
+
+        metadataBuildTabButtons.forEach((button) => {
+            button.addEventListener('click', () => {
+                setMetadataBuildTab(button.dataset.buildTab || 'progress');
+            });
+        });
+
+        if (metadataBuildWorkerInput) {
+            metadataBuildWorkerInput.addEventListener('change', () => {
+                metadataBuildWorkerInput.dataset.userEdited = 'true';
+                const workerCount = normalizeMetadataBuildWorkerCount();
+                if (metadataBuildWorkersEl && !this.metadataBuildProgressId) {
+                    metadataBuildWorkersEl.textContent = workerCount.toLocaleString();
+                }
             });
         }
 
