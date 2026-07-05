@@ -187,6 +187,7 @@ class ModelResolverExtension:
                     search_local_matches,
                 )
                 from .core.path_templates import infer_download_path_templates
+                from .core.metadata_audit import audit_metadata_sizes
                 from .core.scanner import get_model_files, invalidate_model_files_cache, find_local_file_path
                 from .core.path_utils import (
                     extract_safetensors_header_sha256,
@@ -1118,6 +1119,28 @@ class ModelResolverExtension:
                     invalidate_local_hash_match_cache()
                 models = get_model_files(force_rescan=force_rescan)
                 return web.json_response(models)
+
+            @routes.post("/model_resolver/metadata-size-audit")
+            @json_api_endpoint("metadata-size-audit")
+            async def metadata_size_audit_route(request):
+                """Check local model .metadata.json sidecars for stale size values."""
+                payload = {}
+                try:
+                    if request.can_read_body:
+                        payload = await request.json()
+                except Exception:
+                    payload = {}
+                if not isinstance(payload, dict):
+                    payload = {}
+
+                force_rescan = to_bool(payload.get("force_rescan"), True)
+                result = await asyncio.to_thread(
+                    audit_metadata_sizes,
+                    force_rescan=force_rescan,
+                    worker_count=payload.get("worker_count"),
+                    batch_size=payload.get("batch_size"),
+                )
+                return web.json_response(result)
 
             @routes.post("/model_resolver/loaded")
             @json_api_endpoint("get_loaded_models")

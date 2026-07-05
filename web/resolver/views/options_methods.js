@@ -243,6 +243,13 @@ export const optionsMethods = {
                                     </span>
                                     <span class="mr-options-nav-meta">07</span>
                                 </button>
+                                <button type="button" class="mr-options-nav-btn" data-target="mr-options-section-metadata-audit">
+                                    <span class="mr-options-nav-main">
+                                        <span class="mr-options-nav-icon" aria-hidden="true">${getSvgIcon('hardDrive')}</span>
+                                        <span>Metadata Sizes</span>
+                                    </span>
+                                    <span class="mr-options-nav-meta">08</span>
+                                </button>
                             </div>
                         </div>
                         <div class="mr-options-actions">
@@ -723,6 +730,44 @@ export const optionsMethods = {
                                 </div>
                             </div>
                         </section>
+                        <section id="mr-options-section-metadata-audit" class="mr-options-card mr-options-section mr-options-section-fill is-hidden">
+                            <div class="mr-options-section-head">
+                                <h4 class="mr-options-section-title">Metadata Size Audit</h4>
+                            </div>
+                            <div class="mr-options-grid">
+                                <div class="mr-options-panel">
+                                    <div class="mr-options-stack">
+                                        <div class="mr-options-db-summary">
+                                            <div class="mr-options-db-row">
+                                                <span>Models scanned</span>
+                                                <strong id="mr-options-metadata-size-scanned">0</strong>
+                                            </div>
+                                            <div class="mr-options-db-row">
+                                                <span>Metadata checked</span>
+                                                <strong id="mr-options-metadata-size-checked">0</strong>
+                                            </div>
+                                            <div class="mr-options-db-row">
+                                                <span>Mismatches</span>
+                                                <strong id="mr-options-metadata-size-mismatches">0</strong>
+                                            </div>
+                                            <div class="mr-options-db-row">
+                                                <span>Missing size</span>
+                                                <strong id="mr-options-metadata-size-missing">0</strong>
+                                            </div>
+                                            <div class="mr-options-db-row">
+                                                <span>Errors</span>
+                                                <strong id="mr-options-metadata-size-errors">0</strong>
+                                            </div>
+                                        </div>
+                                        <div class="mr-options-db-actions">
+                                            <button id="mr-options-metadata-size-scan" type="button" class="mr-btn mr-btn-secondary">${getSvgIcon('refreshCw')} Check Metadata Sizes</button>
+                                        </div>
+                                        <div id="mr-options-metadata-size-status" class="mr-options-db-message">Not checked yet.</div>
+                                        <div id="mr-options-metadata-size-results" class="mr-options-audit-results" hidden></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
                     </div>
                 </div>
             </div>
@@ -803,6 +848,15 @@ export const optionsMethods = {
         const hfIndexRefreshBtn = this.contentElement.querySelector('#mr-options-hf-index-refresh');
         const clearAllCacheBtn = this.contentElement.querySelector('#mr-options-clear-all-cache');
         const clearAllCacheStatus = this.contentElement.querySelector('#mr-options-clear-cache-status');
+        const metadataSizeAuditBtn = this.contentElement.querySelector('#mr-options-metadata-size-scan');
+        const metadataSizeAuditStatus = this.contentElement.querySelector('#mr-options-metadata-size-status');
+        const metadataSizeAuditResults = this.contentElement.querySelector('#mr-options-metadata-size-results');
+        const metadataSizeScannedEl = this.contentElement.querySelector('#mr-options-metadata-size-scanned');
+        const metadataSizeCheckedEl = this.contentElement.querySelector('#mr-options-metadata-size-checked');
+        const metadataSizeMismatchesEl = this.contentElement.querySelector('#mr-options-metadata-size-mismatches');
+        const metadataSizeMissingEl = this.contentElement.querySelector('#mr-options-metadata-size-missing');
+        const metadataSizeErrorsEl = this.contentElement.querySelector('#mr-options-metadata-size-errors');
+        const optionsMain = this.contentElement.querySelector('.mr-options-main');
         const navButtons = Array.from(this.contentElement.querySelectorAll('.mr-options-nav-btn'));
         const optionSections = Array.from(this.contentElement.querySelectorAll('.mr-options-section'));
         const trackedInputs = [
@@ -935,6 +989,187 @@ export const optionsMethods = {
 
         const setHfIndexBusy = (busy) => {
             if (hfIndexRefreshBtn) hfIndexRefreshBtn.disabled = busy;
+        };
+
+        const setMetadataSizeAuditBusy = (busy) => {
+            if (metadataSizeAuditBtn) metadataSizeAuditBtn.disabled = busy;
+        };
+
+        const setStatusMode = (element, mode = '') => {
+            if (!element) return;
+            element.classList.remove('is-valid', 'is-invalid', 'is-pending');
+            if (mode) element.classList.add(mode);
+        };
+
+        const formatAuditNumber = (value) => {
+            const number = Number(value || 0);
+            return Number.isFinite(number) ? number.toLocaleString() : '0';
+        };
+
+        const setMetadataSizeAuditStatus = (text, mode = '') => {
+            if (!metadataSizeAuditStatus) return;
+            metadataSizeAuditStatus.textContent = text;
+            setStatusMode(metadataSizeAuditStatus, mode);
+        };
+
+        const setMetadataSizeSummaryValue = (element, value, mode = '') => {
+            if (!element) return;
+            element.textContent = formatAuditNumber(value);
+            setStatusMode(element, mode);
+        };
+
+        const updateMetadataSizeAuditSummary = (data = {}) => {
+            const mismatchCount = Number(data.mismatch_count || 0);
+            const missingSizeCount = Number(data.missing_size || 0);
+            const errorCount = Number(data.error_count || 0);
+            setMetadataSizeSummaryValue(metadataSizeScannedEl, data.scanned_models || 0);
+            setMetadataSizeSummaryValue(metadataSizeCheckedEl, data.metadata_files ?? data.checked_metadata ?? 0);
+            setMetadataSizeSummaryValue(metadataSizeMismatchesEl, mismatchCount, mismatchCount > 0 ? 'is-invalid' : '');
+            setMetadataSizeSummaryValue(metadataSizeMissingEl, missingSizeCount, missingSizeCount > 0 ? 'is-pending' : '');
+            setMetadataSizeSummaryValue(metadataSizeErrorsEl, errorCount, errorCount > 0 ? 'is-invalid' : '');
+        };
+
+        const renderMetadataSizeAuditResults = (data = null) => {
+            if (!metadataSizeAuditResults) return;
+            if (!data) {
+                metadataSizeAuditResults.hidden = true;
+                metadataSizeAuditResults.innerHTML = '';
+                return;
+            }
+
+            const mismatches = Array.isArray(data.mismatches) ? data.mismatches : [];
+            const errors = Array.isArray(data.errors) ? data.errors : [];
+            const visibleMismatches = mismatches.slice(0, 500);
+            let html = '';
+
+            if (mismatches.length) {
+                const rows = visibleMismatches.map((item) => {
+                    const modelLabel = item.relative_path || item.filename || item.model_path || 'Model';
+                    const modelPath = item.model_path || '';
+                    const metadataPath = item.metadata_path || '';
+                    const metadataSize = item.metadata_size_label || this.formatBytes(item.metadata_size);
+                    const actualSize = item.actual_size_label || this.formatBytes(item.actual_size);
+                    const difference = Number(item.difference || 0);
+                    const differenceClass = difference > 0 ? 'is-positive' : (difference < 0 ? 'is-negative' : '');
+                    const differenceLabel = item.difference_label || `${difference >= 0 ? '+' : '-'}${this.formatBytes(Math.abs(difference))}`;
+                    const sizeField = item.size_field || 'size';
+                    const auditContext = modelPath ? {
+                        context_scope: 'local_model',
+                        open_folder_label: 'Show File in Folder',
+                        name: item.filename || modelLabel,
+                        filename: item.filename || modelLabel,
+                        relative_path: item.relative_path || modelLabel,
+                        path: modelPath,
+                        resolved_path: modelPath,
+                        open_path: modelPath,
+                        folder_path: item.base_directory || '',
+                        category: item.category || '',
+                        metadata_path: metadataPath,
+                        size: item.actual_size || 0,
+                        file_size: item.actual_size || 0,
+                        metadata_size: item.metadata_size || 0,
+                        context_source: 'metadata_size_audit'
+                    } : null;
+                    const contextAttrs = auditContext
+                        ? this.getContextMenuAttrs(auditContext, 'Right-click for model options')
+                        : '';
+                    return `
+                        <tr class="mr-options-audit-row ${contextAttrs ? 'is-context-menu' : ''}"${contextAttrs}>
+                            <td>
+                                <div class="mr-options-audit-model">${this.escapeHtml(modelLabel)}</div>
+                                <div class="mr-options-audit-path" title="${this.escapeHtml(modelPath)}">${this.escapeHtml(modelPath)}</div>
+                            </td>
+                            <td>${this.escapeHtml(item.category || '')}</td>
+                            <td>
+                                <div>${this.escapeHtml(metadataSize)}</div>
+                                <div class="mr-options-audit-path">${this.escapeHtml(sizeField)}</div>
+                            </td>
+                            <td>${this.escapeHtml(actualSize)}</td>
+                            <td class="mr-options-audit-delta ${differenceClass}">${this.escapeHtml(differenceLabel)}</td>
+                            <td>
+                                <div class="mr-options-audit-path" title="${this.escapeHtml(metadataPath)}">${this.escapeHtml(metadataPath)}</div>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+                html += `
+                    <div class="mr-options-audit-table-wrap">
+                        <table class="mr-options-audit-table">
+                            <thead>
+                                <tr>
+                                    <th>Model</th>
+                                    <th>Folder</th>
+                                    <th>Metadata</th>
+                                    <th>Actual</th>
+                                    <th>Delta</th>
+                                    <th>Metadata file</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>
+                `;
+                if (mismatches.length > visibleMismatches.length) {
+                    html += `<div class="mr-options-db-message">Showing first ${visibleMismatches.length.toLocaleString()} of ${mismatches.length.toLocaleString()} mismatches.</div>`;
+                }
+            } else {
+                html += '<div class="mr-options-audit-empty">No metadata size mismatches found.</div>';
+            }
+
+            if (errors.length) {
+                const errorRows = errors.slice(0, 10).map((item) => {
+                    const targetPath = item.metadata_path || item.model_path || '';
+                    return `<li><span>${this.escapeHtml(item.message || 'Error')}</span><code>${this.escapeHtml(targetPath)}</code></li>`;
+                }).join('');
+                html += `
+                    <div class="mr-options-audit-errors">
+                        <div class="mr-options-audit-errors-title">Read errors</div>
+                        <ul>${errorRows}</ul>
+                    </div>
+                `;
+            }
+
+            metadataSizeAuditResults.innerHTML = html;
+            metadataSizeAuditResults.hidden = false;
+        };
+
+        const runMetadataSizeAudit = async () => {
+            setMetadataSizeAuditBusy(true);
+            updateMetadataSizeAuditSummary({});
+            renderMetadataSizeAuditResults(null);
+            setMetadataSizeAuditStatus('Checking metadata sizes...', 'is-pending');
+            try {
+                const data = await this.fetchJson('/model_resolver/metadata-size-audit', {
+                    method: 'POST',
+                    body: JSON.stringify({ force_rescan: true })
+                }, 'Check metadata sizes');
+                updateMetadataSizeAuditSummary(data);
+                renderMetadataSizeAuditResults(data);
+
+                const mismatchCount = Number(data?.mismatch_count || 0);
+                const checkedCount = Number(data?.metadata_files ?? data?.checked_metadata ?? 0);
+                const errorCount = Number(data?.error_count || 0);
+                const workerCount = Number(data?.worker_count || 0);
+                const batchCount = Number(data?.batch_count || 0);
+                const workerText = workerCount > 1
+                    ? ` using ${workerCount.toLocaleString()} workers across ${batchCount.toLocaleString()} batch${batchCount === 1 ? '' : 'es'}`
+                    : '';
+                if (mismatchCount > 0) {
+                    setMetadataSizeAuditStatus(`${mismatchCount.toLocaleString()} metadata size mismatch${mismatchCount === 1 ? '' : 'es'} found${workerText}.`, 'is-invalid');
+                    this.showNotification('Metadata size mismatches found', 'warning');
+                } else if (errorCount > 0) {
+                    setMetadataSizeAuditStatus(`Checked ${checkedCount.toLocaleString()} metadata file${checkedCount === 1 ? '' : 's'}${workerText} with ${errorCount.toLocaleString()} read error${errorCount === 1 ? '' : 's'}.`, 'is-invalid');
+                    this.showNotification('Metadata size audit finished with errors', 'warning');
+                } else {
+                    setMetadataSizeAuditStatus(`Checked ${checkedCount.toLocaleString()} metadata file${checkedCount === 1 ? '' : 's'}${workerText}. No mismatches found.`, 'is-valid');
+                    this.showNotification('Metadata sizes checked', 'success');
+                }
+            } catch (error) {
+                setMetadataSizeAuditStatus(error.message || 'Metadata size audit failed.', 'is-invalid');
+                renderMetadataSizeAuditResults(null);
+            } finally {
+                setMetadataSizeAuditBusy(false);
+            }
         };
 
         const setTokenCheckStatus = (statusEl, text, mode = '') => {
@@ -1493,6 +1728,10 @@ export const optionsMethods = {
             optionSections.forEach((section) => {
                 section.classList.toggle('is-hidden', section.id !== targetId);
             });
+            optionsMain?.classList.toggle(
+                'mr-options-main-fill-section',
+                targetId === 'mr-options-section-metadata-audit'
+            );
             setActiveNav(targetId);
         };
 
@@ -1966,6 +2205,12 @@ export const optionsMethods = {
         if (clearAllCacheBtn) {
             clearAllCacheBtn.addEventListener('click', () => {
                 clearAllCachesFromOptions();
+            });
+        }
+
+        if (metadataSizeAuditBtn) {
+            metadataSizeAuditBtn.addEventListener('click', () => {
+                runMetadataSizeAudit();
             });
         }
 
