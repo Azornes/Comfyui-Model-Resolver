@@ -18,7 +18,12 @@ from ..matcher import (
     base_model_score as _base_model_score,
     calculate_candidate_rank,
 )
-from ..type_utils import select_primary_model_file, get_generic_filename_tokens
+from ..type_utils import (
+    select_primary_model_file,
+    get_generic_filename_tokens,
+    normalize_lora_manager_type,
+    build_search_result,
+)
 from ..progress import report_progress, get_progress_reporter
 from ..log_system import create_module_logger
 log = create_module_logger(__name__)
@@ -98,22 +103,7 @@ def _connect_readonly() -> Optional[sqlite3.Connection]:
 
 
 def _normalize_model_type(model_type: Optional[str]) -> str:
-    value = str(model_type or "").strip().lower()
-    type_map = {
-        "lora": "lora",
-        "loras": "lora",
-        "lycoris": "lycoris",
-        "checkpoint": "checkpoint",
-        "checkpoints": "checkpoint",
-        "vae": "vae",
-        "controlnet": "controlnet",
-        "embedding": "textualinversion",
-        "embeddings": "textualinversion",
-        "textualinversion": "textualinversion",
-        "upscaler": "upscaler",
-        "upscale_models": "upscaler",
-    }
-    return type_map.get(value, value)
+    return normalize_lora_manager_type(model_type)
 
 
 
@@ -437,32 +427,32 @@ def _build_result_from_row(
     )
     match_type = "exact" if confidence == 100.0 else "similar"
 
-    return {
-        "source": "lora_manager_archive",
-        "model_id": model_id,
-        "version_id": version_id,
-        "name": row["model_name"],
-        "version_name": row["version_name"],
-        "type": row["model_type"],
-        "filename": filename,
-        "url": f"https://civitai.com/models/{model_id}?modelVersionId={version_id}",
-        "download_url": primary_file.get("downloadUrl") if primary_file else None,
-        "size": (
+    return build_search_result(
+        source="lora_manager_archive",
+        model_id=model_id,
+        version_id=version_id,
+        name=row["model_name"],
+        version_name=row["version_name"],
+        type=row["model_type"],
+        filename=filename,
+        url=f"https://civitai.com/models/{model_id}?modelVersionId={version_id}",
+        download_url=primary_file.get("downloadUrl") if primary_file else None,
+        size=(
             int((primary_file.get("sizeKB") or 0) * 1024)
             if primary_file and primary_file.get("sizeKB") is not None
             else None
         ),
-        "base_model": row["base_model"] or version_data.get("baseModel"),
-        "tags": tags,
-        "trained_words": trained_words,
-        "images": version_data.get("images", []),
-        "description": model_data.get("description", ""),
-        "model_description": model_data.get("description", ""),
-        "creator": model_data.get("creator", {}),
-        "files": files,
-        "match_type": match_type,
-        "confidence": confidence,
-    }
+        base_model=row["base_model"] or version_data.get("baseModel"),
+        tags=tags,
+        trained_words=trained_words,
+        images=version_data.get("images", []),
+        match_type=match_type,
+        confidence=confidence,
+        description=model_data.get("description", ""),
+        model_description=model_data.get("description", ""),
+        creator=model_data.get("creator", {}),
+        files=files,
+    )
 
 
 def search_lora_manager_archive(

@@ -23,6 +23,7 @@ from ..matcher import (
     base_model_score as _base_model_score,
     calculate_candidate_rank,
     build_filename_search_queries,
+    MODEL_TITLE_MATCH_THRESHOLD,
 )
 from ..path_utils import get_filename_from_path
 from ..type_utils import (
@@ -39,6 +40,8 @@ from ..type_utils import (
     clear_remote_size_cache,
     extract_trained_words,
     extract_file_size,
+    normalize_model_file_info,
+    build_search_result,
 )
 from ..progress import report_progress, get_progress_reporter
 from ..log_system import create_module_logger
@@ -58,7 +61,6 @@ DEFAULT_CIVARCHIVE_CANDIDATE_LIMIT = 10
 MAX_CIVARCHIVE_CANDIDATE_LIMIT = 30
 SEARCH_RESULT_DETAIL_LIMIT = 5
 HASH_PAGE_MODEL_LINK_LIMIT = 5
-MODEL_TITLE_MATCH_THRESHOLD = 82.0
 
 
 
@@ -948,25 +950,14 @@ def _normalize_archive_mirrors(file_info: Dict[str, Any]) -> List[Dict[str, Any]
 def _normalize_archive_file(file_info: Dict[str, Any], model_id: Optional[int], version_id: Optional[int]) -> Dict[str, Any]:
     transformed = _transform_file_entry(file_info)
     download_urls = _collect_download_urls(transformed)
-    hashes = transformed.get("hashes") if isinstance(transformed.get("hashes"), dict) else {}
-    metadata = transformed.get("metadata") if isinstance(transformed.get("metadata"), dict) else {}
     mirrors = _normalize_archive_mirrors(transformed)
-    return {
-        "id": transformed.get("id"),
-        "name": transformed.get("name"),
-        "type": transformed.get("type"),
-        "size": extract_file_size(transformed),
-        "download_url": download_urls[0] if download_urls else transformed.get("downloadUrl"),
-        "download_urls": download_urls,
-        "primary": bool(transformed.get("primary")),
-        "sha256": transformed.get("sha256") or hashes.get("SHA256") or hashes.get("sha256"),
-        "hashes": hashes,
-        "metadata": metadata,
-        "mirrors": mirrors,
-        "mirror_count": len(mirrors),
-        "model_id": model_id or transformed.get("modelId"),
-        "version_id": version_id or transformed.get("modelVersionId"),
-    }
+    normalized = normalize_model_file_info(transformed, model_id=model_id, version_id=version_id)
+    # Re-extract size using exact logic and append mirror info
+    normalized["size"] = extract_file_size(transformed)
+    normalized["download_urls"] = download_urls
+    normalized["mirrors"] = mirrors
+    normalized["mirror_count"] = len(mirrors)
+    return normalized
 
 
 def _normalize_archive_version(
@@ -1198,32 +1189,30 @@ def _build_result_from_normalized_version(
     if size is None:
         size = _resolve_file_size_bytes(file_info, download_urls)
 
-    return {
-        "source": "civarchive",
-        "model_id": model_id,
-        "version_id": version_id,
-        "name": model_details.get("name") or "",
-        "version_name": version.get("name") or "",
-        "type": model_details.get("type") or file_info.get("type"),
-        "filename": filename,
-        "url": url,
-        "platform_url": version.get("platform_url") or version.get("platformUrl"),
-        "civitai_model_id": version.get("civitai_model_id") or version.get("civitaiModelId"),
-        "civitai_model_version_id": version.get("civitai_model_version_id") or version.get("civitaiModelVersionId"),
-        "download_url": download_urls[0],
-        "download_urls": download_urls,
-        "size": size,
-        "base_model": version.get("base_model")
-        or version.get("baseModel")
-        or version.get("baseModelType"),
-        "tags": tags,
-        "trained_words": version.get("trained_words") or [],
-        "images": version.get("images") or [],
-        "creator": model_details.get("creator") or {},
-        "platform": model_details.get("platform"),
-        "is_deleted": False,
-        "match_type": match_type,
-    }
+    return build_search_result(
+        source="civarchive",
+        model_id=model_id,
+        version_id=version_id,
+        name=model_details.get("name") or "",
+        version_name=version.get("name") or "",
+        type=model_details.get("type") or file_info.get("type"),
+        filename=filename,
+        url=url,
+        platform_url=version.get("platform_url") or version.get("platformUrl"),
+        civitai_model_id=version.get("civitai_model_id") or version.get("civitaiModelId"),
+        civitai_model_version_id=version.get("civitai_model_version_id") or version.get("civitaiModelVersionId"),
+        download_url=download_urls[0],
+        download_urls=download_urls,
+        size=size,
+        base_model=version.get("base_model") or version.get("baseModel") or version.get("baseModelType"),
+        tags=tags,
+        trained_words=version.get("trained_words") or [],
+        images=version.get("images") or [],
+        creator=model_details.get("creator") or {},
+        platform=model_details.get("platform"),
+        is_deleted=False,
+        match_type=match_type,
+    )
 
 
 def _hydrate_civarchive_version_with_files(
@@ -1673,38 +1662,38 @@ def _build_result_from_payload(
         else ""
     )
 
-    return {
-        "source": "civarchive",
-        "model_id": model_id,
-        "version_id": version_id,
-        "name": model_name,
-        "version_name": version_name,
-        "type": context.get("type") or selected_file.get("type"),
-        "filename": filename,
-        "url": civarchive_url,
-        "platform_url": version.get("platform_url") or version.get("platformUrl"),
-        "civitai_model_id": version.get("civitai_model_id") or version.get("civitaiModelId"),
-        "civitai_model_version_id": version.get("civitai_model_version_id") or version.get("civitaiModelVersionId"),
-        "download_url": download_urls[0],
-        "download_urls": download_urls,
-        "size": _resolve_file_size_bytes(selected_file, download_urls),
-        "base_model": version.get("baseModel") or version.get("base_model") or version.get("baseModelType"),
-        "tags": tags,
-        "trained_words": trained_words,
-        "images": version.get("images", []),
-        "creator": {
+    return build_search_result(
+        source="civarchive",
+        model_id=model_id,
+        version_id=version_id,
+        name=model_name,
+        version_name=version_name,
+        type=context.get("type") or selected_file.get("type"),
+        filename=filename,
+        url=civarchive_url,
+        platform_url=version.get("platform_url") or version.get("platformUrl"),
+        civitai_model_id=version.get("civitai_model_id") or version.get("civitaiModelId"),
+        civitai_model_version_id=version.get("civitai_model_version_id") or version.get("civitaiModelVersionId"),
+        download_url=download_urls[0],
+        download_urls=download_urls,
+        size=_resolve_file_size_bytes(selected_file, download_urls),
+        base_model=version.get("baseModel") or version.get("base_model") or version.get("baseModelType"),
+        tags=tags,
+        trained_words=trained_words,
+        images=version.get("images", []),
+        creator={
             "username": context.get("creator_username") or context.get("username"),
             "name": context.get("creator_name"),
             "url": context.get("creator_url"),
         },
-        "platform": context.get("platform") or context.get("platform_name"),
-        "is_deleted": bool(context.get("deletedAt") or version.get("deletedAt")),
-        "match_type": match_type,
-        "confidence": best_confidence,
-        "sha256": sha256,
-        "hash": sha256,
-        "hashes": hashes,
-    }
+        platform=context.get("platform") or context.get("platform_name"),
+        is_deleted=bool(context.get("deletedAt") or version.get("deletedAt")),
+        match_type=match_type,
+        confidence=best_confidence,
+        sha256=sha256,
+        hash=sha256,
+        hashes=hashes,
+    )
 
 
 def resolve_civarchive_by_hash(
@@ -1830,29 +1819,31 @@ def _build_result_from_search_candidate(
 
     open_url = urljoin(CIVARCHIVE_BASE_URL, str(candidate.get("url") or ""))
     sha256 = (parsed or {}).get("sha256")
-    return {
-        "source": "civarchive",
-        "name": candidate_name or filename or query_basename,
-        "version_name": "",
-        "type": candidate.get("type"),
-        "filename": filename or query_basename,
-        "url": open_url,
-        "download_url": download_urls[0],
-        "download_urls": download_urls,
-        "size": _resolve_file_size_bytes(candidate, download_urls),
-        "base_model": candidate.get("base_model") or candidate.get("baseModel"),
-        "tags": candidate.get("tags") or [],
-        "trained_words": [],
-        "images": [],
-        "creator": candidate.get("creator") or {},
-        "platform": candidate.get("platform") or candidate.get("source"),
-        "is_deleted": False,
-        "match_type": "exact" if confidence == 100.0 else "similar",
-        "confidence": confidence,
-        "sha256": sha256,
-        "hash": sha256,
-        "hashes": {"SHA256": sha256} if sha256 else {},
-    }
+    return build_search_result(
+        source="civarchive",
+        model_id=candidate.get("model_id") or candidate.get("modelId"),
+        version_id=candidate.get("version_id") or candidate.get("modelVersionId"),
+        name=candidate_name or filename or query_basename,
+        version_name="",
+        type=candidate.get("type"),
+        filename=filename or query_basename,
+        url=open_url,
+        download_url=download_urls[0],
+        download_urls=download_urls,
+        size=_resolve_file_size_bytes(candidate, download_urls),
+        base_model=candidate.get("base_model") or candidate.get("baseModel"),
+        tags=candidate.get("tags") or [],
+        trained_words=[],
+        images=[],
+        creator=candidate.get("creator") or {},
+        platform=candidate.get("platform") or candidate.get("source"),
+        is_deleted=False,
+        match_type="exact" if confidence == 100.0 else "similar",
+        confidence=confidence,
+        sha256=sha256,
+        hash=sha256,
+        hashes={"SHA256": sha256} if sha256 else {},
+    )
 
 
 def _resolve_civarchive_model_link(
@@ -2047,8 +2038,9 @@ def _is_hash_verified_exact_match(result: Optional[Dict[str, Any]], confidence: 
     return bool(result.get("sha256") or result.get("hash"))
 
 
+
+
 def _build_search_queries(filename: str) -> List[str]:
-    # Wrap the unified query builder helper
     return build_filename_search_queries(filename)
 
 
@@ -2171,7 +2163,7 @@ def search_civarchive_for_file(
     )
 
     try:
-        search_queries = _build_search_queries(normalized_filename)
+        search_queries = build_filename_search_queries(normalized_filename)
         query_count = max(1, len(search_queries))
         for query_index, search_query in enumerate(search_queries, start=1):
             query_percent = 30 + ((query_index - 1) / query_count) * 18

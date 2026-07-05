@@ -19,6 +19,9 @@ except ImportError:
     rapidfuzz_fuzz = None
 
 
+MODEL_TITLE_MATCH_THRESHOLD = 82.0
+
+
 def normalize_filename(filename: str) -> str:
     """
     Normalize a filename for comparison.

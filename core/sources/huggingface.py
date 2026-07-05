@@ -521,9 +521,6 @@ def _find_matching_file_in_author_index(
     return partial_match
 
 
-def _build_huggingface_search_queries(filename: str) -> List[str]:
-    # Wrap the unified query builder helper
-    return build_filename_search_queries(filename)
 
 
 def _get_repos_by_author(
@@ -676,7 +673,7 @@ def search_huggingface_for_file(
 
         repos_to_check = []
         seen_repos = set()
-        search_queries = _build_huggingface_search_queries(filename)
+        search_queries = build_filename_search_queries(filename)
 
         if use_api_search:
             total_queries = max(1, len(search_queries))

@@ -971,6 +971,103 @@ def get_enabled_download_categories(folder_names: list[str]) -> list[str]:
     return categories
 
 
+def normalize_lora_manager_type(model_type: Optional[str]) -> str:
+    """Normalize a model type for LoRA Manager Archive database queries."""
+    value = str(model_type or "").strip().lower()
+    type_map = {
+        "lora": "lora",
+        "loras": "lora",
+        "lycoris": "lycoris",
+        "checkpoint": "checkpoint",
+        "checkpoints": "checkpoint",
+        "vae": "vae",
+        "controlnet": "controlnet",
+        "embedding": "textualinversion",
+        "embeddings": "textualinversion",
+        "textualinversion": "textualinversion",
+        "upscaler": "upscaler",
+        "upscale_models": "upscaler",
+    }
+    return type_map.get(value, value)
 
 
+def normalize_model_file_info(
+    raw: Dict[str, Any],
+    *,
+    model_id: Optional[int] = None,
+    version_id: Optional[int] = None,
+    fallback_download_url: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Normalize a single model file dictionary to a unified schema."""
+    hashes = raw.get("hashes") if isinstance(raw.get("hashes"), dict) else {}
+    sha256 = raw.get("sha256") or hashes.get("SHA256") or hashes.get("sha256") or ""
 
+    size = raw.get("size")
+    if size is None and raw.get("sizeKB") is not None:
+        try:
+            size = int(float(raw["sizeKB"]) * 1024)
+        except (ValueError, TypeError):
+            pass
+
+    download_url = raw.get("downloadUrl") or raw.get("download_url") or fallback_download_url
+
+    return {
+        "id": raw.get("id"),
+        "name": raw.get("name") or raw.get("filename") or "",
+        "type": raw.get("type") or "",
+        "size": size,
+        "download_url": download_url,
+        "primary": bool(raw.get("primary", False)),
+        "sha256": sha256,
+        "hashes": hashes,
+        "metadata": raw.get("metadata") if isinstance(raw.get("metadata"), dict) else {},
+        "model_id": model_id or raw.get("modelId"),
+        "version_id": version_id or raw.get("modelVersionId"),
+    }
+
+
+def build_search_result(
+    source: str,
+    *,
+    model_id: Any,
+    version_id: Any,
+    name: str = "",
+    version_name: str = "",
+    type: str = "",
+    filename: str = "",
+    url: str = "",
+    download_url: Optional[str] = None,
+    size: Optional[int] = None,
+    base_model: Optional[str] = None,
+    tags: Optional[List[str]] = None,
+    match_type: str = "similar",
+    confidence: float = 0.0,
+    sha256: Optional[str] = None,
+    hashes: Optional[Dict[str, str]] = None,
+    trained_words: Optional[List[str]] = None,
+    images: Optional[List[Dict[str, Any]]] = None,
+    **extra: Any,
+) -> Dict[str, Any]:
+    """Helper to unify search result dictionary creation across different sources."""
+    result = {
+        "source": source,
+        "model_id": model_id,
+        "version_id": version_id,
+        "name": name,
+        "version_name": version_name,
+        "type": type,
+        "filename": filename,
+        "url": url,
+        "download_url": download_url,
+        "size": size,
+        "base_model": base_model,
+        "tags": tags or [],
+        "match_type": match_type,
+        "confidence": confidence,
+        "sha256": sha256,
+        "hashes": hashes or {},
+        "trained_words": trained_words or [],
+        "images": images or [],
+    }
+    result.update(extra)
+    return result

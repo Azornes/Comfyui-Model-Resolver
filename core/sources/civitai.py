@@ -91,6 +91,10 @@ def build_civitai_session_cookie(session_token: Optional[str]) -> str:
     return f"__Secure-civ-token={token}; __Secure-civitai-token={token}"
 
 
+def _extract_civitai_username(data: Dict[str, Any]) -> str:
+    return data.get("username") or data.get("name") or data.get("email") or ""
+
+
 def check_civitai_session_token(session_token: Optional[str]) -> Dict[str, Any]:
     """Check whether a CivitAI browser session token is accepted by civitai.com."""
     from ..type_utils import check_credential_preconditions
@@ -105,14 +109,11 @@ def check_civitai_session_token(session_token: Optional[str]) -> Dict[str, Any]:
         "user-agent": DEFAULT_BROWSER_USER_AGENT,
     }
 
-    def get_user(data):
-        return data.get("username") or data.get("name") or data.get("email") or ""
-
     return check_credential_http(
         "https://civitai.com/api/v1/me",
         headers=headers,
         success_message="Session token is valid.",
-        get_username=get_user,
+        get_username=_extract_civitai_username,
         error_msg_401_403="Session token is not accepted by CivitAI.",
     )
 
@@ -131,14 +132,11 @@ def check_civitai_api_key(api_key: Optional[str]) -> Dict[str, Any]:
         "user-agent": DEFAULT_BROWSER_USER_AGENT,
     }
 
-    def get_user(data):
-        return data.get("username") or data.get("name") or data.get("email") or ""
-
     return check_credential_http(
         "https://civitai.com/api/v1/me",
         headers=headers,
         success_message="CivitAI API key is valid.",
-        get_username=get_user,
+        get_username=_extract_civitai_username,
         error_msg_401_403="CivitAI API key is not accepted.",
     )
 
@@ -156,23 +154,24 @@ def _build_civitai_result_from_version(
     version_id = version.get("id")
     hashes = file_info.get("hashes") if isinstance(file_info.get("hashes"), dict) else {}
     sha256 = file_info.get("sha256") or hashes.get("SHA256") or hashes.get("sha256")
-    return {
-        "source": "civitai",
-        "model_id": model_id,
-        "version_id": version_id,
-        "name": model_name,
-        "type": model_type,
-        "filename": file_info.get("name", ""),
-        "url": f"https://civitai.com/models/{model_id}?modelVersionId={version_id}",
-        "download_url": file_info.get("downloadUrl")
-        or get_civitai_download_url(version_id),
-        "size": file_info.get("sizeKB", 0) * 1024,
-        "base_model": version.get("baseModel"),
-        "tags": tags or [],
-        "match_type": match_type,
-        "sha256": sha256,
-        "hashes": hashes,
-    }
+    size = file_info.get("sizeKB", 0) * 1024 if file_info.get("sizeKB") else file_info.get("size")
+    download_url = file_info.get("downloadUrl") or get_civitai_download_url(version_id)
+    return build_search_result(
+        source="civitai",
+        model_id=model_id,
+        version_id=version_id,
+        name=model_name,
+        type=model_type,
+        filename=file_info.get("name", ""),
+        url=f"https://civitai.com/models/{model_id}?modelVersionId={version_id}",
+        download_url=download_url,
+        size=size,
+        base_model=version.get("baseModel"),
+        tags=tags or [],
+        match_type=match_type,
+        sha256=sha256,
+        hashes=hashes,
+    )
 
 
 
@@ -1291,40 +1290,19 @@ def search_civitai_by_hash(
     hash_value: str, api_key: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
     """Look up a model by file hash on CivitAI."""
-    try:
-        headers = {}
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
-
-        response = requests.get(
-            f"{CIVITAI_API_URL}/model-versions/by-hash/{hash_value}",
-            headers=headers,
-            timeout=15,
-        )
-
-        if response.status_code == 200:
-            data = response.json()
-
-            model_id = data.get("modelId")
-            version_id = data.get("id")
-            files = data.get("files", [])
-            primary_file = files[0] if files else {}
-
-            return {
-                "source": "civitai",
-                "model_id": model_id,
-                "version_id": version_id,
-                "name": data.get("model", {}).get("name", ""),
-                "url": f"https://civitai.com/models/{model_id}",
-                "download_url": get_civitai_download_url(version_id, api_key),
-                "filename": primary_file.get("name", ""),
-                "size": primary_file.get("sizeKB", 0) * 1024,
-            }
-
-    except Exception as e:
-        log.error(f"CivitAI hash lookup error: {e}")
-
-    return None
+    result = get_model_info_by_hash(hash_value, api_key=api_key, use_cache=False)
+    if not result:
+        return None
+    return {
+        "source": result.get("source"),
+        "model_id": result.get("model_id"),
+        "version_id": result.get("version_id"),
+        "name": result.get("model_name") or result.get("name", ""),
+        "url": result.get("url"),
+        "download_url": result.get("download_url"),
+        "filename": result.get("filename", ""),
+        "size": result.get("size"),
+    }
 
 
 def resolve_urn(
