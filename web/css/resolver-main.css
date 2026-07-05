@@ -7222,7 +7222,8 @@ a.mr-image-preview-resource-name:hover {
     line-height: 1.2;
 }
 
-.mr-download-target-label .mr-download-folder-help {
+.mr-download-target-label .mr-download-folder-help,
+.mr-download-target-label .mr-download-subfolder-help {
     width: 14px;
     height: 14px;
     margin-left: 3px;

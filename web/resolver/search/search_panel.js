@@ -101,6 +101,10 @@ export const searchPanelMethods = {
             text,
             text.replace(/(\d+)(?:[\s._-]+0)+(?!\d)/g, '$1')
         ];
+        const normalized = this.normalizeBaseModelToken(text);
+        if (normalized.startsWith('flux1') && normalized.length > 'flux1'.length) {
+            variants.push(`flux${normalized.slice('flux1'.length)}`);
+        }
         return new Set(
             variants
                 .map(item => this.normalizeBaseModelToken(item))

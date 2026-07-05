@@ -50,6 +50,19 @@ def _normalize_token(value: Any) -> str:
     return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
 
 
+def _base_model_token_variants(value: Any) -> List[str]:
+    token = _normalize_token(value)
+    if not token:
+        return []
+
+    variants = [token]
+    if token.startswith("flux1") and len(token) > len("flux1"):
+        variants.append(f"flux{token[len('flux1'):]}")
+    if token.endswith("10") and len(token) > 2:
+        variants.append(token[:-1])
+    return list(dict.fromkeys(variants))
+
+
 def _split_relative_folder_segments(relative_path: Any) -> List[str]:
     parts = [
         part.strip()
@@ -79,21 +92,25 @@ def _build_base_model_alias_index(base_models_config: Any) -> Dict[str, Dict[str
         aliases = item.get("aliases") or []
         values = [name, *aliases] if isinstance(aliases, list) else [name]
         for value in values:
-            token = _normalize_token(value)
-            if token and token not in index:
-                index[token] = {"name": name, "alias": str(value or "")}
+            for token in _base_model_token_variants(value):
+                if token and token not in index:
+                    index[token] = {"name": name, "alias": str(value or "")}
     return index
 
 
 def _match_base_model_segment(
     segment: str,
     base_alias_index: Mapping[str, Dict[str, str]],
+    *,
+    allow_partial: bool = True,
 ) -> Optional[Dict[str, str]]:
     token = _normalize_token(segment)
     if not token:
         return None
     if token in base_alias_index:
         return dict(base_alias_index[token])
+    if not allow_partial:
+        return None
 
     for alias_token, match in sorted(
         base_alias_index.items(),
@@ -118,16 +135,33 @@ def _match_base_model_path(
     """Find the deepest recognized base-model segment in a folder prefix."""
 
     best_match: Optional[Dict[str, Any]] = None
-    for index, segment in enumerate(segments):
-        match = _match_base_model_segment(segment, base_alias_index)
-        if not match:
-            continue
-        best_match = {
-            **match,
-            "segment": segment,
-            "index": index,
-            "path": _join_mapping_segments(segments[: index + 1]),
-        }
+    for start_index in range(len(segments)):
+        for end_index in range(start_index, len(segments)):
+            span = segments[start_index : end_index + 1]
+            span_length = end_index - start_index + 1
+            match = _match_base_model_segment(
+                " ".join(span),
+                base_alias_index,
+                allow_partial=span_length == 1,
+            )
+            if not match:
+                continue
+
+            current_span_length = int(best_match.get("span_length", 0)) if best_match else 0
+            current_index = int(best_match.get("index", -1)) if best_match else -1
+            if end_index < current_index:
+                continue
+            if end_index == current_index and span_length <= current_span_length:
+                continue
+
+            best_match = {
+                **match,
+                "segment": "/".join(span),
+                "index": end_index,
+                "start_index": start_index,
+                "span_length": span_length,
+                "path": _join_mapping_segments(segments[: end_index + 1]),
+            }
     return best_match
 
 
