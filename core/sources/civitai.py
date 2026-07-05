@@ -35,7 +35,14 @@ from ..type_utils import (
     extract_trained_words,
 )
 from ..progress import report_progress, get_progress_reporter
-from ..path_utils import calculate_file_sha256, get_filename_from_path, read_json_safe, find_metadata_sidecar_path
+from ..path_utils import (
+    calculate_file_sha256,
+    extract_safetensors_header_metadata,
+    find_metadata_sidecar_path,
+    get_filename_from_path,
+    infer_safetensors_base_model,
+    read_json_safe,
+)
 from ..log_system import create_module_logger
 log = create_module_logger(__name__)
 
@@ -1601,6 +1608,168 @@ def _format_model_location(file_path: str) -> str:
     return location
 
 
+def _has_metadata_value(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (list, tuple, dict, set)):
+        return bool(value)
+    return True
+
+
+def _merge_unique_values(existing: Any, incoming: Any) -> List[Any]:
+    existing_list = existing if isinstance(existing, list) else ([existing] if existing else [])
+    incoming_list = incoming if isinstance(incoming, list) else ([incoming] if incoming else [])
+    result: List[Any] = []
+    seen = set()
+    for item in [*existing_list, *incoming_list]:
+        if item in (None, ""):
+            continue
+        if isinstance(item, dict):
+            key = json.dumps(item, sort_keys=True, default=str)
+        else:
+            key = str(item).strip().lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        result.append(item)
+    return result
+
+
+def _apply_safetensors_header_metadata(
+    result: Dict[str, Any],
+    file_path: str,
+) -> Dict[str, Any]:
+    if not isinstance(result, dict):
+        return result
+
+    header_metadata = extract_safetensors_header_metadata(file_path)
+    if not header_metadata:
+        return result
+
+    filename = get_filename_from_path(file_path)
+    stem = os.path.splitext(filename)[0]
+    header_name = header_metadata.get("model_name")
+    current_name = str(result.get("model_name") or "").strip()
+    if header_name and (
+        not current_name
+        or current_name == stem
+        or current_name == filename
+        or result.get("source") == "local"
+    ):
+        result["model_name"] = header_name
+
+    for key in (
+        "description",
+        "model_description",
+        "author",
+        "creator",
+        "license",
+        "usage_hint",
+        "usage_tips",
+        "preview_url",
+        "clip_skip",
+        "sha256",
+        "hash",
+        "hashes",
+        "sha256_source",
+        "hash_status",
+        "model_type",
+        "base_model_raw",
+    ):
+        if _has_metadata_value(header_metadata.get(key)) and not _has_metadata_value(result.get(key)):
+            result[key] = header_metadata[key]
+
+    for key in ("tags", "trained_words", "images"):
+        if _has_metadata_value(header_metadata.get(key)):
+            if _has_metadata_value(result.get(key)):
+                result[key] = _merge_unique_values(result.get(key), header_metadata.get(key))
+            else:
+                result[key] = header_metadata[key]
+
+    if header_metadata.get("base_model") and not result.get("base_model"):
+        result["base_model"] = header_metadata["base_model"]
+        result["base_model_source"] = header_metadata.get("base_model_source")
+        result["base_model_inferred"] = bool(header_metadata.get("base_model_inferred"))
+
+    for key in (
+        "metadata_summary",
+        "header_metadata_keys",
+        "metadata_source",
+        "from_safetensors_header",
+        "local_metadata_available",
+    ):
+        if _has_metadata_value(header_metadata.get(key)) and not _has_metadata_value(result.get(key)):
+            result[key] = header_metadata[key]
+
+    if (
+        result.get("source") == "local"
+        and header_metadata.get("details_source")
+    ):
+        result["details_source"] = header_metadata["details_source"]
+
+    return result
+
+
+def _apply_inferred_base_model(result: Dict[str, Any], file_path: str) -> Dict[str, Any]:
+    if not isinstance(result, dict) or result.get("base_model"):
+        return result
+
+    inferred_base_model = infer_safetensors_base_model(file_path)
+    if inferred_base_model:
+        result["base_model"] = inferred_base_model
+        result["base_model_inferred"] = True
+        result["base_model_source"] = "safetensors_header"
+        log.info(
+            f"Inferred base model from safetensors tensor fingerprint: "
+            f"{inferred_base_model} ({file_path})"
+        )
+    return result
+
+
+def _has_local_header_details(result: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(result, dict):
+        return False
+    return bool(
+        result.get("local_metadata_available")
+        or result.get("from_safetensors_header")
+        or result.get("base_model_inferred")
+        or result.get("metadata_summary")
+    )
+
+
+def _build_local_model_info(
+    file_path: str,
+    *,
+    local_only: bool = False,
+    require_inferred: bool = False,
+) -> Optional[Dict[str, Any]]:
+    filename = get_filename_from_path(file_path)
+    stem = os.path.splitext(filename)[0]
+    result = {
+        "source": "local",
+        "details_source": "local",
+        "filename": filename,
+        "file_path": file_path,
+        "resolved_path": file_path,
+        "model_name": stem,
+        "model_type": "",
+        "location": _format_model_location(file_path),
+        "from_metadata": False,
+        "local_only": local_only,
+    }
+    try:
+        result["size"] = os.path.getsize(file_path)
+    except Exception:
+        pass
+
+    _apply_safetensors_header_metadata(result, file_path)
+    _apply_inferred_base_model(result, file_path)
+    if require_inferred and not _has_local_header_details(result):
+        return None
+    return result
+
 
 def _metadata_to_model_info(metadata: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -1805,6 +1974,8 @@ def get_model_info_for_file(
             result["file_path"] = file_path
             result["metadata_path"] = metadata_path
             result["location"] = _format_model_location(file_path)
+            _apply_safetensors_header_metadata(result, file_path)
+            _apply_inferred_base_model(result, file_path)
             if not result.get("size"):
                 try:
                     result["size"] = os.path.getsize(file_path)
@@ -1822,38 +1993,31 @@ def get_model_info_for_file(
             log.info(f"Files in {directory}: {metadata_files}")
 
     if local_only:
-        filename = get_filename_from_path(file_path)
-        stem = os.path.splitext(filename)[0]
-        result = {
-            "source": "local",
-            "filename": filename,
-            "file_path": file_path,
-            "resolved_path": file_path,
-            "model_name": stem,
-            "model_type": "",
-            "location": _format_model_location(file_path),
-            "from_metadata": False,
-            "local_only": True,
-        }
-        try:
-            result["size"] = os.path.getsize(file_path)
-        except Exception:
-            pass
-        return result
+        return _build_local_model_info(file_path, local_only=True)
 
     # If no metadata file, compute hash and look up on CivitAI
     file_hash = calculate_file_sha256(file_path)
     if not file_hash:
-        return None
+        return _build_local_model_info(file_path, require_inferred=True)
 
-    result = get_model_info_by_hash(file_hash, api_key)
+    try:
+        result = get_model_info_by_hash(file_hash, api_key)
+    except Exception as e:
+        log.warning(
+            f"CivitAI hash lookup failed; trying local tensor fingerprint fallback: {e}"
+        )
+        return _build_local_model_info(file_path, require_inferred=True)
+
     if result:
         result["file_path"] = file_path
         result["location"] = _format_model_location(file_path)
+        _apply_safetensors_header_metadata(result, file_path)
+        _apply_inferred_base_model(result, file_path)
         if not result.get("size"):
             try:
                 result["size"] = os.path.getsize(file_path)
             except Exception:
                 pass
+        return result
 
-    return result
+    return _build_local_model_info(file_path, require_inferred=True)

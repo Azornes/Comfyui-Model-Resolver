@@ -1588,6 +1588,34 @@ class ModelResolverExtension:
 
                 clean_name = _os.path.splitext(filename)[0]
 
+                local_metadata_fields = (
+                    "author",
+                    "creator",
+                    "license",
+                    "usage_hint",
+                    "usage_tips",
+                    "preview_url",
+                    "metadata_source",
+                    "from_safetensors_header",
+                    "local_metadata_available",
+                    "header_metadata_keys",
+                    "metadata_summary",
+                    "base_model_raw",
+                    "sha256_source",
+                    "hashes",
+                    "hash_status",
+                )
+
+                def add_local_metadata_fields(payload, result):
+                    if not isinstance(payload, dict) or not isinstance(result, dict):
+                        return payload
+                    for key in local_metadata_fields:
+                        value = result.get(key)
+                        if value in (None, "", [], {}):
+                            continue
+                        payload[key] = value
+                    return payload
+
                 # Get the file path to hash
                 file_path = resolved_path if resolved_path else None
                 file_location = ""
@@ -1625,7 +1653,7 @@ class ModelResolverExtension:
                         or infer_model_type_from_category(category)
                     )
 
-                    return {
+                    response = {
                         "filename": result.get("filename") or filename,
                         "category": category,
                         "file_path": result.get("file_path") or file_path or "",
@@ -1653,6 +1681,8 @@ class ModelResolverExtension:
                         "sha256": result.get("sha256") or provided_hash,
                         "size": size_value,
                         "base_model": result.get("base_model"),
+                        "base_model_source": result.get("base_model_source"),
+                        "base_model_inferred": bool(result.get("base_model_inferred")),
                         "tags": result.get("tags", []),
                         "trained_words": result.get("trained_words", []),
                         "images": result.get("images", []),
@@ -1664,6 +1694,7 @@ class ModelResolverExtension:
                         "metadata_checked": bool(civitai_checked),
                         "civitai_checked": bool(civitai_checked),
                     }
+                    return add_local_metadata_fields(response, result)
                 def extract_result_sha256(result):
                     return extract_sha256_from_metadata(result)
 
@@ -1762,6 +1793,20 @@ class ModelResolverExtension:
                         except Exception:
                             pass
                     return result
+
+                def result_has_remote_identity(result):
+                    if not isinstance(result, dict):
+                        return False
+                    return bool(
+                        result.get("url")
+                        or result.get("version_url")
+                        or result.get("download_url")
+                        or result.get("platform_url")
+                        or result.get("repo_id")
+                        or result.get("model_id")
+                        or result.get("version_id")
+                        or result.get("from_metadata")
+                    )
 
                 def remote_link_is_marked_dead(item):
                     if not isinstance(item, dict):
@@ -1911,6 +1956,8 @@ class ModelResolverExtension:
                             "sha256": result.get("sha256") or provided_hash,
                             "size": result.get("size"),
                             "base_model": result.get("base_model"),
+                            "base_model_source": result.get("base_model_source"),
+                            "base_model_inferred": bool(result.get("base_model_inferred")),
                             "tags": result.get("tags", []),
                             "trained_words": result.get("trained_words", []),
                             "images": result.get("images", []),
@@ -1935,6 +1982,7 @@ class ModelResolverExtension:
                                 "path": result.get("path"),
                             },
                         }
+                        add_local_metadata_fields(metadata_payload, result)
                         metadata_path = write_lora_manager_metadata(
                             file_path,
                             metadata_payload,
@@ -2011,6 +2059,8 @@ class ModelResolverExtension:
                                     "sha256": result.get("sha256"),
                                     "size": result.get("size"),
                                     "base_model": result.get("base_model"),
+                                    "base_model_source": result.get("base_model_source"),
+                                    "base_model_inferred": bool(result.get("base_model_inferred")),
                                     "tags": result.get("tags", []),
                                     "trained_words": result.get("trained_words", []),
                                     "images": result.get("images", []),
@@ -2034,6 +2084,7 @@ class ModelResolverExtension:
                                         "imported_from": source_metadata_path,
                                     },
                                 }
+                                add_local_metadata_fields(metadata_payload, result)
                                 metadata_path = write_lora_manager_metadata(
                                     file_path,
                                     metadata_payload,
@@ -2094,15 +2145,24 @@ class ModelResolverExtension:
                             or result.get("version_url")
                             or result.get("from_metadata")
                             or result.get("trained_words")
+                            or result.get("base_model_inferred")
+                            or result.get("local_metadata_available")
+                            or result.get("from_safetensors_header")
                         ) and (
                             result.get("from_metadata")
                             or not provided_hash
                             or result_hash_matches(result)
                         ):
-                            result = prepare_remote_result(result, "civitai")
+                            result_source = (
+                                "local"
+                                if result.get("source") == "local"
+                                and not result_has_remote_identity(result)
+                                else "civitai"
+                            )
+                            result = prepare_remote_result(result, result_source)
                             metadata_path, metadata_saved = save_remote_metadata(
                                 result,
-                                "civitai",
+                                result_source,
                             )
 
                             return web.json_response(
@@ -2214,25 +2274,59 @@ class ModelResolverExtension:
                                     f"{hf_attempt['label']} metadata lookup error: {e}"
                                 )
 
-                # No result found
-                response = build_info_response(None, civitai_checked=True)
+                # No remote result found. Keep any useful local safetensors
+                # header metadata, including base-model fingerprints, model
+                # titles, descriptions, tags, trigger words, and author data.
+                local_fallback_result = None
+                if file_path and _os.path.exists(file_path):
+                    try:
+                        from .core.sources.civitai import get_model_info_for_file
+
+                        local_candidate = get_model_info_for_file(
+                            file_path,
+                            local_only=True,
+                        )
+                        if (
+                            isinstance(local_candidate, dict)
+                            and (
+                                local_candidate.get("base_model")
+                                or local_candidate.get("local_metadata_available")
+                                or local_candidate.get("from_safetensors_header")
+                            )
+                        ):
+                            local_fallback_result = local_candidate
+                    except Exception as local_fallback_error:
+                        self.logger.debug(
+                            f"Local base model inference fallback failed: {local_fallback_error}"
+                        )
+
+                response = build_info_response(
+                    local_fallback_result,
+                    civitai_checked=True,
+                    local_payload=bool(local_fallback_result),
+                )
                 response["url"] = None
                 if force_refresh and file_path and _os.path.exists(file_path):
                     try:
                         metadata_payload = {
                             "filename": filename,
                             "category": category,
-                            "model_name": clean_name,
-                            "name": clean_name,
-                            "model_type": infer_model_type_from_category(category),
-                            "sha256": provided_hash,
-                            "size": _os.path.getsize(file_path),
+                            "model_name": response.get("model_name") or clean_name,
+                            "name": response.get("model_name") or clean_name,
+                            "model_type": response.get("model_type")
+                            or infer_model_type_from_category(category),
+                            "sha256": response.get("sha256") or provided_hash,
+                            "size": response.get("size") or _os.path.getsize(file_path),
+                            "base_model": response.get("base_model"),
+                            "base_model_source": response.get("base_model_source"),
+                            "base_model_inferred": bool(response.get("base_model_inferred")),
                             "civitai_deleted": True,
                             "civitai_checked": True,
                             "remote_metadata_missing": True,
                             "source": "local",
-                            "details_source": "",
+                            "details_source": response.get("details_source") or "",
                         }
+                        add_local_metadata_fields(metadata_payload, response)
                         metadata_path = write_lora_manager_metadata(
                             file_path,
                             metadata_payload,

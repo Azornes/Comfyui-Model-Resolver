@@ -8,7 +8,8 @@ and directory matching to be shared across all modules.
 import os
 import json
 import hashlib
-from typing import Any, Tuple, Optional, Callable, Iterable, List
+import re
+from typing import Any, Tuple, Optional, Callable, Iterable, List, Dict
 
 
 _log = None
@@ -277,9 +278,19 @@ _NON_SHA256_HASH_KEY_PARTS = (
     "crc32",
     "md5",
     "sha1",
+    "ss_new_sd_model_hash",
+    "ss_sd_model_hash",
+    "sshs_model_hash",
+    "sshs_legacy_hash",
+    "autov3",
     "autov1",
     "autov2",
 )
+_BASE_MODEL_ALIAS_CACHE: Optional[List[Tuple[str, str]]] = None
+SAFETENSORS_METADATA_TAG_LIMIT = 40
+SAFETENSORS_METADATA_KEY_LIMIT = 80
+SAFETENSORS_METADATA_TEXT_MAX_CHARS = 20000
+SAFETENSORS_METADATA_THUMBNAIL_MAX_CHARS = 512 * 1024
 
 
 def _normalize_header_sha256(value: Any) -> str:
@@ -306,11 +317,11 @@ def _normalize_header_sha256(value: Any) -> str:
     return candidate.lower()
 
 
-def extract_safetensors_header_sha256(
+def read_safetensors_header(
     file_path: str,
     max_header_size: int = SAFETENSORS_HEADER_MAX_BYTES,
-) -> Optional[str]:
-    """Return an embedded SHA256 from a safetensors metadata header when present."""
+) -> Optional[Dict[str, Any]]:
+    """Read and parse a safetensors JSON header without touching tensor payloads."""
     if not file_path or not str(file_path).lower().endswith(".safetensors"):
         return None
 
@@ -345,40 +356,597 @@ def extract_safetensors_header_sha256(
                 return None
 
         header_json = json.loads(header_bytes.decode("utf-8"))
-        if not isinstance(header_json, dict):
-            return None
-
-        metadata = header_json.get("__metadata__")
-        if not isinstance(metadata, dict):
-            return None
-
-        for key in (
-            "modelspec.hash.sha256",
-            "modelspec.hash_sha256",
-            "sha256",
-            "SHA256",
-        ):
-            sha256 = _normalize_header_sha256(metadata.get(key))
-            if sha256:
-                return sha256
-
-        for key, value in metadata.items():
-            key_lower = str(key).lower()
-            if not (
-                "sha256" in key_lower
-                or "hash" in key_lower
-                or "civitai" in key_lower
-            ):
-                continue
-            if any(part in key_lower for part in _NON_SHA256_HASH_KEY_PARTS):
-                continue
-            sha256 = _normalize_header_sha256(value)
-            if sha256:
-                return sha256
+        if isinstance(header_json, dict):
+            return header_json
     except Exception as e:
-        _get_log().debug(f"Could not read safetensors header hash for {file_path}: {e}")
+        _get_log().debug(f"Could not read safetensors header for {file_path}: {e}")
 
     return None
+
+
+def extract_safetensors_header_sha256(
+    file_path: str,
+    max_header_size: int = SAFETENSORS_HEADER_MAX_BYTES,
+) -> Optional[str]:
+    """Return an embedded SHA256 from a safetensors metadata header when present."""
+    header_json = read_safetensors_header(file_path, max_header_size=max_header_size)
+    if not isinstance(header_json, dict):
+        return None
+
+    metadata = header_json.get("__metadata__")
+    if not isinstance(metadata, dict):
+        return None
+
+    for key in (
+        "modelspec.hash.sha256",
+        "modelspec.hash_sha256",
+        "sha256",
+        "SHA256",
+    ):
+        sha256 = _normalize_header_sha256(metadata.get(key))
+        if sha256:
+            return sha256
+
+    for key, value in metadata.items():
+        key_lower = str(key).lower()
+        if not (
+            "sha256" in key_lower
+            or "hash" in key_lower
+            or "civitai" in key_lower
+        ):
+            continue
+        if any(part in key_lower for part in _NON_SHA256_HASH_KEY_PARTS):
+            continue
+        sha256 = _normalize_header_sha256(value)
+        if sha256:
+            return sha256
+
+    return None
+
+
+def _normalize_base_model_token(value: Any) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+
+
+def _load_base_model_aliases() -> List[Tuple[str, str]]:
+    """Return normalized base-model aliases ordered from most specific first."""
+    global _BASE_MODEL_ALIAS_CACHE
+    if _BASE_MODEL_ALIAS_CACHE is not None:
+        return _BASE_MODEL_ALIAS_CACHE
+
+    aliases: List[Tuple[str, str]] = []
+    try:
+        data = read_json_safe(os.path.join(METADATA_DIR, "base-models.json"), {})
+        for entry in data.get("base_models", []) if isinstance(data, dict) else []:
+            if not isinstance(entry, dict):
+                continue
+            name = str(entry.get("name") or "").strip()
+            if not name:
+                continue
+            raw_aliases = entry.get("aliases") or []
+            if isinstance(raw_aliases, str):
+                raw_aliases = [raw_aliases]
+            if not isinstance(raw_aliases, (list, tuple, set)):
+                raw_aliases = []
+            for raw_alias in [name, *raw_aliases]:
+                alias = _normalize_base_model_token(raw_alias)
+                if alias:
+                    aliases.append((alias, name))
+    except Exception as e:
+        _get_log().debug(f"Could not load base model aliases: {e}")
+
+    aliases.sort(key=lambda item: len(item[0]), reverse=True)
+    _BASE_MODEL_ALIAS_CACHE = aliases
+    return aliases
+
+
+def _canonical_base_model_from_text(value: Any) -> str:
+    normalized = _normalize_base_model_token(value)
+    if not normalized:
+        return ""
+
+    for alias, name in _load_base_model_aliases():
+        if normalized == alias or (len(alias) >= 4 and alias in normalized):
+            return name
+    return ""
+
+
+def infer_safetensors_base_model(
+    file_path: str,
+    max_tensor_keys: int = 500,
+) -> str:
+    """Infer a likely base model from safetensors metadata and tensor names."""
+    header_json = read_safetensors_header(file_path)
+    if not isinstance(header_json, dict):
+        return ""
+
+    metadata = header_json.get("__metadata__")
+    if not isinstance(metadata, dict):
+        metadata = {}
+
+    architecture = str(
+        metadata.get("modelspec.architecture")
+        or metadata.get("architecture")
+        or metadata.get("ss_base_model_version")
+        or ""
+    ).lower()
+
+    if architecture:
+        if "stable-diffusion-xl" in architecture or "sdxl" in architecture:
+            return "SDXL 1.0"
+        if (
+            "stable-diffusion-v1" in architecture
+            or "stable-diffusion-1" in architecture
+            or "runwayml/stable-diffusion-v1-5" in architecture
+            or "sd1.5" in architecture
+            or "sd 1.5" in architecture
+        ):
+            return "SD 1.5"
+        if "stable-diffusion-v2" in architecture or "sd2" in architecture:
+            return "SD 2.1"
+        if (
+            "stable-diffusion-3" in architecture
+            or "stable-diffusion-v3" in architecture
+            or "sd3" in architecture
+        ):
+            return "SD 3"
+        if "flux" in architecture:
+            if "krea" in architecture:
+                return "Flux.1 Krea"
+            if "schnell" in architecture:
+                return "Flux.1 S"
+            if "kontext" in architecture:
+                return "Flux.1 Kontext"
+            return "Flux.1 D"
+        alias_match = _canonical_base_model_from_text(architecture)
+        if alias_match:
+            return alias_match
+
+    tensor_keys = [
+        str(key)
+        for key in header_json.keys()
+        if key != "__metadata__"
+    ][:max_tensor_keys]
+    keys_text = " ".join(tensor_keys)
+
+    if "double_blocks.0.img_attn" in keys_text or "img_in.weight" in keys_text:
+        return "Flux.1 D"
+    if "joint_blocks.0.x_block" in keys_text:
+        return "SD 3"
+    if (
+        "conditioner.embedders.1.model" in keys_text
+        or "label_emb.0.0.weight" in keys_text
+    ):
+        return "SDXL 1.0"
+    if (
+        "cond_stage_model.transformer.text_model" in keys_text
+        or "model.diffusion_model.input_blocks.0.0.weight" in keys_text
+    ):
+        return "SD 1.5"
+
+    return ""
+
+
+def _parse_safetensors_metadata_value(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+
+    text = value.strip()
+    if not text:
+        return ""
+    if text[:1] in {"{", "["}:
+        try:
+            return json.loads(text)
+        except Exception:
+            return text
+    return text
+
+
+def _metadata_get(metadata: Dict[str, Any], *keys: str) -> Any:
+    if not isinstance(metadata, dict):
+        return None
+
+    for key in keys:
+        if key in metadata:
+            return metadata.get(key)
+
+    lowered = {str(key).lower(): key for key in metadata.keys()}
+    for key in keys:
+        original_key = lowered.get(str(key).lower())
+        if original_key is not None:
+            return metadata.get(original_key)
+    return None
+
+
+def _metadata_text(
+    metadata: Dict[str, Any],
+    *keys: str,
+    max_chars: int = SAFETENSORS_METADATA_TEXT_MAX_CHARS,
+) -> str:
+    value = _parse_safetensors_metadata_value(_metadata_get(metadata, *keys))
+    if value is None or isinstance(value, (dict, list, tuple, set)):
+        return ""
+
+    text = str(value).strip()
+    if not text or text.lower() in {"none", "null", "undefined"}:
+        return ""
+    if max_chars and len(text) > max_chars:
+        return text[:max_chars].rstrip()
+    return text
+
+
+def _dedupe_strings(values: Iterable[Any], limit: int = 0) -> List[str]:
+    result: List[str] = []
+    seen = set()
+    for value in values:
+        text = str(value or "").strip()
+        if not text:
+            continue
+        key = text.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(text)
+        if limit and len(result) >= limit:
+            break
+    return result
+
+
+def _metadata_string_list(value: Any, limit: int = SAFETENSORS_METADATA_TAG_LIMIT) -> List[str]:
+    parsed = _parse_safetensors_metadata_value(value)
+    items: List[Any] = []
+
+    def collect(item: Any) -> None:
+        item = _parse_safetensors_metadata_value(item)
+        if item is None:
+            return
+        if isinstance(item, dict):
+            for key in (
+                "tags",
+                "model_tags",
+                "modelTags",
+                "trained_words",
+                "trainedWords",
+                "trigger",
+                "trigger_phrase",
+                "values",
+                "words",
+            ):
+                if key in item:
+                    collect(item.get(key))
+                    return
+            for value_item in item.values():
+                collect(value_item)
+            return
+        if isinstance(item, (list, tuple, set)):
+            for value_item in item:
+                collect(value_item)
+            return
+        if isinstance(item, str):
+            parts = re.split(r"[\n,|;]+", item)
+            items.extend(part.strip() for part in parts if part.strip())
+            return
+        items.append(item)
+
+    collect(parsed)
+    return _dedupe_strings(items, limit=limit)
+
+
+def _collect_tag_frequency_tags(value: Any, limit: int = 20) -> List[str]:
+    parsed = _parse_safetensors_metadata_value(value)
+    counts: Dict[str, float] = {}
+
+    def add_tag(tag: Any, count: Any) -> None:
+        text = str(tag or "").strip()
+        if (
+            not text
+            or len(text) > 80
+            or "/" in text
+            or "\\" in text
+            or text.lower().endswith((".safetensors", ".ckpt", ".pt"))
+        ):
+            return
+        try:
+            amount = float(count)
+        except (TypeError, ValueError):
+            amount = 1.0
+        counts[text] = counts.get(text, 0.0) + max(amount, 0.0)
+
+    def walk(item: Any) -> None:
+        item = _parse_safetensors_metadata_value(item)
+        if isinstance(item, dict):
+            numeric_values = True
+            for value_item in item.values():
+                try:
+                    float(value_item)
+                except (TypeError, ValueError):
+                    numeric_values = False
+                    break
+            if numeric_values:
+                for key, value_item in item.items():
+                    add_tag(key, value_item)
+                return
+            for value_item in item.values():
+                walk(value_item)
+        elif isinstance(item, (list, tuple, set)):
+            for value_item in item:
+                walk(value_item)
+
+    walk(parsed)
+    ordered = sorted(counts.items(), key=lambda item: (-item[1], item[0].lower()))
+    return [tag for tag, _count in ordered[:limit]]
+
+
+def _limited_metadata_value(value: Any, *, max_chars: int = 1000, max_items: int = 8) -> Any:
+    parsed = _parse_safetensors_metadata_value(value)
+    if isinstance(parsed, str):
+        text = parsed.strip()
+        return text[:max_chars].rstrip() if len(text) > max_chars else text
+    if isinstance(parsed, (bool, int, float)) or parsed is None:
+        return parsed
+    if isinstance(parsed, dict):
+        limited: Dict[str, Any] = {}
+        for index, (key, item_value) in enumerate(parsed.items()):
+            if index >= max_items:
+                limited["_truncated"] = True
+                break
+            limited[str(key)] = _limited_metadata_value(
+                item_value,
+                max_chars=max_chars,
+                max_items=max_items,
+            )
+        return limited
+    if isinstance(parsed, (list, tuple, set)):
+        values = list(parsed)
+        limited_list = [
+            _limited_metadata_value(item, max_chars=max_chars, max_items=max_items)
+            for item in values[:max_items]
+        ]
+        if len(values) > max_items:
+            limited_list.append({"_truncated": True})
+        return limited_list
+    return str(parsed)
+
+
+def _metadata_preview_url(metadata: Dict[str, Any]) -> str:
+    value = _metadata_get(
+        metadata,
+        "modelspec.thumbnail",
+        "thumbnail",
+        "thumbnail_url",
+        "thumbnailUrl",
+        "preview_url",
+        "previewUrl",
+        "ssmd_cover_images",
+    )
+    parsed = _parse_safetensors_metadata_value(value)
+
+    def extract(item: Any) -> str:
+        item = _parse_safetensors_metadata_value(item)
+        if isinstance(item, str):
+            text = item.strip()
+            if not text or len(text) > SAFETENSORS_METADATA_THUMBNAIL_MAX_CHARS:
+                return ""
+            if text.startswith(("http://", "https://", "data:image/")):
+                return text
+            return ""
+        if isinstance(item, dict):
+            for key in ("url", "src", "image", "thumbnail", "preview", "data"):
+                preview = extract(item.get(key))
+                if preview:
+                    return preview
+        if isinstance(item, (list, tuple)):
+            for value_item in item:
+                preview = extract(value_item)
+                if preview:
+                    return preview
+        return ""
+
+    return extract(parsed)
+
+
+def _metadata_number_or_text(metadata: Dict[str, Any], *keys: str) -> Any:
+    value = _metadata_text(metadata, *keys, max_chars=100)
+    if not value:
+        return None
+    try:
+        number = int(value)
+        if str(number) == value:
+            return number
+    except (TypeError, ValueError):
+        pass
+    return value
+
+
+def extract_safetensors_header_metadata(file_path: str) -> Dict[str, Any]:
+    """Extract displayable local model metadata from a safetensors header."""
+    header_json = read_safetensors_header(file_path)
+    if not isinstance(header_json, dict):
+        return {}
+
+    metadata = header_json.get("__metadata__")
+    if not isinstance(metadata, dict):
+        metadata = {}
+
+    result: Dict[str, Any] = {}
+    metadata_keys = sorted(str(key) for key in metadata.keys())
+    if metadata_keys:
+        result["header_metadata_keys"] = metadata_keys[:SAFETENSORS_METADATA_KEY_LIMIT]
+
+    title = _metadata_text(
+        metadata,
+        "modelspec.title",
+        "ssmd_display_name",
+        "ss_output_name",
+        "title",
+        "name",
+        "model_name",
+        max_chars=300,
+    )
+    if title:
+        result["model_name"] = title
+
+    description = _metadata_text(
+        metadata,
+        "modelspec.description",
+        "ssmd_description",
+        "description",
+        "model_description",
+        "ss_training_comment",
+    )
+    if description:
+        result["description"] = description
+        result["model_description"] = description
+
+    author = _metadata_text(
+        metadata,
+        "modelspec.author",
+        "ssmd_author",
+        "author",
+        "creator",
+        max_chars=200,
+    )
+    if author:
+        result["author"] = author
+        result["creator"] = {"username": author, "name": author}
+
+    license_value = _metadata_text(metadata, "modelspec.license", "license", max_chars=200)
+    if license_value:
+        result["license"] = license_value
+
+    usage_hint = _metadata_text(
+        metadata,
+        "modelspec.usage_hint",
+        "usage_hint",
+        "usage_tips",
+        max_chars=2000,
+    )
+    if usage_hint:
+        result["usage_hint"] = usage_hint
+        result["usage_tips"] = usage_hint
+
+    explicit_tags: List[str] = []
+    for key in ("modelspec.tags", "ssmd_tags", "tags", "model_tags"):
+        explicit_tags.extend(_metadata_string_list(_metadata_get(metadata, key)))
+    explicit_tags.extend(_collect_tag_frequency_tags(_metadata_get(metadata, "ss_tag_frequency")))
+    tags = _dedupe_strings(explicit_tags, limit=SAFETENSORS_METADATA_TAG_LIMIT)
+    if tags:
+        result["tags"] = tags
+
+    trained_words: List[str] = []
+    for key in (
+        "modelspec.trigger_phrase",
+        "modelspec.trigger_phrases",
+        "trigger_phrase",
+        "trigger_phrases",
+        "trigger",
+        "trained_words",
+        "trainedWords",
+        "ssmd_trained_words",
+    ):
+        trained_words.extend(_metadata_string_list(_metadata_get(metadata, key), limit=20))
+    trained_words = _dedupe_strings(trained_words, limit=20)
+    if trained_words:
+        result["trained_words"] = trained_words
+
+    preview_url = _metadata_preview_url(metadata)
+    if preview_url:
+        result["preview_url"] = preview_url
+        result["images"] = [
+            {
+                "url": preview_url,
+                "metadata": {"source": "safetensors_header"},
+            }
+        ]
+
+    clip_skip = _metadata_number_or_text(metadata, "ss_clip_skip", "clip_skip", "clipSkip")
+    if clip_skip not in (None, ""):
+        result["clip_skip"] = clip_skip
+
+    sha256 = extract_safetensors_header_sha256(file_path)
+    if sha256:
+        result["sha256"] = sha256
+        result["hash"] = sha256
+        result["hashes"] = {"SHA256": sha256}
+        result["sha256_source"] = "safetensors_header"
+        result["hash_status"] = "completed"
+
+    base_model = infer_safetensors_base_model(file_path)
+    if base_model:
+        result["base_model"] = base_model
+        result["base_model_source"] = "safetensors_header"
+        result["base_model_inferred"] = True
+
+    raw_base = _metadata_text(
+        metadata,
+        "ss_base_model_version",
+        "modelspec.architecture",
+        "architecture",
+        max_chars=300,
+    )
+    if raw_base:
+        result["base_model_raw"] = raw_base
+
+    if _metadata_get(metadata, "ss_network_module"):
+        result["model_type"] = "LORA"
+
+    summary_fields = {
+        "architecture": ("modelspec.architecture", "architecture"),
+        "base_model_version": ("ss_base_model_version",),
+        "resolution": ("modelspec.resolution", "ss_resolution"),
+        "prediction_type": ("modelspec.prediction_type", "prediction_type"),
+        "date": ("modelspec.date", "date"),
+        "implementation": ("modelspec.implementation",),
+        "network_module": ("ss_network_module",),
+        "network_dim": ("ss_network_dim",),
+        "network_alpha": ("ss_network_alpha",),
+        "model_hash": ("sshs_model_hash",),
+        "legacy_model_hash": ("sshs_legacy_hash",),
+        "training_model": ("ss_sd_model_name", "ss_new_sd_model_name"),
+        "vae": ("ss_vae_name",),
+        "encoder_layer": ("modelspec.encoder_layer",),
+        "merged_from": ("modelspec.merged_from",),
+        "merge_recipe": ("sd_merge_recipe",),
+        "merge_models": ("sd_merge_models",),
+    }
+    metadata_summary: Dict[str, Any] = {}
+    for output_key, source_keys in summary_fields.items():
+        value = _metadata_get(metadata, *source_keys)
+        if value in (None, ""):
+            continue
+        limited_value = _limited_metadata_value(value)
+        if limited_value not in (None, "", [], {}):
+            metadata_summary[output_key] = limited_value
+
+    if _metadata_get(metadata, "workflow") not in (None, ""):
+        metadata_summary["has_embedded_workflow"] = True
+    if _metadata_get(metadata, "prompt") not in (None, ""):
+        metadata_summary["has_embedded_prompt"] = True
+
+    if metadata_summary:
+        result["metadata_summary"] = metadata_summary
+
+    meaningful_keys = (
+        "model_name",
+        "description",
+        "author",
+        "license",
+        "usage_hint",
+        "tags",
+        "trained_words",
+        "preview_url",
+        "sha256",
+        "base_model",
+        "metadata_summary",
+    )
+    if any(result.get(key) for key in meaningful_keys):
+        result["from_safetensors_header"] = True
+        result["metadata_source"] = "safetensors_header"
+        result["details_source"] = "safetensors_header"
+        result["local_metadata_available"] = True
+        return result
+
+    return {}
 
 
 def calculate_file_sha256(

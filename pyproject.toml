@@ -3,15 +3,19 @@ name = "Comfyui-Model-Resolver"
 description = "ComfyUI extension for automatically resolving missing models in loaded workflows. It features intelligent local fuzzy matching, direct cloud downloads, background download tracking, and automated in-place workflow updating."
 version = "1.0.0"
 license = { text = "MIT License" }
+requires-python = ">=3.10"
 dynamic = ["dependencies"]
 
 [project.urls]
 Repository = "https://github.com/Azornes/Comfyui-Model-Resolver"
+Documentation = "https://github.com/Azornes/Comfyui-Model-Resolver/wiki"
+"Bug Tracker" = "https://github.com/Azornes/Comfyui-Model-Resolver/issues"
 
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }
 
 [tool.comfy]
 PublisherId = "azornes"
-DisplayName = "Comfyui-Model-Resolver"
+DisplayName = "Comfyui Model Resolver"
 Icon = ""
+requires-comfyui = ">=0.26.0"
