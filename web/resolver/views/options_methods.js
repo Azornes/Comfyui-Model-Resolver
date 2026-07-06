@@ -26,8 +26,8 @@ const SETTINGS_MAP = [
     { serverKey: 'base_model_path_mappings', localKey: 'ModelResolver.baseModelPathMappings', type: 'json', default: {} },
     { serverKey: 'frontend_logs_enabled', localKey: 'ModelResolver.frontendLogsEnabled', type: 'frontendLogsEnabled', default: true },
     { serverKey: 'backend_logs_enabled', localKey: 'ModelResolver.backendLogsEnabled', type: 'backendLogsEnabled', default: true },
-    { serverKey: 'frontend_log_level', localKey: 'ModelResolver.frontendLogLevel', type: 'string', default: 'DEBUG' },
-    { serverKey: 'backend_log_level', localKey: 'ModelResolver.backendLogLevel', type: 'string', default: 'DEBUG' },
+    { serverKey: 'frontend_log_level', localKey: 'ModelResolver.frontendLogLevel', type: 'string', default: 'ERROR' },
+    { serverKey: 'backend_log_level', localKey: 'ModelResolver.backendLogLevel', type: 'string', default: 'ERROR' },
     { serverKey: 'civitai_candidate_limit', localKey: 'ModelResolver.civitaiCandidateLimit', type: 'candidateLimit', default: 5 },
 ];
 
@@ -3522,7 +3522,7 @@ export const optionsMethods = {
         };
     },
 
-    applyFrontendLoggingPreference(enabled = true, levelName = 'DEBUG') {
+    applyFrontendLoggingPreference(enabled = true, levelName = 'ERROR') {
         frontendLogger.setEnabled(Boolean(enabled));
         frontendLogger.setGlobalAndModuleLevel(frontendLogger.normalizeLevel(levelName));
     },

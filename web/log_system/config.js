@@ -6,7 +6,7 @@ description: Logging Configuration
 */
 // Log level for development.
 // Possible values: 'DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL', 'NONE'
-export const LOG_LEVEL = 'DEBUG';
+export const LOG_LEVEL = 'ERROR';
 
 // Logger module name. Set to null to use the default project name.
 export const LOG_MODULE_NAME = "MResolver";
