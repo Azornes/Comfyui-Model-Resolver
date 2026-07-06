@@ -1137,10 +1137,20 @@ def build_missing_local_metadata(
             **result,
         },
     )
-    log.info(
-        "Local metadata build finished: "
-        f"models={scanned_models}, created={created_metadata}, updated={updated_metadata}, "
-        f"skipped={skipped_complete}, header_hashes={header_hashes}, "
-        f"calculated_hashes={calculated_hashes}, errors={len(errors)}"
+    skipped_only_noop = (
+        skipped_complete > 0
+        and created_metadata == 0
+        and updated_metadata == 0
+        and header_hashes == 0
+        and calculated_hashes == 0
+        and not errors
+        and scanned_models == skipped_complete
     )
+    if not skipped_only_noop:
+        log.info(
+            "Local metadata build finished: "
+            f"models={scanned_models}, created={created_metadata}, updated={updated_metadata}, "
+            f"skipped={skipped_complete}, header_hashes={header_hashes}, "
+            f"calculated_hashes={calculated_hashes}, errors={len(errors)}"
+        )
     return result
