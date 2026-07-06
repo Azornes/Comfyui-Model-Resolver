@@ -29,7 +29,16 @@ app.registerExtension({
         MODEL_RESOLVER_OPEN_DEFAULT_KEYBINDING,
     ],
     setup: modelResolver.setup,
+    beforeRegisterNodeDef(nodeType, nodeData) {
+        modelResolver.configureWorkflowDependencyMarkerNodeType(nodeType, nodeData);
+    },
     nodeCreated(node) {
         modelResolver.configureWorkflowDependencyMarkerNode(node);
+    },
+    loadedGraphNode(node) {
+        modelResolver.configureWorkflowDependencyMarkerNode(node);
+    },
+    afterConfigureGraph() {
+        modelResolver.configureWorkflowDependencyMarkerNodes();
     },
 });

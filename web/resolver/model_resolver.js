@@ -543,6 +543,7 @@ export class ModelResolver {
         window.__ModelResolverWorkflowHashMetadataOwner = this;
         if (window.__ModelResolverWorkflowHashMetadataPatched) {
             this.scheduleWorkflowHashMetadataRefresh();
+            this.configureWorkflowDependencyMarkerNodes();
             return;
         }
 
@@ -559,6 +560,7 @@ export class ModelResolver {
             return workflow;
         };
         window.__ModelResolverWorkflowHashMetadataPatched = true;
+        this.configureWorkflowDependencyMarkerNodes();
         this.scheduleWorkflowHashMetadataRefresh();
     }
 
@@ -568,8 +570,60 @@ export class ModelResolver {
         return workflow;
     }
 
+    isWorkflowDependencyMarkerNode(node) {
+        if (!node) return false;
+        const candidates = [
+            node.type,
+            node.comfyClass,
+            node.comfy_class,
+            node.constructor?.ComfyClass,
+            node.constructor?.comfyClass,
+            node.constructor?.nodeData?.name,
+        ];
+        return candidates.some((candidate) => candidate === WORKFLOW_DEPENDENCY_MARKER_NODE_TYPE);
+    }
+
+    isWorkflowDependencyMarkerNodeType(nodeType, nodeData) {
+        const candidates = [
+            nodeData?.name,
+            nodeData?.node_id,
+            nodeData?.class_type,
+            nodeType?.ComfyClass,
+            nodeType?.comfyClass,
+            nodeType?.type,
+            nodeType?.prototype?.comfyClass,
+        ];
+        return candidates.some((candidate) => candidate === WORKFLOW_DEPENDENCY_MARKER_NODE_TYPE);
+    }
+
+    configureWorkflowDependencyMarkerNodeType(nodeType, nodeData) {
+        if (!this.isWorkflowDependencyMarkerNodeType(nodeType, nodeData)) return;
+        const proto = nodeType?.prototype;
+        if (!proto || proto.__modelResolverDependencyMarkerTypePatched) return;
+
+        const resolver = this;
+        const originalOnNodeCreated = proto.onNodeCreated;
+        proto.onNodeCreated = function(...args) {
+            const result = originalOnNodeCreated?.apply(this, args);
+            resolver.configureWorkflowDependencyMarkerNode(this);
+            return result;
+        };
+
+        const originalComputeSize = proto.computeSize;
+        proto.computeSize = function(...args) {
+            const size = typeof originalComputeSize === 'function'
+                ? originalComputeSize.apply(this, args)
+                : this.size;
+            const width = Math.max(Number(size?.[0]) || 0, 260);
+            const height = Math.max(Number(size?.[1]) || 0, 110);
+            return [width, height];
+        };
+
+        proto.__modelResolverDependencyMarkerTypePatched = true;
+    }
+
     configureWorkflowDependencyMarkerNode(node) {
-        if (!node || node.type !== WORKFLOW_DEPENDENCY_MARKER_NODE_TYPE) return node;
+        if (!this.isWorkflowDependencyMarkerNode(node)) return node;
 
         node.properties = node.properties && typeof node.properties === 'object' ? node.properties : {};
         delete node.properties.cnr_id;
@@ -587,6 +641,7 @@ export class ModelResolver {
         );
         if (existingOpenButton) {
             existingOpenButton.callback = () => this.activateResolverButton();
+            existingOpenButton.value = WORKFLOW_DEPENDENCY_MARKER_BUTTON_NAME;
             existingOpenButton.__modelResolverOpenButton = true;
             existingOpenButton.options = existingOpenButton.options && typeof existingOpenButton.options === 'object'
                 ? existingOpenButton.options
@@ -596,7 +651,7 @@ export class ModelResolver {
             const button = node.addWidget(
                 "button",
                 WORKFLOW_DEPENDENCY_MARKER_BUTTON_NAME,
-                null,
+                WORKFLOW_DEPENDENCY_MARKER_BUTTON_NAME,
                 () => this.activateResolverButton(),
                 { serialize: false }
             );
@@ -608,8 +663,15 @@ export class ModelResolver {
         }
 
         if (Array.isArray(node.size)) {
-            node.size[0] = Math.max(Number(node.size[0]) || 0, 260);
-            node.size[1] = Math.max(Number(node.size[1]) || 0, 90);
+            const size = [
+                Math.max(Number(node.size[0]) || 0, 260),
+                Math.max(Number(node.size[1]) || 0, 110),
+            ];
+            if (typeof node.setSize === 'function') {
+                node.setSize(size);
+            } else {
+                node.size = size;
+            }
         }
 
         if (!node.__modelResolverDependencySerializePatched) {
@@ -624,7 +686,17 @@ export class ModelResolver {
             node.__modelResolverDependencySerializePatched = true;
         }
 
+        node.graph?.setDirtyCanvas?.(true, true);
+        app.canvas?.setDirty?.(true, true);
         return node;
+    }
+
+    configureWorkflowDependencyMarkerNodes(graph = app?.graph) {
+        const nodes = graph?._nodes || graph?.nodes || [];
+        if (!Array.isArray(nodes)) return;
+        for (const node of nodes) {
+            this.configureWorkflowDependencyMarkerNode(node);
+        }
     }
 
     configureSerializedDependencyMarkerNode(node) {
@@ -654,7 +726,7 @@ export class ModelResolver {
     findWorkflowDependencyMarkerNode(graph = app?.graph) {
         const nodes = graph?._nodes || graph?.nodes || [];
         return Array.isArray(nodes)
-            ? nodes.find((node) => node?.type === WORKFLOW_DEPENDENCY_MARKER_NODE_TYPE) || null
+            ? nodes.find((node) => this.isWorkflowDependencyMarkerNode(node)) || null
             : null;
     }
 

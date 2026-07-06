@@ -31,35 +31,73 @@ from .core.log_system.config import LOG_LEVEL as BACKEND_DEFAULT_LOG_LEVEL
 WEB_DIRECTORY = "./web"
 
 MODEL_RESOLVER_DEPENDENCY_NODE_TYPE = "ModelResolverDependency"
+MODEL_RESOLVER_DEPENDENCY_NODE_DISPLAY_NAME = "Model Resolver Opener"
+MODEL_RESOLVER_DEPENDENCY_NODE_CATEGORY = "Model Resolver/Workflow"
+MODEL_RESOLVER_DEPENDENCY_NODE_DESCRIPTION = (
+    "A passive opener node for workflows that intentionally depend on "
+    "Model Resolver metadata. It does not process images, models, or prompts."
+)
+
+try:
+    from comfy_api.latest import ComfyExtension, io
+except Exception:
+    ComfyExtension = None
+    io = None
 
 
-class ModelResolverDependencyNode:
-    """Canvas node that declares Model Resolver and opens its workflow tools."""
+if ComfyExtension is not None and io is not None:
 
-    DESCRIPTION = (
-        "A passive marker node for workflows that intentionally depend on "
-        "Model Resolver metadata. It does not process images, models, or prompts."
-    )
-    RETURN_TYPES = ()
-    FUNCTION = "noop"
-    CATEGORY = "Model Resolver/Workflow"
+    class ModelResolverDependencyNode(io.ComfyNode):
+        """Canvas node that declares Model Resolver and opens its workflow tools."""
 
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {"required": {}}
+        @classmethod
+        def define_schema(cls) -> io.Schema:
+            return io.Schema(
+                node_id=MODEL_RESOLVER_DEPENDENCY_NODE_TYPE,
+                display_name=MODEL_RESOLVER_DEPENDENCY_NODE_DISPLAY_NAME,
+                category=MODEL_RESOLVER_DEPENDENCY_NODE_CATEGORY,
+                description=MODEL_RESOLVER_DEPENDENCY_NODE_DESCRIPTION,
+                inputs=[],
+                outputs=[],
+            )
 
-    def noop(self):
-        return ()
+        @classmethod
+        def execute(cls) -> io.NodeOutput:
+            return io.NodeOutput()
 
+    class ModelResolverNodeExtension(ComfyExtension):
+        async def get_node_list(self) -> list[type[io.ComfyNode]]:
+            return [ModelResolverDependencyNode]
 
-NODE_CLASS_MAPPINGS = {
-    MODEL_RESOLVER_DEPENDENCY_NODE_TYPE: ModelResolverDependencyNode,
-}
-NODE_DISPLAY_NAME_MAPPINGS = {
-    MODEL_RESOLVER_DEPENDENCY_NODE_TYPE: "Model Resolver Opener",
-}
+    async def comfy_entrypoint() -> ComfyExtension:
+        return ModelResolverNodeExtension()
 
-__all__ = ["WEB_DIRECTORY", "NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
+    __all__ = ["WEB_DIRECTORY", "comfy_entrypoint"]
+else:
+
+    class ModelResolverDependencyNode:
+        """Legacy fallback for ComfyUI builds without the v3 custom-node API."""
+
+        DESCRIPTION = MODEL_RESOLVER_DEPENDENCY_NODE_DESCRIPTION
+        RETURN_TYPES = ()
+        FUNCTION = "noop"
+        CATEGORY = MODEL_RESOLVER_DEPENDENCY_NODE_CATEGORY
+
+        @classmethod
+        def INPUT_TYPES(cls):
+            return {"required": {}}
+
+        def noop(self):
+            return ()
+
+    NODE_CLASS_MAPPINGS = {
+        MODEL_RESOLVER_DEPENDENCY_NODE_TYPE: ModelResolverDependencyNode,
+    }
+    NODE_DISPLAY_NAME_MAPPINGS = {
+        MODEL_RESOLVER_DEPENDENCY_NODE_TYPE: MODEL_RESOLVER_DEPENDENCY_NODE_DISPLAY_NAME,
+    }
+
+    __all__ = ["WEB_DIRECTORY", "NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
 
 
 class JobProgressTracker:
