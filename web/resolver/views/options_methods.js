@@ -1004,6 +1004,10 @@ export const optionsMethods = {
             this.metadataBuildHistoryFilter = 'all';
         }
         this.metadataBuildHistoryFilterMenuOpen = false;
+        const metadataBuildHistoryPageSize = 250;
+        if (!Number.isFinite(Number(this.metadataBuildHistoryVisibleLimit)) || Number(this.metadataBuildHistoryVisibleLimit) < metadataBuildHistoryPageSize) {
+            this.metadataBuildHistoryVisibleLimit = metadataBuildHistoryPageSize;
+        }
         if (this.metadataBuildPollTimer) {
             window.clearTimeout(this.metadataBuildPollTimer);
             this.metadataBuildPollTimer = null;
@@ -1779,17 +1783,8 @@ export const optionsMethods = {
             if (!metadataBuildResults) return;
             const normalizedFilter = metadataBuildHistoryFilterValues.includes(filter) ? filter : 'all';
             this.metadataBuildHistoryFilter = normalizedFilter;
-            let shown = 0;
-            metadataBuildResults.querySelectorAll('[data-metadata-history-row]').forEach((row) => {
-                const action = row.dataset.historyAction || 'checked';
-                const matches = metadataBuildHistoryActionMatchesFilter(action, normalizedFilter);
-                row.hidden = !matches;
-                if (matches) shown += 1;
-            });
-            const emptyRow = metadataBuildResults.querySelector('[data-metadata-history-empty-row]');
-            if (emptyRow) emptyRow.hidden = shown > 0;
-            this.metadataBuildHistoryFilteredCount = shown;
-            updateMetadataBuildActionFilterControl(normalizedFilter);
+            this.metadataBuildHistoryVisibleLimit = metadataBuildHistoryPageSize;
+            renderMetadataBuildResults(undefined);
         };
 
         const renderMetadataBuildResults = (data = undefined) => {
@@ -1824,7 +1819,12 @@ export const optionsMethods = {
             this.metadataBuildHistoryFilter = activeHistoryFilter;
             const filteredItems = displayItems.filter(item => metadataBuildHistoryMatchesFilter(item, activeHistoryFilter));
             const filterCounts = updateMetadataBuildHistoryFilterUi(displayItems, filteredItems, activeHistoryFilter);
-            const visibleItems = displayItems;
+            const visibleLimit = Math.max(
+                metadataBuildHistoryPageSize,
+                Number(this.metadataBuildHistoryVisibleLimit || metadataBuildHistoryPageSize)
+            );
+            const visibleItems = filteredItems.slice(0, visibleLimit);
+            const hiddenByLimit = Math.max(0, filteredItems.length - visibleItems.length);
             let html = '';
 
             if (displayItems.length) {
@@ -1889,6 +1889,17 @@ export const optionsMethods = {
                         </tr>
                     `;
                 }).join('');
+                const moreRow = hiddenByLimit > 0
+                    ? `
+                        <tr>
+                            <td colspan="6">
+                                <button type="button" class="mr-options-history-show-more" data-metadata-history-show-more>
+                                    Show ${Math.min(metadataBuildHistoryPageSize, hiddenByLimit).toLocaleString()} more of ${filteredItems.length.toLocaleString()}
+                                </button>
+                            </td>
+                        </tr>
+                    `
+                    : '';
                 const emptyRow = `
                     <tr data-metadata-history-empty-row ${filteredItems.length ? 'hidden' : ''}>
                         <td colspan="6">
@@ -1909,7 +1920,7 @@ export const optionsMethods = {
                                     <th>Metadata file</th>
                                 </tr>
                             </thead>
-                            <tbody>${rows}${emptyRow}</tbody>
+                            <tbody>${rows}${moreRow}${emptyRow}</tbody>
                         </table>
                     </div>
                 `;
@@ -2065,6 +2076,7 @@ export const optionsMethods = {
             this.metadataBuildFinishedProgressId = '';
             this.metadataBuildHistory = [];
             this.metadataBuildHistoryKeys = new Set();
+            this.metadataBuildHistoryVisibleLimit = metadataBuildHistoryPageSize;
             if (metadataBuildHistoryCountEl) metadataBuildHistoryCountEl.textContent = '0';
             setMetadataBuildBusy(true);
             updateMetadataBuildSummary({});
@@ -3210,6 +3222,18 @@ export const optionsMethods = {
                     const nextFilter = filterOption.dataset.metadataHistoryFilterOption || 'all';
                     applyMetadataBuildHistoryFilter(nextFilter);
                     setMetadataBuildHistoryFilterMenuOpen(false);
+                    return;
+                }
+
+                const showMoreButton = event.target?.closest?.('[data-metadata-history-show-more]');
+                if (showMoreButton) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    this.metadataBuildHistoryVisibleLimit = Math.max(
+                        metadataBuildHistoryPageSize,
+                        Number(this.metadataBuildHistoryVisibleLimit || metadataBuildHistoryPageSize)
+                    ) + metadataBuildHistoryPageSize;
+                    renderMetadataBuildResults(undefined);
                 }
             });
         }

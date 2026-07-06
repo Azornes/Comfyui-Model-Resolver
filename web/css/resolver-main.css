@@ -7222,8 +7222,37 @@ a.mr-image-preview-resource-name:hover {
     min-width: 900px;
 }
 
+.mr-options-history-table .mr-options-audit-row {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 58px;
+}
+
 .mr-options-history-table tr[hidden] {
     display: none;
+}
+
+#model-resolver-modal .mr-options-history-show-more {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 34px;
+    padding: 0 12px;
+    border: 1px solid rgba(255, 255, 255, 0.09) !important;
+    border-radius: 6px;
+    color: var(--mr-text-secondary);
+    background: rgba(255, 255, 255, 0.035) !important;
+    box-shadow: none !important;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+#model-resolver-modal .mr-options-history-show-more:hover,
+#model-resolver-modal .mr-options-history-show-more:focus-visible {
+    color: var(--mr-text);
+    background: rgba(255, 255, 255, 0.06) !important;
+    outline: none;
 }
 
 .mr-options-history-table th:nth-child(1),
