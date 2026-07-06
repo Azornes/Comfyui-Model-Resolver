@@ -744,37 +744,42 @@ export const optionsMethods = {
                         </section>
                         <section id="mr-options-section-metadata-audit" class="mr-options-card mr-options-section mr-options-section-fill is-hidden">
                             <div class="mr-options-section-head">
-                                <h4 class="mr-options-section-title">Metadata Size Audit</h4>
+                                <button id="mr-options-metadata-size-collapse-toggle" type="button" class="mr-options-section-title mr-options-collapse-title" aria-expanded="true" aria-controls="mr-options-metadata-size-controls">
+                                    <span>Metadata Size Audit</span>
+                                    <span class="mr-options-collapse-chevron" aria-hidden="true">${getSvgIcon('chevronDown')}</span>
+                                </button>
                             </div>
                             <div class="mr-options-grid">
                                 <div class="mr-options-panel">
-                                    <div class="mr-options-stack">
-                                        <div class="mr-options-db-summary">
-                                            <div class="mr-options-db-row">
-                                                <span>Models scanned</span>
-                                                <strong id="mr-options-metadata-size-scanned">0</strong>
+                                    <div class="mr-options-stack mr-options-metadata-size-stack">
+                                        <div id="mr-options-metadata-size-controls" class="mr-options-metadata-size-controls">
+                                            <div class="mr-options-db-summary mr-options-metadata-size-summary">
+                                                <div class="mr-options-db-row">
+                                                    <span class="mr-options-overview-stat-icon" aria-hidden="true">${getSvgIcon('search')}</span>
+                                                    <span class="mr-options-overview-stat-copy"><span>Models scanned</span><strong id="mr-options-metadata-size-scanned">0</strong></span>
+                                                </div>
+                                                <div class="mr-options-db-row">
+                                                    <span class="mr-options-overview-stat-icon" aria-hidden="true">${getSvgIcon('fileCheck')}</span>
+                                                    <span class="mr-options-overview-stat-copy"><span>Metadata checked</span><strong id="mr-options-metadata-size-checked">0</strong></span>
+                                                </div>
+                                                <div class="mr-options-db-row">
+                                                    <span class="mr-options-overview-stat-icon" aria-hidden="true">${getSvgIcon('scale')}</span>
+                                                    <span class="mr-options-overview-stat-copy"><span>Mismatches</span><strong id="mr-options-metadata-size-mismatches">0</strong></span>
+                                                </div>
+                                                <div class="mr-options-db-row">
+                                                    <span class="mr-options-overview-stat-icon" aria-hidden="true">${getSvgIcon('fileQuestion')}</span>
+                                                    <span class="mr-options-overview-stat-copy"><span>Missing size</span><strong id="mr-options-metadata-size-missing">0</strong></span>
+                                                </div>
+                                                <div class="mr-options-db-row">
+                                                    <span class="mr-options-overview-stat-icon" aria-hidden="true">${getSvgIcon('triangleAlert')}</span>
+                                                    <span class="mr-options-overview-stat-copy"><span>Errors</span><strong id="mr-options-metadata-size-errors">0</strong></span>
+                                                </div>
                                             </div>
-                                            <div class="mr-options-db-row">
-                                                <span>Metadata checked</span>
-                                                <strong id="mr-options-metadata-size-checked">0</strong>
+                                            <div class="mr-options-db-actions">
+                                                <button id="mr-options-metadata-size-scan" type="button" class="mr-btn mr-btn-secondary">${getSvgIcon('refreshCw')} Check Metadata Sizes</button>
                                             </div>
-                                            <div class="mr-options-db-row">
-                                                <span>Mismatches</span>
-                                                <strong id="mr-options-metadata-size-mismatches">0</strong>
-                                            </div>
-                                            <div class="mr-options-db-row">
-                                                <span>Missing size</span>
-                                                <strong id="mr-options-metadata-size-missing">0</strong>
-                                            </div>
-                                            <div class="mr-options-db-row">
-                                                <span>Errors</span>
-                                                <strong id="mr-options-metadata-size-errors">0</strong>
-                                            </div>
+                                            <div id="mr-options-metadata-size-status" class="mr-options-db-message">Not checked yet.</div>
                                         </div>
-                                        <div class="mr-options-db-actions">
-                                            <button id="mr-options-metadata-size-scan" type="button" class="mr-btn mr-btn-secondary">${getSvgIcon('refreshCw')} Check Metadata Sizes</button>
-                                        </div>
-                                        <div id="mr-options-metadata-size-status" class="mr-options-db-message">Not checked yet.</div>
                                         <div id="mr-options-metadata-size-results" class="mr-options-audit-results" hidden></div>
                                     </div>
                                 </div>
@@ -782,57 +787,62 @@ export const optionsMethods = {
                         </section>
                         <section id="mr-options-section-metadata-build" class="mr-options-card mr-options-section mr-options-section-fill is-hidden">
                             <div class="mr-options-section-head">
-                                <h4 class="mr-options-section-title">Local Metadata Builder</h4>
+                                <button id="mr-options-metadata-build-collapse-toggle" type="button" class="mr-options-section-title mr-options-collapse-title" aria-expanded="true" aria-controls="mr-options-metadata-build-controls">
+                                    <span>Local Metadata Builder</span>
+                                    <span class="mr-options-collapse-chevron" aria-hidden="true">${getSvgIcon('chevronDown')}</span>
+                                </button>
                             </div>
                             <div class="mr-options-grid">
                                 <div class="mr-options-panel">
                                     <div class="mr-options-stack mr-options-build-stack">
-                                        <div class="mr-options-db-summary">
-                                            <div class="mr-options-db-row">
-                                                <span>CPU cores</span>
-                                                <strong id="mr-options-metadata-build-cpu">Detecting</strong>
+                                        <div id="mr-options-metadata-build-controls" class="mr-options-metadata-build-controls">
+                                            <div class="mr-options-db-summary mr-options-metadata-build-summary">
+                                                <div class="mr-options-db-row">
+                                                    <span class="mr-options-overview-stat-icon" aria-hidden="true">${getSvgIcon('cpu')}</span>
+                                                    <span class="mr-options-overview-stat-copy"><span>CPU cores</span><strong id="mr-options-metadata-build-cpu">Detecting</strong></span>
+                                                </div>
+                                                <div class="mr-options-db-row">
+                                                    <span class="mr-options-overview-stat-icon" aria-hidden="true">${getSvgIcon('users')}</span>
+                                                    <span class="mr-options-overview-stat-copy"><span>Workers</span><strong id="mr-options-metadata-build-workers">0</strong></span>
+                                                </div>
+                                                <div class="mr-options-db-row">
+                                                    <span class="mr-options-overview-stat-icon" aria-hidden="true">${getSvgIcon('search')}</span>
+                                                    <span class="mr-options-overview-stat-copy"><span>Models scanned</span><strong id="mr-options-metadata-build-scanned">0</strong></span>
+                                                </div>
+                                                <div class="mr-options-db-row">
+                                                    <span class="mr-options-overview-stat-icon" aria-hidden="true">${getSvgIcon('circlePlus')}</span>
+                                                    <span class="mr-options-overview-stat-copy"><span>Created</span><strong id="mr-options-metadata-build-created">0</strong></span>
+                                                </div>
+                                                <div class="mr-options-db-row">
+                                                    <span class="mr-options-overview-stat-icon" aria-hidden="true">${getSvgIcon('pencil')}</span>
+                                                    <span class="mr-options-overview-stat-copy"><span>Updated</span><strong id="mr-options-metadata-build-updated">0</strong></span>
+                                                </div>
+                                                <div class="mr-options-db-row">
+                                                    <span class="mr-options-overview-stat-icon" aria-hidden="true">${getSvgIcon('circleCheckBig')}</span>
+                                                    <span class="mr-options-overview-stat-copy"><span>Already complete</span><strong id="mr-options-metadata-build-skipped">0</strong></span>
+                                                </div>
+                                                <div class="mr-options-db-row">
+                                                    <span class="mr-options-overview-stat-icon" aria-hidden="true">${getSvgIcon('hash')}</span>
+                                                    <span class="mr-options-overview-stat-copy"><span>Hashes calculated</span><strong id="mr-options-metadata-build-hashes">0</strong></span>
+                                                </div>
+                                                <div class="mr-options-db-row">
+                                                    <span class="mr-options-overview-stat-icon" aria-hidden="true">${getSvgIcon('triangleAlert')}</span>
+                                                    <span class="mr-options-overview-stat-copy"><span>Errors</span><strong id="mr-options-metadata-build-errors">0</strong></span>
+                                                </div>
                                             </div>
-                                            <div class="mr-options-db-row">
-                                                <span>Workers</span>
-                                                <strong id="mr-options-metadata-build-workers">0</strong>
+                                            <div class="mr-options-number-row mr-options-wide-row">
+                                                <div class="mr-options-number-copy">
+                                                    <span class="mr-options-label">Concurrent hash workers</span>
+                                                    <span id="mr-options-metadata-build-worker-hint" class="mr-options-db-message mr-options-inline-hint">Loading CPU details...</span>
+                                                </div>
+                                                <input id="mr-options-metadata-build-worker-count" class="mr-options-input" type="number" min="1" max="64" step="1" value="1">
                                             </div>
-                                            <div class="mr-options-db-row">
-                                                <span>Models scanned</span>
-                                                <strong id="mr-options-metadata-build-scanned">0</strong>
+                                            <div class="mr-options-db-actions">
+                                                <button id="mr-options-metadata-build-start" type="button" class="mr-btn mr-btn-secondary">${getSvgIcon('fileText')} Build Local Metadata</button>
+                                                <button id="mr-options-metadata-build-cancel" type="button" class="mr-btn mr-btn-secondary" hidden>${getSvgIcon('x')} Cancel</button>
                                             </div>
-                                            <div class="mr-options-db-row">
-                                                <span>Created</span>
-                                                <strong id="mr-options-metadata-build-created">0</strong>
-                                            </div>
-                                            <div class="mr-options-db-row">
-                                                <span>Updated</span>
-                                                <strong id="mr-options-metadata-build-updated">0</strong>
-                                            </div>
-                                            <div class="mr-options-db-row">
-                                                <span>Already complete</span>
-                                                <strong id="mr-options-metadata-build-skipped">0</strong>
-                                            </div>
-                                            <div class="mr-options-db-row">
-                                                <span>Hashes calculated</span>
-                                                <strong id="mr-options-metadata-build-hashes">0</strong>
-                                            </div>
-                                            <div class="mr-options-db-row">
-                                                <span>Errors</span>
-                                                <strong id="mr-options-metadata-build-errors">0</strong>
-                                            </div>
+                                            <div id="mr-options-metadata-build-status" class="mr-options-db-message">Not started yet.</div>
                                         </div>
-                                        <div class="mr-options-number-row mr-options-wide-row">
-                                            <div class="mr-options-number-copy">
-                                                <span class="mr-options-label">Concurrent hash workers</span>
-                                                <span id="mr-options-metadata-build-worker-hint" class="mr-options-db-message mr-options-inline-hint">Loading CPU details...</span>
-                                            </div>
-                                            <input id="mr-options-metadata-build-worker-count" class="mr-options-input" type="number" min="1" max="64" step="1" value="1">
-                                        </div>
-                                        <div class="mr-options-db-actions">
-                                            <button id="mr-options-metadata-build-start" type="button" class="mr-btn mr-btn-secondary">${getSvgIcon('fileText')} Build Local Metadata</button>
-                                            <button id="mr-options-metadata-build-cancel" type="button" class="mr-btn mr-btn-secondary" hidden>${getSvgIcon('x')} Cancel</button>
-                                        </div>
-                                        <div id="mr-options-metadata-build-status" class="mr-options-db-message">Not started yet.</div>
                                         <div class="mr-tabs mr-options-build-tabs" role="tablist" aria-label="Metadata builder views">
                                             <button type="button" class="mr-tab mr-options-build-tab mr-tab-active is-active" data-build-tab="progress" role="tab" aria-selected="true">
                                                 <span class="mr-tab-label">Progress</span>
@@ -954,6 +964,9 @@ export const optionsMethods = {
         const metadataSizeMismatchesEl = this.contentElement.querySelector('#mr-options-metadata-size-mismatches');
         const metadataSizeMissingEl = this.contentElement.querySelector('#mr-options-metadata-size-missing');
         const metadataSizeErrorsEl = this.contentElement.querySelector('#mr-options-metadata-size-errors');
+        const metadataSizeCollapseToggle = this.contentElement.querySelector('#mr-options-metadata-size-collapse-toggle');
+        const metadataSizeControls = this.contentElement.querySelector('#mr-options-metadata-size-controls');
+        const metadataSizeStack = this.contentElement.querySelector('.mr-options-metadata-size-stack');
         const metadataBuildStartBtn = this.contentElement.querySelector('#mr-options-metadata-build-start');
         const metadataBuildCancelBtn = this.contentElement.querySelector('#mr-options-metadata-build-cancel');
         const metadataBuildStatus = this.contentElement.querySelector('#mr-options-metadata-build-status');
@@ -980,6 +993,9 @@ export const optionsMethods = {
         const metadataBuildSkippedEl = this.contentElement.querySelector('#mr-options-metadata-build-skipped');
         const metadataBuildHashesEl = this.contentElement.querySelector('#mr-options-metadata-build-hashes');
         const metadataBuildErrorsEl = this.contentElement.querySelector('#mr-options-metadata-build-errors');
+        const metadataBuildCollapseToggle = this.contentElement.querySelector('#mr-options-metadata-build-collapse-toggle');
+        const metadataBuildControls = this.contentElement.querySelector('#mr-options-metadata-build-controls');
+        const metadataBuildStack = this.contentElement.querySelector('.mr-options-build-stack');
         const optionsMain = this.contentElement.querySelector('.mr-options-main');
         const navButtons = Array.from(this.contentElement.querySelectorAll('.mr-options-nav-btn'));
         const optionSections = Array.from(this.contentElement.querySelectorAll('.mr-options-section'));
@@ -1150,6 +1166,46 @@ export const optionsMethods = {
             element.textContent = formatAuditNumber(value);
             setStatusMode(element, mode);
         };
+
+        const setMetadataSizeControlsCollapsed = (collapsed, persist = true) => {
+            const isCollapsed = Boolean(collapsed);
+            this.metadataSizeControlsCollapsed = isCollapsed;
+            if (metadataSizeControls) {
+                metadataSizeControls.hidden = isCollapsed;
+            }
+            if (metadataSizeStack) {
+                metadataSizeStack.classList.toggle('is-controls-collapsed', isCollapsed);
+            }
+            if (metadataSizeCollapseToggle) {
+                metadataSizeCollapseToggle.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+                this.setTooltip?.(
+                    metadataSizeCollapseToggle,
+                    isCollapsed ? 'Show metadata size audit controls' : 'Hide metadata size audit controls'
+                );
+            }
+            if (persist) {
+                try {
+                    localStorage.setItem(
+                        this.metadataSizeControlsCollapsedStorageKey || 'model_resolver_metadata_size_controls_collapsed',
+                        isCollapsed ? '1' : '0'
+                    );
+                } catch (error) {
+                    console.warn('Model Resolver: could not save metadata size audit collapse state:', error);
+                }
+            }
+        };
+
+        if (!this.metadataSizeControlsCollapsedStorageKey) {
+            this.metadataSizeControlsCollapsedStorageKey = 'model_resolver_metadata_size_controls_collapsed';
+        }
+        if (typeof this.metadataSizeControlsCollapsed !== 'boolean') {
+            try {
+                this.metadataSizeControlsCollapsed = localStorage.getItem(this.metadataSizeControlsCollapsedStorageKey) === '1';
+            } catch (error) {
+                this.metadataSizeControlsCollapsed = false;
+            }
+        }
+        setMetadataSizeControlsCollapsed(this.metadataSizeControlsCollapsed, false);
 
         const updateMetadataSizeAuditSummary = (data = {}) => {
             const mismatchCount = Number(data.mismatch_count || 0);
@@ -1324,6 +1380,47 @@ export const optionsMethods = {
             element.textContent = formatAuditNumber(value);
             setStatusMode(element, mode);
         };
+
+        const setMetadataBuildControlsCollapsed = (collapsed, persist = true) => {
+            const isCollapsed = Boolean(collapsed);
+            this.metadataBuildControlsCollapsed = isCollapsed;
+            if (metadataBuildControls) {
+                metadataBuildControls.hidden = isCollapsed;
+            }
+            if (metadataBuildStack) {
+                metadataBuildStack.classList.toggle('is-controls-collapsed', isCollapsed);
+            }
+            if (metadataBuildCollapseToggle) {
+                metadataBuildCollapseToggle.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+                metadataBuildCollapseToggle.classList.toggle('is-collapsed', isCollapsed);
+                this.setTooltip?.(
+                    metadataBuildCollapseToggle,
+                    isCollapsed ? 'Show metadata builder controls' : 'Hide metadata builder controls'
+                );
+            }
+            if (persist) {
+                try {
+                    localStorage.setItem(
+                        this.metadataBuildControlsCollapsedStorageKey || 'model_resolver_metadata_build_controls_collapsed',
+                        isCollapsed ? '1' : '0'
+                    );
+                } catch (error) {
+                    console.warn('Model Resolver: could not save metadata builder collapse state:', error);
+                }
+            }
+        };
+
+        if (!this.metadataBuildControlsCollapsedStorageKey) {
+            this.metadataBuildControlsCollapsedStorageKey = 'model_resolver_metadata_build_controls_collapsed';
+        }
+        if (typeof this.metadataBuildControlsCollapsed !== 'boolean') {
+            try {
+                this.metadataBuildControlsCollapsed = localStorage.getItem(this.metadataBuildControlsCollapsedStorageKey) === '1';
+            } catch (error) {
+                this.metadataBuildControlsCollapsed = false;
+            }
+        }
+        setMetadataBuildControlsCollapsed(this.metadataBuildControlsCollapsed, false);
 
         let scheduleMetadataBuildHistoryRender = () => {};
         const setMetadataBuildPanelHidden = (panel, hidden) => {
@@ -3063,6 +3160,18 @@ export const optionsMethods = {
         if (metadataSizeAuditBtn) {
             metadataSizeAuditBtn.addEventListener('click', () => {
                 runMetadataSizeAudit();
+            });
+        }
+
+        if (metadataSizeCollapseToggle) {
+            metadataSizeCollapseToggle.addEventListener('click', () => {
+                setMetadataSizeControlsCollapsed(!this.metadataSizeControlsCollapsed);
+            });
+        }
+
+        if (metadataBuildCollapseToggle) {
+            metadataBuildCollapseToggle.addEventListener('click', () => {
+                setMetadataBuildControlsCollapsed(!this.metadataBuildControlsCollapsed);
             });
         }
 

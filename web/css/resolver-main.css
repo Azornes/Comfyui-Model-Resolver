@@ -6294,6 +6294,69 @@ a.mr-image-preview-resource-name:hover {
     color: var(--mr-text);
 }
 
+.mr-options-collapse-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+}
+
+#model-resolver-modal .mr-options-collapse-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--mr-text);
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+}
+
+.mr-options-collapse-title:hover {
+    color: var(--mr-text);
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+}
+
+.mr-options-collapse-title:focus-visible {
+    outline: none;
+    color: var(--mr-text);
+}
+
+.mr-options-collapse-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 18px;
+    width: 18px;
+    height: 18px;
+    border: 0;
+    border-radius: 0;
+    color: var(--mr-text-secondary);
+    background: transparent;
+    box-shadow: none;
+    transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.mr-options-collapse-chevron svg {
+    width: 16px;
+    height: 16px;
+}
+
+.mr-options-collapse-title:hover .mr-options-collapse-chevron {
+    color: var(--mr-text);
+}
+
+.mr-options-collapse-title[aria-expanded="false"] .mr-options-collapse-chevron {
+    transform: rotate(-90deg);
+}
+
 .mr-options-grid {
     display: grid;
     grid-template-columns: 1fr;
@@ -6345,12 +6408,37 @@ a.mr-image-preview-resource-name:hover {
 }
 
 .mr-options-section-fill .mr-options-build-stack {
-    grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.mr-options-section-fill .mr-options-metadata-size-stack {
+    grid-template-rows: auto minmax(0, 1fr);
+}
+
+.mr-options-section-fill .mr-options-metadata-size-stack.is-controls-collapsed {
+    grid-template-rows: minmax(0, 1fr);
 }
 
 .mr-options-build-stack {
     --mr-options-build-surface: #121212;
     --mr-tab-active-bg: var(--mr-options-build-surface);
+}
+
+.mr-options-metadata-build-controls,
+.mr-options-metadata-size-controls {
+    display: grid;
+    gap: 0;
+    min-width: 0;
+}
+
+.mr-options-metadata-build-controls[hidden],
+.mr-options-metadata-size-controls[hidden] {
+    display: none;
+}
+
+.mr-options-build-stack,
+.mr-options-metadata-size-stack {
+    container-type: inline-size;
 }
 
 .mr-options-panel-title {
@@ -6403,6 +6491,141 @@ a.mr-image-preview-resource-name:hover {
 
 .mr-options-db-row strong.is-invalid {
     color: var(--mr-color-error-light);
+}
+
+.mr-options-metadata-build-summary,
+.mr-options-metadata-size-summary {
+    gap: 1px;
+    padding: 1px;
+    border-color: rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.09);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.mr-options-metadata-build-summary {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+    padding: 0;
+    background: transparent;
+}
+
+.mr-options-metadata-size-summary {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+}
+
+.mr-options-db-summary.mr-options-metadata-size-summary {
+    background: #ffffff00;
+}
+
+.mr-options-metadata-build-summary .mr-options-db-row,
+.mr-options-metadata-size-summary .mr-options-db-row {
+    position: relative;
+    justify-content: flex-start;
+    min-width: 0;
+    min-height: 70px;
+    padding: 6px;
+    border-top: 0 !important;
+    background: rgba(18, 18, 18, 0.96);
+}
+
+.mr-options-metadata-build-summary .mr-options-db-row::after,
+.mr-options-metadata-size-summary .mr-options-db-row::after {
+    content: none !important;
+    display: none !important;
+}
+
+.mr-options-overview-stat-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 28px;
+    width: 28px;
+    height: 28px;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.mr-options-overview-stat-icon svg {
+    width: 24px;
+    height: 24px;
+    stroke-width: 1.9;
+}
+
+.mr-options-overview-stat-copy {
+    display: grid;
+    min-width: 0;
+    gap: 3px;
+}
+
+.mr-options-overview-stat-copy span {
+    overflow-wrap: normal;
+    word-break: normal;
+    color: var(--mr-text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.mr-options-metadata-build-summary .mr-options-db-row strong,
+.mr-options-metadata-size-summary .mr-options-db-row strong {
+    color: var(--mr-text);
+    font-size: 20px;
+    font-weight: 800;
+    line-height: 1.05;
+    text-align: left;
+}
+
+@container (min-width: 700px) {
+    .mr-options-metadata-build-summary {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+@container (min-width: 860px) {
+    .mr-options-metadata-size-summary {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+}
+
+@container (max-width: 560px) {
+    .mr-options-metadata-build-summary,
+    .mr-options-metadata-size-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        background: rgba(255, 255, 255, 0.09);
+    }
+
+    .mr-options-metadata-build-summary {
+        background: transparent;
+    }
+
+    .mr-options-metadata-build-summary .mr-options-db-row,
+    .mr-options-metadata-size-summary .mr-options-db-row {
+        min-height: 66px;
+        padding: 6px;
+    }
+
+}
+
+@container (max-width: 360px) {
+    .mr-options-metadata-build-summary,
+    .mr-options-metadata-size-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .mr-options-metadata-build-summary {
+        padding: 0;
+    }
+
+    .mr-options-metadata-size-summary {
+        padding: 8px;
+    }
+
+    .mr-options-metadata-build-summary .mr-options-db-row,
+    .mr-options-metadata-size-summary .mr-options-db-row {
+        min-height: 56px;
+        padding: 6px;
+    }
+
 }
 
 .mr-options-aria2-summary .mr-options-db-row {
@@ -6477,6 +6700,10 @@ a.mr-image-preview-resource-name:hover {
     --mr-tab-active-bg: var(--mr-options-build-surface);
 }
 
+.mr-options-build-stack.is-controls-collapsed .mr-options-build-tabs {
+    margin-top: 0;
+}
+
 .mr-options-build-tabs .mr-options-build-tab {
     gap: 5px;
     min-width: 94px;
@@ -6526,7 +6753,7 @@ a.mr-image-preview-resource-name:hover {
 
 #mr-options-metadata-build-progress-panel,
 #mr-options-metadata-build-history-panel {
-    grid-row: 6;
+    grid-row: 3;
     grid-column: 1;
     min-height: 0;
     padding: 10px;
@@ -7808,6 +8035,17 @@ a.mr-image-preview-resource-name:hover {
     .mr-options-toggle-row {
         gap: 10px;
     }
+
+    .mr-options-metadata-build-summary,
+    .mr-options-metadata-size-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        background: rgba(255, 255, 255, 0.09);
+    }
+
+    .mr-options-metadata-build-summary {
+        background: transparent;
+    }
+
 }
 
 @media (max-width: 760px) {
@@ -7838,6 +8076,26 @@ a.mr-image-preview-resource-name:hover {
     .mr-options-number-row {
         grid-template-columns: 1fr;
     }
+
+    .mr-options-metadata-build-summary,
+    .mr-options-metadata-size-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .mr-options-metadata-build-summary {
+        padding: 0;
+    }
+
+    .mr-options-metadata-size-summary {
+        padding: 8px;
+    }
+
+    .mr-options-metadata-build-summary .mr-options-db-row,
+    .mr-options-metadata-size-summary .mr-options-db-row {
+        min-height: 56px;
+        padding: 6px;
+    }
+
 }
 
 @media (max-width: 640px) {
