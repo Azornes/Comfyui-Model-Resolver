@@ -28,5 +28,8 @@ app.registerExtension({
     keybindings: [
         MODEL_RESOLVER_OPEN_DEFAULT_KEYBINDING,
     ],
-    setup: modelResolver.setup
+    setup: modelResolver.setup,
+    nodeCreated(node) {
+        modelResolver.configureWorkflowDependencyMarkerNode(node);
+    },
 });

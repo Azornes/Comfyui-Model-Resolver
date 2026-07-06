@@ -30,11 +30,36 @@ from .core.log_system.config import LOG_LEVEL as BACKEND_DEFAULT_LOG_LEVEL
 # Web directory for JavaScript interface
 WEB_DIRECTORY = "./web"
 
-# Empty NODE_CLASS_MAPPINGS - we don't provide custom nodes, only web extension
-# This prevents ComfyUI from showing "IMPORT FAILED" message
-NODE_CLASS_MAPPINGS = {}
+MODEL_RESOLVER_DEPENDENCY_NODE_TYPE = "ModelResolverDependency"
 
-__all__ = ["WEB_DIRECTORY"]
+
+class ModelResolverDependencyNode:
+    """Canvas node that declares Model Resolver and opens its workflow tools."""
+
+    DESCRIPTION = (
+        "A passive marker node for workflows that intentionally depend on "
+        "Model Resolver metadata. It does not process images, models, or prompts."
+    )
+    RETURN_TYPES = ()
+    FUNCTION = "noop"
+    CATEGORY = "Model Resolver/Workflow"
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {}}
+
+    def noop(self):
+        return ()
+
+
+NODE_CLASS_MAPPINGS = {
+    MODEL_RESOLVER_DEPENDENCY_NODE_TYPE: ModelResolverDependencyNode,
+}
+NODE_DISPLAY_NAME_MAPPINGS = {
+    MODEL_RESOLVER_DEPENDENCY_NODE_TYPE: "Model Resolver Opener",
+}
+
+__all__ = ["WEB_DIRECTORY", "NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
 
 
 class JobProgressTracker:

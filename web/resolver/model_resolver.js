@@ -18,6 +18,14 @@ export const MODEL_RESOLVER_OPEN_DEFAULT_KEYBINDING = Object.freeze({
 const OPEN_TOOLTIP_BASE = "Open Model Resolver to find or download missing workflow models.";
 const KEYBINDING_NEW_SETTING_ID = "Comfy.Keybinding.NewBindings";
 const KEYBINDING_UNSET_SETTING_ID = "Comfy.Keybinding.UnsetBindings";
+const LEGACY_WORKFLOW_HASH_MARKER_NODE_TYPE = "ModelResolverWorkflowHashes";
+const WORKFLOW_DEPENDENCY_MARKER_NODE_TYPE = "ModelResolverDependency";
+const WORKFLOW_DEPENDENCY_MARKER_DISPLAY_NAME = "Model Resolver Opener";
+const WORKFLOW_DEPENDENCY_MARKER_AUX_ID = "Azornes/Comfyui-Model-Resolver";
+const WORKFLOW_DEPENDENCY_MARKER_REPOSITORY = "https://github.com/Azornes/Comfyui-Model-Resolver";
+const WORKFLOW_DEPENDENCY_MARKER_CNR_ID = "comfyui-model-resolver";
+const WORKFLOW_DEPENDENCY_MARKER_BUTTON_NAME = "Open Model Resolver";
+const WORKFLOW_DEPENDENCY_MARKER_AUTO_ID = -918273646;
 
 function getKeybindingSetting(id) {
     try {
@@ -105,6 +113,7 @@ export class ModelResolver {
     }
 
     setup = async () => {
+        window.ModelResolver = this;
         applyStoredFrontendLoggingPreference();
         loadStylesWhenNeeded();
 
@@ -426,6 +435,9 @@ export class ModelResolver {
         if (!window.__ModelResolverLoadGraphDataPatched && typeof app.loadGraphData === 'function') {
             const originalLoadGraphData = app.loadGraphData;
             app.loadGraphData = function(...args) {
+                if (args[0] && typeof args[0] === 'object') {
+                    window.__ModelResolverWorkflowHashMetadataOwner?.removeLegacyWorkflowHashMarkerNode(args[0]);
+                }
                 const result = originalLoadGraphData.apply(this, args);
                 Promise.resolve(result).then(() => {
                     setTimeout(() => {
@@ -523,6 +535,10 @@ export class ModelResolver {
         return localStorage.getItem('ModelResolver.workflowHashMetadataEnabled') !== 'false';
     }
 
+    isWorkflowDependencyMarkerEnabled() {
+        return localStorage.getItem('ModelResolver.workflowDependencyMarkerEnabled') === 'true';
+    }
+
     setupWorkflowHashMetadataInjection() {
         window.__ModelResolverWorkflowHashMetadataOwner = this;
         if (window.__ModelResolverWorkflowHashMetadataPatched) {
@@ -535,12 +551,211 @@ export class ModelResolver {
         const originalSerialize = app.graph.serialize;
         app.graph.serialize = function(...args) {
             const workflow = originalSerialize.apply(this, args);
+            window.__ModelResolverWorkflowHashMetadataOwner?.removeLegacyWorkflowHashMarkerNode(workflow);
+            window.__ModelResolverWorkflowHashMetadataOwner?.configureSerializedWorkflowDependencyMarkerNodes(workflow);
             window.__ModelResolverWorkflowHashMetadataOwner?.injectWorkflowHashMetadata(workflow);
+            window.__ModelResolverWorkflowHashMetadataOwner?.injectWorkflowDependencyMarker(workflow);
             window.__ModelResolverWorkflowHashMetadataOwner?.scheduleWorkflowHashMetadataRefresh(workflow);
             return workflow;
         };
         window.__ModelResolverWorkflowHashMetadataPatched = true;
         this.scheduleWorkflowHashMetadataRefresh();
+    }
+
+    removeLegacyWorkflowHashMarkerNode(workflow) {
+        if (!workflow || !Array.isArray(workflow.nodes)) return workflow;
+        workflow.nodes = workflow.nodes.filter((node) => node?.type !== LEGACY_WORKFLOW_HASH_MARKER_NODE_TYPE);
+        return workflow;
+    }
+
+    configureWorkflowDependencyMarkerNode(node) {
+        if (!node || node.type !== WORKFLOW_DEPENDENCY_MARKER_NODE_TYPE) return node;
+
+        node.properties = node.properties && typeof node.properties === 'object' ? node.properties : {};
+        delete node.properties.cnr_id;
+        node.properties.aux_id = WORKFLOW_DEPENDENCY_MARKER_AUX_ID;
+        node.properties.repository = WORKFLOW_DEPENDENCY_MARKER_REPOSITORY;
+        node.properties.registry_id = WORKFLOW_DEPENDENCY_MARKER_CNR_ID;
+        node.properties.purpose = "Declares Model Resolver as an intentional workflow dependency.";
+        node.properties["Node name for S&R"] = WORKFLOW_DEPENDENCY_MARKER_NODE_TYPE;
+
+        node.widgets = Array.isArray(node.widgets)
+            ? node.widgets.filter((widget) => widget?.name !== 'note')
+            : [];
+        const existingOpenButton = node.widgets.find(
+            (widget) => widget?.__modelResolverOpenButton || widget?.name === WORKFLOW_DEPENDENCY_MARKER_BUTTON_NAME
+        );
+        if (existingOpenButton) {
+            existingOpenButton.callback = () => this.activateResolverButton();
+            existingOpenButton.__modelResolverOpenButton = true;
+            existingOpenButton.options = existingOpenButton.options && typeof existingOpenButton.options === 'object'
+                ? existingOpenButton.options
+                : {};
+            existingOpenButton.options.serialize = false;
+        } else if (typeof node.addWidget === 'function') {
+            const button = node.addWidget(
+                "button",
+                WORKFLOW_DEPENDENCY_MARKER_BUTTON_NAME,
+                null,
+                () => this.activateResolverButton(),
+                { serialize: false }
+            );
+            if (button) {
+                button.__modelResolverOpenButton = true;
+                button.options = button.options && typeof button.options === 'object' ? button.options : {};
+                button.options.serialize = false;
+            }
+        }
+
+        if (Array.isArray(node.size)) {
+            node.size[0] = Math.max(Number(node.size[0]) || 0, 260);
+            node.size[1] = Math.max(Number(node.size[1]) || 0, 90);
+        }
+
+        if (!node.__modelResolverDependencySerializePatched) {
+            const originalOnSerialize = node.onSerialize;
+            node.onSerialize = function(serialized) {
+                const result = typeof originalOnSerialize === 'function'
+                    ? originalOnSerialize.call(this, serialized)
+                    : undefined;
+                window.__ModelResolverWorkflowHashMetadataOwner?.configureSerializedDependencyMarkerNode(serialized);
+                return result;
+            };
+            node.__modelResolverDependencySerializePatched = true;
+        }
+
+        return node;
+    }
+
+    configureSerializedDependencyMarkerNode(node) {
+        if (!node || node.type !== WORKFLOW_DEPENDENCY_MARKER_NODE_TYPE) return node;
+
+        node.properties = node.properties && typeof node.properties === 'object' ? node.properties : {};
+        delete node.properties.cnr_id;
+        node.properties.aux_id = WORKFLOW_DEPENDENCY_MARKER_AUX_ID;
+        node.properties.repository = WORKFLOW_DEPENDENCY_MARKER_REPOSITORY;
+        node.properties.registry_id = WORKFLOW_DEPENDENCY_MARKER_CNR_ID;
+        node.properties.purpose = "Declares Model Resolver as an intentional workflow dependency.";
+        node.properties["Node name for S&R"] = WORKFLOW_DEPENDENCY_MARKER_NODE_TYPE;
+
+        node.widgets_values = [];
+
+        return node;
+    }
+
+    configureSerializedWorkflowDependencyMarkerNodes(workflow) {
+        if (!workflow || !Array.isArray(workflow.nodes)) return workflow;
+        for (const node of workflow.nodes) {
+            this.configureSerializedDependencyMarkerNode(node);
+        }
+        return workflow;
+    }
+
+    findWorkflowDependencyMarkerNode(graph = app?.graph) {
+        const nodes = graph?._nodes || graph?.nodes || [];
+        return Array.isArray(nodes)
+            ? nodes.find((node) => node?.type === WORKFLOW_DEPENDENCY_MARKER_NODE_TYPE) || null
+            : null;
+    }
+
+    getDependencyMarkerGraphPosition() {
+        const visibleArea = app?.canvas?.ds?.visible_area;
+        if (Array.isArray(visibleArea) && visibleArea.length >= 4) {
+            const [x, y, w] = visibleArea;
+            const dpi = Math.max(window.devicePixelRatio || 1, 1);
+            return [x + Math.max(24, (w - 360) / dpi / 2), y + 48];
+        }
+        return [0, 0];
+    }
+
+    addWorkflowDependencyMarkerNode() {
+        const graph = app?.graph;
+        const liteGraph = window.LiteGraph;
+        if (!graph || typeof liteGraph?.createNode !== 'function') {
+            showNotification("Could not access the current workflow graph.", "error");
+            return null;
+        }
+
+        const existing = this.findWorkflowDependencyMarkerNode(graph);
+        if (existing) {
+            this.configureWorkflowDependencyMarkerNode(existing);
+            app.canvas?.centerOnNode?.(existing);
+            showNotification("Model Resolver opener node is already in this workflow.", "info");
+            return existing;
+        }
+
+        const node = liteGraph.createNode(
+            WORKFLOW_DEPENDENCY_MARKER_NODE_TYPE,
+            WORKFLOW_DEPENDENCY_MARKER_DISPLAY_NAME,
+            { pos: this.getDependencyMarkerGraphPosition() }
+        );
+        if (!node) {
+            showNotification("Model Resolver opener node is not available. Restart ComfyUI after updating the extension.", "error");
+            return null;
+        }
+
+        this.configureWorkflowDependencyMarkerNode(node);
+        graph.add(node);
+        app.canvas?.centerOnNode?.(node);
+        graph.setDirtyCanvas?.(true, true);
+        app.canvas?.setDirty?.(true, true);
+        showNotification("Model Resolver opener node added.", "success");
+        return node;
+    }
+
+    getWorkflowDependencyMarkerPosition(workflow) {
+        const nodes = Array.isArray(workflow?.nodes)
+            ? workflow.nodes.filter((node) => node?.type !== WORKFLOW_DEPENDENCY_MARKER_NODE_TYPE && Array.isArray(node?.pos))
+            : [];
+        if (!nodes.length) return [0, 0];
+
+        const xs = nodes.map((node) => Number(node.pos[0])).filter(Number.isFinite);
+        const ys = nodes.map((node) => Number(node.pos[1])).filter(Number.isFinite);
+        if (!xs.length || !ys.length) return [0, 0];
+
+        return [Math.min(...xs), Math.min(...ys) - 170];
+    }
+
+    getWorkflowDependencyMarkerId(workflow) {
+        const usedIds = new Set(
+            (Array.isArray(workflow?.nodes) ? workflow.nodes : [])
+                .map((node) => Number(node?.id))
+                .filter(Number.isFinite)
+        );
+        let id = WORKFLOW_DEPENDENCY_MARKER_AUTO_ID;
+        while (usedIds.has(id)) id -= 1;
+        return id;
+    }
+
+    createSerializedWorkflowDependencyMarkerNode(workflow) {
+        return this.configureSerializedDependencyMarkerNode({
+            id: this.getWorkflowDependencyMarkerId(workflow),
+            type: WORKFLOW_DEPENDENCY_MARKER_NODE_TYPE,
+            pos: this.getWorkflowDependencyMarkerPosition(workflow),
+            size: [360, 120],
+            flags: {},
+            order: -1,
+            mode: 0,
+            inputs: [],
+            outputs: [],
+            properties: {},
+            widgets_values: [],
+        });
+    }
+
+    injectWorkflowDependencyMarker(workflow) {
+        if (!workflow || typeof workflow !== 'object') return workflow;
+        if (!this.isWorkflowDependencyMarkerEnabled()) return workflow;
+
+        workflow.nodes = Array.isArray(workflow.nodes) ? workflow.nodes : [];
+        const existing = workflow.nodes.find((node) => node?.type === WORKFLOW_DEPENDENCY_MARKER_NODE_TYPE);
+        if (existing) {
+            this.configureSerializedDependencyMarkerNode(existing);
+            return workflow;
+        }
+
+        workflow.nodes.push(this.createSerializedWorkflowDependencyMarkerNode(workflow));
+        return workflow;
     }
 
     injectWorkflowHashMetadata(workflow) {

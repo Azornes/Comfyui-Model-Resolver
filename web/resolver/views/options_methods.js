@@ -19,6 +19,7 @@ const SETTINGS_MAP = [
     { serverKey: 'auto_fill_subfolder', localKey: 'ModelResolver.autoFillSubfolder', type: 'boolean', default: true },
     { serverKey: 'auto_refresh_comfy_models_after_apply', localKey: 'ModelResolver.autoRefreshComfyModelsAfterApply', type: 'boolean', default: true },
     { serverKey: 'workflow_hash_metadata_enabled', localKey: 'ModelResolver.workflowHashMetadataEnabled', type: 'boolean', default: true },
+    { serverKey: 'workflow_dependency_marker_enabled', localKey: 'ModelResolver.workflowDependencyMarkerEnabled', type: 'boolean', default: false },
     { serverKey: 'download_backend', localKey: 'ModelResolver.downloadBackend', type: 'backend', default: 'python' },
     { serverKey: 'aria2c_path', localKey: 'ModelResolver.aria2cPath', type: 'string', default: '' },
     { serverKey: 'aria2_auto_stop_daemon', localKey: 'ModelResolver.aria2AutoStopDaemon', type: 'boolean', default: true },
@@ -443,6 +444,18 @@ export const optionsMethods = {
                                                 <span class="mr-options-switch"></span>
                                             </span>
                                         </label>
+                                        <label class="mr-options-toggle-row">
+                                            <div class="mr-options-toggle-copy">
+                                                <span class="mr-options-toggle-title">Embed opener node <span class="mr-tooltip-badge" data-tooltip="When enabled, saved workflows include a small Model Resolver node with an Open button, so ComfyUI-Manager can suggest installing this extension on other machines.">?</span></span>
+                                            </div>
+                                            <span class="mr-options-toggle-control">
+                                                <input id="mr-options-workflow-dependency-marker" class="mr-options-switch-input" type="checkbox" ${tokens.workflow_dependency_marker_enabled ? 'checked' : ''}>
+                                                <span class="mr-options-switch"></span>
+                                            </span>
+                                        </label>
+                                        <div class="mr-options-db-actions">
+                                            <button id="mr-options-add-dependency-node" type="button" class="mr-btn mr-btn-secondary">${getSvgIcon('circlePlus')} Add opener node</button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -914,6 +927,8 @@ export const optionsMethods = {
         const autoFillSubfolderInput = this.contentElement.querySelector('#mr-options-auto-fill-subfolder');
         const autoRefreshComfyModelsInput = this.contentElement.querySelector('#mr-options-auto-refresh-comfy-models');
         const workflowHashMetadataInput = this.contentElement.querySelector('#mr-options-workflow-hash-metadata');
+        const workflowDependencyMarkerInput = this.contentElement.querySelector('#mr-options-workflow-dependency-marker');
+        const addDependencyNodeBtn = this.contentElement.querySelector('#mr-options-add-dependency-node');
         const downloadBackendInput = this.contentElement.querySelector('#mr-options-download-backend');
         const aria2cPathInput = this.contentElement.querySelector('#mr-options-aria2c-path');
         const aria2InstallBtn = this.contentElement.querySelector('#mr-options-aria2-install');
@@ -1038,6 +1053,8 @@ export const optionsMethods = {
             autoFillBaseModelInput,
             autoFillSubfolderInput,
             autoRefreshComfyModelsInput,
+            workflowHashMetadataInput,
+            workflowDependencyMarkerInput,
             downloadBackendInput,
             aria2cPathInput,
             aria2AutoStopInput,
@@ -3180,6 +3197,16 @@ export const optionsMethods = {
             });
         }
 
+        if (addDependencyNodeBtn) {
+            addDependencyNodeBtn.addEventListener('click', () => {
+                if (typeof window.ModelResolver?.addWorkflowDependencyMarkerNode !== 'function') {
+                    this.showNotification('Could not add Model Resolver opener node.', 'error');
+                    return;
+                }
+                window.ModelResolver.addWorkflowDependencyMarkerNode();
+            });
+        }
+
         if (metadataSizeAuditBtn) {
             metadataSizeAuditBtn.addEventListener('click', () => {
                 runMetadataSizeAudit();
@@ -3434,6 +3461,7 @@ export const optionsMethods = {
                     auto_fill_subfolder: Boolean(autoFillSubfolderInput?.checked),
                     auto_refresh_comfy_models_after_apply: Boolean(autoRefreshComfyModelsInput?.checked),
                     workflow_hash_metadata_enabled: Boolean(workflowHashMetadataInput?.checked),
+                    workflow_dependency_marker_enabled: Boolean(workflowDependencyMarkerInput?.checked),
                     download_backend: downloadBackend,
                     aria2c_path: aria2cPathInput?.value?.trim() || '',
                     aria2_auto_stop_daemon: Boolean(aria2AutoStopInput?.checked),
