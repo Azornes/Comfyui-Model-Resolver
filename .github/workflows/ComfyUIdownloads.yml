@@ -21,15 +21,23 @@ jobs:
       - name: Query Model Resolver API and find top download
         run: |
           max_downloads=0
+          found_valid_data=false
           top_node_json="{}"
-          node_id="comfyui-model-resolver"
+          node_id="Comfyui-Model-Resolver"
 
           for i in {1..3}; do
             echo "Fetching data for attempt $i..."
-            curl -s "https://api.comfy.org/nodes/${node_id}" > tmp_$i.json
+            if ! curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors \
+              -H "Accept: application/json" \
+              "https://api.comfy.org/nodes/${node_id}" > tmp_$i.json; then
+              echo "Error: request failed for attempt $i"
+              rm -f tmp_$i.json
+              continue
+            fi
 
             if [ ! -s tmp_$i.json ] || ! jq empty tmp_$i.json 2>/dev/null; then
               echo "Error: invalid JSON for attempt $i"
+              rm -f tmp_$i.json
               continue
             fi
 
@@ -41,7 +49,12 @@ jobs:
                 downloads=$(jq -r ".[$j].downloads // 0" tmp_$i.json)
                 name=$(jq -r ".[$j].name // \"\"" tmp_$i.json)
 
-                if [ "$downloads" -gt "$max_downloads" ]; then
+                if ! [[ "$downloads" =~ ^[0-9]+$ ]]; then
+                  downloads=0
+                fi
+
+                if [ "$found_valid_data" = false ] || [ "$downloads" -gt "$max_downloads" ]; then
+                  found_valid_data=true
                   max_downloads=$downloads
                   top_node_json=$(jq ".[$j]" tmp_$i.json)
                   echo "New maximum found: $downloads (node: $name)"
@@ -51,7 +64,12 @@ jobs:
               downloads=$(jq -r '.downloads // 0' tmp_$i.json)
               name=$(jq -r '.name // ""' tmp_$i.json)
 
-              if [ "$downloads" -gt "$max_downloads" ]; then
+              if ! [[ "$downloads" =~ ^[0-9]+$ ]]; then
+                downloads=0
+              fi
+
+              if [ "$found_valid_data" = false ] || [ "$downloads" -gt "$max_downloads" ]; then
+                found_valid_data=true
                 max_downloads=$downloads
                 top_node_json=$(cat tmp_$i.json)
                 echo "New maximum found: $downloads (node: $name)"
@@ -61,14 +79,14 @@ jobs:
             rm -f tmp_$i.json
           done
 
-          if [ "$max_downloads" -gt 0 ]; then
+          if [ "$found_valid_data" = true ]; then
             echo "$top_node_json" > top_modelresolver.json
             echo "Highest download count: $max_downloads"
             echo "Node details:"
             jq . top_modelresolver.json
           else
             echo "Error: no valid data found"
-            echo '{"name": "ComfyUI Model Resolver", "downloads": 0}' > top_modelresolver.json
+            exit 1
           fi
 
       - name: create or update gist with top download
