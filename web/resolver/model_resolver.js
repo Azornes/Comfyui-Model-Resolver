@@ -26,6 +26,8 @@ const WORKFLOW_DEPENDENCY_MARKER_REPOSITORY = "https://github.com/Azornes/Comfyu
 const WORKFLOW_DEPENDENCY_MARKER_CNR_ID = "comfyui-model-resolver";
 const WORKFLOW_DEPENDENCY_MARKER_BUTTON_NAME = "Open Model Resolver";
 const WORKFLOW_DEPENDENCY_MARKER_AUTO_ID = -918273646;
+const WORKFLOW_DEPENDENCY_MARKER_DEFAULT_SIZE = Object.freeze([160, 40]);
+const WORKFLOW_DEPENDENCY_MARKER_MIN_SIZE = Object.freeze([160, 40]);
 
 function getKeybindingSetting(id) {
     try {
@@ -611,15 +613,43 @@ export class ModelResolver {
 
         const originalComputeSize = proto.computeSize;
         proto.computeSize = function(...args) {
-            const size = typeof originalComputeSize === 'function'
-                ? originalComputeSize.apply(this, args)
-                : this.size;
-            const width = Math.max(Number(size?.[0]) || 0, 260);
-            const height = Math.max(Number(size?.[1]) || 0, 110);
-            return [width, height];
+            originalComputeSize?.apply(this, args);
+            return [...WORKFLOW_DEPENDENCY_MARKER_MIN_SIZE];
         };
 
         proto.__modelResolverDependencyMarkerTypePatched = true;
+    }
+
+    applyWorkflowDependencyMarkerSize(node) {
+        if (!Array.isArray(node?.size)) return;
+
+        const width = Number(node.size[0]);
+        const height = Number(node.size[1]);
+        if (!Number.isFinite(width) || !Number.isFinite(height)) {
+            node.size = [...WORKFLOW_DEPENDENCY_MARKER_DEFAULT_SIZE];
+            return;
+        }
+
+        if (node.__modelResolverDependencySizeInitialized) return;
+
+        const [defaultWidth, defaultHeight] = WORKFLOW_DEPENDENCY_MARKER_DEFAULT_SIZE;
+        const shouldCompact =
+            width > defaultWidth + 25
+            || height > defaultHeight + 16;
+
+        if (shouldCompact) {
+            const compactSize = [
+                Math.min(width, defaultWidth),
+                Math.min(height, defaultHeight),
+            ];
+            if (typeof node.setSize === 'function') {
+                node.setSize(compactSize);
+            } else {
+                node.size = compactSize;
+            }
+        }
+
+        node.__modelResolverDependencySizeInitialized = true;
     }
 
     configureWorkflowDependencyMarkerNode(node) {
@@ -662,17 +692,7 @@ export class ModelResolver {
             }
         }
 
-        if (Array.isArray(node.size)) {
-            const size = [
-                Math.max(Number(node.size[0]) || 0, 260),
-                Math.max(Number(node.size[1]) || 0, 110),
-            ];
-            if (typeof node.setSize === 'function') {
-                node.setSize(size);
-            } else {
-                node.size = size;
-            }
-        }
+        this.applyWorkflowDependencyMarkerSize(node);
 
         if (!node.__modelResolverDependencySerializePatched) {
             const originalOnSerialize = node.onSerialize;
@@ -766,6 +786,7 @@ export class ModelResolver {
             return null;
         }
 
+        node.size = [...WORKFLOW_DEPENDENCY_MARKER_DEFAULT_SIZE];
         this.configureWorkflowDependencyMarkerNode(node);
         graph.add(node);
         app.canvas?.centerOnNode?.(node);
@@ -804,7 +825,7 @@ export class ModelResolver {
             id: this.getWorkflowDependencyMarkerId(workflow),
             type: WORKFLOW_DEPENDENCY_MARKER_NODE_TYPE,
             pos: this.getWorkflowDependencyMarkerPosition(workflow),
-            size: [360, 120],
+            size: [...WORKFLOW_DEPENDENCY_MARKER_DEFAULT_SIZE],
             flags: {},
             order: -1,
             mode: 0,
