@@ -119,7 +119,10 @@ def _match_base_model_segment(
     ):
         if len(alias_token) < 4:
             continue
-        if token.startswith(alias_token) or alias_token in token:
+        remainder = token[len(alias_token) :] if token.startswith(alias_token) else ""
+        has_version_suffix = bool(re.fullmatch(r"v?\d+[a-z0-9]*", remainder))
+        is_plural = token in {f"{alias_token}s", f"{alias_token}es"}
+        if has_version_suffix or is_plural:
             return dict(match)
     return None
 
@@ -142,6 +145,9 @@ def _match_base_model_path(
             match = _match_base_model_segment(
                 " ".join(span),
                 base_alias_index,
+                # A single folder may append a version or plural suffix to an
+                # alias (for example IDEOGRAM4 or Upscalers). Multi-folder spans
+                # remain exact to avoid guessing across unrelated path parts.
                 allow_partial=span_length == 1,
             )
             if not match:
