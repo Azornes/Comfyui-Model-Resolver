@@ -1815,6 +1815,10 @@ export const missingBrowserMethods = {
         const missingModels = (data.missing_models || []).map(missing => {
             let restored = this.restoreDownloadedLocalMatchesForMissing?.(missing) || missing;
             restored = this.restoreSearchLocalHashMatchesForMissing?.(restored) || restored;
+            restored.matches = this.preserveActiveDownloadLocalMatches?.(
+                restored,
+                restored.matches || []
+            ) || restored.matches || [];
             return restored;
         });
         const resolvedModels = this.getResolvedWorkflowModels(data);

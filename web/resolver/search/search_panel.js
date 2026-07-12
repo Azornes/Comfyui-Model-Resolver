@@ -2877,7 +2877,8 @@ export const searchPanelMethods = {
 
         const promise = (async () => {
             const data = await this.fetchLocalMatches(filename, missing.category || '', false);
-            missing.matches = Array.isArray(data.matches) ? data.matches : [];
+            const matches = Array.isArray(data.matches) ? data.matches : [];
+            missing.matches = this.preserveActiveDownloadLocalMatches?.(missing, matches) || matches;
             missing.__urnLocalMatchesFilename = filename;
             return missing.matches;
         })().finally(() => {

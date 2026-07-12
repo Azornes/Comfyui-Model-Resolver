@@ -629,6 +629,34 @@ export const resolveDownloadMethods = {
     },
 
     shouldReplaceLocalMatch(previous = {}, next = {}) {
+        const previousModel = previous.model || {};
+        const previousIsDownloading = Boolean(
+            previous.is_downloading
+            || previous.downloading
+            || previousModel.is_downloading
+            || previousModel.downloading
+            || this.getActiveDownloadInfoForLocalMatch?.(previous)
+        );
+        if (previousIsDownloading) {
+            const previousAbsolute = this.getLocalMatchAbsolutePathIdentity(previous);
+            const nextAbsolute = this.getLocalMatchAbsolutePathIdentity(next);
+            const previousRelative = this.getLocalMatchRelativePathIdentity(previous);
+            const nextRelative = this.getLocalMatchRelativePathIdentity(next);
+            const sameAbsolute = Boolean(
+                previousAbsolute && nextAbsolute && previousAbsolute === nextAbsolute
+            );
+            const sameRelative = Boolean(
+                previousRelative && nextRelative && previousRelative === nextRelative
+            );
+
+            // A late hash lookup may contain only category + filename. That is
+            // not enough evidence to replace a path-specific match belonging to
+            // an active download when another file with the same name exists.
+            if (!sameAbsolute && !sameRelative) {
+                return false;
+            }
+        }
+
         const previousConfidence = Number(previous.confidence || 0);
         const nextConfidence = Number(next.confidence || 0);
         if (nextConfidence !== previousConfidence) {
@@ -861,6 +889,110 @@ export const resolveDownloadMethods = {
         const currentMatches = Array.isArray(missing.matches) ? missing.matches : [];
         missing.matches = this.mergeLocalMatches(currentMatches, this.cloneLocalMatches(storedMatches));
         return missing;
+    },
+
+    preserveActiveDownloadLocalMatches(missing, nextMatches = []) {
+        if (!missing) return Array.isArray(nextMatches) ? nextMatches : [];
+
+        const activeEntries = this.getActiveDownloadEntriesForMissing?.(missing) || [];
+        const candidates = [
+            ...(Array.isArray(missing.matches) ? missing.matches : []),
+            ...activeEntries.flatMap(({ info }) => (
+                Array.isArray(info?.missing?.matches) ? info.missing.matches : []
+            ))
+        ];
+        const downloadingMatches = [];
+        for (const match of candidates) {
+            if (!match || typeof match !== 'object') continue;
+            const activeDownload = this.getActiveDownloadInfoForLocalMatch?.(match);
+            if (!activeDownload) continue;
+
+            downloadingMatches.push(match);
+
+            // A full missing-model refresh creates new model objects, while the
+            // progress poller still holds the object captured when the download
+            // started. Rebind it by the verified download/path match so the next
+            // polling tick cannot repaint Local Matches from stale state.
+            const activeEntry = this.activeDownloads?.[activeDownload.download_id];
+            if (activeEntry && activeEntry.missing !== missing) {
+                activeEntry.missing = missing;
+            }
+        }
+        if (!downloadingMatches.length) {
+            return Array.isArray(nextMatches) ? nextMatches : [];
+        }
+
+        return this.mergeLocalMatches(
+            Array.isArray(nextMatches) ? nextMatches : [],
+            this.cloneLocalMatches(downloadingMatches)
+        );
+    },
+
+    isLocalMatchForDownloadTarget(match = {}, info = {}, progress = {}) {
+        const model = match.model || {};
+        const normalizePath = (value = '') => this.normalizeLocalMatchPathIdentity(value);
+        const joinPath = (...parts) => normalizePath(parts.filter(Boolean).join('/'));
+        const filename = progress.filename || info.filename || '';
+        const matchAbsolute = [
+            model.path,
+            model.resolved_path,
+            match.path,
+            match.resolved_path
+        ].map(normalizePath).filter(Boolean);
+        const matchRelative = [
+            model.relative_path,
+            match.relative_path
+        ].map(normalizePath).filter(Boolean);
+        const targetAbsolute = [
+            progress.path,
+            info.downloadPath,
+            joinPath(progress.directory || '', filename),
+            joinPath(info.downloadDirectory || '', filename)
+        ].map(normalizePath).filter(Boolean);
+        const targetRelative = [
+            info.subfolder && filename ? joinPath(info.subfolder, filename) : '',
+            progress.relative_path,
+            info.relativePath
+        ].map(normalizePath).filter(Boolean);
+
+        return targetAbsolute.some(target => (
+            matchAbsolute.includes(target)
+            || matchRelative.some(relative => target.endsWith(`/${relative}`))
+        )) || targetRelative.some(target => (
+            matchRelative.includes(target)
+            || matchAbsolute.some(absolute => absolute.endsWith(`/${target}`))
+        ));
+    },
+
+    removeCancelledDownloadLocalMatches(info = {}, progress = {}) {
+        if (!info) return [];
+        const shouldRemove = (match) => this.isLocalMatchForDownloadTarget(match, info, progress);
+        const cleanMatches = (matches) => (
+            Array.isArray(matches) ? matches.filter(match => !shouldRemove(match)) : []
+        );
+        const cleanMissing = (missing) => {
+            if (!missing || !Array.isArray(missing.matches)) return;
+            missing.matches = cleanMatches(missing.matches);
+        };
+        const cleanAnalysis = (data) => {
+            for (const key of ['missing_models', 'resolved_models']) {
+                (Array.isArray(data?.[key]) ? data[key] : []).forEach(cleanMissing);
+            }
+        };
+
+        cleanMissing(info.missing);
+        (Array.isArray(this.missingModels) ? this.missingModels : []).forEach(cleanMissing);
+        cleanAnalysis(this.cachedAnalysisData);
+        for (const cached of this.workflowAnalysisCaches?.values?.() || []) {
+            cleanAnalysis(cached?.data);
+        }
+        for (const snapshot of this.getDownloadProgressStore?.().values?.() || []) {
+            if (Array.isArray(snapshot?.localMatches)) {
+                snapshot.localMatches = cleanMatches(snapshot.localMatches);
+            }
+        }
+
+        return Array.isArray(info.missing?.matches) ? info.missing.matches : [];
     },
 
     persistLocalMatchesInAnalysisCache(missing, matches = []) {
@@ -1373,7 +1505,11 @@ export const resolveDownloadMethods = {
             }
 
             const data = await this.fetchLocalMatches(targetFilename, missing.category || '', true);
-            const matches = Array.isArray(data.matches) ? data.matches : [];
+            const refreshedMatches = Array.isArray(data.matches) ? data.matches : [];
+            const matches = this.preserveActiveDownloadLocalMatches?.(
+                currentMissing,
+                refreshedMatches
+            ) || refreshedMatches;
             currentMissing.matches = matches;
             missing.matches = matches;
             if (currentMissing.is_urn) {
@@ -1842,6 +1978,7 @@ export const resolveDownloadMethods = {
                     isActive: false
                 });
                 this.renderDownloadSnapshot(downloadId, cancelledSnapshot, { progressDiv, downloadBtn });
+                this.removeCancelledDownloadLocalMatches?.(info, progress);
                 delete this.activeDownloads[downloadId];
                 this.updateDownloadAllButtonState();
                 this.updateQueuePanel?.();
@@ -1915,7 +2052,17 @@ export const resolveDownloadMethods = {
 
         this.fetchJson(`/model_resolver/cancel/${downloadId}`, {
             method: 'POST'
-        }, 'Cancel download').catch((error) => {
+        }, 'Cancel download').then(() => {
+            if (!info) return;
+            this.removeCancelledDownloadLocalMatches?.(info, {
+                ...(info.lastProgress || {}),
+                status: 'cancelled',
+                filename: info.lastProgress?.filename || info.filename || '',
+                path: info.lastProgress?.path || info.downloadPath || '',
+                directory: info.lastProgress?.directory || info.downloadDirectory || ''
+            });
+            this.refreshLocalMatchesUiForMissing?.(info.missing);
+        }).catch((error) => {
             console.error('Model Resolver: Cancel error:', error);
             this.showNotification('Failed to cancel download', 'error');
         });
