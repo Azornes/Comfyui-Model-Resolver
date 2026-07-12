@@ -33,6 +33,7 @@ from ..type_utils import (
     as_dict,
     as_list,
     extract_trained_words,
+    build_search_result,
 )
 from ..progress import report_progress, get_progress_reporter
 from ..path_utils import (
