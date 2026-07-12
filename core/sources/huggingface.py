@@ -143,7 +143,7 @@ def _write_persistent_author_index(author: str, index: Dict[str, Any]) -> None:
         write_json_atomic(
             HF_AUTHOR_INDEX_CACHE_PATH,
             data,
-            separators=(",", ":"),
+            indent=2,
         )
     except Exception as e:
         log.debug(f"Error writing HuggingFace author index cache: {e}")
