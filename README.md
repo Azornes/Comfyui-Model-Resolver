@@ -37,14 +37,19 @@
 ## 🛠️ How It Works (Step-by-Step)
 
 1. **Load Workflow**: Load any workflow JSON or image into ComfyUI.
-2. **Detection**: If the workflow references model files that are missing from your directories, the extension alerts you immediately.
-3. **Resolve**:
-   * **Local Search**: Click the local search button to find similar filenames you already have on disk (e.g., if they were moved to a different subfolder).
-   * **Online Search**: If the file isn't on disk, search for it online (e.g., on CivitAI via its SHA256 file hash or text search).
-4. **Download or Link**:
-   * Click **Download** to asynchronously download the model in the background directly into the correct ComfyUI folder.
+2. **Open Model Resolver**: Open the Model Resolver interface using one of these options:
+   * Click the **Model Resolver** tab icon in the ComfyUI sidebar (or the menu/topbar button in older ComfyUI versions).
+   * Press the default keyboard shortcut `Ctrl + Shift + |`.
+   * Add a **Model Resolver Opener** node to your canvas and click its **Open Model Resolver** button.
+   * Search for `Open Model Resolver` in the ComfyUI Command Palette.
+3. **Detection**: Once opened, the extension automatically scans your active workflow, checks your local directories, and lists any referenced models that are missing on disk.
+4. **Resolve**:
+   * **Local Search**: Click the search icon next to a missing model to find similar filenames already on your disk (e.g., if you renamed a file or moved it to a different subfolder).
+   * **Online Search**: If the file isn't on disk, search for it online (e.g., on CivitAI via its SHA256 hash or text search, or on HuggingFace).
+5. **Download or Link**:
+   * Click **Download** to asynchronously download the model in the background directly into the correct category folder.
    * Or select a local alternative suggested by the Fuzzy Matching algorithm.
-5. **Apply**: Click the apply button to update the ComfyUI workflow with the new, correct model paths. You're ready to click *Queue Prompt*!
+6. **Apply**: Click **Apply** to update the ComfyUI workflow nodes with the new, correct model paths. You're ready to click *Queue Prompt*!
 
 ---
 
