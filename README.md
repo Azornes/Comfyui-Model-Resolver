@@ -57,17 +57,38 @@ Model Resolver supports standard ComfyUI mechanisms as well as custom implementa
 
 ---
 
-## ⚡ Downloader Backends and Aria2
+## ⚡ Downloader Backends
 
-Model Resolver supports two download engines configured in the Settings panel:
+Model Resolver provides two download engines in the Settings panel and an automatic Hugging Face Xet transport for eligible files:
 
-1. **Python Engine**:
-   * Out-of-the-box download backend using standard libraries (`urllib` / `aiohttp`).
-   * No external binaries required.
-2. **Aria2 Engine (Recommended)**:
-   * High-performance, multi-threaded downloader.
-   * Speeds up large downloads by splitting files and downloading across multiple connections (up to 16 connections/splits).
-   * Automatically forwards target cookies, headers, and authentication tokens safely.
+| Backend / transport | How it is selected | Live progress | Cancel | Pause / resume |
+| --- | --- | --- | --- | --- |
+| **Python** | Selected in Settings; also used as the general fallback | Yes | Yes | No |
+| **Aria2 (Recommended)** | Selected in Settings | Yes | Yes | Yes |
+| **Hugging Face Xet** | Activated automatically for Xet-backed Hugging Face files while the Python engine is selected | Yes, using native Xet updates | Yes | No |
+
+### Python Engine
+
+* Works out of the box without external downloader binaries.
+* Supports authenticated Hugging Face and CivitAI requests, live speed and ETA, and cancellation with partial-file cleanup.
+
+### Aria2 Engine
+
+* High-performance, multi-connection downloader for large files.
+* Splits downloads across multiple connections (up to 16 connections/splits).
+* Safely forwards target cookies, headers, and authentication tokens.
+* Supports cancelling, pausing, and resuming partial downloads.
+
+### Hugging Face Xet Transport
+
+* Uses the official `huggingface-hub` and `hf-xet` packages for files stored with Hugging Face Xet.
+* Starts automatically when the Python engine is selected and the Hugging Face response includes Xet metadata. If Xet is unavailable or the file is not Xet-backed, Model Resolver falls back to the regular Python downloader.
+* Reports native transfer progress, network speed, and ETA approximately every 200 ms. The progress display uses the known final file size from Hugging Face metadata.
+* Writes an in-progress download to a temporary `.xet-part` file. Cancelling stops the native Xet task and removes this partial file.
+* May briefly show **Finalizing** after the network transfer while Xet reconstructs and writes the final model file.
+
+> [!NOTE]
+> Xet transfers compressed and deduplicated data, so the number of bytes received over the network can be lower than the final model file size. In that case the download can enter **Finalizing** before the displayed network byte counter reaches the final file size.
 
 > [!TIP]
 > **One-Click Aria2 Setup:** You do not need to install `aria2c` manually. The extension features a built-in installer that downloads, extracts, and configures the latest official release matching your OS architecture (Windows, macOS, Linux) with a single click in the Settings panel.
@@ -132,16 +153,30 @@ Configure credentials and API keys in the Settings panel to authenticate gated d
    ```
 2. Clone this repository:
    ```bash
-   git clone https://github.com/Azornes/comfyui-model-resolver.git
+   git clone https://github.com/Azornes/Comfyui-Model-Resolver.git
    ```
-3. Start or restart ComfyUI. The extension will automatically install any missing dependencies (`requests`, `aiohttp`) and load the web interface.
+3. Enter the repository:
+   ```bash
+   cd Comfyui-Model-Resolver
+   ```
+4. Install the required dependencies:
+   * **For Windows Portable Version:**
+      ```bash
+      ..\..\..\python_embeded\python.exe -m pip install -r requirements.txt
+      ```
+   * **For standard Python/virtual environment installations:**
+    Activate the same Python environment used by ComfyUI, then run:
+     ```bash
+     pip install -r requirements.txt
+     ```
+5. Start or restart ComfyUI.
 
 ---
 
 ## 📝 Requirements
 
 * Python 3.10 or newer
-* Libraries: `requests`, `aiohttp` (installed automatically if missing)
+* Libraries: `requests`, `aiohttp`, `rapidfuzz`, `huggingface-hub`
 * Modern web browser with JS support (Chrome, Edge, Firefox, Brave)
 
 ---
