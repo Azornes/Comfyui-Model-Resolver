@@ -47,7 +47,8 @@ aria2_lock = threading.RLock()
 aria2_process: Optional[subprocess.Popen] = None
 aria2_rpc_url = ""
 aria2_rpc_secret = ""
-aria2_transfers: Dict[str, Dict[str, str]] = {}
+aria2_rpc_lock = threading.Lock()
+aria2_transfers: Dict[str, Dict[str, Any]] = {}
 aria2_action_locks: Dict[str, threading.Lock] = {}
 aria2_desired_states: Dict[str, Dict[str, Any]] = {}
 aria2_idle_timer: Optional[threading.Timer] = None
@@ -58,9 +59,16 @@ SPEED_HISTORY_SIZE = 5  # Number of samples for smoothing
 CHUNK_SIZE = 1024 * 1024  # 1MB chunks for faster downloads
 CLI_LOG_INTERVAL = 5  # Log progress to CLI every N seconds
 ARIA2_RPC_TIMEOUT = (2, 5)  # local JSON-RPC should respond quickly
+ARIA2_STATUS_RPC_RETRIES = 4
+ARIA2_STATUS_RPC_RETRY_DELAY = 0.15
 ARIA2_IDLE_STOP_SECONDS = 5 * 60
 DOWNLOAD_USER_AGENT = DEFAULT_BROWSER_USER_AGENT
 MANAGED_ARIA2_ROOT = Path(__file__).resolve().parents[1] / "tools" / "aria2"
+HF_XET_ARIA2_AUTH_HOSTS = {
+    "cas-bridge.xethub.hf.co",
+    "cas-bridge-direct.xethub.hf.co",
+    "cas-bridge-direct.xethub-eu.hf.co",
+}
 
 from .settings import CATEGORY_MAP, load_settings, normalize_download_backend, normalize_download_category, normalize_relative_subfolder
 
@@ -254,6 +262,8 @@ def _resolve_download_url_for_aria2(
 ) -> tuple[str, Dict[str, str]]:
     """Preflight an aria2 URL and validate every redirect before RPC handoff."""
     request_headers = build_download_headers(url, headers)
+    source_host = urlparse(str(url or "")).hostname
+    is_huggingface_source = host_matches_domain(source_host, "huggingface.co")
     response = None
     try:
         response, resolved_url, resolved_headers = request_public_url(
@@ -262,6 +272,12 @@ def _resolve_download_url_for_aria2(
             headers=request_headers,
             timeout=20,
             stream=True,
+            trusted_sensitive_redirect_hosts=(
+                HF_XET_ARIA2_AUTH_HOSTS if is_huggingface_source else None
+            ),
+            trusted_sensitive_redirect_headers=(
+                {"authorization"} if is_huggingface_source else None
+            ),
         )
         response.raise_for_status()
         return resolved_url, resolved_headers
@@ -971,26 +987,29 @@ def _aria2_rpc(method: str, params: Optional[List[Any]] = None) -> Any:
         "method": method,
         "params": [f"token:{aria2_rpc_secret}", *(params or [])],
     }
-    response = requests.post(aria2_rpc_url, json=payload, timeout=ARIA2_RPC_TIMEOUT)
-    text = response.text
-    try:
-        body = response.json()
-    except ValueError as exc:
-        raise Aria2Error(
-            f"aria2 RPC returned non-JSON response ({response.status_code}): {text[:300]}"
-        ) from exc
+    # aria2's Windows RPC server can reset one connection when status polling
+    # overlaps a pause/resume command. Keep local RPC requests serialized.
+    with aria2_rpc_lock:
+        response = requests.post(aria2_rpc_url, json=payload, timeout=ARIA2_RPC_TIMEOUT)
+        text = response.text
+        try:
+            body = response.json()
+        except ValueError as exc:
+            raise Aria2Error(
+                f"aria2 RPC returned non-JSON response ({response.status_code}): {text[:300]}"
+            ) from exc
 
-    if "error" in body:
-        error = body.get("error") or {}
-        message = error.get("message") if isinstance(error, dict) else str(error)
-        raise Aria2Error(message or f"aria2 RPC {method} failed")
+        if "error" in body:
+            error = body.get("error") or {}
+            message = error.get("message") if isinstance(error, dict) else str(error)
+            raise Aria2Error(message or f"aria2 RPC {method} failed")
 
-    if response.status_code != 200:
-        raise Aria2Error(
-            f"aria2 RPC {method} returned HTTP {response.status_code}: {text[:300]}"
-        )
+        if response.status_code != 200:
+            raise Aria2Error(
+                f"aria2 RPC {method} returned HTTP {response.status_code}: {text[:300]}"
+            )
 
-    return body.get("result")
+        return body.get("result")
 
 
 def _aria2_ping() -> bool:
@@ -1208,8 +1227,20 @@ def _aria2_tell_status(gid: str) -> Dict[str, Any]:
         "errorMessage",
         "files",
     ]
-    result = _aria2_rpc("aria2.tellStatus", [gid, keys])
-    return result if isinstance(result, dict) else {}
+    for attempt in range(ARIA2_STATUS_RPC_RETRIES):
+        try:
+            result = _aria2_rpc("aria2.tellStatus", [gid, keys])
+            return result if isinstance(result, dict) else {}
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+            if attempt + 1 >= ARIA2_STATUS_RPC_RETRIES:
+                raise
+            log.debug(
+                f"Retrying aria2 status RPC for {gid} "
+                f"({attempt + 2}/{ARIA2_STATUS_RPC_RETRIES})"
+            )
+            time.sleep(ARIA2_STATUS_RPC_RETRY_DELAY * (attempt + 1))
+
+    return {}
 
 
 def _parse_aria2_int(value: Any) -> int:
@@ -1515,6 +1546,9 @@ def download_file_with_aria2(
             "auto-file-renaming": "false",
             "file-allocation": "none",
             "no-want-digest-header": "true",
+            # Redirects were already resolved and validated above. Keeping them
+            # disabled prevents sensitive headers from reaching another host.
+            "max-redirect": "0",
         }
         user_agent = _get_header_value(request_headers, "User-Agent")
         referer = _get_header_value(request_headers, "Referer")
@@ -1536,7 +1570,10 @@ def download_file_with_aria2(
             raise Aria2Error("aria2 did not return a download gid")
 
         with aria2_lock:
-            aria2_transfers[download_id] = {"gid": gid, "path": dest_path}
+            aria2_transfers[download_id] = {
+                "gid": gid,
+                "path": dest_path,
+            }
         with download_lock:
             download_progress[download_id]["aria2_gid"] = gid
             download_progress[download_id]["status"] = "downloading"
@@ -1703,18 +1740,20 @@ def download_file(
     """
     global download_progress, cancelled_downloads
 
-    xet_result = _download_huggingface_xet(
-        url,
-        dest_path,
-        download_id,
-        headers=headers,
-        metadata=metadata,
-        category=category,
-    )
-    if xet_result is not None:
-        return xet_result
+    download_backend = _download_backend_from_settings()
+    if download_backend != "aria2":
+        xet_result = _download_huggingface_xet(
+            url,
+            dest_path,
+            download_id,
+            headers=headers,
+            metadata=metadata,
+            category=category,
+        )
+        if xet_result is not None:
+            return xet_result
 
-    if _download_backend_from_settings() == "aria2":
+    if download_backend == "aria2":
         return download_file_with_aria2(
             url,
             dest_path,
@@ -2047,8 +2086,18 @@ def download_model(
             "error": "Download target is outside the selected model directory",
         }
 
-    # Check if file already exists
-    if os.path.exists(dest_path):
+    # A matching aria2 control file means the destination is incomplete and can
+    # be resumed safely by aria2's continue mode after a restart or RPC failure.
+    resume_aria2_partial = bool(
+        _download_backend_from_settings() == "aria2"
+        and os.path.isfile(dest_path)
+        and os.path.isfile(f"{dest_path}.aria2")
+    )
+    if resume_aria2_partial:
+        log.info(f"Resuming partial aria2 download: {dest_path}")
+
+    # Check if a complete file already exists.
+    if os.path.exists(dest_path) and not resume_aria2_partial:
         expected_sha256 = _extract_expected_sha256(metadata)
         if expected_sha256:
             metadata_sha256 = read_completed_metadata_sha256(dest_path)
@@ -2245,7 +2294,10 @@ def _run_aria2_desired_state_worker(download_id: str) -> None:
             if _aria2_action_error_is_ok(desired_status, str(exc)):
                 _set_download_progress_status(download_id, desired_status, speed=0 if desired_status == "paused" else download_progress.get(download_id, {}).get("speed", 0))
             else:
-                log.warning(f"aria2 {desired_status} action failed for {download_id}: {exc}")
+                if desired_status == "downloading":
+                    _set_download_progress_status(download_id, "paused", speed=0)
+                safe_error = _sanitize_download_error(exc)
+                log.warning(f"aria2 {desired_status} action failed for {download_id}: {safe_error}")
 
         with aria2_lock:
             latest = aria2_desired_states.get(download_id)

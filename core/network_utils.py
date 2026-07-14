@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 import socket
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Iterable, Optional, Set, Tuple
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -104,13 +104,43 @@ def _url_origin(url: str) -> Tuple[str, str, int]:
     return scheme, str(parsed.hostname or "").lower().rstrip("."), port
 
 
-def _redirect_headers(headers: Dict[str, str], source_url: str, target_url: str) -> Dict[str, str]:
+def _normalize_hosts(hosts: Optional[Iterable[str]]) -> Set[str]:
+    return {
+        str(host or "").strip().lower().rstrip(".")
+        for host in (hosts or ())
+        if str(host or "").strip()
+    }
+
+
+def _redirect_headers(
+    headers: Dict[str, str],
+    source_url: str,
+    target_url: str,
+    *,
+    trusted_sensitive_redirect_hosts: Optional[Iterable[str]] = None,
+    trusted_sensitive_redirect_headers: Optional[Iterable[str]] = None,
+) -> Dict[str, str]:
     if _url_origin(source_url) == _url_origin(target_url):
         return dict(headers)
+
+    target_host = _url_origin(target_url)[1]
+    trusted_hosts = _normalize_hosts(trusted_sensitive_redirect_hosts)
+    allowed_sensitive_headers = {
+        str(header or "").strip().lower()
+        for header in (trusted_sensitive_redirect_headers or ())
+        if str(header or "").strip()
+    }
+    preserve_for_target = target_host in trusted_hosts
     return {
         key: value
         for key, value in headers.items()
-        if str(key).lower() not in SENSITIVE_REDIRECT_HEADERS
+        if (
+            str(key).lower() not in SENSITIVE_REDIRECT_HEADERS
+            or (
+                preserve_for_target
+                and str(key).lower() in allowed_sensitive_headers
+            )
+        )
     }
 
 
@@ -122,6 +152,8 @@ def request_public_url(
     timeout: Any = 30,
     stream: bool = True,
     max_redirects: int = 5,
+    trusted_sensitive_redirect_hosts: Optional[Iterable[str]] = None,
+    trusted_sensitive_redirect_headers: Optional[Iterable[str]] = None,
 ) -> Tuple[requests.Response, str, Dict[str, str]]:
     """Perform a GET/HEAD request while validating every redirect target."""
     current_url = validate_public_http_url(url)
@@ -155,7 +187,13 @@ def request_public_url(
         except UnsafeUrlError:
             response.close()
             raise
-        next_headers = _redirect_headers(current_headers, current_url, next_url)
+        next_headers = _redirect_headers(
+            current_headers,
+            current_url,
+            next_url,
+            trusted_sensitive_redirect_hosts=trusted_sensitive_redirect_hosts,
+            trusted_sensitive_redirect_headers=trusted_sensitive_redirect_headers,
+        )
         response.close()
         current_url = next_url
         current_headers = next_headers
