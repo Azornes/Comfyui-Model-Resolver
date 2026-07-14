@@ -43,6 +43,7 @@ from ..type_utils import (
     extract_file_size,
     normalize_model_file_info,
     build_search_result,
+    normalize_sha256,
 )
 from ..progress import report_progress, get_progress_reporter
 from ..log_system import create_module_logger
@@ -125,43 +126,16 @@ def _request_json(
     params: Optional[Dict[str, Any]] = None,
     timeout: int = 20,
 ) -> Optional[Dict[str, Any]]:
+    from ..network_utils import request_source_json
     url = f"{CIVARCHIVE_API_URL}{path}"
-    response = None
-    request_params = {k: v for k, v in (params or {}).items() if v is not None}
-    for attempt in range(2):
-        try:
-            response = requests.get(
-                url,
-                params=request_params,
-                headers=REQUEST_HEADERS,
-                timeout=timeout,
-            )
-        except Exception as e:
-            log.warning(f"CivArchive API request failed: path={path}, error={e}")
-            return None
+    return request_source_json(
+        url,
+        params=params,
+        headers=REQUEST_HEADERS,
+        timeout=timeout,
+        log_name="CivArchive API"
+    )
 
-        if response.status_code != 429 or attempt == 1:
-            break
-
-        retry_after = response.headers.get("Retry-After")
-        try:
-            delay = float(retry_after) if retry_after else 1.2
-        except (TypeError, ValueError):
-            delay = 1.2
-        time.sleep(max(0.5, min(delay, 3.0)))
-
-    if response is None or response.status_code != 200:
-        status = response.status_code if response is not None else "no-response"
-        log.debug(
-            f"CivArchive API returned {status}: path={path}, params={params}"
-        )
-        return None
-
-    try:
-        return response.json()
-    except Exception as e:
-        log.warning(f"CivArchive API JSON parse failed: path={path}, error={e}")
-        return None
 
 
 def _normalize_embedded_html_text(html_text: str) -> str:
@@ -478,28 +452,22 @@ def _search_page(
 
 def parse_civarchive_url(url: str) -> Optional[Dict[str, Any]]:
     """Parse CivArchive URLs into sha256 or model/version identifiers."""
+    from ..type_utils import parse_provider_model_url
     if not url:
         return None
-
-    parsed = urlparse(urljoin(CIVARCHIVE_BASE_URL, url))
-    if parsed.hostname and not host_matches_domain(parsed.hostname, "civarchive.com"):
-        return None
-
-    sha_match = re.search(r"/sha256/([a-fA-F0-9]{64})", parsed.path)
-    if sha_match:
-        return {"sha256": sha_match.group(1).lower()}
-
-    return parse_civitai_model_path(parsed.path, parsed.query)
+    full_url = urljoin(CIVARCHIVE_BASE_URL, url)
+    return parse_provider_model_url(full_url, ["civarchive.com"])
 
 
 def _extract_sha256(value: str) -> Optional[str]:
     if not value:
         return None
-    direct = re.fullmatch(r"[a-fA-F0-9]{64}", value.strip())
-    if direct:
-        return direct.group(0).lower()
+    normalized = normalize_sha256(value)
+    if normalized:
+        return normalized
     parsed = parse_civarchive_url(value)
     return parsed.get("sha256") if parsed else None
+
 
 
 def _extract_model_context(

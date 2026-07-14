@@ -1128,3 +1128,64 @@ class UnifiedHelpersTests(unittest.TestCase):
             # Verify new data is written
             self.assertEqual(read_json_safe(data_file), new_data)
             self.assertEqual(read_json_safe(meta_file), new_meta)
+
+    @patch("requests.get")
+    def test_request_source_json_success(self, mock_get):
+        from core.network_utils import request_source_json
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"success": True}
+        mock_get.return_value = mock_response
+
+        res = request_source_json("https://example.com/api")
+        self.assertEqual(res, {"success": True})
+
+    @patch("requests.get")
+    @patch("time.sleep")
+    def test_request_source_json_429_retry(self, mock_sleep, mock_get):
+        from core.network_utils import request_source_json
+        mock_response_429 = MagicMock()
+        mock_response_429.status_code = 429
+        mock_response_429.headers = {"Retry-After": "1.5"}
+
+        mock_response_200 = MagicMock()
+        mock_response_200.status_code = 200
+        mock_response_200.json.return_value = {"ok": True}
+
+        mock_get.side_effect = [mock_response_429, mock_response_200]
+
+        res = request_source_json("https://example.com/api", max_attempts=2)
+        self.assertEqual(res, {"ok": True})
+        mock_sleep.assert_called_once_with(1.5)
+
+    def test_split_path_segments(self):
+        from core.path_utils import split_path_segments
+        self.assertEqual(split_path_segments("a/b/c"), ["a", "b", "c"])
+        self.assertEqual(split_path_segments("a\\b\\c"), ["a", "b", "c"])
+        self.assertEqual(split_path_segments("a/./b/../c"), ["a", "b", "c"])
+        self.assertEqual(split_path_segments("a/./b/../c", filter_dots=False), ["a", ".", "b", "..", "c"])
+        self.assertEqual(split_path_segments(""), [])
+        self.assertEqual(split_path_segments(None), [])
+
+    def test_parse_provider_model_url(self):
+        from core.type_utils import parse_provider_model_url
+        allowed = ["civitai.com", "civitai.red"]
+        
+        # Valid url download format
+        res = parse_provider_model_url("https://civitai.com/api/download/models/12345", allowed)
+        self.assertEqual(res, {"version_id": 12345})
+        
+        # Valid model page format
+        res = parse_provider_model_url("https://civitai.red/models/9876?modelVersionId=54321", allowed)
+        self.assertEqual(res, {"model_id": 9876, "version_id": 54321})
+        
+        # Non-matching hostname
+        res = parse_provider_model_url("https://example.com/api/download/models/12345", allowed)
+        self.assertIsNone(res)
+        
+        # Mirror sha256 path pattern
+        res = parse_provider_model_url("https://civarchive.com/sha256/a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2", ["civarchive.com"])
+        self.assertEqual(res, {"sha256": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"})
+
+
+

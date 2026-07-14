@@ -4,6 +4,7 @@ import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
 import { LOG_LEVEL as DEFAULT_FRONTEND_LOG_LEVEL } from "../../log_system/config.js";
 import { logger as frontendLogger } from "../../log_system/logger.js";
+import { pollBackgroundTask } from "../utils/html_utils.js";
 const SETTINGS_MAP = [
     { serverKey: 'civitai_key', localKey: 'ModelResolver.civitaiApiKey', type: 'string', default: '' },
     { serverKey: 'civitai_session_token', localKey: 'ModelResolver.civitaiSessionToken', type: 'string', default: '' },
@@ -2067,34 +2068,31 @@ export const optionsMethods = {
         const pollMetadataBuildProgress = async () => {
             const progressId = this.metadataBuildProgressId;
             if (!progressId) return;
-            try {
-                const data = await this.fetchJson(
-                    `/model_resolver/metadata-build/progress/${encodeURIComponent(progressId)}`,
-                    { silent: true },
-                    'Metadata build progress'
-                );
-                appendMetadataBuildHistory(data);
-                updateMetadataBuildSummary(data);
-                updateMetadataBuildProgressView(data);
-                renderMetadataBuildResults(data);
-                if (isMetadataBuildTerminal(data)) {
-                    stopMetadataBuildPolling();
+            stopMetadataBuildPolling();
+            await pollBackgroundTask({
+                endpoint: `/model_resolver/metadata-build/progress/${encodeURIComponent(progressId)}`,
+                tokenCheck: () => this.metadataBuildProgressId === progressId,
+                onProgress: (data) => {
+                    appendMetadataBuildHistory(data);
+                    updateMetadataBuildSummary(data);
+                    updateMetadataBuildProgressView(data);
+                    renderMetadataBuildResults(data);
+                },
+                isTerminal: (data) => isMetadataBuildTerminal(data),
+                onTerminal: (data) => {
                     finishMetadataBuild(data);
                     if (this.metadataBuildProgressId === progressId) {
                         this.metadataBuildProgressId = '';
                     }
-                    return;
-                }
-                stopMetadataBuildPolling();
-                this.metadataBuildPollTimer = window.setTimeout(() => {
-                    pollMetadataBuildProgress();
-                }, 700);
-            } catch (error) {
-                stopMetadataBuildPolling();
-                this.metadataBuildProgressId = '';
-                setMetadataBuildBusy(false);
-                setMetadataBuildStatus(error.message || 'Metadata build progress failed.', 'is-invalid');
-            }
+                },
+                onError: (error) => {
+                    this.metadataBuildProgressId = '';
+                    setMetadataBuildBusy(false);
+                    setMetadataBuildStatus(error.message || 'Metadata build progress failed.', 'is-invalid');
+                },
+                intervalMs: 700,
+                fetchJson: this.fetchJson.bind(this)
+            });
         };
 
         const runMetadataBuild = async () => {

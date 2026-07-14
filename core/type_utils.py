@@ -1072,3 +1072,38 @@ def build_search_result(
     }
     result.update(extra)
     return result
+
+
+def parse_provider_model_url(url: str, allowed_domains: list[str]) -> Optional[Dict[str, Any]]:
+    """Parse a provider model URL (e.g. CivitAI or mirror site) to extract model/version info."""
+    from urllib.parse import urlparse
+    import re
+    
+    if not isinstance(url, str) or not url.strip():
+        return None
+        
+    parsed = urlparse(url)
+    hostname = parsed.hostname
+    if hostname:
+        hostname = hostname.lower().strip(".")
+        matched = False
+        for domain in allowed_domains:
+            if hostname == domain or hostname.endswith("." + domain):
+                matched = True
+                break
+        if not matched:
+            return None
+            
+    # Standard CivArchive sha256 mirrors pattern
+    sha_match = re.search(r"/sha256/([a-fA-F0-9]{64})", parsed.path)
+    if sha_match:
+        return {"sha256": sha_match.group(1).lower()}
+
+    # Standard CivitAI download pattern
+    if "/api/download/models/" in parsed.path:
+        match = re.search(r"/api/download/models/(\d+)", parsed.path)
+        if match:
+            return {"version_id": int(match.group(1))}
+            
+    return parse_civitai_model_path(parsed.path, parsed.query)
+

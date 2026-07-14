@@ -18,7 +18,7 @@ from ..log_system import create_module_logger
 log = create_module_logger(__name__)
 
 from ..path_utils import write_json_atomic, METADATA_DIR, read_json_safe
-from ..network_utils import host_matches_domain
+from ..network_utils import host_matches_domain, request_source_response, request_source_json
 from ..type_utils import check_credential_http, parse_size_header as _parse_size_header, fetch_remote_file_size, fetch_remote_file_size_cached, clear_remote_size_cache, extract_file_size
 from ..matcher import build_filename_search_queries, clean_filename_for_search
 
@@ -188,11 +188,12 @@ def _build_author_index_from_models(
 
 def _fetch_author_index(author: str, headers: Dict[str, str], limit: int = 200):
     try:
-        response = requests.get(
+        response = request_source_response(
             f"{HF_API_URL}/models",
             params={"author": author, "limit": limit, "full": "true"},
             headers=headers,
             timeout=15,
+            log_name="HuggingFace author index"
         )
         if response.status_code != 200:
             log.debug(
@@ -389,11 +390,12 @@ def _get_repo_tree(
     files_url = f"{HF_API_URL}/models/{repo_id}/tree/{quote(branch, safe='')}"
 
     try:
-        response = requests.get(
+        response = request_source_response(
             files_url,
             params={"recursive": "1"},
             headers=headers,
             timeout=15,
+            log_name="HuggingFace tree"
         )
         if response.status_code != 200:
             log.debug(
@@ -528,11 +530,12 @@ def _get_repos_by_author(
     author: str, headers: Dict[str, str], limit: int = 200
 ) -> List[str]:
     try:
-        response = requests.get(
+        response = request_source_response(
             f"{HF_API_URL}/models",
             params={"author": author, "limit": limit},
             headers=headers,
             timeout=15,
+            log_name="HuggingFace repos by author"
         )
         if response.status_code != 200:
             log.debug(
@@ -569,8 +572,8 @@ def _search_brave_for_huggingface_candidates(
     seen = set()
 
     try:
-        response = requests.get(
-            BRAVE_SEARCH_API_URL, headers=headers, params=params, timeout=15
+        response = request_source_response(
+            BRAVE_SEARCH_API_URL, headers=headers, params=params, timeout=15, log_name="Brave search"
         )
         if response.status_code != 200:
             log.warning(
@@ -689,7 +692,7 @@ def search_huggingface_for_file(
                     query_count=total_queries,
                 )
                 search_url = f"{HF_API_URL}/models?search={quote(search_query)}&limit=20"
-                response = requests.get(search_url, headers=headers, timeout=10)
+                response = request_source_response(search_url, headers=headers, timeout=10, log_name="HuggingFace models search")
                 if response.status_code != 200:
                     log.warning(
                         f"HuggingFace API status={response.status_code} query={search_query}"
@@ -969,12 +972,12 @@ def search_huggingface(
 
         params = {"search": query, "limit": limit, "full": "true"}
 
-        response = requests.get(
-            f"{HF_API_URL}/models", params=params, headers=headers, timeout=15
+        data = request_source_json(
+            f"{HF_API_URL}/models", params=params, headers=headers, timeout=15, log_name="HuggingFace general search"
         )
 
-        if response.status_code == 200:
-            models = response.json()
+        if data:
+            models = data
 
             for model in models:
                 repo_id = model.get("id", "")

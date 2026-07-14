@@ -1079,3 +1079,22 @@ def find_metadata_sidecar_path(model_path: str) -> str:
                 return path
 
     return ""
+
+
+def split_path_segments(path_value: Any, filter_dots: bool = True) -> list[str]:
+    """Split path into standard segments, replacing backslashes and filtering empty segments."""
+    text = str(path_value or "").replace("\\", "/").strip()
+    if not text:
+        return []
+    
+    parts = []
+    for raw_part in text.split("/"):
+        part = raw_part.strip()
+        if not part:
+            continue
+        if filter_dots and part in {".", ".."}:
+            continue
+        parts.append(part)
+        
+    return parts
+

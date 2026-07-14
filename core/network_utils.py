@@ -199,3 +199,89 @@ def request_public_url(
         current_headers = next_headers
 
     raise UnsafeUrlError("The download URL has too many redirects")
+
+
+def request_source_response(
+    url: str,
+    method: str = "GET",
+    headers: Optional[Dict[str, str]] = None,
+    params: Optional[Dict[str, Any]] = None,
+    timeout: int = 20,
+    max_attempts: int = 2,
+    log_name: str = "Source API",
+) -> Optional[requests.Response]:
+    """Perform a GET/POST request with retry logic for rate limit status (HTTP 429)."""
+    import time
+    from .log_system import create_module_logger
+    log = create_module_logger(__name__)
+
+    request_params = {k: v for k, v in (params or {}).items() if v is not None}
+    response = None
+
+    for attempt in range(max_attempts):
+        try:
+            if method.upper() == "POST":
+                response = requests.post(url, json=request_params, headers=headers, timeout=timeout)
+            else:
+                response = requests.get(url, params=request_params, headers=headers, timeout=timeout)
+        except Exception as e:
+            log.warning(f"{log_name} request failed: url={url}, error={e}")
+            return None
+
+        if response.status_code != 429 or attempt == max_attempts - 1:
+            break
+
+        retry_after = response.headers.get("Retry-After")
+        try:
+            delay = float(retry_after) if retry_after else 1.2
+        except (TypeError, ValueError):
+            delay = 1.2
+        time.sleep(max(0.5, min(delay, 3.0)))
+
+    return response
+
+
+def request_source_json(
+    url: str,
+    method: str = "GET",
+    headers: Optional[Dict[str, str]] = None,
+    params: Optional[Dict[str, Any]] = None,
+    timeout: int = 20,
+    max_attempts: int = 2,
+    log_name: str = "Source API",
+    raise_on_error: bool = False,
+) -> Optional[Dict[str, Any]]:
+    """Perform a GET/POST request and return JSON with retry logic for HTTP 429."""
+    response = request_source_response(
+        url,
+        method=method,
+        headers=headers,
+        params=params,
+        timeout=timeout,
+        max_attempts=max_attempts,
+        log_name=log_name,
+    )
+    if response is None:
+        if raise_on_error:
+            raise ValueError(f"{log_name} request failed: no response")
+        return None
+
+    if response.status_code != 200:
+        from .log_system import create_module_logger
+        log = create_module_logger(__name__)
+        log.debug(f"{log_name} returned HTTP {response.status_code}: url={url}")
+        if raise_on_error:
+            response.raise_for_status()
+        return None
+
+    try:
+        return response.json()
+    except Exception as e:
+        from .log_system import create_module_logger
+        log = create_module_logger(__name__)
+        log.warning(f"{log_name} JSON parse failed: url={url}, error={e}")
+        if raise_on_error:
+            raise
+        return None
+
+

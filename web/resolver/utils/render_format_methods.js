@@ -2,7 +2,7 @@ import { app } from "../../../../../scripts/app.js";
 import { api } from "../../../../../scripts/api.js";
 import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
-import { escapeHtml, escapeJsString } from "./html_utils.js";
+import { escapeHtml, escapeJsString, pollBackgroundTask } from "./html_utils.js";
 
 export const renderFormatMethods = {
     encodeContextMenuModel(context = null) {
@@ -248,69 +248,54 @@ export const renderFormatMethods = {
     },
 
     async pollAnalysisProgress(analysisId, token) {
-        while (this._analysisProgressToken === token) {
-            try {
-                const progress = await this.fetchJson(`/model_resolver/analyze-progress/${analysisId}`, {
-                    silent: true
-                }, 'Poll analysis progress');
-                if (
-                    progress &&
-                    this.contentElement &&
-                    this._analysisProgressToken === token &&
-                    this.activeTab === 'missing'
-                ) {
+        await pollBackgroundTask({
+            endpoint: `/model_resolver/analyze-progress/${analysisId}`,
+            tokenCheck: () => this._analysisProgressToken === token,
+            onProgress: (progress) => {
+                if (this.contentElement && this.activeTab === 'missing') {
                     this.contentElement.innerHTML = this.renderAnalysisProgress(progress);
-                    if (progress.status === 'completed' || progress.status === 'error') {
-                        if (this._analysisProgressToken === token) {
-                            this._analysisProgressToken = null;
-                        }
-                        return;
-                    }
                 }
-            } catch (error) {
+            },
+            isTerminal: (progress) => progress.status === 'completed' || progress.status === 'error',
+            onTerminal: () => {
+                if (this._analysisProgressToken === token) {
+                    this._analysisProgressToken = null;
+                }
+            },
+            onError: (error) => {
                 console.warn('Model Resolver: analysis progress polling failed', error);
-            }
-
-            await new Promise(resolve => setTimeout(resolve, 250));
-        }
+            },
+            intervalMs: 250,
+            fetchJson: this.fetchJson.bind(this)
+        });
     },
 
     async pollLoadedModelsProgress(loadedId, token) {
-        while (this._loadedModelsProgressToken === token) {
-            try {
-                const progress = await this.fetchJson(`/model_resolver/loaded-progress/${encodeURIComponent(loadedId)}`, {
-                    silent: true
-                }, 'Poll loaded models progress');
-                if (progress?.status === 'unknown') {
-                    await new Promise(resolve => setTimeout(resolve, 250));
-                    continue;
-                }
-                if (
-                    progress &&
-                    this.contentElement &&
-                    this._loadedModelsProgressToken === token &&
-                    this.activeTab === 'loaded'
-                ) {
+        await pollBackgroundTask({
+            endpoint: `/model_resolver/loaded-progress/${encodeURIComponent(loadedId)}`,
+            tokenCheck: () => this._loadedModelsProgressToken === token,
+            filterIgnoredStatus: (progress) => progress?.status === 'unknown',
+            onProgress: (progress) => {
+                if (this.contentElement && this.activeTab === 'loaded') {
                     this.contentElement.innerHTML = this.renderLoadedModelsProgress(progress);
-                    if (progress.status === 'completed' || progress.status === 'error') {
-                        if (this._loadedModelsProgressToken === token) {
-                            this._loadedModelsProgressToken = null;
-                        }
-                        return;
-                    }
                 }
-            } catch (error) {
+            },
+            isTerminal: (progress) => progress.status === 'completed' || progress.status === 'error',
+            onTerminal: () => {
+                if (this._loadedModelsProgressToken === token) {
+                    this._loadedModelsProgressToken = null;
+                }
+            },
+            onError: (error) => {
                 console.warn('Model Resolver: loaded models progress polling failed', error);
-            }
-
-            await new Promise(resolve => setTimeout(resolve, 250));
-        }
+            },
+            intervalMs: 250,
+            fetchJson: this.fetchJson.bind(this)
+        });
     },
 
     /**
      * Get display information for the best local match of a missing model
-     * @param {object} missing - The missing model object
-     * @returns {object} Match display metadata
      */
     getLocalMatchDisplayInfo(missing) {
         const bestMatch = this.getBestLocalMatch?.(missing, 70) || null;

@@ -119,3 +119,43 @@ export function sanitizeDescriptionHtml(html) {
     Array.from(root.childNodes).forEach(child => sanitizeNode(child));
     return root.innerHTML;
 }
+
+/**
+ * Generic background task progress poller with token cancellation checks.
+ */
+export async function pollBackgroundTask({
+    endpoint,
+    tokenCheck,
+    onProgress,
+    isTerminal,
+    onTerminal,
+    onError,
+    intervalMs = 250,
+    fetchJson,
+    filterIgnoredStatus
+}) {
+    while (tokenCheck()) {
+        try {
+            const data = await fetchJson(endpoint, { silent: true }, 'Poll background task');
+            
+            if (filterIgnoredStatus && filterIgnoredStatus(data)) {
+                await new Promise(resolve => setTimeout(resolve, intervalMs));
+                continue;
+            }
+            
+            if (tokenCheck()) {
+                onProgress(data);
+                if (isTerminal(data)) {
+                    onTerminal(data);
+                    return;
+                }
+            }
+        } catch (error) {
+            if (tokenCheck()) {
+                onError(error);
+                return;
+            }
+        }
+        await new Promise(resolve => setTimeout(resolve, intervalMs));
+    }
+}

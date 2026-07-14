@@ -64,11 +64,8 @@ def _base_model_token_variants(value: Any) -> List[str]:
 
 
 def _split_relative_folder_segments(relative_path: Any) -> List[str]:
-    parts = [
-        part.strip()
-        for part in str(relative_path or "").replace("\\", "/").split("/")
-        if part.strip()
-    ]
+    from .path_utils import split_path_segments
+    parts = split_path_segments(relative_path)
     return parts[:-1] if len(parts) > 1 else []
 
 

@@ -27,6 +27,7 @@ MODEL_LIST_SOURCE_URL = (
 MODEL_LIST_GITHUB_API_URL = (
     "https://api.github.com/repos/Comfy-Org/ComfyUI-Manager/contents/model-list.json?ref=main"
 )
+from ..network_utils import request_source_json
 HTTP_TIMEOUT = 30
 
 # Cache for loaded data
@@ -42,9 +43,14 @@ def _fetch_json_url(url: str) -> Dict[str, Any]:
         "Accept": "application/json",
         "User-Agent": "comfyui-model-resolver",
     }
-    response = requests.get(url, headers=headers, timeout=HTTP_TIMEOUT)
-    response.raise_for_status()
-    return response.json()
+    return request_source_json(
+        url,
+        headers=headers,
+        timeout=HTTP_TIMEOUT,
+        log_name="ModelList",
+        raise_on_error=True,
+    )
+
 
 
 

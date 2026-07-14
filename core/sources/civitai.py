@@ -9,6 +9,7 @@ import re
 import json
 import hashlib
 import requests
+from ..network_utils import request_source_response, request_source_json
 from typing import Dict, Any, Optional, List, Callable
 from urllib.parse import urlparse, parse_qs, quote, urlencode
 
@@ -445,10 +446,9 @@ def _search_civitai_trpc_candidates(
             f"CivitAI tRPC search start: filename={filename}, model_type={model_type}, type_filter={type_filter or 'none'}, session_token={'yes' if session_token else 'no'}, url={url}"
         )
 
-        try:
-            response = requests.get(url, headers=headers, timeout=timeout)
-        except Exception as e:
-            log.warning(f"CivitAI tRPC request failed for filename={filename}: {e}")
+        response = request_source_response(url, headers=headers, timeout=timeout, log_name="CivitAI tRPC")
+        if response is None:
+            log.warning(f"CivitAI tRPC request failed for filename={filename}: no response")
             return []
 
         text_preview = response.text[:800].replace("\n", " ").replace("\r", " ")
@@ -497,12 +497,13 @@ def _search_civitai_red_candidates(
         headers["Cookie"] = build_civitai_session_cookie(session_token)
     log.info(f"CivitAI.red search start: filename={filename}, url={search_url}")
 
-    response = requests.get(search_url, headers=headers, timeout=timeout)
-    if response.status_code != 200:
-        if response.status_code in {401, 403}:
+    response = request_source_response(search_url, headers=headers, timeout=timeout, log_name="CivitAI.red")
+    if response is None or response.status_code != 200:
+        if response is not None and response.status_code in {401, 403}:
             return []
+        status = response.status_code if response is not None else "no-response"
         log.warning(
-            f"CivitAI.red search returned {response.status_code} for filename={filename}"
+            f"CivitAI.red search returned {status} for filename={filename}"
         )
         return []
 
@@ -582,15 +583,15 @@ def _search_civitai_public_api_candidates(
         f"CivitAI public API search start: filename={filename}, model_type={model_type}, api_key={'yes' if api_key else 'no'}, session_token={'yes' if session_token else 'no'}"
     )
 
-    try:
-        response = requests.get(
-            f"{CIVITAI_API_URL}/models",
-            params=params,
-            headers=headers,
-            timeout=timeout,
-        )
-    except Exception as e:
-        log.warning(f"CivitAI public API request failed for filename={filename}: {e}")
+    response = request_source_response(
+        f"{CIVITAI_API_URL}/models",
+        params=params,
+        headers=headers,
+        timeout=timeout,
+        log_name="CivitAI public API"
+    )
+    if response is None:
+        log.warning(f"CivitAI public API request failed for filename={filename}: no response")
         return []
 
     text_preview = response.text[:800].replace("\n", " ").replace("\r", " ")
@@ -686,19 +687,15 @@ def _find_civitai_file_in_model(
 
     best_resolved_result = None
     best_resolved_confidence = 0.0
-
     headers = {}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
-    response = requests.get(
-        f"{CIVITAI_API_URL}/models/{model_id}", headers=headers, timeout=15
+    data = request_source_json(
+        f"{CIVITAI_API_URL}/models/{model_id}", headers=headers, timeout=15, log_name="CivitAI model lookup"
     )
-    if response.status_code != 200:
-        log.warning(f"CivitAI model lookup returned {response.status_code} for model_id={model_id}")
+    if data is None:
         return None
-
-    data = response.json()
     versions = data.get("modelVersions", [])
 
     if allow_model_title_match:
@@ -796,18 +793,8 @@ def parse_civitai_url(url: str) -> Optional[Dict[str, Any]]:
     """
     Parse a CivitAI URL to extract model/version info.
     """
-    if not isinstance(url, str) or not url.strip():
-        return None
-    parsed = urlparse(url)
-    if not _is_civitai_host(parsed.hostname):
-        return None
-
-    if "/api/download/models/" in parsed.path:
-        match = re.search(r"/api/download/models/(\d+)", parsed.path)
-        if match:
-            return {"version_id": int(match.group(1))}
-
-    return parse_civitai_model_path(parsed.path, parsed.query)
+    from ..type_utils import parse_provider_model_url
+    return parse_provider_model_url(url, ["civitai.com", "civitai.red"])
 
 
 def get_civitai_download_url(version_id: int, api_key: Optional[str] = None) -> str:
@@ -1085,12 +1072,11 @@ def search_civitai(
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
 
-        response = requests.get(
-            f"{CIVITAI_API_URL}/models", params=params, headers=headers, timeout=15
+        data = request_source_json(
+            f"{CIVITAI_API_URL}/models", params=params, headers=headers, timeout=15, log_name="CivitAI search models"
         )
 
-        if response.status_code == 200:
-            data = response.json()
+        if data:
 
             for model in data.get("items", []):
                 model_id = model.get("id")
@@ -1174,10 +1160,11 @@ def get_civitai_model_details(
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
-    response = requests.get(
+    response = request_source_response(
         f"{CIVITAI_API_URL}/models/{model_id}",
         headers=headers,
         timeout=20,
+        log_name="CivitAI model details"
     )
     if response.status_code != 200:
         log.warning(f"CivitAI model details returned {response.status_code}: model_id={model_id}")
@@ -1332,7 +1319,7 @@ def resolve_urn(
         url = f"{CIVITAI_API_URL}/models/{model_id}"
         params = {"modelVersionId": version_id}
 
-        response = requests.get(url, headers=headers, params=params, timeout=15)
+        response = request_source_response(url, headers=headers, params=params, timeout=15, log_name="CivitAI URN resolve")
 
         if response.status_code != 200:
             log.warning(f"CivitAI URN resolve failed: {response.status_code}")
@@ -1443,7 +1430,7 @@ def get_model_info_by_hash(
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
 
-        response = requests.get(api_url, headers=headers, timeout=15)
+        response = request_source_response(api_url, headers=headers, timeout=15, log_name="CivitAI by-hash")
 
         if response.status_code == 200:
             data = response.json()

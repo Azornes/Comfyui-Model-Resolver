@@ -85,28 +85,14 @@ def sanitize_folder_name(value: Any, fallback: str = "") -> str:
 
 
 def normalize_relative_subfolder(path_value: Any) -> str:
-    text = str(path_value or "").replace("\\", "/").strip()
-    if not text:
-        return ""
-    parts = []
-    for raw_part in text.split("/"):
-        part = sanitize_folder_name(raw_part)
-        if part and part not in {".", ".."}:
-            parts.append(part)
-    return "/".join(parts)
+    from .path_utils import split_path_segments
+    parts = [sanitize_folder_name(part) for part in split_path_segments(path_value)]
+    return "/".join([part for part in parts if part])
 
 
 def normalize_download_path_template(template: Any) -> str:
-    text = str(template or "").replace("\\", "/").strip()
-    if not text:
-        return ""
-    parts = []
-    for raw_part in text.split("/"):
-        part = raw_part.strip()
-        if not part or part in {".", ".."}:
-            continue
-        parts.append(part)
-    return "/".join(parts)
+    from .path_utils import split_path_segments
+    return "/".join(split_path_segments(template))
 
 
 def _read_settings_file() -> Dict[str, Any]:
