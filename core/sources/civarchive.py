@@ -14,7 +14,7 @@ from urllib.parse import parse_qs, unquote, urljoin, urlparse
 
 import requests
 
-from ..network_utils import host_matches_domain
+from ..network_utils import host_matches_domain, request_source_response
 from ..matcher import (
     calculate_archived_model_confidence,
     calculate_model_title_confidence,
@@ -155,16 +155,15 @@ def _request_page_text(
     timeout: int = 20,
 ) -> Optional[str]:
     url = urljoin(CIVARCHIVE_BASE_URL, path_or_url)
-    request_params = {k: v for k, v in (params or {}).items() if v is not None}
-    try:
-        response = requests.get(
-            url,
-            params=request_params,
-            headers=REQUEST_HEADERS,
-            timeout=timeout,
-        )
-    except Exception as e:
-        log.warning(f"CivArchive page request failed: url={url}, error={e}")
+    response = request_source_response(
+        url,
+        method="GET",
+        headers=REQUEST_HEADERS,
+        params=params,
+        timeout=timeout,
+        log_name="CivArchive page",
+    )
+    if response is None:
         return None
 
     if response.status_code != 200:
@@ -417,16 +416,16 @@ def _search_page(
     # (especially VAEs) are frequently misclassified (e.g. as Checkpoint or null type) in their database.
     # We rely on name confidence sorting instead.
 
-    try:
-        response = requests.get(
-            f"{CIVARCHIVE_BASE_URL}/search",
-            params=params,
-            headers=REQUEST_HEADERS,
-            timeout=timeout,
-        )
-    except Exception as e:
-        log.warning(f"CivArchive search request failed: query={query}, error={e}")
-        raise CivArchiveSearchError(str(e)) from e
+    response = request_source_response(
+        f"{CIVARCHIVE_BASE_URL}/search",
+        method="GET",
+        headers=REQUEST_HEADERS,
+        params=params,
+        timeout=timeout,
+        log_name="CivArchive search",
+    )
+    if response is None:
+        raise CivArchiveSearchError("CivArchive search request failed (network error or timeout)")
 
     if response.status_code != 200:
         log.warning(

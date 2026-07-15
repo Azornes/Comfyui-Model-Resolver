@@ -314,17 +314,23 @@ class ModelResolverRobustnessTests(unittest.TestCase):
         api_url = "https://civitai.com/api/download/models/123"
         redirect_url = "https://civitai-delivery.net/models/123/model.safetensors?token=abc"
 
-        mock_response = MagicMock()
-        mock_response.status_code = 302
-        mock_response.headers = {"Location": redirect_url}
+        mock_response1 = MagicMock()
+        mock_response1.status_code = 302
+        mock_response1.headers = {"Location": redirect_url}
 
-        with patch("requests.get", return_value=mock_response) as mock_get, patch(
+        mock_response2 = MagicMock()
+        mock_response2.status_code = 200
+
+        with patch("requests.get", side_effect=[mock_response1, mock_response2]) as mock_get, patch(
             "core.downloader.validate_public_http_url",
+            side_effect=lambda value: value,
+        ), patch(
+            "core.network_utils.validate_public_http_url",
             side_effect=lambda value: value,
         ):
             resolved = _resolve_civitai_download_url_for_aria2(api_url)
             self.assertEqual(resolved, redirect_url)
-            mock_get.assert_called_once()
+            self.assertEqual(mock_get.call_count, 2)
 
         # Scenario 2: Non-CivitAI URL (e.g. HuggingFace) should bypass redirects immediately
         hf_url = "https://huggingface.co/runwayml/stable-diffusion-v1-5/resolve/main/model.safetensors"

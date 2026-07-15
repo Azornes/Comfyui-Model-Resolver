@@ -228,34 +228,21 @@ def _resolve_civitai_download_url_for_aria2(
     if not _is_civitai_api_download_url(validated_url):
         return validated_url
 
-    response = None
     try:
-        response = requests.get(
+        response, resolved_url, _ = request_public_url(
+            "GET",
             validated_url,
             headers=build_download_headers(validated_url, headers),
-            allow_redirects=False,
-            stream=True,
             timeout=20,
+            stream=True,
+            max_redirects=1,
         )
-        if response.status_code not in {301, 302, 303, 307, 308}:
-            return url
-
-        location = response.headers.get("Location") or response.headers.get("location")
-        if not location:
-            return url
-
-        resolved_url = validate_public_http_url(urljoin(validated_url, location.strip()))
+        response.close()
         log.debug("Resolved CivitAI download redirect for aria2")
         return resolved_url
     except Exception as exc:
         log.warning(f"Could not pre-resolve CivitAI download URL for aria2: {exc}")
         return validated_url
-    finally:
-        if response is not None:
-            try:
-                response.close()
-            except Exception:
-                pass
 
 
 def _resolve_download_url_for_aria2(

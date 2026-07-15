@@ -35,6 +35,7 @@ from ..type_utils import (
     as_list,
     extract_trained_words,
     build_search_result,
+    normalize_model_file_info,
 )
 from ..progress import report_progress, get_progress_reporter
 from ..path_utils import (
@@ -1129,22 +1130,13 @@ def _normalize_civitai_file(
     version_id: Optional[int],
     api_key: Optional[str] = None,
 ) -> Dict[str, Any]:
-    hashes = file_info.get("hashes") if isinstance(file_info.get("hashes"), dict) else {}
-    return {
-        "id": file_info.get("id"),
-        "name": file_info.get("name") or file_info.get("filename"),
-        "type": file_info.get("type"),
-        "size": file_info.get("sizeKB", 0) * 1024 if file_info.get("sizeKB") else file_info.get("size"),
-        "download_url": file_info.get("downloadUrl") or (
-            get_civitai_download_url(version_id, api_key) if version_id else None
-        ),
-        "primary": bool(file_info.get("primary", False)),
-        "sha256": file_info.get("sha256") or hashes.get("SHA256") or hashes.get("sha256"),
-        "hashes": hashes,
-        "metadata": file_info.get("metadata") or {},
-        "model_id": model_id,
-        "version_id": version_id,
-    }
+    fallback_url = get_civitai_download_url(version_id, api_key) if version_id else None
+    return normalize_model_file_info(
+        file_info,
+        model_id=model_id,
+        version_id=version_id,
+        fallback_download_url=fallback_url
+    )
 
 
 def get_civitai_model_details(

@@ -91,6 +91,73 @@ class TestRefactoringUnification(unittest.TestCase):
         res = search_civitai_by_hash("fake_hash")
         self.assertIsNone(res)
 
+    @patch("requests.get")
+    def test_request_page_text_success(self, mock_get):
+        from core.sources.civarchive import _request_page_text
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = "<html>content</html>"
+        mock_get.return_value = mock_response
+
+        res = _request_page_text("test_path")
+        self.assertEqual(res, "<html>content</html>")
+        mock_get.assert_called_once()
+
+    @patch("requests.get")
+    def test_request_page_text_fail(self, mock_get):
+        from core.sources.civarchive import _request_page_text
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_get.return_value = mock_response
+
+        res = _request_page_text("test_path")
+        self.assertIsNone(res)
+
+        mock_get.side_effect = Exception("network error")
+        res2 = _request_page_text("test_path")
+        self.assertIsNone(res2)
+
+    @patch("requests.get")
+    def test_get_base_models_status_remote(self, mock_get):
+        from core.sources.popular import get_base_models_status
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"BaseModel": ["SD 1.5", "SDXL 1.0"]}
+        mock_get.return_value = mock_response
+
+        res = get_base_models_status(check_remote=True)
+        self.assertIn("local_count", res)
+        self.assertIn("update_available", res)
+        mock_get.assert_called_once_with("https://civitai.com/api/v1/enums", params={}, headers=None, timeout=15)
+
+    @patch("core.sources.popular.save_catalog_with_backup")
+    @patch("core.sources.popular.read_json_safe")
+    @patch("requests.get")
+    def test_update_base_models_from_remote_success(self, mock_get, mock_read_json, mock_save_catalog):
+        from core.sources.popular import update_base_models_from_remote
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"BaseModel": ["SD 1.5", "SDXL 1.0", "NewModel"]}
+        mock_get.return_value = mock_response
+
+        # Mock reading base-models.json
+        mock_read_json.return_value = {
+            "base_models": [
+                {"name": "SD 1.5", "aliases": ["sd1.5"]},
+                {"name": "SDXL 1.0", "aliases": ["sdxl"]},
+            ]
+        }
+
+        res = update_base_models_from_remote()
+        self.assertTrue(res.get("updated"))
+        self.assertEqual(res.get("new_models_added"), 1)
+        self.assertIn("NewModel", res.get("new_models_added_list", []))
+        
+        # Verify it saved the updated catalog
+        mock_save_catalog.assert_called_once()
+        saved_data = mock_save_catalog.call_args[0][1]
+        self.assertEqual(len(saved_data["base_models"]), 3)
+
 
 if __name__ == "__main__":
     unittest.main()

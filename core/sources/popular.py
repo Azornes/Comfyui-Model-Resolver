@@ -17,6 +17,7 @@ log = create_module_logger(__name__)
 
 
 from ..path_utils import METADATA_DIR, read_json_safe, write_json_atomic, save_catalog_with_backup
+from ..network_utils import request_source_json
 POPULAR_MODELS_FILE = os.path.join(METADATA_DIR, "popular-models.json")
 MODEL_ALIASES_FILE = os.path.join(METADATA_DIR, "model-aliases.json")
 BASE_MODELS_FILE = os.path.join(METADATA_DIR, "base-models.json")
@@ -259,11 +260,9 @@ def get_base_models_status(check_remote: bool = False) -> Dict[str, Any]:
     
     if check_remote:
         try:
-            import requests
-            # Fetch from CivitAI API
-            response = requests.get("https://civitai.com/api/v1/enums", timeout=15)
-            if response.status_code == 200:
-                enums = response.json()
+            # Fetch from CivitAI API using unified helper
+            enums = request_source_json("https://civitai.com/api/v1/enums", timeout=15, log_name="CivitAI Enums")
+            if enums:
                 remote_models = enums.get("BaseModel", [])
                 
                 # Check if there are new models by comparing normalized names and aliases
@@ -292,12 +291,9 @@ def get_base_models_status(check_remote: bool = False) -> Dict[str, Any]:
 
 def update_base_models_from_remote() -> Dict[str, Any]:
     """Fetch live BaseModel enums from CivitAI and merge into base-models.json."""
-    import requests
-    response = requests.get("https://civitai.com/api/v1/enums", timeout=15)
-    if response.status_code != 200:
-        raise ValueError(f"CivitAI enums endpoint returned HTTP {response.status_code}")
-        
-    enums = response.json()
+    enums = request_source_json("https://civitai.com/api/v1/enums", timeout=15, log_name="CivitAI Enums", raise_on_error=True)
+    if not enums:
+        raise ValueError("CivitAI enums did not return a valid response")
     remote_names = enums.get("BaseModel", [])
     if not remote_names or not isinstance(remote_names, list):
         raise ValueError("CivitAI enums did not return a valid BaseModel list")
