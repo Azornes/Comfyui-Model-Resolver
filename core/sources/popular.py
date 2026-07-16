@@ -16,11 +16,13 @@ from ..log_system import create_module_logger
 log = create_module_logger(__name__)
 
 
-from ..path_utils import METADATA_DIR, read_json_safe, write_json_atomic, save_catalog_with_backup
+from ..path_utils import METADATA_DIR, read_json_safe
 from ..network_utils import request_source_json
+from ..catalog_manager import CatalogManager
 POPULAR_MODELS_FILE = os.path.join(METADATA_DIR, "popular-models.json")
 MODEL_ALIASES_FILE = os.path.join(METADATA_DIR, "model-aliases.json")
 BASE_MODELS_FILE = os.path.join(METADATA_DIR, "base-models.json")
+BASE_MODELS_META_FILE = os.path.join(METADATA_DIR, "base-models.meta.json")
 
 # Cache for loaded data
 _popular_models_cache: Optional[Dict] = None
@@ -55,6 +57,9 @@ def _load_model_aliases() -> Dict[str, List[str]]:
 from ..matcher import normalize_base_model as _normalize_base_model
 
 
+base_models_mgr = CatalogManager(BASE_MODELS_FILE, BASE_MODELS_META_FILE, "base_models")
+
+
 def load_base_model_aliases() -> Dict[str, List[str]]:
     """Load and normalize base model aliases from base-models.json."""
     global _base_models_aliases_cache
@@ -64,7 +69,7 @@ def load_base_model_aliases() -> Dict[str, List[str]]:
 
     aliases_dict = {}
     try:
-        data = read_json_safe(BASE_MODELS_FILE, {})
+        data = base_models_mgr.read_data()
         base_models = data.get("base_models", [])
         for model in base_models:
                     name = model.get("name", "")
@@ -190,7 +195,6 @@ def reload_databases():
     load_base_model_aliases()
 
 
-BASE_MODELS_META_FILE = os.path.join(METADATA_DIR, "base-models.meta.json")
 
 
 def get_base_models_config() -> Dict[str, Any]:
@@ -199,11 +203,11 @@ def get_base_models_config() -> Dict[str, Any]:
 
 
 def _read_base_models_file() -> Dict[str, Any]:
-    return read_json_safe(BASE_MODELS_FILE, {"base_models": []})
+    return base_models_mgr.read_data()
 
 
 def _read_base_models_meta() -> Dict[str, Any]:
-    return read_json_safe(BASE_MODELS_META_FILE, {})
+    return base_models_mgr.read_meta()
 
 
 def generate_aliases(name: str) -> List[str]:
@@ -353,7 +357,7 @@ def update_base_models_from_remote() -> Dict[str, Any]:
         "new_models_added": new_added_count,
         "new_models_added_list": new_added_names
     }
-    save_catalog_with_backup(BASE_MODELS_FILE, {"base_models": updated_models}, BASE_MODELS_META_FILE, meta, indent=2)
+    base_models_mgr.save({"base_models": updated_models}, meta, indent=2)
     reload_databases()
     
     return {

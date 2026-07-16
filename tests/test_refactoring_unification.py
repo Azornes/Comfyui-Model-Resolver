@@ -130,10 +130,9 @@ class TestRefactoringUnification(unittest.TestCase):
         self.assertIn("update_available", res)
         mock_get.assert_called_once_with("https://civitai.com/api/v1/enums", params={}, headers=None, timeout=15)
 
-    @patch("core.sources.popular.save_catalog_with_backup")
-    @patch("core.sources.popular.read_json_safe")
+    @patch("core.sources.popular.base_models_mgr")
     @patch("requests.get")
-    def test_update_base_models_from_remote_success(self, mock_get, mock_read_json, mock_save_catalog):
+    def test_update_base_models_from_remote_success(self, mock_get, mock_base_models_mgr):
         from core.sources.popular import update_base_models_from_remote
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -141,12 +140,13 @@ class TestRefactoringUnification(unittest.TestCase):
         mock_get.return_value = mock_response
 
         # Mock reading base-models.json
-        mock_read_json.return_value = {
+        mock_base_models_mgr.read_data.return_value = {
             "base_models": [
                 {"name": "SD 1.5", "aliases": ["sd1.5"]},
                 {"name": "SDXL 1.0", "aliases": ["sdxl"]},
             ]
         }
+        mock_base_models_mgr.read_meta.return_value = {}
 
         res = update_base_models_from_remote()
         self.assertTrue(res.get("updated"))
@@ -154,10 +154,68 @@ class TestRefactoringUnification(unittest.TestCase):
         self.assertIn("NewModel", res.get("new_models_added_list", []))
         
         # Verify it saved the updated catalog
-        mock_save_catalog.assert_called_once()
-        saved_data = mock_save_catalog.call_args[0][1]
+        mock_base_models_mgr.save.assert_called_once()
+        saved_data = mock_base_models_mgr.save.call_args[0][0]
         self.assertEqual(len(saved_data["base_models"]), 3)
+
+
+    @patch("core.sources.model_list.catalog_mgr")
+    @patch("core.sources.model_list._get_remote_model_list_info")
+    @patch("core.sources.model_list._fetch_json_url")
+    def test_model_list_lifecycle_status_and_update(self, mock_fetch_json, mock_get_remote, mock_catalog_mgr):
+        from core.sources.model_list import get_model_list_update_status, update_model_list_from_remote
+        
+        # Mock responses
+        mock_catalog_mgr.read_data.side_effect = [
+            {"models": [{"name": "ModelA"}]},  # Data file read
+            {"models": [{"name": "ModelA"}]},  # Reset update
+            {"models": [{"name": "ModelA"}, {"name": "ModelB"}]}  # updated check
+        ]
+        mock_catalog_mgr.read_meta.side_effect = [
+            {"sha": "123", "updated_at": "2026"},  # Meta file read
+            {"sha": "123"},  # Reset update
+            {"sha": "456"}
+        ]
+        
+        mock_get_remote.return_value = {
+            "sha": "123",
+            "size": 100,
+            "download_url": "https://dummy",
+            "html_url": "https://dummy_html"
+        }
+        
+        status = get_model_list_update_status(check_remote=True)
+        self.assertEqual(status["local_count"], 1)
+        self.assertTrue(status["can_compare"])
+        
+        # Reset mock
+        mock_get_remote.return_value = {
+            "sha": "456",
+            "size": 100,
+            "download_url": "https://dummy",
+            "html_url": "https://dummy_html"
+        }
+        mock_fetch_json.return_value = {"models": [{"name": "ModelA"}, {"name": "ModelB"}]}
+        res = update_model_list_from_remote()
+        self.assertTrue(res.get("updated"))
+        self.assertTrue(mock_catalog_mgr.save.called)
+
+
+    def test_tracker_progress_updates(self):
+        import importlib
+        node_mod = importlib.import_module("comfyui-model-resolver")
+        JobProgressTracker = node_mod.JobProgressTracker
+        
+        tracker = JobProgressTracker("Test Tracker")
+        tracker.update("job123", status="running", percent=50)
+        state = tracker.get("job123")
+        self.assertEqual(state["status"], "running")
+        self.assertEqual(state["percent"], 50)
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+
+

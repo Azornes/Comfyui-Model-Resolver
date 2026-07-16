@@ -271,6 +271,23 @@ export class ResolverManagerDialog extends ComfyDialog {
     }
 }
 
+/**
+ * Mixin Architecture Pattern:
+ * 
+ * To prevent the dialog class from growing to an unmanageable size (e.g. 5,000+ lines), 
+ * the dialog is split into multiple view/behavior-specific mixin files under `views/`, `actions/`, etc.
+ * 
+ * Each mixin file exports a plain object containing methods that expect `this` to point to the
+ * active `ResolverManagerDialog` instance (accessing properties like `this.contentElement`, `this.activeTab`).
+ * 
+ * Rationale:
+ * - Keeps UI views isolated in separate files.
+ * - Resolves circular dependency concerns when views trigger global dialog actions.
+ * 
+ * Future Refactoring / Migration Path:
+ * - If UI complexity grows, transition these view objects to decoupled Web Components or independent ES6 
+ *   Tab classes extending a base component, passing the dialog controller instance as a constructor argument.
+ */
 function applyDialogMethods(...sources) {
     for (const source of sources) {
         for (const key of Reflect.ownKeys(source)) {

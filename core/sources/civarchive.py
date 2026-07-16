@@ -25,6 +25,7 @@ from ..matcher import (
     calculate_candidate_rank,
     build_filename_search_queries,
     MODEL_TITLE_MATCH_THRESHOLD,
+    should_update_best_match,
 )
 from ..path_utils import get_filename_from_path
 from ..type_utils import (
@@ -2211,11 +2212,14 @@ def search_civarchive_for_file(
 
                     resolved["confidence"] = confidence
                     resolved["match_type"] = "exact" if confidence == 100.0 else "similar"
-                base_model_matches, rank = calculate_candidate_rank(
-                    confidence, resolved.get("base_model"), base_model_context
-                )
 
-                if rank > best_rank:
+                should_update, rank, base_model_matches = should_update_best_match(
+                    confidence, resolved.get("base_model"), base_model_context, best_rank, exact_only
+                )
+                if exact_only and confidence < 100.0:
+                    continue
+
+                if should_update:
                     best_rank = rank
                     best_confidence = confidence
                     best_match = resolved

@@ -18,9 +18,11 @@ from ..log_system import create_module_logger
 log = create_module_logger(__name__)
 
 
-from ..path_utils import METADATA_DIR, read_json_safe, write_json_atomic, save_catalog_with_backup
+from ..path_utils import METADATA_DIR
+from ..catalog_manager import CatalogManager
 MODEL_LIST_FILE = os.path.join(METADATA_DIR, "model-list.json")
 MODEL_LIST_META_FILE = os.path.join(METADATA_DIR, "model-list.meta.json")
+catalog_mgr = CatalogManager(MODEL_LIST_FILE, MODEL_LIST_META_FILE, "models")
 MODEL_LIST_SOURCE_URL = (
     "https://raw.githubusercontent.com/Comfy-Org/ComfyUI-Manager/main/model-list.json"
 )
@@ -56,11 +58,11 @@ def _fetch_json_url(url: str) -> Dict[str, Any]:
 
 
 def _read_model_list_file() -> Dict[str, Any]:
-    return read_json_safe(MODEL_LIST_FILE, {"models": []})
+    return catalog_mgr.read_data()
 
 
 def _read_model_list_meta() -> Dict[str, Any]:
-    return read_json_safe(MODEL_LIST_META_FILE, {})
+    return catalog_mgr.read_meta()
 
 
 def _get_local_model_list_sha() -> str:
@@ -98,14 +100,11 @@ def _load_model_list() -> List[Dict]:
     if _model_list_cache is not None:
         return _model_list_cache
 
-    data = read_json_safe(MODEL_LIST_FILE, {})
+    data = catalog_mgr.read_data()
     _model_list_cache = data.get("models", [])
     log.info(
         f"Loaded {len(_model_list_cache)} models from model-list.json"
     )
-    return _model_list_cache
-
-    _model_list_cache = []
     return _model_list_cache
 
 
@@ -165,7 +164,7 @@ def update_model_list_from_remote() -> Dict[str, Any]:
         "model_count": len(models),
         "updated_at": _utc_now_iso(),
     }
-    save_catalog_with_backup(MODEL_LIST_FILE, data, MODEL_LIST_META_FILE, meta, indent=2)
+    catalog_mgr.save(data, meta, indent=2)
     reload_model_list()
 
     return {

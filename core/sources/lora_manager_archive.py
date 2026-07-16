@@ -17,6 +17,7 @@ from ..matcher import (
     base_model_matches as _base_model_matches,
     base_model_score as _base_model_score,
     calculate_candidate_rank,
+    should_update_best_match,
 )
 from ..type_utils import (
     select_primary_model_file,
@@ -708,14 +709,12 @@ def search_lora_manager_archive_for_file(
         )
         candidate_filename = candidate.get("filename", "")
         confidence = calculate_archived_model_confidence(filename, candidate.get("name", ""), candidate.get("version_name", ""), candidate_filename)
-        if exact_only and confidence < 100.0:
-            continue
-        base_model_matches, rank = calculate_candidate_rank(
-            confidence, candidate.get("base_model"), base_model_context
+        should_update, rank, base_model_matches = should_update_best_match(
+            confidence, candidate.get("base_model"), base_model_context, best_rank, exact_only
         )
         if base_model_context and not base_model_matches:
             continue
-        if rank > best_rank:
+        if should_update:
             best_rank = rank
             best_confidence = confidence
             best_match = dict(candidate)

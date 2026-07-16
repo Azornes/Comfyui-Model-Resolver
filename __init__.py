@@ -7,6 +7,7 @@
 
 import asyncio
 import threading
+from typing import Dict, Any, Optional
 import time
 import sys
 import os
@@ -205,6 +206,82 @@ class ModelResolverExtension:
         self.hash_tracker = JobProgressTracker("Preparing hash calculation...")
         self.metadata_builder_progress = JobProgressTracker("Building local metadata...")
         self.search_result_timestamps = {}
+
+    def _update_analysis_progress(
+        self,
+        analysis_id: Optional[str],
+        payload: Dict[str, Any]
+    ) -> None:
+        if not analysis_id:
+            return
+        status = "running" if payload.get("stage") != "completed" else "completed"
+        self.analysis_progress.update(analysis_id, status=status, **payload)
+
+    def _update_metadata_build_progress(
+        self,
+        progress_id: Optional[str],
+        progress_payload: Dict[str, Any]
+    ) -> None:
+        if not progress_id or not isinstance(progress_payload, dict):
+            return
+        data = dict(progress_payload)
+        status = data.pop("status", None)
+        stage = data.get("stage") or ""
+        if not status:
+            if stage == "done":
+                status = "done"
+            elif stage == "cancelled":
+                status = "cancelled"
+            else:
+                status = "running"
+        self.metadata_builder_progress.update(progress_id, status=status, **data)
+
+    def _update_loaded_progress(
+        self,
+        loaded_id: Optional[str],
+        stage: str,
+        message: str,
+        percent: Optional[float] = None,
+        status: str = "running",
+        current: int = 0,
+        total: int = 0,
+        **payload,
+    ) -> None:
+        if not loaded_id:
+            return
+        self.loaded_progress.update(
+            loaded_id,
+            status=status,
+            stage=stage,
+            message=message,
+            percent=percent,
+            current=current,
+            total=total,
+            **payload,
+        )
+
+    def _update_workflow_analysis_progress(
+        self,
+        loaded_id: Optional[str],
+        workflow_node_count: int,
+        interpolate_percent_fn,
+        payload: Dict[str, Any]
+    ) -> None:
+        progress_payload = dict(payload or {})
+        current = progress_payload.pop("current", 0)
+        total = progress_payload.pop("total", workflow_node_count)
+        stage = progress_payload.pop("stage", "analyzing")
+        message = progress_payload.pop("message", "Analyzing workflow nodes...")
+        progress_payload.pop("percent", None)
+        self._update_loaded_progress(
+            loaded_id,
+            stage,
+            message,
+            percent=interpolate_percent_fn(35, 78, current, total),
+            current=current,
+            total=total,
+            **progress_payload,
+        )
 
     def initialize(self):
         """Initialize the extension and set up API routes."""
@@ -542,15 +619,7 @@ class ModelResolverExtension:
                             total=0,
                         )
 
-                    def update_analysis_progress(payload):
-                        if not analysis_id:
-                            return
-                        status = "running" if payload.get("stage") != "completed" else "completed"
-                        self.analysis_progress.update(
-                            analysis_id,
-                            status=status,
-                            **payload
-                        )
+                    update_analysis_progress = lambda payload: self._update_analysis_progress(analysis_id, payload)
 
                     # Analyze and find matches
                     result = await asyncio.to_thread(
@@ -1395,24 +1464,7 @@ class ModelResolverExtension:
                     requested_worker_count=worker_count,
                 )
 
-                def update_metadata_build_progress(progress_payload):
-                    if not isinstance(progress_payload, dict):
-                        return
-                    data = dict(progress_payload)
-                    status = data.pop("status", None)
-                    stage = data.get("stage") or ""
-                    if not status:
-                        if stage == "done":
-                            status = "done"
-                        elif stage == "cancelled":
-                            status = "cancelled"
-                        else:
-                            status = "running"
-                    self.metadata_builder_progress.update(
-                        progress_id,
-                        status=status,
-                        **data,
-                    )
+                update_metadata_build_progress = lambda progress_payload: self._update_metadata_build_progress(progress_id, progress_payload)
 
                 def is_metadata_build_cancelled():
                     return self.metadata_builder_progress.is_cancelled(progress_id)
@@ -1531,27 +1583,7 @@ class ModelResolverExtension:
                         {"error": "Workflow JSON must be an object"}, status=400
                     )
 
-                def update_loaded_progress(
-                    stage,
-                    message,
-                    percent=None,
-                    status="running",
-                    current=0,
-                    total=0,
-                    **payload,
-                ):
-                    if not loaded_id:
-                        return
-                    self.loaded_progress.update(
-                        loaded_id,
-                        status=status,
-                        stage=stage,
-                        message=message,
-                        percent=percent,
-                        current=current,
-                        total=total,
-                        **payload,
-                    )
+                update_loaded_progress = lambda *args, **kwargs: self._update_loaded_progress(loaded_id, *args, **kwargs)
 
                 def get_workflow_node_count():
                     node_count = 0
@@ -1689,23 +1721,7 @@ class ModelResolverExtension:
                         total=workflow_node_count,
                     )
 
-                    def update_workflow_analysis_progress(payload):
-                        progress_payload = dict(payload or {})
-                        current = progress_payload.pop("current", 0)
-                        total = progress_payload.pop("total", workflow_node_count)
-                        stage = progress_payload.pop("stage", "analyzing")
-                        message = progress_payload.pop(
-                            "message", "Analyzing workflow nodes..."
-                        )
-                        progress_payload.pop("percent", None)
-                        update_loaded_progress(
-                            stage,
-                            message,
-                            percent=interpolate_percent(35, 78, current, total),
-                            current=current,
-                            total=total,
-                            **progress_payload,
-                        )
+                    update_workflow_analysis_progress = lambda payload: self._update_workflow_analysis_progress(loaded_id, workflow_node_count, interpolate_percent, payload)
 
                     # Analyze workflow to get all model references
                     all_model_refs = analyze_workflow_models(

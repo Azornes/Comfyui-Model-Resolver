@@ -502,3 +502,25 @@ def match_model_by_title_generic(
         )
 
     return None
+
+
+def should_update_best_match(
+    confidence: float,
+    base_model: Optional[str],
+    base_model_context: Optional[str],
+    best_rank: float,
+    exact_only: bool = False,
+) -> Tuple[bool, float, bool]:
+    """
+    Check if a candidate match is better than the current best.
+    Returns (should_update, candidate_rank, base_model_matches).
+    """
+    if exact_only and confidence < 100.0:
+        return False, -9999.0, False
+    bm_matches, rank = calculate_candidate_rank(
+        confidence, base_model, base_model_context
+    )
+    if rank > best_rank:
+        return True, rank, bm_matches
+    return False, rank, bm_matches
+
