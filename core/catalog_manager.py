@@ -1,7 +1,9 @@
 """Unified manager for metadata catalog files (JSON data and metadata sidecars)."""
 
 from typing import Any, Dict
+
 from .path_utils import read_json_safe, save_catalog_with_backup
+
 
 class CatalogManager:
     """Encapsulates reading, writing, status auditing, and backup logic for catalog files."""

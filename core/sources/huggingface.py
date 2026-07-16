@@ -4,23 +4,28 @@ HuggingFace Source Module
 Search and download models from HuggingFace Hub.
 """
 
-import json
 import os
 import re
 import threading
 import time
-import requests
-from typing import Dict, Any, Optional, List, Callable
-from urllib.parse import urlparse, quote
+from typing import Any, Callable, Dict, List, Optional
+from urllib.parse import quote, urlparse
 
-from ..progress import report_progress, get_progress_reporter
 from ..log_system import create_module_logger
+from ..progress import get_progress_reporter
+
 log = create_module_logger(__name__)
 
-from ..path_utils import write_json_atomic, METADATA_DIR, read_json_safe, get_filename_from_path
-from ..network_utils import host_matches_domain, request_source_response, request_source_json
-from ..type_utils import check_credential_http, parse_size_header as _parse_size_header, fetch_remote_file_size, fetch_remote_file_size_cached, clear_remote_size_cache, extract_file_size, prepare_remote_size_probe_url
-from ..matcher import build_filename_search_queries, clean_filename_for_search
+from ..matcher import build_filename_search_queries
+from ..network_utils import host_matches_domain, request_source_json, request_source_response
+from ..path_utils import METADATA_DIR, get_filename_from_path, read_json_safe, write_json_atomic
+from ..type_utils import (
+    check_credential_http,
+    clear_remote_size_cache,
+    extract_file_size,
+    fetch_remote_file_size_cached,
+    prepare_remote_size_probe_url,
+)
 
 HF_API_URL = "https://huggingface.co/api"
 HF_AUTHOR_FALLBACKS = ["Comfy-Org"]

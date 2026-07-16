@@ -6,49 +6,47 @@ Search and resolve models from CivArchive.
 
 import html
 import json
-import os
 import re
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from urllib.parse import parse_qs, unquote, urljoin, urlparse
+from urllib.parse import urljoin, urlparse
 
-import requests
-
-from ..network_utils import host_matches_domain, request_source_response
+from ..log_system import create_module_logger
 from ..matcher import (
+    base_model_matches as _base_model_matches,
+)
+from ..matcher import (
+    build_filename_search_queries,
     calculate_archived_model_confidence,
     calculate_model_title_confidence,
-    has_known_model_extension as _has_known_model_extension,
-    normalize_base_model as _normalize_base_model,
-    base_model_matches as _base_model_matches,
-    base_model_score as _base_model_score,
-    calculate_candidate_rank,
-    build_filename_search_queries,
-    MODEL_TITLE_MATCH_THRESHOLD,
     should_update_best_match,
 )
+from ..matcher import (
+    has_known_model_extension as _has_known_model_extension,
+)
+from ..matcher import (
+    normalize_base_model as _normalize_base_model,
+)
+from ..network_utils import host_matches_domain, request_source_response
 from ..path_utils import get_filename_from_path
+from ..progress import get_progress_reporter
 from ..type_utils import (
-    to_int,
     CIVARCHIVE_API_TYPE_MAP,
-    select_primary_model_file,
-    parse_size_to_bytes,
-    get_version_sort_key,
     DEFAULT_BROWSER_USER_AGENT,
-    parse_civitai_model_path,
-    looks_like_model_file,
-    normalize_model_image,
-    fetch_remote_file_size_cached,
-    clear_remote_size_cache,
-    extract_trained_words,
-    extract_file_size,
-    normalize_model_file_info,
     build_search_result,
+    clear_remote_size_cache,
+    extract_file_size,
+    extract_trained_words,
+    fetch_remote_file_size_cached,
+    looks_like_model_file,
+    normalize_model_file_info,
+    normalize_model_image,
     normalize_sha256,
     prepare_remote_size_probe_url,
+    select_primary_model_file,
+    to_int,
 )
-from ..progress import report_progress, get_progress_reporter
-from ..log_system import create_module_logger
+
 log = create_module_logger(__name__)
 
 

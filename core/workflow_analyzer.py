@@ -7,9 +7,10 @@ Extracts model references from workflow JSON and identifies missing models.
 import os
 import re
 import threading
-from typing import List, Dict, Any, Optional, Set, Callable
+from typing import Any, Callable, Dict, List, Optional, Set
 
 from .log_system import create_module_logger
+
 log = create_module_logger(__name__)
 
 
@@ -21,7 +22,7 @@ except ImportError:
     log.warning("Model Resolver: folder_paths not available yet - will retry later")
 
 
-from .type_utils import URN_TYPE_MAP, MODEL_EXTENSIONS, unique_ordered_strings
+from .type_utils import MODEL_EXTENSIONS, URN_TYPE_MAP, unique_ordered_strings
 
 URN_REGEX = re.compile(r"^urn:air:([^:]+):([^:]+):([^:]+):(\d+)@(\d+)$")
 
@@ -734,7 +735,7 @@ def _build_dynamic_node_widget_category_hints(node_type: str) -> Dict[str, Any]:
 
     try:
         if folder_paths_module is not None and callable(get_filename_list):
-            setattr(folder_paths_module, "get_filename_list", traced_get_filename_list)
+            folder_paths_module.get_filename_list = traced_get_filename_list
             patched_folder_paths = True
             patch_get_filename_list_global(input_types_func)
             patch_get_filename_list_global(schema_func)
@@ -750,7 +751,7 @@ def _build_dynamic_node_widget_category_hints(node_type: str) -> Dict[str, Any]:
         for global_scope, global_name, global_value in patched_globals:
             global_scope[global_name] = global_value
         if patched_folder_paths:
-            setattr(folder_paths_module, "get_filename_list", get_filename_list)
+            folder_paths_module.get_filename_list = get_filename_list
 
     if not isinstance(input_types, dict) and schema is None:
         return empty_hints
@@ -1037,7 +1038,7 @@ def get_model_widget_category_hints(
 
     if indexed_category_hint:
         hints_list.append(indexed_category_hint)
-    
+
     # If the widget category hint is just "diffusion_models", and we have a more specific output hint,
     # let the output hint take priority.
     if widget_category_hint == "diffusion_models" and output_widget_category_hint and output_widget_category_hint != "diffusion_models":
@@ -1048,7 +1049,7 @@ def get_model_widget_category_hints(
             hints_list.append(widget_category_hint)
         if output_widget_category_hint:
             hints_list.append(output_widget_category_hint)
-            
+
     return _ordered_unique_categories(hints_list)
 
 

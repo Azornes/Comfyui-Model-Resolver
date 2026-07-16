@@ -11,14 +11,13 @@ Modules:
 - sources: Search integrations (HuggingFace, CivitAI, popular models)
 """
 
+from .matcher import find_matches
 from .resolver import analyze_and_find_matches, apply_resolution
 from .scanner import get_model_files
-from .matcher import find_matches
-
 
 __all__ = [
     "analyze_and_find_matches",
     "apply_resolution",
-    "get_model_files",
     "find_matches",
+    "get_model_files",
 ]

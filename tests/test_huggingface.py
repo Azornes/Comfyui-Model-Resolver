@@ -8,10 +8,9 @@ from core.sources.huggingface import (
     parse_huggingface_url,
     get_huggingface_download_url,
     _normalize_huggingface_size_probe_url,
-    clean_filename_for_search,
     _write_persistent_author_index,
 )
-from core.matcher import build_filename_search_queries
+from core.matcher import build_filename_search_queries, clean_filename_for_search
 from core.type_utils import extract_file_size
 
 class HuggingFaceSourceTests(unittest.TestCase):

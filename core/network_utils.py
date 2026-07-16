@@ -9,7 +9,6 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 
-
 REDIRECT_STATUS_CODES = {301, 302, 303, 307, 308}
 SENSITIVE_REDIRECT_HEADERS = {"authorization", "cookie", "proxy-authorization"}
 
@@ -212,6 +211,7 @@ def request_source_response(
 ) -> Optional[requests.Response]:
     """Perform a GET/POST request with retry logic for rate limit status (HTTP 429)."""
     import time
+
     from .log_system import create_module_logger
     log = create_module_logger(__name__)
 

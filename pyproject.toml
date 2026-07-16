@@ -19,3 +19,49 @@ PublisherId = "azornes"
 DisplayName = "Comfyui Model Resolver"
 Icon = ""
 requires-comfyui = ">=0.26.0"
+
+# ---------------------------------------------------------------------------
+# Ruff – static analysis for Python
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+# Rule sets:
+#   E/W  – pycodestyle errors & warnings
+#   F    – pyflakes
+#   I    – isort (import sorting)
+#   B    – flake8-bugbear
+#   SIM  – flake8-simplify
+#   UP   – pyupgrade
+#   RUF  – Ruff-specific rules
+select = ["E", "W", "F", "I", "B", "SIM", "UP", "RUF"]
+
+ignore = [
+    "E501",     # line-too-long – handled by formatter / not enforced
+    "E402",     # module-import-not-at-top – ComfyUI entry point needs late imports
+    "W293",     # blank-line-with-whitespace – CRLF artifacts on indented blank lines
+    "B023",     # function-uses-loop-variable – intentional in callback patterns
+    "SIM105",   # suppressible-exception – contextlib.suppress not always clearer
+    "SIM108",   # if-else-block-instead-of-if-exp – readability preference
+    "UP006",    # non-pep585-annotation – project targets >=3.10 but uses typing compat
+    "UP035",    # deprecated-import – typing compat kept for clarity
+    "RUF013",   # implicit-optional – existing API signatures
+    "UP045",    # non-pep604-annotation-optional – existing code uses Optional[X]
+    "UP038",    # non-pep604-isinstance – existing isinstance(x, (A, B)) patterns
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = [
+    "F401",     # unused-import – re-exports
+    "E402",     # module-import-not-at-top – ComfyUI entry point structure
+    "F811",     # redefined-while-unused – re-exports / conditional imports
+]
+"tests/*" = [
+    "B011",     # assert-false – ok in tests
+    "SIM300",   # yoda-conditions – ok in tests
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["core"]

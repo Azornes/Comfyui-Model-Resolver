@@ -5,12 +5,11 @@ Provides helper functions for path normalization, symlink resolution,
 and directory matching to be shared across all modules.
 """
 
-import os
-import json
 import hashlib
+import json
+import os
 import re
-from typing import Any, Tuple, Optional, Callable, Iterable, List, Dict
-
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 _log = None
 
@@ -226,13 +225,13 @@ def write_json_atomic(
     separators: Optional[Tuple[str, str]] = None,
 ) -> None:
     """Safely write data to a JSON file using a temporary file and atomic replace."""
-    import tempfile
     import json
-    
+    import tempfile
+
     dir_name = os.path.dirname(file_path)
     if dir_name:
         os.makedirs(dir_name, exist_ok=True)
-        
+
     fd, tmp_path = tempfile.mkstemp(
         prefix=f".{os.path.basename(file_path)}.",
         suffix=".tmp",
@@ -550,7 +549,7 @@ def _metadata_get(metadata: Dict[str, Any], *keys: str) -> Any:
         if key in metadata:
             return metadata.get(key)
 
-    lowered = {str(key).lower(): key for key in metadata.keys()}
+    lowered = {str(key).lower(): key for key in metadata}
     for key in keys:
         original_key = lowered.get(str(key).lower())
         if original_key is not None:
@@ -1001,14 +1000,14 @@ def save_catalog_with_backup(
     dir_name = os.path.dirname(data_path)
     if dir_name:
         os.makedirs(dir_name, exist_ok=True)
-    
+
     # Backup existing data file
     if os.path.exists(data_path):
         shutil.copy2(data_path, f"{data_path}.bak")
-            
+
     # Write data file atomically
     write_json_atomic(data_path, data, indent=indent)
-    
+
     # Write metadata file atomically
     write_json_atomic(meta_path, meta, indent=indent)
 
@@ -1018,7 +1017,7 @@ def read_json_safe(file_path: str, default: Any = None) -> Any:
     if not file_path or not os.path.exists(file_path):
         return default
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
         _get_log().warning(f"Error reading JSON from {os.path.basename(file_path)}: {e}")
@@ -1086,7 +1085,7 @@ def split_path_segments(path_value: Any, filter_dots: bool = True) -> list[str]:
     text = str(path_value or "").replace("\\", "/").strip()
     if not text:
         return []
-    
+
     parts = []
     for raw_part in text.split("/"):
         part = raw_part.strip()
@@ -1095,6 +1094,6 @@ def split_path_segments(path_value: Any, filter_dots: bool = True) -> list[str]:
         if filter_dots and part in {".", ".."}:
             continue
         parts.append(part)
-        
+
     return parts
 

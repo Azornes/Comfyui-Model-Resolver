@@ -4,17 +4,29 @@ Core Resolver Module
 Integrates all components to provide high-level API for model linking.
 """
 
+import json
 import os
 import re
-import json
 import threading
-from typing import Dict, Any, List, Optional, Tuple, Callable
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import unquote
 
 from .log_system import create_module_logger
+
 log = create_module_logger(__name__)
 
+from .matcher import find_matches, strip_known_model_extension
 from .scanner import get_model_files
+from .sources.huggingface import parse_huggingface_url as parse_hf_url
+from .type_utils import MODEL_EXTENSIONS as _MODEL_EXTENSIONS
+from .type_utils import (
+    as_dict,
+    as_list,
+    extract_sha256_from_metadata,
+    normalize_sha256,
+    prepare_remote_size_probe_url,
+    unique_ordered_strings,
+)
 from .workflow_analyzer import (
     NESTED_MODEL_KEYS,
     NODE_TYPE_TO_CATEGORY_HINTS,
@@ -23,11 +35,7 @@ from .workflow_analyzer import (
     identify_missing_models,
     should_scan_as_model_reference,
 )
-from .matcher import find_matches, strip_known_model_extension
-from .type_utils import as_dict, as_list, MODEL_EXTENSIONS as _MODEL_EXTENSIONS, unique_ordered_strings, extract_sha256_from_metadata, normalize_sha256, prepare_remote_size_probe_url
 from .workflow_updater import update_workflow_nodes
-from .sources.civitai import resolve_urn
-from .sources.huggingface import parse_huggingface_url as parse_hf_url
 
 # Regex patterns for URL extraction (matches HuggingFace and CivitAI URLs)
 URL_PATTERN = re.compile(r'(https?://(?:huggingface\.co|civitai\.com)[^\s"\'<>\)\\]+)')
@@ -37,17 +45,11 @@ MODEL_EXTENSIONS = tuple(_MODEL_EXTENSIONS)
 
 
 from .path_utils import (
-    get_path_identity,
-    get_path_abs,
-    get_path_key,
-    is_path_within,
-    prefer_local_base_directory,
-    dedupe_local_base_directories,
-    get_filename_from_path,
-    read_json_safe,
     find_metadata_sidecar_path,
+    get_filename_from_path,
+    get_path_identity,
+    read_json_safe,
 )
-
 
 # Imported from .matcher
 
@@ -1305,7 +1307,7 @@ def apply_resolution(
         }
 
         # If resolved_model provided, extract path if needed
-        if "resolved_model" in resolution and resolution["resolved_model"]:
+        if resolution.get("resolved_model"):
             resolved_model = resolution["resolved_model"]
             if "path" in resolved_model and not mapping.get("resolved_path"):
                 mapping["resolved_path"] = resolved_model["path"]

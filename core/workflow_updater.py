@@ -5,12 +5,12 @@ Updates workflow JSON by replacing model paths in nodes.
 """
 
 import os
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from .log_system import create_module_logger
-log = create_module_logger(__name__)
-from .path_utils import is_path_within, get_filename_from_path
 
+log = create_module_logger(__name__)
+from .path_utils import get_filename_from_path, is_path_within
 
 
 def convert_to_relative_path(

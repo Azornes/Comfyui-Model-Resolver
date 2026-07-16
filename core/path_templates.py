@@ -12,7 +12,6 @@ from .settings import (
     sanitize_folder_name,
 )
 
-
 TEMPLATE_CATEGORIES = (
     "loras",
     "checkpoints",

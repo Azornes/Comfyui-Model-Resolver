@@ -4,13 +4,14 @@ Fuzzy Matcher Module
 Implements fuzzy string matching to find similar model names.
 """
 
+import heapq
 import os
 import re
-import heapq
-from typing import List, Dict, Tuple, Optional, Any
 from difflib import SequenceMatcher
+from typing import Any, Dict, List, Optional, Tuple
 
 from .log_system import create_module_logger
+
 log = create_module_logger(__name__)
 
 from .path_utils import get_filename_from_path
@@ -290,6 +291,7 @@ def base_model_score(candidate: str, preferred: Optional[str]) -> float:
 # ==================== CENTRALIZED MATCHING & CONFIDENCE HELPERS ====================
 
 from .type_utils import MODEL_EXTENSIONS, PRECISION_FORMAT_SUFFIXES, get_version_sort_key
+
 MODEL_FILE_EXTENSIONS = MODEL_EXTENSIONS
 
 
@@ -350,11 +352,11 @@ def calculate_filename_confidence(target_filename: str, candidate_filename: str)
     best_similarity = calculate_similarity_with_normalization(
         target_filename, candidate_filename
     )
-    
+
     # Cap similarity at 0.999 for non-exact matches to prevent false 100% scores
     if best_similarity >= 0.999:
         best_similarity = 0.999
-        
+
     return round(best_similarity * 100, 1)
 
 
@@ -418,26 +420,26 @@ def build_filename_search_queries(filename: str) -> List[str]:
     basename = get_filename_from_path(filename).strip()
     if not basename:
         return []
-        
+
     stem = os.path.splitext(basename)[0].strip()
     stem_lower = stem.lower()
-    
+
     # Pattern to match common precision/format suffixes
     pattern = r"[-_]?(" + "|".join(PRECISION_FORMAT_SUFFIXES) + r")"
-    
+
     # 1. Strip suffix followed by any other characters (like clean_filename_for_search)
     cleaned = re.sub(pattern + r".*$", "", stem, flags=re.IGNORECASE).strip(" -_")
     cleaned_lower = cleaned.lower()
-    
+
     # 2. Strip suffix at the end of the stem (like simplified in search queries)
     simplified = re.sub(pattern + r"$", "", stem_lower, flags=re.IGNORECASE).strip(" -_")
-    
+
     queries = []
     for query in [basename, stem, stem_lower, cleaned, cleaned_lower, simplified]:
         query_val = (query or "").strip(" -_")
         if query_val and query_val not in queries:
             queries.append(query_val)
-            
+
     return queries
 
 
@@ -454,8 +456,7 @@ def match_model_by_title_generic(
     log_prefix: str = "ModelResolver",
 ) -> Optional[Dict[str, Any]]:
     """Generic helper to resolve extensionless workflow values by model title across CivitAI and CivArchive."""
-    from typing import Callable, Any
-    
+
     title_confidence = calculate_model_title_confidence(title_query, model_name)
     if title_confidence < MODEL_TITLE_MATCH_THRESHOLD:
         log.debug(
@@ -472,7 +473,7 @@ def match_model_by_title_generic(
 
     for version in versions:
         hydrated_version = hydrate_version_fn(version) if hydrate_version_fn else version
-        
+
         # Check base model context
         if base_model_context:
             base_model = get_base_model_fn(hydrated_version)
@@ -492,7 +493,7 @@ def match_model_by_title_generic(
 
         result["confidence"] = title_confidence
         result["title_confidence"] = title_confidence
-        
+
         log.info(
             f"{log_prefix} model-title match: query={title_query}, model_id={model_id}, model_name={model_name}, version_id={result.get('version_id')}, filename={result.get('filename')}, confidence={title_confidence}, base={result.get('base_model')}"
         )

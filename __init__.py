@@ -6,11 +6,11 @@
 """
 
 import asyncio
-import threading
-from typing import Dict, Any, Optional
-import time
-import sys
 import os
+import sys
+import threading
+import time
+from typing import Any, Dict, Optional
 
 if not __package__ or __package__ == "":
     this_dir = os.path.dirname(os.path.abspath(__file__))
@@ -25,7 +25,8 @@ if not __package__ or __package__ == "":
         sys.modules[package_name] = current_module
         if not hasattr(current_module, "__path__"):
             current_module.__path__ = [this_dir]
-from .core.log_system import LogLevel, create_module_logger, logger as backend_log_controller
+from .core.log_system import LogLevel, create_module_logger
+from .core.log_system import logger as backend_log_controller
 from .core.log_system.config import LOG_LEVEL as BACKEND_DEFAULT_LOG_LEVEL
 from .core.path_utils import get_filename_from_path
 
@@ -99,7 +100,7 @@ else:
         MODEL_RESOLVER_DEPENDENCY_NODE_TYPE: MODEL_RESOLVER_DEPENDENCY_NODE_DISPLAY_NAME,
     }
 
-    __all__ = ["WEB_DIRECTORY", "NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
+    __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
 
 class JobProgressTracker:
@@ -140,7 +141,7 @@ class JobProgressTracker:
         now = time.time()
         with self.lock:
             current = self.progress.get(progress_id, {})
-            
+
             # If the job was cancelled, force it to remain cancelled.
             if progress_id in self.cancelled and payload.get("status") != "cancelled":
                 payload["status"] = "cancelled"
@@ -320,28 +321,10 @@ class ModelResolverExtension:
 
             # Import resolver modules
             try:
-                from .core.resolver import (
-                    analyze_and_find_matches,
-                    apply_resolution,
-                    get_local_model_hash_metadata,
-                    invalidate_local_hash_match_cache,
-                    search_local_matches_by_hash,
-                    search_local_matches,
-                )
-                from .core.workflow_analyzer import analyze_workflow_models
-                from .core.path_templates import infer_download_path_templates
                 from .core.metadata_audit import audit_metadata_sizes
                 from .core.metadata_builder import (
                     build_missing_local_metadata,
                     get_metadata_build_capabilities,
-                )
-                from .core.scanner import get_model_files, invalidate_model_files_cache, find_local_file_path
-                from .core.path_utils import (
-                    extract_safetensors_header_sha256,
-                    get_filename_from_path,
-                    is_path_in_configured_model_roots,
-                    read_json_safe,
-                    write_json_atomic,
                 )
                 from .core.network_utils import (
                     UnsafeUrlError,
@@ -349,101 +332,135 @@ class ModelResolverExtension:
                     request_public_url,
                     validate_public_http_url,
                 )
-                from .core.type_utils import (
-                    first_non_empty,
-                    to_int,
-                    to_bool,
-                    format_size_bytes,
-                    normalize_sha256,
-                    extract_sha256_from_metadata,
-                    fetch_remote_file_size_cached,
-                    looks_like_model_file,
-                    normalize_category_to_model_type,
-                    get_category_folder_keys,
-                    get_enabled_download_categories,
+                from .core.path_templates import infer_download_path_templates
+                from .core.path_utils import (
+                    extract_safetensors_header_sha256,
+                    get_filename_from_path,
+                    is_path_in_configured_model_roots,
+                    read_json_safe,
+                    write_json_atomic,
                 )
+                from .core.resolver import (
+                    analyze_and_find_matches,
+                    apply_resolution,
+                    get_local_model_hash_metadata,
+                    invalidate_local_hash_match_cache,
+                    search_local_matches,
+                    search_local_matches_by_hash,
+                )
+                from .core.scanner import find_local_file_path, get_model_files, invalidate_model_files_cache
                 from .core.settings import (
                     TEMPLATE_KEY_ALIASES,
-                    bool_setting as resolver_bool_setting,
                     get_default_root_for_category,
-                    load_settings as load_resolver_settings,
                     resolve_download_subfolder,
+                )
+                from .core.settings import (
+                    bool_setting as resolver_bool_setting,
+                )
+                from .core.settings import (
+                    load_settings as load_resolver_settings,
+                )
+                from .core.settings import (
                     save_settings as save_resolver_settings,
                 )
+                from .core.type_utils import (
+                    extract_sha256_from_metadata,
+                    fetch_remote_file_size_cached,
+                    first_non_empty,
+                    format_size_bytes,
+                    get_category_folder_keys,
+                    get_enabled_download_categories,
+                    looks_like_model_file,
+                    normalize_category_to_model_type,
+                    normalize_sha256,
+                    to_bool,
+                    to_int,
+                )
+                from .core.workflow_analyzer import analyze_workflow_models
             except ImportError as e:
                 self.logger.error(f"Model Resolver: Could not import core modules: {e}")
                 return False
 
             # Import download modules
             try:
+                from .core.aria2_installer import Aria2InstallError, install_aria2_engine
                 from .core.downloader import (
-                    start_background_download,
-                    get_progress,
-                    get_all_progress,
                     cancel_download,
-                    pause_download,
-                    resume_download,
+                    get_all_progress,
                     get_aria2_status,
-                    start_aria2_daemon,
-                    stop_aria2_daemon,
                     get_download_directory,
                     get_metadata_sidecar_path,
+                    get_progress,
                     get_safe_metadata_sidecar_path,
-                    normalize_download_category,
-                    write_lora_manager_metadata,
-                    sanitize_download_filename,
                     is_allowed_model_download_filename,
+                    normalize_download_category,
+                    pause_download,
+                    resume_download,
+                    sanitize_download_filename,
+                    start_aria2_daemon,
+                    start_background_download,
+                    stop_aria2_daemon,
+                    write_lora_manager_metadata,
                 )
-                from .core.aria2_installer import Aria2InstallError, install_aria2_engine
-                from .core.sources.popular import (
-                    get_popular_model_url,
-                    search_popular_models,
-                    reload_databases as reload_popular_databases,
-                )
-                from .core.sources.model_list import (
-                    search_model_list,
-                    search_model_list_multiple,
-                    get_model_list_update_status,
-                    update_model_list_from_remote,
-                    reload_model_list,
-                )
-                from .core.sources.huggingface import (
-                    search_huggingface_for_file,
-                    parse_huggingface_url,
-                    get_huggingface_download_url,
-                    get_author_fallback_index_status,
-                    refresh_author_fallback_index,
-                    check_huggingface_token,
-                    check_brave_search_api_key,
-                    clear_search_cache as clear_huggingface_search_cache,
-                )
-                from .core.sources.civitai import (
-                    search_civitai_for_file,
-                    search_civitai,
-                    parse_civitai_url,
-                    get_civitai_download_url,
-                    get_civitai_model_details,
-                    resolve_urn,
-                    check_civitai_api_key,
-                    check_civitai_session_token,
-                    clear_search_cache as clear_civitai_search_cache,
-                )
+                from .core.sources import clear_all_search_caches
                 from .core.sources.civarchive import (
                     CivArchiveSearchError,
+                    get_civarchive_model_details,
                     is_civarchive_available,
-                    search_civarchive_for_file,
                     parse_civarchive_url,
                     resolve_civarchive_by_hash,
                     resolve_civarchive_model_version,
-                    get_civarchive_model_details,
+                    search_civarchive_for_file,
+                )
+                from .core.sources.civarchive import (
                     clear_search_cache as clear_civarchive_search_cache,
+                )
+                from .core.sources.civitai import (
+                    check_civitai_api_key,
+                    check_civitai_session_token,
+                    get_civitai_download_url,
+                    get_civitai_model_details,
+                    parse_civitai_url,
+                    resolve_urn,
+                    search_civitai,
+                    search_civitai_for_file,
+                )
+                from .core.sources.civitai import (
+                    clear_search_cache as clear_civitai_search_cache,
+                )
+                from .core.sources.huggingface import (
+                    check_brave_search_api_key,
+                    check_huggingface_token,
+                    get_author_fallback_index_status,
+                    get_huggingface_download_url,
+                    parse_huggingface_url,
+                    refresh_author_fallback_index,
+                    search_huggingface_for_file,
+                )
+                from .core.sources.huggingface import (
+                    clear_search_cache as clear_huggingface_search_cache,
+                )
+                from .core.sources.lora_manager_archive import (
+                    clear_search_cache as clear_lora_manager_archive_search_cache,
                 )
                 from .core.sources.lora_manager_archive import (
                     is_lora_manager_archive_available,
                     search_lora_manager_archive_for_file,
-                    clear_search_cache as clear_lora_manager_archive_search_cache,
                 )
-                from .core.sources import clear_all_search_caches
+                from .core.sources.model_list import (
+                    get_model_list_update_status,
+                    reload_model_list,
+                    search_model_list,
+                    search_model_list_multiple,
+                    update_model_list_from_remote,
+                )
+                from .core.sources.popular import (
+                    get_popular_model_url,
+                    search_popular_models,
+                )
+                from .core.sources.popular import (
+                    reload_databases as reload_popular_databases,
+                )
 
                 download_available = True
             except ImportError as e:
@@ -1139,6 +1156,7 @@ class ModelResolverExtension:
 
             def calculate_sha256_with_progress(normalized_path, progress_id=""):
                 import os as _os
+
                 from .core.path_utils import calculate_file_sha256 as _calculate_file_sha256_core
 
                 total_bytes = max(0, _os.path.getsize(normalized_path))
@@ -1618,8 +1636,8 @@ class ModelResolverExtension:
 
                 def build_loaded_models_response():
                     from .core.workflow_analyzer import (
-                        analyze_workflow_models,
                         URN_TYPE_MAP,
+                        analyze_workflow_models,
                     )
 
                     update_loaded_progress(
@@ -3452,13 +3470,21 @@ class ModelResolverExtension:
             if download_available:
 
                 from .core.path_utils import (
-                    get_path_abs as get_local_path_abs,
-                    get_path_key as get_local_path_key,
-                    get_path_identity as get_local_path_identity,
-                    get_comfy_root_path,
-                    is_path_within as is_local_path_within,
-                    prefer_local_base_directory,
                     dedupe_local_base_directories,
+                    get_comfy_root_path,
+                    prefer_local_base_directory,
+                )
+                from .core.path_utils import (
+                    get_path_abs as get_local_path_abs,
+                )
+                from .core.path_utils import (
+                    get_path_identity as get_local_path_identity,
+                )
+                from .core.path_utils import (
+                    get_path_key as get_local_path_key,
+                )
+                from .core.path_utils import (
+                    is_path_within as is_local_path_within,
                 )
 
                 # cleanup_search_progress, is_search_progress_cancelled, mark_search_progress_cancelled, and update_search_progress removed
@@ -4084,10 +4110,7 @@ class ModelResolverExtension:
 
                                 if model_list_result:
                                     confidence = model_list_result.get("confidence", 0)
-                                    if is_urn and confidence >= 70:
-                                        source_results["model_list"] = model_list_result
-                                        source_found = True
-                                    elif not is_urn:
+                                    if (is_urn and confidence >= 70) or not is_urn:
                                         source_results["model_list"] = model_list_result
                                         source_found = True
 
@@ -4654,7 +4677,7 @@ class ModelResolverExtension:
 
                     if not filename:
                         # Extract filename from URL
-                        from urllib.parse import urlparse, unquote
+                        from urllib.parse import unquote, urlparse
 
                         parsed = urlparse(url)
                         filename = unquote(parsed.path.split("/")[-1])
@@ -4933,6 +4956,7 @@ class ModelResolverExtension:
                 async def get_root_directories(request):
                     """Get configured ComfyUI root directories for path settings."""
                     import os
+
                     import folder_paths
 
                     known_categories = set(folder_paths.folder_names_and_paths.keys())
@@ -5050,6 +5074,7 @@ class ModelResolverExtension:
                 async def get_subfolders(request):
                     """Get known subfolders for a category using ComfyUI folder_paths."""
                     import os
+
                     import folder_paths
 
                     raw_category = (request.match_info.get("category") or "").strip()
@@ -5278,7 +5303,7 @@ class ModelResolverExtension:
                         lines.append(
                             f"===== {name} ({stat.st_size} bytes, modified {modified_at}) ====="
                         )
-                        with open(path, "r", encoding="utf-8", errors="replace") as log_file:
+                        with open(path, encoding="utf-8", errors="replace") as log_file:
                             lines.append(log_file.read().rstrip())
                     except OSError as exc:
                         lines.append(f"===== {name} =====")

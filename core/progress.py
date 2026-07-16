@@ -4,8 +4,10 @@ Progress Reporting Module
 Unified utility for reporting progress of asynchronous search and download operations.
 """
 
-from typing import Dict, Any, Optional, Callable
+from typing import Any, Callable, Dict, Optional
+
 from .log_system import create_module_logger
+
 log = create_module_logger(__name__)
 
 

@@ -4,22 +4,20 @@ Model List Database Module
 Search the ComfyUI Manager model-list.json database with fuzzy matching.
 """
 
-import os
 import hashlib
-import shutil
-import tempfile
+import os
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional, List
-import requests
-
-from ..matcher import normalize_filename, calculate_similarity
+from typing import Any, Dict, List, Optional
 
 from ..log_system import create_module_logger
+from ..matcher import calculate_similarity, normalize_filename
+
 log = create_module_logger(__name__)
 
 
-from ..path_utils import METADATA_DIR
 from ..catalog_manager import CatalogManager
+from ..path_utils import METADATA_DIR
+
 MODEL_LIST_FILE = os.path.join(METADATA_DIR, "model-list.json")
 MODEL_LIST_META_FILE = os.path.join(METADATA_DIR, "model-list.meta.json")
 catalog_mgr = CatalogManager(MODEL_LIST_FILE, MODEL_LIST_META_FILE, "models")
@@ -30,6 +28,7 @@ MODEL_LIST_GITHUB_API_URL = (
     "https://api.github.com/repos/Comfy-Org/ComfyUI-Manager/contents/model-list.json?ref=main"
 )
 from ..network_utils import request_source_json
+
 HTTP_TIMEOUT = 30
 
 # Cache for loaded data
@@ -69,7 +68,7 @@ def _get_local_model_list_sha() -> str:
     try:
         with open(MODEL_LIST_FILE, "rb") as f:
             content = f.read()
-        header = f"blob {len(content)}\0".encode("utf-8")
+        header = f"blob {len(content)}\0".encode()
         return hashlib.sha1(header + content).hexdigest()
     except Exception as e:
         log.warning(f"Error calculating model-list.json SHA: {e}")

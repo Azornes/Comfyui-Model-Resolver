@@ -15,7 +15,6 @@ import requests
 
 from .path_utils import is_path_within
 
-
 ARIA2_RELEASE_API_URL = "https://api.github.com/repos/aria2/aria2/releases/latest"
 REQUEST_HEADERS = {"User-Agent": "ComfyUI-Model-Resolver"}
 CUSTOM_NODE_ROOT = Path(__file__).resolve().parents[1]

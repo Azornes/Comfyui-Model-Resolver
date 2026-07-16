@@ -11,17 +11,16 @@ Features:
 - Log file rotation
 - Configuration via environment variables
 """
-# ruff: noqa: T201
-import os
-import sys
 import json
-import re
 import logging
-import time
+import os
+import re
+import sys
 import threading
+import time
+import traceback
 from enum import IntEnum
 from logging.handlers import RotatingFileHandler
-import traceback
 
 
 # Log levels
@@ -546,9 +545,9 @@ class AzLogsLogger:
         message = " ".join(str(arg) for arg in args)
 
         # Extract known kwargs
-        exc_info = kwargs.get("exc_info", None)
+        exc_info = kwargs.get("exc_info")
         stacklevel = kwargs.get("stacklevel", 1)
-        extra = kwargs.get("extra", None)
+        extra = kwargs.get("extra")
 
         # Map LogLevel to logging level
         log_level = LEVEL_MAP.get(level, logging.INFO)

@@ -5,20 +5,19 @@ Curated list of common models with known download URLs.
 """
 
 import os
-import json
 import re
-import shutil
-import tempfile
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
 
 from ..log_system import create_module_logger
+
 log = create_module_logger(__name__)
 
 
-from ..path_utils import METADATA_DIR, read_json_safe
-from ..network_utils import request_source_json
 from ..catalog_manager import CatalogManager
+from ..network_utils import request_source_json
+from ..path_utils import METADATA_DIR, read_json_safe
+
 POPULAR_MODELS_FILE = os.path.join(METADATA_DIR, "popular-models.json")
 MODEL_ALIASES_FILE = os.path.join(METADATA_DIR, "model-aliases.json")
 BASE_MODELS_FILE = os.path.join(METADATA_DIR, "base-models.json")
@@ -55,7 +54,6 @@ def _load_model_aliases() -> Dict[str, List[str]]:
 
 
 from ..matcher import normalize_base_model as _normalize_base_model
-
 
 base_models_mgr = CatalogManager(BASE_MODELS_FILE, BASE_MODELS_META_FILE, "base_models")
 
@@ -212,19 +210,19 @@ def _read_base_models_meta() -> Dict[str, Any]:
 
 def generate_aliases(name: str) -> List[str]:
     aliases = {name.lower()}
-    
+
     # Replace dots, dashes, underscores with spaces, then normalize spaces
     normalized = re.sub(r"[\._\-]+", " ", name.lower())
     normalized = re.sub(r"\s+", " ", normalized).strip()
     aliases.add(normalized)
     version_trimmed = re.sub(r"(\d+)(?:[\s\._\-]+0)+(?!\d)", r"\1", normalized)
     aliases.add(version_trimmed)
-    
+
     # Remove all spaces/dashes/dots/underscores
     collapsed = re.sub(r"[\s\._\-]+", "", name.lower())
     aliases.add(collapsed)
     aliases.add(re.sub(r"[\s\._\-]+", "", version_trimmed))
-    
+
     # If there are dots/dashes/underscores, add specific clean replacements
     if "." in name:
         aliases.add(name.lower().replace(".", ""))
@@ -242,7 +240,7 @@ def generate_aliases(name: str) -> List[str]:
         first_word = words[0]
         if len(first_word) > 2 and first_word not in {"stable", "flux", "pony", "sdxl"}:
             aliases.add(first_word)
-            
+
     return sorted(list({a for a in aliases if len(a) > 1}))
 
 
@@ -251,45 +249,45 @@ def get_base_models_status(check_remote: bool = False) -> Dict[str, Any]:
     local_data = _read_base_models_file()
     base_models = local_data.get("base_models", [])
     meta = _read_base_models_meta()
-    
+
     local_count = len(base_models)
     local_updated_at = meta.get("updated_at") or ""
-    
+
     status = {
         "local_count": local_count,
         "local_updated_at": local_updated_at,
         "remote_checked_at": meta.get("last_checked_at") or "",
         "update_available": False,
     }
-    
+
     if check_remote:
         try:
             # Fetch from CivitAI API using unified helper
             enums = request_source_json("https://civitai.com/api/v1/enums", timeout=15, log_name="CivitAI Enums")
             if enums:
                 remote_models = enums.get("BaseModel", [])
-                
+
                 # Check if there are new models by comparing normalized names and aliases
                 all_existing_normalized = set()
                 for m in base_models:
                     all_existing_normalized.add(_normalize_base_model(m.get("name", "")))
                     for alias in m.get("aliases", []):
                         all_existing_normalized.add(_normalize_base_model(alias))
-                
+
                 new_models_found = False
                 for remote_name in remote_models:
                     norm_remote = _normalize_base_model(remote_name)
                     if norm_remote and norm_remote not in all_existing_normalized:
                         new_models_found = True
                         break
-                
+
                 status.update({
                     "remote_checked_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
                     "update_available": new_models_found
                 })
         except Exception as e:
             log.warning(f"Error checking remote base models: {e}")
-            
+
     return status
 
 
@@ -301,33 +299,33 @@ def update_base_models_from_remote() -> Dict[str, Any]:
     remote_names = enums.get("BaseModel", [])
     if not remote_names or not isinstance(remote_names, list):
         raise ValueError("CivitAI enums did not return a valid BaseModel list")
-        
+
     local_data = _read_base_models_file()
     base_models = local_data.get("base_models", [])
-    
+
     # 1. Build a set of all normalized aliases currently in base-models.json
     all_known_normalized = set()
     for m in base_models:
         for alias in m.get("aliases", []):
             all_known_normalized.add(_normalize_base_model(alias))
         all_known_normalized.add(_normalize_base_model(m.get("name", "")))
-        
+
     updated_models = list(base_models)
     new_added_count = 0
     new_added_names = []
-    
+
     for name in remote_names:
         norm_name = _normalize_base_model(name)
         if not norm_name:
             continue
-            
+
         # If the normalized name is already a known alias or name, skip it
         if norm_name in all_known_normalized:
             continue
-            
+
         # Generate candidate aliases
         candidates = generate_aliases(name)
-        
+
         # Filter out aliases that are already registered/known
         filtered_aliases = []
         for alias in candidates:
@@ -335,20 +333,20 @@ def update_base_models_from_remote() -> Dict[str, Any]:
             if norm_alias not in all_known_normalized:
                 filtered_aliases.append(alias)
                 all_known_normalized.add(norm_alias)
-                
+
         # If we have valid aliases, add the new base model entry
         if filtered_aliases:
             if name.lower() not in [a.lower() for a in filtered_aliases]:
                 filtered_aliases.insert(0, name)
                 all_known_normalized.add(norm_name)
-                
+
             updated_models.append({
                 "name": name,
                 "aliases": filtered_aliases
             })
             new_added_count += 1
             new_added_names.append(name)
-            
+
     now_str = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     meta = {
         "updated_at": now_str,
@@ -359,7 +357,7 @@ def update_base_models_from_remote() -> Dict[str, Any]:
     }
     base_models_mgr.save({"base_models": updated_models}, meta, indent=2)
     reload_databases()
-    
+
     return {
         "local_count": len(updated_models),
         "local_updated_at": now_str,

@@ -5,8 +5,6 @@ Handles downloading models from various sources with progress tracking.
 """
 
 import os
-import json
-import hashlib
 import re
 import secrets
 import shutil
@@ -14,25 +12,44 @@ import socket
 import subprocess
 import threading
 import time
-import requests
-from typing import Dict, Any, Optional, Callable, List
-from pathlib import Path
 from collections import deque
-from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+
+import requests
 
 from .log_system import create_module_logger
+
 log = create_module_logger(__name__)
 
-from .resolver import invalidate_local_hash_match_cache, normalize_sha256
-from .scanner import invalidate_model_files_cache
-from .path_utils import is_path_within, get_path_identity, write_json_atomic, read_json_safe, get_comfy_root_path, calculate_file_sha256, get_filename_from_path
 from .network_utils import (
     host_matches_domain,
     request_public_url,
     validate_public_http_url,
 )
-from .type_utils import as_dict, as_list, first_non_empty, format_size_bytes as format_bytes, DEFAULT_BROWSER_USER_AGENT, extract_response_file_size, normalize_category_to_model_type, get_category_folder_keys, MODEL_EXTENSIONS
-
+from .path_utils import (
+    calculate_file_sha256,
+    get_comfy_root_path,
+    get_filename_from_path,
+    get_path_identity,
+    is_path_within,
+    read_json_safe,
+    write_json_atomic,
+)
+from .resolver import invalidate_local_hash_match_cache, normalize_sha256
+from .scanner import invalidate_model_files_cache
+from .type_utils import (
+    DEFAULT_BROWSER_USER_AGENT,
+    MODEL_EXTENSIONS,
+    as_dict,
+    as_list,
+    extract_response_file_size,
+    first_non_empty,
+    get_category_folder_keys,
+    normalize_category_to_model_type,
+)
+from .type_utils import format_size_bytes as format_bytes
 
 try:
     import folder_paths
@@ -72,7 +89,12 @@ HF_XET_ARIA2_AUTH_HOSTS = {
     "cas-bridge-direct.xethub-eu.hf.co",
 }
 
-from .settings import CATEGORY_MAP, load_settings, normalize_download_backend, normalize_download_category, normalize_relative_subfolder
+from .settings import (
+    load_settings,
+    normalize_download_backend,
+    normalize_download_category,
+    normalize_relative_subfolder,
+)
 
 SENSITIVE_METADATA_KEYS = {
     "authorization",
@@ -1610,7 +1632,7 @@ def _download_huggingface_xet(
 
         size = os.path.getsize(partial_path)
         if expected_size and size != expected_size:
-            raise IOError(
+            raise OSError(
                 f"Downloaded size mismatch: expected {expected_size}, received {size}"
             )
         os.replace(partial_path, dest_path)

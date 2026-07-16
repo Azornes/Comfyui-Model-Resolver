@@ -4,10 +4,9 @@
 @version: 2.0.0
 @description: Logging Initializer
 """
-# ruff: noqa: T201
+import logging
 import os
 import traceback
-import logging
 
 _logger = logging.getLogger(__name__)
 _initialized = False
@@ -15,8 +14,8 @@ _project_root = None
 _default_module_name = __name__
 
 try:
-    from .logger import logger, LogLevel, debug, info, warn, error, exception, fatal
-    from .config import LOG_LEVEL, LOG_MODULE_NAME, USE_COLORS, PROJECT_ALIASES
+    from .config import LOG_LEVEL, LOG_MODULE_NAME, PROJECT_ALIASES, USE_COLORS
+    from .logger import LogLevel, debug, error, exception, fatal, info, logger, warn
 
     def _find_project_root(start_path):
         current = os.path.dirname(os.path.abspath(start_path))

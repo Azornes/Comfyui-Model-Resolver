@@ -6,28 +6,35 @@ Search archived CivitAI metadata stored by comfyui-lora-manager.
 
 import json
 import os
-import sqlite3
 import re
+import sqlite3
 import time
 from typing import Any, Callable, Dict, List, Optional
 
+from ..log_system import create_module_logger
+from ..matcher import (
+    base_model_matches as _base_model_matches,
+)
+from ..matcher import (
+    base_model_score as _base_model_score,
+)
 from ..matcher import (
     calculate_archived_model_confidence,
-    normalize_base_model as _normalize_base_model,
-    base_model_matches as _base_model_matches,
-    base_model_score as _base_model_score,
     calculate_candidate_rank,
     should_update_best_match,
 )
+from ..matcher import (
+    normalize_base_model as _normalize_base_model,
+)
 from ..path_utils import get_filename_from_path
+from ..progress import get_progress_reporter
 from ..type_utils import (
-    select_primary_model_file,
+    build_search_result,
     get_generic_filename_tokens,
     normalize_lora_manager_type,
-    build_search_result,
+    select_primary_model_file,
 )
-from ..progress import report_progress, get_progress_reporter
-from ..log_system import create_module_logger
+
 log = create_module_logger(__name__)
 
 

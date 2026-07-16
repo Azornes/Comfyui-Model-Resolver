@@ -6,12 +6,12 @@ import json
 import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping, Optional
-from .path_utils import write_json_atomic, read_json_safe
 
+from .path_utils import read_json_safe, write_json_atomic
 
 SETTINGS_FILE = Path(__file__).resolve().parents[1] / "model_resolver_settings.json"
 
-from .type_utils import to_bool, CATEGORY_MAP, normalize_download_category
+from .type_utils import normalize_download_category, to_bool
 
 DOWNLOAD_PATH_MODES = {"suggested", "template", "manual"}
 DOWNLOAD_BACKENDS = {"python", "aria2"}

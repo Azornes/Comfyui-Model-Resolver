@@ -4,40 +4,31 @@ CivitAI Source Module
 Search and download models from CivitAI.
 """
 
+import json
 import os
 import re
-import json
-import hashlib
-import requests
-from ..network_utils import request_source_response, request_source_json
-from typing import Dict, Any, Optional, List, Callable
-from urllib.parse import urlparse, parse_qs, quote, urlencode
+from typing import Any, Callable, Dict, List, Optional
+from urllib.parse import quote, urlencode
 
+import requests  # noqa: F401 – used indirectly via unittest.mock patch targets
+
+from ..log_system import create_module_logger
 from ..matcher import (
-    calculate_filename_confidence,
-    calculate_model_title_confidence,
-    has_known_model_extension as _has_known_model_extension,
-    normalize_base_model as _normalize_base_model,
     base_model_matches as _base_model_matches,
+)
+from ..matcher import (
     base_model_score as _base_model_score,
 )
-from ..type_utils import (
-    first_non_empty,
-    CIVITAI_API_TYPE_MAP,
-    select_primary_model_file,
-    parse_size_to_bytes,
-    get_version_sort_key,
-    check_credential_http,
-    DEFAULT_BROWSER_USER_AGENT,
-    parse_civitai_model_path,
-    normalize_model_image,
-    as_dict,
-    as_list,
-    extract_trained_words,
-    build_search_result,
-    normalize_model_file_info,
+from ..matcher import (
+    calculate_filename_confidence,
 )
-from ..progress import report_progress, get_progress_reporter
+from ..matcher import (
+    has_known_model_extension as _has_known_model_extension,
+)
+from ..matcher import (
+    normalize_base_model as _normalize_base_model,
+)
+from ..network_utils import request_source_json, request_source_response
 from ..path_utils import (
     calculate_file_sha256,
     extract_safetensors_header_metadata,
@@ -46,7 +37,22 @@ from ..path_utils import (
     infer_safetensors_base_model,
     read_json_safe,
 )
-from ..log_system import create_module_logger
+from ..progress import get_progress_reporter
+from ..type_utils import (
+    CIVITAI_API_TYPE_MAP,
+    DEFAULT_BROWSER_USER_AGENT,
+    as_dict,
+    as_list,
+    build_search_result,
+    check_credential_http,
+    extract_trained_words,
+    first_non_empty,
+    normalize_model_file_info,
+    normalize_model_image,
+    parse_size_to_bytes,
+    select_primary_model_file,
+)
+
 log = create_module_logger(__name__)
 
 

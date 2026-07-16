@@ -6,13 +6,15 @@ Scans configured model directories and finds available model files.
 
 import os
 import time
-from typing import List, Dict, Tuple, Optional
+from typing import Dict, List, Optional, Tuple
 
 from .log_system import create_module_logger
+
 log = create_module_logger(__name__)
 
 
-from .path_utils import get_path_identity, get_filename_from_path
+from .path_utils import get_filename_from_path, get_path_identity
+
 # Import folder_paths lazily - it may not be available until ComfyUI is initialized
 try:
     import folder_paths

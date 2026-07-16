@@ -262,8 +262,9 @@ CIVARCHIVE_API_TYPE_MAP = {
     "motion_modules": "MotionModule",
 }
 
-from typing import Any, Dict, List, Optional, Tuple, Callable
 import re
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
 
 def normalize_download_category(category: str) -> str:
     """Return the canonical ComfyUI folder_paths key for a download category."""
@@ -561,7 +562,7 @@ def fetch_remote_file_size(
     """
     from .network_utils import request_public_url
     request_headers = {**(headers or {}), "Accept-Encoding": "identity"}
-    
+
     size = None
     try:
         response, _final_url, _final_headers = request_public_url(
@@ -604,6 +605,7 @@ def looks_like_model_file(url: str, expected_filename: str = "") -> bool:
     """
     import os
     from urllib.parse import unquote, urlparse
+
     from .network_utils import host_matches_domain
     from .path_utils import get_filename_from_path
 
@@ -620,7 +622,7 @@ def looks_like_model_file(url: str, expected_filename: str = "") -> bool:
 
     if host_matches_domain(host, "huggingface.co") and path.startswith("/spaces/"):
         return False
-    
+
     # Civitai/CivArchive api/download url prefix check
     if (
         host_matches_domain(host, "civitai.com")
@@ -650,7 +652,7 @@ def normalize_model_image(image_data: Dict[str, Any], default_civitai_url: str =
         meta = {}
 
     url = image_data.get("url") or image_data.get("imageUrl") or image_data.get("src") or ""
-    
+
     civitai_url = image_data.get("civitaiUrl") or image_data.get("postUrl") or default_civitai_url
     if not civitai_url and isinstance(image_data.get("id"), (int, str)):
         civitai_url = f"https://civitai.com/images/{image_data.get('id')}"
@@ -693,7 +695,6 @@ def normalize_model_image(image_data: Dict[str, Any], default_civitai_url: str =
     }
 
 
-import re
 SHA256_PATTERN = re.compile(r"^[a-fA-F0-9]{64}$")
 
 
@@ -836,6 +837,7 @@ def prepare_remote_size_probe_url(url: Any) -> Optional[str]:
     Converts HuggingFace '/blob/' URLs to '/resolve/' URLs.
     """
     from urllib.parse import urlparse
+
     from .network_utils import host_matches_domain
 
     if not isinstance(url, str) or not url.strip():
@@ -992,7 +994,7 @@ def get_enabled_download_categories(folder_names: list[str]) -> list[str]:
         "text_encoders", "ipadapter", "sams", "ultralytics"
     ]
     skip = {"custom_nodes", "configs"}
-    
+
     categories = []
     for cat in [*preferred, *folder_names]:
         norm = normalize_download_category(cat)
@@ -1105,12 +1107,12 @@ def build_search_result(
 
 def parse_provider_model_url(url: str, allowed_domains: list[str]) -> Optional[Dict[str, Any]]:
     """Parse a provider model URL (e.g. CivitAI or mirror site) to extract model/version info."""
-    from urllib.parse import urlparse
     import re
-    
+    from urllib.parse import urlparse
+
     if not isinstance(url, str) or not url.strip():
         return None
-        
+
     parsed = urlparse(url)
     hostname = parsed.hostname
     if hostname:
@@ -1122,7 +1124,7 @@ def parse_provider_model_url(url: str, allowed_domains: list[str]) -> Optional[D
                 break
         if not matched:
             return None
-            
+
     # Standard CivArchive sha256 mirrors pattern
     sha_match = re.search(r"/sha256/([a-fA-F0-9]{64})", parsed.path)
     if sha_match:
@@ -1133,6 +1135,6 @@ def parse_provider_model_url(url: str, allowed_domains: list[str]) -> Optional[D
         match = re.search(r"/api/download/models/(\d+)", parsed.path)
         if match:
             return {"version_id": int(match.group(1))}
-            
+
     return parse_civitai_model_path(parsed.path, parsed.query)
 
