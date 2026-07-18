@@ -1190,5 +1190,41 @@ class UnifiedHelpersTests(unittest.TestCase):
         res = parse_provider_model_url("https://civarchive.com/sha256/a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2", ["civarchive.com"])
         self.assertEqual(res, {"sha256": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"})
 
+    def test_resolve_model_category(self):
+        from core.type_utils import resolve_model_category
+        self.assertEqual(resolve_model_category("checkpoints", target_format="folder"), "checkpoints")
+        self.assertEqual(resolve_model_category("lora", target_format="folder"), "loras")
+        self.assertEqual(resolve_model_category("checkpoint", target_format="civitai"), "Checkpoint")
+        self.assertEqual(resolve_model_category("loras", target_format="civitai"), "LORA")
+        self.assertEqual(resolve_model_category("locon", target_format="civarchive"), "LoCon")
+        self.assertEqual(resolve_model_category("loras", target_format="urn"), "loras")
+
+    @patch("core.network_utils.request_source_json")
+    def test_execute_provider_json_request(self, mock_request_json):
+        from core.network_utils import execute_provider_json_request
+        mock_request_json.return_value = {"items": []}
+        res = execute_provider_json_request(
+            "CivitAI API",
+            "https://civitai.com/api/v1/models",
+            params={"limit": 5},
+            session_token="secret_token",
+        )
+        self.assertEqual(res, {"items": []})
+        mock_request_json.assert_called_once()
+        call_kwargs = mock_request_json.call_args[1]
+        self.assertIn("Cookie", call_kwargs["headers"])
+
+    def test_progress_tracker(self):
+        from core.progress import ProgressTracker
+        updates = []
+        def callback(data):
+            updates.append(data)
+        with ProgressTracker("Test Tracker", callback=callback, total=10) as tracker:
+            tracker.update(step=2, message="Processing")
+        self.assertTrue(len(updates) >= 1)
+        self.assertEqual(updates[-1]["current"], 2)
+        self.assertEqual(updates[-1]["total"], 10)
+
+
 
 

@@ -1,7 +1,3 @@
-import { app } from "../../../../../scripts/app.js";
-import { api } from "../../../../../scripts/api.js";
-import { $el } from "../../../../../scripts/ui.js";
-import { getSvgIcon } from "../../utils/icon_utils.js";
 import { escapeHtml, escapeJsString, getFilenameFromPath, pollBackgroundTask } from "./html_utils.js";
 
 export const renderFormatMethods = {
@@ -81,10 +77,6 @@ export const renderFormatMethods = {
 
     getStatusBadge(label, variant = 'neutral') {
         return `<span class="mr-badge mr-badge-${variant}">${label}</span>`;
-    },
-
-    getFilenameFromPath(path) {
-        return getFilenameFromPath(path);
     },
 
     /**
@@ -430,14 +422,6 @@ export const renderFormatMethods = {
 
     hasModelExtension(value) {
         return hasModelExtension(value);
-    },
-
-    escapeHtml(value) {
-        return escapeHtml(value);
-    },
-
-    escapeJsString(value) {
-        return escapeJsString(value);
     }
 };
 

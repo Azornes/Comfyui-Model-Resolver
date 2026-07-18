@@ -28,7 +28,7 @@ from ..matcher import (
 from ..matcher import (
     normalize_base_model as _normalize_base_model,
 )
-from ..network_utils import request_source_json, request_source_response
+from ..network_utils import execute_provider_json_request, request_source_json, request_source_response
 from ..path_utils import (
     calculate_file_sha256,
     extract_safetensors_header_metadata,
@@ -49,6 +49,7 @@ from ..type_utils import (
     normalize_model_file_info,
     normalize_model_image,
     parse_size_to_bytes,
+    resolve_model_category,
     select_primary_model_file,
 )
 
@@ -562,7 +563,7 @@ def _search_civitai_public_api_candidates(
         "sort": "Highest Rated",
         "period": "AllTime",
     }
-    civitai_type = CIVITAI_API_TYPE_MAP.get(str(model_type).lower()) if model_type else None
+    civitai_type = resolve_model_category(model_type, target_format="civitai") if model_type else None
     if civitai_type:
         params["types"] = civitai_type
 
@@ -684,12 +685,11 @@ def _find_civitai_file_in_model(
 
     best_resolved_result = None
     best_resolved_confidence = 0.0
-    headers = {}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-
-    data = request_source_json(
-        f"{CIVITAI_API_URL}/models/{model_id}", headers=headers, timeout=15, log_name="CivitAI model lookup"
+    data = execute_provider_json_request(
+        "CivitAI model lookup",
+        f"{CIVITAI_API_URL}/models/{model_id}",
+        api_key=api_key,
+        timeout=15,
     )
     if data is None:
         return None

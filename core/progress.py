@@ -64,3 +64,41 @@ def get_progress_reporter(error_context: str) -> Callable[[Optional[Callable[[Di
         )
     return reporter
 
+
+class ProgressTracker:
+    """
+    Context manager and state tracker for reporting operational progress to callbacks.
+    """
+    def __init__(
+        self,
+        stage: str,
+        callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+        total: int = 1,
+        error_context: str = "Progress callback",
+    ):
+        self.stage = stage
+        self.callback = callback
+        self.total = max(1, total)
+        self.current = 0
+        self.error_context = error_context
+
+    def __enter__(self) -> "ProgressTracker":
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        pass
+
+    def update(self, step: int = 1, message: str = "", **extra: Any) -> None:
+        self.current += step
+        percent = min(100.0, max(0.0, (self.current / self.total) * 100.0))
+        report_progress(
+            self.callback,
+            self.stage,
+            message,
+            percent=percent,
+            error_context=self.error_context,
+            current=self.current,
+            total=self.total,
+            **extra,
+        )
+

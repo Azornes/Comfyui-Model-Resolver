@@ -31,7 +31,6 @@ from ..network_utils import host_matches_domain, request_source_response
 from ..path_utils import get_filename_from_path
 from ..progress import get_progress_reporter
 from ..type_utils import (
-    CIVARCHIVE_API_TYPE_MAP,
     DEFAULT_BROWSER_USER_AGENT,
     clear_remote_size_cache,
     extract_file_size,
@@ -42,6 +41,7 @@ from ..type_utils import (
     normalize_model_image,
     normalize_sha256,
     prepare_remote_size_probe_url,
+    resolve_model_category,
     select_primary_model_file,
     to_int,
 )
@@ -177,7 +177,7 @@ def _normalize_civarchive_type(value: Any) -> str:
     if value is None:
         return ""
     text = str(value).strip()
-    mapped = CIVARCHIVE_API_TYPE_MAP.get(text.lower(), text)
+    mapped = resolve_model_category(text, target_format="civarchive")
     return re.sub(r"[^a-z0-9]+", "", str(mapped).lower())
 
 

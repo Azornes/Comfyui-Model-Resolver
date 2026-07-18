@@ -299,4 +299,47 @@ def fetch_json_from_public_url(
     return res
 
 
+def execute_provider_json_request(
+    provider_name: str,
+    url: str,
+    *,
+    method: str = "GET",
+    headers: Optional[Dict[str, str]] = None,
+    params: Optional[Dict[str, Any]] = None,
+    api_key: Optional[str] = None,
+    session_token: Optional[str] = None,
+    timeout: int = 20,
+    max_attempts: int = 2,
+    raise_on_error: bool = False,
+) -> Optional[Dict[str, Any]]:
+    """
+    Execute an outbound JSON request to a provider (CivitAI, CivArchive, HF, etc.)
+    with normalized user-agent, authorization token/session headers, and 429 retry handling.
+    """
+    from .type_utils import DEFAULT_BROWSER_USER_AGENT
+
+    req_headers = {"User-Agent": DEFAULT_BROWSER_USER_AGENT, "Accept": "application/json"}
+    if headers:
+        req_headers.update(headers)
+
+    token = str(api_key or "").strip()
+    if token and "Authorization" not in req_headers:
+        req_headers["Authorization"] = f"Bearer {token}"
+
+    sess_token = str(session_token or "").strip()
+    if sess_token and "Cookie" not in req_headers:
+        req_headers["Cookie"] = f"__Secure-civ-token={sess_token}; __Secure-civitai-token={sess_token}"
+
+    return request_source_json(
+        url,
+        method=method,
+        headers=req_headers,
+        params=params,
+        timeout=timeout,
+        max_attempts=max_attempts,
+        log_name=provider_name,
+        raise_on_error=raise_on_error,
+    )
+
+
 

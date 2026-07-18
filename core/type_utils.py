@@ -267,8 +267,18 @@ CIVARCHIVE_API_TYPE_MAP = {
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 
-def normalize_download_category(category: str) -> str:
-    """Return the canonical ComfyUI folder_paths key for a download category."""
+def resolve_model_category(
+    category: Any,
+    target_format: str = "folder",
+    default: str = "checkpoints",
+) -> str:
+    """
+    Resolve and normalize a category string into a target format:
+    - 'folder': canonical ComfyUI folder_paths category key
+    - 'civitai': CivitAI API type string (e.g. 'Checkpoint', 'LORA')
+    - 'civarchive': CivArchive API type string (e.g. 'Checkpoint', 'LoCon')
+    - 'urn': URN category string
+    """
     token = (
         str(category or "")
         .strip()
@@ -281,7 +291,22 @@ def normalize_download_category(category: str) -> str:
     while "__" in token:
         token = token.replace("__", "_")
     token = token.strip("_")
-    return CATEGORY_MAP.get(token, token or "checkpoints")
+
+    if target_format == "civitai":
+        canonical_folder = CATEGORY_MAP.get(token, token)
+        return CIVITAI_API_TYPE_MAP.get(token) or CIVITAI_API_TYPE_MAP.get(canonical_folder) or token.capitalize()
+    elif target_format == "civarchive":
+        canonical_folder = CATEGORY_MAP.get(token, token)
+        return CIVARCHIVE_API_TYPE_MAP.get(token) or CIVARCHIVE_API_TYPE_MAP.get(canonical_folder) or token.capitalize()
+    elif target_format == "urn":
+        return URN_TYPE_MAP.get(token, token or default)
+    else:
+        return CATEGORY_MAP.get(token, token or default)
+
+
+def normalize_download_category(category: str) -> str:
+    """Return the canonical ComfyUI folder_paths key for a download category."""
+    return resolve_model_category(category, target_format="folder", default="checkpoints")
 
 
 def select_primary_model_file(

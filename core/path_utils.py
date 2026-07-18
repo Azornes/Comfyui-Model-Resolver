@@ -340,6 +340,30 @@ def read_safetensors_header(
     return None
 
 
+def get_or_build_model_sidecar_info(
+    model_path: str,
+    *,
+    read_header_if_missing: bool = False,
+) -> Tuple[str, bool, Optional[Dict[str, Any]]]:
+    """
+    Locate or determine the metadata sidecar path for a model file.
+    Returns a tuple of (sidecar_path, exists_flag, header_json_or_none).
+    """
+    if not model_path:
+        return "", False, None
+
+    found_path = find_metadata_sidecar_path(model_path)
+    if found_path and os.path.isfile(found_path):
+        return found_path, True, None
+
+    default_sidecar = get_metadata_sidecar_path(model_path)
+    header_json = None
+    if read_header_if_missing and str(model_path).lower().endswith(".safetensors"):
+        header_json = read_safetensors_header(model_path)
+
+    return default_sidecar, False, header_json
+
+
 def extract_safetensors_header_sha256(
     file_path: str,
     max_header_size: int = SAFETENSORS_HEADER_MAX_BYTES,

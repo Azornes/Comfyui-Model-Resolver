@@ -15,11 +15,12 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from .log_system import create_module_logger
 from .path_utils import (
     HashCalculationCancelled,
-    _metadata_sidecar_paths,
+    _metadata_sidecar_paths,  # noqa: F401
     calculate_file_sha256,
     extract_safetensors_header_metadata,
     get_filename_from_path,
     get_metadata_sidecar_path,
+    get_or_build_model_sidecar_info,
     get_path_identity,
     read_json_safe,
     read_safetensors_header,
@@ -47,10 +48,8 @@ DEFAULT_METADATA_BUILD_WORKER_LIMIT = 4
 
 
 def _select_metadata_path(model_path: str) -> Tuple[str, bool]:
-    for candidate in _metadata_sidecar_paths(model_path):
-        if os.path.isfile(candidate):
-            return candidate, True
-    return get_metadata_sidecar_path(model_path), False
+    sidecar_path, exists, _ = get_or_build_model_sidecar_info(model_path)
+    return sidecar_path, exists
 
 
 def _is_model_file_path(path: str) -> bool:
