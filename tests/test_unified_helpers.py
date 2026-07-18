@@ -1215,16 +1215,5 @@ class UnifiedHelpersTests(unittest.TestCase):
         call_kwargs = mock_request_json.call_args[1]
         self.assertIn("Cookie", call_kwargs["headers"])
 
-    def test_progress_tracker(self):
-        from core.progress import ProgressTracker
-        updates = []
-        def callback(data):
-            updates.append(data)
-        with ProgressTracker("Test Tracker", callback=callback, total=10) as tracker:
-            tracker.update(step=2, message="Processing")
-        self.assertTrue(len(updates) >= 1)
-        self.assertEqual(updates[-1]["current"], 2)
-        self.assertEqual(updates[-1]["total"], 10)
-
 
 

@@ -1062,26 +1062,6 @@ export const modelInfoMethods = {
         window.open(sourceLink.url, '_blank', 'noopener,noreferrer');
     },
 
-    getKnownCivitaiModelUrl(model = {}) {
-        const candidates = [
-            model.model_url,
-            model.workflow_model_url,
-            model.openUrl,
-            model.url
-        ];
-        for (const url of candidates) {
-            const value = String(url || '');
-            if (/^https:\/\/(?:www\.)?civitai\.com\/models\/\d+/i.test(value)) {
-                return value;
-            }
-        }
-        const modelId = model.model_id || model.modelId;
-        const versionId = model.version_id || model.versionId;
-        if (modelId) {
-            return getCivitaiModelUrl(modelId, versionId);
-        }
-        return '';
-    },
 
     /**
      * Show model info dialog (similar to rgthree's RgthreeLoraInfoDialog)

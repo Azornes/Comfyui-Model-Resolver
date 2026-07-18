@@ -100,39 +100,6 @@ export const renderFormatMethods = {
         return { display: truncated, full: filename };
     },
 
-    /**
-     * Format a path showing directory context
-     * @param {string} path - Full relative path
-     * @param {number} maxLength - Maximum display length
-     * @returns {object} { display: formatted path, full: full path }
-     */
-    formatPath(path, maxLength = 60) {
-        if (!path) return { display: 'Unknown', full: 'Unknown' };
-
-        if (path.length <= maxLength) {
-            return { display: path, full: path };
-        }
-
-        // Try to show meaningful parts: first dir + filename
-        const parts = path.split(/[\/\\]/);
-        const filename = parts.pop() || '';
-        const firstDir = parts[0] || '';
-
-        if (parts.length === 0) {
-            // Just a filename
-            return this.formatFilename(path, maxLength);
-        }
-
-        // Show first directory + ... + filename
-        const formatted = firstDir + '\\...' + (filename.length > 40 ? this.formatFilename(filename, 40).display : filename);
-
-        if (formatted.length <= maxLength) {
-            return { display: formatted, full: path };
-        }
-
-        // Still too long, just truncate
-        return { display: path.slice(0, maxLength - 3) + '...', full: path };
-    },
 
     /**
      * Render a status message with icon

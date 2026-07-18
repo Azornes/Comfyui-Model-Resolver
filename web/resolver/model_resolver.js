@@ -1069,12 +1069,6 @@ export class ModelResolver {
         return localStorage.getItem('ModelResolver.autoOpenOnMissing') !== 'false';
     }
 
-    /**
-     * Set auto-open preference
-     */
-    setAutoOpenEnabled(enabled) {
-        localStorage.setItem('ModelResolver.autoOpenOnMissing', enabled ? 'true' : 'false');
-    }
 
     /**
      * Check for missing models and auto-open dialog if any are found

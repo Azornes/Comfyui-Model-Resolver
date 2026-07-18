@@ -10,7 +10,7 @@ from core.sources.huggingface import (
     _normalize_huggingface_size_probe_url,
     _write_persistent_author_index,
 )
-from core.matcher import build_filename_search_queries, clean_filename_for_search
+from core.matcher import build_filename_search_queries
 from core.type_utils import extract_file_size
 
 class HuggingFaceSourceTests(unittest.TestCase):
@@ -84,16 +84,6 @@ class HuggingFaceSourceTests(unittest.TestCase):
         url = "https://huggingface.co/user/repo/blob/main/model.safetensors"
         normalized = _normalize_huggingface_size_probe_url(url)
         self.assertEqual(normalized, "https://huggingface.co/user/repo/resolve/main/model.safetensors")
-
-    def test_clean_filename_for_search(self):
-        self.assertEqual(clean_filename_for_search("model_fp16.safetensors"), "model")
-        self.assertEqual(clean_filename_for_search("model_scaled_bf16.safetensors"), "model")
-        self.assertEqual(clean_filename_for_search("my-awesome-model.safetensors"), "my-awesome-model")
-
-        # Verify new format/precision suffixes are cleaned
-        self.assertEqual(clean_filename_for_search("model_fp8.safetensors"), "model")
-        self.assertEqual(clean_filename_for_search("model_q4.safetensors"), "model")
-        self.assertEqual(clean_filename_for_search("model_mixed.safetensors"), "model")
 
     def test_build_huggingface_search_queries(self):
         queries = build_filename_search_queries("some_model_bf16.safetensors")

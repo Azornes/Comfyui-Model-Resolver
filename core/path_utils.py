@@ -271,7 +271,6 @@ class HashCalculationCancelled(Exception):
 
 
 SAFETENSORS_HEADER_MAX_BYTES = 100 * 1024 * 1024
-_SHA256_HEX_CHARS = frozenset("0123456789abcdefABCDEF")
 _NON_SHA256_HASH_KEY_PARTS = (
     "blake3",
     "crc32",

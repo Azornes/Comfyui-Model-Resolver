@@ -6,84 +6,9 @@ import { getSvgIcon } from "../../utils/icon_utils.js";
 import { getModelCardUrl } from "../utils/url_utils.js";
 import { getCivitaiModelUrl } from "../globals.js";
 import { normalizePathIdentity } from "../utils/html_utils.js";
-
 const log = createModuleLogger('resolve_download_methods');
 
 export const resolveDownloadMethods = {
-    /**
-     * Resolve a model - resolves ALL nodes that reference this model
-     */
-    async resolveModel(missing, resolvedModel) {
-        log.debug('resolveModel called:', missing?.original_path, '->', resolvedModel?.filename);
-
-        if (!resolvedModel) {
-            this.showNotification('No resolved model selected', 'error');
-            return;
-        }
-
-        try {
-            const workflow = this.getCurrentWorkflow();
-            if (!workflow) {
-                this.showNotification('No workflow loaded', 'error');
-                return;
-            }
-
-            // Resolve ALL nodes that need this model (all_node_refs contains deduplicated refs)
-            const nodeRefs = missing.all_node_refs || [missing];
-            log.debug('nodeRefs count:', nodeRefs?.length, 'is_lora_v2:', nodeRefs?.[0]?.is_lora_v2);
-
-            const missingKey = this.getMissingModelKey?.(missing);
-            const missingSearchKey = this.getMissingSearchKey?.(missing);
-            const resolutions = nodeRefs.map(ref => ({
-                missing_key: missingKey,
-                missing_search_key: missingSearchKey,
-                node_id: ref.node_id,
-                widget_index: ref.widget_index,
-                resolved_path: resolvedModel.path,
-                category: ref.category,
-                resolved_model: resolvedModel,
-                subgraph_id: ref.subgraph_id,
-                is_top_level: ref.is_top_level,
-                is_lora_v2: ref.is_lora_v2,
-                original_lora_name: ref.name || ref.original_path,
-                nested_key: ref.nested_key
-            }));
-
-            const data = await this.fetchJson('/model_resolver/resolve', {
-                method: 'POST',
-                body: JSON.stringify({
-                    workflow,
-                    resolutions: resolutions
-                })
-            }, 'Resolve model');
-            log.debug('Resolve response: success=', data.success, ' missing count:', data.workflow?.nodes?.length);
-
-            if (data.success) {
-                await this.refreshComfyModelCatalogAfterApply?.(data.workflow, resolutions);
-
-                // Update workflow in ComfyUI
-                await this.updateWorkflowInComfyUI(data.workflow);
-
-                // Show success notification
-                const modelName = resolvedModel.relative_path || resolvedModel.filename || 'model';
-                const count = resolutions.length;
-                const refText = count > 1 ? ` (${count} references)` : '';
-                this.showNotification(`✓ Model linked successfully: ${modelName}${refText}`, 'success');
-                this.rememberAppliedResolvedSelections?.(resolutions);
-
-                // Reload dialog using the updated workflow from API response
-                // This ensures we're analyzing the correct updated workflow
-                this.preserveSearchCacheAcrossNextWorkflowSync = true;
-                await this.loadWorkflowData(data.workflow, { force: true });
-            } else {
-                this.showNotification('Failed to resolve model: ' + (data.error || 'Unknown error'), 'error');
-            }
-
-        } catch (error) {
-            console.error('Model Resolver: Error resolving model:', error);
-            this.showNotification('Error resolving model: ' + error.message, 'error');
-        }
-    },
 
     getExactLocalMatchSelections(missingModels = []) {
         const selections = [];
@@ -169,62 +94,6 @@ export const resolveDownloadMethods = {
         }
     },
 
-    /**
-     * Download all missing models that have download sources but no 100% local match
-     */
-    async downloadAllMissing() {
-        if (!this.contentElement) return;
-
-        try {
-            const workflow = this.getCurrentWorkflow();
-            if (!workflow) {
-                this.showNotification('No workflow loaded', 'error');
-                return;
-            }
-
-            // Analyze workflow first
-            const analyzeData = await this.fetchJson('/model_resolver/analyze', {
-                method: 'POST',
-                body: JSON.stringify({ workflow })
-            }, 'Analyze workflow');
-            const missingModels = analyzeData.missing_models || [];
-
-            // Collect models that need downloading:
-            // - Have a download_source with valid URL
-            // - Do NOT have any 100% confidence local matches
-            const toDownload = [];
-            for (const missing of missingModels) {
-                const perfectMatches = (missing.matches || []).filter(m => m.confidence === 100);
-
-                // Skip if has 100% local match or no download source
-                if (perfectMatches.length > 0 || !missing.download_source?.url) {
-                    continue;
-                }
-
-                toDownload.push(missing);
-            }
-
-            if (toDownload.length === 0) {
-                this.showNotification('No models available for download (all have local matches or no download URLs).', 'info');
-                return;
-            }
-
-            // Start all downloads
-            this.showNotification(`Starting ${toDownload.length} download${toDownload.length > 1 ? 's' : ''}...`, 'info');
-
-            for (const missing of toDownload) {
-                // Use downloadModel which handles progress tracking
-                this.downloadModel(missing);
-            }
-
-            // Update button state to show Cancel All
-            this.updateDownloadAllButtonState();
-
-        } catch (error) {
-            console.error('Model Resolver: Error in downloadAllMissing:', error);
-            this.showNotification('Error starting downloads: ' + error.message, 'error');
-        }
-    },
 
     getBestDownloadSourceForMissing(missing) {
         if (!missing) return null;
