@@ -3572,8 +3572,15 @@ export const optionsMethods = {
                 return;
             }
 
+            let settingsObj = data;
+            if (data.schema && Array.isArray(data.schema)) {
+                SETTINGS_MAP.length = 0;
+                SETTINGS_MAP.push(...data.schema);
+                settingsObj = data.settings || {};
+            }
+
             for (const opt of SETTINGS_MAP) {
-                const serverValue = data[opt.serverKey];
+                const serverValue = settingsObj[opt.serverKey];
                 if (serverValue === undefined) continue;
 
                 if (opt.type === 'boolean' || opt.type === 'frontendLogsEnabled' || opt.type === 'backendLogsEnabled') {
@@ -3591,14 +3598,14 @@ export const optionsMethods = {
                 }
             }
             this.getDefaultRootCategoryDefinitions().forEach((item) => {
-                if (data[item.settingKey] !== undefined) {
-                    safeStorage.setItem(item.storageKey, String(data[item.settingKey] || ''));
+                if (settingsObj[item.settingKey] !== undefined) {
+                    safeStorage.setItem(item.storageKey, String(settingsObj[item.settingKey] || ''));
                 }
             });
 
             // Source-enabled flags stored as a nested object
-            if (data.search_source_enabled && typeof data.search_source_enabled === 'object') {
-                Object.entries(data.search_source_enabled).forEach(([key, val]) => {
+            if (settingsObj.search_source_enabled && typeof settingsObj.search_source_enabled === 'object') {
+                Object.entries(settingsObj.search_source_enabled).forEach(([key, val]) => {
                     if (key) safeStorage.setItem(key, val ? 'true' : 'false');
                 });
             }

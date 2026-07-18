@@ -4724,12 +4724,14 @@ class ModelResolverExtension:
                 @json_api_endpoint("capabilities")
                 async def get_capabilities(request):
                     """Get optional source capabilities available in this install."""
+                    from .core.workflow_analyzer import NODE_TYPE_MODEL_WIDGET_CATEGORIES
                     return web.json_response(
                         {
                             "sources": {
                                 "civarchive": is_civarchive_available(),
                                 "lora_manager_archive": is_lora_manager_archive_available()
-                            }
+                            },
+                            "node_rules": NODE_TYPE_MODEL_WIDGET_CATEGORIES
                         }
                     )
 
@@ -5011,7 +5013,11 @@ class ModelResolverExtension:
             async def get_settings_route(request):
                 """Return persisted settings (API keys, preferences)."""
                 data = await asyncio.to_thread(load_resolver_settings)
-                return web.json_response(data)
+                from .core.settings import get_settings_schema
+                return web.json_response({
+                    "settings": data,
+                    "schema": get_settings_schema()
+                })
 
             @routes.post("/model_resolver/settings")
             @json_api_endpoint("settings POST")

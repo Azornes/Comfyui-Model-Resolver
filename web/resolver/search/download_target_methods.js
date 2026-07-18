@@ -281,6 +281,16 @@ export const downloadTargetMethods = {
 
     getExactNodeTypeDownloadCategory(nodeType = '') {
         const normalizedNodeType = String(nodeType || '').trim();
+        const dynamicRules = this.capabilities?.node_rules;
+        if (dynamicRules && typeof dynamicRules === 'object' && dynamicRules[normalizedNodeType]) {
+            const widgetsMap = dynamicRules[normalizedNodeType];
+            if (widgetsMap && typeof widgetsMap === 'object') {
+                const indices = Object.keys(widgetsMap).map(k => parseInt(k, 10)).sort((a, b) => a - b);
+                if (indices.length > 0) {
+                    return widgetsMap[indices[0]] || '';
+                }
+            }
+        }
         const exactMap = {
             CheckpointLoaderSimple: 'checkpoints',
             CheckpointLoader: 'checkpoints',

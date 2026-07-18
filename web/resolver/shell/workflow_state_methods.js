@@ -1,4 +1,4 @@
-﻿import { app } from "../../../../../scripts/app.js";
+import { app } from "../../../../../scripts/app.js";
 import { api } from "../../../../../scripts/api.js";
 import { $el } from "../../../../../scripts/ui.js";
 import { createModuleLogger } from "../../log_system/log_funcs.js";
@@ -67,7 +67,7 @@ export const workflowStateMethods = {
             'on'
         ]);
         const loraStrengthNodeTypes = new Set(['LoraLoader', 'LoraLoaderModelOnly']);
-        const modelWidgetIndicesByNodeType = {
+        const staticFallback = {
             CheckpointLoaderSimple: [0],
             CheckpointLoader: [1],
             DiffusersLoader: [0],
@@ -130,6 +130,16 @@ export const workflowStateMethods = {
             LTXVGemmaCLIPModelLoader: [0],
             LTXAVTextEncoderLoader: [0, 1]
         };
+
+        const modelWidgetIndicesByNodeType = { ...staticFallback };
+        const dynamicRules = this.capabilities?.node_rules;
+        if (dynamicRules && typeof dynamicRules === 'object') {
+            for (const [nodeType, widgetsMap] of Object.entries(dynamicRules)) {
+                if (widgetsMap && typeof widgetsMap === 'object') {
+                    modelWidgetIndicesByNodeType[nodeType] = Object.keys(widgetsMap).map(k => parseInt(k, 10));
+                }
+            }
+        }
 
         const normalizeKey = (key = '') => String(key).replace(/[-\s]/g, '_').toLowerCase();
         const isModelWidgetIndex = (nodeType = '', index = -1) => (

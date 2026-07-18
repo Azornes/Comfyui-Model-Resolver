@@ -73,10 +73,13 @@ def _extract_size_from_object(data: Any, prefix: str = "") -> Optional[Tuple[int
     if not isinstance(data, dict):
         return None
 
-    for field_path, value, multiplier in _iter_size_fields(data, prefix):
-        size = _coerce_size_bytes(value, multiplier=multiplier)
-        if size is not None:
-            return size, field_path
+    from .type_utils import extract_file_size
+    size = extract_file_size(data)
+    if size is not None:
+        for field_path, value, multiplier in _iter_size_fields(data, prefix):
+            if _coerce_size_bytes(value, multiplier=multiplier) == size:
+                return size, field_path
+        return size, f"{prefix}size"
 
     return None
 
