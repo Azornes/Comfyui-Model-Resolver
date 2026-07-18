@@ -40,5 +40,6 @@ app.registerExtension({
     },
     afterConfigureGraph() {
         modelResolver.configureWorkflowDependencyMarkerNodes();
+        modelResolver.checkAndOpenForMissingModels();
     },
 });

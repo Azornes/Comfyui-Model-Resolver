@@ -1540,11 +1540,6 @@ export const queueMethods = {
         }
     },
 
-    // Collapse/expand queue panel
-    toggleQueueCollapsed() {
-        this.setQueueCollapsed(!this.queueCollapsed);
-    },
-
     setQueueCollapsed(collapsed, { persist = true, updatePanel = true } = {}) {
         const nextCollapsed = !!collapsed;
         const wasCollapsed = !!this.queueCollapsed;
@@ -2904,19 +2899,6 @@ export const queueMethods = {
             );
         } catch (error) {
             console.warn('Model Resolver: tab content animation failed', error);
-        }
-    },
-
-    /**
-     * Handle click on Download All / Cancel All button
-     */
-    handleDownloadAllClick() {
-        if (this.getActiveQueuePanelDownloadIds().length > 0) {
-            // Cancel all active downloads
-            this.cancelAllDownloads();
-        } else {
-            // Start downloading all missing
-            this.downloadAllMissing();
         }
     },
 

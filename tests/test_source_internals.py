@@ -29,7 +29,6 @@ from core.sources.civarchive import (
     _normalize_archive_version,
     parse_civarchive_url,
     _prepare_size_probe_url,
-    _build_search_queries,
 )
 
 # ---------------------------------------------------------------------------
@@ -482,24 +481,6 @@ class PrepareSizeProbeUrlTests(unittest.TestCase):
     def test_none_returns_none(self):
         self.assertIsNone(_prepare_size_probe_url(None))
 
-
-# ===========================================================================
-# civarchive - _build_search_queries
-# ===========================================================================
-class BuildSearchQueriesTests(unittest.TestCase):
-
-    def test_returns_list_of_strings(self):
-        result = _build_search_queries("my_model_v2.safetensors")
-        self.assertIsInstance(result, list)
-        self.assertTrue(all(isinstance(q, str) for q in result))
-
-    def test_non_empty_for_valid_filename(self):
-        result = _build_search_queries("cool-lora-style_v1.safetensors")
-        self.assertGreater(len(result), 0)
-
-    def test_empty_string_returns_list(self):
-        result = _build_search_queries("")
-        self.assertIsInstance(result, list)
 
 
 # ===========================================================================

@@ -14,7 +14,7 @@ from core.downloader import (
     get_metadata_sidecar_path,
     download_model,
     get_progress,
-    _resolve_civitai_download_url_for_aria2,
+    _resolve_download_url_for_aria2,
     start_aria2_daemon,
     _delete_partial_download_files,
     download_progress,
@@ -307,10 +307,8 @@ class ModelResolverRobustnessTests(unittest.TestCase):
     def test_civitai_redirection_link_resolution_for_aria2(self):
         """
         Covers Integration Requirement: Redirect resolution for Aria2.
-        Verifies _resolve_civitai_download_url_for_aria2 pre-resolves redirect URLs,
-        and skips non-CivitAI URL requests completely.
+        Verifies _resolve_download_url_for_aria2 pre-resolves redirect URLs.
         """
-        # Scenario 1: CivitAI URL redirect
         api_url = "https://civitai.com/api/download/models/123"
         redirect_url = "https://civitai-delivery.net/models/123/model.safetensors?token=abc"
 
@@ -328,19 +326,9 @@ class ModelResolverRobustnessTests(unittest.TestCase):
             "core.network_utils.validate_public_http_url",
             side_effect=lambda value: value,
         ):
-            resolved = _resolve_civitai_download_url_for_aria2(api_url)
+            resolved, _ = _resolve_download_url_for_aria2(api_url)
             self.assertEqual(resolved, redirect_url)
             self.assertEqual(mock_get.call_count, 2)
-
-        # Scenario 2: Non-CivitAI URL (e.g. HuggingFace) should bypass redirects immediately
-        hf_url = "https://huggingface.co/runwayml/stable-diffusion-v1-5/resolve/main/model.safetensors"
-        with patch("requests.get") as mock_get_hf, patch(
-            "core.downloader.validate_public_http_url",
-            side_effect=lambda value: value,
-        ):
-            resolved_hf = _resolve_civitai_download_url_for_aria2(hf_url)
-            self.assertEqual(resolved_hf, hf_url)
-            mock_get_hf.assert_not_called()
 
     def test_job_progress_tracker_clamping_and_thread_safety(self):
         """

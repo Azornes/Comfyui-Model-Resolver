@@ -1969,12 +1969,6 @@ def _is_hash_verified_exact_match(result: Optional[Dict[str, Any]], confidence: 
     return bool(result.get("sha256") or result.get("hash"))
 
 
-
-
-def _build_search_queries(filename: str) -> List[str]:
-    return build_filename_search_queries(filename)
-
-
 def search_civarchive(
     query: str,
     model_type: Optional[str] = None,

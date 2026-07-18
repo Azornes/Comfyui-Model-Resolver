@@ -8,7 +8,6 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 from core.matcher import MODEL_TITLE_MATCH_THRESHOLD
-from core.sources.civitai import search_civitai_by_hash
 from core.sources.lora_manager_archive import _normalize_model_type
 from core.type_utils import (
     normalize_lora_manager_type,
@@ -64,36 +63,6 @@ class TestRefactoringUnification(unittest.TestCase):
         self.assertEqual(res["name"], "Test Model")
         self.assertEqual(res["filename"], "test.safetensors")
         self.assertEqual(res["extra_field"], "hello_world")
-
-    @patch("core.sources.civitai.get_model_info_by_hash")
-    def test_search_civitai_by_hash(self, mock_get_info):
-        mock_get_info.return_value = {
-            "source": "civitai",
-            "model_id": 500,
-            "version_id": 600,
-            "model_name": "My Civitai Model",
-            "url": "http://civitai/model",
-            "download_url": "http://civitai/download",
-            "filename": "my_model.safetensors",
-            "size": 9999,
-        }
-        res = search_civitai_by_hash("fake_hash", "fake_key")
-        mock_get_info.assert_called_once_with("fake_hash", api_key="fake_key", use_cache=False)
-        self.assertIsNotNone(res)
-        self.assertEqual(res["source"], "civitai")
-        self.assertEqual(res["model_id"], 500)
-        self.assertEqual(res["version_id"], 600)
-        self.assertEqual(res["name"], "My Civitai Model")
-        self.assertEqual(res["url"], "http://civitai/model")
-        self.assertEqual(res["download_url"], "http://civitai/download")
-        self.assertEqual(res["filename"], "my_model.safetensors")
-        self.assertEqual(res["size"], 9999)
-
-    @patch("core.sources.civitai.get_model_info_by_hash")
-    def test_search_civitai_by_hash_not_found(self, mock_get_info):
-        mock_get_info.return_value = None
-        res = search_civitai_by_hash("fake_hash")
-        self.assertIsNone(res)
 
     @patch("requests.get")
     def test_request_page_text_success(self, mock_get):

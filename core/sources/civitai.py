@@ -1252,24 +1252,6 @@ def _enrich_model_info_with_details(
     return result
 
 
-def search_civitai_by_hash(
-    hash_value: str, api_key: Optional[str] = None
-) -> Optional[Dict[str, Any]]:
-    """Look up a model by file hash on CivitAI."""
-    result = get_model_info_by_hash(hash_value, api_key=api_key, use_cache=False)
-    if not result:
-        return None
-    return {
-        "source": result.get("source"),
-        "model_id": result.get("model_id"),
-        "version_id": result.get("version_id"),
-        "name": result.get("model_name") or result.get("name", ""),
-        "url": result.get("url"),
-        "download_url": result.get("download_url"),
-        "filename": result.get("filename", ""),
-        "size": result.get("size"),
-    }
-
 
 def resolve_urn(
     model_id: int, version_id: int, api_key: Optional[str] = None
