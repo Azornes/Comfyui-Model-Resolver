@@ -239,7 +239,8 @@ def normalize_base_model(value: str) -> str:
     Returns:
         Normalized base model name
     """
-    return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+    from .type_utils import normalize_alphanumeric_lower
+    return normalize_alphanumeric_lower(value)
 
 
 def base_model_matches(candidate: str, preferred: Optional[str]) -> bool:

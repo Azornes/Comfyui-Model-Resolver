@@ -6,7 +6,6 @@ Search the ComfyUI Manager model-list.json database with fuzzy matching.
 
 import hashlib
 import os
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from ..log_system import create_module_logger
@@ -36,7 +35,8 @@ _model_list_cache: Optional[List[Dict]] = None
 
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    from ..type_utils import utc_now_iso
+    return utc_now_iso()
 
 
 def _fetch_json_url(url: str) -> Dict[str, Any]:

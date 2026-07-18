@@ -19,6 +19,10 @@ from core.type_utils import (
 
 class TestRefactoringUnification(unittest.TestCase):
 
+    def tearDown(self):
+        from core.sources.popular import reload_databases
+        reload_databases()
+
     def test_thresholds(self):
         self.assertEqual(MODEL_TITLE_MATCH_THRESHOLD, 82.0)
 
@@ -220,9 +224,52 @@ class TestRefactoringUnification(unittest.TestCase):
         self.assertEqual(get_filename_from_path(""), "")
         self.assertEqual(get_filename_from_path(None), "")
 
+    def test_alphanumeric_normalizers(self):
+        from core.matcher import normalize_base_model
+        from core.path_utils import _normalize_base_model_token
+        from core.path_templates import _normalize_token
+        from core.settings import _normalize_tag
+
+        inputs = ["SD 1.5", "sd-xl_1.0!!", "Flux.1-dev", "", None]
+        for val in inputs:
+            res_matcher = normalize_base_model(val)
+            res_path = _normalize_base_model_token(val)
+            res_temp = _normalize_token(val)
+            res_set = _normalize_tag(val)
+
+            # verify they all behave identically
+            self.assertEqual(res_matcher, res_path)
+            self.assertEqual(res_matcher, res_temp)
+            self.assertEqual(res_matcher, res_set)
+
+            # verify correct regex behavior
+            import re
+            expected = re.sub(r"[^a-z0-9]+", "", str(val or "").lower())
+            self.assertEqual(res_matcher, expected)
+
+    def test_utc_now_iso(self):
+        from core.sources.model_list import _utc_now_iso
+        res = _utc_now_iso()
+        self.assertTrue(isinstance(res, str))
+        self.assertEqual(len(res), 25)  # YYYY-MM-DDTHH:MM:SS+00:00
+        self.assertIn("T", res)
+        self.assertTrue(res.endswith("+00:00"))
+        # Check no microsecond
+        self.assertNotIn(".", res)
+
+    def test_listification(self):
+        from core.type_utils import as_list
+        from core.settings import _listify_tags
+
+        self.assertEqual(as_list("a,b, c"), ["a", "b", "c"])
+        self.assertEqual(list(_listify_tags("a,b; c")), ["a", "b", "c"])
+        self.assertEqual(as_list(["a", "", None, "b"]), ["a", "b"])
+        self.assertEqual(list(_listify_tags(["a", "", None, "b"])), ["a", "b"])
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
 

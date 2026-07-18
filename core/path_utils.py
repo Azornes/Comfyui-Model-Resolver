@@ -383,7 +383,8 @@ def extract_safetensors_header_sha256(
 
 
 def _normalize_base_model_token(value: Any) -> str:
-    return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+    from .type_utils import normalize_alphanumeric_lower
+    return normalize_alphanumeric_lower(value)
 
 
 def _load_base_model_aliases() -> List[Tuple[str, str]]:
@@ -394,8 +395,9 @@ def _load_base_model_aliases() -> List[Tuple[str, str]]:
 
     aliases: List[Tuple[str, str]] = []
     try:
-        data = read_json_safe(os.path.join(METADATA_DIR, "base-models.json"), {})
-        for entry in data.get("base_models", []) if isinstance(data, dict) else []:
+        from .sources.popular import load_raw_base_models
+        base_models = load_raw_base_models()
+        for entry in base_models:
             if not isinstance(entry, dict):
                 continue
             name = str(entry.get("name") or "").strip()
@@ -418,6 +420,12 @@ def _load_base_model_aliases() -> List[Tuple[str, str]]:
     return aliases
 
 
+def clear_base_model_alias_cache() -> None:
+    """Clear the base model alias cache."""
+    global _BASE_MODEL_ALIAS_CACHE
+    _BASE_MODEL_ALIAS_CACHE = None
+
+
 def _canonical_base_model_from_text(value: Any) -> str:
     normalized = _normalize_base_model_token(value)
     if not normalized:
@@ -427,6 +435,7 @@ def _canonical_base_model_from_text(value: Any) -> str:
         if normalized == alias or (len(alias) >= 4 and alias in normalized):
             return name
     return ""
+
 
 
 def infer_safetensors_base_model(

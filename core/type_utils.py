@@ -4,6 +4,7 @@ Type Utilities Module
 Unified helper functions for safe data type casting and normalization.
 """
 
+import re
 from typing import Any, Dict, List
 
 
@@ -27,7 +28,7 @@ def as_list(value: Any) -> List[Any]:
     Supports:
         - lists (returns list filtered of None/empty strings)
         - tuples and sets (casts to list and filters)
-        - comma-separated strings (splits, strips, and filters)
+        - comma-separated or semicolon-separated strings (splits, strips, and filters)
         
     Args:
         value: Value to cast
@@ -40,8 +41,9 @@ def as_list(value: Any) -> List[Any]:
     if isinstance(value, (tuple, set)):
         return [item for item in value if item not in (None, "")]
     if isinstance(value, str):
-        return [item.strip() for item in value.split(",") if item.strip()]
+        return [item.strip() for item in re.split(r"[,;]+", value) if item.strip()]
     return []
+
 
 
 MODEL_EXTENSIONS = {
@@ -262,7 +264,6 @@ CIVARCHIVE_API_TYPE_MAP = {
     "motion_modules": "MotionModule",
 }
 
-import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 
@@ -1169,4 +1170,16 @@ def parse_provider_model_url(url: str, allowed_domains: list[str]) -> Optional[D
             return {"version_id": int(match.group(1))}
 
     return parse_civitai_model_path(parsed.path, parsed.query)
+
+
+def normalize_alphanumeric_lower(value: Any) -> str:
+    """Normalize a string or token to standard lowercase alphanumeric format."""
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+
+
+def utc_now_iso() -> str:
+    """Return the current UTC timestamp formatted as ISO 8601 string without microseconds."""
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
 

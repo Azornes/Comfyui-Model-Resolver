@@ -6,7 +6,6 @@ Curated list of common models with known download URLs.
 
 import os
 import re
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from ..log_system import create_module_logger
@@ -58,6 +57,22 @@ from ..matcher import normalize_base_model as _normalize_base_model
 base_models_mgr = CatalogManager(BASE_MODELS_FILE, BASE_MODELS_META_FILE, "base_models")
 
 
+_raw_base_models_cache: Optional[List[Dict[str, Any]]] = None
+
+
+def load_raw_base_models() -> List[Dict[str, Any]]:
+    """Loads and caches the raw base models database."""
+    global _raw_base_models_cache
+    if _raw_base_models_cache is None:
+        try:
+            data = base_models_mgr.read_data()
+            _raw_base_models_cache = data.get("base_models", [])
+        except Exception as e:
+            log.error(f"Error loading raw base models: {e}")
+            _raw_base_models_cache = []
+    return _raw_base_models_cache
+
+
 def load_base_model_aliases() -> Dict[str, List[str]]:
     """Load and normalize base model aliases from base-models.json."""
     global _base_models_aliases_cache
@@ -67,31 +82,30 @@ def load_base_model_aliases() -> Dict[str, List[str]]:
 
     aliases_dict = {}
     try:
-        data = base_models_mgr.read_data()
-        base_models = data.get("base_models", [])
+        base_models = load_raw_base_models()
         for model in base_models:
-                    name = model.get("name", "")
-                    normalized_name = _normalize_base_model(name)
-                    if not normalized_name:
-                        continue
+            name = model.get("name", "")
+            normalized_name = _normalize_base_model(name)
+            if not normalized_name:
+                continue
 
-                    aliases = model.get("aliases", [])
-                    # Normalize each alias token and deduplicate
-                    normalized_tokens = []
-                    seen_tokens = set()
-                    for alias in aliases:
-                        if not alias:
-                            continue
-                        normalized_alias = _normalize_base_model(alias)
-                        if normalized_alias and normalized_alias not in seen_tokens:
-                            seen_tokens.add(normalized_alias)
-                            normalized_tokens.append(normalized_alias)
+            aliases = model.get("aliases", [])
+            # Normalize each alias token and deduplicate
+            normalized_tokens = []
+            seen_tokens = set()
+            for alias in aliases:
+                if not alias:
+                    continue
+                normalized_alias = _normalize_base_model(alias)
+                if normalized_alias and normalized_alias not in seen_tokens:
+                    seen_tokens.add(normalized_alias)
+                    normalized_tokens.append(normalized_alias)
 
-                    # Ensure normalized name itself is in preferred tokens if not already
-                    if normalized_name not in seen_tokens:
-                        normalized_tokens.append(normalized_name)
+            # Ensure normalized name itself is in preferred tokens if not already
+            if normalized_name not in seen_tokens:
+                normalized_tokens.append(normalized_name)
 
-                    aliases_dict[normalized_name] = normalized_tokens
+            aliases_dict[normalized_name] = normalized_tokens
     except Exception as e:
         log.error(f"Error loading base model aliases: {e}")
 
@@ -186,10 +200,13 @@ def get_all_popular_models() -> Dict[str, Any]:
 
 def reload_databases():
     """Force reload of all databases."""
-    global _popular_models_cache, _model_aliases_cache, _base_models_aliases_cache
+    global _popular_models_cache, _model_aliases_cache, _base_models_aliases_cache, _raw_base_models_cache
     _popular_models_cache = None
     _model_aliases_cache = None
     _base_models_aliases_cache = None
+    _raw_base_models_cache = None
+    from ..path_utils import clear_base_model_alias_cache
+    clear_base_model_alias_cache()
     _load_popular_models()
     _load_model_aliases()
     load_base_model_aliases()
@@ -283,8 +300,9 @@ def get_base_models_status(check_remote: bool = False) -> Dict[str, Any]:
                         new_models_found = True
                         break
 
+                from ..type_utils import utc_now_iso
                 status.update({
-                    "remote_checked_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+                    "remote_checked_at": utc_now_iso(),
                     "update_available": new_models_found
                 })
         except Exception as e:
@@ -349,7 +367,8 @@ def update_base_models_from_remote() -> Dict[str, Any]:
             new_added_count += 1
             new_added_names.append(name)
 
-    now_str = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    from ..type_utils import utc_now_iso
+    now_str = utc_now_iso()
     meta = {
         "updated_at": now_str,
         "last_checked_at": now_str,

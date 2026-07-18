@@ -364,6 +364,7 @@ class ModelResolverExtension:
                     save_settings as save_resolver_settings,
                 )
                 from .core.type_utils import (
+                    build_search_result,
                     extract_sha256_from_metadata,
                     fetch_remote_file_size_cached,
                     first_non_empty,
@@ -3860,30 +3861,26 @@ class ModelResolverExtension:
                                             download_url = get_civitai_download_url(
                                                 version_id_val
                                             )
-                                            source_results["civitai"] = {
-                                                "source": "civitai",
-                                                "name": model_info.get("model_name"),
-                                                "version_name": model_info.get(
-                                                    "version_name"
-                                                ),
-                                                "filename": model_info.get(
-                                                    "expected_filename"
-                                                ),
-                                                "type": category,
-                                                "download_url": download_url,
-                                                "url": f"https://civitai.com/models/{model_id_val}?modelVersionId={version_id_val}",
-                                                "model_id": model_id_val,
-                                                "version_id": version_id_val,
-                                                "size": primary_file.get("size"),
-                                                "base_model": model_info.get("base_model"),
-                                                "tags": model_info.get("tags", []),
-                                                "sha256": primary_file.get("sha256")
+                                            source_results["civitai"] = build_search_result(
+                                                "civitai",
+                                                model_id=model_id_val,
+                                                version_id=version_id_val,
+                                                name=model_info.get("model_name"),
+                                                version_name=model_info.get("version_name"),
+                                                filename=model_info.get("expected_filename"),
+                                                type=category,
+                                                download_url=download_url,
+                                                url=f"https://civitai.com/models/{model_id_val}?modelVersionId={version_id_val}",
+                                                size=primary_file.get("size"),
+                                                base_model=model_info.get("base_model"),
+                                                tags=model_info.get("tags", []),
+                                                sha256=primary_file.get("sha256")
                                                 or (primary_file.get("hashes") or {}).get("SHA256")
                                                 or (primary_file.get("hashes") or {}).get("sha256"),
-                                                "hashes": primary_file.get("hashes") or {},
-                                                "match_type": "exact",
-                                                "confidence": 100.0,
-                                            }
+                                                hashes=primary_file.get("hashes") or {},
+                                                match_type="exact",
+                                                confidence=100.0,
+                                            )
                                             log_search_result(
                                                 "civitai/urn",
                                                 source_results["civitai"],
@@ -3927,19 +3924,19 @@ class ModelResolverExtension:
                                         )
                                         if civitai_results:
                                             first_result = civitai_results[0]
-                                            source_results["civitai"] = {
-                                                "source": "civitai",
-                                                "name": first_result.get("name"),
-                                                "filename": first_result.get("filename"),
-                                                "type": first_result.get("type"),
-                                                "download_url": first_result.get(
-                                                    "download_url"
-                                                ),
-                                                "url": first_result.get("url"),
-                                                "size": first_result.get("size"),
-                                                "base_model": first_result.get("base_model"),
-                                                "tags": first_result.get("tags", []),
-                                            }
+                                            source_results["civitai"] = build_search_result(
+                                                "civitai",
+                                                model_id=first_result.get("model_id"),
+                                                version_id=first_result.get("version_id"),
+                                                name=first_result.get("name"),
+                                                filename=first_result.get("filename"),
+                                                type=first_result.get("type"),
+                                                download_url=first_result.get("download_url"),
+                                                url=first_result.get("url"),
+                                                size=first_result.get("size"),
+                                                base_model=first_result.get("base_model"),
+                                                tags=first_result.get("tags", []),
+                                            )
                                             source_found = True
                                 else:
                                     civitai_result = execute_search_with_fallback(

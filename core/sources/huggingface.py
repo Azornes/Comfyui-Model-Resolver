@@ -20,6 +20,7 @@ from ..matcher import build_filename_search_queries
 from ..network_utils import host_matches_domain, request_source_json, request_source_response
 from ..path_utils import METADATA_DIR, get_filename_from_path, read_json_safe, write_json_atomic
 from ..type_utils import (
+    build_search_result,
     check_credential_http,
     clear_remote_size_cache,
     extract_file_size,
@@ -370,16 +371,19 @@ def _build_huggingface_result(
     size = extract_file_size(file_info)
     if not size:
         size = _fetch_remote_file_size_bytes(download_url, headers=headers)
-    return {
-        "source": "huggingface",
-        "repo_id": repo_id,
-        "filename": get_filename_from_path(file_path),
-        "path": file_path,
-        "url": download_url,
-        "size": size,
-        "match_type": match_type,
-        "sha256": sha256,
-    }
+    return build_search_result(
+        "huggingface",
+        model_id=repo_id,
+        version_id=None,
+        filename=get_filename_from_path(file_path),
+        url=download_url,
+        download_url=download_url,
+        size=size,
+        match_type=match_type,
+        sha256=sha256,
+        repo_id=repo_id,
+        path=file_path,
+    )
 
 
 def _get_repo_tree(
@@ -1070,20 +1074,22 @@ def build_huggingface_custom_result(
     page_url = (
         f"https://huggingface.co/{repo_id}/blob/{branch}/{quote_url_path(file_path)}"
     )
-    return {
-        "source": "huggingface",
-        "details_source": "huggingface",
-        "repo_id": repo_id,
-        "repo": repo_id,
-        "path": file_path,
-        "filename": filename,
-        "name": repo_id,
-        "url": download_url,
-        "download_url": download_url,
-        "page_url": page_url,
-        "version_url": page_url,
-        "size": size,
-        "match_type": "custom_url",
-        "custom_url": True,
-    }
+    return build_search_result(
+        "huggingface",
+        model_id=repo_id,
+        version_id=None,
+        name=repo_id,
+        filename=filename,
+        url=download_url,
+        download_url=download_url,
+        size=size,
+        match_type="custom_url",
+        details_source="huggingface",
+        repo_id=repo_id,
+        repo=repo_id,
+        path=file_path,
+        page_url=page_url,
+        version_url=page_url,
+        custom_url=True,
+    )
 

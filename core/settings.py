@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from .path_utils import read_json_safe, write_json_atomic
 
@@ -199,22 +199,15 @@ def _template_for_category(settings: Mapping[str, Any], category: str) -> str:
     return templates.get(category_key, "")
 
 
-def _listify_tags(value: Any) -> Iterable[str]:
-    if isinstance(value, (list, tuple, set)):
-        for item in value:
-            text = str(item or "").strip()
-            if text:
-                yield text
-        return
-    if isinstance(value, str):
-        for item in re.split(r"[,;]+", value):
-            text = item.strip()
-            if text:
-                yield text
+def _listify_tags(value: Any) -> List[str]:
+    from .type_utils import as_list
+    return as_list(value)
 
 
 def _normalize_tag(value: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+    from .type_utils import normalize_alphanumeric_lower
+    return normalize_alphanumeric_lower(value)
+
 
 
 def _resolve_base_model_mapping(mappings: Mapping[str, str], base_model: Any) -> str:
