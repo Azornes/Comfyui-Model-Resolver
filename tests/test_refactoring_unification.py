@@ -283,6 +283,44 @@ class TestRefactoringUnification(unittest.TestCase):
         self.assertEqual(data, {"key": "value"})
         mock_request_source_json.assert_called_once()
 
+    def test_prepare_remote_size_probe_url_with_allowed_domains(self):
+        from core.type_utils import prepare_remote_size_probe_url
+        
+        # Test default behavior
+        self.assertEqual(
+            prepare_remote_size_probe_url("https://huggingface.co/user/repo/blob/main/model.safetensors"),
+            "https://huggingface.co/user/repo/resolve/main/model.safetensors"
+        )
+        
+        # Test allowed domains filtering
+        self.assertEqual(
+            prepare_remote_size_probe_url("https://civitai.com/api/download/models/123", ["civitai.com", "civitai.red"]),
+            "https://civitai.com/api/download/models/123"
+        )
+        
+        self.assertIsNone(
+            prepare_remote_size_probe_url("https://otherdomain.com/model.safetensors", ["civitai.com", "civitai.red"])
+        )
+
+    @patch("core.network_utils.request_source_json")
+    def test_execute_provider_json_request(self, mock_request_source_json):
+        from core.network_utils import execute_provider_json_request
+        mock_request_source_json.return_value = {"response": "ok"}
+        
+        # Test Bearer Authorization and Cookie header injection
+        res = execute_provider_json_request(
+            "Test Provider",
+            "https://example.com/api",
+            api_key="my_secret_token",
+            session_token="my_session"
+        )
+        
+        self.assertEqual(res, {"response": "ok"})
+        mock_request_source_json.assert_called_once()
+        call_args = mock_request_source_json.call_args
+        headers = call_args[1]["headers"]
+        self.assertEqual(headers["Authorization"], "Bearer my_secret_token")
+        self.assertIn("__Secure-civ-token=my_session", headers["Cookie"])
 
 
 if __name__ == "__main__":

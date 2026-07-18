@@ -28,8 +28,8 @@ from core.sources.civarchive import (
     _collect_download_urls_unified,
     _normalize_archive_version,
     parse_civarchive_url,
-    _prepare_size_probe_url,
 )
+from core.type_utils import prepare_remote_size_probe_url
 
 # ---------------------------------------------------------------------------
 # civitai internals
@@ -462,24 +462,27 @@ class ParseCivarchiveUrlTests(unittest.TestCase):
 # ===========================================================================
 class PrepareSizeProbeUrlTests(unittest.TestCase):
 
+    def _prepare_size_probe_url(self, url):
+        return prepare_remote_size_probe_url(url, ["civarchive.com", "civitai.com", "civitai.red"])
+
     def test_civarchive_api_download_url_passes(self):
         url = "https://civarchive.com/api/download/models/77.safetensors"
-        self.assertEqual(_prepare_size_probe_url(url), url)
+        self.assertEqual(self._prepare_size_probe_url(url), url)
 
     def test_civarchive_non_download_url_blocked(self):
         url = "https://civarchive.com/models/77"
-        self.assertIsNone(_prepare_size_probe_url(url))
+        self.assertIsNone(self._prepare_size_probe_url(url))
 
     def test_civitai_non_download_url_blocked(self):
         url = "https://civitai.com/models/123"
-        self.assertIsNone(_prepare_size_probe_url(url))
+        self.assertIsNone(self._prepare_size_probe_url(url))
 
     def test_civitai_api_download_url_passes(self):
         url = "https://civitai.com/api/download/models/99.safetensors"
-        self.assertEqual(_prepare_size_probe_url(url), url)
+        self.assertEqual(self._prepare_size_probe_url(url), url)
 
     def test_none_returns_none(self):
-        self.assertIsNone(_prepare_size_probe_url(None))
+        self.assertIsNone(self._prepare_size_probe_url(None))
 
 
 

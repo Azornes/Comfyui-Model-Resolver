@@ -9,7 +9,7 @@ import json
 import re
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 
 from ..log_system import create_module_logger
 from ..matcher import (
@@ -27,7 +27,7 @@ from ..matcher import (
 from ..matcher import (
     normalize_base_model as _normalize_base_model,
 )
-from ..network_utils import host_matches_domain, request_source_response
+from ..network_utils import request_source_response
 from ..path_utils import get_filename_from_path
 from ..progress import get_progress_reporter
 from ..type_utils import (
@@ -535,31 +535,11 @@ def _archive_link_is_dead(item: Dict[str, Any]) -> bool:
     )
 
 
-def _prepare_size_probe_url(url: Any) -> Optional[str]:
+def _fetch_remote_file_size_bytes(url: Any, timeout: int = 15) -> Optional[int]:
     normalized = _normalize_download_url(url)
     if not normalized:
         return None
-
-    normalized = prepare_remote_size_probe_url(normalized)
-    if not normalized:
-        return None
-
-    parsed = urlparse(normalized)
-    host = parsed.hostname
-    path = parsed.path or ""
-
-    if host_matches_domain(host, "civarchive.com") and not path.startswith("/api/download/"):
-        return None
-    if host_matches_domain(host, "civitai.com", "civitai.red") and not path.startswith("/api/download/"):
-        return None
-
-    return normalized
-
-
-
-
-def _fetch_remote_file_size_bytes(url: Any, timeout: int = 15) -> Optional[int]:
-    probe_url = _prepare_size_probe_url(url)
+    probe_url = prepare_remote_size_probe_url(normalized, ["civarchive.com", "civitai.com", "civitai.red"])
     if not probe_url:
         return None
     return fetch_remote_file_size_cached(probe_url, headers=REQUEST_HEADERS, timeout=timeout)

@@ -17,7 +17,7 @@ from ..progress import get_progress_reporter
 log = create_module_logger(__name__)
 
 from ..matcher import build_filename_search_queries
-from ..network_utils import host_matches_domain, request_source_json, request_source_response
+from ..network_utils import execute_provider_json_request, host_matches_domain, request_source_response
 from ..path_utils import METADATA_DIR, get_filename_from_path, read_json_safe, write_json_atomic
 from ..type_utils import (
     build_search_result,
@@ -696,14 +696,19 @@ def search_huggingface_for_file(
                     query_count=total_queries,
                 )
                 search_url = f"{HF_API_URL}/models?search={quote(search_query)}&limit=20"
-                response = request_source_response(search_url, headers=headers, timeout=10, log_name="HuggingFace models search")
-                if response.status_code != 200:
+                repos = execute_provider_json_request(
+                    "HuggingFace models search",
+                    search_url,
+                    api_key=token,
+                    timeout=10,
+                )
+                if repos is None:
                     log.warning(
-                        f"HuggingFace API status={response.status_code} query={search_query}"
+                        f"HuggingFace API query={search_query} failed"
                     )
                     continue
-
-                repos = response.json()
+                if not repos:
+                    continue
                 log.info(f"HuggingFace API query={search_query} repos={len(repos)}")
 
                 for repo in repos:
@@ -970,14 +975,14 @@ def search_huggingface(
     results = []
 
     try:
-        headers = {}
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
-
         params = {"search": query, "limit": limit, "full": "true"}
 
-        data = request_source_json(
-            f"{HF_API_URL}/models", params=params, headers=headers, timeout=15, log_name="HuggingFace general search"
+        data = execute_provider_json_request(
+            "HuggingFace general search",
+            f"{HF_API_URL}/models",
+            params=params,
+            api_key=token,
+            timeout=15,
         )
 
         if data:

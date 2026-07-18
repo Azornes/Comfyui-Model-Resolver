@@ -5,34 +5,7 @@ import { getSvgIcon } from "../../utils/icon_utils.js";
 import { LOG_LEVEL as DEFAULT_FRONTEND_LOG_LEVEL } from "../../log_system/config.js";
 import { logger as frontendLogger } from "../../log_system/logger.js";
 import { pollBackgroundTask, safeStorage } from "../utils/html_utils.js";
-const SETTINGS_MAP = [
-    { serverKey: 'civitai_key', localKey: 'ModelResolver.civitaiApiKey', type: 'string', default: '' },
-    { serverKey: 'civitai_session_token', localKey: 'ModelResolver.civitaiSessionToken', type: 'string', default: '' },
-    { serverKey: 'civitai_use_trpc_search', localKey: 'ModelResolver.civitaiUseTrpcSearch', type: 'boolean', default: true },
-    { serverKey: 'civitai_use_api_search', localKey: 'ModelResolver.civitaiUseApiSearch', type: 'boolean', default: true },
-    { serverKey: 'civitai_use_html_fallback', localKey: 'ModelResolver.civitaiUseHtmlFallback', type: 'boolean', default: true },
-    { serverKey: 'hf_token', localKey: 'ModelResolver.huggingFaceToken', type: 'string', default: '' },
-    { serverKey: 'brave_search_api_key', localKey: 'ModelResolver.braveSearchApiKey', type: 'string', default: '' },
-    { serverKey: 'hf_use_api_search', localKey: 'ModelResolver.hfUseApiSearch', type: 'boolean', default: true },
-    { serverKey: 'hf_use_comfy_org_fallback', localKey: 'ModelResolver.hfUseComfyOrgFallback', type: 'boolean', default: true },
-    { serverKey: 'hf_use_brave_fallback', localKey: 'ModelResolver.hfUseBraveFallback', type: 'boolean', default: true },
-    { serverKey: 'auto_fill_base_model', localKey: 'ModelResolver.autoFillBaseModel', type: 'boolean', default: true },
-    { serverKey: 'auto_fill_subfolder', localKey: 'ModelResolver.autoFillSubfolder', type: 'boolean', default: true },
-    { serverKey: 'auto_refresh_comfy_models_after_apply', localKey: 'ModelResolver.autoRefreshComfyModelsAfterApply', type: 'boolean', default: true },
-    { serverKey: 'workflow_hash_metadata_enabled', localKey: 'ModelResolver.workflowHashMetadataEnabled', type: 'boolean', default: true },
-    { serverKey: 'workflow_dependency_marker_enabled', localKey: 'ModelResolver.workflowDependencyMarkerEnabled', type: 'boolean', default: false },
-    { serverKey: 'download_backend', localKey: 'ModelResolver.downloadBackend', type: 'backend', default: 'python' },
-    { serverKey: 'aria2c_path', localKey: 'ModelResolver.aria2cPath', type: 'string', default: '' },
-    { serverKey: 'aria2_auto_stop_daemon', localKey: 'ModelResolver.aria2AutoStopDaemon', type: 'boolean', default: true },
-    { serverKey: 'download_path_mode', localKey: 'ModelResolver.downloadPathMode', type: 'pathMode', default: 'suggested' },
-    { serverKey: 'download_path_templates', localKey: 'ModelResolver.downloadPathTemplates', type: 'json', default: {} },
-    { serverKey: 'base_model_path_mappings', localKey: 'ModelResolver.baseModelPathMappings', type: 'json', default: {} },
-    { serverKey: 'frontend_logs_enabled', localKey: 'ModelResolver.frontendLogsEnabled', type: 'frontendLogsEnabled', default: true },
-    { serverKey: 'backend_logs_enabled', localKey: 'ModelResolver.backendLogsEnabled', type: 'backendLogsEnabled', default: true },
-    { serverKey: 'frontend_log_level', localKey: 'ModelResolver.frontendLogLevel', type: 'string', default: 'ERROR' },
-    { serverKey: 'backend_log_level', localKey: 'ModelResolver.backendLogLevel', type: 'string', default: 'ERROR' },
-    { serverKey: 'civitai_candidate_limit', localKey: 'ModelResolver.civitaiCandidateLimit', type: 'candidateLimit', default: 5 },
-];
+const SETTINGS_MAP = [];
 
 export const optionsMethods = {
     displayOptions() {

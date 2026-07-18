@@ -28,7 +28,7 @@ from ..matcher import (
 from ..matcher import (
     normalize_base_model as _normalize_base_model,
 )
-from ..network_utils import execute_provider_json_request, request_source_json, request_source_response
+from ..network_utils import execute_provider_json_request, request_source_response
 from ..path_utils import (
     calculate_file_sha256,
     extract_safetensors_header_metadata,
@@ -1056,12 +1056,12 @@ def search_civitai(
             if civitai_type:
                 params["types"] = civitai_type
 
-        headers = {}
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
-
-        data = request_source_json(
-            f"{CIVITAI_API_URL}/models", params=params, headers=headers, timeout=15, log_name="CivitAI search models"
+        data = execute_provider_json_request(
+            "CivitAI search models",
+            f"{CIVITAI_API_URL}/models",
+            params=params,
+            api_key=api_key,
+            timeout=15,
         )
 
         if data:

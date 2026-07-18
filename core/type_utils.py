@@ -893,7 +893,7 @@ def extract_trained_words(*values: Any) -> List[str]:
 _remote_size_cache: Dict[tuple[str, Optional[str]], Optional[int]] = {}
 
 
-def prepare_remote_size_probe_url(url: Any) -> Optional[str]:
+def prepare_remote_size_probe_url(url: Any, allowed_domains: Optional[List[str]] = None) -> Optional[str]:
     """
     Normalize a remote URL to be suitable for file size probing.
     Converts HuggingFace '/blob/' URLs to '/resolve/' URLs.
@@ -915,6 +915,12 @@ def prepare_remote_size_probe_url(url: Any) -> Optional[str]:
         path = parsed.path or ""
     except Exception:
         return None
+
+    if allowed_domains and host:
+        if not host_matches_domain(host, *allowed_domains):
+            return None
+        if host_matches_domain(host, "civarchive.com", "civitai.com", "civitai.red") and not path.startswith("/api/download/"):
+            return None
 
     if host and host_matches_domain(host, "huggingface.co") and "/blob/" in path:
         value = value.replace("/blob/", "/resolve/", 1)
