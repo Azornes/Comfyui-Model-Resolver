@@ -1377,7 +1377,10 @@ def _run_huggingface_xet_transfer(
     """Use detailed native Xet progress when supported, with legacy fallback."""
     import hf_xet
     from huggingface_hub.file_download import xet_get
-    from huggingface_hub.utils import refresh_xet_connection_info
+    try:
+        from huggingface_hub.utils import refresh_xet_connection_info
+    except ImportError:
+        refresh_xet_connection_info = lambda *a, **kw: None
 
     supports_session_progress = all(
         hasattr(hf_xet, name)
