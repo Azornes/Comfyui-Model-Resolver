@@ -477,6 +477,58 @@ class PathSecurityTests(unittest.TestCase):
         self.assertEqual(0.8, progress["transfer_progress"])
         self.assertEqual(0.8, progress["progress"])
 
+    def test_huggingface_xet_without_refresh_helper_uses_native_fallback(self):
+        legacy_hf_xet = SimpleNamespace(
+            PyItemProgressUpdate=object(),
+            PyTotalProgressUpdate=object(),
+            PyXetDownloadInfo=object(),
+            download_files=MagicMock(),
+        )
+        real_import = __import__
+
+        def import_without_refresh_helper(
+            name,
+            globals=None,
+            locals=None,
+            fromlist=(),
+            level=0,
+        ):
+            if name == "hf_xet":
+                return legacy_hf_xet
+            if (
+                name == "huggingface_hub.utils"
+                and "refresh_xet_connection_info" in fromlist
+            ):
+                raise ImportError("refresh_xet_connection_info is unavailable")
+            return real_import(name, globals, locals, fromlist, level)
+
+        incomplete_path = Path("model.safetensors.xet-part")
+        xet_file_data = SimpleNamespace(file_hash="test-hash")
+        progress_adapter = MagicMock()
+
+        with patch(
+            "builtins.__import__",
+            side_effect=import_without_refresh_helper,
+        ), patch("huggingface_hub.file_download.xet_get") as mock_xet_get:
+            downloader_module._run_huggingface_xet_transfer(
+                incomplete_path,
+                xet_file_data,
+                {"Authorization": "Bearer test"},
+                1024,
+                "model.safetensors",
+                progress_adapter,
+            )
+
+        mock_xet_get.assert_called_once_with(
+            incomplete_path=incomplete_path,
+            xet_file_data=xet_file_data,
+            headers={"Authorization": "Bearer test"},
+            expected_size=1024,
+            displayed_filename="model.safetensors",
+            _tqdm_bar=progress_adapter,
+        )
+        legacy_hf_xet.download_files.assert_not_called()
+
     def test_cancel_download_calls_active_huggingface_xet_handle(self):
         download_id = "xet-cancel-handle-test"
         handle = MagicMock()
