@@ -30,6 +30,7 @@ SETTINGS_SCHEMA: List[Dict[str, Any]] = [
     { "serverKey": "auto_fill_base_model", "localKey": "ModelResolver.autoFillBaseModel", "type": "boolean", "default": True },
     { "serverKey": "auto_fill_subfolder", "localKey": "ModelResolver.autoFillSubfolder", "type": "boolean", "default": True },
     { "serverKey": "auto_refresh_comfy_models_after_apply", "localKey": "ModelResolver.autoRefreshComfyModelsAfterApply", "type": "boolean", "default": True },
+    { "serverKey": "auto_open_on_missing", "localKey": "ModelResolver.autoOpenOnMissing", "type": "boolean", "default": False },
     { "serverKey": "workflow_hash_metadata_enabled", "localKey": "ModelResolver.workflowHashMetadataEnabled", "type": "boolean", "default": True },
     { "serverKey": "workflow_dependency_marker_enabled", "localKey": "ModelResolver.workflowDependencyMarkerEnabled", "type": "boolean", "default": False },
     { "serverKey": "download_backend", "localKey": "ModelResolver.downloadBackend", "type": "backend", "default": "python" },
@@ -191,6 +192,9 @@ def normalize_settings(settings: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
     )
     data["auto_refresh_comfy_models_after_apply"] = bool_setting(
         data.get("auto_refresh_comfy_models_after_apply"), True
+    )
+    data["auto_open_on_missing"] = bool_setting(
+        data.get("auto_open_on_missing"), False
     )
     data["download_path_mode"] = normalize_download_path_mode(
         data.get("download_path_mode"), data.get("auto_fill_subfolder")

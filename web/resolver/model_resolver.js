@@ -1066,7 +1066,7 @@ export class ModelResolver {
      * Check if auto-open preference is enabled
      */
     isAutoOpenEnabled() {
-        return localStorage.getItem('ModelResolver.autoOpenOnMissing') !== 'false';
+        return localStorage.getItem('ModelResolver.autoOpenOnMissing') === 'true';
     }
 
 

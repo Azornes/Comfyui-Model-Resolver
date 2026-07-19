@@ -9,6 +9,14 @@ const queueMethodsSource = fs.readFileSync(
   path.join(projectRoot, 'web/resolver/actions/queue_methods.js'),
   'utf8'
 );
+const modelResolverSource = fs.readFileSync(
+  path.join(projectRoot, 'web/resolver/model_resolver.js'),
+  'utf8'
+);
+const optionsMethodsSource = fs.readFileSync(
+  path.join(projectRoot, 'web/resolver/views/options_methods.js'),
+  'utf8'
+);
 const resolveDownloadMethodsSource = fs.readFileSync(
   path.join(projectRoot, 'web/resolver/actions/resolve_download_methods.js'),
   'utf8'
@@ -660,6 +668,41 @@ test('active download refresh preserves existing cards for hover and tooltip sta
   assert.match(queueMethodsSource, /patchDownloadsPanelElement\(currentPanel, nextPanel\)/);
   assert.match(renderQueueDownloadsHtml, /data-download-id=/);
   assert.match(queueMethodsSource, /patchDownloadsPanelElement\(currentElement, nextElement\)/);
+});
+
+test('automatic opening for missing models is disabled by default', () => {
+  const isAutoOpenEnabled = eval(`(${extractMethod(modelResolverSource, 'isAutoOpenEnabled')})`);
+  const previousLocalStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  const setStoredValue = value => {
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: { getItem: () => value },
+    });
+  };
+
+  try {
+    setStoredValue(null);
+    assert.equal(isAutoOpenEnabled(), false);
+
+    setStoredValue('false');
+    assert.equal(isAutoOpenEnabled(), false);
+
+    setStoredValue('true');
+    assert.equal(isAutoOpenEnabled(), true);
+  } finally {
+    if (previousLocalStorageDescriptor) {
+      Object.defineProperty(globalThis, 'localStorage', previousLocalStorageDescriptor);
+    } else delete globalThis.localStorage;
+  }
+});
+
+test('automatic opening remains conditional on unresolved models', () => {
+  assert.match(
+    modelResolverSource,
+    /if \(data\.total_missing > 0\) \{[\s\S]*?this\.openResolverManager\(\);/
+  );
+  assert.match(optionsMethodsSource, /id="mr-options-auto-open-on-missing"/);
+  assert.match(optionsMethodsSource, /auto_open_on_missing: Boolean\(autoOpenOnMissingInput\?\.checked\)/);
 });
 
 test('active workflow label prefers selected ComfyUI workflow tab name over route hash', () => {

@@ -411,6 +411,15 @@ export const optionsMethods = {
                                         </label>
                                         <label class="mr-options-toggle-row">
                                             <div class="mr-options-toggle-copy">
+                                                <span class="mr-options-toggle-title">Open when a workflow has missing models <span class="mr-tooltip-badge" data-tooltip="When enabled, loading a workflow opens Model Resolver only after analysis detects unresolved models. This option is disabled by default.">?</span></span>
+                                            </div>
+                                            <span class="mr-options-toggle-control">
+                                                <input id="mr-options-auto-open-on-missing" class="mr-options-switch-input" type="checkbox" ${tokens.auto_open_on_missing ? 'checked' : ''}>
+                                                <span class="mr-options-switch"></span>
+                                            </span>
+                                        </label>
+                                        <label class="mr-options-toggle-row">
+                                            <div class="mr-options-toggle-copy">
                                                 <span class="mr-options-toggle-title">Embed workflow hashes <span class="mr-tooltip-badge" data-tooltip="Adds SHA256 metadata for models used in saved workflows and image workflow JSON, so renamed files can be resolved by hash later.">?</span></span>
                                             </div>
                                             <span class="mr-options-toggle-control">
@@ -900,6 +909,7 @@ export const optionsMethods = {
         const autoFillBaseModelInput = this.contentElement.querySelector('#mr-options-auto-fill-base-model');
         const autoFillSubfolderInput = this.contentElement.querySelector('#mr-options-auto-fill-subfolder');
         const autoRefreshComfyModelsInput = this.contentElement.querySelector('#mr-options-auto-refresh-comfy-models');
+        const autoOpenOnMissingInput = this.contentElement.querySelector('#mr-options-auto-open-on-missing');
         const workflowHashMetadataInput = this.contentElement.querySelector('#mr-options-workflow-hash-metadata');
         const workflowDependencyMarkerInput = this.contentElement.querySelector('#mr-options-workflow-dependency-marker');
         const addDependencyNodeBtn = this.contentElement.querySelector('#mr-options-add-dependency-node');
@@ -1027,6 +1037,7 @@ export const optionsMethods = {
             autoFillBaseModelInput,
             autoFillSubfolderInput,
             autoRefreshComfyModelsInput,
+            autoOpenOnMissingInput,
             workflowHashMetadataInput,
             workflowDependencyMarkerInput,
             downloadBackendInput,
@@ -3425,6 +3436,7 @@ export const optionsMethods = {
                     auto_fill_base_model: Boolean(autoFillBaseModelInput?.checked),
                     auto_fill_subfolder: Boolean(autoFillSubfolderInput?.checked),
                     auto_refresh_comfy_models_after_apply: Boolean(autoRefreshComfyModelsInput?.checked),
+                    auto_open_on_missing: Boolean(autoOpenOnMissingInput?.checked),
                     workflow_hash_metadata_enabled: Boolean(workflowHashMetadataInput?.checked),
                     workflow_dependency_marker_enabled: Boolean(workflowDependencyMarkerInput?.checked),
                     download_backend: downloadBackend,

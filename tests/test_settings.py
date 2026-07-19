@@ -24,6 +24,14 @@ class SettingsTests(unittest.TestCase):
             ]
         )
 
+    def test_auto_open_on_missing_defaults_to_disabled(self):
+        self.assertFalse(normalize_settings({})["auto_open_on_missing"])
+        self.assertTrue(
+            normalize_settings({"auto_open_on_missing": "true"})[
+                "auto_open_on_missing"
+            ]
+        )
+
     def test_sanitize_folder_name(self):
         self.assertEqual(sanitize_folder_name("valid_name"), "valid_name")
         self.assertEqual(sanitize_folder_name("name/with\\slashes"), "name_with_slashes")
