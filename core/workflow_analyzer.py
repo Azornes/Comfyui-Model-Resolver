@@ -1012,17 +1012,11 @@ def get_model_widget_category_hints(
     dynamic_category_hints = get_dynamic_widget_category_hints(node, widget_index)
 
     output_category_hint = get_node_output_category_hint(node)
-    widgets_values = node.get("widgets_values", [])
-    has_single_widget_value = len(widgets_values) == 1
     output_widget_category_hint = (
         output_category_hint
         if (
             not dynamic_category_hints
-            and (
-                indexed_category_hint
-                or widget_category_hint
-                or has_single_widget_value
-            )
+            and (indexed_category_hint or widget_category_hint)
         )
         else None
     )
@@ -1068,12 +1062,15 @@ def is_placeholder_model_value(value: Any) -> bool:
 
 
 def should_scan_as_model_reference(value: Any, declared_model_widget: bool) -> bool:
-    """Detect model references, including extensionless known model widgets."""
-    if is_model_filename(value):
+    """Detect references only when the value or its widget provides model evidence."""
+    if isinstance(value, str) and URN_REGEX.match(value.strip()):
         return True
 
     if not declared_model_widget or not isinstance(value, str):
         return False
+
+    if is_model_filename(value):
+        return True
 
     return bool(value.strip()) and not is_placeholder_model_value(value)
 
@@ -1268,8 +1265,8 @@ def get_node_model_info(
     """
     Extract model references from a single node.
 
-    This scans all widgets_values entries and tries to identify which ones
-    are model file references by attempting to resolve them.
+    This scans widget values backed by model metadata or a model-like widget name.
+    Explicit model URNs are also accepted without widget metadata.
 
     Args:
         node: Node dictionary from workflow JSON
@@ -1454,11 +1451,19 @@ def get_node_model_info(
             if model_widget_category_hints
             else ([effective_category_hint] if effective_category_hint else None)
         )
+        category_backed_model_widget = bool(
+            model_widget_category_hint
+            or schema_output_category_hint
+        )
+        named_model_file_widget = bool(
+            is_workflow_model_widget_candidate(node, idx)
+            and is_model_filename(value)
+        )
 
         if not should_scan_as_model_reference(
             value,
-            declared_model_widget=bool(
-                model_widget_category_hint or schema_output_category_hint
+            declared_model_widget=(
+                category_backed_model_widget or named_model_file_widget
             ),
         ):
             # Check for dict-type widget values containing model references (e.g. Power Lora Loader)

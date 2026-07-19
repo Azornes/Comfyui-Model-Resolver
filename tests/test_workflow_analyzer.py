@@ -80,6 +80,135 @@ class WorkflowAnalyzerCaseSensitivityTests(unittest.TestCase):
 
 
 class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
+    def test_show_anything_cached_model_text_is_not_a_model_reference(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_dir = os.path.join(tmpdir, "KREA2")
+            os.makedirs(model_dir)
+            model_path = os.path.join(
+                model_dir, "krea2_turbo_fp8_scaled.safetensors"
+            )
+            with open(model_path, "wb"):
+                pass
+
+            workflow = {
+                "nodes": [
+                    {
+                        "id": 141,
+                        "type": "easy showAnything",
+                        "title": "Diffusion model",
+                        "inputs": [{"name": "anything", "type": "*", "link": 700}],
+                        "outputs": [{"name": "output", "type": "*", "links": []}],
+                        "widgets": [{"name": "text"}],
+                        "widgets_values": [
+                            r"KREA2\krea2_turbo_fp8_scaled.safetensors"
+                        ],
+                    }
+                ]
+            }
+            available_models = [
+                {
+                    "filename": "krea2_turbo_fp8_scaled.safetensors",
+                    "path": model_path,
+                    "relative_path": r"KREA2\krea2_turbo_fp8_scaled.safetensors",
+                    "category": "diffusion_models",
+                    "base_directory": tmpdir,
+                }
+            ]
+
+            refs = analyze_workflow_models(
+                workflow, available_models=available_models
+            )
+
+            self.assertEqual([], refs)
+
+    def test_model_like_widget_name_keeps_custom_model_reference_detection(self):
+        workflow = {
+            "nodes": [
+                {
+                    "id": 199,
+                    "type": "CustomModelSelector",
+                    "widgets": [{"name": "filename"}],
+                    "widgets_values": ["custom_model.safetensors"],
+                    "outputs": [],
+                }
+            ]
+        }
+
+        refs = analyze_workflow_models(workflow, available_models=[])
+
+        self.assertEqual(1, len(refs))
+        self.assertEqual("custom_model.safetensors", refs[0]["original_path"])
+
+    def test_set_node_model_slot_name_does_not_turn_constant_into_model(self):
+        workflow = {
+            "nodes": [
+                {
+                    "id": 3,
+                    "type": "SetNode",
+                    "title": "Set_MODEL_BASE",
+                    "inputs": [{"name": "MODEL", "type": "MODEL", "link": 701}],
+                    "outputs": [{"name": "MODEL", "type": "MODEL", "links": []}],
+                    "widgets": [{"name": "Constant"}],
+                    "widgets_values": ["MODEL_BASE"],
+                },
+                {
+                    "id": 19,
+                    "type": "SetNode",
+                    "title": "Set_MODEL_LORA",
+                    "inputs": [{"name": "MODEL", "type": "MODEL", "link": 702}],
+                    "outputs": [{"name": "MODEL", "type": "MODEL", "links": []}],
+                    "widgets": [{"name": "Constant"}],
+                    "widgets_values": ["MODEL_LORA"],
+                },
+            ]
+        }
+
+        refs = analyze_workflow_models(workflow, available_models=[])
+
+        self.assertEqual([], refs)
+
+    def test_model_slot_does_not_turn_device_widget_into_model(self):
+        workflow = {
+            "nodes": [
+                {
+                    "id": 104,
+                    "type": "CustomVideoUpscaler",
+                    "inputs": [
+                        {"name": "model", "type": "MODEL", "link": 703},
+                        {
+                            "name": "offload_device",
+                            "type": "COMBO",
+                            "widget": {"name": "offload_device"},
+                        },
+                    ],
+                    "outputs": [{"name": "IMAGE", "type": "IMAGE", "links": []}],
+                    "widgets": [{"name": "offload_device"}],
+                    "widgets_values": ["cuda:0"],
+                }
+            ]
+        }
+
+        refs = analyze_workflow_models(workflow, available_models=[])
+
+        self.assertEqual([], refs)
+
+    def test_filename_widget_template_without_model_extension_is_ignored(self):
+        workflow = {
+            "nodes": [
+                {
+                    "id": 155,
+                    "type": "Image Saver",
+                    "widgets": [{"name": "filename"}],
+                    "widgets_values": ["Krea2_%time_%seed"],
+                    "outputs": [],
+                }
+            ]
+        }
+
+        refs = analyze_workflow_models(workflow, available_models=[])
+
+        self.assertEqual([], refs)
+
     def test_upscale_model_loader_widget_named_model_name_stays_upscale(self):
         workflow = {
             "nodes": [
