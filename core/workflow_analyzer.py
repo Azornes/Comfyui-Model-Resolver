@@ -1451,8 +1451,15 @@ def get_node_model_info(
             if model_widget_category_hints
             else ([effective_category_hint] if effective_category_hint else None)
         )
+        # A generic widget name such as ``model_name`` is useful for choosing a
+        # category, but it is not proof that an arbitrary STRING value is a local
+        # model reference. Some metadata/search nodes use that name for human-
+        # readable titles. Only folder-backed schemas, known widget indexes, or a
+        # model-typed combo/output pairing are strong enough to admit an
+        # extensionless value.
         category_backed_model_widget = bool(
-            model_widget_category_hint
+            model_widget_folder_key_hints
+            or get_node_model_widget_category_hint(node_type, idx)
             or schema_output_category_hint
         )
         named_model_file_widget = bool(

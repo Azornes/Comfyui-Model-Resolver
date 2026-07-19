@@ -209,6 +209,46 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
 
         self.assertEqual([], refs)
 
+    def test_model_name_string_used_as_metadata_query_is_ignored(self):
+        workflow = {
+            "nodes": [
+                {
+                    "id": 153,
+                    "type": "Civitai Hash Fetcher (Image Saver)",
+                    "inputs": [
+                        {
+                            "name": "username",
+                            "type": "STRING",
+                            "widget": {"name": "username"},
+                        },
+                        {
+                            "name": "model_name",
+                            "type": "STRING",
+                            "widget": {"name": "model_name"},
+                        },
+                        {
+                            "name": "version",
+                            "type": "STRING",
+                            "widget": {"name": "version"},
+                        },
+                    ],
+                    "outputs": [{"name": "STRING", "type": "STRING", "links": []}],
+                    "widgets_values": [
+                        "latentheart",
+                        (
+                            "Krea2 [SFW / NSFW] Uncensored - Image-to-Prompt + "
+                            "Prompt Enhancer + 4K Upscaler + CivitAI Metadata"
+                        ),
+                        "",
+                    ],
+                }
+            ]
+        }
+
+        refs = analyze_workflow_models(workflow, available_models=[])
+
+        self.assertEqual([], refs)
+
     def test_upscale_model_loader_widget_named_model_name_stays_upscale(self):
         workflow = {
             "nodes": [
