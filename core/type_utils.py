@@ -170,6 +170,7 @@ CATEGORY_MAP = {
     "diffusers": "diffusers",
     "unet": "diffusion_models",
     "unet_gguf": "diffusion_models",
+    "select_safetensors": "diffusion_models",
     "diffusion_model": "diffusion_models",
     "diffusion_models": "diffusion_models",
     "clip": "text_encoders",

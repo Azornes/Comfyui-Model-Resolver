@@ -1469,6 +1469,13 @@ test('download category normalization maps unet gguf to diffusion models', () =>
   assert.equal(normalizeDownloadCategory('UNET GGUF'), 'diffusion_models');
 });
 
+test('download category normalization maps select safetensors alias to diffusion models', () => {
+  const normalizeDownloadCategory = eval(`(${extractMethod(downloadTargetMethodsSource, 'normalizeDownloadCategory')})`);
+
+  assert.equal(normalizeDownloadCategory('select_safetensors'), 'diffusion_models');
+  assert.equal(normalizeDownloadCategory('SELECT SAFETENSORS'), 'diffusion_models');
+});
+
 test('hash match label map numbers distinct matched hashes', () => {
   const normalizeSearchResultSha256 = eval(`(${extractMethod(searchPanelMethodsSource, 'normalizeSearchResultSha256')})`);
   const getLocalMatchHash = eval(`(${extractMethod(searchPanelMethodsSource, 'getLocalMatchHash')})`);

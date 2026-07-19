@@ -1194,6 +1194,7 @@ class UnifiedHelpersTests(unittest.TestCase):
         from core.type_utils import resolve_model_category
         self.assertEqual(resolve_model_category("checkpoints", target_format="folder"), "checkpoints")
         self.assertEqual(resolve_model_category("lora", target_format="folder"), "loras")
+        self.assertEqual(resolve_model_category("select_safetensors", target_format="folder"), "diffusion_models")
         self.assertEqual(resolve_model_category("checkpoint", target_format="civitai"), "Checkpoint")
         self.assertEqual(resolve_model_category("diffusion_models", target_format="civitai"), "Checkpoint")
         self.assertEqual(resolve_model_category("loras", target_format="civitai"), "LORA")
@@ -1214,6 +1215,5 @@ class UnifiedHelpersTests(unittest.TestCase):
         mock_request_json.assert_called_once()
         call_kwargs = mock_request_json.call_args[1]
         self.assertIn("Cookie", call_kwargs["headers"])
-
 
 

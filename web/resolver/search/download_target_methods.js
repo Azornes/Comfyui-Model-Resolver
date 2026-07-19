@@ -109,6 +109,7 @@ export const downloadTargetMethods = {
             upscaler: 'upscale_models',
             unet: 'diffusion_models',
             unet_gguf: 'diffusion_models',
+            select_safetensors: 'diffusion_models',
             diffusion_model: 'diffusion_models',
             diffusion_models: 'diffusion_models',
             clip: 'text_encoders',
