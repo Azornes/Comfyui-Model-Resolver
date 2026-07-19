@@ -1161,7 +1161,7 @@ export const queueMethods = {
     renderDownloadsPanel(downloads = [], history = this.getDownloadHistory()) {
         const activeSubTab = this.queueDownloadsActiveTab === 'history' ? 'history' : 'active';
         const activeSelected = activeSubTab === 'active';
-        let html = '<div class="mr-downloads-panel">';
+        let html = `<div class="mr-downloads-panel" data-downloads-view="${activeSubTab}">`;
         html += '<div class="mr-tabs mr-queue-tabs mr-downloads-subtabs" role="tablist" aria-label="Downloads views">';
         html += `<button type="button" class="mr-tab mr-queue-tab mr-downloads-subtab${activeSelected ? ' mr-tab-active' : ''}" data-downloads-tab="active" aria-selected="${activeSelected ? 'true' : 'false'}"><span class="mr-tab-label">Active (${downloads.length})</span></button>`;
         html += `<button type="button" class="mr-tab mr-queue-tab mr-downloads-subtab${!activeSelected ? ' mr-tab-active' : ''}" data-downloads-tab="history" aria-selected="${!activeSelected ? 'true' : 'false'}"><span class="mr-tab-label">History (${history.length})</span></button>`;
@@ -1171,8 +1171,96 @@ export const queueMethods = {
             : this.renderDownloadHistoryHtml(history);
         html += '</div>';
 
+        const currentPanel = this.queueList.querySelector?.(`.mr-downloads-panel[data-downloads-view="${activeSubTab}"]`);
+        if (currentPanel && typeof document !== 'undefined') {
+            const template = document.createElement('template');
+            template.innerHTML = html;
+            const nextPanel = template.content.firstElementChild;
+            if (nextPanel) {
+                this.patchDownloadsPanelElement(currentPanel, nextPanel);
+                this.wireDownloadsPanelControls();
+                return;
+            }
+        }
+
         this.queueList.innerHTML = html;
         this.wireDownloadsPanelControls();
+    },
+
+    patchDownloadsPanelElement(currentElement, nextElement) {
+        const syncAttributes = (current, next) => {
+            const nextAttributeNames = new Set(Array.from(next.attributes || [], attribute => attribute.name));
+            for (const attribute of Array.from(next.attributes || [])) {
+                if (current.getAttribute(attribute.name) !== attribute.value) {
+                    current.setAttribute(attribute.name, attribute.value);
+                }
+            }
+            for (const attribute of Array.from(current.attributes || [])) {
+                if (!nextAttributeNames.has(attribute.name)) {
+                    current.removeAttribute(attribute.name);
+                }
+            }
+        };
+        const getNodeKey = (node) => {
+            if (node?.nodeType !== 1) return '';
+            return node.getAttribute?.('data-download-id') || '';
+        };
+        const canPatchNode = (current, next) => {
+            if (!current || current.nodeType !== next.nodeType) return false;
+            if (current.nodeType !== 1) return true;
+            if (current.tagName !== next.tagName) return false;
+            if ((current.getAttribute('class') || '') !== (next.getAttribute('class') || '')) return false;
+            const currentKey = getNodeKey(current);
+            const nextKey = getNodeKey(next);
+            return !currentKey && !nextKey ? true : currentKey === nextKey;
+        };
+        const patchNode = (current, next) => {
+            if (!canPatchNode(current, next)) {
+                const replacement = next.cloneNode(true);
+                current.replaceWith(replacement);
+                return replacement;
+            }
+            if (current.nodeType !== 1) {
+                if (current.nodeValue !== next.nodeValue) current.nodeValue = next.nodeValue;
+                return current;
+            }
+
+            syncAttributes(current, next);
+            patchChildren(current, next);
+            return current;
+        };
+        const patchChildren = (current, next) => {
+            const nextChildren = Array.from(next.childNodes || []);
+            let cursor = current.firstChild;
+
+            for (const nextChild of nextChildren) {
+                const nextKey = getNodeKey(nextChild);
+                let currentChild = cursor;
+                if (nextKey) {
+                    currentChild = Array.from(current.childNodes || []).find(child => getNodeKey(child) === nextKey) || null;
+                    if (currentChild && currentChild !== cursor) {
+                        current.insertBefore(currentChild, cursor);
+                    }
+                }
+
+                if (!currentChild) {
+                    current.appendChild(nextChild.cloneNode(true));
+                    cursor = null;
+                    continue;
+                }
+
+                const patchedChild = patchNode(currentChild, nextChild);
+                cursor = patchedChild.nextSibling;
+            }
+
+            while (cursor) {
+                const nextSibling = cursor.nextSibling;
+                cursor.remove();
+                cursor = nextSibling;
+            }
+        };
+
+        patchNode(currentElement, nextElement);
     },
 
     wireDownloadsPanelControls() {
@@ -1285,7 +1373,7 @@ export const queueMethods = {
                 ? this.getContextMenuAttrs(contextModel, contextTooltip)
                 : '';
 
-            html += `<div class="mr-queue-item mr-download-queue-item"${contextData}>`;
+            html += `<div class="mr-queue-item mr-download-queue-item" data-download-id="${this.escapeHtml(downloadId)}"${contextData}>`;
             html += `<div class="mr-queue-item-title mr-download-queue-title">`;
             html += `<span data-tooltip="${this.escapeHtml(filename)}">${this.escapeHtml(filename)}</span>`;
             html += `<span class="mr-download-queue-status">${this.escapeHtml(statusLabel)}</span>`;

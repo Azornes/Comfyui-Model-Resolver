@@ -608,14 +608,8 @@ test('downloads tab shows active downloads from all workflow tabs', () => {
 });
 
 test('downloads tab renders workflow label for active downloads', () => {
-  const renderQueueDownloads = eval(`(${extractMethod(queueMethodsSource, 'renderQueueDownloads')})`);
+  const renderQueueDownloadsHtml = eval(`(${extractMethod(queueMethodsSource, 'renderQueueDownloadsHtml')})`);
   const dialog = {
-    queueList: {
-      innerHTML: '',
-      querySelectorAll() {
-        return [];
-      },
-    },
     escapeHtml(value) {
       return String(value).replace(/[&<>\"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[char]));
     },
@@ -631,15 +625,23 @@ test('downloads tab renders workflow label for active downloads', () => {
     getDownloadFolderContext() {
       return null;
     },
-    renderQueueDownloadsHtml(downloads) {
-      const info = downloads[0]?.info || {};
-      const workflowLabel = this.getDownloadWorkflowLabel(info);
-      return `<span>Workflow</span> ${workflowLabel}`;
+    getDownloadDisplayProgress(progress) {
+      return {
+        percent: progress.progress || 0,
+        downloaded: progress.downloaded || 0,
+        totalSize: progress.total_size || 0,
+        isFinalizing: false,
+      };
     },
-    wireDownloadsPanelControls() {},
+    formatDownloadProgressMeta() {
+      return '';
+    },
+    getDownloadQueueContext() {
+      return null;
+    },
   };
 
-  renderQueueDownloads.call(dialog, [{
+  const html = renderQueueDownloadsHtml.call(dialog, [{
     downloadId: 'download-1',
     info: {
       workflowLabel: 'Workflow B',
@@ -648,8 +650,16 @@ test('downloads tab renders workflow label for active downloads', () => {
     },
   }]);
 
-  assert.match(dialog.queueList.innerHTML, /<span>Workflow<\/span>/);
-  assert.match(dialog.queueList.innerHTML, /Workflow B/);
+  assert.match(html, /<span>Workflow<\/span>/);
+  assert.match(html, /Workflow B/);
+});
+
+test('active download refresh preserves existing cards for hover and tooltip state', () => {
+  const renderQueueDownloadsHtml = extractMethod(queueMethodsSource, 'renderQueueDownloadsHtml');
+
+  assert.match(queueMethodsSource, /patchDownloadsPanelElement\(currentPanel, nextPanel\)/);
+  assert.match(renderQueueDownloadsHtml, /data-download-id=/);
+  assert.match(queueMethodsSource, /patchDownloadsPanelElement\(currentElement, nextElement\)/);
 });
 
 test('active workflow label prefers selected ComfyUI workflow tab name over route hash', () => {
