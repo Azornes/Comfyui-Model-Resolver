@@ -699,10 +699,38 @@ test('automatic opening for missing models is disabled by default', () => {
 test('automatic opening remains conditional on unresolved models', () => {
   assert.match(
     modelResolverSource,
-    /if \(data\.total_missing > 0\) \{[\s\S]*?this\.openResolverManager\(\);/
+    /if \(data\.total_missing > 0\) \{[\s\S]*?this\.openResolverForDetectedMissingModels\(\);/
   );
   assert.match(optionsMethodsSource, /id="mr-options-auto-open-on-missing"/);
   assert.match(optionsMethodsSource, /auto_open_on_missing: Boolean\(autoOpenOnMissingInput\?\.checked\)/);
+});
+
+test('automatic opening preserves the current resolver display mode', () => {
+  const openResolverForDetectedMissingModels = eval(`(${extractMethod(modelResolverSource, 'openResolverForDetectedMissingModels')})`);
+  const refreshReasons = [];
+  let activationCount = 0;
+  const visibleResolver = {
+    dialog: {
+      isVisible: () => true,
+      scheduleActiveWorkflowRefresh: reason => refreshReasons.push(reason),
+    },
+    activateResolverButton() {
+      activationCount += 1;
+    },
+  };
+
+  openResolverForDetectedMissingModels.call(visibleResolver);
+  assert.equal(activationCount, 0);
+  assert.deepEqual(refreshReasons, ['auto-open-missing-models']);
+
+  const hiddenResolver = {
+    dialog: { isVisible: () => false },
+    activateResolverButton() {
+      activationCount += 1;
+    },
+  };
+  openResolverForDetectedMissingModels.call(hiddenResolver);
+  assert.equal(activationCount, 1);
 });
 
 test('active workflow label prefers selected ComfyUI workflow tab name over route hash', () => {

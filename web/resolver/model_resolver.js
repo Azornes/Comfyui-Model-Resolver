@@ -1069,6 +1069,15 @@ export class ModelResolver {
         return localStorage.getItem('ModelResolver.autoOpenOnMissing') === 'true';
     }
 
+    openResolverForDetectedMissingModels() {
+        if (this.dialog?.isVisible?.()) {
+            this.dialog.scheduleActiveWorkflowRefresh?.('auto-open-missing-models');
+            return;
+        }
+
+        this.activateResolverButton();
+    }
+
 
     /**
      * Check for missing models and auto-open dialog if any are found
@@ -1121,7 +1130,7 @@ export class ModelResolver {
             // Auto-open dialog if there are missing models
             if (data.total_missing > 0) {
                 log.debug(`Model Resolver: Found ${data.total_missing} missing model(s), opening dialog...`);
-                this.openResolverManager();
+                this.openResolverForDetectedMissingModels();
             }
 
         } catch (error) {
