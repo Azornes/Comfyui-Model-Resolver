@@ -291,11 +291,10 @@ export const modelInfoMethods = {
     getContextMenuSourceLink(model = {}) {
         const fallbackKey = this.getContextMenuSourceKey(model);
         const candidates = this.getContextMenuSourceUrlCandidates(model);
-
-        for (const candidate of candidates) {
+        const resolveCandidate = (candidate) => {
             const candidateKey = this.getContextMenuSourceKeyFromUrl(candidate) || fallbackKey;
             const normalizedUrl = this.normalizeContextMenuSourceUrl(candidate, candidateKey);
-            if (!normalizedUrl) continue;
+            if (!normalizedUrl) return null;
 
             const cardUrl = getModelCardUrl(normalizedUrl) || normalizedUrl;
             const sourceKey = this.getContextMenuSourceKeyFromUrl(cardUrl)
@@ -306,6 +305,17 @@ export const modelInfoMethods = {
                 ...config,
                 url: cardUrl
             };
+        };
+
+        const preferredCandidates = fallbackKey
+            ? candidates.filter(candidate => {
+                const candidateKey = this.getContextMenuSourceKeyFromUrl(candidate);
+                return !candidateKey || candidateKey === fallbackKey;
+            })
+            : candidates;
+        for (const candidate of preferredCandidates) {
+            const resolved = resolveCandidate(candidate);
+            if (resolved) return resolved;
         }
 
         const builtUrl = this.buildContextMenuSourceUrlFromIds(model, fallbackKey);
@@ -315,6 +325,12 @@ export const modelInfoMethods = {
                 ...config,
                 url: builtUrl
             };
+        }
+
+        for (const candidate of candidates) {
+            if (preferredCandidates.includes(candidate)) continue;
+            const resolved = resolveCandidate(candidate);
+            if (resolved) return resolved;
         }
 
         return null;
@@ -2096,11 +2112,11 @@ export const modelInfoMethods = {
         const civitaiLinkEl = dialog.querySelector('.mr-info-civitai-link');
         if (civitaiLinkEl) {
             const hasLocalFile = Boolean(this.getInfoDialogModelFilePath(data));
-            if (data.url || data.version_url) {
-                const url = data.version_url || data.url;
-                const sourceLabel = this.getInfoMetadataSourceLabel(data);
+            const sourceLink = this.getContextMenuSourceLink(data);
+            if (sourceLink?.url) {
+                const sourceLabel = sourceLink.label || this.getInfoMetadataSourceLabel(data);
                 civitaiLinkEl.innerHTML = `
-                    <a href="${this.escapeHtml(url)}" target="_blank" class="mr-info-link">
+                    <a href="${this.escapeHtml(sourceLink.url)}" target="_blank" class="mr-info-link">
                         View on ${this.escapeHtml(sourceLabel)}
                         ${this.getInfoMetadataSourceIcon(data)}
                     </a>

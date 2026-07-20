@@ -1390,9 +1390,10 @@ def get_model_info_by_hash(
             api_url,
             api_key=api_key,
             timeout=15,
+            raise_on_error=True,
         )
 
-        if data:
+        if isinstance(data, dict) and data:
             # Extract useful info from the response
             model_info = data.get("model", {})
             version_info = data
@@ -1435,10 +1436,21 @@ def get_model_info_by_hash(
             log.info(f"Found model by hash {file_hash}: {result.get('model_name')}")
             return result
 
-        else:
-            log.info(f"Model not found or lookup failed on CivitAI for hash {file_hash}")
+        log.warning(
+            f"CivitAI hash lookup returned an unexpected JSON payload for {file_hash}"
+        )
+        return None
+
+    except requests.HTTPError as e:
+        status_code = getattr(e.response, "status_code", None)
+        if status_code == 404:
+            log.info(f"Model not found on CivitAI for hash {file_hash}")
             _hash_cache[cache_key] = None
             return None
+        log.warning(
+            f"CivitAI hash lookup returned HTTP {status_code or 'error'} for {file_hash}"
+        )
+        return None
 
     except Exception as e:
         log.error(f"Error looking up model by hash {file_hash}: {e}")

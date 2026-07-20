@@ -16,6 +16,39 @@ from core.downloader import (
 
 
 class DownloaderMetadataSidecarTests(unittest.TestCase):
+    def test_civarchive_metadata_keeps_provider_page_separate_from_hf_mirror(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_path = os.path.join(tmpdir, "model.safetensors")
+            with open(model_path, "wb") as handle:
+                handle.write(b"abc")
+
+            payload = build_lora_manager_metadata(
+                model_path,
+                {
+                    "source": "civarchive",
+                    "details_source": "civarchive",
+                    "model_id": 123,
+                    "version_id": 456,
+                    "version_url": (
+                        "https://huggingface.co/author/repo/blob/main/model.safetensors"
+                    ),
+                    "url": "https://civarchive.com/models/123?modelVersionId=456",
+                    "download_url": (
+                        "https://huggingface.co/author/repo/resolve/main/model.safetensors"
+                    ),
+                    "sha256": "a" * 64,
+                },
+                category="checkpoints",
+            )
+
+        expected_page = "https://civarchive.com/models/123?modelVersionId=456"
+        self.assertEqual(expected_page, payload["source_url"])
+        self.assertEqual(expected_page, payload["version_url"])
+        self.assertEqual(
+            "https://huggingface.co/author/repo/resolve/main/model.safetensors",
+            payload["download_url"],
+        )
+
     def test_huggingface_metadata_does_not_create_civitai_identity(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             model_path = os.path.join(tmpdir, "model.safetensors")

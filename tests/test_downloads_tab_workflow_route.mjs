@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizePathIdentity } from '../web/resolver/utils/html_utils.js';
+import { html, normalizePathIdentity } from '../web/resolver/utils/html_utils.js';
+import { getModelCardUrl } from '../web/resolver/utils/url_utils.js';
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
 const queueMethodsSource = fs.readFileSync(
@@ -37,6 +38,15 @@ const renderFormatMethodsSource = fs.readFileSync(
   path.join(projectRoot, 'web/resolver/utils/render_format_methods.js'),
   'utf8'
 );
+
+test('html template escapes every item in interpolated arrays', () => {
+  const rendered = html`<div>${['<script>', '"quoted"', '&value']}</div>`;
+
+  assert.equal(
+    rendered,
+    '<div>&lt;script&gt;&quot;quoted&quot;&amp;value</div>'
+  );
+});
 
 function extractMethod(source, methodName, paramsPattern = '[^)]*') {
   const signatureRegex = new RegExp(`\\n\\s+(async\\s+)?${methodName}\\s*\\(${paramsPattern}\\)\\s*\\{`);
@@ -635,6 +645,89 @@ test('manual URL download metadata never inherits provider identity or hash from
   assert.equal(metadata.url_source, 'custom');
   assert.equal(metadata.provided_url, source.provided_url);
   assert.equal('civitai' in metadata, false);
+});
+
+test('CivArchive metadata keeps its page URL when the download mirror is HuggingFace', () => {
+  const getDownloadMetadata = eval(`(${extractMethod(downloadTargetMethodsSource, 'getDownloadMetadata')})`);
+  const civarchivePage = 'https://civarchive.com/models/123?modelVersionId=456';
+  const huggingFaceMirror = 'https://huggingface.co/author/repo/resolve/main/model.safetensors';
+  const source = {
+    source: 'civarchive',
+    details_source: 'civarchive',
+    model_id: 123,
+    version_id: 456,
+    filename: 'model.safetensors',
+    url: civarchivePage,
+    version_url: 'https://huggingface.co/stale/repo/blob/main/model.safetensors',
+    download_url: huggingFaceMirror
+  };
+  const dialog = {
+    getCachedSearchSuggestionData() {
+      return {
+        source: 'huggingface',
+        version_url: 'https://huggingface.co/stale/repo/blob/main/model.safetensors'
+      };
+    },
+    getCompatibleCivitaiSearchResult() {
+      return {};
+    },
+    getFilenameFromPath(value = '') {
+      return String(value).split(/[\\/]/).at(-1) || '';
+    }
+  };
+
+  const metadata = getDownloadMetadata.call(dialog, {
+    original_path: source.filename,
+    category: 'checkpoints'
+  }, source, {
+    filename: source.filename,
+    category: 'checkpoints',
+    url: huggingFaceMirror,
+    openUrl: '',
+    pathMetadata: { filename: source.filename, category: 'checkpoints' }
+  });
+
+  assert.equal(metadata.source, 'civarchive');
+  assert.equal(metadata.url, civarchivePage);
+  assert.equal(metadata.version_url, civarchivePage);
+  assert.equal(metadata.page_url, civarchivePage);
+  assert.equal(metadata.download_url, huggingFaceMirror);
+});
+
+test('source link prefers the selected provider page over another provider mirror', () => {
+  const getContextMenuSourceLink = eval(`(${extractMethod(modelInfoMethodsSource, 'getContextMenuSourceLink')})`);
+  const civarchivePage = 'https://civarchive.com/models/123?modelVersionId=456';
+  const dialog = {
+    getContextMenuSourceKey() {
+      return 'civarchive';
+    },
+    getContextMenuSourceUrlCandidates() {
+      return [
+        'https://huggingface.co/author/repo/blob/main/model.safetensors',
+        civarchivePage
+      ];
+    },
+    getContextMenuSourceKeyFromUrl(value = '') {
+      if (value.includes('civarchive.com')) return 'civarchive';
+      if (value.includes('huggingface.co')) return 'huggingface';
+      return '';
+    },
+    normalizeContextMenuSourceUrl(value = '') {
+      return value;
+    },
+    getContextMenuSourceConfig(key = '') {
+      return { key, label: key === 'civarchive' ? 'CivArchive' : 'HuggingFace' };
+    },
+    buildContextMenuSourceUrlFromIds() {
+      return '';
+    }
+  };
+
+  const result = getContextMenuSourceLink.call(dialog, {});
+
+  assert.equal(result.key, 'civarchive');
+  assert.equal(result.label, 'CivArchive');
+  assert.equal(result.url, civarchivePage);
 });
 
 test('manual URL table row preserves the explicit provenance boundary', () => {

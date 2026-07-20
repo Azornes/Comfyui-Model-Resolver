@@ -1412,6 +1412,39 @@ export const downloadTargetMethods = {
             || merged.details_source
             || merged.source
             || '';
+        const sourcePageCandidates = [
+            options.openUrl,
+            sourceData.version_url,
+            sourceData.versionUrl,
+            sourceData.model_url,
+            sourceData.modelUrl,
+            sourceData.page_url,
+            sourceData.pageUrl,
+            sourceData.url,
+            merged.model_url,
+            merged.page_url,
+            merged.version_url,
+            merged.url
+        ].filter(Boolean);
+        let sourcePageUrl = sourcePageCandidates[0] || '';
+        const isCivArchiveSource = String(sourceName).toLowerCase().replace(/[-\s]+/g, '_') === 'civarchive';
+        if (isCivArchiveSource) {
+            const civarchivePageUrl = sourcePageCandidates.find(value => {
+                try {
+                    const host = new URL(String(value), 'https://civarchive.com').hostname.toLowerCase();
+                    return host === 'civarchive.com' || host.endsWith('.civarchive.com');
+                } catch {
+                    return false;
+                }
+            });
+            const sourceModelId = idSource.model_id || idSource.modelId || '';
+            const sourceVersionId = idSource.version_id || idSource.versionId || '';
+            sourcePageUrl = civarchivePageUrl || (
+                sourceModelId
+                    ? `https://civarchive.com/models/${sourceModelId}${sourceVersionId ? `?modelVersionId=${sourceVersionId}` : ''}`
+                    : ''
+            );
+        }
         const metadata = {
             source: sourceName,
             details_source: sourceData.details_source || sourceData.source || sourceName,
@@ -1431,8 +1464,11 @@ export const downloadTargetMethods = {
             creator,
             author: merged.author || pathMetadata.author || '',
             repo_id: repoId,
-            url: options.openUrl || merged.model_url || merged.version_url || merged.url || '',
-            version_url: merged.version_url || '',
+            url: sourcePageUrl,
+            version_url: isCivArchiveSource ? sourcePageUrl : (sourceData.version_url || sourceData.versionUrl || sourcePageUrl),
+            page_url: isCivArchiveSource ? sourcePageUrl : (sourceData.page_url || sourceData.pageUrl || sourcePageUrl),
+            model_url: isCivArchiveSource ? sourcePageUrl : (sourceData.model_url || sourceData.modelUrl || sourcePageUrl),
+            platform_url: sourceData.platform_url || sourceData.platformUrl || merged.platform_url || merged.platformUrl || '',
             download_url: options.url || merged.download_url || merged.downloadUrl || merged.url || '',
             size: merged.size || merged.size_bytes || '',
             sha256: merged.sha256 || merged.hash || merged.hashes?.SHA256 || merged.hashes?.sha256 || '',

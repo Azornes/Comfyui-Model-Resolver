@@ -550,6 +550,29 @@ def build_lora_manager_metadata(
         source.get("platform_url"),
         source_url,
     )
+    if source_name == "civarchive":
+        civarchive_page_url = next(
+            (
+                str(value).strip()
+                for value in (
+                    source.get("version_url"),
+                    source.get("model_url"),
+                    source.get("page_url"),
+                    source.get("source_url"),
+                    source.get("url"),
+                )
+                if value
+                and host_matches_domain(urlparse(str(value)).hostname, "civarchive.com")
+            ),
+            "",
+        )
+        if not civarchive_page_url and model_id:
+            civarchive_page_url = f"https://civarchive.com/models/{model_id}"
+            if version_id:
+                civarchive_page_url += f"?modelVersionId={version_id}"
+        if not civarchive_page_url and sha256:
+            civarchive_page_url = f"https://civarchive.com/sha256/{sha256}"
+        source_page_url = civarchive_page_url
     platform_url = _first_present(source.get("platform_url"), source.get("platformUrl"))
     preview_url = _first_present(
         source.get("preview_url"),

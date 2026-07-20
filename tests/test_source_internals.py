@@ -16,6 +16,8 @@ import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
+import requests
+
 # ---------------------------------------------------------------------------
 # civarchive internals
 # ---------------------------------------------------------------------------
@@ -47,6 +49,7 @@ from core.sources.civitai import (
     _search_civitai_public_api_candidates,
     _search_civitai_red_candidates,
     _search_civitai_trpc_candidates,
+    get_model_info_by_hash,
     get_model_info_for_file,
     search_civitai_for_file,
 )
@@ -93,6 +96,52 @@ class CivitaiResultBuilderTests(unittest.TestCase):
         self.assertEqual("Anima", result["base_model"])
         self.assertEqual("abc123", result["sha256"])
         self.assertEqual(10 * 1024, result["size"])
+
+
+class CivitaiHashLookupCacheTests(unittest.TestCase):
+
+    def setUp(self):
+        clear_search_cache()
+
+    def tearDown(self):
+        clear_search_cache()
+
+    @staticmethod
+    def _http_error(status_code):
+        response = requests.Response()
+        response.status_code = status_code
+        return requests.HTTPError(response=response)
+
+    def test_only_not_found_response_is_cached(self):
+        with patch(
+            "core.sources.civitai.execute_provider_json_request",
+            side_effect=self._http_error(404),
+        ) as request_json:
+            self.assertIsNone(get_model_info_by_hash("a" * 64))
+            self.assertIsNone(get_model_info_by_hash("a" * 64))
+
+        request_json.assert_called_once()
+        self.assertTrue(request_json.call_args.kwargs["raise_on_error"])
+
+    def test_transient_http_error_is_not_cached(self):
+        with patch(
+            "core.sources.civitai.execute_provider_json_request",
+            side_effect=self._http_error(503),
+        ) as request_json:
+            self.assertIsNone(get_model_info_by_hash("b" * 64))
+            self.assertIsNone(get_model_info_by_hash("b" * 64))
+
+        self.assertEqual(request_json.call_count, 2)
+
+    def test_unexpected_json_shape_is_not_cached(self):
+        with patch(
+            "core.sources.civitai.execute_provider_json_request",
+            return_value=[],
+        ) as request_json:
+            self.assertIsNone(get_model_info_by_hash("c" * 64))
+            self.assertIsNone(get_model_info_by_hash("c" * 64))
+
+        self.assertEqual(request_json.call_count, 2)
 
 
 # ===========================================================================

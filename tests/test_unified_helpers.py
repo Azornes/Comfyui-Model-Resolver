@@ -1144,6 +1144,19 @@ class UnifiedHelpersTests(unittest.TestCase):
         self.assertEqual(res, {"success": True})
 
     @patch("requests.get")
+    def test_request_source_json_accepts_array_payload(self, mock_get):
+        from core.network_utils import request_source_json
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = [{"id": "author/model"}]
+        mock_get.return_value = mock_response
+
+        res = request_source_json("https://example.com/api")
+
+        self.assertEqual(res, [{"id": "author/model"}])
+
+    @patch("requests.get")
     @patch("time.sleep")
     def test_request_source_json_429_retry(self, mock_sleep, mock_get):
         from core.network_utils import request_source_json
@@ -1216,4 +1229,17 @@ class UnifiedHelpersTests(unittest.TestCase):
         call_kwargs = mock_request_json.call_args[1]
         self.assertIn("Cookie", call_kwargs["headers"])
 
+    @patch("core.network_utils.request_source_json")
+    def test_execute_provider_json_request_accepts_array_payload(
+        self, mock_request_json
+    ):
+        from core.network_utils import execute_provider_json_request
 
+        mock_request_json.return_value = [{"id": "author/model"}]
+
+        result = execute_provider_json_request(
+            "HuggingFace API",
+            "https://huggingface.co/api/models",
+        )
+
+        self.assertEqual(result, [{"id": "author/model"}])

@@ -27,7 +27,9 @@ export function html(strings, ...values) {
         const value = values[i - 1];
         let valStr = '';
         if (value !== undefined && value !== null) {
-            valStr = Array.isArray(value) ? value.join('') : escapeHtml(value);
+            valStr = Array.isArray(value)
+                ? value.map(item => escapeHtml(item)).join('')
+                : escapeHtml(value);
         }
         return result + valStr + string;
     });

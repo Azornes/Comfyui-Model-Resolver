@@ -250,8 +250,8 @@ def request_source_json(
     max_attempts: int = 2,
     log_name: str = "Source API",
     raise_on_error: bool = False,
-) -> Optional[Dict[str, Any]]:
-    """Perform a GET/POST request and return JSON with retry logic for HTTP 429."""
+) -> Any:
+    """Perform a GET/POST request and return any parsed JSON payload or ``None``."""
     response = request_source_response(
         url,
         method=method,
@@ -311,10 +311,12 @@ def execute_provider_json_request(
     timeout: int = 20,
     max_attempts: int = 2,
     raise_on_error: bool = False,
-) -> Optional[Dict[str, Any]]:
+) -> Any:
     """
-    Execute an outbound JSON request to a provider (CivitAI, CivArchive, HF, etc.)
-    with normalized user-agent, authorization token/session headers, and 429 retry handling.
+    Execute an outbound JSON request and return any parsed JSON payload.
+
+    Provider APIs may return either objects or arrays. Callers that require a
+    specific shape must validate the returned value before using it.
     """
     from .type_utils import DEFAULT_BROWSER_USER_AGENT
 
