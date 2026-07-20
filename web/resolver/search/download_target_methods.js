@@ -1341,12 +1341,25 @@ export const downloadTargetMethods = {
 
     getDownloadMetadata(missing = {}, source = {}, options = {}) {
         const sourceData = source && typeof source === 'object' ? source : {};
-        const searchSuggestion = this.getCachedSearchSuggestionData(missing);
-        const compatibleCivitaiSearch = this.getCompatibleCivitaiSearchResult?.(missing) || {};
+        const isProvidedUrl = Boolean(
+            sourceData.custom_url
+            || sourceData.url_source === 'custom'
+            || sourceData.match_type === 'custom_url'
+            || sourceData.provided_url
+        );
+        // A URL explicitly selected by the user is an authoritative provenance
+        // boundary. Never fill its hash, provider IDs, or file details from an
+        // earlier fuzzy search result belonging to another provider.
+        const searchSuggestion = isProvidedUrl ? null : this.getCachedSearchSuggestionData(missing);
+        const compatibleCivitaiSearch = isProvidedUrl
+            ? {}
+            : (this.getCompatibleCivitaiSearchResult?.(missing) || {});
+        const inheritedDownloadSource = isProvidedUrl ? {} : (missing?.download_source || {});
+        const inheritedCivitaiInfo = isProvidedUrl ? {} : (missing?.civitai_info || {});
         const merged = {
-            ...(missing?.civitai_info || {}),
+            ...inheritedCivitaiInfo,
             ...compatibleCivitaiSearch,
-            ...(missing?.download_source || {}),
+            ...inheritedDownloadSource,
             ...(searchSuggestion || {}),
             ...sourceData
         };
@@ -1359,7 +1372,7 @@ export const downloadTargetMethods = {
             || sourceData.source
             || sourceData.sourceKey
         );
-        const idSource = sourceHasIdentity ? sourceData : (missing?.download_source || {});
+        const idSource = sourceHasIdentity ? sourceData : inheritedDownloadSource;
         const selectedVersion = merged.selected_version || merged.selectedVersion || null;
         const pathMetadata = options.pathMetadata || this.getDownloadPathMetadata(missing, sourceData);
         const toList = (value) => {
@@ -1437,6 +1450,15 @@ export const downloadTargetMethods = {
         if (merged.metadata_source) metadata.metadata_source = merged.metadata_source;
         if (merged.is_deleted !== undefined) metadata.is_deleted = Boolean(merged.is_deleted);
         if (merged.civitai_deleted !== undefined) metadata.civitai_deleted = Boolean(merged.civitai_deleted);
+        if (isProvidedUrl) {
+            metadata.custom_url = true;
+            metadata.url_source = 'custom';
+            metadata.provided_url = sourceData.provided_url
+                || sourceData.version_url
+                || sourceData.page_url
+                || sourceData.url
+                || '';
+        }
 
         return metadata;
     },

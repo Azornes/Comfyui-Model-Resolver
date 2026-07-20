@@ -570,26 +570,39 @@ def build_lora_manager_metadata(
         source.get("version_description"),
     )
 
-    civitai_payload = dict(_as_dict(source.get("civitai")))
-    if model_id and "modelId" not in civitai_payload:
-        civitai_payload["modelId"] = _coerce_int_or_value(model_id)
-    if version_id and "id" not in civitai_payload:
-        civitai_payload["id"] = _coerce_int_or_value(version_id)
-    if version_name and "name" not in civitai_payload:
-        civitai_payload["name"] = str(version_name)
-    if base_model and "baseModel" not in civitai_payload:
-        civitai_payload["baseModel"] = str(base_model)
-    if trained_words and "trainedWords" not in civitai_payload:
-        civitai_payload["trainedWords"] = trained_words
-    if images and "images" not in civitai_payload:
-        civitai_payload["images"] = images
-    if direct_url and "downloadUrl" not in civitai_payload:
-        civitai_payload["downloadUrl"] = _strip_sensitive_url_params(str(direct_url))
-    if version_description and "description" not in civitai_payload:
-        civitai_payload["description"] = str(version_description)
+    is_civitai_source = source_name in {
+        "civitai",
+        "civarchive",
+        "lora_manager_archive",
+    } or (
+        not source_name
+        and bool(source.get("civitai") or source.get("civitai_details"))
+    )
+    civitai_payload = (
+        dict(_as_dict(source.get("civitai"))) if is_civitai_source else {}
+    )
+    if is_civitai_source:
+        if model_id and "modelId" not in civitai_payload:
+            civitai_payload["modelId"] = _coerce_int_or_value(model_id)
+        if version_id and "id" not in civitai_payload:
+            civitai_payload["id"] = _coerce_int_or_value(version_id)
+        if version_name and "name" not in civitai_payload:
+            civitai_payload["name"] = str(version_name)
+        if base_model and "baseModel" not in civitai_payload:
+            civitai_payload["baseModel"] = str(base_model)
+        if trained_words and "trainedWords" not in civitai_payload:
+            civitai_payload["trainedWords"] = trained_words
+        if images and "images" not in civitai_payload:
+            civitai_payload["images"] = images
+        if direct_url and "downloadUrl" not in civitai_payload:
+            civitai_payload["downloadUrl"] = _strip_sensitive_url_params(
+                str(direct_url)
+            )
+        if version_description and "description" not in civitai_payload:
+            civitai_payload["description"] = str(version_description)
 
     files = _as_list(_first_present(selected_version.get("files"), source.get("files")))
-    if files and "files" not in civitai_payload:
+    if is_civitai_source and files and "files" not in civitai_payload:
         civitai_payload["files"] = files
 
     model_payload = dict(_as_dict(civitai_payload.get("model")))
@@ -602,9 +615,9 @@ def build_lora_manager_metadata(
         model_payload["description"] = str(model_description)
     if tags and "tags" not in model_payload:
         model_payload["tags"] = tags
-    if model_payload:
+    if is_civitai_source and model_payload:
         civitai_payload["model"] = model_payload
-    if creator and "creator" not in civitai_payload:
+    if is_civitai_source and creator and "creator" not in civitai_payload:
         civitai_payload["creator"] = creator
 
     metadata_source = _metadata_source_value(source_name, source.get("metadata_source"))
@@ -624,7 +637,10 @@ def build_lora_manager_metadata(
         "preview_url": str(preview_url or ""),
         "preview_nsfw_level": 0,
         "notes": "",
-        "from_civitai": bool(metadata_source or model_id or version_id),
+        "from_civitai": bool(
+            is_civitai_source
+            and (metadata_source or model_id or version_id or civitai_payload)
+        ),
         "civitai": civitai_payload,
         "tags": tags,
         "modelDescription": str(model_description or ""),
@@ -2298,14 +2314,15 @@ def download_model(
 
             if existing_sha256 == expected_sha256:
                 message = "This model is already downloaded and matches the source hash."
-                metadata_path = get_metadata_sidecar_path(dest_path)
-                if not os.path.exists(metadata_path):
-                    metadata_path = write_lora_manager_metadata(
-                        dest_path,
-                        metadata or {},
-                        category,
-                        url,
-                    ) or ""
+                # Refresh the sidecar even when it already exists. The selected
+                # source may be more authoritative than metadata left by an
+                # earlier fuzzy search or manual download attempt.
+                metadata_path = write_lora_manager_metadata(
+                    dest_path,
+                    metadata or {},
+                    category,
+                    url,
+                ) or ""
                 size = os.path.getsize(dest_path)
                 with download_lock:
                     if download_id in download_progress:

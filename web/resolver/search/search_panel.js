@@ -2086,19 +2086,19 @@ export const searchPanelMethods = {
                 result.type || '',
                 result.base_model || ''
             ].filter(Boolean).join(' / ');
-        const detailsContext = ['civitai', 'civarchive'].includes(source) && (result.model_id || result.modelId)
-            ? {
-                ...result,
-                source,
-                details_source: source,
-                model_id: result.model_id || result.modelId,
-                version_id: result.version_id || result.versionId,
-                name: modelName,
-                filename,
-                missing_key: this.getMissingModelKey(missing),
-                category
-            }
-            : null;
+        const detailsContext = {
+            ...result,
+            source,
+            details_source: source,
+            custom_url: true,
+            url_source: 'custom',
+            model_id: result.model_id || result.modelId,
+            version_id: result.version_id || result.versionId,
+            name: modelName,
+            filename,
+            missing_key: this.getMissingModelKey(missing),
+            category
+        };
         const localHashMatchIdentities = this.getLocalHashMatchIdentitiesForResult?.(
             localHashMatches,
             source,

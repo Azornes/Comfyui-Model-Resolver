@@ -26,6 +26,7 @@ from ..type_utils import (
     extract_file_size,
     fetch_remote_file_size_cached,
     looks_like_model_file,
+    normalize_sha256,
     prepare_remote_size_probe_url,
 )
 from .common import build_unified_search_result
@@ -124,8 +125,8 @@ def _author_index_cache_key(author: str, headers: Dict[str, str]) -> str:
     return f"{author}::{auth_key}"
 
 
-def _is_author_index_fresh(index: Optional[Dict[str, Any]]) -> bool:
-    if not index:
+def _is_author_index_fresh(index: Any) -> bool:
+    if not isinstance(index, dict) or not index:
         return False
 
     updated_at = index.get("updated_at")
@@ -142,6 +143,15 @@ def _read_persistent_author_indexes() -> Dict[str, Any]:
         return {"version": HF_AUTHOR_INDEX_CACHE_VERSION, "authors": {}}
     if not isinstance(data.get("authors"), dict):
         data["authors"] = {}
+    else:
+        # A short-lived regression stored the raw HuggingFace response list in
+        # place of the built author index. Ignore malformed entries so they are
+        # fetched and rebuilt normally.
+        data["authors"] = {
+            author: index
+            for author, index in data["authors"].items()
+            if isinstance(index, dict)
+        }
     return data
 
 
@@ -205,8 +215,6 @@ def _fetch_author_index(author: str, headers: Dict[str, str], limit: int = 200):
         )
         if not isinstance(repos, list):
             return None
-
-        return repos
 
         index = _build_author_index_from_models(author, repos)
         log.info(
@@ -356,13 +364,7 @@ def _build_huggingface_result(
     match_type: str,
     headers: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
-    lfs_info = file_info.get("lfs") if isinstance(file_info.get("lfs"), dict) else {}
-    sha256 = (
-        file_info.get("sha256")
-        or file_info.get("hash")
-        or lfs_info.get("sha256")
-        or lfs_info.get("oid")
-    )
+    sha256 = _extract_huggingface_file_sha256(file_info)
     download_url = get_huggingface_download_url(repo_id, file_path)
     size = extract_file_size(file_info)
     if not size:
@@ -379,6 +381,16 @@ def _build_huggingface_result(
         sha256=sha256,
         repo_id=repo_id,
         path=file_path,
+    )
+
+
+def _extract_huggingface_file_sha256(file_info: Dict[str, Any]) -> str:
+    lfs_info = file_info.get("lfs") if isinstance(file_info.get("lfs"), dict) else {}
+    return normalize_sha256(
+        file_info.get("sha256")
+        or file_info.get("hash")
+        or lfs_info.get("sha256")
+        or lfs_info.get("oid")
     )
 
 
@@ -1025,11 +1037,23 @@ def build_huggingface_custom_result(
     headers = {}
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    size = fetch_remote_file_size_cached(
-        download_url,
-        headers=headers,
-        timeout=10,
-    )
+    file_info: Dict[str, Any] = {}
+    repo_tree = _get_repo_tree(repo_id, headers, branch)
+    normalized_file_path = file_path.replace("\\", "/").strip("/")
+    for candidate in repo_tree or []:
+        candidate_path = str(candidate.get("path") or "").replace("\\", "/").strip("/")
+        if candidate_path == normalized_file_path:
+            file_info = candidate
+            break
+
+    size = extract_file_size(file_info)
+    if not size:
+        size = fetch_remote_file_size_cached(
+            download_url,
+            headers=headers,
+            timeout=10,
+        )
+    sha256 = _extract_huggingface_file_sha256(file_info)
 
     def quote_url_path(val):
         return quote(str(val or "").replace("\\", "/"), safe="/")
@@ -1046,6 +1070,8 @@ def build_huggingface_custom_result(
         url=download_url,
         download_url=download_url,
         size=size,
+        sha256=sha256,
+        hashes={"SHA256": sha256} if sha256 else {},
         match_type="custom_url",
         details_source="huggingface",
         repo_id=repo_id,

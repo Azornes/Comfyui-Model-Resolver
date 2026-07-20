@@ -567,6 +567,128 @@ test('search suggestion metadata prefers exact matching base model over weaker a
   assert.equal(merged.filename, 'snofs_krea_v1.safetensors');
 });
 
+test('manual URL download metadata never inherits provider identity or hash from search results', () => {
+  const getDownloadMetadata = eval(`(${extractMethod(downloadTargetMethodsSource, 'getDownloadMetadata')})`);
+  const staleHash = 'a'.repeat(64);
+  const exactHash = 'b'.repeat(64);
+  const missing = {
+    original_path: 'QWEN\\qwen3-vl-4b-heretic_int8.safetensors',
+    category: 'text_encoders',
+    civitai_info: {
+      source: 'civarchive',
+      model_id: 100,
+      version_id: 200,
+      sha256: staleHash,
+      hashes: { SHA256: staleHash },
+      civitai: { modelId: 100, id: 200 }
+    },
+    download_source: {
+      source: 'civarchive',
+      model_id: 100,
+      version_id: 200,
+      sha256: staleHash
+    }
+  };
+  const source = {
+    source: 'huggingface',
+    details_source: 'huggingface',
+    model_id: 'DreamFast/Qwen3-VL-4b-Heretic-ComfyUI',
+    filename: 'qwen3-vl-4b-heretic_int8.safetensors',
+    download_url: 'https://huggingface.co/DreamFast/repo/resolve/main/model.safetensors',
+    version_url: 'https://huggingface.co/DreamFast/repo/blob/main/model.safetensors',
+    provided_url: 'https://huggingface.co/DreamFast/repo/blob/main/model.safetensors',
+    custom_url: true,
+    url_source: 'custom',
+    match_type: 'custom_url',
+    sha256: exactHash,
+    hashes: { SHA256: exactHash }
+  };
+  const dialog = {
+    getCachedSearchSuggestionData() {
+      throw new Error('manual URL must not read cached search metadata');
+    },
+    getCompatibleCivitaiSearchResult() {
+      throw new Error('manual URL must not read cached CivitAI metadata');
+    },
+    getFilenameFromPath(value = '') {
+      return String(value).split(/[\\/]/).at(-1) || '';
+    }
+  };
+
+  const metadata = getDownloadMetadata.call(dialog, missing, source, {
+    filename: source.filename,
+    category: 'text_encoders',
+    url: source.download_url,
+    openUrl: source.version_url,
+    pathMetadata: {
+      filename: source.filename,
+      category: 'text_encoders'
+    }
+  });
+
+  assert.equal(metadata.source, 'huggingface');
+  assert.equal(metadata.model_id, 'DreamFast/Qwen3-VL-4b-Heretic-ComfyUI');
+  assert.equal(metadata.version_id, '');
+  assert.equal(metadata.sha256, exactHash);
+  assert.deepEqual(metadata.hashes, { SHA256: exactHash });
+  assert.equal(metadata.custom_url, true);
+  assert.equal(metadata.url_source, 'custom');
+  assert.equal(metadata.provided_url, source.provided_url);
+  assert.equal('civitai' in metadata, false);
+});
+
+test('manual URL table row preserves the explicit provenance boundary', () => {
+  const getCustomUrlResultTableRow = eval(`(${extractMethod(searchPanelMethodsSource, 'getCustomUrlResultTableRow')})`);
+  const result = {
+    source: 'huggingface',
+    model_id: 'DreamFast/Qwen3-VL-4b-Heretic-ComfyUI',
+    filename: 'qwen3-vl-4b-heretic_int8.safetensors',
+    download_url: 'https://huggingface.co/DreamFast/repo/resolve/main/model.safetensors',
+    page_url: 'https://huggingface.co/DreamFast/repo/blob/main/model.safetensors',
+    provided_url: 'https://huggingface.co/DreamFast/repo/blob/main/model.safetensors',
+    custom_url: true
+  };
+  const dialog = {
+    getFilenameFromPath(value = '') {
+      return String(value).split(/[\\/]/).at(-1) || '';
+    },
+    getMissingDownloadCategory() {
+      return 'text_encoders';
+    },
+    getSourceResultDownloadCategory() {
+      return 'text_encoders';
+    },
+    getMissingModelKey() {
+      return 'missing-key';
+    },
+    getLocalHashMatchIdentitiesForResult() {
+      return [];
+    },
+    getHashMatchLabelForSearchResult() {
+      return '';
+    },
+    getSearchResultMatchDisplay() {
+      return { label: 'Provided', className: 'strong' };
+    },
+    formatSearchResultSize() {
+      return '';
+    },
+    getSearchResultTimestamp() {
+      return '';
+    }
+  };
+
+  const row = getCustomUrlResultTableRow.call(dialog, {
+    original_path: result.filename,
+    category: 'text_encoders'
+  }, result);
+
+  assert.equal(row.detailsContext.custom_url, true);
+  assert.equal(row.detailsContext.url_source, 'custom');
+  assert.equal(row.detailsContext.provided_url, result.provided_url);
+  assert.equal(row.detailsContext.source, 'huggingface');
+});
+
 test('search suggestion does not let a delayed incompatible result replace workflow path context', () => {
   const getCachedSearchSuggestionData = eval(`(${extractMethod(downloadTargetMethodsSource, 'getCachedSearchSuggestionData')})`);
   const getFirstSearchResult = eval(`(${extractMethod(downloadTargetMethodsSource, 'getFirstSearchResult')})`);
