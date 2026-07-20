@@ -62,26 +62,108 @@ MODEL_EXTENSIONS = {
 }
 
 
-PRECISION_FORMAT_SUFFIXES = [
-    "fp16",
+NUMERIC_PRECISION_SUFFIXES = (
+    "fp64",
+    "float64",
+    "f64",
     "fp32",
-    "fp8",
-    "fp4",
+    "float32",
+    "f32",
+    "fp16",
+    "float16",
+    "f16",
+    "half",
     "bf16",
+    "bfloat16",
+    "fp8",
+    "float8",
+    "e4m3",
     "e4m3fn",
+    "e4m3fnuz",
+    "e5m2",
+    "e5m2fnuz",
+    "fp4",
+    "float4",
+    "e2m1",
+    "int8",
+    "uint8",
+    "int4",
+    "uint4",
+    "int3",
+    "uint3",
+    "int2",
+    "uint2",
+    "nf4",
+    "mxfp4",
+    "nvfp4",
+)
+
+
+QUANTIZATION_LEVEL_SUFFIXES = (
+    "q1",
+    "q2",
+    "q3",
+    "q4",
+    "q5",
+    "q6",
+    "q7",
+    "q8",
+    "iq1",
+    "iq2",
+    "iq3",
+    "iq4",
+    "tq1",
+    "tq2",
+)
+
+
+QUANTIZATION_SCHEME_SUFFIXES = (
+    "gptq",
+    "awq",
+    "exl2",
+    "hqq",
+    "aqlm",
+    "bnb4",
+    "bnb8",
+)
+
+
+MODEL_CONTAINER_SUFFIXES = (
+    "ggml",
+    "gguf",
+)
+
+
+MODEL_VARIANT_SUFFIXES = (
     "mixed",
     "scaled",
     "pruned",
+    "ema",
     "emaonly",
-    "q4",
-    "q8",
-]
+    "quant",
+    "quantized",
+    "converted",
+    "conversion",
+    "compressed",
+    "conv",
+)
+
+
+TECHNICAL_MODEL_SUFFIXES = tuple(
+    dict.fromkeys(
+        NUMERIC_PRECISION_SUFFIXES
+        + QUANTIZATION_LEVEL_SUFFIXES
+        + QUANTIZATION_SCHEME_SUFFIXES
+        + MODEL_CONTAINER_SUFFIXES
+        + MODEL_VARIANT_SUFFIXES
+    )
+)
 
 
 def get_generic_filename_tokens() -> set:
     """Return a set of generic filename tokens (extensions and suffixes) in lowercase."""
     dotless_extensions = {ext.lstrip(".") for ext in MODEL_EXTENSIONS}
-    return dotless_extensions | set(PRECISION_FORMAT_SUFFIXES)
+    return dotless_extensions | set(TECHNICAL_MODEL_SUFFIXES)
 
 
 

@@ -292,9 +292,34 @@ def base_model_score(candidate: str, preferred: Optional[str]) -> float:
 
 # ==================== CENTRALIZED MATCHING & CONFIDENCE HELPERS ====================
 
-from .type_utils import MODEL_EXTENSIONS, PRECISION_FORMAT_SUFFIXES, get_version_sort_key
+from .type_utils import MODEL_EXTENSIONS, TECHNICAL_MODEL_SUFFIXES, get_version_sort_key
 
 MODEL_FILE_EXTENSIONS = MODEL_EXTENSIONS
+
+_TECHNICAL_VARIANT_TOKENS = {
+    *TECHNICAL_MODEL_SUFFIXES,
+}
+_TECHNICAL_VARIANT_TOKEN_RE = re.compile(
+    r"^(?:(?:bf|bfloat|fp|float|int|uint|f|i)\d+|"
+    r"(?:i?q|tq)\d+|(?:mxfp|nvfp)\d+|e\d+m\d+(?:fnuz|fn)?|bnb\d+)$",
+    re.IGNORECASE,
+)
+_QUANTIZATION_HEAD_TOKEN_RE = re.compile(r"^(?:i?q|tq)\d+$", re.IGNORECASE)
+_QUANTIZATION_TAIL_TOKENS = {
+    "0",
+    "1",
+    "4",
+    "8",
+    "k",
+    "m",
+    "s",
+    "l",
+    "xl",
+    "xs",
+    "xxs",
+    "nl",
+}
+_MODEL_CAPACITY_TOKEN_RE = re.compile(r"^\d+(?:\.\d+)?[bmk]$", re.IGNORECASE)
 
 
 def strip_known_model_extension(filename: str) -> str:
@@ -319,6 +344,54 @@ def normalize_model_title(value: str) -> str:
     value = strip_known_model_extension(str(value or "")).lower()
     value = re.sub(r"[^a-z0-9]+", " ", value)
     return re.sub(r"\s+", " ", value).strip()
+
+
+def normalize_model_family_filename(filename: str) -> str:
+    """Normalize a filename while ignoring precision and quantization variants."""
+    normalized_filename = normalize_filename(filename)
+    normalized_filename = re.sub(r"\bema\s+only\b", "emaonly", normalized_filename)
+    tokens = normalized_filename.split()
+    family_tokens = []
+    quantization_tail = False
+
+    for token in tokens:
+        token_lower = token.lower()
+        is_quantization_token = bool(
+            _TECHNICAL_VARIANT_TOKEN_RE.fullmatch(token_lower)
+        )
+        if token_lower in _TECHNICAL_VARIANT_TOKENS or is_quantization_token:
+            quantization_tail = bool(
+                _QUANTIZATION_HEAD_TOKEN_RE.fullmatch(token_lower)
+            )
+            continue
+        if quantization_tail and token_lower in _QUANTIZATION_TAIL_TOKENS:
+            continue
+
+        quantization_tail = False
+        family_tokens.append(token_lower)
+
+    return " ".join(family_tokens)
+
+
+def _get_model_family_signature(normalized_family_name: str) -> Optional[Tuple[str, str]]:
+    """Return the architecture prefix and parameter count when both are available."""
+    tokens = normalized_family_name.split()
+    for index, token in enumerate(tokens):
+        if not _MODEL_CAPACITY_TOKEN_RE.fullmatch(token):
+            continue
+        architecture = "".join(tokens[:index])
+        if len(architecture) >= 3 and re.search(r"[a-z]", architecture):
+            return architecture, token
+    return None
+
+
+def _architectures_have_numeric_conflict(left: str, right: str) -> bool:
+    """Detect otherwise-identical architecture names with different generations."""
+    left_digits = re.findall(r"\d+", left)
+    right_digits = re.findall(r"\d+", right)
+    if not left_digits or not right_digits or left_digits == right_digits:
+        return False
+    return re.sub(r"\d+", "", left) == re.sub(r"\d+", "", right)
 
 
 def calculate_model_title_confidence(query: str, model_name: str) -> float:
@@ -351,9 +424,57 @@ def calculate_filename_confidence(target_filename: str, candidate_filename: str)
     if target_norm == candidate_norm:
         return 100.0
 
-    best_similarity = calculate_similarity_with_normalization(
-        target_filename, candidate_filename
-    )
+    best_similarity = calculate_similarity(target_norm, candidate_norm)
+    target_family = normalize_model_family_filename(target_filename)
+    candidate_family = normalize_model_family_filename(candidate_filename)
+
+    if target_family and candidate_family:
+        family_similarity = calculate_similarity(target_family, candidate_family)
+        target_signature = _get_model_family_signature(target_family)
+        candidate_signature = _get_model_family_signature(candidate_family)
+
+        if target_family == candidate_family:
+            # Same model name with a different precision or quantization is a
+            # strong alternative, but remains below an exact filename match.
+            best_similarity = max(best_similarity, 0.94)
+        else:
+            best_similarity = max(best_similarity, family_similarity)
+
+        if (
+            target_family != candidate_family
+            and target_signature
+            and target_signature == candidate_signature
+        ):
+            target_tokens = set(target_family.split())
+            candidate_tokens = set(candidate_family.split())
+            if target_tokens.issubset(candidate_tokens) or candidate_tokens.issubset(
+                target_tokens
+            ):
+                # One filename adds a semantic variant such as "abliterated".
+                best_similarity = max(best_similarity, 0.90)
+            else:
+                # The architecture and size agree, but both names contain
+                # different semantic modifiers such as "base" and "heretic".
+                best_similarity = max(best_similarity, 0.84)
+        elif (
+            target_family != candidate_family
+            and target_signature
+            and candidate_signature
+        ):
+            target_architecture, target_capacity = target_signature
+            candidate_architecture, candidate_capacity = candidate_signature
+            if target_architecture == candidate_architecture and target_capacity != candidate_capacity:
+                # A 4B model is not an interchangeable precision variant of 8B.
+                best_similarity = min(best_similarity, 0.69)
+            elif (
+                target_capacity == candidate_capacity
+                and _architectures_have_numeric_conflict(
+                    target_architecture, candidate_architecture
+                )
+            ):
+                # Keep adjacent generations such as Qwen2 and Qwen3 out of the
+                # visible recommendation threshold unless another exact signal exists.
+                best_similarity = min(best_similarity, 0.69)
 
     # Cap similarity at 0.999 for non-exact matches to prevent false 100% scores
     if best_similarity >= 0.999:
@@ -380,7 +501,7 @@ def calculate_archived_model_confidence(
         if query_norm == candidate_norm:
             return 100.0
 
-        score = calculate_similarity_with_normalization(query, candidate)
+        score = calculate_filename_confidence(query, candidate) / 100.0
         if query_norm and candidate_norm and (
             query_norm in candidate_norm or candidate_norm in query_norm
         ):
@@ -413,15 +534,33 @@ def build_filename_search_queries(filename: str) -> List[str]:
     stem = os.path.splitext(basename)[0].strip()
     stem_lower = stem.lower()
 
-    # Pattern to match common precision/format suffixes
-    pattern = r"[-_]?(" + "|".join(PRECISION_FORMAT_SUFFIXES) + r")"
+    literal_suffixes = sorted(
+        (re.escape(token) for token in TECHNICAL_MODEL_SUFFIXES),
+        key=len,
+        reverse=True,
+    )
+    technical_token_pattern = (
+        r"(?:^|[-_.\s])(?:"
+        + "|".join(
+            [
+                *literal_suffixes,
+                r"(?:bf|bfloat|fp|float|int|uint|f|i)\d+",
+                r"(?:i?q|tq)\d+",
+                r"(?:mxfp|nvfp)\d+",
+                r"e\d+m\d+(?:fnuz|fn)?",
+                r"bnb\d+",
+            ]
+        )
+        + r")(?=$|[-_.\s])"
+    )
 
-    # 1. Strip suffix followed by any other characters (like clean_filename_for_search)
-    cleaned = re.sub(pattern + r".*$", "", stem, flags=re.IGNORECASE).strip(" -_")
+    technical_match = re.search(technical_token_pattern, stem, flags=re.IGNORECASE)
+    cleaned = (
+        stem[: technical_match.start()] if technical_match else stem
+    ).strip(" -_.")
     cleaned_lower = cleaned.lower()
 
-    # 2. Strip suffix at the end of the stem (like simplified in search queries)
-    simplified = re.sub(pattern + r"$", "", stem_lower, flags=re.IGNORECASE).strip(" -_")
+    simplified = cleaned_lower
 
     queries = []
     for query in [basename, stem, stem_lower, cleaned, cleaned_lower, simplified]:
