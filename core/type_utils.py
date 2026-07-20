@@ -253,6 +253,7 @@ CATEGORY_MAP = {
     "diffusers": "diffusers",
     "unet": "diffusion_models",
     "unet_gguf": "diffusion_models",
+    "model_gguf": "diffusion_models",
     "select_safetensors": "diffusion_models",
     "diffusion_model": "diffusion_models",
     "diffusion_models": "diffusion_models",
@@ -1130,6 +1131,7 @@ def get_category_folder_keys(category: str) -> list[str]:
     if folder_key == "diffusion_models":
         keys.append("unet")
         keys.append("unet_gguf")
+        keys.append("model_gguf")
     elif folder_key == "text_encoders":
         keys.append("clip")
     return keys

@@ -246,8 +246,15 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
 
     def test_category_folder_keys_mapping(self):
         from core.type_utils import get_category_folder_keys
-        self.assertEqual(get_category_folder_keys("diffusion_models"), ["diffusion_models", "unet", "unet_gguf"])
-        self.assertEqual(get_category_folder_keys("unet_gguf"), ["diffusion_models", "unet", "unet_gguf"])
+        expected_diffusion_keys = [
+            "diffusion_models",
+            "unet",
+            "unet_gguf",
+            "model_gguf",
+        ]
+        self.assertEqual(get_category_folder_keys("diffusion_models"), expected_diffusion_keys)
+        self.assertEqual(get_category_folder_keys("model_gguf"), expected_diffusion_keys)
+        self.assertEqual(get_category_folder_keys("unet_gguf"), expected_diffusion_keys)
         self.assertEqual(get_category_folder_keys("text_encoders"), ["text_encoders", "clip"])
         self.assertEqual(get_category_folder_keys("checkpoints"), ["checkpoints"])
 
@@ -298,5 +305,3 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
 
         # Require download excludes main.safetensors because it has no download url
         self.assertEqual(select_primary_model_file(files, require_download=True)["id"], 1)
-
-

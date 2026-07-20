@@ -34,6 +34,10 @@ const modelInfoMethodsSource = fs.readFileSync(
   path.join(projectRoot, 'web/resolver/views/model_info_methods.js'),
   'utf8'
 );
+const missingBrowserMethodsSource = fs.readFileSync(
+  path.join(projectRoot, 'web/resolver/views/missing_browser_methods.js'),
+  'utf8'
+);
 const renderFormatMethodsSource = fs.readFileSync(
   path.join(projectRoot, 'web/resolver/utils/render_format_methods.js'),
   'utf8'
@@ -1827,7 +1831,7 @@ test('local match bad folder badge is omitted for supported folder', () => {
   assert.equal(html, '');
 });
 
-test('local match bad folder badge treats unet gguf as diffusion models', () => {
+test('local match bad folder badge treats gguf folder keys as diffusion models', () => {
   const getLocalMatchCategory = eval(`(${extractMethod(searchPanelMethodsSource, 'getLocalMatchCategory')})`);
   const getLocalMatchBadFolderWarning = eval(`(${extractMethod(searchPanelMethodsSource, 'getLocalMatchBadFolderWarning')})`);
   const renderLocalMatchBadFolderBadge = eval(`(${extractMethod(searchPanelMethodsSource, 'renderLocalMatchBadFolderBadge')})`);
@@ -1837,7 +1841,7 @@ test('local match bad folder badge treats unet gguf as diffusion models', () => 
     normalizeDownloadCategory(value = '') {
       return {
         unet_gguf: 'diffusion_models',
-        diffusion_models: 'diffusion_models',
+        model_gguf: 'diffusion_models',
       }[String(value || '').trim()] || String(value || '').trim();
     },
     getMissingSupportedDownloadCategories() {
@@ -1851,7 +1855,7 @@ test('local match bad folder badge treats unet gguf as diffusion models', () => 
   const html = renderLocalMatchBadFolderBadge.call(
     dialog,
     { category: 'diffusion_models' },
-    { confidence: 100, model: { category: 'unet_gguf' } }
+    { confidence: 100, model: { category: 'model_gguf' } }
   );
 
   assert.equal(html, '');
@@ -1925,11 +1929,12 @@ test('local match bad type badge is omitted for a file type accepted by node cat
   assert.equal(html, '');
 });
 
-test('download category normalization maps unet gguf to diffusion models', () => {
+test('download category normalization maps gguf folder keys to diffusion models', () => {
   const normalizeDownloadCategory = eval(`(${extractMethod(downloadTargetMethodsSource, 'normalizeDownloadCategory')})`);
 
   assert.equal(normalizeDownloadCategory('unet_gguf'), 'diffusion_models');
   assert.equal(normalizeDownloadCategory('UNET GGUF'), 'diffusion_models');
+  assert.equal(normalizeDownloadCategory('model_gguf'), 'diffusion_models');
 });
 
 test('download category normalization maps select safetensors alias to diffusion models', () => {
@@ -1937,6 +1942,27 @@ test('download category normalization maps select safetensors alias to diffusion
 
   assert.equal(normalizeDownloadCategory('select_safetensors'), 'diffusion_models');
   assert.equal(normalizeDownloadCategory('SELECT SAFETENSORS'), 'diffusion_models');
+});
+
+test('missing model preview shows accepted GGUF format next to its category', () => {
+  const renderMissingModelFormatBadges = eval(`(${extractMethod(missingBrowserMethodsSource, 'renderMissingModelFormatBadges')})`);
+  const dialog = {
+    getMissingAcceptedModelFileTypes() {
+      return [{ extension: 'gguf', label: 'GGUF', display: 'GGUF (.gguf)' }];
+    },
+    escapeHtml(value) {
+      return String(value).replace(/[&<>\"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[char]));
+    },
+  };
+
+  const html = renderMissingModelFormatBadges.call(dialog, {
+    category: 'diffusion_models',
+    node_type: 'UnetLoaderGGUF',
+  });
+
+  assert.match(html, /mr-model-format-chip/);
+  assert.match(html, />GGUF<\/span>/);
+  assert.match(html, /Accepted file format for this node: GGUF \(\.gguf\)\./);
 });
 
 test('hash match label map numbers distinct matched hashes', () => {

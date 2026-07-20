@@ -22,7 +22,12 @@ except ImportError:
     log.warning("Model Resolver: folder_paths not available yet - will retry later")
 
 
-from .type_utils import MODEL_EXTENSIONS, URN_TYPE_MAP, unique_ordered_strings
+from .type_utils import (
+    MODEL_EXTENSIONS,
+    URN_TYPE_MAP,
+    normalize_download_category,
+    unique_ordered_strings,
+)
 
 URN_REGEX = re.compile(r"^urn:air:([^:]+):([^:]+):([^:]+):(\d+)@(\d+)$")
 
@@ -1024,7 +1029,7 @@ def get_model_widget_category_hints(
     hints_list = []
     for h in dynamic_category_hints:
         if h:
-            hints_list.append(h)
+            hints_list.append(normalize_download_category(h))
 
     if dynamic_category_hints:
         return _ordered_unique_categories(hints_list)

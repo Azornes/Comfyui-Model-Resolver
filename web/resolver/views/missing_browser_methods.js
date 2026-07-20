@@ -12,6 +12,17 @@ export const missingBrowserMethods = {
         return this.getFilenameFromPath(missing.original_path) || missing.name || 'Missing model';
     },
 
+    renderMissingModelFormatBadges(missing = {}) {
+        const acceptedTypes = this.getMissingAcceptedModelFileTypes?.(missing) || [];
+        return acceptedTypes.map(type => {
+            const label = String(type?.label || type?.extension || '').trim();
+            if (!label) return '';
+            const display = String(type?.display || label).trim();
+            const tooltip = `Accepted file format for this node: ${display}.`;
+            return `<span class="mr-category-chip mr-model-format-chip" data-tooltip="${this.escapeHtml(tooltip)}">${this.escapeHtml(label)}</span>`;
+        }).join('');
+    },
+
     getMissingLocateTarget(missing = {}) {
         const hasLocateNode = missing.locate_node_id !== undefined
             && missing.locate_node_id !== null
@@ -2079,6 +2090,7 @@ export const missingBrowserMethods = {
         if (missing.category) {
             html += `<span class="mr-category-chip ${this.getModelTypeColorClass(missing.category)}" data-tooltip="${this.escapeHtml(missing.category)}">${this.getCategoryDisplayName(missing.category)}</span>`;
         }
+        html += this.renderMissingModelFormatBadges(missing);
         html += `<span id="${locateId}" class="${nodeChipClasses}"${nodeChipTitle ? ` data-tooltip="${this.escapeHtml(nodeChipTitle)}"` : ''}>`;
         if (nodeDisplay.canLocate) {
             html += this.getLocateIconHtml();

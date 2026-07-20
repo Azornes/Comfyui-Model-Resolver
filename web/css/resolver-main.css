@@ -1489,6 +1489,12 @@
     font-weight: 700;
 }
 
+.mr-model-format-chip {
+    background: rgba(67, 160, 255, 0.12);
+    border-color: rgba(104, 184, 255, 0.3);
+    color: #b9ddff;
+}
+
 /* ComfyUI node_slot-inspired type chips. */
 .mr-type-chip,
 .mr-info-tag.mr-type-chip,

@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from core.scanner import scan_directory
 from core.workflow_analyzer import analyze_workflow_models, identify_missing_models
@@ -411,6 +412,40 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
 
         self.assertEqual(4, len(refs))
         self.assertEqual({"text_encoders"}, {ref["category"] for ref in refs})
+
+    def test_gguf_unet_loader_keeps_diffusion_badge_and_raw_folder_hint(self):
+        for node_type in (
+            "LoaderGGUF",
+            "LoaderGGUFAdvanced",
+            "UnetLoaderGGUF",
+            "UnetLoaderGGUFAdvanced",
+        ):
+            with self.subTest(node_type=node_type):
+                with patch(
+                    "core.workflow_analyzer.get_dynamic_widget_category_hints",
+                    return_value=["model_gguf"],
+                ):
+                    refs = analyze_workflow_models(
+                        {
+                            "nodes": [
+                                {
+                                    "id": 345,
+                                    "type": node_type,
+                                    "widgets": [{"name": "gguf_name"}],
+                                    "widgets_values": [
+                                        r"LTXV\LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf"
+                                    ],
+                                    "outputs": [{"type": "MODEL", "links": [1]}],
+                                }
+                            ]
+                        },
+                        available_models=[],
+                    )
+
+                self.assertEqual(1, len(refs))
+                self.assertEqual("diffusion_models", refs[0]["category"])
+                self.assertEqual(["diffusion_models"], refs[0]["category_hints"])
+                self.assertEqual(["model_gguf"], refs[0]["folder_key_hints"])
 
 
 class ScannerFolderModelTests(unittest.TestCase):
