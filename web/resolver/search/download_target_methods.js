@@ -445,6 +445,9 @@ export const downloadTargetMethods = {
     },
 
     getDownloadCategoryTooltip(missing = {}, selectedCategory = '', options = {}) {
+        const formatFolderTooltip = (heading, value, reason, action = 'Choose another option in the Folder field.') => (
+            `${heading}: ${value}\n\nWhy: ${reason}\n\nTo change: ${action}`
+        );
         const category = this.normalizeDownloadCategory(selectedCategory || 'checkpoints');
         const label = this.getCategoryDisplayName(category);
         const saved = options.saved || this.getSavedDownloadTargetSelection(missing);
@@ -452,27 +455,47 @@ export const downloadTargetMethods = {
         const preserveSavedCategory = options.preserveSavedCategory ?? this.shouldPreserveSavedDownloadCategory(missing, saved, inferredCategory);
 
         if (preserveSavedCategory) {
-            return `Folder is set to ${label} because you manually changed it for this missing model. Model Resolver remembers that choice for this workflow entry.`;
+            return formatFolderTooltip(
+                'Selected manually',
+                label,
+                'You changed this folder earlier, so Model Resolver kept your choice for this workflow.'
+            );
         }
 
         const nodeCategory = this.getMissingNodeTypeDownloadCategory(missing);
         if (nodeCategory && this.normalizeDownloadCategory(nodeCategory) === category) {
             const nodeType = missing.locate_node_type || missing.promoted_inner_node_type || missing.node_type || 'this node';
-            return `Auto selected ${label} because the node type (${nodeType}) uses this kind of model folder.`;
+            return formatFolderTooltip(
+                'Selected automatically',
+                label,
+                `The workflow node “${nodeType}” uses this type of model.`
+            );
         }
 
         const rawMissingCategory = missing.category || missing.directory || '';
         const missingCategory = rawMissingCategory ? this.normalizeDownloadCategory(rawMissingCategory) : '';
         if (missingCategory && missingCategory === category) {
-            return `Auto selected ${label} from the model category detected in the workflow: ${rawMissingCategory}.`;
+            return formatFolderTooltip(
+                'Selected automatically',
+                label,
+                `The workflow identifies this as a ${this.getCategoryDisplayName(missingCategory)} model.`
+            );
         }
 
         const defaultCategory = this.normalizeDownloadCategory(options.defaultCategory || 'checkpoints');
         if (defaultCategory && defaultCategory === category) {
-            return `Auto selected ${label} from the download source or default folder for this result.`;
+            return formatFolderTooltip(
+                'Selected automatically',
+                label,
+                'This is the folder recommended by the selected download source or your default settings.'
+            );
         }
 
-        return `Auto selected ${label} as the best available download folder. If this is wrong, choose another folder manually.`;
+        return formatFolderTooltip(
+            'Selected automatically',
+            label,
+            'This is the closest matching download folder available for this model.'
+        );
     },
 
     getSubfolderSuggestionTrackingPatch(suggestion = null, appliedBy = '') {
@@ -497,28 +520,40 @@ export const downloadTargetMethods = {
         };
     },
 
-    getDownloadSubfolderSuggestionReason(suggestion = {}) {
+    getDownloadSubfolderSuggestionReason(suggestion = {}, missing = {}) {
         const source = suggestion?.suggestionSource || '';
         if (source === 'template') {
-            const template = suggestion.template ? ` (${suggestion.template})` : '';
-            return `your path template${template} matched the available model metadata`;
+            const template = suggestion.template ? ` “${suggestion.template}”` : '';
+            return `Your saved folder rule${template} produced this subfolder from the available model information.`;
         }
         if (source === 'lora_metadata') {
             const baseModel = suggestion.matchedBaseModel || '';
             const tag = suggestion.matchedTag || '';
             if (baseModel && tag) {
-                return `this LoRA's base model (${baseModel}) and tag (${tag}) match an existing folder`;
+                return `The LoRA is identified as ${baseModel} and tagged “${tag}”; an existing folder matches both.`;
             }
             if (baseModel) {
-                return `this LoRA's base model (${baseModel}) matches an existing folder`;
+                return `The LoRA is identified as ${baseModel}, and an existing folder has the same name.`;
             }
-            return `this LoRA's metadata matches an existing folder`;
+            return `The available LoRA information matches an existing folder.`;
         }
         if (source === 'model_name') {
             const candidate = suggestion.matchedCandidate || '';
+            const candidateToken = this.normalizeFolderToken(candidate);
+            const workflowPathParts = String(missing?.original_path || '')
+                .split(/[/\\]+/)
+                .map(part => part.trim())
+                .filter(Boolean);
+            const workflowDirectoryParts = workflowPathParts.slice(0, -1);
+            const matchingWorkflowDirectory = workflowDirectoryParts.find(part => (
+                candidateToken && this.normalizeFolderToken(part) === candidateToken
+            ));
+            if (matchingWorkflowDirectory) {
+                return `The model path saved in this workflow already contains the folder “${matchingWorkflowDirectory}”, and the same download folder exists on this computer.`;
+            }
             return candidate
-                ? `the model name or filename (${candidate}) matches an existing folder`
-                : `the model name or filename matches an existing folder`;
+                ? `Part of the model name, “${candidate}”, matches an existing download folder.`
+                : `The model name matches an existing download folder.`;
         }
         return '';
     },
@@ -560,6 +595,9 @@ export const downloadTargetMethods = {
     },
 
     getDownloadSubfolderTooltip(missing = {}, selectedCategory = '', selectedSubfolder = '', options = {}) {
+        const formatSubfolderTooltip = (heading, value, reason, finalLabel = 'To change', finalText = 'Type or choose another subfolder.') => (
+            `${heading}: ${value}\n\nWhy: ${reason}\n\n${finalLabel}: ${finalText}`
+        );
         const category = this.normalizeDownloadCategory(selectedCategory || 'checkpoints');
         const categoryLabel = this.getCategoryDisplayName(category);
         const saved = options.saved || this.getSavedDownloadTargetSelection(missing);
@@ -568,33 +606,67 @@ export const downloadTargetMethods = {
         const mode = this.getDownloadPathMode();
         const savedSuggestion = this.getSavedDownloadSubfolderSuggestion(saved, subfolder, baseDirectory);
         const currentSuggestion = savedSuggestion || this.getCurrentDownloadSubfolderSuggestion(missing, category, subfolder, baseDirectory);
-        const suggestionReason = this.getDownloadSubfolderSuggestionReason(currentSuggestion);
+        const suggestionReason = this.getDownloadSubfolderSuggestionReason(currentSuggestion, missing);
 
         if (saved?.subfolderTouched) {
             if (!subfolder) {
-                return `Subfolder is empty because you manually cleared it for this missing model. The file will download directly into the ${categoryLabel} folder.`;
+                return formatSubfolderTooltip(
+                    'Subfolder',
+                    'None',
+                    'You cleared this field manually, so Model Resolver kept it empty.',
+                    'Save location',
+                    `The file will be saved directly in the ${categoryLabel} folder.`
+                );
             }
             if (saved?.subfolderSuggestionAppliedBy === 'button' && suggestionReason) {
-                return `Subfolder is set to ${subfolder} because you clicked Suggest. The suggestion was chosen because ${suggestionReason}. Model Resolver remembers that choice for this workflow entry.`;
+                return formatSubfolderTooltip(
+                    'Selected with Suggest',
+                    subfolder,
+                    suggestionReason
+                );
             }
-            return `Subfolder is set to ${subfolder} because you manually changed it for this missing model. Model Resolver remembers that choice for this workflow entry.`;
+            return formatSubfolderTooltip(
+                'Selected manually',
+                subfolder,
+                'You changed this subfolder earlier, so Model Resolver kept your choice for this workflow.'
+            );
         }
 
         if (subfolder) {
-            return suggestionReason
-                ? `Auto selected ${subfolder} because ${suggestionReason}. If this is wrong, type or pick another subfolder manually.`
-                : `Auto selected ${subfolder} as the best available subfolder for this model. If this is wrong, type or pick another subfolder manually.`;
+            return formatSubfolderTooltip(
+                'Suggested subfolder',
+                subfolder,
+                suggestionReason || 'This is the closest matching existing folder for the available model information.'
+            );
         }
 
         if (mode === 'manual') {
-            return `Subfolder is empty because Subfolder fill mode is Manual. Type a path or click Suggest to choose one for this download.`;
+            return formatSubfolderTooltip(
+                'Subfolder',
+                'None',
+                'Automatic subfolder suggestions are set to Manual in Options.',
+                'To add one',
+                'Type a subfolder or click Suggest.'
+            );
         }
 
         if (!this.isAutoFillSubfolderEnabled()) {
-            return `Subfolder is empty because Auto-fill subfolder is disabled. Type a path or click Suggest to choose one for this download.`;
+            return formatSubfolderTooltip(
+                'Subfolder',
+                'None',
+                'Automatic subfolder suggestions are disabled in Options.',
+                'To add one',
+                'Type a subfolder or click Suggest.'
+            );
         }
 
-        return `No subfolder was selected automatically because Model Resolver did not find a reliable metadata, tag, filename, or existing-folder match. The file will download directly into the ${categoryLabel} folder.`;
+        return formatSubfolderTooltip(
+            'Subfolder',
+            'None',
+            'Model Resolver did not find enough reliable information to choose one.',
+            'Save location',
+            `The file will be saved directly in the ${categoryLabel} folder.`
+        );
     },
 
     refreshDownloadTargetHelp(container, missing, categoryEl = null, subfolderEl = null) {
@@ -1231,9 +1303,10 @@ export const downloadTargetMethods = {
     getDownloadPathMetadata(missing = {}, source = {}) {
         const sourceData = source && typeof source === 'object' ? source : {};
         const searchSuggestion = this.getCachedSearchSuggestionData(missing);
+        const compatibleCivitaiSearch = this.getCompatibleCivitaiSearchResult?.(missing) || {};
         const merged = {
             ...(missing?.civitai_info || {}),
-            ...(missing?.civitai_search_result || {}),
+            ...compatibleCivitaiSearch,
             ...(missing?.download_source || {}),
             ...(searchSuggestion || {}),
             ...sourceData
@@ -1269,9 +1342,10 @@ export const downloadTargetMethods = {
     getDownloadMetadata(missing = {}, source = {}, options = {}) {
         const sourceData = source && typeof source === 'object' ? source : {};
         const searchSuggestion = this.getCachedSearchSuggestionData(missing);
+        const compatibleCivitaiSearch = this.getCompatibleCivitaiSearchResult?.(missing) || {};
         const merged = {
             ...(missing?.civitai_info || {}),
-            ...(missing?.civitai_search_result || {}),
+            ...compatibleCivitaiSearch,
             ...(missing?.download_source || {}),
             ...(searchSuggestion || {}),
             ...sourceData
@@ -1453,13 +1527,17 @@ export const downloadTargetMethods = {
         if (selectedBaseModel && selectedBaseModel !== 'auto' && selectedBaseModel !== 'none') {
             addCandidate(selectedBaseModel);
         }
-        addCandidate(missing?.civitai_search_result?.base_model);
-        addCandidate(missing?.civitai_search_result?.baseModel);
-        addCandidate(missing?.civitai_info?.base_model);
-        addCandidate(missing?.civitai_info?.baseModel);
         addCandidate(missing?.download_source?.base_model);
         addCandidate(missing?.download_source?.baseModel);
+        addCandidate(missing?.civitai_info?.base_model);
+        addCandidate(missing?.civitai_info?.baseModel);
         addCandidate(this.getMissingLocalBaseModel?.(missing, 70));
+        const savedTarget = this.getSavedDownloadTargetSelection?.(missing) || {};
+        if (savedTarget.subfolderTouched) {
+            addCandidate(this.resolveBaseModelAliasFromPath?.(savedTarget.subfolder));
+        }
+        addCandidate(this.resolveBaseModelAliasFromPath?.(missing?.original_path));
+        addCandidate(this.resolveBaseModelAliasFromPath?.(missing?.name));
 
         for (const candidate of candidates) {
             const canonical = this.resolveBaseModelAlias?.(candidate)
@@ -1487,6 +1565,22 @@ export const downloadTargetMethods = {
         const resultToken = normalize(resultCanonical);
 
         return Boolean(preferredToken && resultToken && preferredToken === resultToken);
+    },
+
+    getCompatibleCivitaiSearchResult(missing = {}) {
+        const result = missing?.civitai_search_result;
+        if (!result || typeof result !== 'object') return {};
+
+        const preferredBaseModel = this.getSearchSuggestionPreferredBaseModel(missing);
+        const resultBaseModel = result.base_model || result.baseModel || '';
+        if (
+            preferredBaseModel
+            && resultBaseModel
+            && !this.baseModelMatchesSearchSuggestionPreference(resultBaseModel, preferredBaseModel)
+        ) {
+            return {};
+        }
+        return result;
     },
 
     getSearchSuggestionResultScore(source = '', result = {}, preferredBaseModel = '') {
@@ -1574,6 +1668,12 @@ export const downloadTargetMethods = {
                 result: this.getFirstSearchResult(results[source])
             }))
             .filter(candidate => candidate.result && typeof candidate.result === 'object')
+            .filter(candidate => {
+                if (!preferredBaseModel) return true;
+                const resultBaseModel = candidate.result.base_model || candidate.result.baseModel || '';
+                return !resultBaseModel
+                    || this.baseModelMatchesSearchSuggestionPreference(resultBaseModel, preferredBaseModel);
+            })
             .map(candidate => ({
                 ...candidate,
                 score: this.getSearchSuggestionResultScore(candidate.source, candidate.result, preferredBaseModel)
@@ -1626,10 +1726,11 @@ export const downloadTargetMethods = {
         }
 
         const searchSuggestion = this.getCachedSearchSuggestionData(missing);
+        const compatibleCivitaiSearch = this.getCompatibleCivitaiSearchResult?.(missing) || {};
         const civitaiData = {
             ...(missing?.civitai_info || {}),
             ...(searchSuggestion || {}),
-            ...(missing?.civitai_search_result || {}),
+            ...compatibleCivitaiSearch,
             ...(missing?.download_source || {})
         };
         const baseModel = civitaiData.base_model || '';
@@ -1685,11 +1786,15 @@ export const downloadTargetMethods = {
     getSuggestedModelSubfolderCandidates(missing = {}) {
         const source = missing.download_source || {};
         const civitaiInfo = missing.civitai_info || {};
-        const civitaiSearch = missing.civitai_search_result || {};
+        const civitaiSearch = this.getCompatibleCivitaiSearchResult?.(missing) || {};
         const searchSuggestion = this.getCachedSearchSuggestionData(missing);
         const localMatches = Array.isArray(missing.matches) ? missing.matches : [];
-        const bestLocalMatch = localMatches
-            .filter(match => match && typeof match === 'object')
+        const bestLocalMatch = this.getBestLocalMatch?.(missing, 70) || localMatches
+            .filter(match => (
+                match
+                && typeof match === 'object'
+                && Number(match.confidence) >= 70
+            ))
             .sort((a, b) => Number(b.confidence || 0) - Number(a.confidence || 0))[0] || null;
         const bestLocalModel = bestLocalMatch?.model || {};
         const bestLocalPath = bestLocalModel.relative_path

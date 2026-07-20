@@ -188,7 +188,8 @@ test('auto base model uses Any model for standalone SAM and Ultralytics models',
     assert.equal(getMissingAutoBaseModel.call(dialog, missing), '');
     assert.equal(getSearchBaseModelLabel.call(dialog, 'auto', missing), 'Auto (Any model)');
     assert.equal(getSearchBaseModelContext.call(dialog, missing), '');
-    assert.match(getMissingAutoBaseModelInfo.call(dialog, missing).message, /Auto uses Any model/);
+    assert.match(getMissingAutoBaseModelInfo.call(dialog, missing).message, /Selected automatically: Any model/);
+    assert.match(getMissingAutoBaseModelInfo.call(dialog, missing).message, /no model filter is needed/);
   }
 
   state.selectedBaseModel = 'SDXL 1.0';
@@ -197,6 +198,54 @@ test('auto base model uses Any model for standalone SAM and Ultralytics models',
     'SDXL 1.0',
     'Manual base model selection should remain available'
   );
+});
+
+test('auto base model keeps workflow path context when a delayed search result disagrees', () => {
+  const getMissingAutoBaseModelInfo = eval(`(${extractMethod(searchPanelMethodsSource, 'getMissingAutoBaseModelInfo')})`);
+  const missing = {
+    original_path: 'KREA2\\KNPV3_1.safetensors',
+    civitai_search_result: { base_model: 'Flux.1 D' }
+  };
+  const dialog = {
+    getBaseModelIndependentSearchType() {
+      return '';
+    },
+    getCachedSearchSuggestionData() {
+      return { base_model: 'Flux.1 D' };
+    },
+    getSavedDownloadTargetSelection() {
+      return {
+        subfolder: 'FLUX',
+        subfolderTouched: false,
+        subfolderSuggestionAppliedBy: 'auto'
+      };
+    },
+    getMissingLocalBaseModel() {
+      return '';
+    },
+    resolveBaseModelAlias(value = '') {
+      if (value === 'Flux.1 D') return 'Flux.1 D';
+      if (value === 'Krea 2') return 'Krea 2';
+      return '';
+    },
+    resolveBaseModelAliasExact(value = '') {
+      return this.resolveBaseModelAlias(value);
+    },
+    resolveBaseModelAliasFromPath(value = '') {
+      return /(^|[\\/])KREA2([\\/]|$)/i.test(String(value)) ? 'Krea 2' : '';
+    },
+    getDominantWorkflowBaseModel() {
+      return 'Flux.1 D';
+    }
+  };
+
+  const info = getMissingAutoBaseModelInfo.call(dialog, missing);
+
+  assert.equal(info.value, 'Krea 2');
+  assert.equal(info.source, 'missing model path');
+  assert.match(info.message, /Selected automatically: Krea 2/);
+  assert.match(info.message, /Why: The model path saved in this workflow/);
+  assert.match(info.message, /To change: Choose a different option in the Model field/);
 });
 
 test('base model path mapping ignores conflicting full-path base model', () => {
@@ -286,8 +335,26 @@ test('download subfolder tooltip explains automatic suggestion source', () => {
 
   const tooltip = getDownloadSubfolderTooltip.call(dialog, { node_id: 1 }, 'loras', 'SDXL/Style');
 
-  assert.match(tooltip, /Auto selected SDXL\\Style/);
-  assert.match(tooltip, /base model \(SDXL\) and tag \(style\)/);
+  assert.match(tooltip, /Suggested subfolder: SDXL\\Style/);
+  assert.match(tooltip, /identified as SDXL and tagged/);
+});
+
+test('download subfolder tooltip identifies a folder taken from the workflow model path', () => {
+  const getDownloadSubfolderSuggestionReason = eval(`(${extractMethod(downloadTargetMethodsSource, 'getDownloadSubfolderSuggestionReason')})`);
+  const dialog = {
+    normalizeFolderToken(value = '') {
+      return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    }
+  };
+
+  const reason = getDownloadSubfolderSuggestionReason.call(dialog, {
+    suggestionSource: 'model_name',
+    matchedCandidate: 'KREA2'
+  }, {
+    original_path: 'KREA2\\KNPV3_1.safetensors'
+  });
+
+  assert.match(reason, /model path saved in this workflow.*folder.*KREA2/);
 });
 
 test('download subfolder tooltip explains Suggest button choice', () => {
@@ -333,8 +400,8 @@ test('download subfolder tooltip explains Suggest button choice', () => {
 
   const tooltip = getDownloadSubfolderTooltip.call(dialog, { node_id: 1 }, 'loras', 'Pony\\Styles', { saved });
 
-  assert.match(tooltip, /because you clicked Suggest/);
-  assert.match(tooltip, /path template \(\{base_model\}\/\{first_tag\}\)/);
+  assert.match(tooltip, /Selected with Suggest: Pony\\Styles/);
+  assert.match(tooltip, /saved folder rule.*\{base_model\}\/\{first_tag\}/);
 });
 
 test('post-search subfolder suggestion can prefer path template metadata', () => {
@@ -498,6 +565,119 @@ test('search suggestion metadata prefers exact matching base model over weaker a
   assert.equal(merged.base_model, 'Krea 2');
   assert.deepEqual(merged.tags, ['style']);
   assert.equal(merged.filename, 'snofs_krea_v1.safetensors');
+});
+
+test('search suggestion does not let a delayed incompatible result replace workflow path context', () => {
+  const getCachedSearchSuggestionData = eval(`(${extractMethod(downloadTargetMethodsSource, 'getCachedSearchSuggestionData')})`);
+  const getFirstSearchResult = eval(`(${extractMethod(downloadTargetMethodsSource, 'getFirstSearchResult')})`);
+  const getSearchSuggestionPreferredBaseModel = eval(`(${extractMethod(downloadTargetMethodsSource, 'getSearchSuggestionPreferredBaseModel')})`);
+  const baseModelMatchesSearchSuggestionPreference = eval(`(${extractMethod(downloadTargetMethodsSource, 'baseModelMatchesSearchSuggestionPreference')})`);
+  const getCompatibleCivitaiSearchResult = eval(`(${extractMethod(downloadTargetMethodsSource, 'getCompatibleCivitaiSearchResult')})`);
+  const getSearchSuggestionResultScore = eval(`(${extractMethod(downloadTargetMethodsSource, 'getSearchSuggestionResultScore')})`);
+  const state = {
+    selectedBaseModel: 'auto',
+    results: {
+      civitai: {
+        base_model: 'Flux.1 D',
+        filename: 'KNPV3_1.safetensors',
+        match_type: 'similar',
+        confidence: 80
+      }
+    }
+  };
+  const dialog = {
+    searchResultCache: new Map([['missing-key', state]]),
+    getCachedSearchSuggestionData,
+    getFirstSearchResult,
+    getSearchSuggestionPreferredBaseModel,
+    baseModelMatchesSearchSuggestionPreference,
+    getCompatibleCivitaiSearchResult,
+    getSearchSuggestionResultScore,
+    getMissingSearchKey() {
+      return 'missing-key';
+    },
+    getSavedDownloadTargetSelection() {
+      return null;
+    },
+    getMissingLocalBaseModel() {
+      return '';
+    },
+    resolveBaseModelAliasFromPath(value = '') {
+      return /(^|[\\/])KREA2([\\/]|$)/i.test(String(value)) ? 'Krea 2' : '';
+    },
+    normalizeBaseModelToken(value = '') {
+      return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    },
+    resolveBaseModelAlias(value = '') {
+      const token = this.normalizeBaseModelToken(value);
+      if (token === 'krea2') return 'Krea 2';
+      if (token === 'flux1d') return 'Flux.1 D';
+      return '';
+    },
+    resolveBaseModelAliasExact(value = '') {
+      return this.resolveBaseModelAlias(value);
+    },
+    getSourceResultDownloadCategory() {
+      return 'loras';
+    }
+  };
+  const missing = {
+    category: 'loras',
+    original_path: 'KREA2\\KNPV3_1.safetensors',
+    civitai_search_result: { base_model: 'Flux.1 D' }
+  };
+
+  assert.equal(getSearchSuggestionPreferredBaseModel.call(dialog, missing), 'Krea 2');
+  assert.deepEqual(getCompatibleCivitaiSearchResult.call(dialog, missing), {});
+  assert.deepEqual(getCachedSearchSuggestionData.call(dialog, missing), {});
+});
+
+test('subfolder suggestion ignores hidden local matches below the visible confidence threshold', () => {
+  const getSuggestedModelSubfolderCandidates = eval(`(${extractMethod(downloadTargetMethodsSource, 'getSuggestedModelSubfolderCandidates')})`);
+  const getSuggestedExistingSubfolderByModelName = eval(`(${extractMethod(downloadTargetMethodsSource, 'getSuggestedExistingSubfolderByModelName')})`);
+  const dialog = {
+    getSuggestedModelSubfolderCandidates,
+    getSuggestedExistingSubfolderByModelName,
+    getBestLocalMatch(missing, minConfidence) {
+      return (missing.matches || [])
+        .filter(match => Number(match.confidence) >= minConfidence)
+        .sort((a, b) => Number(b.confidence || 0) - Number(a.confidence || 0))[0] || null;
+    },
+    getCompatibleCivitaiSearchResult() {
+      return {};
+    },
+    getCachedSearchSuggestionData() {
+      return {};
+    },
+    normalizeFolderToken(value = '') {
+      return String(value || '')
+        .toLowerCase()
+        .replace(/[\\/]+/g, ' ')
+        .replace(/[^a-z0-9]+/g, '');
+    }
+  };
+  const missing = {
+    original_path: 'KNPV3_1.safetensors',
+    name: 'KNPV3_1.safetensors',
+    matches: [{
+      confidence: 55,
+      model: {
+        filename: 'KNPV4.1_pre.safetensors',
+        relative_path: 'FLUX\\KREA\\concept\\KNPV4.1_pre.safetensors'
+      }
+    }]
+  };
+  const folders = [{
+    value: 'FLUX',
+    segments: ['FLUX'],
+    normalizedSegments: ['flux']
+  }];
+
+  const candidates = getSuggestedModelSubfolderCandidates.call(dialog, missing);
+  const suggestion = getSuggestedExistingSubfolderByModelName.call(dialog, missing, folders);
+
+  assert.equal(candidates.some(candidate => candidate.normalized === 'flux'), false);
+  assert.equal(suggestion, null);
 });
 
 test('auto-link 100 percent applies visible exact matches without re-analyzing', async () => {

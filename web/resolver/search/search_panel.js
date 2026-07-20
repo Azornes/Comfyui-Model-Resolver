@@ -226,24 +226,28 @@ export const searchPanelMethods = {
     },
 
     getMissingAutoBaseModelInfo(missing = {}) {
+        const formatAutoMessage = (selected, reason, action = 'Choose a different option in the Model field.') => (
+            `Selected automatically: ${selected}\n\nWhy: ${reason}\n\nTo change: ${action}`
+        );
         const independentType = this.getBaseModelIndependentSearchType(missing);
         if (independentType) {
             return {
                 value: '',
                 source: 'independent model type',
                 usesAnyModel: true,
-                message: `${independentType} models are not tied to a base model, so Auto uses Any model.`
+                message: formatAutoMessage(
+                    'Any model',
+                    `${independentType} models are not tied to one base model, so no model filter is needed.`
+                )
             };
         }
 
         const searchSuggestion = this.getCachedSearchSuggestionData?.(missing) || {};
         const directCandidates = [
-            { value: missing?.civitai_info?.base_model, source: 'model metadata' },
-            { value: missing?.civitai_info?.baseModel, source: 'model metadata' },
-            { value: missing?.civitai_search_result?.base_model, source: 'search result metadata' },
-            { value: missing?.civitai_search_result?.baseModel, source: 'search result metadata' },
             { value: missing?.download_source?.base_model, source: 'selected download source' },
-            { value: missing?.download_source?.baseModel, source: 'selected download source' }
+            { value: missing?.download_source?.baseModel, source: 'selected download source' },
+            { value: missing?.civitai_info?.base_model, source: 'model metadata' },
+            { value: missing?.civitai_info?.baseModel, source: 'model metadata' }
         ];
 
         for (const { value, source } of directCandidates) {
@@ -252,15 +256,23 @@ export const searchPanelMethods = {
                 return {
                     value: canonical,
                     source,
-                    message: `Auto selected ${canonical} from ${source}.`
+                    message: formatAutoMessage(
+                        canonical,
+                        source === 'selected download source'
+                            ? `The download source you selected identifies this model as ${canonical}.`
+                            : `The model information saved with this workflow identifies it as ${canonical}.`
+                    )
                 };
             }
         }
 
         const savedTarget = this.getSavedDownloadTargetSelection?.(missing) || {};
+        const explicitlySelectedSubfolder = savedTarget.subfolderTouched
+            ? savedTarget.subfolder
+            : '';
         const pathCandidates = [
             { value: this.getMissingLocalBaseModel(missing, 70), source: 'best local match' },
-            { value: savedTarget.subfolder, source: 'selected subfolder' }
+            { value: explicitlySelectedSubfolder, source: 'selected subfolder' }
         ];
 
         for (const { value, source } of pathCandidates) {
@@ -270,22 +282,12 @@ export const searchPanelMethods = {
                 return {
                     value: canonical,
                     source,
-                    message: `Auto selected ${canonical} from the ${source}.`
-                };
-            }
-        }
-
-        const cachedCandidates = [
-            { value: searchSuggestion.base_model, source: 'cached search result' },
-            { value: searchSuggestion.baseModel, source: 'cached search result' }
-        ];
-        for (const { value, source } of cachedCandidates) {
-            const canonical = this.resolveBaseModelAlias(value);
-            if (canonical) {
-                return {
-                    value: canonical,
-                    source,
-                    message: `Auto selected ${canonical} from ${source} metadata.`
+                    message: formatAutoMessage(
+                        canonical,
+                        source === 'best local match'
+                            ? `A reliable local match is stored in a folder associated with ${canonical}.`
+                            : `The subfolder you selected is associated with ${canonical}.`
+                    )
                 };
             }
         }
@@ -301,7 +303,32 @@ export const searchPanelMethods = {
                 return {
                     value: canonical,
                     source,
-                    message: `Auto selected ${canonical} from the ${source}.`
+                    message: formatAutoMessage(
+                        canonical,
+                        source === 'missing model path'
+                            ? `The model path saved in this workflow points to a folder associated with ${canonical}.`
+                            : source === 'missing model name'
+                                ? `The model name saved in this workflow contains a name associated with ${canonical}.`
+                                : `A previously found model path points to a folder associated with ${canonical}.`
+                    )
+                };
+            }
+        }
+
+        const cachedCandidates = [
+            { value: searchSuggestion.base_model, source: 'cached search result' },
+            { value: searchSuggestion.baseModel, source: 'cached search result' }
+        ];
+        for (const { value, source } of cachedCandidates) {
+            const canonical = this.resolveBaseModelAlias(value);
+            if (canonical) {
+                return {
+                    value: canonical,
+                    source,
+                    message: formatAutoMessage(
+                        canonical,
+                        `A compatible search result identifies this model as ${canonical}.`
+                    )
                 };
             }
         }
@@ -311,14 +338,22 @@ export const searchPanelMethods = {
             return {
                 value: workflowFallback,
                 source: 'workflow fallback',
-                message: `This model was not recognized in the Base Models list, so Auto is using the workflow-wide fallback: ${workflowFallback}. If this looks wrong, open Options and update the local database / Base Models list.`
+                message: formatAutoMessage(
+                    workflowFallback,
+                    `This model could not be identified directly, so Model Resolver used the most common model type in this workflow.`,
+                    'Choose another model here, or update the Base Models list in Options.'
+                )
             };
         }
 
         return {
             value: '',
             source: 'none',
-            message: 'Auto could not detect a base model for this entry. Open Options and update the local database / Base Models list, or choose a model manually.'
+            message: formatAutoMessage(
+                'No model filter',
+                'There is not enough reliable information to identify the model type.',
+                'Choose a model here, or update the Base Models list in Options.'
+            )
         };
     },
 
@@ -326,10 +361,10 @@ export const searchPanelMethods = {
         const state = this.getSearchState(missing);
         const selected = state.selectedBaseModel || this.getDefaultSearchBaseModel();
         if (selected === 'none') {
-            return 'Search will use Any model and will not filter by base model.';
+            return 'Selected: Any model\n\nWhy: Searches will not be limited to one model type.\n\nTo change: Choose Auto or a specific model.';
         }
         if (selected && selected !== 'auto') {
-            return `Search model filter is manually set to ${selected}.`;
+            return `Selected manually: ${selected}\n\nWhy: Searches are limited to this model type.\n\nTo change: Choose Auto, Any model, or another model.`;
         }
         return this.getMissingAutoBaseModelInfo(missing).message;
     },
