@@ -258,15 +258,17 @@ class ModelResolverExtension:
     ) -> None:
         if not loaded_id:
             return
-        self.loaded_progress.update(
+        self.loaded_progress.update_from_payload(
             loaded_id,
-            status=status,
-            stage=stage,
-            message=message,
-            percent=percent,
-            current=current,
-            total=total,
-            **payload,
+            {
+                "stage": stage,
+                "message": message,
+                "percent": percent,
+                "status": status,
+                "current": current,
+                "total": total,
+                **payload,
+            },
         )
 
     def _update_workflow_analysis_progress(
@@ -657,13 +659,15 @@ class ModelResolverExtension:
                         )
 
                     if analysis_id:
-                        self.analysis_progress.update(
+                        self._update_analysis_progress(
                             analysis_id,
-                            status="starting",
-                            stage="starting",
-                            message="Starting analysis...",
-                            current=0,
-                            total=0,
+                            {
+                                "status": "starting",
+                                "stage": "starting",
+                                "message": "Starting analysis...",
+                                "current": 0,
+                                "total": 0,
+                            },
                         )
 
                     def update_analysis_progress(payload):

@@ -127,8 +127,8 @@ class TestRefactoringUnification(unittest.TestCase):
         self.assertIn("NewModel", res.get("new_models_added_list", []))
         
         # Verify it saved the updated catalog
-        mock_base_models_mgr.save.assert_called_once()
-        saved_data = mock_base_models_mgr.save.call_args[0][0]
+        mock_base_models_mgr.sync_catalog.assert_called_once()
+        saved_data = mock_base_models_mgr.sync_catalog.call_args[0][0]
         self.assertEqual(len(saved_data["base_models"]), 3)
 
 
@@ -171,7 +171,7 @@ class TestRefactoringUnification(unittest.TestCase):
         mock_fetch_json.return_value = {"models": [{"name": "ModelA"}, {"name": "ModelB"}]}
         res = update_model_list_from_remote()
         self.assertTrue(res.get("updated"))
-        self.assertTrue(mock_catalog_mgr.save.called)
+        self.assertTrue(mock_catalog_mgr.sync_catalog.called)
 
 
     def test_tracker_progress_updates(self):

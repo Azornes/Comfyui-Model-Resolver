@@ -17,6 +17,23 @@ export function escapeHtml(value) {
 }
 
 /**
+ * Tagged template literal for auto-escaping interpolation values in HTML strings.
+ * @param {TemplateStringsArray} strings
+ * @param {...any} values
+ * @returns {string}
+ */
+export function html(strings, ...values) {
+    return strings.reduce((result, string, i) => {
+        const value = values[i - 1];
+        let valStr = '';
+        if (value !== undefined && value !== null) {
+            valStr = Array.isArray(value) ? value.join('') : escapeHtml(value);
+        }
+        return result + valStr + string;
+    });
+}
+
+/**
  * Escapes a value to be safely embedded inside inline JavaScript.
  * @param {any} value 
  * @returns {string} Escaped string

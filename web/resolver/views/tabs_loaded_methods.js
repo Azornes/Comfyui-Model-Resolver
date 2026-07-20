@@ -2,7 +2,11 @@ import { app } from "../../../../../scripts/app.js";
 import { api } from "../../../../../scripts/api.js";
 import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
+import { escapeHtml } from "../utils/html_utils.js";
 export const tabsLoadedMethods = {
+    escapeHtml(value) {
+        return escapeHtml(value);
+    },
     getTabButton(tab) {
         return {
             missing: this.missingTab,

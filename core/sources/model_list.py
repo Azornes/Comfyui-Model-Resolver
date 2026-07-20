@@ -163,7 +163,7 @@ def update_model_list_from_remote() -> Dict[str, Any]:
         "model_count": len(models),
         "updated_at": _utc_now_iso(),
     }
-    catalog_mgr.save(data, meta, indent=2)
+    catalog_mgr.sync_catalog(data, meta, indent=2)
     reload_model_list()
 
     return {

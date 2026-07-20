@@ -406,8 +406,8 @@ def extract_safetensors_header_sha256(
 
 
 def _normalize_base_model_token(value: Any) -> str:
-    from .type_utils import normalize_alphanumeric_lower
-    return normalize_alphanumeric_lower(value)
+    from .type_utils import normalize_alphanumeric_key
+    return normalize_alphanumeric_key(value)
 
 
 def _load_base_model_aliases() -> List[Tuple[str, str]]:

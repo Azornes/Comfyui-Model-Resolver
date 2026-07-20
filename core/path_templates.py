@@ -46,8 +46,8 @@ TAG_FOLDER_TOKENS = {
 
 
 def _normalize_token(value: Any) -> str:
-    from .type_utils import normalize_alphanumeric_lower
-    return normalize_alphanumeric_lower(value)
+    from .type_utils import normalize_alphanumeric_key
+    return normalize_alphanumeric_key(value)
 
 
 def _base_model_token_variants(value: Any) -> List[str]:

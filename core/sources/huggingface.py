@@ -196,22 +196,17 @@ def _build_author_index_from_models(
 
 def _fetch_author_index(author: str, headers: Dict[str, str], limit: int = 200):
     try:
-        response = request_source_response(
+        repos = execute_provider_json_request(
+            "HuggingFace author index",
             f"{HF_API_URL}/models",
             params={"author": author, "limit": limit, "full": "true"},
             headers=headers,
             timeout=15,
-            log_name="HuggingFace author index"
         )
-        if response.status_code != 200:
-            log.debug(
-                f"HuggingFace author index returned {response.status_code} for author={author}"
-            )
-            return None
-
-        repos = response.json()
         if not isinstance(repos, list):
             return None
+
+        return repos
 
         index = _build_author_index_from_models(author, repos)
         log.info(
@@ -393,19 +388,16 @@ def _get_repo_tree(
     files_url = f"{HF_API_URL}/models/{repo_id}/tree/{quote(branch, safe='')}"
 
     try:
-        response = request_source_response(
+        data = execute_provider_json_request(
+            "HuggingFace tree",
             files_url,
             params={"recursive": "1"},
             headers=headers,
             timeout=15,
-            log_name="HuggingFace tree"
         )
-        if response.status_code != 200:
-            log.debug(
-                f"HuggingFace tree request returned {response.status_code} for repo={repo_id}, branch={branch}"
-            )
-            return None
-        return response.json()
+        if isinstance(data, list):
+            return data
+        return None
     except Exception as e:
         log.debug(f"Error getting HuggingFace tree for {repo_id}@{branch}: {e}")
         return None

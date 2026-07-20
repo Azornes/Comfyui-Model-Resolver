@@ -369,9 +369,9 @@ def update_base_models_from_remote() -> Dict[str, Any]:
         "last_checked_at": now_str,
         "local_count": len(updated_models),
         "new_models_added": new_added_count,
-        "new_models_added_list": new_added_names
+        "new_models_added_list": new_added_names,
     }
-    base_models_mgr.save({"base_models": updated_models}, meta, indent=2)
+    base_models_mgr.sync_catalog({"base_models": updated_models}, meta, indent=2)
     reload_databases()
 
     return {

@@ -37,6 +37,7 @@ from ..type_utils import (
     extract_trained_words,
     fetch_remote_file_size_cached,
     looks_like_model_file,
+    normalize_alphanumeric_key,
     normalize_model_file_info,
     normalize_model_image,
     normalize_sha256,
@@ -126,14 +127,14 @@ def _request_json(
     params: Optional[Dict[str, Any]] = None,
     timeout: int = 20,
 ) -> Optional[Dict[str, Any]]:
-    from ..network_utils import request_source_json
+    from ..network_utils import execute_provider_json_request
     url = f"{CIVARCHIVE_API_URL}{path}"
-    return request_source_json(
+    return execute_provider_json_request(
+        "CivArchive API",
         url,
         params=params,
         headers=REQUEST_HEADERS,
         timeout=timeout,
-        log_name="CivArchive API"
     )
 
 
@@ -178,7 +179,7 @@ def _normalize_civarchive_type(value: Any) -> str:
         return ""
     text = str(value).strip()
     mapped = resolve_model_category(text, target_format="civarchive")
-    return re.sub(r"[^a-z0-9]+", "", str(mapped).lower())
+    return normalize_alphanumeric_key(mapped)
 
 
 def _extract_hash_page_model_cards(next_data: Dict[str, Any]) -> List[Dict[str, Any]]:

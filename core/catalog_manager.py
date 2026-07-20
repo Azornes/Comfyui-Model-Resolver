@@ -21,3 +21,27 @@ class CatalogManager:
 
     def save(self, data: Any, meta: Any, indent: int = 2) -> None:
         save_catalog_with_backup(self.data_file, data, self.meta_file, meta, indent=indent)
+
+    def get_items(self) -> list:
+        data = self.read_data()
+        if isinstance(data, dict):
+            items = data.get(self.root_key, [])
+            return items if isinstance(items, list) else []
+        return []
+
+    def get_local_count(self) -> int:
+        return len(self.get_items())
+
+    def sync_catalog(
+        self,
+        new_data: Any,
+        meta_updates: Dict[str, Any],
+        indent: int = 2,
+    ) -> Dict[str, Any]:
+        """Save updated catalog payload and sidecar metadata."""
+        data = {self.root_key: new_data} if not isinstance(new_data, dict) else new_data
+        self.save(data, meta_updates, indent=indent)
+        return {
+            "updated": True,
+            **meta_updates,
+        }

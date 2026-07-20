@@ -49,6 +49,7 @@ from ..type_utils import (
     normalize_model_file_info,
     normalize_model_image,
     parse_size_to_bytes,
+    prepare_remote_size_probe_url,
     resolve_model_category,
     select_primary_model_file,
 )
@@ -57,6 +58,15 @@ log = create_module_logger(__name__)
 
 
 CIVITAI_API_URL = "https://civitai.com/api/v1"
+
+
+def _fetch_civitai_remote_file_size(url: str, timeout: int = 15) -> Optional[int]:
+    """Probe file size for Civitai remote URLs."""
+    from ..type_utils import fetch_remote_file_size_cached
+    probe_url = prepare_remote_size_probe_url(url, ["civitai.com", "civitai.red"])
+    if not probe_url:
+        return None
+    return fetch_remote_file_size_cached(probe_url, timeout=timeout)
 
 # Cache for search results and URN resolutions
 _search_cache: Dict[str, Any] = {}
@@ -1135,21 +1145,14 @@ def get_civitai_model_details(
     if not model_id:
         return None
 
-    headers = {}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-
-    response = request_source_response(
+    data = execute_provider_json_request(
+        "CivitAI model details",
         f"{CIVITAI_API_URL}/models/{model_id}",
-        headers=headers,
+        api_key=api_key,
         timeout=20,
-        log_name="CivitAI model details"
     )
-    if response.status_code != 200:
-        log.warning(f"CivitAI model details returned {response.status_code}: model_id={model_id}")
+    if not data:
         return None
-
-    data = response.json()
     versions = data.get("modelVersions") or []
     normalized_versions = []
     selected_version = None
@@ -1273,21 +1276,16 @@ def resolve_urn(
         return _urn_cache[cache_key]
 
     try:
-        headers = {}
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
-
-        url = f"{CIVITAI_API_URL}/models/{model_id}"
-        params = {"modelVersionId": version_id}
-
-        response = request_source_response(url, headers=headers, params=params, timeout=15, log_name="CivitAI URN resolve")
-
-        if response.status_code != 200:
-            log.warning(f"CivitAI URN resolve failed: {response.status_code}")
+        data = execute_provider_json_request(
+            "CivitAI URN resolve",
+            f"{CIVITAI_API_URL}/models/{model_id}",
+            params={"modelVersionId": version_id},
+            api_key=api_key,
+            timeout=15,
+        )
+        if not data:
             _urn_cache[cache_key] = None
             return None
-
-        data = response.json()
         versions = data.get("modelVersions", [])
 
         if not versions:
@@ -1387,15 +1385,14 @@ def get_model_info_by_hash(
     api_url = f"{CIVITAI_API_URL}/model-versions/by-hash/{file_hash}"
 
     try:
-        headers = {}
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
+        data = execute_provider_json_request(
+            "CivitAI by-hash",
+            api_url,
+            api_key=api_key,
+            timeout=15,
+        )
 
-        response = request_source_response(api_url, headers=headers, timeout=15, log_name="CivitAI by-hash")
-
-        if response.status_code == 200:
-            data = response.json()
-
+        if data:
             # Extract useful info from the response
             model_info = data.get("model", {})
             version_info = data
@@ -1438,14 +1435,9 @@ def get_model_info_by_hash(
             log.info(f"Found model by hash {file_hash}: {result.get('model_name')}")
             return result
 
-        elif response.status_code == 404:
-            log.info(f"Model not found on CivitAI for hash {file_hash}")
-            _hash_cache[cache_key] = None
-            return None
         else:
-            log.warning(
-                f"CivitAI hash lookup returned {response.status_code} for {file_hash}"
-            )
+            log.info(f"Model not found or lookup failed on CivitAI for hash {file_hash}")
+            _hash_cache[cache_key] = None
             return None
 
     except Exception as e:

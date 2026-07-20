@@ -238,8 +238,8 @@ def _listify_tags(value: Any) -> List[str]:
 
 
 def _normalize_tag(value: str) -> str:
-    from .type_utils import normalize_alphanumeric_lower
-    return normalize_alphanumeric_lower(value)
+    from .type_utils import normalize_alphanumeric_key
+    return normalize_alphanumeric_key(value)
 
 
 
@@ -274,7 +274,8 @@ def _resolve_base_model_mapping(mappings: Mapping[str, str], base_model: Any) ->
 
 
 def _first_tag(tags: Any) -> str:
-    tag_list = list(_listify_tags(tags))
+    from .type_utils import as_list
+    tag_list = list(as_list(tags))
     if not tag_list:
         return "no tags"
     normalized_tags = {tag: _normalize_tag(tag) for tag in tag_list}

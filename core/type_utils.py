@@ -21,17 +21,18 @@ def as_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def as_list(value: Any) -> List[Any]:
+def as_list(value: Any, pattern: str = r"[,;]+") -> List[Any]:
     """
     Safely cast value to a list.
     
     Supports:
         - lists (returns list filtered of None/empty strings)
         - tuples and sets (casts to list and filters)
-        - comma-separated or semicolon-separated strings (splits, strips, and filters)
+        - delimited strings (splits by pattern, strips, and filters)
         
     Args:
         value: Value to cast
+        pattern: Regex pattern for string splitting (default: r"[,;]+")
         
     Returns:
         A list of elements.
@@ -41,7 +42,7 @@ def as_list(value: Any) -> List[Any]:
     if isinstance(value, (tuple, set)):
         return [item for item in value if item not in (None, "")]
     if isinstance(value, str):
-        return [item.strip() for item in re.split(r"[,;]+", value) if item.strip()]
+        return [item.strip() for item in re.split(pattern, value) if item.strip()]
     return []
 
 
@@ -1290,9 +1291,13 @@ def parse_provider_model_url(url: str, allowed_domains: list[str]) -> Optional[D
     return parse_civitai_model_path(parsed.path, parsed.query)
 
 
-def normalize_alphanumeric_lower(value: Any) -> str:
+def normalize_alphanumeric_key(value: Any) -> str:
     """Normalize a string or token to standard lowercase alphanumeric format."""
     return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+
+
+normalize_alphanumeric_lower = normalize_alphanumeric_key
+
 
 
 def utc_now_iso() -> str:

@@ -4,10 +4,13 @@ import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
 import { LOG_LEVEL as DEFAULT_FRONTEND_LOG_LEVEL } from "../../log_system/config.js";
 import { logger as frontendLogger } from "../../log_system/logger.js";
-import { pollBackgroundTask, safeStorage } from "../utils/html_utils.js";
+import { escapeHtml, pollBackgroundTask, safeStorage } from "../utils/html_utils.js";
 const SETTINGS_MAP = [];
 
 export const optionsMethods = {
+    escapeHtml(value) {
+        return escapeHtml(value);
+    },
     displayOptions() {
         if (!this.contentElement) return;
         this.contentElement.style.overflowY = 'hidden';
