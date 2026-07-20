@@ -1642,6 +1642,74 @@ test('local match bad folder badge treats unet gguf as diffusion models', () => 
   assert.equal(html, '');
 });
 
+test('local match bad type badge warns when node catalog does not accept gguf', () => {
+  const getModelFileTypeInfo = eval(`(${extractMethod(searchPanelMethodsSource, 'getModelFileTypeInfo')})`);
+  const getMissingAcceptedModelFileTypes = eval(`(${extractMethod(searchPanelMethodsSource, 'getMissingAcceptedModelFileTypes')})`);
+  const getLocalMatchBadTypeWarning = eval(`(${extractMethod(searchPanelMethodsSource, 'getLocalMatchBadTypeWarning')})`);
+  const renderLocalMatchBadTypeBadge = eval(`(${extractMethod(searchPanelMethodsSource, 'renderLocalMatchBadTypeBadge')})`);
+  const dialog = {
+    getModelFileTypeInfo,
+    getMissingAcceptedModelFileTypes,
+    getLocalMatchBadTypeWarning,
+    getCurrentComfyCatalogValues(nodeType, widgetName) {
+      assert.equal(nodeType, 'CLIPLoader');
+      assert.equal(widgetName, 'clip_name');
+      return [
+        'QWEN/qwen3vl_4b_fp8_scaled.safetensors',
+        'FLUX/t5xxl_fp16.safetensors',
+      ];
+    },
+    escapeHtml(value) {
+      return String(value).replace(/"/g, '&quot;');
+    },
+  };
+
+  const html = renderLocalMatchBadTypeBadge.call(
+    dialog,
+    {
+      node_type: 'CLIPLoader',
+      node_title: 'Load CLIP',
+      widget_name: 'clip_name',
+      widget_index: 0,
+    },
+    {
+      confidence: 76.7,
+      model: { relative_path: 'QWEN/Qwen3-4B-abliterated-iq4_nl.gguf' },
+    }
+  );
+
+  assert.match(html, /mr-match-status-bad-type[^>]*>Bad type</);
+  assert.match(html, /This file is GGUF \(.gguf\)/);
+  assert.match(html, /Load CLIP only lists Safetensors \(.safetensors\) files/);
+  assert.match(html, /use a loader made for GGUF models/);
+});
+
+test('local match bad type badge is omitted for a file type accepted by node catalog', () => {
+  const getModelFileTypeInfo = eval(`(${extractMethod(searchPanelMethodsSource, 'getModelFileTypeInfo')})`);
+  const getMissingAcceptedModelFileTypes = eval(`(${extractMethod(searchPanelMethodsSource, 'getMissingAcceptedModelFileTypes')})`);
+  const getLocalMatchBadTypeWarning = eval(`(${extractMethod(searchPanelMethodsSource, 'getLocalMatchBadTypeWarning')})`);
+  const renderLocalMatchBadTypeBadge = eval(`(${extractMethod(searchPanelMethodsSource, 'renderLocalMatchBadTypeBadge')})`);
+  const dialog = {
+    getModelFileTypeInfo,
+    getMissingAcceptedModelFileTypes,
+    getLocalMatchBadTypeWarning,
+    getCurrentComfyCatalogValues() {
+      return ['QWEN/qwen3vl_4b_fp8_scaled.safetensors'];
+    },
+    escapeHtml(value) {
+      return String(value);
+    },
+  };
+
+  const html = renderLocalMatchBadTypeBadge.call(
+    dialog,
+    { node_type: 'CLIPLoader', widget_name: 'clip_name', widget_index: 0 },
+    { model: { relative_path: 'QWEN/another_text_encoder.safetensors' } }
+  );
+
+  assert.equal(html, '');
+});
+
 test('download category normalization maps unet gguf to diffusion models', () => {
   const normalizeDownloadCategory = eval(`(${extractMethod(downloadTargetMethodsSource, 'normalizeDownloadCategory')})`);
 

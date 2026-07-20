@@ -2493,6 +2493,95 @@ export const searchPanelMethods = {
         return `<span class="mr-match-status mr-match-status-bad-folder" tabindex="0" data-tooltip="${this.escapeHtml(warning.tooltip)}">Bad folder</span>`;
     },
 
+    getModelFileTypeInfo(value = '') {
+        const match = String(value || '').trim().match(/\.([a-z0-9]+)(?:$|[?#])/i);
+        if (!match) return null;
+
+        const extension = match[1].toLowerCase();
+        const labels = {
+            safetensors: 'Safetensors',
+            gguf: 'GGUF',
+            ckpt: 'Checkpoint',
+            pt: 'PyTorch',
+            pt2: 'PyTorch',
+            pth: 'PyTorch',
+            bin: 'Binary model',
+            onnx: 'ONNX',
+            pkl: 'Pickle',
+            sft: 'SFT'
+        };
+        if (!labels[extension]) return null;
+
+        return {
+            extension,
+            label: labels[extension],
+            display: `${labels[extension]} (.${extension})`
+        };
+    },
+
+    getMissingAcceptedModelFileTypes(missing = {}) {
+        const explicitExtensions = missing.accepted_extensions
+            || missing.allowed_extensions
+            || missing.accepted_model_extensions;
+        let acceptedValues = Array.isArray(explicitExtensions) ? explicitExtensions : [];
+
+        if (!acceptedValues.length) {
+            const widgetName = missing.widget_name
+                || this.getComfyWidgetNameByIndex?.(missing.node_type || '', Number(missing.widget_index))
+                || '';
+            acceptedValues = this.getCurrentComfyCatalogValues?.(
+                missing.node_type || '',
+                widgetName
+            ) || [];
+        }
+
+        const byExtension = new Map();
+        for (const value of acceptedValues) {
+            const typeInfo = this.getModelFileTypeInfo?.(value);
+            if (typeInfo && !byExtension.has(typeInfo.extension)) {
+                byExtension.set(typeInfo.extension, typeInfo);
+            }
+        }
+        return Array.from(byExtension.values());
+    },
+
+    getLocalMatchBadTypeWarning(missing = {}, match = {}) {
+        const model = match.model && typeof match.model === 'object' ? match.model : {};
+        const matchValue = model.relative_path
+            || model.path
+            || match.relative_path
+            || match.path
+            || model.filename
+            || match.filename
+            || model.name
+            || match.name
+            || '';
+        const matchType = this.getModelFileTypeInfo?.(matchValue);
+        if (!matchType) return null;
+
+        const acceptedTypes = this.getMissingAcceptedModelFileTypes?.(missing) || [];
+        if (!acceptedTypes.length || acceptedTypes.some(type => type.extension === matchType.extension)) {
+            return null;
+        }
+
+        const acceptedText = acceptedTypes.length === 1
+            ? acceptedTypes[0].display
+            : acceptedTypes.map(type => type.display).join(', ');
+        const nodeLabel = String(missing.node_title || missing.node_type || 'this node').trim();
+
+        return {
+            matchType,
+            acceptedTypes,
+            tooltip: `This file is ${matchType.display}, but ${nodeLabel} only lists ${acceptedText} files.\n\nLinking it may not work. Choose a supported file type or use a loader made for ${matchType.label} models.`
+        };
+    },
+
+    renderLocalMatchBadTypeBadge(missing = {}, match = {}) {
+        const warning = this.getLocalMatchBadTypeWarning?.(missing, match);
+        if (!warning) return '';
+        return `<span class="mr-match-status mr-match-status-bad-type" tabindex="0" data-tooltip="${this.escapeHtml(warning.tooltip)}">Bad type</span>`;
+    },
+
     getActiveDownloadInfoForLocalMatch(match = {}) {
         const model = match.model || {};
         const normalizePath = (value = '') => normalizePathIdentity(value);
@@ -2580,7 +2669,8 @@ export const searchPanelMethods = {
     },
 
     renderLocalMatchStatusGroup(missing = {}, match = {}, hashLabelMap = null) {
-        return `<span class="mr-match-status-group">${this.renderLocalMatchStatus(match, hashLabelMap)}${this.renderLocalMatchDownloadingBadge(match)}${this.renderLocalMatchBadFolderBadge(missing, match)}</span>`;
+        const badTypeBadge = this.renderLocalMatchBadTypeBadge?.(missing, match) || '';
+        return `<span class="mr-match-status-group">${this.renderLocalMatchStatus(match, hashLabelMap)}${this.renderLocalMatchDownloadingBadge(match)}${this.renderLocalMatchBadFolderBadge(missing, match)}${badTypeBadge}</span>`;
     },
 
     areLocalMatchAlternativesCollapsed() {
