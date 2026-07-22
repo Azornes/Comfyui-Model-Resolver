@@ -1811,12 +1811,16 @@ export const missingBrowserMethods = {
     displayMissingModels(container, data, options = {}) {
         const selectionOnly = !!options.selectionOnly;
         const listScrollSnapshot = this.getMissingListScrollSnapshot(container);
+        // Resolving the download state used to serialize the whole workflow for
+        // every missing model. Keep the scope stable for this render pass.
+        const downloadWorkflowScope = this.getCurrentDownloadWorkflowScopeIdentity?.() || '';
         const missingModels = (data.missing_models || []).map(missing => {
-            let restored = this.restoreDownloadedLocalMatchesForMissing?.(missing) || missing;
+            let restored = this.restoreDownloadedLocalMatchesForMissing?.(missing, downloadWorkflowScope) || missing;
             restored = this.restoreSearchLocalHashMatchesForMissing?.(restored) || restored;
             restored.matches = this.preserveActiveDownloadLocalMatches?.(
                 restored,
-                restored.matches || []
+                restored.matches || [],
+                downloadWorkflowScope
             ) || restored.matches || [];
             return restored;
         });

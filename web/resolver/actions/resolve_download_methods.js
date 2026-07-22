@@ -394,6 +394,7 @@ export const resolveDownloadMethods = {
     },
 
     getDownloadWorkflowScopeIdentity(context = {}) {
+        if (typeof context === 'string') return context.trim();
         const workflowKey = String(context.workflowKey || context.workflow_key || '').trim();
         return String(
             context.workflowTabId
@@ -417,10 +418,10 @@ export const resolveDownloadMethods = {
         });
     },
 
-    isDownloadInCurrentWorkflowScope(info = {}) {
+    isDownloadInCurrentWorkflowScope(info = {}, currentScope = null) {
         const downloadScope = this.getDownloadWorkflowScopeIdentity(info);
-        const currentScope = this.getCurrentDownloadWorkflowScopeIdentity();
-        return !downloadScope || !currentScope || downloadScope === currentScope;
+        const scope = currentScope || this.getCurrentDownloadWorkflowScopeIdentity();
+        return !downloadScope || !scope || downloadScope === scope;
     },
 
     getDownloadMissingIdentity(missing) {
@@ -791,10 +792,12 @@ export const resolveDownloadMethods = {
         return snapshot;
     },
 
-    restoreDownloadedLocalMatchesForMissing(missing) {
+    restoreDownloadedLocalMatchesForMissing(missing, workflowScope = null) {
         if (!missing) return missing;
 
-        const snapshot = this.getDownloadProgressStore().get(this.getDownloadStateKey(missing));
+        const snapshot = this.getDownloadProgressStore().get(
+            this.getDownloadStateKey(missing, workflowScope || null)
+        );
         const storedMatches = Array.isArray(snapshot?.localMatches) ? snapshot.localMatches : [];
         if (!storedMatches.length) return missing;
 
@@ -803,7 +806,7 @@ export const resolveDownloadMethods = {
         return missing;
     },
 
-    preserveActiveDownloadLocalMatches(missing, nextMatches = []) {
+    preserveActiveDownloadLocalMatches(missing, nextMatches = [], workflowScope = null) {
         if (!missing) return Array.isArray(nextMatches) ? nextMatches : [];
 
         const activeEntries = this.getActiveDownloadEntriesForMissing?.(missing) || [];
@@ -828,7 +831,7 @@ export const resolveDownloadMethods = {
             const activeEntry = this.activeDownloads?.[activeDownload.download_id];
             if (
                 activeEntry
-                && (!this.isDownloadInCurrentWorkflowScope || this.isDownloadInCurrentWorkflowScope(activeEntry))
+                && (!this.isDownloadInCurrentWorkflowScope || this.isDownloadInCurrentWorkflowScope(activeEntry, workflowScope))
                 && activeEntry.missing !== missing
             ) {
                 activeEntry.missing = missing;
