@@ -303,20 +303,36 @@ export const missingBrowserMethods = {
         return 'idle';
     },
 
+    hasMissingSourceSearchAttempt(missing = {}, source = '', state = null) {
+        const searchState = state || this.searchResultCache?.get(this.getMissingSearchKey(missing));
+        const explicitSources = new Set(
+            Array.isArray(searchState?.explicitSearchSources) ? searchState.explicitSearchSources : []
+        );
+        return explicitSources.has(source) || explicitSources.has('all');
+    },
+
+    isLocalDatabaseDownloadSource(downloadSource = {}) {
+        const source = String(downloadSource?.source || '')
+            .trim()
+            .toLowerCase()
+            .replace(/-/g, '_');
+        return source === 'local' || source === 'model_list' || source === 'popular';
+    },
+
+    shouldDisplayKnownDownloadSource(missing = {}, downloadSource = {}, state = null) {
+        if (!downloadSource?.url) return false;
+        if (!this.isLocalDatabaseDownloadSource(downloadSource)) return true;
+        return this.hasMissingSourceSearchAttempt(missing, 'local', state);
+    },
+
     getMissingSourceResultStatus(missing = {}, source = '', state = null) {
         const results = state?.results || {};
         const candidates = [];
 
         if (source === 'local') {
+            if (!this.hasMissingSourceSearchAttempt(missing, source, state)) return '';
+
             candidates.push(results.model_list, results.popular);
-            const bestLocalMatch = this.getBestLocalMatch(missing, 70);
-            if (bestLocalMatch) {
-                candidates.push({
-                    source: 'local_match',
-                    confidence: Number(bestLocalMatch.confidence || 0),
-                    match_type: Number(bestLocalMatch.confidence || 0) >= 100 ? 'exact' : 'similar'
-                });
-            }
         } else if (source === 'huggingface') {
             candidates.push(results.huggingface);
         } else if (source === 'civitai') {
@@ -2248,7 +2264,7 @@ export const missingBrowserMethods = {
         const downloadSource = missing.download_source;
         const urnDownloadId = `urn-download-${missing.node_id}-${missing.widget_index}`;
 
-        if (downloadSource && downloadSource.url) {
+        if (this.shouldDisplayKnownDownloadSource(missing, downloadSource)) {
             html += this.renderKnownDownloadPanel(missing, downloadSource);
         } else if (perfectMatches.length > 0) {
             // Has perfect local match - download not needed, but allow online re-check.

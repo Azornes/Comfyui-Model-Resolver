@@ -657,17 +657,6 @@ export const resolveDownloadMethods = {
                     hashMatches
                 )
             };
-            state.lastAttemptSources = Array.from(new Set([...(state.lastAttemptSources || []), 'local']));
-            state.lastAttemptFound = true;
-            state.sourceProgress = {
-                ...(state.sourceProgress || {}),
-                local: {
-                    status: 'found',
-                    percent: 100,
-                    message: 'Hash metadata match',
-                    updatedAt: Date.now()
-                }
-            };
             if (workflowKey) {
                 this.persistSearchStateForWorkflow?.(workflowKey, currentMissing, state);
             }
@@ -788,7 +777,6 @@ export const resolveDownloadMethods = {
         });
 
         this.persistLocalMatchesInAnalysisCache(missing, matches);
-        this.persistDownloadedLocalMatchSearchState(missing, matches, metadata);
         return snapshot;
     },
 
@@ -981,34 +969,6 @@ export const resolveDownloadMethods = {
         if (cached?.data) {
             patchAnalysisData(cached.data);
         }
-    },
-
-    persistDownloadedLocalMatchSearchState(missing, matches = [], metadata = {}) {
-        if (!missing || !Array.isArray(matches)) return;
-
-        const workflowKey = this.getWorkflowScopedQueueKey?.();
-        if (!workflowKey) return;
-
-        const state = this.getSearchStateForWorkflow?.(workflowKey, missing);
-        if (!state) return;
-
-        const hasRenderableMatch = matches.some(match => Number(match.confidence || 0) >= 70);
-        const hasExactMatch = matches.some(match => Number(match.confidence || 0) >= 100);
-        state.lastAttemptSources = Array.from(new Set([...(state.lastAttemptSources || []), 'local']));
-        state.lastAttemptFound = hasRenderableMatch || state.lastAttemptFound || false;
-        state.lastAttemptError = state.lastAttemptError || null;
-        state.sourceProgress = {
-            ...(state.sourceProgress || {}),
-            local: {
-                status: hasRenderableMatch ? 'found' : 'none',
-                percent: 100,
-                message: hasExactMatch ? 'Exact local match' : (hasRenderableMatch ? 'Local match' : 'No local match'),
-                updatedAt: Date.now(),
-                filename: metadata.targetFilename || metadata.filename || ''
-            }
-        };
-
-        this.persistSearchStateForWorkflow?.(workflowKey, missing, state);
     },
 
     rememberDownloadUiState(downloadId, info, progress = {}, options = {}) {
@@ -2394,6 +2354,10 @@ export const resolveDownloadMethods = {
             };
             this.backgroundSearchJobs.set(backgroundJobKey, backgroundJob);
             state.activeSearchRunId = searchRunId;
+            state.explicitSearchSources = Array.from(new Set([
+                ...(Array.isArray(state.explicitSearchSources) ? state.explicitSearchSources : []),
+                ...sourceIds
+            ]));
             state.lastAttemptSources = sourceIds;
             state.lastAttemptFound = null;
             state.lastAttemptError = null;
@@ -3007,7 +2971,9 @@ export const resolveDownloadMethods = {
                 match: this.getSearchResultMatchDisplay(result, fallbackLabel, fallbackClass, hashLabel)
             };
         };
-        const knownDownloadRow = this.getDownloadSourceTableRow(missing, missing.download_source, hashLabelMap);
+        const knownDownloadRow = this.shouldDisplayKnownDownloadSource(missing, missing.download_source, state)
+            ? this.getDownloadSourceTableRow(missing, missing.download_source, hashLabelMap)
+            : null;
         const hasResults = knownDownloadRow || popular || modelListResult || hfResult || civitaiResult || civarchiveResult || loraManagerArchiveResult || customResults.length;
         const progressHtml = this.renderSearchProgress(state);
         const hasActiveProgress = this.hasActiveSearchProgress(state);

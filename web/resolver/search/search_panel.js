@@ -45,6 +45,7 @@ export const searchPanelMethods = {
                 custom: [],
                 local_hash_matches: []
             },
+            explicitSearchSources: [],
             lastAttemptSources: [],
             lastAttemptBaseModelContext: '',
             lastAttemptFound: null,

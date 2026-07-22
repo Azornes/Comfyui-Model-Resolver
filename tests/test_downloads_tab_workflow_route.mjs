@@ -43,6 +43,80 @@ const renderFormatMethodsSource = fs.readFileSync(
   'utf8'
 );
 
+test('Local Database source ignores installed local model matches before search', () => {
+  const hasMissingSourceSearchAttempt = eval(`(${extractMethod(missingBrowserMethodsSource, 'hasMissingSourceSearchAttempt')})`);
+  const getMissingSourceResultStatus = eval(`(${extractMethod(missingBrowserMethodsSource, 'getMissingSourceResultStatus')})`);
+  const dialog = {
+    hasMissingSourceSearchAttempt,
+    getSearchResultStatusLevel: () => 'exact'
+  };
+  const missing = {
+    matches: [{ confidence: 100, path: 'models/checkpoints/already-installed.safetensors' }],
+    download_source: {
+      source: 'model_list',
+      url: 'https://example.invalid/model.safetensors'
+    }
+  };
+
+  assert.equal(
+    getMissingSourceResultStatus.call(dialog, missing, 'local', {
+      results: { model_list: null, popular: null },
+      explicitSearchSources: [],
+      lastAttemptSources: ['local'],
+      sourceProgress: { local: { status: 'found' } }
+    }),
+    ''
+  );
+});
+
+test('Local Database source reports its result after Local Database or Everything search', () => {
+  const hasMissingSourceSearchAttempt = eval(`(${extractMethod(missingBrowserMethodsSource, 'hasMissingSourceSearchAttempt')})`);
+  const getMissingSourceResultStatus = eval(`(${extractMethod(missingBrowserMethodsSource, 'getMissingSourceResultStatus')})`);
+  const getSearchResultStatusLevel = eval(`(${extractMethod(missingBrowserMethodsSource, 'getSearchResultStatusLevel')})`);
+  const dialog = { hasMissingSourceSearchAttempt, getSearchResultStatusLevel };
+
+  for (const attemptedSource of ['local', 'all']) {
+    assert.equal(
+      getMissingSourceResultStatus.call(dialog, {}, 'local', {
+        results: {
+          model_list: { source: 'model_list', confidence: 100, match_type: 'exact' },
+          popular: null
+        },
+        explicitSearchSources: [attemptedSource],
+        lastAttemptSources: [],
+        sourceProgress: {}
+      }),
+      'exact'
+    );
+  }
+});
+
+test('automatic Local Database download source stays hidden until that source is searched', () => {
+  const hasMissingSourceSearchAttempt = eval(`(${extractMethod(missingBrowserMethodsSource, 'hasMissingSourceSearchAttempt')})`);
+  const isLocalDatabaseDownloadSource = eval(`(${extractMethod(missingBrowserMethodsSource, 'isLocalDatabaseDownloadSource')})`);
+  const shouldDisplayKnownDownloadSource = eval(`(${extractMethod(missingBrowserMethodsSource, 'shouldDisplayKnownDownloadSource')})`);
+  const state = {
+    selectedSource: 'all',
+    explicitSearchSources: [],
+    lastAttemptSources: [],
+    sourceProgress: {}
+  };
+  const dialog = {
+    searchResultCache: new Map([['missing-key', state]]),
+    getMissingSearchKey: () => 'missing-key',
+    hasMissingSourceSearchAttempt,
+    isLocalDatabaseDownloadSource
+  };
+  const downloadSource = {
+    source: 'model_list',
+    url: 'https://example.invalid/model.safetensors'
+  };
+
+  assert.equal(shouldDisplayKnownDownloadSource.call(dialog, {}, downloadSource, state), false);
+  state.explicitSearchSources = ['local'];
+  assert.equal(shouldDisplayKnownDownloadSource.call(dialog, {}, downloadSource, state), true);
+});
+
 test('html template escapes every item in interpolated arrays', () => {
   const rendered = html`<div>${['<script>', '"quoted"', '&value']}</div>`;
 

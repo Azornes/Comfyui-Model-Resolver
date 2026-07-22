@@ -467,6 +467,9 @@ export const workflowStateMethods = {
         clone.selectedSource = clone.selectedSource || 'all';
         clone.selectedBaseModel = clone.selectedBaseModel || this.getDefaultSearchBaseModel?.() || 'auto';
         clone.results = this.mergeSearchResults({}, clone.results || {});
+        clone.explicitSearchSources = Array.isArray(clone.explicitSearchSources)
+            ? clone.explicitSearchSources
+            : [];
         clone.lastAttemptSources = Array.isArray(clone.lastAttemptSources)
             ? clone.lastAttemptSources
             : [];
