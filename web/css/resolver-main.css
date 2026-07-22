@@ -8874,7 +8874,8 @@ a.mr-image-preview-resource-name:hover {
     border-radius: 0;
 }
 
-#model-resolver-modal .mr-missing-detail-pane .mr-download-section .mr-search-button-picker>.mr-btn {
+#model-resolver-modal .mr-missing-detail-pane .mr-download-section .mr-search-button-picker>.mr-btn,
+#model-resolver-modal .mr-missing-detail-pane .mr-download-section .mr-custom-url-button-picker>.mr-btn {
     --mr-missing-search-button-height: var(--mr-missing-field-height, 38px);
     width: 82px;
     min-width: 82px;
@@ -8883,15 +8884,24 @@ a.mr-image-preview-resource-name:hover {
     padding: 0 10px;
     font-size: 12px;
     font-weight: 700;
+    justify-content: center;
+    gap: 8px;
 }
 
-#model-resolver-modal .mr-missing-detail-pane .mr-download-section .mr-search-button-picker>.mr-btn .mr-btn-icon {
+#model-resolver-modal .mr-missing-detail-pane .mr-download-section .mr-search-button-picker>.mr-btn .mr-btn-icon,
+#model-resolver-modal .mr-missing-detail-pane .mr-download-section .mr-custom-url-button-picker>.mr-btn .mr-btn-icon {
+    position: static;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 var(--mr-missing-icon-size, 13px);
     width: var(--mr-missing-icon-size, 13px);
     height: var(--mr-missing-icon-size, 13px);
     font-size: var(--mr-missing-icon-size, 13px);
 }
 
-#model-resolver-modal .mr-missing-detail-pane .mr-download-section .mr-search-button-picker>.mr-btn .mr-btn-icon svg {
+#model-resolver-modal .mr-missing-detail-pane .mr-download-section .mr-search-button-picker>.mr-btn .mr-btn-icon svg,
+#model-resolver-modal .mr-missing-detail-pane .mr-download-section .mr-custom-url-button-picker>.mr-btn .mr-btn-icon svg {
     width: var(--mr-missing-icon-size, 13px);
     height: var(--mr-missing-icon-size, 13px);
     display: block;
