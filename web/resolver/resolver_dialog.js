@@ -76,6 +76,8 @@ export class ResolverManagerDialog extends ComfyDialog {
         this.showAutoDownloadModelsStorageKey = "model_resolver_show_auto_download_models";
         this.localMatchAlternativesCollapsedStorageKey = "model_resolver_local_match_alternatives_collapsed";
         this.showResolvedModels = safeStorage.getItem(this.showResolvedModelsStorageKey) === '1';
+        this.missingModelsTypeFilter = 'all';
+        this.missingModelsTypeFilterMenuOpen = false;
         const storedShowAutoDownload = safeStorage.getItem(this.showAutoDownloadModelsStorageKey);
         this.showAutoDownloadModels = storedShowAutoDownload === null
             ? true

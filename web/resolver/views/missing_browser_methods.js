@@ -539,6 +539,11 @@ export const missingBrowserMethods = {
         const resolvedCount = Number(options.resolvedCount || 0);
         const rawMissingCount = Number(options.rawMissingCount ?? totalMissing);
         const missingCount = Number(options.missingCount ?? rawMissingCount);
+        const typeFilterOptions = Array.isArray(options.typeFilterOptions) ? options.typeFilterOptions : [];
+        const activeTypeFilter = String(options.activeTypeFilter || 'all');
+        const activeTypeOption = typeFilterOptions.find(option => option.value === activeTypeFilter);
+        const activeTypeLabel = activeTypeOption?.label || 'All';
+        const typeFilterMenuOpen = Boolean(this.missingModelsTypeFilterMenuOpen);
         const resolvedToggleCount = this.showResolvedModels ? resolvedCount : hiddenResolvedCount;
         const autoDownloadToggleCount = this.showAutoDownloadModels ? autoDownloadCount : hiddenAutoDownloadCount;
         const stats = this.getMissingModelSummaryStats(missingModels);
@@ -558,9 +563,24 @@ export const missingBrowserMethods = {
             : '';
         const listStyle = `--mr-missing-model-col:${listLayout.modelPx}px;--mr-missing-type-col:${listLayout.typePx}px;`;
         const browserStyle = `${listStyle}${splitStyle}`;
-        const titleText = this.showResolvedModels && resolvedCount > 0
+        const typeFilterTotal = Number(typeFilterOptions.find(option => option.value === 'all')?.count || totalMissing);
+        const titleText = activeTypeFilter !== 'all'
+            ? `${totalMissing} shown of ${typeFilterTotal}`
+            : this.showResolvedModels && resolvedCount > 0
             ? `${totalMissing} shown (${missingCount} missing / ${resolvedCount} resolved)`
             : `${totalMissing} missing model${totalMissing === 1 ? '' : 's'}`;
+        const typeFilterMenuOptions = typeFilterOptions.map((option) => {
+            const isActive = option.value === activeTypeFilter;
+            const labelClass = option.colorClass
+                ? `mr-missing-type-filter-option-label ${option.colorClass}`
+                : 'mr-missing-type-filter-option-label';
+            return `
+                <button type="button" class="mr-missing-type-filter-option ${isActive ? 'is-active' : ''}" data-missing-type-filter-option="${this.escapeHtml(option.value)}" role="menuitemradio" aria-checked="${isActive ? 'true' : 'false'}">
+                    <span class="${this.escapeHtml(labelClass)}">${this.escapeHtml(option.label)}</span>
+                    <strong>${Number(option.count || 0).toLocaleString()}</strong>
+                </button>
+            `;
+        }).join('');
 
         let html = `
             <div class="mr-missing-browser" style="${browserStyle}">
@@ -598,7 +618,17 @@ export const missingBrowserMethods = {
                             </span>
                             <span>#</span>
                             <span>Missing Model</span>
-                            <span>Type</span>
+                            <span class="mr-missing-type-filter-cell">
+                                <span class="mr-missing-type-filter-wrap">
+                                    <button type="button" class="mr-missing-type-filter-button ${activeTypeFilter !== 'all' ? 'is-filtered' : ''}" data-missing-type-filter-toggle aria-haspopup="menu" aria-expanded="${typeFilterMenuOpen ? 'true' : 'false'}" title="Filter by type">
+                                        <span>Type</span>
+                                        <span class="mr-missing-type-filter-chip" ${activeTypeFilter !== 'all' ? '' : 'hidden'}>${this.escapeHtml(activeTypeLabel)}</span>
+                                    </button>
+                                    <span class="mr-missing-type-filter-menu" role="menu" ${typeFilterMenuOpen ? '' : 'hidden'}>
+                                        ${typeFilterMenuOptions}
+                                    </span>
+                                </span>
+                            </span>
                             <span>Best Local Match</span>
                             <span>Match</span>
                             <span>Sources</span>
@@ -665,6 +695,46 @@ export const missingBrowserMethods = {
 
     wireMissingModelsBrowser(container, data, sortedMissingModels) {
         this.wireMissingBrowserSplitter(container);
+
+        const browser = container.querySelector('.mr-missing-browser');
+        const typeFilterToggle = browser?.querySelector('[data-missing-type-filter-toggle]');
+        const typeFilterMenu = browser?.querySelector('.mr-missing-type-filter-menu');
+        const setTypeFilterMenuOpen = (open) => {
+            this.missingModelsTypeFilterMenuOpen = Boolean(open);
+            if (typeFilterMenu) typeFilterMenu.hidden = !this.missingModelsTypeFilterMenuOpen;
+            if (typeFilterToggle) {
+                typeFilterToggle.setAttribute('aria-expanded', this.missingModelsTypeFilterMenuOpen ? 'true' : 'false');
+            }
+        };
+
+        typeFilterToggle?.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setTypeFilterMenuOpen(!this.missingModelsTypeFilterMenuOpen);
+        });
+
+        browser?.querySelectorAll('[data-missing-type-filter-option]').forEach((option) => {
+            option.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                this.missingModelsTypeFilter = option.dataset.missingTypeFilterOption || 'all';
+                this.missingModelsTypeFilterMenuOpen = false;
+                this.displayMissingModels(container, data);
+            });
+        });
+
+        browser?.addEventListener('click', (event) => {
+            if (!this.missingModelsTypeFilterMenuOpen) return;
+            if (event.target instanceof Element && event.target.closest('.mr-missing-type-filter-wrap')) return;
+            setTypeFilterMenuOpen(false);
+        });
+
+        browser?.addEventListener('keydown', (event) => {
+            if (event.key !== 'Escape' || !this.missingModelsTypeFilterMenuOpen) return;
+            event.preventDefault();
+            setTypeFilterMenuOpen(false);
+            typeFilterToggle?.focus();
+        });
 
         const refreshBtn = container.querySelector('#mr-refresh-missing-analysis');
         if (refreshBtn && refreshBtn.dataset.mlRefreshBound !== 'true') {
@@ -1838,9 +1908,40 @@ export const missingBrowserMethods = {
             count + (this.isAutoDownloadModel(missing) ? 1 : 0)
         ), 0);
         const hiddenAutoDownloadCount = this.showAutoDownloadModels ? 0 : autoDownloadCount;
-        const visibleMissingModels = this.showAutoDownloadModels
+        const typeFilterSourceModels = this.showAutoDownloadModels
             ? resolvedFilteredModels
             : resolvedFilteredModels.filter(missing => !this.isAutoDownloadModel(missing));
+        const getTypeFilterValue = missing => String(missing?.category || 'unknown').trim().toLowerCase() || 'unknown';
+        const typeFilterCounts = new Map();
+        const typeFilterLabels = new Map();
+        typeFilterSourceModels.forEach((missing) => {
+            const value = getTypeFilterValue(missing);
+            typeFilterCounts.set(value, (typeFilterCounts.get(value) || 0) + 1);
+            if (!typeFilterLabels.has(value)) {
+                typeFilterLabels.set(
+                    value,
+                    missing.category ? this.getCategoryDisplayName(missing.category) : 'Unknown'
+                );
+            }
+        });
+        let activeTypeFilter = String(this.missingModelsTypeFilter || 'all').toLowerCase();
+        if (activeTypeFilter !== 'all' && !typeFilterCounts.has(activeTypeFilter)) {
+            activeTypeFilter = 'all';
+            this.missingModelsTypeFilter = 'all';
+            this.missingModelsTypeFilterMenuOpen = false;
+        }
+        const typeFilterOptions = [
+            { value: 'all', label: 'All', count: typeFilterSourceModels.length },
+            ...Array.from(typeFilterCounts, ([value, count]) => ({
+                value,
+                label: typeFilterLabels.get(value) || value,
+                count,
+                colorClass: this.getModelTypeColorClass(value)
+            })).sort((left, right) => left.label.localeCompare(right.label))
+        ];
+        const visibleMissingModels = activeTypeFilter === 'all'
+            ? typeFilterSourceModels
+            : typeFilterSourceModels.filter(missing => getTypeFilterValue(missing) === activeTypeFilter);
         this.missingModels = visibleMissingModels;
         this.syncBatchSelectionForMissingModels(visibleMissingModels);
 
@@ -1987,6 +2088,8 @@ export const missingBrowserMethods = {
                 resolvedCount,
                 rawMissingCount,
                 missingCount: unresolvedMissingCount,
+                typeFilterOptions,
+                activeTypeFilter,
             }
         );
         this.wireMissingModelsBrowser(container, data, sortedMissingModels);

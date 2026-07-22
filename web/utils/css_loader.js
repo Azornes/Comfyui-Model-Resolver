@@ -20,6 +20,7 @@ export function loadAllStyles() {
             './css/css-variables.css',
             './css/resolver-shell.css',
             './css/resolver-main.css',
+            './resolver/missing_type_filter.css',
         ];
         
         cssFiles.forEach(file => {
