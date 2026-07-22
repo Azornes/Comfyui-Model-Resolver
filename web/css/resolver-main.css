@@ -2039,6 +2039,8 @@
 .mr-btn>svg,
 #model-resolver-modal .mr-btn>svg {
     display: block;
+    width: 14px;
+    height: 14px;
     flex: 0 0 auto;
 }
 
