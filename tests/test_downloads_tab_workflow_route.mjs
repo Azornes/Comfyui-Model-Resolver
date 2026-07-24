@@ -927,6 +927,22 @@ test('portable subfolder paths use forward slashes and join to the host path sty
     joinLocalPath.call(dialog, 'C:\\models\\loras', 'Pony/Styles'),
     'C:\\models\\loras\\Pony\\Styles'
   );
+  assert.equal(
+    joinLocalPath.call(dialog, '/', 'models\\Pony'),
+    '/models/Pony'
+  );
+  assert.equal(
+    joinLocalPath.call(dialog, '/models/literal\\name', 'Pony\\Styles'),
+    '/models/literal\\name/Pony/Styles'
+  );
+  assert.equal(
+    joinLocalPath.call(dialog, 'C:\\', 'Pony/Styles'),
+    'C:\\Pony\\Styles'
+  );
+  assert.equal(
+    joinLocalPath.call(dialog, '\\\\server\\share\\', 'Pony/Styles'),
+    '\\\\server\\share\\Pony\\Styles'
+  );
 });
 
 test('download subfolder tooltip identifies a folder taken from the workflow model path', () => {

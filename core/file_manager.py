@@ -30,9 +30,9 @@ def _normalized_absolute_path(path_value: str) -> str:
 def normalize_file_manager_path(path_value: Any) -> str:
     """Normalize a local path and recover UI-style separators when necessary.
 
-    The frontend uses backslashes as its canonical subfolder separator. On
-    POSIX, a backslash is a valid filename character, so the literal path is
-    always checked first. It is interpreted as a separator only when the
+    Legacy frontend state may contain backslashes as subfolder separators. On
+    POSIX, a backslash is also a valid filename character, so the literal path
+    is always checked first. It is interpreted as a separator only when the
     literal path does not exist and the converted path does.
     """
     if not isinstance(path_value, (str, os.PathLike)):

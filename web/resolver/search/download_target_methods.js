@@ -1004,13 +1004,19 @@ export const downloadTargetMethods = {
     },
 
     joinLocalPath(basePath = '', relativePath = '') {
-        const base = String(basePath || '').replace(/[\/\\]+$/, '');
+        const rawBase = String(basePath || '');
         const relative = String(relativePath || '').replace(/^[\/\\]+/, '');
+        const usesBackslash = /^[A-Za-z]:\\/.test(rawBase)
+            || /^\\\\/.test(rawBase)
+            || (!rawBase.includes('/') && rawBase.includes('\\'));
+        const separator = usesBackslash ? '\\' : '/';
+        const base = rawBase.replace(usesBackslash ? /[\/\\]+$/ : /\/+$/, '')
+            || (usesBackslash ? (/^\\+$/.test(rawBase) ? '\\' : '') : (/^\/+$/.test(rawBase) ? '/' : ''));
         if (!base) return this.normalizePathToForward(relative);
         if (!relative) return base;
-        const separator = base.includes('\\') ? '\\' : '/';
         const normalizedRelative = relative.replace(/[\/\\]+/g, separator);
-        return `${base}${separator}${normalizedRelative}`;
+        const joiner = base.endsWith(separator) ? '' : separator;
+        return `${base}${joiner}${normalizedRelative}`;
     },
 
     getDownloadTargetFolderContext(category = '', subfolder = '', baseDirectory = '') {

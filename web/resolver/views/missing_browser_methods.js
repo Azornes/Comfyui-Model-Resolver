@@ -1533,12 +1533,18 @@ export const missingBrowserMethods = {
             if (typeof this.joinLocalPath === 'function') {
                 return this.joinLocalPath(basePath, relativePath);
             }
-            const base = String(basePath || '').replace(/[\/\\]+$/, '');
+            const rawBase = String(basePath || '');
             const relative = String(relativePath || '').replace(/^[\/\\]+/, '');
+            const usesBackslash = /^[A-Za-z]:\\/.test(rawBase)
+                || /^\\\\/.test(rawBase)
+                || (!rawBase.includes('/') && rawBase.includes('\\'));
+            const separator = usesBackslash ? '\\' : '/';
+            const base = rawBase.replace(usesBackslash ? /[\/\\]+$/ : /\/+$/, '')
+                || (usesBackslash ? (/^\\+$/.test(rawBase) ? '\\' : '') : (/^\/+$/.test(rawBase) ? '/' : ''));
             if (!base) return relative;
             if (!relative) return base;
-            const separator = base.includes('\\') ? '\\' : '/';
-            return `${base}${separator}${relative.replace(/[\/\\]+/g, separator)}`;
+            const joiner = base.endsWith(separator) ? '' : separator;
+            return `${base}${joiner}${relative.replace(/[\/\\]+/g, separator)}`;
         };
         const buildLocalFolderContext = (folderPath = '', name = 'Folder', category = '') => {
             const path = String(folderPath || '').trim();
