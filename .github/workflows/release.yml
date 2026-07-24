@@ -1,10 +1,13 @@
+# Reusable workflow
+#
+# The release name and version are read from pyproject.toml.
+# No project-specific repository variables or additional secrets are required.
+
 name: Release
 
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
     paths:
       - "pyproject.toml"
 
@@ -18,6 +21,7 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
+    if: github.ref_name == github.event.repository.default_branch
 
     steps:
       - name: Checkout repo
@@ -35,14 +39,21 @@ jobs:
           with open("pyproject.toml", "rb") as handle:
               data = tomllib.load(handle)
 
-          project = data["project"]
-          version = str(project["version"]).strip()
-          name = str(project["name"]).strip()
+          project = data.get("project", {})
+          version = str(project.get("version", "")).strip()
+          name = str(project.get("name", "")).strip()
+          display_name = str(
+              data.get("tool", {}).get("comfy", {}).get("DisplayName") or name
+          ).strip()
+
+          if not name:
+              raise SystemExit("[project].name is missing in pyproject.toml")
 
           if not re.fullmatch(r"\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", version):
               raise SystemExit(f"Invalid semantic version in pyproject.toml: {version}")
 
           print(f"project_name={name}")
+          print(f"display_name={display_name}")
           print(f"version={version}")
           print(f"tag=v{version}")
           PY
@@ -86,9 +97,9 @@ jobs:
 
       - name: Create GitHub Release
         if: steps.tag_check.outputs.exists != 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.metadata.outputs.tag }}
-          name: ComfyUI Model Resolver ${{ steps.metadata.outputs.tag }}
+          name: ${{ steps.metadata.outputs.display_name }} ${{ steps.metadata.outputs.tag }}
           body: ${{ steps.notes.outputs.body }}
           generate_release_notes: true

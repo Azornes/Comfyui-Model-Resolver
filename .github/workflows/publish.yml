@@ -1,10 +1,16 @@
+# Reusable workflow
+#
+# Project metadata is read by the publishing action from pyproject.toml.
+# No project-specific repository variables need to be configured manually.
+#
+# Required repository secret:
+#   REGISTRY_ACCESS_TOKEN   Comfy Registry publishing API key
+
 name: Publish to Comfy Registry
 
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
     paths:
       - "pyproject.toml"
 
@@ -19,12 +25,12 @@ jobs:
   publish-node:
     name: Publish Custom Node to registry
     runs-on: ubuntu-latest
-    if: ${{ github.repository == 'Azornes/Comfyui-Model-Resolver' }}
+    if: github.ref_name == github.event.repository.default_branch
     steps:
       - name: Check out code
         uses: actions/checkout@v7
 
-      - name: Check registry token
+      - name: Validate publishing configuration
         env:
           REGISTRY_ACCESS_TOKEN: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
         run: |
@@ -33,7 +39,38 @@ jobs:
             exit 1
           fi
 
+          python - <<'PY'
+          from pathlib import Path
+          import tomllib
+
+          path = Path("pyproject.toml")
+          if not path.is_file():
+              raise SystemExit("pyproject.toml was not found")
+
+          with path.open("rb") as file:
+              config = tomllib.load(file)
+
+          required_fields = {
+              "[project].name": config.get("project", {}).get("name"),
+              "[project].version": config.get("project", {}).get("version"),
+              "[tool.comfy].PublisherId": (
+                  config.get("tool", {}).get("comfy", {}).get("PublisherId")
+              ),
+          }
+          missing = [
+              field
+              for field, value in required_fields.items()
+              if not str(value or "").strip()
+          ]
+
+          if missing:
+              raise SystemExit(
+                  "Missing required pyproject.toml fields: " + ", ".join(missing)
+              )
+          PY
+
       - name: Publish Custom Node
         uses: Comfy-Org/publish-node-action@main
         with:
           personal_access_token: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
+          skip_checkout: true

@@ -6,7 +6,11 @@
 #   COMFY_DOWNLOADS_GIST_ID
 #
 # Required repository secret:
-#   SECRET_TOKEN            GitHub token with Gist and repository Actions variables write access
+#   SECRET_TOKEN   Fine-grained personal access token with access to this repository:
+#                  Repository permissions:
+#                    Variables: Read and write
+#                  Account permissions:
+#                    Gists: Read and write
 
 name: ComfyUI Top Downloads Badge
 
@@ -18,11 +22,14 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: badge-updates-${{ github.repository }}
+  cancel-in-progress: false
+
 env:
   COMFY_DOWNLOADS_GIST_ID: ${{ vars.COMFY_DOWNLOADS_GIST_ID }}
   BADGE_DOC: badges/DOWNLOADS.md
   DATA_FILE: comfyui_downloads.json
-  GH_TOKEN: ${{ secrets.SECRET_TOKEN }}
 
 jobs:
   build:
@@ -33,9 +40,11 @@ jobs:
 
       - name: Read project metadata and validate authentication
         id: project
+        env:
+          GH_TOKEN: ${{ secrets.SECRET_TOKEN }}
         run: |
           if [ -z "$GH_TOKEN" ]; then
-            echo "::error title=Missing SECRET_TOKEN::Add a GitHub token with Gist and repository Actions variables write access."
+            echo "::error title=Missing SECRET_TOKEN::Add a fine-grained PAT with Variables: Read and write and Gists: Read and write."
             exit 1
           fi
 
@@ -149,9 +158,14 @@ jobs:
 
       - name: Create or reuse downloads Gist
         id: gist
+        env:
+          GH_TOKEN: ${{ secrets.SECRET_TOKEN }}
         run: |
           gist_id="$COMFY_DOWNLOADS_GIST_ID"
+          expected_description="${GITHUB_REPOSITORY} ComfyUI download statistics"
+          authenticated_user=$(gh api user --jq '.login')
           save_gist_id=false
+          valid_gist=false
 
           if [ -z "$gist_id" ]; then
             gist_id=$(python - <<'PY'
@@ -182,6 +196,36 @@ jobs:
           fi
 
           if [ -n "$gist_id" ] && gh gist view "$gist_id" >/dev/null 2>&1; then
+            gist_filename=$(gh api "gists/$gist_id" --jq '
+              .files
+              | keys
+              | if index("comfyui_downloads.json") then
+                  "comfyui_downloads.json"
+                else
+                  (map(select(endswith(".json"))) | first // "comfyui_downloads.json")
+                end
+            ')
+            gist_owner=$(gh api "gists/$gist_id" --jq '.owner.login')
+            gist_description=$(gh api "gists/$gist_id" --jq '.description // ""')
+            gist_node_slug=$(
+              gh api "gists/$gist_id" |
+                jq -r --arg filename "$gist_filename" '
+                  .files[$filename].content // ""
+                  | fromjson?
+                  | ((.id // empty) | ascii_downcase)
+                '
+            )
+
+            if [ "$gist_owner" = "$authenticated_user" ] &&
+              { [ "$gist_description" = "$expected_description" ] ||
+                [ "$gist_node_slug" = "$COMFY_NODE_SLUG" ]; }; then
+              valid_gist=true
+            else
+              echo "The detected Gist belongs to another repository, token owner, or ComfyUI node."
+            fi
+          fi
+
+          if [ "$valid_gist" = true ]; then
             echo "Using existing Gist: $gist_id"
           else
             if [ -n "$gist_id" ]; then
@@ -191,7 +235,7 @@ jobs:
             fi
 
             gist_url=$(gh gist create "$DATA_FILE" \
-              --desc "ComfyUI downloads for $COMFY_NODE_DISPLAY_NAME")
+              --desc "$expected_description")
             gist_id="${gist_url##*/}"
             save_gist_id=true
           fi
@@ -214,7 +258,7 @@ jobs:
                 (map(select(endswith(".json"))) | first // "comfyui_downloads.json")
               end
           ')
-          gist_owner=$(gh api user --jq '.login')
+          gist_owner=$(gh api "gists/$gist_id" --jq '.owner.login')
           echo "id=$gist_id" >> "$GITHUB_OUTPUT"
           echo "filename=$gist_filename" >> "$GITHUB_OUTPUT"
           echo "owner=$gist_owner" >> "$GITHUB_OUTPUT"
@@ -291,6 +335,7 @@ jobs:
 
       - name: Update Gist
         env:
+          GH_TOKEN: ${{ secrets.SECRET_TOKEN }}
           GIST_ID: ${{ steps.gist.outputs.id }}
           GIST_FILENAME: ${{ steps.gist.outputs.filename }}
         run: |
@@ -301,7 +346,7 @@ jobs:
 
           content=$(jq -c . "$DATA_FILE")
           jq -n \
-            --arg description "ComfyUI downloads for $COMFY_NODE_DISPLAY_NAME" \
+            --arg description "${GITHUB_REPOSITORY} ComfyUI download statistics" \
             --arg filename "$GIST_FILENAME" \
             --arg content "$content" \
             '{
