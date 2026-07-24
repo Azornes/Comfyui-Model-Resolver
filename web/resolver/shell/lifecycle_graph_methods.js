@@ -157,9 +157,10 @@ export const lifecycleGraphMethods = {
                 if (shouldRenderMissingModels()) {
                     await this.ensureDownloadDirectoriesLoaded();
                     this.displayMissingModels(this.contentElement, this.cachedAnalysisData);
+                    this.applyPendingWorkflowModelSelection?.(this.cachedAnalysisData);
                     this.reconnectActiveDownloads();
                 }
-                return;
+                return this.cachedAnalysisData;
             }
 
             if (!this.workflowHasNodes(workflow)) {
@@ -179,8 +180,9 @@ export const lifecycleGraphMethods = {
                 if (shouldRenderMissingModels()) {
                     await this.ensureDownloadDirectoriesLoaded();
                     this.displayMissingModels(this.contentElement, data);
+                    this.applyPendingWorkflowModelSelection?.(data);
                 }
-                return;
+                return data;
             }
 
             const analysisId = `an-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -217,10 +219,12 @@ export const lifecycleGraphMethods = {
             if (shouldRenderMissingModels()) {
                 await this.ensureDownloadDirectoriesLoaded();
                 this.displayMissingModels(this.contentElement, data);
+                this.applyPendingWorkflowModelSelection?.(data);
 
                 // Reconnect any active downloads to their new progress divs
                 this.reconnectActiveDownloads();
             }
+            return data;
 
         } catch (error) {
             if (!loadToken || this._workflowDataLoadToken === loadToken) {
@@ -232,6 +236,7 @@ export const lifecycleGraphMethods = {
             } else if (!loadToken && this.activeTab === 'missing' && this.contentElement) {
                 this.contentElement.innerHTML = `<p class="mr-error-text">Error: ${error.message}</p>`;
             }
+            return null;
         }
     },
 

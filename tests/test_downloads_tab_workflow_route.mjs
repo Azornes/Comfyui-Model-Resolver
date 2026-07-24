@@ -237,6 +237,62 @@ test('node context integration preserves existing menu hooks and refreshes after
   assert.deepEqual(calls, ['original-menu', 'original-widget:ckpt_name', 'refresh']);
 });
 
+test('queued workflow model selection survives missing data and completes after analysis', () => {
+  const queueWorkflowModelReferenceSelection = eval(`(${extractMethod(missingBrowserMethodsSource, 'queueWorkflowModelReferenceSelection')})`);
+  const applyPendingWorkflowModelSelection = eval(`(${extractMethod(missingBrowserMethodsSource, 'applyPendingWorkflowModelSelection')})`);
+  const selectedModel = {
+    node_id: 163,
+    widget_index: 1,
+    original_path: 'FLUX/ae.safetensors',
+  };
+  let analysisReady = false;
+  const dialog = {
+    pendingWorkflowModelSelection: null,
+    queueWorkflowModelReferenceSelection,
+    selectWorkflowModelReference() {
+      return analysisReady ? selectedModel : null;
+    },
+  };
+
+  const request = queueWorkflowModelReferenceSelection.call(dialog, selectedModel);
+
+  assert.equal(request.status, 'pending');
+  assert.equal(applyPendingWorkflowModelSelection.call(dialog, {}), null);
+  assert.equal(dialog.pendingWorkflowModelSelection, request);
+
+  analysisReady = true;
+  assert.equal(applyPendingWorkflowModelSelection.call(dialog, {}), selectedModel);
+  assert.equal(request.status, 'selected');
+  assert.equal(request.selected, selectedModel);
+  assert.equal(dialog.pendingWorkflowModelSelection, null);
+});
+
+test('a newer workflow model selection supersedes the previous pending request', () => {
+  const queueWorkflowModelReferenceSelection = eval(`(${extractMethod(missingBrowserMethodsSource, 'queueWorkflowModelReferenceSelection')})`);
+  const dialog = { pendingWorkflowModelSelection: null };
+
+  const first = queueWorkflowModelReferenceSelection.call(dialog, { node_id: 1 });
+  const second = queueWorkflowModelReferenceSelection.call(dialog, { node_id: 2 });
+
+  assert.equal(first.status, 'superseded');
+  assert.equal(second.status, 'pending');
+  assert.equal(dialog.pendingWorkflowModelSelection, second);
+});
+
+test('workflow model selection wait resolves only after the queued request completes', async () => {
+  const waitForWorkflowModelSelection = eval(`(${extractMethod(modelResolverSource, 'waitForWorkflowModelSelection')})`);
+  const request = { status: 'pending' };
+  const resolver = { dialog: { pendingWorkflowModelSelection: request } };
+
+  setTimeout(() => {
+    request.status = 'selected';
+  }, 20);
+
+  const completed = await waitForWorkflowModelSelection.call(resolver, request, 500);
+  assert.equal(completed, request);
+  assert.equal(completed.status, 'selected');
+});
+
 test('Local Database source ignores installed local model matches before search', () => {
   const hasMissingSourceSearchAttempt = eval(`(${extractMethod(missingBrowserMethodsSource, 'hasMissingSourceSearchAttempt')})`);
   const getMissingSourceResultStatus = eval(`(${extractMethod(missingBrowserMethodsSource, 'getMissingSourceResultStatus')})`);

@@ -483,9 +483,33 @@ export class ModelResolver {
         });
     }
 
+    waitForWorkflowModelSelection(request, timeoutMs = 120000) {
+        const startedAt = Date.now();
+        return new Promise((resolve) => {
+            const check = () => {
+                if (!request || request.status !== 'pending') {
+                    resolve(request || null);
+                    return;
+                }
+                if (Date.now() - startedAt >= timeoutMs) {
+                    request.status = 'timeout';
+                    if (this.dialog?.pendingWorkflowModelSelection === request) {
+                        this.dialog.pendingWorkflowModelSelection = null;
+                    }
+                    resolve(request);
+                    return;
+                }
+                setTimeout(check, 50);
+            };
+            check();
+        });
+    }
+
     async showResolvedNodeModelInResolver(reference) {
         if (!this.dialog) return;
 
+        const wasVisible = Boolean(this.dialog.isVisible?.());
+        const wasOnMissingTab = this.dialog.activeTab === 'missing';
         const { signature } = this.getNodeContextWorkflowState();
         const analysisData = this.getCurrentNodeContextAnalysis(signature);
         if (signature && analysisData) {
@@ -493,11 +517,11 @@ export class ModelResolver {
             this.dialog.cachedAnalysisData = analysisData;
         }
 
-        this.dialog.activeTab = 'missing';
         this.dialog.persistActiveTab?.('missing');
         this.dialog.showResolvedModels = true;
         this.dialog.missingModelsTypeFilter = 'all';
         this.dialog.missingModelsTypeFilterMenuOpen = false;
+        const selectionRequest = this.dialog.queueWorkflowModelReferenceSelection?.(reference);
 
         try {
             localStorage.setItem(this.dialog.showResolvedModelsStorageKey, '1');
@@ -505,30 +529,30 @@ export class ModelResolver {
             log.debug('Model Resolver: failed to persist resolved-model visibility.', error);
         }
 
-        if (!this.dialog.isVisible?.()) {
+        if (!wasVisible) {
+            this.dialog.activeTab = 'missing';
             this.activateResolverButton();
         }
         if (!await this.waitForResolverDialogReady()) {
+            if (selectionRequest?.status === 'pending') {
+                selectionRequest.status = 'open-failed';
+            }
+            if (this.dialog.pendingWorkflowModelSelection === selectionRequest) {
+                this.dialog.pendingWorkflowModelSelection = null;
+            }
             showNotification('Could not open Model Resolver.', 'error');
             return;
         }
 
-        this.dialog.switchTab?.('missing', { force: true });
-        await this.dialog.loadWorkflowData?.();
-
-        let selected = this.dialog.selectWorkflowModelReference?.(
-            reference,
-            this.dialog.cachedAnalysisData
-        );
-        if (!selected) {
-            await this.dialog.loadWorkflowData?.(null, { force: true, forceRescan: false });
-            selected = this.dialog.selectWorkflowModelReference?.(
-                reference,
-                this.dialog.cachedAnalysisData
-            );
+        if (wasVisible && !wasOnMissingTab) {
+            await this.dialog.switchTab?.('missing', { force: true });
+        } else if (wasVisible) {
+            await this.dialog.loadWorkflowData?.();
         }
-        if (!selected) {
-            showNotification('The selected model is no longer present in the current workflow.', 'warning');
+
+        const completedRequest = await this.waitForWorkflowModelSelection(selectionRequest);
+        if (completedRequest?.status === 'timeout') {
+            showNotification('Could not select the model after workflow analysis completed.', 'warning');
         }
     }
 

@@ -508,6 +508,36 @@ export const missingBrowserMethods = {
         };
     },
 
+    queueWorkflowModelReferenceSelection(reference = {}) {
+        if (this.pendingWorkflowModelSelection?.status === 'pending') {
+            this.pendingWorkflowModelSelection.status = 'superseded';
+        }
+
+        const request = {
+            id: `workflow-model-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            reference: { ...reference },
+            status: 'pending',
+            selected: null
+        };
+        this.pendingWorkflowModelSelection = request;
+        return request;
+    },
+
+    applyPendingWorkflowModelSelection(data = this.cachedAnalysisData || {}) {
+        const request = this.pendingWorkflowModelSelection;
+        if (!request || request.status !== 'pending') return null;
+
+        const selected = this.selectWorkflowModelReference(request.reference, data);
+        if (!selected) return null;
+
+        request.status = 'selected';
+        request.selected = selected;
+        if (this.pendingWorkflowModelSelection === request) {
+            this.pendingWorkflowModelSelection = null;
+        }
+        return selected;
+    },
+
     selectWorkflowModelReference(reference = {}, data = this.cachedAnalysisData || {}) {
         const selected = this.getResolvedWorkflowModels(data)
             .find(model => matchesWorkflowModelReference(model, reference));

@@ -54,6 +54,7 @@ export class ResolverManagerDialog extends ComfyDialog {
         this.cachedLoadedModelsData = null;
         this.cachedLoadedModelsSignature = null;
         this.selectedMissingModelKey = null;
+        this.pendingWorkflowModelSelection = null;
         this.batchSelectedMissingKeys = new Set();
         this.lastBatchSelectedMissingKey = null;
         this.activeFooterMenu = null;

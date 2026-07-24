@@ -59,13 +59,13 @@ export const tabsLoadedMethods = {
                 this.contentElement.style.overflowY = 'auto';
             }
             this.setMissingFooterControlsVisible(true);
-            this.loadWorkflowData();
+            return this.loadWorkflowData();
         } else if (this.activeTab === 'loaded') {
             if (this.contentElement) {
                 this.contentElement.style.overflowY = 'auto';
             }
             this.setMissingFooterControlsVisible(false);
-            this.loadLoadedModels();
+            return this.loadLoadedModels();
         } else {
             if (this.contentElement) {
                 this.contentElement.style.overflowY = 'hidden';
@@ -73,6 +73,7 @@ export const tabsLoadedMethods = {
             this.setMissingFooterControlsVisible(false);
             this.displayOptions();
         }
+        return null;
     },
 
     async loadLoadedModels(workflow = null, { force = false } = {}) {
