@@ -31,7 +31,7 @@ https://github.com/user-attachments/assets/f5d83ce9-3ea8-4532-9b96-4ca4cd6cfb75
 * **🔄 In-Place Workflow Updater**: Safely replaces model names and paths in your current workflow (supporting nested subgraphs and custom nodes like *rgthree's Power Lora Loader* or *LoraManager*).
 * **📥 Background Download Manager**: Downloads models asynchronously directly to the correct directories (`checkpoints`, `loras`, `vae`, etc.) with speed tracking, file size display, progress bars, and cancellation/pause support.
 * **🕵️ Loaded Models Inspector**: A dedicated tab displaying all models used in the active workflow, including their strength, physical paths, and disk availability status.
-* **📂 Open Containing Folder**: Quickly opens Windows Explorer and selects/highlights the model file directly from the interface.
+* **📂 Open Containing Folder**: Opens the host system's file manager and selects/highlights the model file where the platform supports it.
 * **🔗 Custom URL Downloads**: Directly paste any custom URL link to download files into target folders with customized names.
 
 ---
@@ -140,7 +140,7 @@ Configure credentials and API keys in the Settings panel to authenticate gated d
 ## 🕵️ Loaded Models Inspector & Local Hashing
 
 * **Loaded Models Tab**: Check what models are loaded in the current active python session. It lists paths, model categories, byte sizes, physical existence checks, and confidence levels.
-* **Open Containing Folder**: Select a model in the Loaded Models tab and click the folder icon to open Windows Explorer with the target file highlighted.
+* **Open Containing Folder**: Select a model in the Loaded Models tab and click the folder icon to reveal it in the host system's file manager.
 * **Local Hashing (`sha256`)**:
   * You can calculate the exact `sha256` hash of any local model file in the background.
   * Hashing status is updated in real-time, allowing you to use exact hash queries on CivitAI/CivArchive to retrieve model metadata and link files.

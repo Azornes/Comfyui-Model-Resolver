@@ -25,6 +25,13 @@ if not __package__ or __package__ == "":
         sys.modules[package_name] = current_module
         if not hasattr(current_module, "__path__"):
             current_module.__path__ = [this_dir]
+from .core.file_manager import (
+    FileManagerError,
+    FileManagerUnavailableError,
+    UnsupportedFileManagerPlatformError,
+    normalize_file_manager_path,
+    open_in_file_manager,
+)
 from .core.log_system import LogLevel, create_module_logger
 from .core.log_system import logger as backend_log_controller
 from .core.log_system.config import LOG_LEVEL as BACKEND_DEFAULT_LOG_LEVEL
@@ -1081,40 +1088,71 @@ class ModelResolverExtension:
             @routes.post("/model_resolver/open-containing-folder")
             @json_api_endpoint("open-containing-folder")
             async def open_containing_folder(request):
-                """Open Explorer at the folder containing the selected model."""
-                import os
-                import subprocess
-
-                data = await request.json()
+                """Reveal a file or open a directory in the host file manager."""
+                try:
+                    data = await request.json()
+                except Exception as exc:
+                    return web.json_response(
+                        {"success": False, "error": f"invalid JSON body: {exc}"},
+                        status=400,
+                    )
+                if not isinstance(data, dict):
+                    return web.json_response(
+                        {"success": False, "error": "JSON body must be an object"},
+                        status=400,
+                    )
                 target_path = data.get("path", "")
 
-                if not target_path:
+                try:
+                    normalized_path = normalize_file_manager_path(target_path)
+                except ValueError as exc:
                     return web.json_response(
-                        {"error": "path is required"}, status=400
+                        {"success": False, "error": str(exc)}, status=400
                     )
 
-                normalized_path = os.path.realpath(
-                    os.path.abspath(os.path.normpath(target_path))
-                )
                 if not os.path.exists(normalized_path):
                     return web.json_response(
-                        {"error": "path does not exist"}, status=404
+                        {"success": False, "error": "path does not exist"}, status=404
                     )
                 if not is_path_in_configured_model_roots(normalized_path):
                     return web.json_response(
-                        {"error": "path is outside configured model directories"},
+                        {
+                            "success": False,
+                            "error": "path is outside configured model directories",
+                        },
                         status=403,
                     )
 
-                if os.path.isfile(normalized_path):
-                    subprocess.Popen(
-                        ["explorer.exe", "/select,", normalized_path],
-                        shell=False,
+                try:
+                    result = await asyncio.to_thread(
+                        open_in_file_manager, normalized_path
                     )
-                else:
-                    os.startfile(normalized_path)
+                except FileNotFoundError:
+                    return web.json_response(
+                        {"success": False, "error": "path no longer exists"},
+                        status=404,
+                    )
+                except UnsupportedFileManagerPlatformError as exc:
+                    return web.json_response(
+                        {"success": False, "error": str(exc)}, status=501
+                    )
+                except FileManagerUnavailableError as exc:
+                    return web.json_response(
+                        {
+                            "success": False,
+                            "error": (
+                                f"{exc} The ComfyUI host may be running without "
+                                "a graphical desktop session."
+                            ),
+                        },
+                        status=503,
+                    )
+                except FileManagerError as exc:
+                    return web.json_response(
+                        {"success": False, "error": str(exc)}, status=500
+                    )
 
-                return web.json_response({"success": True})
+                return web.json_response({"success": True, **result})
 
             # cleanup_hash_progress, update_hash_progress, is_hash_progress_cancelled, and mark_hash_progress_cancelled removed
 
