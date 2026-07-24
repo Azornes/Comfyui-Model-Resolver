@@ -20,6 +20,10 @@
   <strong>⚙️ <a href="#%EF%B8%8F-configuration--settings">Configuration</a></strong>
 </p>
 
+https://github.com/user-attachments/assets/f5d83ce9-3ea8-4532-9b96-4ca4cd6cfb75
+
+</p>
+
 ---
 
 ## 🚀 Key Features
