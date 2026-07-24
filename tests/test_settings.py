@@ -1,12 +1,15 @@
 import unittest
+
 from core.settings import (
-    bool_setting,
-    normalize_settings,
-    sanitize_folder_name,
-    normalize_relative_subfolder,
-    normalize_download_path_template,
     _resolve_base_model_mapping,
+    bool_setting,
+    normalize_download_path_template,
+    normalize_relative_subfolder,
+    normalize_settings,
+    resolve_download_subfolder,
+    sanitize_folder_name,
 )
+
 
 class SettingsTests(unittest.TestCase):
 
@@ -41,6 +44,12 @@ class SettingsTests(unittest.TestCase):
     def test_normalize_relative_subfolder(self):
         self.assertEqual(normalize_relative_subfolder("sub\\dir/name"), "sub/dir/name")
         self.assertEqual(normalize_relative_subfolder(""), "")
+
+    def test_requested_download_subfolder_uses_forward_slashes(self):
+        self.assertEqual(
+            resolve_download_subfolder("loras", r"Pony\Styles"),
+            "Pony/Styles",
+        )
 
     def test_normalize_download_path_template(self):
         self.assertEqual(normalize_download_path_template("some/{category}/template/"), "some/{category}/template")

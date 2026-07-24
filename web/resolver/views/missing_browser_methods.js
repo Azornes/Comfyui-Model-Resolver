@@ -1437,11 +1437,11 @@ export const missingBrowserMethods = {
 
         const getAllModels = () => Array.isArray(this.allModels) ? this.allModels : [];
         let localModelLoadToken = 0;
-        const normalizeModelPath = (value = '') => this.normalizePathToBackward(value)
-            .split('\\')
+        const normalizeModelPath = (value = '') => this.normalizePathToForward(value)
+            .split('/')
             .map(part => part.trim())
             .filter(Boolean)
-            .join('\\');
+            .join('/');
         const getModelCategory = (model = {}) => this.normalizeDownloadCategory(model.category || 'unknown') || 'unknown';
         const getDownloadCategoryElement = () => container.querySelector(`#download-category-${missing.node_id}-${missing.widget_index}`)
             || this.contentElement?.querySelector(`#download-category-${missing.node_id}-${missing.widget_index}`);
@@ -1537,7 +1537,8 @@ export const missingBrowserMethods = {
             const relative = String(relativePath || '').replace(/^[\/\\]+/, '');
             if (!base) return relative;
             if (!relative) return base;
-            return `${base}${base.includes('\\') ? '\\' : '/'}${relative}`;
+            const separator = base.includes('\\') ? '\\' : '/';
+            return `${base}${separator}${relative.replace(/[\/\\]+/g, separator)}`;
         };
         const buildLocalFolderContext = (folderPath = '', name = 'Folder', category = '') => {
             const path = String(folderPath || '').trim();
@@ -1581,9 +1582,9 @@ export const missingBrowserMethods = {
             const category = getModelCategory(model);
             const categoryLabel = this.getCategoryDisplayName(category);
             const relativePath = normalizeModelPath(model.relative_path || model.filename || '');
-            const pathParts = relativePath.split('\\').filter(Boolean);
+            const pathParts = relativePath.split('/').filter(Boolean);
             const filename = pathParts.pop() || model.filename || relativePath || 'model';
-            const folderPath = pathParts.join('\\');
+            const folderPath = pathParts.join('/');
             const baseDirectory = String(model.base_directory || '');
             const fullPath = String(model.path || '');
             return {
@@ -1634,11 +1635,11 @@ export const missingBrowserMethods = {
         const buildModelTree = (entries = []) => {
             const root = { folders: new Map(), models: [] };
             entries.forEach(entry => {
-                const folderParts = entry.folderPath.split('\\').filter(Boolean);
+                const folderParts = entry.folderPath.split('/').filter(Boolean);
                 let current = root;
                 let currentPath = '';
                 folderParts.forEach(part => {
-                    currentPath = currentPath ? `${currentPath}\\${part}` : part;
+                    currentPath = currentPath ? `${currentPath}/${part}` : part;
                     if (!current.folders.has(part)) {
                         current.folders.set(part, {
                             name: part,

@@ -868,8 +868,8 @@ test('download subfolder tooltip explains automatic suggestion source', () => {
     getSavedDownloadSubfolderSuggestion,
     getCurrentDownloadSubfolderSuggestion,
     normalizeDownloadSubfolderPath,
-    normalizePathToBackward(value) {
-      return String(value || '').replace(/[\/]+/g, '\\');
+    normalizePathToForward(value) {
+      return String(value || '').replace(/\\/g, '/');
     },
     normalizeDownloadCategory(value) {
       return String(value || 'checkpoints');
@@ -902,8 +902,31 @@ test('download subfolder tooltip explains automatic suggestion source', () => {
 
   const tooltip = getDownloadSubfolderTooltip.call(dialog, { node_id: 1 }, 'loras', 'SDXL/Style');
 
-  assert.match(tooltip, /Suggested subfolder: SDXL\\Style/);
+  assert.match(tooltip, /Suggested subfolder: SDXL\/Style/);
   assert.match(tooltip, /identified as SDXL and tagged/);
+});
+
+test('portable subfolder paths use forward slashes and join to the host path style', () => {
+  const normalizeDownloadSubfolderPath = eval(`(${extractMethod(downloadTargetMethodsSource, 'normalizeDownloadSubfolderPath')})`);
+  const joinLocalPath = eval(`(${extractMethod(downloadTargetMethodsSource, 'joinLocalPath')})`);
+  const dialog = {
+    normalizeDownloadSubfolderPath,
+    joinLocalPath,
+    normalizePathToForward(value) {
+      return String(value || '').trim().replace(/\\/g, '/');
+    }
+  };
+
+  assert.equal(normalizeDownloadSubfolderPath.call(dialog, 'Pony\\Styles'), 'Pony/Styles');
+  assert.equal(normalizeDownloadSubfolderPath.call(dialog, 'Pony/Styles'), 'Pony/Styles');
+  assert.equal(
+    joinLocalPath.call(dialog, '/models/loras', 'Pony\\Styles'),
+    '/models/loras/Pony/Styles'
+  );
+  assert.equal(
+    joinLocalPath.call(dialog, 'C:\\models\\loras', 'Pony/Styles'),
+    'C:\\models\\loras\\Pony\\Styles'
+  );
 });
 
 test('download subfolder tooltip identifies a folder taken from the workflow model path', () => {
@@ -945,8 +968,8 @@ test('download subfolder tooltip explains Suggest button choice', () => {
     getSavedDownloadSubfolderSuggestion,
     getCurrentDownloadSubfolderSuggestion,
     normalizeDownloadSubfolderPath,
-    normalizePathToBackward(value) {
-      return String(value || '').replace(/[\/]+/g, '\\');
+    normalizePathToForward(value) {
+      return String(value || '').replace(/\\/g, '/');
     },
     normalizeDownloadCategory(value) {
       return String(value || 'checkpoints');
@@ -967,7 +990,7 @@ test('download subfolder tooltip explains Suggest button choice', () => {
 
   const tooltip = getDownloadSubfolderTooltip.call(dialog, { node_id: 1 }, 'loras', 'Pony\\Styles', { saved });
 
-  assert.match(tooltip, /Selected with Suggest: Pony\\Styles/);
+  assert.match(tooltip, /Selected with Suggest: Pony\/Styles/);
   assert.match(tooltip, /saved folder rule.*\{base_model\}\/\{first_tag\}/);
 });
 
@@ -1025,6 +1048,9 @@ test('post-search auto-fill can refresh earlier suggested subfolder', async () =
     normalizeDownloadCategory(value) {
       return String(value || '');
     },
+    normalizeDownloadSubfolderPath(value) {
+      return String(value || '').replace(/\\/g, '/');
+    },
     getDropdownValue(element) {
       return element.dataset.value;
     },
@@ -1062,7 +1088,7 @@ test('post-search auto-fill can refresh earlier suggested subfolder', async () =
     preferTemplate: true
   });
 
-  assert.equal(subfolderEl.value, 'SDXL\\style');
+  assert.equal(subfolderEl.value, 'SDXL/style');
   assert.equal(saves.at(-1).subfolderSuggestionSource, 'template');
 });
 

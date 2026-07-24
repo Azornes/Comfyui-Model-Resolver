@@ -102,6 +102,33 @@ class PathSecurityTests(unittest.TestCase):
                 mock_download_file.call_args.args[1],
             )
 
+    def test_download_subfolder_accepts_both_separator_styles(self):
+        with tempfile.TemporaryDirectory() as model_root, patch(
+            "core.downloader.get_download_directory", return_value=model_root
+        ), patch("core.downloader.download_file") as mock_download_file:
+            expected_path = os.path.join(
+                model_root,
+                "Pony",
+                "Styles",
+                "model.safetensors",
+            )
+            mock_download_file.return_value = {
+                "success": True,
+                "download_id": "portable-subfolder",
+                "path": expected_path,
+            }
+
+            result = download_model(
+                "https://example.com/model.safetensors",
+                "model.safetensors",
+                "loras",
+                download_id="portable-subfolder",
+                subfolder=r"Pony\Styles",
+            )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(expected_path, mock_download_file.call_args.args[1])
+
     def test_non_model_executable_download_is_rejected(self):
         self.assertFalse(is_allowed_model_download_filename("payload.exe"))
         self.assertTrue(is_allowed_model_download_filename("model.safetensors"))

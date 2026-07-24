@@ -380,7 +380,7 @@ def resolve_download_subfolder(
 ) -> str:
     requested = str(requested_subfolder or "").strip()
     if requested:
-        return requested
+        return normalize_relative_subfolder(requested)
 
     active_settings = normalize_settings(settings if settings is not None else load_settings())
     if active_settings.get("download_path_mode") != "template":

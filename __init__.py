@@ -363,6 +363,7 @@ class ModelResolverExtension:
                     is_path_within,
                     prefer_local_base_directory,
                     read_json_safe,
+                    split_path_segments,
                     write_json_atomic,
                 )
                 from .core.resolver import (
@@ -4596,7 +4597,7 @@ class ModelResolverExtension:
                         )
                         if target_directory and subfolder:
                             target_directory = _download_os.path.join(
-                                target_directory, subfolder
+                                target_directory, *split_path_segments(subfolder)
                             )
                         if target_directory:
                             target_path = _download_os.path.join(
@@ -4906,9 +4907,7 @@ class ModelResolverExtension:
                     )
 
                     def add_subfolder(rel_path, base_dir=""):
-                        rel_path = os.path.normpath(str(rel_path or "")).replace(
-                            os.sep, "\\"
-                        )
+                        rel_path = "/".join(split_path_segments(rel_path))
                         if not rel_path or rel_path == ".":
                             return
                         base_dir = os.path.abspath(base_dir) if base_dir else ""
@@ -4978,12 +4977,12 @@ class ModelResolverExtension:
                                 )
                             except Exception:
                                 base_dir = ""
-                            parts = [p for p in rel_path.replace("/", "\\").split("\\") if p]
+                            parts = split_path_segments(rel_path)
                             if len(parts) <= 1:
                                 continue
                             current = ""
                             for part in parts[:-1]:
-                                current = f"{current}\\{part}" if current else part
+                                current = f"{current}/{part}" if current else part
                                 add_subfolder(current, base_dir)
 
                     for base_dir in base_dirs:
