@@ -325,10 +325,10 @@ def get_widget_name_candidates(node: Dict[str, Any], widget_index: int) -> List[
     widget_inputs = _get_widget_inputs(node)
     if widget_index < len(widget_inputs):
         candidates.extend(_widget_item_name_candidates(widget_inputs[widget_index]))
-
-    inputs = node.get("inputs", [])
-    if isinstance(inputs, list) and widget_index < len(inputs):
-        candidates.extend(_widget_item_name_candidates(inputs[widget_index]))
+    elif not widget_inputs:
+        inputs = node.get("inputs", [])
+        if isinstance(inputs, list) and widget_index < len(inputs):
+            candidates.extend(_widget_item_name_candidates(inputs[widget_index]))
 
     return unique_ordered_strings(candidates)
 
@@ -400,6 +400,7 @@ def _summarize_choice_info_for_log(info_by_key: Dict[Any, Dict[str, Any]]) -> Di
 
 def _summarize_dynamic_hints_for_log(hints: Dict[str, Any]) -> Dict[str, Any]:
     return {
+        "widget_names": hints.get("widget_names", []),
         "by_name": hints.get("by_name", {}),
         "by_index": hints.get("by_index", {}),
         "choice_info_by_name": _summarize_choice_info_for_log(
@@ -604,6 +605,7 @@ def _iter_widget_input_type_entries(
 
 def _empty_dynamic_hints() -> Dict[str, Any]:
     return {
+        "widget_names": [],
         "by_name": {},
         "by_index": {},
         "choice_info_by_name": {},
@@ -680,6 +682,9 @@ def _merge_dynamic_hint_entry(
     choice_info: Dict[str, Any],
 ) -> None:
     if normalized_name:
+        hints["widget_names"] = _ordered_unique_categories(
+            [*list(hints.get("widget_names") or []), normalized_name]
+        )
         _merge_category_hints(hints["by_name"], normalized_name, categories)
         if choice_info:
             _merge_choice_info(
@@ -717,7 +722,10 @@ def _build_dynamic_node_widget_category_hints(node_type: str) -> Dict[str, Any]:
 
     def traced_get_filename_list(category: Any, *args: Any, **kwargs: Any) -> List[str]:
         category_name = str(category or "").strip()
-        sentinel = f"{_DYNAMIC_CATEGORY_SENTINEL_PREFIX}{len(sentinel_to_category)}"
+        sentinel = (
+            f"{_DYNAMIC_CATEGORY_SENTINEL_PREFIX}"
+            f"{len(sentinel_to_category)}.safetensors"
+        )
         sentinel_to_category[sentinel] = category_name
         return [sentinel]
 
@@ -813,7 +821,7 @@ def _build_dynamic_node_widget_category_hints(node_type: str) -> Dict[str, Any]:
 
 def get_dynamic_node_widget_category_hints(node_type: str) -> Dict[str, Any]:
     if not node_type:
-        return {"by_name": {}, "by_index": {}}
+        return _empty_dynamic_hints()
 
     with _DYNAMIC_NODE_WIDGET_CATEGORY_LOCK:
         cached = _DYNAMIC_NODE_WIDGET_CATEGORY_CACHE.get(node_type)
@@ -837,9 +845,17 @@ def get_dynamic_widget_category_hints(
 
     categories: List[str] = []
     by_name = hints.get("by_name", {})
+    normalized_candidates = [
+        normalize_widget_name(candidate)
+        for candidate in get_widget_name_candidates(node, widget_index)
+    ]
     if isinstance(by_name, dict):
-        for candidate in get_widget_name_candidates(node, widget_index):
-            categories.extend(by_name.get(normalize_widget_name(candidate), []))
+        for candidate in normalized_candidates:
+            categories.extend(by_name.get(candidate, []))
+
+    known_widget_names = set(hints.get("widget_names") or [])
+    if any(candidate in known_widget_names for candidate in normalized_candidates):
+        return _ordered_unique_categories(categories)
 
     by_index = hints.get("by_index", {})
     if isinstance(by_index, dict):
@@ -891,10 +907,18 @@ def get_dynamic_widget_choice_info(
     info: Dict[str, Any] = {"source": "unknown", "choices": []}
 
     by_name = hints.get("choice_info_by_name", {})
+    normalized_candidates = [
+        normalize_widget_name(candidate)
+        for candidate in get_widget_name_candidates(node, widget_index)
+    ]
     if isinstance(by_name, dict):
-        for candidate in get_widget_name_candidates(node, widget_index):
-            candidate_info = by_name.get(normalize_widget_name(candidate), {})
+        for candidate in normalized_candidates:
+            candidate_info = by_name.get(candidate, {})
             info = _merge_widget_choice_info_values(info, candidate_info)
+
+    known_widget_names = set(hints.get("widget_names") or [])
+    if any(candidate in known_widget_names for candidate in normalized_candidates):
+        return info
 
     by_index = hints.get("choice_info_by_index", {})
     if isinstance(by_index, dict):
@@ -942,6 +966,9 @@ def static_or_hybrid_choice_looks_like_model(
 
 MODEL_WIDGET_PLACEHOLDERS = {
     "",
+    ".none",
+    ".use_ckpt_clip",
+    ".use_ckpt_vae",
     "none",
     "[none]",
     "null",
@@ -986,11 +1013,12 @@ def get_node_model_widget_category_hint(
 
 
 def get_node_output_category_hint(node: Dict[str, Any]) -> Optional[str]:
-    """Return a model category hint from strongly typed loader outputs."""
+    """Return a category only when strongly typed model outputs are unambiguous."""
     outputs = node.get("outputs", [])
     if not isinstance(outputs, list):
         return None
 
+    categories: List[str] = []
     for output in outputs:
         if not isinstance(output, dict):
             continue
@@ -998,8 +1026,10 @@ def get_node_output_category_hint(node: Dict[str, Any]) -> Optional[str]:
             token = str(output.get(key, "") or "").strip().upper()
             category = MODEL_OUTPUT_TYPE_TO_CATEGORY.get(token)
             if category:
-                return category
-    return None
+                categories.append(category)
+
+    unique_categories = _ordered_unique_categories(categories)
+    return unique_categories[0] if len(unique_categories) == 1 else None
 
 
 def get_model_widget_category_hint(

@@ -1,8 +1,10 @@
 import os
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
+from core import workflow_analyzer
 from core.scanner import scan_directory
 from core.workflow_analyzer import analyze_workflow_models, identify_missing_models
 
@@ -81,6 +83,190 @@ class WorkflowAnalyzerCaseSensitivityTests(unittest.TestCase):
 
 
 class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
+    def test_named_widget_does_not_inherit_conflicting_index_category(self):
+        cases = [
+            ("easy fullLoader", 7, "resolution", "512 x 512"),
+            ("ttN pipeLoader_v2", 8, "negative", "Negative"),
+            ("WanVideoVAELoader", 1, "precision", "bf16"),
+        ]
+
+        for node_type, widget_index, widget_name, widget_value in cases:
+            with self.subTest(node_type=node_type, widget_name=widget_name):
+                dynamic_hints = {
+                    "widget_names": [widget_name, "vae_name"],
+                    "by_name": {"vae_name": ["vae"]},
+                    "by_index": {widget_index: ["vae"]},
+                    "choice_info_by_name": {},
+                    "choice_info_by_index": {
+                        widget_index: {"source": "folder_paths", "choices": []}
+                    },
+                }
+                widget_inputs = [
+                    {
+                        "name": f"widget_{index}",
+                        "type": "STRING",
+                        "widget": {"name": f"widget_{index}"},
+                    }
+                    for index in range(widget_index)
+                ]
+                widget_inputs.append(
+                    {
+                        "name": widget_name,
+                        "type": "STRING",
+                        "widget": {"name": widget_name},
+                    }
+                )
+                workflow = {
+                    "nodes": [
+                        {
+                            "id": 500,
+                            "type": node_type,
+                            "inputs": [
+                                {"name": "model_override", "type": "MODEL"},
+                                *widget_inputs,
+                            ],
+                            "widgets_values": [
+                                *([""] * widget_index),
+                                widget_value,
+                            ],
+                            "outputs": [],
+                        }
+                    ]
+                }
+
+                with patch(
+                    "core.workflow_analyzer.get_dynamic_node_widget_category_hints",
+                    return_value=dynamic_hints,
+                ):
+                    refs = analyze_workflow_models(workflow, available_models=[])
+
+                self.assertEqual([], refs)
+
+    def test_dynamic_sentinel_survives_model_extension_filter(self):
+        fake_folder_paths = SimpleNamespace()
+
+        def get_filename_list(category):
+            return [f"{category}.safetensors"]
+
+        fake_folder_paths.get_filename_list = get_filename_list
+
+        class FilteredMultiCategoryLoader:
+            @classmethod
+            def INPUT_TYPES(cls):
+                choices = (
+                    fake_folder_paths.get_filename_list("checkpoints")
+                    + fake_folder_paths.get_filename_list("diffusion_models")
+                )
+                return {
+                    "required": {
+                        "model_name": (
+                            [
+                                choice
+                                for choice in choices
+                                if choice.endswith((".ckpt", ".safetensors"))
+                            ],
+                        )
+                    }
+                }
+
+        with (
+            patch.object(
+                workflow_analyzer,
+                "_get_comfy_node_class",
+                return_value=FilteredMultiCategoryLoader,
+            ),
+            patch.object(
+                workflow_analyzer,
+                "_get_folder_paths_module",
+                return_value=fake_folder_paths,
+            ),
+        ):
+            hints = workflow_analyzer._build_dynamic_node_widget_category_hints(
+                "FilteredMultiCategoryLoader"
+            )
+
+        self.assertEqual(
+            ["checkpoints", "diffusion_models"],
+            hints["by_name"]["model_name"],
+        )
+
+    def test_res4lyf_placeholders_are_not_model_references(self):
+        category_by_index = {
+            0: ["checkpoints", "diffusion_models"],
+            1: [],
+            2: ["text_encoders"],
+            3: ["text_encoders"],
+            4: ["vae"],
+            5: ["clip_vision"],
+            6: ["style_models"],
+        }
+        workflow = {
+            "nodes": [
+                {
+                    "id": 501,
+                    "type": "FluxLoader",
+                    "widgets": [
+                        {"name": "model_name"},
+                        {"name": "weight_dtype"},
+                        {"name": "clip_name1"},
+                        {"name": "clip_name2_opt"},
+                        {"name": "vae_name"},
+                        {"name": "clip_vision_name"},
+                        {"name": "style_model_name"},
+                    ],
+                    "widgets_values": [
+                        ".none",
+                        "default",
+                        ".use_ckpt_clip",
+                        ".none",
+                        ".use_ckpt_vae",
+                        ".none",
+                        ".none",
+                    ],
+                    "outputs": [
+                        {"type": "MODEL", "links": []},
+                        {"type": "CLIP", "links": []},
+                        {"type": "VAE", "links": []},
+                        {"type": "CLIP_VISION", "links": []},
+                        {"type": "STYLE_MODEL", "links": []},
+                    ],
+                }
+            ]
+        }
+
+        with patch(
+            "core.workflow_analyzer.get_dynamic_widget_category_hints",
+            side_effect=lambda _node, index: category_by_index[index],
+        ):
+            refs = analyze_workflow_models(workflow, available_models=[])
+
+        self.assertEqual([], refs)
+
+    def test_ambiguous_model_outputs_do_not_override_widget_name_category(self):
+        workflow = {
+            "nodes": [
+                {
+                    "id": 502,
+                    "type": "FluxLoader",
+                    "widgets": [{"name": "model_name"}],
+                    "widgets_values": ["flux.safetensors"],
+                    "outputs": [
+                        {"type": "CLIP_VISION", "links": []},
+                        {"type": "STYLE_MODEL", "links": []},
+                    ],
+                }
+            ]
+        }
+
+        with patch(
+            "core.workflow_analyzer.get_dynamic_widget_category_hints",
+            return_value=[],
+        ):
+            refs = analyze_workflow_models(workflow, available_models=[])
+
+        self.assertEqual(1, len(refs))
+        self.assertEqual("diffusion_models", refs[0]["category"])
+
     def test_show_anything_cached_model_text_is_not_a_model_reference(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             model_dir = os.path.join(tmpdir, "KREA2")
