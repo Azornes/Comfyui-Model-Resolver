@@ -6,6 +6,11 @@ import { logger as frontendLogger } from "../log_system/logger.js";
 import { loadStylesWhenNeeded } from "../utils/css_loader.js";
 import { ResolverManagerDialog } from "./resolver_dialog.js";
 import { showNotification } from "../utils/notification_utils.js";
+import {
+    buildModelResolverNodeMenu,
+    getResolvedModelsForNode,
+    toResolverContextModel,
+} from "./node_context_menu.js";
 
 const log = createModuleLogger('model_resolver');
 export const MODEL_RESOLVER_OPEN_COMMAND_ID = "ModelResolver.OpenModelResolver";
@@ -112,6 +117,10 @@ export class ModelResolver {
         this.workflowHashMetadataSignature = null;
         this.workflowHashMetadataRefreshTimer = null;
         this.workflowHashMetadataRefreshing = false;
+        this.nodeContextAnalysisData = null;
+        this.nodeContextAnalysisSignature = null;
+        this.nodeContextAnalysisPromise = null;
+        this.nodeContextAnalysisTimer = null;
     }
 
     setup = async () => {
@@ -308,6 +317,219 @@ export class ModelResolver {
         }
 
         this.handleResolverButtonClick();
+    }
+
+    getNodeContextWorkflowState() {
+        const workflow = app?.graph?.serialize?.();
+        if (!workflow) return { workflow: null, signature: null };
+
+        const signature = this.dialog?.getWorkflowSignature?.(workflow)
+            || JSON.stringify(workflow);
+        return { workflow, signature };
+    }
+
+    getNodeContextScope(node) {
+        const graph = node?.graph;
+        const isTopLevel = !graph || graph === app?.graph;
+        if (isTopLevel) {
+            return { is_top_level: true };
+        }
+
+        const subgraphId = graph?._subgraph?.id
+            || graph?.subgraph?.id
+            || graph?._id
+            || graph?.id
+            || '';
+        return {
+            is_top_level: false,
+            subgraph_id: subgraphId ? String(subgraphId) : undefined,
+        };
+    }
+
+    getCurrentNodeContextAnalysis(signature) {
+        if (
+            signature
+            && this.dialog?.cachedWorkflowSignature === signature
+            && this.dialog?.cachedAnalysisData
+        ) {
+            return this.dialog.cachedAnalysisData;
+        }
+        if (
+            signature
+            && this.nodeContextAnalysisSignature === signature
+            && this.nodeContextAnalysisData
+        ) {
+            return this.nodeContextAnalysisData;
+        }
+        return null;
+    }
+
+    scheduleNodeContextMenuAnalysis(delay = 350) {
+        if (this.nodeContextAnalysisTimer) {
+            clearTimeout(this.nodeContextAnalysisTimer);
+        }
+        this.nodeContextAnalysisTimer = setTimeout(() => {
+            this.nodeContextAnalysisTimer = null;
+            this.refreshNodeContextMenuAnalysis();
+        }, delay);
+    }
+
+    async refreshNodeContextMenuAnalysis({ force = false } = {}) {
+        if (!this.dialog) return null;
+
+        const { workflow, signature } = this.getNodeContextWorkflowState();
+        if (!workflow || !signature) return null;
+
+        const cachedData = this.getCurrentNodeContextAnalysis(signature);
+        if (!force && cachedData) return cachedData;
+        if (this.nodeContextAnalysisPromise) return this.nodeContextAnalysisPromise;
+
+        const analysisPromise = this.dialog.fetchJson('/model_resolver/analyze', {
+            method: 'POST',
+            body: JSON.stringify({ workflow }),
+            silent: true,
+        }, 'Analyze workflow')
+            .then((data) => {
+                const currentState = this.getNodeContextWorkflowState();
+                if (currentState.signature === signature) {
+                    this.nodeContextAnalysisSignature = signature;
+                    this.nodeContextAnalysisData = data;
+                }
+                return data;
+            })
+            .catch((error) => {
+                log.debug('Model Resolver: node context analysis failed.', error);
+                return null;
+            })
+            .finally(() => {
+                if (this.nodeContextAnalysisPromise === analysisPromise) {
+                    this.nodeContextAnalysisPromise = null;
+                }
+                const currentState = this.getNodeContextWorkflowState();
+                if (currentState.signature && currentState.signature !== signature) {
+                    this.scheduleNodeContextMenuAnalysis(0);
+                }
+            });
+
+        this.nodeContextAnalysisPromise = analysisPromise;
+        return analysisPromise;
+    }
+
+    getResolvedModelsForNodeContextMenu(node) {
+        const { signature } = this.getNodeContextWorkflowState();
+        const data = this.getCurrentNodeContextAnalysis(signature);
+        if (!data) {
+            this.scheduleNodeContextMenuAnalysis(0);
+            return [];
+        }
+
+        return getResolvedModelsForNode(
+            data,
+            node?.id,
+            this.getNodeContextScope(node)
+        );
+    }
+
+    configureNodeContextMenu(nodeType) {
+        if (!nodeType?.prototype || nodeType.prototype.__modelResolverContextMenuPatched) {
+            return;
+        }
+
+        const owner = this;
+        const originalGetExtraMenuOptions = nodeType.prototype.getExtraMenuOptions;
+        const originalOnWidgetChanged = nodeType.prototype.onWidgetChanged;
+        nodeType.prototype.getExtraMenuOptions = function(_, options) {
+            const result = originalGetExtraMenuOptions?.apply(this, arguments);
+            const models = owner.getResolvedModelsForNodeContextMenu(this);
+            const menu = buildModelResolverNodeMenu(models, {
+                showInResolver: model => owner.showResolvedNodeModelInResolver(model),
+                showInfo: model => owner.dialog?.showModelInfo(toResolverContextModel(model)),
+                openContainingFolder: model => owner.dialog?.openContainingFolder(toResolverContextModel(model)),
+            }, {
+                formatCategory: category => owner.dialog?.getCategoryDisplayName?.(category),
+            });
+
+            const targetOptions = Array.isArray(options)
+                ? options
+                : (Array.isArray(result) ? result : null);
+            if (menu && targetOptions) {
+                targetOptions.unshift(menu);
+            }
+            return result;
+        };
+        nodeType.prototype.onWidgetChanged = function() {
+            const result = originalOnWidgetChanged?.apply(this, arguments);
+            owner.scheduleNodeContextMenuAnalysis();
+            return result;
+        };
+        nodeType.prototype.__modelResolverContextMenuPatched = true;
+    }
+
+    waitForResolverDialogReady(timeoutMs = 2500) {
+        const startedAt = Date.now();
+        return new Promise((resolve) => {
+            const check = () => {
+                if (this.dialog?.isVisible?.() && this.dialog?.contentElement) {
+                    resolve(true);
+                    return;
+                }
+                if (Date.now() - startedAt >= timeoutMs) {
+                    resolve(false);
+                    return;
+                }
+                setTimeout(check, 40);
+            };
+            check();
+        });
+    }
+
+    async showResolvedNodeModelInResolver(reference) {
+        if (!this.dialog) return;
+
+        const { signature } = this.getNodeContextWorkflowState();
+        const analysisData = this.getCurrentNodeContextAnalysis(signature);
+        if (signature && analysisData) {
+            this.dialog.cachedWorkflowSignature = signature;
+            this.dialog.cachedAnalysisData = analysisData;
+        }
+
+        this.dialog.activeTab = 'missing';
+        this.dialog.persistActiveTab?.('missing');
+        this.dialog.showResolvedModels = true;
+        this.dialog.missingModelsTypeFilter = 'all';
+        this.dialog.missingModelsTypeFilterMenuOpen = false;
+
+        try {
+            localStorage.setItem(this.dialog.showResolvedModelsStorageKey, '1');
+        } catch (error) {
+            log.debug('Model Resolver: failed to persist resolved-model visibility.', error);
+        }
+
+        if (!this.dialog.isVisible?.()) {
+            this.activateResolverButton();
+        }
+        if (!await this.waitForResolverDialogReady()) {
+            showNotification('Could not open Model Resolver.', 'error');
+            return;
+        }
+
+        this.dialog.switchTab?.('missing', { force: true });
+        await this.dialog.loadWorkflowData?.();
+
+        let selected = this.dialog.selectWorkflowModelReference?.(
+            reference,
+            this.dialog.cachedAnalysisData
+        );
+        if (!selected) {
+            await this.dialog.loadWorkflowData?.(null, { force: true, forceRescan: false });
+            selected = this.dialog.selectWorkflowModelReference?.(
+                reference,
+                this.dialog.cachedAnalysisData
+            );
+        }
+        if (!selected) {
+            showNotification('The selected model is no longer present in the current workflow.', 'warning');
+        }
     }
 
     handleSidebarButtonClick(event) {
@@ -1114,15 +1336,9 @@ export class ModelResolver {
             }
             this.lastCheckedWorkflow = workflowHash;
 
-            // Call analyze endpoint to check for missing models
-            let data;
-            try {
-                data = await this.dialog.fetchJson('/model_resolver/analyze', {
-                    method: 'POST',
-                    body: JSON.stringify({ workflow }),
-                    silent: true
-                }, 'Analyze workflow');
-            } catch (error) {
+            // Reuse the background context-menu analysis to avoid scanning twice.
+            const data = await this.refreshNodeContextMenuAnalysis();
+            if (!data) {
                 console.warn('Model Resolver: Failed to analyze workflow for missing models');
                 return;
             }

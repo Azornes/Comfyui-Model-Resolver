@@ -6,6 +6,7 @@ import { createFloatingTreePicker } from "../utils/tree_picker.js";
 import { startSplitterDrag } from "../utils/splitter_drag.js";
 import { getCivitaiModelUrl } from "../globals.js";
 import { safeStorage, normalizePathIdentity } from "../utils/html_utils.js";
+import { matchesWorkflowModelReference } from "../node_context_menu.js";
 
 export const missingBrowserMethods = {
     getMissingFilename(missing = {}) {
@@ -505,6 +506,27 @@ export const missingBrowserMethods = {
                 ? (hasResolvedMatch ? backendMatches : [fallbackMatch, ...backendMatches])
                 : [fallbackMatch]
         };
+    },
+
+    selectWorkflowModelReference(reference = {}, data = this.cachedAnalysisData || {}) {
+        const selected = this.getResolvedWorkflowModels(data)
+            .find(model => matchesWorkflowModelReference(model, reference));
+        if (!selected || !this.contentElement) return null;
+
+        this.showResolvedModels = true;
+        this.missingModelsTypeFilter = 'all';
+        this.missingModelsTypeFilterMenuOpen = false;
+        safeStorage.setItem(this.showResolvedModelsStorageKey, '1');
+        this.selectedMissingModelKey = this.getMissingModelKey(selected);
+        this.displayMissingModels(this.contentElement, data);
+
+        requestAnimationFrame(() => {
+            const row = Array.from(
+                this.contentElement?.querySelectorAll?.('.mr-missing-list-row') || []
+            ).find(item => item.dataset.missingKey === this.selectedMissingModelKey);
+            row?.scrollIntoView?.({ block: 'nearest' });
+        });
+        return selected;
     },
 
     isAutoDownloadModel(missing = {}) {

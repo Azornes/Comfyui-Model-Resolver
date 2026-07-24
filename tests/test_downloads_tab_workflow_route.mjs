@@ -4,6 +4,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { html, normalizePathIdentity } from '../web/resolver/utils/html_utils.js';
 import { getModelCardUrl } from '../web/resolver/utils/url_utils.js';
+import {
+  buildModelResolverNodeMenu,
+  getResolvedModelsForNode,
+  matchesWorkflowModelReference,
+  toResolverContextModel,
+} from '../web/resolver/node_context_menu.js';
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
 const queueMethodsSource = fs.readFileSync(
@@ -42,6 +48,194 @@ const renderFormatMethodsSource = fs.readFileSync(
   path.join(projectRoot, 'web/resolver/utils/render_format_methods.js'),
   'utf8'
 );
+
+test('node context menu includes only existing resolved models from the selected node scope', () => {
+  const data = {
+    resolved_models: [
+      {
+        node_id: 42,
+        widget_index: 0,
+        widget_name: 'ckpt_name',
+        original_path: 'models/checkpoint.safetensors',
+        full_path: 'E:\\models\\checkpoint.safetensors',
+        category: 'checkpoints',
+        exists: true,
+        is_top_level: true,
+      },
+      {
+        node_id: 42,
+        widget_index: 1,
+        widget_name: 'vae_name',
+        original_path: 'vae.safetensors',
+        full_path: 'E:\\models\\vae\\vae.safetensors',
+        category: 'vae',
+        exists: false,
+        is_top_level: true,
+      },
+      {
+        node_id: 42,
+        widget_index: 0,
+        original_path: 'nested.safetensors',
+        full_path: 'E:\\models\\nested.safetensors',
+        category: 'checkpoints',
+        exists: true,
+        is_top_level: false,
+        subgraph_id: 'subgraph-a',
+      },
+      {
+        node_id: 99,
+        widget_index: 0,
+        original_path: 'other.safetensors',
+        full_path: 'E:\\models\\other.safetensors',
+        category: 'checkpoints',
+        exists: true,
+        is_top_level: true,
+      },
+    ],
+  };
+
+  const models = getResolvedModelsForNode(data, 42, { is_top_level: true });
+
+  assert.equal(models.length, 1);
+  assert.equal(models[0].widget_name, 'ckpt_name');
+});
+
+test('node context menu groups multiple model inputs and dispatches actions for the selected model', () => {
+  const calls = [];
+  const models = [
+    {
+      node_id: 7,
+      widget_index: 0,
+      widget_name: 'ckpt_name',
+      original_path: 'model.safetensors',
+      full_path: 'E:\\models\\model.safetensors',
+      category: 'checkpoints',
+      exists: true,
+    },
+    {
+      node_id: 7,
+      widget_index: 1,
+      widget_name: 'vae_name',
+      original_path: 'vae.safetensors',
+      full_path: 'E:\\models\\vae\\vae.safetensors',
+      category: 'vae',
+      exists: true,
+    },
+  ];
+  const menu = buildModelResolverNodeMenu(models, {
+    showInResolver: model => calls.push(['show', model.widget_name]),
+    showInfo: model => calls.push(['info', model.widget_name]),
+    openContainingFolder: model => calls.push(['folder', model.widget_name]),
+  }, {
+    formatCategory: category => category === 'checkpoints' ? 'Checkpoint' : category,
+  });
+
+  assert.equal(menu.title, 'Model Resolver');
+  assert.equal(menu.submenu.options.length, 2);
+  assert.match(menu.submenu.options[0].title, /^CHECKPOINT · ckpt_name/);
+  assert.match(menu.submenu.options[1].title, /^VAE · vae_name/);
+  assert.deepEqual(
+    menu.submenu.options[0].submenu.options.map(option => option.content),
+    ['Show in Model Resolver', 'Show info', 'Open containing folder']
+  );
+
+  menu.submenu.options[1].submenu.options[2].callback();
+  assert.deepEqual(calls, [['folder', 'vae_name']]);
+});
+
+test('node context menu uses direct actions for one model and converts its local path for resolver actions', () => {
+  const model = {
+    node_id: 5,
+    widget_index: 2,
+    original_path: 'folder/model.gguf',
+    full_path: 'E:\\models\\folder\\model.gguf',
+    category: 'diffusion_models',
+    exists: true,
+  };
+  const menu = buildModelResolverNodeMenu([model]);
+  const contextModel = toResolverContextModel(model);
+
+  assert.deepEqual(
+    menu.submenu.options.map(option => option.content),
+    ['Show in Model Resolver', 'Show info', 'Open containing folder']
+  );
+  assert.equal(contextModel.name, 'model.gguf');
+  assert.equal(contextModel.path, model.full_path);
+  assert.equal(contextModel.resolved_path, model.full_path);
+});
+
+test('workflow model reference matching distinguishes widget, path, and subgraph scope', () => {
+  const model = {
+    node_id: 11,
+    widget_index: 3,
+    original_path: 'Folder\\Model.safetensors',
+    is_top_level: false,
+    subgraph_id: 'subgraph-a',
+  };
+
+  assert.equal(matchesWorkflowModelReference(model, {
+    node_id: '11',
+    widget_index: 3,
+    original_path: 'folder/model.safetensors',
+    is_top_level: false,
+    subgraph_id: 'subgraph-a',
+  }), true);
+  assert.equal(matchesWorkflowModelReference(model, {
+    node_id: 11,
+    widget_index: 4,
+  }), false);
+  assert.equal(matchesWorkflowModelReference(model, {
+    node_id: 11,
+    widget_index: 3,
+    subgraph_id: 'subgraph-b',
+  }), false);
+});
+
+test('node context integration preserves existing menu hooks and refreshes after widget changes', () => {
+  const configureNodeContextMenu = eval(`(${extractMethod(modelResolverSource, 'configureNodeContextMenu')})`);
+  const calls = [];
+  class NodeType {}
+  NodeType.prototype.getExtraMenuOptions = function(_canvas, options) {
+    calls.push('original-menu');
+    options.push({ content: 'Original action' });
+    return options;
+  };
+  NodeType.prototype.onWidgetChanged = function(name) {
+    calls.push(`original-widget:${name}`);
+    return 'widget-result';
+  };
+
+  const model = {
+    node_id: 7,
+    widget_index: 0,
+    widget_name: 'ckpt_name',
+    original_path: 'model.safetensors',
+    full_path: 'E:\\models\\model.safetensors',
+    category: 'checkpoints',
+    exists: true,
+  };
+  const resolver = {
+    getResolvedModelsForNodeContextMenu: () => [model],
+    scheduleNodeContextMenuAnalysis: () => calls.push('refresh'),
+    showResolvedNodeModelInResolver: () => {},
+    dialog: {
+      getCategoryDisplayName: () => 'checkpoint',
+      showModelInfo: () => {},
+      openContainingFolder: () => {},
+    },
+  };
+
+  configureNodeContextMenu.call(resolver, NodeType);
+  const node = new NodeType();
+  const options = [];
+  const result = node.getExtraMenuOptions(null, options);
+
+  assert.equal(result, options);
+  assert.equal(options[0].title, 'Model Resolver');
+  assert.equal(options[1].content, 'Original action');
+  assert.equal(node.onWidgetChanged('ckpt_name'), 'widget-result');
+  assert.deepEqual(calls, ['original-menu', 'original-widget:ckpt_name', 'refresh']);
+});
 
 test('Local Database source ignores installed local model matches before search', () => {
   const hasMissingSourceSearchAttempt = eval(`(${extractMethod(missingBrowserMethodsSource, 'hasMissingSourceSearchAttempt')})`);

@@ -31,15 +31,19 @@ app.registerExtension({
     setup: modelResolver.setup,
     beforeRegisterNodeDef(nodeType, nodeData) {
         modelResolver.configureWorkflowDependencyMarkerNodeType(nodeType, nodeData);
+        modelResolver.configureNodeContextMenu(nodeType);
     },
     nodeCreated(node) {
         modelResolver.configureWorkflowDependencyMarkerNode(node);
+        modelResolver.scheduleNodeContextMenuAnalysis();
     },
     loadedGraphNode(node) {
         modelResolver.configureWorkflowDependencyMarkerNode(node);
+        modelResolver.scheduleNodeContextMenuAnalysis();
     },
     afterConfigureGraph() {
         modelResolver.configureWorkflowDependencyMarkerNodes();
         modelResolver.checkAndOpenForMissingModels();
+        modelResolver.scheduleNodeContextMenuAnalysis(500);
     },
 });
