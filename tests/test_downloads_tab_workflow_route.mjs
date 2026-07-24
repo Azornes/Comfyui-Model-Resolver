@@ -131,6 +131,7 @@ test('node context menu groups multiple model inputs and dispatches actions for 
   });
 
   assert.equal(menu.title, 'Model Resolver');
+  assert.equal(menu.className, 'mdi mdi-link-variant mr-model-resolver-node-menu');
   assert.equal(menu.submenu.options.length, 2);
   assert.match(menu.submenu.options[0].title, /^CHECKPOINT · ckpt_name/);
   assert.match(menu.submenu.options[1].title, /^VAE · vae_name/);
@@ -232,6 +233,7 @@ test('node context integration preserves existing menu hooks and refreshes after
 
   assert.equal(result, options);
   assert.equal(options[0].title, 'Model Resolver');
+  assert.equal(options[0].className, 'mdi mdi-link-variant mr-model-resolver-node-menu');
   assert.equal(options[1].content, 'Original action');
   assert.equal(node.onWidgetChanged('ckpt_name'), 'widget-result');
   assert.deepEqual(calls, ['original-menu', 'original-widget:ckpt_name', 'refresh']);

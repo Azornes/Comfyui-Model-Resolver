@@ -123,6 +123,7 @@ export function buildModelResolverNodeMenu(models = [], handlers = {}, options =
 
     return {
         title: 'Model Resolver',
+        className: 'mdi mdi-link-variant mr-model-resolver-node-menu',
         has_submenu: true,
         submenu: {
             options: submenuOptions,

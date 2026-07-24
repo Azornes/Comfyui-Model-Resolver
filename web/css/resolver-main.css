@@ -9316,3 +9316,7 @@ a.mr-image-preview-resource-name:hover {
 #model-resolver-modal .mr-missing-detail-pane [id^="local-matches-body-"] .mr-local-alternatives-label {
     color: #bdbdbd;
 }
+
+.litegraph.litecontextmenu .litemenu-entry.mr-model-resolver-node-menu::before {
+    margin-right: 6px;
+}
