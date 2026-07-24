@@ -447,6 +447,49 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
                 self.assertEqual(["diffusion_models"], refs[0]["category_hints"])
                 self.assertEqual(["model_gguf"], refs[0]["folder_key_hints"])
 
+    def test_gguf_loader_resolves_scanner_category_alias(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_path = os.path.join(tmpdir, "flux1-fill-dev-Q4_K_S.gguf")
+            with open(model_path, "wb"):
+                pass
+
+            available_models = [
+                {
+                    "filename": "flux1-fill-dev-Q4_K_S.gguf",
+                    "path": model_path,
+                    "relative_path": r"FLUX\FILL\flux1-fill-dev-Q4_K_S.gguf",
+                    "category": "model_gguf",
+                    "base_directory": tmpdir,
+                }
+            ]
+            workflow = {
+                "nodes": [
+                    {
+                        "id": 346,
+                        "type": "LoaderGGUF",
+                        "widgets": [{"name": "gguf_name"}],
+                        "widgets_values": [
+                            r"FLUX\FILL\flux1-fill-dev-Q4_K_S.gguf"
+                        ],
+                        "outputs": [{"type": "MODEL", "links": [1]}],
+                    }
+                ]
+            }
+
+            with patch(
+                "core.workflow_analyzer.get_dynamic_widget_category_hints",
+                return_value=["model_gguf"],
+            ):
+                refs = analyze_workflow_models(
+                    workflow,
+                    available_models=available_models,
+                )
+
+        self.assertEqual(1, len(refs))
+        self.assertTrue(refs[0]["exists"])
+        self.assertEqual(model_path, refs[0]["full_path"])
+        self.assertEqual("diffusion_models", refs[0]["category"])
+
 
 class ScannerFolderModelTests(unittest.TestCase):
     def test_diffusers_folder_models_are_scanned_as_folder_entries(self):

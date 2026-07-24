@@ -1152,8 +1152,14 @@ def _resolve_from_available_models(
         return None
 
     for category in category_order:
+        normalized_category = normalize_download_category(category)
         for model in available_models:
-            if model.get("category") != category:
+            model_category = model.get("category")
+            if (
+                model_category != category
+                and normalize_download_category(model_category)
+                != normalized_category
+            ):
                 continue
 
             if requested_is_absolute:
