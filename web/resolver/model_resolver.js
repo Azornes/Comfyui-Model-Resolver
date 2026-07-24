@@ -8,7 +8,10 @@ import { ResolverManagerDialog } from "./resolver_dialog.js";
 import { showNotification } from "../utils/notification_utils.js";
 import {
     buildModelResolverNodeMenu,
+    getImmediateModelsForNode,
     getResolvedModelsForNode,
+    isExistingResolvedModel,
+    matchesWorkflowModelReference,
     toResolverContextModel,
 } from "./node_context_menu.js";
 
@@ -420,7 +423,13 @@ export class ModelResolver {
         const data = this.getCurrentNodeContextAnalysis(signature);
         if (!data) {
             this.scheduleNodeContextMenuAnalysis(0);
-            return [];
+            const previousData = this.nodeContextAnalysisData
+                || this.dialog?.cachedAnalysisData;
+            return getImmediateModelsForNode(
+                previousData || {},
+                node,
+                this.getNodeContextScope(node)
+            );
         }
 
         return getResolvedModelsForNode(
@@ -428,6 +437,39 @@ export class ModelResolver {
             node?.id,
             this.getNodeContextScope(node)
         );
+    }
+
+    async ensureCurrentNodeContextAnalysis() {
+        if (this.nodeContextAnalysisTimer) {
+            clearTimeout(this.nodeContextAnalysisTimer);
+            this.nodeContextAnalysisTimer = null;
+        }
+
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+            const { signature } = this.getNodeContextWorkflowState();
+            const cachedData = this.getCurrentNodeContextAnalysis(signature);
+            if (cachedData) return cachedData;
+
+            await this.refreshNodeContextMenuAnalysis({ force: true });
+        }
+
+        const { signature } = this.getNodeContextWorkflowState();
+        return this.getCurrentNodeContextAnalysis(signature);
+    }
+
+    async resolveNodeContextMenuModel(model) {
+        if (!model?.resolution_pending) return model;
+
+        const data = await this.ensureCurrentNodeContextAnalysis();
+        const resolvedModel = (data?.resolved_models || [])
+            .filter(candidate => isExistingResolvedModel(candidate))
+            .find(candidate => matchesWorkflowModelReference(candidate, model));
+
+        if (!resolvedModel) {
+            showNotification('The selected model could not be resolved after the workflow update.', 'warning');
+            return null;
+        }
+        return resolvedModel;
     }
 
     configureNodeContextMenu(nodeType) {
@@ -442,9 +484,24 @@ export class ModelResolver {
             const result = originalGetExtraMenuOptions?.apply(this, arguments);
             const models = owner.getResolvedModelsForNodeContextMenu(this);
             const menu = buildModelResolverNodeMenu(models, {
-                showInResolver: model => owner.showResolvedNodeModelInResolver(model),
-                showInfo: model => owner.dialog?.showModelInfo(toResolverContextModel(model)),
-                openContainingFolder: model => owner.dialog?.openContainingFolder(toResolverContextModel(model)),
+                showInResolver: async model => {
+                    const resolvedModel = await owner.resolveNodeContextMenuModel(model);
+                    if (resolvedModel) {
+                        owner.showResolvedNodeModelInResolver(resolvedModel);
+                    }
+                },
+                showInfo: async model => {
+                    const resolvedModel = await owner.resolveNodeContextMenuModel(model);
+                    if (resolvedModel) {
+                        owner.dialog?.showModelInfo(toResolverContextModel(resolvedModel));
+                    }
+                },
+                openContainingFolder: async model => {
+                    const resolvedModel = await owner.resolveNodeContextMenuModel(model);
+                    if (resolvedModel) {
+                        owner.dialog?.openContainingFolder(toResolverContextModel(resolvedModel));
+                    }
+                },
             }, {
                 formatCategory: category => owner.dialog?.getCategoryDisplayName?.(category),
             });

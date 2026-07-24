@@ -6,7 +6,9 @@ import { html, normalizePathIdentity } from '../web/resolver/utils/html_utils.js
 import { getModelCardUrl } from '../web/resolver/utils/url_utils.js';
 import {
   buildModelResolverNodeMenu,
+  getImmediateModelsForNode,
   getResolvedModelsForNode,
+  isExistingResolvedModel,
   matchesWorkflowModelReference,
   toResolverContextModel,
 } from '../web/resolver/node_context_menu.js';
@@ -98,6 +100,65 @@ test('node context menu includes only existing resolved models from the selected
 
   assert.equal(models.length, 1);
   assert.equal(models[0].widget_name, 'ckpt_name');
+});
+
+test('node context menu immediately reflects a newly selected valid widget model', () => {
+  const previousModel = {
+    node_id: 42,
+    widget_index: 0,
+    widget_name: 'ckpt_name',
+    original_path: 'old-model.safetensors',
+    full_path: 'E:\\models\\old-model.safetensors',
+    category: 'checkpoints',
+    exists: true,
+    is_top_level: true,
+  };
+  const node = {
+    id: 42,
+    widgets: [{
+      value: 'new-model.safetensors',
+      options: {
+        values: ['old-model.safetensors', 'new-model.safetensors'],
+      },
+    }],
+  };
+
+  const models = getImmediateModelsForNode(
+    { resolved_models: [previousModel] },
+    node,
+    { is_top_level: true }
+  );
+  const menu = buildModelResolverNodeMenu(models);
+
+  assert.equal(models.length, 1);
+  assert.equal(models[0].original_path, 'new-model.safetensors');
+  assert.equal(models[0].resolution_pending, true);
+  assert.equal(models[0].full_path, '');
+  assert.equal(menu.title, 'Model Resolver');
+});
+
+test('immediate node context model ignores a value outside the widget choices', () => {
+  const models = getImmediateModelsForNode({
+    resolved_models: [{
+      node_id: 7,
+      widget_index: 0,
+      original_path: 'old-model.safetensors',
+      full_path: 'E:\\models\\old-model.safetensors',
+      category: 'checkpoints',
+      exists: true,
+      is_top_level: true,
+    }],
+  }, {
+    id: 7,
+    widgets: [{
+      value: 'not-in-dropdown.safetensors',
+      options: { values: ['old-model.safetensors'] },
+    }],
+  }, {
+    is_top_level: true,
+  });
+
+  assert.deepEqual(models, []);
 });
 
 test('node context menu groups multiple model inputs and dispatches actions for the selected model', () => {
@@ -237,6 +298,34 @@ test('node context integration preserves existing menu hooks and refreshes after
   assert.equal(options[1].content, 'Original action');
   assert.equal(node.onWidgetChanged('ckpt_name'), 'widget-result');
   assert.deepEqual(calls, ['original-menu', 'original-widget:ckpt_name', 'refresh']);
+});
+
+test('pending node context model resolves against the current workflow analysis before action', async () => {
+  const resolveNodeContextMenuModel = eval(`(${extractMethod(modelResolverSource, 'resolveNodeContextMenuModel')})`);
+  const pendingModel = {
+    node_id: 7,
+    widget_index: 0,
+    original_path: 'new-model.safetensors',
+    is_top_level: true,
+    resolution_pending: true,
+  };
+  const resolvedModel = {
+    ...pendingModel,
+    full_path: 'E:\\models\\new-model.safetensors',
+    exists: true,
+    resolution_pending: false,
+  };
+  const resolver = {
+    ensureCurrentNodeContextAnalysis: async () => ({
+      resolved_models: [resolvedModel],
+    }),
+  };
+
+  assert.equal(
+    await resolveNodeContextMenuModel.call(resolver, pendingModel),
+    resolvedModel
+  );
+  assert.equal(isExistingResolvedModel(resolvedModel), true);
 });
 
 test('queued workflow model selection survives missing data and completes after analysis', () => {

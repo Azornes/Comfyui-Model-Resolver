@@ -34,6 +34,28 @@ function getResolvedModelMenuLabel(model = {}, formatCategory = null) {
     return `${slot} — ${filename}`;
 }
 
+function getWidgetChoiceValue(choice) {
+    if (choice && typeof choice === 'object') {
+        return choice.value ?? choice.name ?? choice.label ?? '';
+    }
+    return choice;
+}
+
+function isCurrentWidgetSelection(widget, value) {
+    const normalizedValue = normalizeIdentity(value);
+    if (!normalizedValue || ['none', 'null', 'undefined'].includes(normalizedValue)) {
+        return false;
+    }
+
+    const choices = widget?.options?.values;
+    if (!Array.isArray(choices) || !choices.length) {
+        return true;
+    }
+    return choices.some(choice => (
+        normalizeIdentity(getWidgetChoiceValue(choice)) === normalizedValue
+    ));
+}
+
 function createModelActions(model, handlers = {}) {
     return [
         {
@@ -107,8 +129,58 @@ export function getResolvedModelsForNode(data = {}, nodeId, scope = {}) {
         });
 }
 
+export function getImmediateModelsForNode(data = {}, node = {}, scope = {}) {
+    const references = [
+        ...(data.resolved_models || []),
+        ...(data.missing_models || []),
+    ].filter(model => (
+        (!model.node_type || !node?.type || model.node_type === node.type)
+        && matchesWorkflowModelReference(model, {
+            node_id: node?.id,
+            is_top_level: scope.is_top_level,
+            subgraph_id: scope.subgraph_id,
+        })
+    ));
+    const modelsByWidget = new Map();
+
+    for (const reference of references) {
+        const widgetIndex = Number(reference.widget_index);
+        if (!Number.isInteger(widgetIndex) || modelsByWidget.has(widgetIndex)) continue;
+
+        const widget = node?.widgets?.[widgetIndex];
+        const currentValue = widget?.value;
+        if (typeof currentValue !== 'string') continue;
+        if (!isCurrentWidgetSelection(widget, currentValue)) continue;
+
+        if (normalizeIdentity(currentValue) === normalizeIdentity(reference.original_path)) {
+            if (isExistingResolvedModel(reference)) {
+                modelsByWidget.set(widgetIndex, reference);
+            }
+            continue;
+        }
+
+        modelsByWidget.set(widgetIndex, {
+            ...reference,
+            name: String(currentValue),
+            filename: getResolvedModelFilename({ original_path: currentValue }),
+            original_path: String(currentValue),
+            full_path: '',
+            path: '',
+            resolved_path: '',
+            exists: false,
+            resolution_pending: true,
+        });
+    }
+
+    return [...modelsByWidget.values()].sort((left, right) => (
+        Number(left.widget_index ?? 0) - Number(right.widget_index ?? 0)
+    ));
+}
+
 export function buildModelResolverNodeMenu(models = [], handlers = {}, options = {}) {
-    const resolvedModels = models.filter(isExistingResolvedModel);
+    const resolvedModels = models.filter(model => (
+        isExistingResolvedModel(model) || model.resolution_pending === true
+    ));
     if (!resolvedModels.length) return null;
 
     const submenuOptions = resolvedModels.length === 1
