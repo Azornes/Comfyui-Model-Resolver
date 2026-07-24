@@ -190,6 +190,189 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
             hints["by_name"]["model_name"],
         )
 
+    def test_control_after_generate_keeps_serialized_widget_indexes_aligned(self):
+        fake_folder_paths = SimpleNamespace()
+
+        def get_filename_list(category):
+            return [f"{category}.safetensors"]
+
+        fake_folder_paths.get_filename_list = get_filename_list
+
+        class ControlledIndexLoader:
+            @classmethod
+            def INPUT_TYPES(cls):
+                return {
+                    "required": {
+                        "csv_filename_path": ("STRING", {}),
+                        "index": (
+                            "INT",
+                            {"default": 0, "control_after_generate": True},
+                        ),
+                        "start_ckpt_name": (
+                            fake_folder_paths.get_filename_list("checkpoints"),
+                        ),
+                        "count": ("INT", {"default": 1}),
+                    }
+                }
+
+        with (
+            patch.object(
+                workflow_analyzer,
+                "_get_comfy_node_class",
+                return_value=ControlledIndexLoader,
+            ),
+            patch.object(
+                workflow_analyzer,
+                "_get_folder_paths_module",
+                return_value=fake_folder_paths,
+            ),
+        ):
+            hints = workflow_analyzer._build_dynamic_node_widget_category_hints(
+                "ControlledIndexLoader"
+            )
+
+        self.assertTrue(hints["has_generated_widgets"])
+        self.assertEqual(
+            {
+                0: "csv_filename_path",
+                1: "index",
+                2: "control_after_generate",
+                3: "start_ckpt_name",
+                4: "count",
+            },
+            hints["serialized_name_by_index"],
+        )
+        self.assertEqual([2], hints["non_model_by_index"])
+        self.assertNotIn(2, hints["by_index"])
+        self.assertEqual(["checkpoints"], hints["by_index"][3])
+
+    def test_control_after_generate_is_skipped_and_following_model_is_detected(self):
+        dynamic_hints = {
+            "widget_names": [
+                "csv_filename_path",
+                "index",
+                "start_ckpt_name",
+                "count",
+            ],
+            "by_name": {"start_ckpt_name": ["checkpoints"]},
+            "by_index": {3: ["checkpoints"]},
+            "serialized_name_by_index": {
+                0: "csv_filename_path",
+                1: "index",
+                2: "control_after_generate",
+                3: "start_ckpt_name",
+                4: "count",
+            },
+            "non_model_by_index": [2],
+            "has_generated_widgets": True,
+            "choice_info_by_name": {
+                "start_ckpt_name": {
+                    "source": "folder_paths",
+                    "choices": [],
+                }
+            },
+            "choice_info_by_index": {
+                3: {"source": "folder_paths", "choices": []}
+            },
+        }
+        workflow = {
+            "nodes": [
+                {
+                    "id": 503,
+                    "type": "CSV Reader X Checkpoint",
+                    "inputs": [
+                        {
+                            "name": "csv_filename_path",
+                            "type": "STRING",
+                            "widget": {"name": "csv_filename_path"},
+                        },
+                        {
+                            "name": "index",
+                            "type": "INT",
+                            "widget": {"name": "index"},
+                        },
+                        {
+                            "name": "start_ckpt_name",
+                            "type": "COMBO",
+                            "widget": {"name": "start_ckpt_name"},
+                        },
+                        {
+                            "name": "count",
+                            "type": "INT",
+                            "widget": {"name": "count"},
+                        },
+                    ],
+                    "widgets_values": [
+                        "",
+                        0,
+                        "randomize",
+                        r"LTXV\model.safetensors",
+                        1,
+                    ],
+                    "outputs": [],
+                }
+            ]
+        }
+
+        with patch(
+            "core.workflow_analyzer.get_dynamic_node_widget_category_hints",
+            return_value=dynamic_hints,
+        ):
+            refs = analyze_workflow_models(workflow, available_models=[])
+
+        self.assertEqual(1, len(refs))
+        self.assertEqual(3, refs[0]["widget_index"])
+        self.assertEqual("start_ckpt_name", refs[0]["widget_name"])
+        self.assertEqual(r"LTXV\model.safetensors", refs[0]["original_path"])
+        self.assertEqual("checkpoints", refs[0]["category"])
+
+    def test_non_model_static_choices_in_hybrid_model_dropdowns_are_skipped(self):
+        cases = [
+            ("DependenciesEdit", "ckpt_name", "checkpoints", "Original"),
+            ("DependenciesEdit", "vae_name", "vae", "Baked VAE"),
+            ("easy XYInputs: ModelMergeBlocks", "vae_use", "vae", "Use Model 1"),
+            ("RecipeModelPicker", "vae", "vae", "(Default)"),
+        ]
+
+        for node_type, widget_name, category, value in cases:
+            with self.subTest(node_type=node_type, value=value):
+                dynamic_hints = {
+                    "widget_names": [widget_name],
+                    "by_name": {widget_name: [category]},
+                    "by_index": {0: [category]},
+                    "serialized_name_by_index": {},
+                    "non_model_by_index": [],
+                    "has_generated_widgets": False,
+                    "choice_info_by_name": {
+                        widget_name: {
+                            "source": "hybrid",
+                            "choices": [value],
+                        }
+                    },
+                    "choice_info_by_index": {
+                        0: {"source": "hybrid", "choices": [value]}
+                    },
+                }
+                workflow = {
+                    "nodes": [
+                        {
+                            "id": 504,
+                            "type": node_type,
+                            "widgets": [{"name": widget_name}],
+                            "widgets_values": [value],
+                            "outputs": [],
+                        }
+                    ]
+                }
+
+                with patch(
+                    "core.workflow_analyzer.get_dynamic_node_widget_category_hints",
+                    return_value=dynamic_hints,
+                ):
+                    refs = analyze_workflow_models(workflow, available_models=[])
+
+                self.assertEqual([], refs)
+
     def test_res4lyf_placeholders_are_not_model_references(self):
         category_by_index = {
             0: ["checkpoints", "diffusion_models"],

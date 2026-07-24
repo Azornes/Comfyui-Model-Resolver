@@ -403,6 +403,9 @@ def _summarize_dynamic_hints_for_log(hints: Dict[str, Any]) -> Dict[str, Any]:
         "widget_names": hints.get("widget_names", []),
         "by_name": hints.get("by_name", {}),
         "by_index": hints.get("by_index", {}),
+        "serialized_name_by_index": hints.get("serialized_name_by_index", {}),
+        "non_model_by_index": hints.get("non_model_by_index", []),
+        "has_generated_widgets": hints.get("has_generated_widgets", False),
         "choice_info_by_name": _summarize_choice_info_for_log(
             hints.get("choice_info_by_name", {})
         ),
@@ -587,6 +590,14 @@ def _is_input_type_widget_spec(spec: Any) -> bool:
     return False
 
 
+def _input_type_generates_control_after_widget(spec: Any) -> bool:
+    if not isinstance(spec, (list, tuple)) or len(spec) < 2:
+        return False
+
+    options = spec[1]
+    return isinstance(options, dict) and options.get("control_after_generate") is True
+
+
 def _iter_widget_input_type_entries(
     input_types: Dict[str, Any],
 ) -> List[tuple[str, Any]]:
@@ -608,6 +619,9 @@ def _empty_dynamic_hints() -> Dict[str, Any]:
         "widget_names": [],
         "by_name": {},
         "by_index": {},
+        "serialized_name_by_index": {},
+        "non_model_by_index": [],
+        "has_generated_widgets": False,
         "choice_info_by_name": {},
         "choice_info_by_index": {},
     }
@@ -777,7 +791,10 @@ def _build_dynamic_node_widget_category_hints(node_type: str) -> Dict[str, Any]:
         categories = _extract_categories_from_value(spec, sentinel_to_category)
         choice_info = _get_widget_choice_info_from_spec(spec, sentinel_to_category)
         normalized_name = normalize_widget_name(input_name)
-        entry_widget_index = widget_index if _is_input_type_widget_spec(spec) else None
+        is_widget = _is_input_type_widget_spec(spec)
+        entry_widget_index = widget_index if is_widget else None
+        if is_widget:
+            hints["serialized_name_by_index"][widget_index] = normalized_name
         _merge_dynamic_hint_entry(
             hints,
             normalized_name,
@@ -785,8 +802,15 @@ def _build_dynamic_node_widget_category_hints(node_type: str) -> Dict[str, Any]:
             categories,
             choice_info,
         )
-        if _is_input_type_widget_spec(spec):
+        if is_widget:
             widget_index += 1
+            if _input_type_generates_control_after_widget(spec):
+                hints["has_generated_widgets"] = True
+                hints["serialized_name_by_index"][
+                    widget_index
+                ] = "control_after_generate"
+                hints["non_model_by_index"].append(widget_index)
+                widget_index += 1
 
     for input_name, input_obj, is_widget in _iter_schema_input_entries(schema):
         categories = _extract_categories_from_value(
@@ -838,17 +862,50 @@ def get_dynamic_node_widget_category_hints(node_type: str) -> Dict[str, Any]:
         return hints
 
 
+def get_dynamic_serialized_widget_name(
+    node: Dict[str, Any], widget_index: int
+) -> str:
+    hints = get_dynamic_node_widget_category_hints(str(node.get("type", "") or ""))
+    if not hints.get("has_generated_widgets"):
+        return ""
+
+    names_by_index = hints.get("serialized_name_by_index", {})
+    if not isinstance(names_by_index, dict):
+        return ""
+
+    return str(
+        names_by_index.get(widget_index, names_by_index.get(str(widget_index), "")) or ""
+    ).strip()
+
+
+def is_dynamic_non_model_widget(node: Dict[str, Any], widget_index: int) -> bool:
+    hints = get_dynamic_node_widget_category_hints(str(node.get("type", "") or ""))
+    if not hints.get("has_generated_widgets"):
+        return False
+
+    non_model_indices = hints.get("non_model_by_index", [])
+    return widget_index in non_model_indices or str(widget_index) in non_model_indices
+
+
 def get_dynamic_widget_category_hints(
     node: Dict[str, Any], widget_index: int
 ) -> List[str]:
     hints = get_dynamic_node_widget_category_hints(str(node.get("type", "") or ""))
 
+    if is_dynamic_non_model_widget(node, widget_index):
+        return []
+
     categories: List[str] = []
     by_name = hints.get("by_name", {})
-    normalized_candidates = [
-        normalize_widget_name(candidate)
-        for candidate in get_widget_name_candidates(node, widget_index)
-    ]
+    serialized_name = get_dynamic_serialized_widget_name(node, widget_index)
+    normalized_candidates = (
+        [normalize_widget_name(serialized_name)]
+        if serialized_name
+        else [
+            normalize_widget_name(candidate)
+            for candidate in get_widget_name_candidates(node, widget_index)
+        ]
+    )
     if isinstance(by_name, dict):
         for candidate in normalized_candidates:
             categories.extend(by_name.get(candidate, []))
@@ -906,11 +963,19 @@ def get_dynamic_widget_choice_info(
     hints = get_dynamic_node_widget_category_hints(str(node.get("type", "") or ""))
     info: Dict[str, Any] = {"source": "unknown", "choices": []}
 
+    if is_dynamic_non_model_widget(node, widget_index):
+        return info
+
     by_name = hints.get("choice_info_by_name", {})
-    normalized_candidates = [
-        normalize_widget_name(candidate)
-        for candidate in get_widget_name_candidates(node, widget_index)
-    ]
+    serialized_name = get_dynamic_serialized_widget_name(node, widget_index)
+    normalized_candidates = (
+        [normalize_widget_name(serialized_name)]
+        if serialized_name
+        else [
+            normalize_widget_name(candidate)
+            for candidate in get_widget_name_candidates(node, widget_index)
+        ]
+    )
     if isinstance(by_name, dict):
         for candidate in normalized_candidates:
             candidate_info = by_name.get(candidate, {})
@@ -1443,7 +1508,12 @@ def get_node_model_info(
 
     # For each widget value, check if it looks like a model file or URN
     for idx, value in enumerate(widgets_values):
-        widget_name = get_widget_name_hint(node, idx)
+        if is_dynamic_non_model_widget(node, idx):
+            continue
+        widget_name = (
+            get_dynamic_serialized_widget_name(node, idx)
+            or get_widget_name_hint(node, idx)
+        )
         dynamic_category_hints = get_dynamic_widget_category_hints(node, idx)
         if dynamic_category_hints and all(
             normalize_download_category(category)
@@ -1468,6 +1538,12 @@ def get_node_model_info(
             value,
             model_widget_choice_info,
         )
+        if (
+            input_choice_source in {"static", "hybrid"}
+            and static_input_choice_matches_value
+            and not static_input_choice_looks_like_model
+        ):
+            continue
         output_category_hint = get_node_output_category_hint(node)
         workflow_schema_model_candidate = bool(
             input_choice_source == "unknown"
