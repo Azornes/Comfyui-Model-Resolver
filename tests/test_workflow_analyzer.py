@@ -326,6 +326,77 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
         self.assertEqual(r"LTXV\model.safetensors", refs[0]["original_path"])
         self.assertEqual("checkpoints", refs[0]["category"])
 
+    def test_implicit_seed_control_keeps_following_model_aligned(self):
+        dynamic_hints = {
+            "widget_names": ["noise_seed", "clip_name", "strength"],
+            "by_name": {"clip_name": ["clip_vision"]},
+            "by_index": {1: ["clip_vision"]},
+            "serialized_name_by_index": {
+                0: "noise_seed",
+                1: "clip_name",
+                2: "strength",
+            },
+            "non_model_by_index": [],
+            "has_generated_widgets": False,
+            "choice_info_by_name": {
+                "clip_name": {
+                    "source": "folder_paths",
+                    "choices": [],
+                }
+            },
+            "choice_info_by_index": {
+                1: {"source": "folder_paths", "choices": []}
+            },
+        }
+        workflow = {
+            "nodes": [
+                {
+                    "id": 321,
+                    "type": "UltraSharkSampler Tiled",
+                    "inputs": [
+                        {
+                            "name": "noise_seed",
+                            "type": "INT",
+                            "widget": {"name": "noise_seed"},
+                        },
+                        {
+                            "name": "clip_name",
+                            "type": "COMBO",
+                            "widget": {"name": "clip_name"},
+                        },
+                        {
+                            "name": "strength",
+                            "type": "FLOAT",
+                            "widget": {"name": "strength"},
+                        },
+                    ],
+                    "widgets_values": [
+                        0,
+                        "randomize",
+                        "clip-vit-large-patch14.safetensors",
+                        1.0,
+                    ],
+                    "outputs": [{"type": "LATENT", "links": []}],
+                }
+            ]
+        }
+
+        with patch(
+            "core.workflow_analyzer.get_dynamic_node_widget_category_hints",
+            return_value=dynamic_hints,
+        ):
+            refs = analyze_workflow_models(workflow, available_models=[])
+
+        self.assertEqual(1, len(refs))
+        self.assertEqual(2, refs[0]["widget_index"])
+        self.assertEqual("clip_name", refs[0]["widget_name"])
+        self.assertEqual(
+            "clip-vit-large-patch14.safetensors",
+            refs[0]["original_path"],
+        )
+        self.assertEqual("clip_vision", refs[0]["category"])
+        self.assertFalse(refs[0]["exists"])
+
     def test_non_model_static_choices_in_hybrid_model_dropdowns_are_skipped(self):
         cases = [
             ("DependenciesEdit", "ckpt_name", "checkpoints", "Original"),

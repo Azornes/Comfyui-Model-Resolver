@@ -862,29 +862,110 @@ def get_dynamic_node_widget_category_hints(node_type: str) -> Dict[str, Any]:
         return hints
 
 
+CONTROL_AFTER_GENERATE_VALUES = {
+    "fixed",
+    "increment",
+    "decrement",
+    "randomize",
+}
+
+
+def _normalized_index_mapping(value: Any) -> Dict[int, str]:
+    if not isinstance(value, dict):
+        return {}
+
+    normalized: Dict[int, str] = {}
+    for raw_index, raw_name in value.items():
+        try:
+            index = int(raw_index)
+        except (TypeError, ValueError):
+            continue
+        if index < 0:
+            continue
+        normalized[index] = str(raw_name or "").strip()
+    return normalized
+
+
+def _dynamic_serialized_widget_layout(
+    node: Dict[str, Any], hints: Dict[str, Any]
+) -> tuple[Dict[int, str], Set[int]]:
+    names_by_index = _normalized_index_mapping(
+        hints.get("serialized_name_by_index", {})
+    )
+    non_model_indices = {
+        int(index)
+        for index in hints.get("non_model_by_index", [])
+        if str(index).isdigit()
+    }
+    if hints.get("has_generated_widgets"):
+        return names_by_index, non_model_indices
+
+    widgets_values = node.get("widgets_values", [])
+    if not isinstance(widgets_values, list) or not names_by_index:
+        return {}, set()
+
+    expected_widget_count = max(names_by_index) + 1
+    remaining_extra_widgets = len(widgets_values) - expected_widget_count
+    if remaining_extra_widgets <= 0:
+        return {}, set()
+
+    effective_names: Dict[int, str] = {}
+    effective_non_model_indices: Set[int] = set()
+    inserted_widget_count = 0
+
+    for base_index in sorted(names_by_index):
+        widget_name = names_by_index[base_index]
+        actual_index = base_index + inserted_widget_count
+        effective_names[actual_index] = widget_name
+
+        normalized_name = normalize_widget_name(widget_name)
+        control_index = actual_index + 1
+        seed_value = (
+            widgets_values[actual_index]
+            if actual_index < len(widgets_values)
+            else None
+        )
+        control_value = (
+            str(widgets_values[control_index] or "").strip().lower()
+            if control_index < len(widgets_values)
+            else ""
+        )
+        is_seed_widget = normalized_name == "seed" or normalized_name.endswith(
+            "_seed"
+        )
+        if (
+            remaining_extra_widgets > 0
+            and is_seed_widget
+            and isinstance(seed_value, int)
+            and not isinstance(seed_value, bool)
+            and control_value in CONTROL_AFTER_GENERATE_VALUES
+        ):
+            effective_names[control_index] = "control_after_generate"
+            effective_non_model_indices.add(control_index)
+            inserted_widget_count += 1
+            remaining_extra_widgets -= 1
+
+    if not effective_non_model_indices:
+        return {}, set()
+    return effective_names, effective_non_model_indices
+
+
 def get_dynamic_serialized_widget_name(
     node: Dict[str, Any], widget_index: int
 ) -> str:
     hints = get_dynamic_node_widget_category_hints(str(node.get("type", "") or ""))
-    if not hints.get("has_generated_widgets"):
-        return ""
-
-    names_by_index = hints.get("serialized_name_by_index", {})
-    if not isinstance(names_by_index, dict):
-        return ""
-
-    return str(
-        names_by_index.get(widget_index, names_by_index.get(str(widget_index), "")) or ""
-    ).strip()
+    names_by_index, _non_model_indices = _dynamic_serialized_widget_layout(
+        node, hints
+    )
+    return names_by_index.get(widget_index, "")
 
 
 def is_dynamic_non_model_widget(node: Dict[str, Any], widget_index: int) -> bool:
     hints = get_dynamic_node_widget_category_hints(str(node.get("type", "") or ""))
-    if not hints.get("has_generated_widgets"):
-        return False
-
-    non_model_indices = hints.get("non_model_by_index", [])
-    return widget_index in non_model_indices or str(widget_index) in non_model_indices
+    _names_by_index, non_model_indices = _dynamic_serialized_widget_layout(
+        node, hints
+    )
+    return widget_index in non_model_indices
 
 
 def get_dynamic_widget_category_hints(
