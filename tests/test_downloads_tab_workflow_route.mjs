@@ -2497,6 +2497,44 @@ test('download category normalization maps select safetensors alias to diffusion
   assert.equal(normalizeDownloadCategory('SELECT SAFETENSORS'), 'diffusion_models');
 });
 
+test('category display names use exact ComfyUI folder keys', () => {
+  const normalizeDownloadCategory = eval(`(${extractMethod(downloadTargetMethodsSource, 'normalizeDownloadCategory')})`);
+  const getCategoryDisplayName = eval(`(${extractMethod(downloadTargetMethodsSource, 'getCategoryDisplayName')})`);
+  const dialog = { normalizeDownloadCategory };
+
+  assert.equal(getCategoryDisplayName.call(dialog, 'audio_encoders'), 'audio_encoders');
+  assert.equal(getCategoryDisplayName.call(dialog, 'audio_encoder'), 'audio_encoders');
+  assert.equal(getCategoryDisplayName.call(dialog, 'text_encoders'), 'text_encoders');
+  assert.equal(getCategoryDisplayName.call(dialog, 'style_models'), 'style_models');
+  assert.equal(getCategoryDisplayName.call(dialog, 'model_patches'), 'model_patches');
+  assert.equal(getCategoryDisplayName.call(dialog, 'upscale_models'), 'upscale_models');
+  assert.equal(getCategoryDisplayName.call(dialog, 'loras'), 'loras');
+  assert.equal(getCategoryDisplayName.call(dialog, 'checkpoints'), 'checkpoints');
+});
+
+test('download path settings label categories with exact folder keys', () => {
+  const getDefaultDownloadPathTemplates = eval(`(${extractMethod(downloadTargetMethodsSource, 'getDefaultDownloadPathTemplates')})`);
+  const getDownloadPathTemplateCategoryDefinitions = eval(`(${extractMethod(downloadTargetMethodsSource, 'getDownloadPathTemplateCategoryDefinitions')})`);
+  const getDefaultRootCategoryDefinitions = eval(`(${extractMethod(downloadTargetMethodsSource, 'getDefaultRootCategoryDefinitions')})`);
+  const dialog = { getDefaultDownloadPathTemplates };
+
+  const templateCategories = getDownloadPathTemplateCategoryDefinitions.call(dialog);
+  const rootCategories = getDefaultRootCategoryDefinitions.call(dialog);
+
+  assert.deepEqual(
+    templateCategories.map(item => item.label),
+    templateCategories.map(item => item.key)
+  );
+  assert.equal(
+    rootCategories.find(item => item.key === 'text_encoders').label,
+    'text_encoders'
+  );
+  assert.equal(
+    rootCategories.find(item => item.key === 'upscale_models').label,
+    'upscale_models'
+  );
+});
+
 test('missing model preview shows accepted GGUF format next to its category', () => {
   const renderMissingModelFormatBadges = eval(`(${extractMethod(missingBrowserMethodsSource, 'renderMissingModelFormatBadges')})`);
   const dialog = {

@@ -714,35 +714,7 @@ export const downloadTargetMethods = {
 
     getCategoryDisplayName(category = '') {
         category = this.normalizeDownloadCategory(category);
-        const displayNames = {
-            'checkpoints': 'checkpoint',
-            'loras': 'lora',
-            'vae': 'vae',
-            'controlnet': 'controlnet',
-            'embeddings': 'embedding',
-            'upscale_models': 'upscale_model',
-            'latent_upscale_models': 'latent_upscale_model',
-            'diffusion_models': 'diffusion_models',
-            'text_encoders': 'text encoders',
-            'clip': 'clip',
-            'clip_vision': 'clip_vision',
-            'hypernetworks': 'hypernetwork',
-            'style_models': 'style model',
-            'gligen': 'GLIGEN',
-            'diffusers': 'Diffusers',
-            'vae_approx': 'TAESD / VAE approx',
-            'audio_encoders': 'audio encoder',
-            'background_removal': 'background removal',
-            'frame_interpolation': 'frame interpolation',
-            'geometry_estimation': 'geometry estimation',
-            'detection': 'detection',
-            'model_patches': 'model patch',
-            'photomaker': 'PhotoMaker',
-            'optical_flow': 'optical flow',
-            'sams': 'SAM',
-            'ultralytics': 'Ultralytics'
-        };
-        return displayNames[category] || category || 'unknown';
+        return category || 'unknown';
     },
 
     getModelTypeColorClass(value = '') {
@@ -1107,27 +1079,19 @@ export const downloadTargetMethods = {
     },
 
     getDownloadPathTemplateCategoryDefinitions() {
-        return [
-            { key: 'loras', label: 'LoRAs' },
-            { key: 'checkpoints', label: 'Checkpoints' },
-            { key: 'embeddings', label: 'Embeddings' },
-            { key: 'diffusion_models', label: 'Diffusion models' },
-            { key: 'text_encoders', label: 'Text encoders' },
-            { key: 'controlnet', label: 'ControlNet' },
-            { key: 'vae', label: 'VAE' },
-            { key: 'upscale_models', label: 'Upscale models' }
-        ];
+        return Object.keys(this.getDefaultDownloadPathTemplates())
+            .map(key => ({ key, label: key }));
     },
 
     getDefaultRootCategoryDefinitions() {
         return [
-            { key: 'loras', label: 'LoRA root', settingKey: 'default_lora_root', storageKey: 'ModelResolver.defaultLoraRoot' },
-            { key: 'checkpoints', label: 'Checkpoint root', settingKey: 'default_checkpoint_root', storageKey: 'ModelResolver.defaultCheckpointRoot' },
-            { key: 'diffusion_models', label: 'Diffusion model root', settingKey: 'default_unet_root', storageKey: 'ModelResolver.defaultUnetRoot' },
-            { key: 'embeddings', label: 'Embedding root', settingKey: 'default_embedding_root', storageKey: 'ModelResolver.defaultEmbeddingRoot' },
-            { key: 'text_encoders', label: 'Text encoder root', settingKey: 'default_text_encoder_root', storageKey: 'ModelResolver.defaultTextEncoderRoot' },
-            { key: 'vae', label: 'VAE root', settingKey: 'default_vae_root', storageKey: 'ModelResolver.defaultVaeRoot' },
-            { key: 'upscale_models', label: 'Upscale model root', settingKey: 'default_upscale_model_root', storageKey: 'ModelResolver.defaultUpscaleModelRoot' }
+            { key: 'loras', label: 'loras', settingKey: 'default_lora_root', storageKey: 'ModelResolver.defaultLoraRoot' },
+            { key: 'checkpoints', label: 'checkpoints', settingKey: 'default_checkpoint_root', storageKey: 'ModelResolver.defaultCheckpointRoot' },
+            { key: 'diffusion_models', label: 'diffusion_models', settingKey: 'default_unet_root', storageKey: 'ModelResolver.defaultUnetRoot' },
+            { key: 'embeddings', label: 'embeddings', settingKey: 'default_embedding_root', storageKey: 'ModelResolver.defaultEmbeddingRoot' },
+            { key: 'text_encoders', label: 'text_encoders', settingKey: 'default_text_encoder_root', storageKey: 'ModelResolver.defaultTextEncoderRoot' },
+            { key: 'vae', label: 'vae', settingKey: 'default_vae_root', storageKey: 'ModelResolver.defaultVaeRoot' },
+            { key: 'upscale_models', label: 'upscale_models', settingKey: 'default_upscale_model_root', storageKey: 'ModelResolver.defaultUpscaleModelRoot' }
         ];
     },
 
