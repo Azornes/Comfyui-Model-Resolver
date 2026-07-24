@@ -46,6 +46,7 @@ from core.sources.civitai import (
     _enrich_model_info_with_details,
     _find_matching_file_in_versions,
     _extract_public_api_model_candidates,
+    _extract_trpc_model_candidates,
     _search_civitai_public_api_candidates,
     _search_civitai_red_candidates,
     _search_civitai_trpc_candidates,
@@ -633,6 +634,66 @@ class CivitaiRedSearchTests(unittest.TestCase):
 
 
 class CivitaiTrpcSearchTests(unittest.TestCase):
+
+    def test_extracts_candidates_from_devalue_serialized_data(self):
+        payload = {
+            "result": {
+                "data": json.dumps(
+                    [
+                        {"items": 1, "nextCursor": -1},
+                        [2],
+                        {"id": 3, "version": 4},
+                        2725430,
+                        {"id": 5},
+                        3071760,
+                    ],
+                    separators=(",", ":"),
+                )
+            }
+        }
+
+        result = _extract_trpc_model_candidates(payload)
+
+        self.assertEqual(
+            result,
+            [{"model_id": 2725430, "version_id": 3071760}],
+        )
+
+    def test_unrecognized_trpc_shapes_return_no_candidates(self):
+        payloads = [
+            None,
+            "not-an-object",
+            {"result": "not-an-object"},
+            {"result": {"data": "not-json"}},
+            {"result": {"data": {"json": "not-json"}}},
+            {"result": {"data": {"json": {"items": "not-a-list"}}}},
+        ]
+
+        for payload in payloads:
+            with self.subTest(payload=payload):
+                self.assertEqual(_extract_trpc_model_candidates(payload), [])
+
+    @patch("core.sources.civitai.requests.get")
+    def test_devalue_serialized_empty_items_does_not_abort_search(self, mock_get):
+        response = MagicMock()
+        response.status_code = 200
+        response.headers = {"content-type": "application/json"}
+        response.text = (
+            '{"result":{"data":"[{\\"items\\":1,\\"nextCursor\\":-1},[]]"}}'
+        )
+        response.json.return_value = {
+            "result": {"data": '[{"items":1,"nextCursor":-1},[]]'}
+        }
+        mock_get.return_value = response
+
+        result = _search_civitai_trpc_candidates(
+            "KNPV3_1.safetensors",
+            model_type="loras",
+            limit=5,
+        )
+
+        self.assertEqual(result, [])
+        mock_get.assert_called_once()
 
     @patch("core.sources.civitai.requests.get")
     def test_does_not_retry_without_type_filter_when_typed_search_is_empty(self, mock_get):

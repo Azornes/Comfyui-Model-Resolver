@@ -326,6 +326,64 @@ def _extract_civitai_red_candidates(html: str, limit: int = 5) -> List[Dict[str,
     return candidates
 
 
+_DEVALUE_UNDEFINED = object()
+
+
+def _decode_devalue_trpc_data(value: str) -> Optional[Dict[str, Any]]:
+    """Decode CivitAI's alternate devalue-serialized tRPC data payload."""
+    try:
+        parsed = json.loads(value)
+    except (TypeError, ValueError):
+        return None
+
+    if isinstance(parsed, dict):
+        return parsed
+    if not isinstance(parsed, list) or not parsed:
+        return None
+
+    memo: Dict[int, Any] = {}
+
+    def hydrate_reference(reference: Any) -> Any:
+        if isinstance(reference, bool) or reference is None:
+            return reference
+        if not isinstance(reference, int):
+            return reference
+        if reference < 0:
+            return _DEVALUE_UNDEFINED
+        if reference >= len(parsed):
+            return _DEVALUE_UNDEFINED
+        return hydrate_index(reference)
+
+    def hydrate_index(index: int) -> Any:
+        if index in memo:
+            return memo[index]
+
+        raw_value = parsed[index]
+        if isinstance(raw_value, dict):
+            hydrated: Any = {}
+            memo[index] = hydrated
+            for key, reference in raw_value.items():
+                resolved = hydrate_reference(reference)
+                if resolved is not _DEVALUE_UNDEFINED:
+                    hydrated[key] = resolved
+            return hydrated
+
+        if isinstance(raw_value, list):
+            hydrated = []
+            memo[index] = hydrated
+            for reference in raw_value:
+                resolved = hydrate_reference(reference)
+                if resolved is not _DEVALUE_UNDEFINED:
+                    hydrated.append(resolved)
+            return hydrated
+
+        memo[index] = raw_value
+        return raw_value
+
+    decoded = hydrate_index(0)
+    return decoded if isinstance(decoded, dict) else None
+
+
 def _extract_trpc_model_candidates(
     payload: Any, limit: int = 5
 ) -> List[Dict[str, Optional[int]]]:
@@ -333,12 +391,26 @@ def _extract_trpc_model_candidates(
     candidates: List[Dict[str, Optional[int]]] = []
     seen = set()
 
-    items = (
-        payload.get("result", {})
-        .get("data", {})
-        .get("json", {})
-        .get("items", [])
-    )
+    if not isinstance(payload, dict):
+        return candidates
+
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        return candidates
+
+    data = result.get("data")
+    if isinstance(data, str):
+        data = _decode_devalue_trpc_data(data)
+    if not isinstance(data, dict):
+        return candidates
+
+    json_data = data.get("json", data)
+    if isinstance(json_data, str):
+        json_data = _decode_devalue_trpc_data(json_data)
+    if not isinstance(json_data, dict):
+        return candidates
+
+    items = json_data.get("items", [])
 
     if not isinstance(items, list):
         return candidates
