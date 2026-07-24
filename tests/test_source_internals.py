@@ -10,8 +10,8 @@ extract_trained_words), or where a refactored unified function changes
 its output contract.
 """
 
-import os
 import json
+import os
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
@@ -22,38 +22,39 @@ import requests
 # civarchive internals
 # ---------------------------------------------------------------------------
 from core.sources.civarchive import (
-    _normalize_download_url,
     _archive_link_is_dead,
-    _download_url_looks_like_model_file,
     _collect_download_urls,
-    _collect_normalized_download_urls,
     _collect_download_urls_unified,
+    _collect_normalized_download_urls,
+    _fetch_remote_file_size_bytes,
     _normalize_archive_version,
+    _normalize_download_url,
+    _resolve_file_size_bytes,
     parse_civarchive_url,
 )
-from core.type_utils import prepare_remote_size_probe_url
 
 # ---------------------------------------------------------------------------
 # civitai internals
 # ---------------------------------------------------------------------------
 from core.sources.civitai import (
-    clear_search_cache,
-    build_civitai_session_cookie,
-    parse_civitai_url,
-    _normalize_civitai_file,
-    _extract_model_images,
     _build_civitai_result_from_version,
     _enrich_model_info_with_details,
-    _find_matching_file_in_versions,
+    _extract_model_images,
     _extract_public_api_model_candidates,
     _extract_trpc_model_candidates,
+    _find_matching_file_in_versions,
+    _normalize_civitai_file,
     _search_civitai_public_api_candidates,
     _search_civitai_red_candidates,
     _search_civitai_trpc_candidates,
+    build_civitai_session_cookie,
+    clear_search_cache,
     get_model_info_by_hash,
     get_model_info_for_file,
+    parse_civitai_url,
     search_civitai_for_file,
 )
+from core.type_utils import prepare_remote_size_probe_url
 
 # ---------------------------------------------------------------------------
 # workflow_updater
@@ -533,6 +534,60 @@ class PrepareSizeProbeUrlTests(unittest.TestCase):
 
     def test_none_returns_none(self):
         self.assertIsNone(self._prepare_size_probe_url(None))
+
+
+class CivArchiveMirrorSizeProbeTests(unittest.TestCase):
+
+    @patch(
+        "core.sources.civarchive.fetch_remote_file_size_cached",
+        return_value=364853140,
+    )
+    def test_huggingface_mirror_is_allowed(self, mock_fetch):
+        url = (
+            "https://huggingface.co/unsloth/LTX-2.3-GGUF/resolve/main/vae/"
+            "ltx-2.3-22b-distilled_audio_vae.safetensors"
+        )
+
+        self.assertEqual(_fetch_remote_file_size_bytes(url), 364853140)
+        mock_fetch.assert_called_once()
+        self.assertEqual(mock_fetch.call_args.args[0], url)
+
+    @patch(
+        "core.sources.civarchive.fetch_remote_file_size_cached",
+        return_value=364853140,
+    )
+    def test_modelscope_mirror_is_allowed(self, mock_fetch):
+        url = (
+            "https://www.modelscope.ai/unsloth/LTX-2.3-GGUF/resolve/master/vae/"
+            "ltx-2.3-22b-distilled_audio_vae.safetensors"
+        )
+
+        self.assertEqual(_fetch_remote_file_size_bytes(url), 364853140)
+        mock_fetch.assert_called_once()
+        self.assertEqual(mock_fetch.call_args.args[0], url)
+
+    @patch("core.sources.civarchive._fetch_remote_file_size_bytes")
+    def test_huggingface_is_probed_before_modelscope(self, mock_fetch):
+        modelscope_url = "https://www.modelscope.ai/org/repo/resolve/master/model.safetensors"
+        huggingface_url = "https://huggingface.co/org/repo/resolve/main/model.safetensors"
+        mock_fetch.side_effect = lambda url: 123456 if url == huggingface_url else None
+
+        size = _resolve_file_size_bytes(
+            {},
+            [modelscope_url, huggingface_url],
+        )
+
+        self.assertEqual(size, 123456)
+        mock_fetch.assert_called_once_with(huggingface_url)
+
+    @patch("core.sources.civarchive.fetch_remote_file_size_cached")
+    def test_untrusted_mirror_is_not_probed(self, mock_fetch):
+        self.assertIsNone(
+            _fetch_remote_file_size_bytes(
+                "https://example.com/models/model.safetensors"
+            )
+        )
+        mock_fetch.assert_not_called()
 
 
 

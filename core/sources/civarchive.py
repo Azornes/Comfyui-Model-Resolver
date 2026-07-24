@@ -9,7 +9,7 @@ import json
 import re
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 from ..log_system import create_module_logger
 from ..matcher import (
@@ -27,7 +27,7 @@ from ..matcher import (
 from ..matcher import (
     normalize_base_model as _normalize_base_model,
 )
-from ..network_utils import request_source_response
+from ..network_utils import host_matches_domain, request_source_response
 from ..path_utils import get_filename_from_path
 from ..progress import get_progress_reporter
 from ..type_utils import (
@@ -64,6 +64,22 @@ DEFAULT_CIVARCHIVE_CANDIDATE_LIMIT = 10
 MAX_CIVARCHIVE_CANDIDATE_LIMIT = 30
 SEARCH_RESULT_DETAIL_LIMIT = 5
 HASH_PAGE_MODEL_LINK_LIMIT = 5
+CIVARCHIVE_SIZE_PROBE_DOMAINS = (
+    "huggingface.co",
+    "civarchive.com",
+    "civitai.com",
+    "civitai.red",
+    "modelscope.ai",
+    "modelscope.cn",
+)
+CIVARCHIVE_SIZE_PROBE_PRIORITY = (
+    "huggingface.co",
+    "civarchive.com",
+    "civitai.com",
+    "civitai.red",
+    "modelscope.ai",
+    "modelscope.cn",
+)
 
 
 
@@ -540,10 +556,25 @@ def _fetch_remote_file_size_bytes(url: Any, timeout: int = 15) -> Optional[int]:
     normalized = _normalize_download_url(url)
     if not normalized:
         return None
-    probe_url = prepare_remote_size_probe_url(normalized, ["civarchive.com", "civitai.com", "civitai.red"])
+    probe_url = prepare_remote_size_probe_url(
+        normalized,
+        list(CIVARCHIVE_SIZE_PROBE_DOMAINS),
+    )
     if not probe_url:
         return None
     return fetch_remote_file_size_cached(probe_url, headers=REQUEST_HEADERS, timeout=timeout)
+
+
+def _remote_size_probe_priority(url: Any) -> int:
+    try:
+        host = urlparse(str(url or "")).hostname
+    except ValueError:
+        return len(CIVARCHIVE_SIZE_PROBE_PRIORITY)
+
+    for priority, domain in enumerate(CIVARCHIVE_SIZE_PROBE_PRIORITY):
+        if host_matches_domain(host, domain):
+            return priority
+    return len(CIVARCHIVE_SIZE_PROBE_PRIORITY)
 
 
 
@@ -556,7 +587,7 @@ def _resolve_file_size_bytes(
         return size
 
     urls = download_urls if download_urls is not None else _collect_normalized_download_urls(file_info)
-    for url in urls:
+    for url in sorted(urls, key=_remote_size_probe_priority):
         size = _fetch_remote_file_size_bytes(url)
         if size:
             return size
