@@ -88,6 +88,21 @@ class FileManagerTests(unittest.TestCase):
         self.assertFalse(result["selected"])
 
     @patch("core.file_manager.subprocess.Popen")
+    @patch("core.file_manager.shutil.which")
+    def test_windows_does_not_treat_explorer_exit_code_one_as_failure(
+        self, mock_which, mock_popen
+    ):
+        mock_which.return_value = r"C:\Windows\explorer.exe"
+        process = MagicMock()
+        process.wait.return_value = 1
+        mock_popen.return_value = process
+
+        result = open_in_file_manager(self.file_path, system="Windows")
+
+        process.wait.assert_not_called()
+        self.assertEqual(result["launcher"], "explorer")
+
+    @patch("core.file_manager.subprocess.Popen")
     @patch("core.file_manager.shutil.which", return_value="/usr/bin/open")
     def test_macos_reveals_a_file(self, _mock_which, mock_popen):
         mock_popen.return_value = self.successful_process()

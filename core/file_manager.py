@@ -82,7 +82,7 @@ def _find_launcher(*names: str) -> tuple[str, str]:
     )
 
 
-def _launch(command: list[str]) -> None:
+def _launch(command: list[str], check_exit_code: bool = True) -> None:
     kwargs: Dict[str, Any] = {
         "shell": False,
         "stdin": subprocess.DEVNULL,
@@ -96,6 +96,12 @@ def _launch(command: list[str]) -> None:
         process = subprocess.Popen(command, **kwargs)
     except (OSError, ValueError) as exc:
         raise FileManagerError(f"Could not start the system file manager: {exc}") from exc
+
+    # Explorer commonly delegates the request to an existing shell process and
+    # exits with code 1 even though the folder opened successfully. A successful
+    # process creation is therefore the only reliable Windows signal.
+    if not check_exit_code:
+        return
 
     # Most launcher commands exit immediately after handing the request to the
     # desktop. Catch a fast failure without waiting for a long-running manager.
@@ -154,7 +160,7 @@ def open_in_file_manager(path_value: Any, system: str | None = None) -> Dict[str
             f"Opening folders is not supported on {display_name}."
         )
 
-    _launch(command)
+    _launch(command, check_exit_code=platform_name != "windows")
     return {
         "platform": platform_name,
         "launcher": launcher,
