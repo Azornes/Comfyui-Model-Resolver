@@ -54,6 +54,10 @@ const resolverDialogSource = fs.readFileSync(
   path.join(projectRoot, 'web/resolver/resolver_dialog.js'),
   'utf8'
 );
+const workflowStateMethodsSource = fs.readFileSync(
+  path.join(projectRoot, 'web/resolver/shell/workflow_state_methods.js'),
+  'utf8'
+);
 const renderFormatMethodsSource = fs.readFileSync(
   path.join(projectRoot, 'web/resolver/utils/render_format_methods.js'),
   'utf8'
@@ -534,6 +538,94 @@ function extractMethod(source, methodName, paramsPattern = '[^)]*') {
   }
   throw new Error(`Could not parse ${methodName}`);
 }
+
+test('workflow signature tracks model strength for bypass and custom LoRA loaders', () => {
+  const getWorkflowSignatureData = eval(`(${extractMethod(workflowStateMethodsSource, 'getWorkflowSignatureData')})`);
+  const dialog = { capabilities: { node_rules: {} } };
+  const makeWorkflow = (type, strengthName, strength) => ({
+    nodes: [{
+      id: 34,
+      type,
+      inputs: [
+        { name: 'model', type: 'MODEL', link: 1 },
+        { name: 'clip', type: 'CLIP', link: 2 },
+        { name: 'lora_name', widget: { name: 'lora_name' } },
+        { name: strengthName, widget: { name: strengthName } },
+      ],
+      outputs: [],
+      widgets_values: ['AnimeEditV2.safetensors', strength],
+    }],
+    links: [],
+  });
+
+  const bypass = getWorkflowSignatureData.call(
+    dialog,
+    makeWorkflow('LoraLoaderBypass', 'strength_model', 0.65)
+  );
+  const custom = getWorkflowSignatureData.call(
+    dialog,
+    makeWorkflow('easy fullLoader', 'lora_model_strength', 0.8)
+  );
+
+  assert.deepEqual(bypass.nodes[0].widgets_values, [
+    { index: 0, value: 'AnimeEditV2.safetensors' },
+    { index: 1, value: 0.65 },
+  ]);
+  assert.deepEqual(custom.nodes[0].widgets_values, [
+    { index: 0, value: 'AnimeEditV2.safetensors' },
+    { index: 1, value: 0.8 },
+  ]);
+});
+
+test('workflow signature tracks EasyLoraStack mode and indexed strengths', () => {
+  const getWorkflowSignatureData = eval(`(${extractMethod(workflowStateMethodsSource, 'getWorkflowSignatureData')})`);
+  const dialog = {
+    capabilities: {
+      node_rules: {
+        'easy loraStack': { 3: 'loras', 7: 'loras' },
+      },
+    },
+  };
+  const widgetNames = [
+    'toggle',
+    'mode',
+    'num_loras',
+    'lora_1_name',
+    'lora_1_strength',
+    'lora_1_model_strength',
+    'lora_1_clip_strength',
+  ];
+  const workflow = {
+    nodes: [{
+      id: 160,
+      type: 'easy loraStack',
+      inputs: widgetNames.map(name => ({ name, widget: { name } })),
+      outputs: [],
+      widgets_values: [
+        true,
+        'advanced',
+        1,
+        'nsfw_flux_lora_v1.safetensors',
+        1,
+        0.45,
+        0.25,
+      ],
+    }],
+    links: [],
+  };
+
+  const signature = getWorkflowSignatureData.call(dialog, workflow);
+
+  assert.deepEqual(signature.nodes[0].widgets_values, [
+    { index: 0, value: true },
+    { index: 1, value: 'advanced' },
+    { index: 2, value: 1 },
+    { index: 3, value: 'nsfw_flux_lora_v1.safetensors' },
+    { index: 4, value: 1 },
+    { index: 5, value: 0.45 },
+    { index: 6, value: 0.25 },
+  ]);
+});
 
 test('download percent keeps native Xet progress below one percent visible', () => {
   const formatDownloadPercent = eval(`(${extractMethod(renderFormatMethodsSource, 'formatDownloadPercent')})`);

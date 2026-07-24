@@ -66,7 +66,23 @@ export const workflowStateMethods = {
             'active',
             'on'
         ]);
-        const loraStrengthNodeTypes = new Set(['LoraLoader', 'LoraLoaderModelOnly']);
+        const loraStrengthNodeTypes = new Set([
+            'LoraLoader',
+            'LoraLoaderModelOnly',
+            'LoraLoaderBypass',
+            'LoraLoaderBypassModelOnly',
+            'CreateHookLora',
+            'CreateHookLoraModelOnly'
+        ]);
+        const loraStrengthKeys = new Set([
+            'strength_model',
+            'lora_model_strength',
+            'model_strength',
+            'lora_strength',
+            'strength'
+        ]);
+        const indexedLoraStrengthPattern = /^lora_\d+_(?:strength|model_strength|clip_strength)$/;
+        const loraStackStateKeys = new Set(['toggle', 'mode', 'num_loras']);
         const staticFallback = {
             CheckpointLoaderSimple: [0],
             CheckpointLoader: [1],
@@ -158,7 +174,13 @@ export const workflowStateMethods = {
                 || urlPattern.test(text)
                 || loraTokenPattern.test(text);
         };
-        const isRelevantScalarKey = (key = '') => ['strength', 'active', 'on', 'model_id', 'modelid', 'version_id', 'versionid'].includes(normalizeKey(key));
+        const isRelevantScalarKey = (key = '') => {
+            const normalizedKey = normalizeKey(key);
+            return loraStrengthKeys.has(normalizedKey)
+                || indexedLoraStrengthPattern.test(normalizedKey)
+                || loraStackStateKeys.has(normalizedKey)
+                || ['active', 'on', 'model_id', 'modelid', 'version_id', 'versionid'].includes(normalizedKey);
+        };
         const normalizeRelevantValue = (value, key = '', isModelWidget = false) => {
             if (value == null) return null;
 
@@ -192,8 +214,14 @@ export const workflowStateMethods = {
             const widgetsValues = Array.isArray(node.widgets_values) ? node.widgets_values : [];
             const nodeType = node.type || '';
             const widgetValueKey = (index) => {
-                for (const key of ['widgets', 'inputs']) {
-                    const items = Array.isArray(node[key]) ? node[key] : [];
+                const widgetInputs = Array.isArray(node.inputs)
+                    ? node.inputs.filter(item => item?.widget != null)
+                    : [];
+                const collections = [
+                    Array.isArray(node.widgets) ? node.widgets : [],
+                    widgetInputs
+                ];
+                for (const items of collections) {
                     const item = items[index];
                     if (!item || typeof item !== 'object') continue;
                     const widgetName = item.widget && typeof item.widget === 'object'
@@ -208,7 +236,13 @@ export const workflowStateMethods = {
                 .map((value, index) => {
                     const key = widgetValueKey(index);
                     const isModelWidget = isModelWidgetIndex(nodeType, index);
-                    let normalized = normalizeRelevantValue(value, key, isModelWidget);
+                    const isLoraStackState = nodeType === 'easy loraStack'
+                        && loraStackStateKeys.has(normalizeKey(key));
+                    let normalized = normalizeRelevantValue(
+                        value,
+                        key,
+                        isModelWidget || isLoraStackState
+                    );
 
                     if (
                         normalized === null

@@ -960,6 +960,111 @@ def get_dynamic_serialized_widget_name(
     return names_by_index.get(widget_index, "")
 
 
+LORA_MODEL_STRENGTH_WIDGET_NAMES = (
+    "strength_model",
+    "lora_model_strength",
+    "model_strength",
+    "lora_strength",
+    "strength",
+)
+
+LEGACY_LORA_STRENGTH_NEXT_WIDGET_TYPES = {
+    "LoraLoader",
+    "LoraLoaderModelOnly",
+    "LoraLoaderBypass",
+    "LoraLoaderBypassModelOnly",
+    "CreateHookLora",
+    "CreateHookLoraModelOnly",
+}
+
+
+def _coerce_lora_strength(value: Any) -> Optional[float]:
+    if isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def get_lora_model_strength(
+    node: Dict[str, Any], lora_widget_index: Optional[int] = None
+) -> Optional[float]:
+    """Return the model strength associated with a LoRA widget in a workflow node."""
+    widgets_values = node.get("widgets_values", [])
+    if not isinstance(widgets_values, list):
+        return None
+
+    hints = get_dynamic_node_widget_category_hints(str(node.get("type", "") or ""))
+    schema_names = _normalized_index_mapping(
+        hints.get("serialized_name_by_index", {})
+    )
+    effective_names, _non_model_indices = _dynamic_serialized_widget_layout(
+        node, hints
+    )
+    if effective_names:
+        schema_names = effective_names
+
+    values_by_name: Dict[str, Any] = {}
+    names_by_index: Dict[int, List[str]] = {}
+    for widget_index, value in enumerate(widgets_values):
+        names = []
+        schema_name = schema_names.get(widget_index)
+        if schema_name:
+            names.append(schema_name)
+        names.extend(get_widget_name_candidates(node, widget_index))
+        normalized_names = unique_ordered_strings(
+            [normalize_widget_name(name) for name in names]
+        )
+        names_by_index[widget_index] = normalized_names
+        for normalized_name in normalized_names:
+            if normalized_name and normalized_name not in values_by_name:
+                values_by_name[normalized_name] = value
+
+    if isinstance(lora_widget_index, int):
+        for widget_name in names_by_index.get(lora_widget_index, []):
+            indexed_match = re.fullmatch(r"lora_(\d+)_name", widget_name)
+            if not indexed_match:
+                continue
+
+            lora_number = indexed_match.group(1)
+            mode = str(values_by_name.get("mode") or "").strip().lower()
+            if mode == "simple":
+                indexed_strength_names = [
+                    f"lora_{lora_number}_strength",
+                    f"lora_{lora_number}_model_strength",
+                ]
+            else:
+                indexed_strength_names = [
+                    f"lora_{lora_number}_model_strength",
+                    f"lora_{lora_number}_strength",
+                ]
+
+            for strength_name in indexed_strength_names:
+                strength = _coerce_lora_strength(
+                    values_by_name.get(strength_name)
+                )
+                if strength is not None:
+                    return strength
+
+    for strength_name in LORA_MODEL_STRENGTH_WIDGET_NAMES:
+        if strength_name not in values_by_name:
+            continue
+        strength = _coerce_lora_strength(values_by_name[strength_name])
+        if strength is not None:
+            return strength
+
+    node_type = str(node.get("type", "") or "")
+    if (
+        node_type in LEGACY_LORA_STRENGTH_NEXT_WIDGET_TYPES
+        and isinstance(lora_widget_index, int)
+        and 0 <= lora_widget_index + 1 < len(widgets_values)
+    ):
+        return _coerce_lora_strength(widgets_values[lora_widget_index + 1])
+
+    return None
+
+
 def is_dynamic_non_model_widget(node: Dict[str, Any], widget_index: int) -> bool:
     hints = get_dynamic_node_widget_category_hints(str(node.get("type", "") or ""))
     _names_by_index, non_model_indices = _dynamic_serialized_widget_layout(

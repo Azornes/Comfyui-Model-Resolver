@@ -6,7 +6,11 @@ from unittest.mock import patch
 
 from core import workflow_analyzer
 from core.scanner import scan_directory
-from core.workflow_analyzer import analyze_workflow_models, identify_missing_models
+from core.workflow_analyzer import (
+    analyze_workflow_models,
+    get_lora_model_strength,
+    identify_missing_models,
+)
 
 
 def _workflow_with_model(model_path):
@@ -993,6 +997,145 @@ class WorkflowCategoryHintsTests(unittest.TestCase):
         self.assertEqual("text_encoders", NODE_TYPE_TO_CATEGORY_HINTS.get("CLIPLoader"))
         # Verify custom fallbacks are also correctly populated
         self.assertEqual("loras", NODE_TYPE_TO_CATEGORY_HINTS.get("LoraLoaderV2"))
+
+
+class WorkflowLoraStrengthTests(unittest.TestCase):
+    @staticmethod
+    def _easy_lora_stack_hints():
+        return {
+            "serialized_name_by_index": {
+                0: "toggle",
+                1: "mode",
+                2: "num_loras",
+                3: "lora_1_name",
+                4: "lora_1_strength",
+                5: "lora_1_model_strength",
+                6: "lora_1_clip_strength",
+                7: "lora_2_name",
+                8: "lora_2_strength",
+                9: "lora_2_model_strength",
+                10: "lora_2_clip_strength",
+            },
+            "non_model_by_index": [],
+            "has_generated_widgets": False,
+        }
+
+    def test_bypass_loader_uses_strength_model_from_dynamic_schema(self):
+        node = {
+            "type": "LoraLoaderBypass",
+            "widgets_values": [
+                r"Anima\anime\AnimeEditV2.safetensors",
+                0.65,
+                0.4,
+            ],
+        }
+        hints = {
+            "serialized_name_by_index": {
+                0: "lora_name",
+                1: "strength_model",
+                2: "strength_clip",
+            },
+            "non_model_by_index": [],
+            "has_generated_widgets": False,
+        }
+
+        with patch(
+            "core.workflow_analyzer.get_dynamic_node_widget_category_hints",
+            return_value=hints,
+        ):
+            strength = get_lora_model_strength(node, 0)
+
+        self.assertEqual(0.65, strength)
+
+    def test_custom_loader_supports_lora_model_strength_widget(self):
+        node = {
+            "type": "easy fullLoader",
+            "inputs": [
+                {"name": "model", "type": "MODEL"},
+                {"name": "lora_name", "widget": {"name": "lora_name"}},
+                {
+                    "name": "lora_model_strength",
+                    "widget": {"name": "lora_model_strength"},
+                },
+                {
+                    "name": "lora_clip_strength",
+                    "widget": {"name": "lora_clip_strength"},
+                },
+            ],
+            "widgets_values": ["style.safetensors", 0.8, 0.3],
+        }
+
+        with patch(
+            "core.workflow_analyzer.get_dynamic_node_widget_category_hints",
+            return_value={},
+        ):
+            strength = get_lora_model_strength(node, 0)
+
+        self.assertEqual(0.8, strength)
+
+    def test_bypass_loader_keeps_legacy_next_widget_fallback(self):
+        node = {
+            "type": "LoraLoaderBypass",
+            "widgets_values": ["style.safetensors", "1.25", 0.5],
+        }
+
+        with patch(
+            "core.workflow_analyzer.get_dynamic_node_widget_category_hints",
+            return_value={},
+        ):
+            strength = get_lora_model_strength(node, 0)
+
+        self.assertEqual(1.25, strength)
+
+    def test_easy_lora_stack_simple_mode_uses_matching_indexed_strength(self):
+        node = {
+            "type": "easy loraStack",
+            "widgets_values": [
+                True,
+                "simple",
+                2,
+                "first.safetensors",
+                0.7,
+                0.2,
+                0.3,
+                "second.safetensors",
+                1.1,
+                1.2,
+                1.3,
+            ],
+        }
+
+        with patch(
+            "core.workflow_analyzer.get_dynamic_node_widget_category_hints",
+            return_value=self._easy_lora_stack_hints(),
+        ):
+            first_strength = get_lora_model_strength(node, 3)
+            second_strength = get_lora_model_strength(node, 7)
+
+        self.assertEqual(0.7, first_strength)
+        self.assertEqual(1.1, second_strength)
+
+    def test_easy_lora_stack_advanced_mode_uses_model_strength(self):
+        node = {
+            "type": "easy loraStack",
+            "widgets_values": [
+                True,
+                "advanced",
+                1,
+                "style.safetensors",
+                0.7,
+                0.45,
+                0.25,
+            ],
+        }
+
+        with patch(
+            "core.workflow_analyzer.get_dynamic_node_widget_category_hints",
+            return_value=self._easy_lora_stack_hints(),
+        ):
+            strength = get_lora_model_strength(node, 3)
+
+        self.assertEqual(0.45, strength)
 
 
 class WorkflowMissingReferenceGroupingTests(unittest.TestCase):

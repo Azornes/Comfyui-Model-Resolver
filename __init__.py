@@ -1676,6 +1676,7 @@ class ModelResolverExtension:
                     from .core.workflow_analyzer import (
                         URN_TYPE_MAP,
                         analyze_workflow_models,
+                        get_lora_model_strength,
                     )
 
                     update_loaded_progress(
@@ -1887,25 +1888,16 @@ class ModelResolverExtension:
                         model_name = get_filename_from_path(original_path)
                         strength = None
 
-                        # For standard LoraLoader nodes, strength is in next widget_value
                         if (
-                            node_type in ["LoraLoader", "LoraLoaderModelOnly"]
-                            and isinstance(widget_index, int)
+                            ref.get("strength") is None
+                            and category in {"lora", "loras"}
                         ):
-                            # Find the node in workflow to get strength value
                             for node in nodes:
                                 if node_matches_ref(node, ref):
-                                    widgets_values = node.get("widgets_values", [])
-                                    if (
-                                        isinstance(widgets_values, list)
-                                        and len(widgets_values) > widget_index + 1
-                                    ):
-                                        try:
-                                            strength = float(
-                                                widgets_values[widget_index + 1]
-                                            )
-                                        except (ValueError, TypeError):
-                                            strength = 1.0
+                                    strength = get_lora_model_strength(
+                                        node,
+                                        widget_index,
+                                    )
                                     break
 
                         if ref.get("strength") is not None:
