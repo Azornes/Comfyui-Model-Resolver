@@ -1796,6 +1796,15 @@ class ModelResolverExtension:
                     # Also extract from node.properties.models
                     workflow_nodes = workflow_json.get("nodes", [])
                     nodes = list(workflow_nodes) if isinstance(workflow_nodes, list) else []
+                    node_scopes = {
+                        id(node): {
+                            "subgraph_id": "",
+                            "subgraph_name": "",
+                            "is_top_level": True,
+                        }
+                        for node in nodes
+                        if isinstance(node, dict)
+                    }
                     definitions = workflow_json.get("definitions", {})
                     subgraphs = (
                         definitions.get("subgraphs", [])
@@ -1807,6 +1816,44 @@ class ModelResolverExtension:
                             subgraph_nodes = subgraph.get("nodes", [])
                             if isinstance(subgraph_nodes, list):
                                 nodes.extend(subgraph_nodes)
+                                for node in subgraph_nodes:
+                                    if not isinstance(node, dict):
+                                        continue
+                                    node_scopes[id(node)] = {
+                                        "subgraph_id": subgraph.get("id") or "",
+                                        "subgraph_name": (
+                                            subgraph.get("name")
+                                            or subgraph.get("id")
+                                            or ""
+                                        ),
+                                        "is_top_level": False,
+                                    }
+
+                    def get_node_scope(node):
+                        return node_scopes.get(
+                            id(node),
+                            {
+                                "subgraph_id": "",
+                                "subgraph_name": "",
+                                "is_top_level": True,
+                            },
+                        )
+
+                    def node_matches_ref(node, ref):
+                        if not isinstance(node, dict):
+                            return False
+                        if str(node.get("id")) != str(ref.get("node_id")):
+                            return False
+                        scope = get_node_scope(node)
+                        if scope["is_top_level"] != (
+                            ref.get("is_top_level") is not False
+                        ):
+                            return False
+                        if not scope["is_top_level"]:
+                            return str(scope["subgraph_id"]) == str(
+                                ref.get("subgraph_id") or ""
+                            )
+                        return True
 
                     # Collect all loaded models with their values
                     loaded_models = []
@@ -1847,7 +1894,7 @@ class ModelResolverExtension:
                         ):
                             # Find the node in workflow to get strength value
                             for node in nodes:
-                                if str(node.get("id")) == str(node_id):
+                                if node_matches_ref(node, ref):
                                     widgets_values = node.get("widgets_values", [])
                                     if (
                                         isinstance(widgets_values, list)
@@ -1890,6 +1937,25 @@ class ModelResolverExtension:
                                 "node_id": node_id,
                                 "widget_index": widget_index,
                                 "node_type": node_type,
+                                "node_title": ref.get("node_title", ""),
+                                "subgraph_id": ref.get("subgraph_id") or "",
+                                "subgraph_name": ref.get("subgraph_name") or "",
+                                "is_top_level": ref.get("is_top_level") is not False,
+                                "locate_node_id": ref.get("locate_node_id"),
+                                "locate_node_type": ref.get("locate_node_type", ""),
+                                "locate_node_title": ref.get("locate_node_title", ""),
+                                "locate_subgraph_id": (
+                                    ref.get("locate_subgraph_id") or ""
+                                ),
+                                "locate_subgraph_name": (
+                                    ref.get("locate_subgraph_name") or ""
+                                ),
+                                "locate_is_top_level": (
+                                    ref.get("locate_is_top_level") is not False
+                                ),
+                                "locate_via_promoted_widget": ref.get(
+                                    "locate_via_promoted_widget", False
+                                ),
                                 "exists": exists,
                                 "strength": strength,
                                 "original_path": original_path,
@@ -1932,6 +1998,7 @@ class ModelResolverExtension:
                             if isinstance(model_info, dict):
                                 name = model_info.get("name", "")
                                 directory = model_info.get("directory", "")
+                                node_scope = get_node_scope(node)
 
                                 if name:
                                     # Check if this model is already in loaded_models
@@ -1951,6 +2018,14 @@ class ModelResolverExtension:
                                                 "node_id": node.get("id"),
                                                 "widget_index": None,
                                                 "node_type": node_type,
+                                                "node_title": node.get("title", ""),
+                                                "subgraph_id": node_scope["subgraph_id"],
+                                                "subgraph_name": node_scope[
+                                                    "subgraph_name"
+                                                ],
+                                                "is_top_level": node_scope[
+                                                    "is_top_level"
+                                                ],
                                                 "exists": True,  # Embedded models are loaded
                                                 "strength": None,
                                                 "original_path": name,

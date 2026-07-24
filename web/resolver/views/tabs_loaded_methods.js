@@ -176,6 +176,13 @@ export const tabsLoadedMethods = {
         return `<${this.getCategoryTokenName(category)}:${name}:${strength || '1.00'}>`;
     },
 
+    getLoadedModelContext(model = {}) {
+        return {
+            ...model,
+            context_scope: 'loaded_model'
+        };
+    },
+
     displayLoadedModels(container, data) {
         const loadedModels = data.loaded_models || [];
         const total = data.total || 0;
@@ -274,7 +281,7 @@ export const tabsLoadedMethods = {
 
                 for (const model of modelsObj.active) {
                     const { name, strength } = this.getModelNameAndStrength(model);
-                    html += `<span class="mr-model-chip"${this.getContextMenuAttrs(model)}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
+                    html += `<span class="mr-model-chip"${this.getContextMenuAttrs(this.getLoadedModelContext(model))}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
                 }
                 html += `</div></div>`;
             }
@@ -291,7 +298,7 @@ export const tabsLoadedMethods = {
 
                 for (const model of modelsObj.inactive) {
                     const { name, strength } = this.getModelNameAndStrength(model);
-                    html += `<span class="mr-model-chip"${this.getContextMenuAttrs(model)}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
+                    html += `<span class="mr-model-chip"${this.getContextMenuAttrs(this.getLoadedModelContext(model))}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
                 }
                 html += `</div></div>`;
             }

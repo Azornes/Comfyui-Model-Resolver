@@ -46,6 +46,14 @@ const missingBrowserMethodsSource = fs.readFileSync(
   path.join(projectRoot, 'web/resolver/views/missing_browser_methods.js'),
   'utf8'
 );
+const tabsLoadedMethodsSource = fs.readFileSync(
+  path.join(projectRoot, 'web/resolver/views/tabs_loaded_methods.js'),
+  'utf8'
+);
+const resolverDialogSource = fs.readFileSync(
+  path.join(projectRoot, 'web/resolver/resolver_dialog.js'),
+  'utf8'
+);
 const renderFormatMethodsSource = fs.readFileSync(
   path.join(projectRoot, 'web/resolver/utils/render_format_methods.js'),
   'utf8'
@@ -326,6 +334,44 @@ test('pending node context model resolves against the current workflow analysis 
     resolvedModel
   );
   assert.equal(isExistingResolvedModel(resolvedModel), true);
+});
+
+test('loaded model context menu locates its exact workflow node and subgraph', () => {
+  const getLoadedModelContext = eval(`(${extractMethod(tabsLoadedMethodsSource, 'getLoadedModelContext')})`);
+  const handleContextMenuAction = eval(`(${extractMethod(modelInfoMethodsSource, 'handleContextMenuAction')})`);
+  const calls = [];
+  const model = getLoadedModelContext.call({}, {
+    node_id: 19,
+    subgraph_id: 'subgraph-a',
+    is_top_level: false,
+  });
+  const dialog = {
+    _contextMenuModel: model,
+    hideContextMenu() {},
+    getMissingLocateTarget(value) {
+      return {
+        nodeId: value.node_id,
+        subgraphId: value.subgraph_id,
+        isTopLevel: value.is_top_level,
+      };
+    },
+    locateNodeInGraph(nodeId, options) {
+      calls.push({ nodeId, options });
+    },
+  };
+
+  handleContextMenuAction.call(dialog, 'locateNode');
+
+  assert.equal(model.context_scope, 'loaded_model');
+  assert.deepEqual(calls, [{
+    nodeId: 19,
+    options: {
+      subgraphId: 'subgraph-a',
+      isTopLevel: false,
+    },
+  }]);
+  assert.match(resolverDialogSource, /data-menu-action": "locateNode"/);
+  assert.match(resolverDialogSource, /textContent: "Locate Node"/);
 });
 
 test('queued workflow model selection survives missing data and completes after analysis', () => {

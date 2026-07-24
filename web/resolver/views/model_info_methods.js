@@ -37,6 +37,7 @@ export const modelInfoMethods = {
         const isDownloadRootContext = model?.context_scope === 'download_root';
         const isDownloadQueueContext = model?.context_scope === 'download_queue';
         const isDownloadHistoryContext = model?.context_scope === 'download_history';
+        const isLoadedModelContext = model?.context_scope === 'loaded_model';
         const isLocalModelContext = model?.context_scope === 'local_model' || model?.context_scope === 'local_match';
         const isFolderOnlyContext = isDownloadFolderContext || isDownloadRootContext;
         const isSourceModelContext = !isDownloadTableContext && !isFolderOnlyContext && !isDownloadQueueContext && !isDownloadHistoryContext;
@@ -46,15 +47,23 @@ export const modelInfoMethods = {
             && hasLocalPath
             && Boolean(model?.missing_key || model?.missing_search_key);
         const showSwitchWorkflow = (isDownloadQueueContext || isDownloadHistoryContext) && Boolean(this.canSwitchToDownloadWorkflow?.(model));
+        const showLocateNode = isLoadedModelContext
+            && model?.node_id !== undefined
+            && model?.node_id !== null
+            && model?.node_id !== '';
         this.setContextMenuItemVisible('showInfo', isSourceModelContext);
         this.setContextMenuItemVisible('showMore', canShowMore);
         this.setContextMenuItemVisible('source', showSourceLink);
         this.setContextMenuItemVisible('civitai', false);
+        this.setContextMenuItemVisible('locateNode', showLocateNode);
         this.setContextMenuItemVisible('switchWorkflow', showSwitchWorkflow);
         this.setContextMenuItemVisible('compareHashes', showCompareHashes);
         this.setContextMenuItemVisible('openFolder', showOpenFolder);
         this.setContextMenuDividerVisible('source', showSourceLink && (isSourceModelContext || canShowMore));
-        this.setContextMenuDividerVisible('workflow', showSwitchWorkflow && (isSourceModelContext || canShowMore || showSourceLink));
+        this.setContextMenuDividerVisible(
+            'workflow',
+            (showLocateNode || showSwitchWorkflow) && (isSourceModelContext || canShowMore || showSourceLink)
+        );
         this.setContextMenuDividerVisible('folder', (showCompareHashes || showOpenFolder) && (isSourceModelContext || canShowMore || showSourceLink || showSwitchWorkflow));
         this.updateContextMenuSourceItem(sourceLink);
 
@@ -107,6 +116,12 @@ export const modelInfoMethods = {
             this.compareLocalModelHashesWithCurrentFinding(model);
         } else if (action === 'switchWorkflow') {
             this.switchToDownloadWorkflow(model);
+        } else if (action === 'locateNode') {
+            const locateTarget = this.getMissingLocateTarget(model);
+            this.locateNodeInGraph(locateTarget.nodeId, {
+                subgraphId: locateTarget.subgraphId || '',
+                isTopLevel: locateTarget.isTopLevel
+            });
         } else if (action === 'showInfo') {
             this.showModelInfo(model);
         } else if (action === 'showMore') {
