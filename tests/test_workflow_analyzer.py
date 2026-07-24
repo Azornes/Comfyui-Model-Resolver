@@ -466,6 +466,40 @@ class ScannerFolderModelTests(unittest.TestCase):
 
 
 class WorkflowCategoryHintsTests(unittest.TestCase):
+    def test_non_model_config_widget_does_not_hide_checkpoint_widget(self):
+        workflow = {
+            "nodes": [
+                {
+                    "id": 470,
+                    "type": "CheckpointLoader",
+                    "widgets": [
+                        {"name": "config_name"},
+                        {"name": "ckpt_name"},
+                    ],
+                    "widgets_values": [
+                        "v1-inference.yaml",
+                        "model.safetensors",
+                    ],
+                    "outputs": [{"type": "MODEL", "links": [1]}],
+                }
+            ]
+        }
+
+        def dynamic_category_hints(_node, widget_index):
+            if widget_index == 0:
+                return ["configs"]
+            return ["checkpoints"]
+
+        with patch(
+            "core.workflow_analyzer.get_dynamic_widget_category_hints",
+            side_effect=dynamic_category_hints,
+        ):
+            refs = analyze_workflow_models(workflow, available_models=[])
+
+        self.assertEqual(1, len(refs))
+        self.assertEqual("model.safetensors", refs[0]["original_path"])
+        self.assertEqual("checkpoints", refs[0]["category"])
+
     def test_node_type_to_category_hints_is_populated(self):
         from core.workflow_analyzer import NODE_TYPE_TO_CATEGORY_HINTS
         # Verify standard loader mappings are correctly generated

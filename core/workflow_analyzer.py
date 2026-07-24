@@ -233,6 +233,7 @@ NESTED_MODEL_KEYS = {
 _DYNAMIC_CATEGORY_SENTINEL_PREFIX = "__model_resolver_folder_category__"
 _DYNAMIC_NODE_WIDGET_CATEGORY_CACHE: Dict[str, Dict[str, Any]] = {}
 _DYNAMIC_NODE_WIDGET_CATEGORY_LOCK = threading.RLock()
+NON_MODEL_REFERENCE_CATEGORIES = {"custom_nodes", "configs"}
 
 # These ComfyUI INPUT_TYPES entries become widgets in widgets_values. Typed graph
 # inputs like MODEL or CLIP are links, so they should not shift widget indexes.
@@ -1407,7 +1408,14 @@ def get_node_model_info(
     # For each widget value, check if it looks like a model file or URN
     for idx, value in enumerate(widgets_values):
         widget_name = get_widget_name_hint(node, idx)
-        model_widget_folder_key_hints = get_dynamic_widget_category_hints(node, idx)
+        dynamic_category_hints = get_dynamic_widget_category_hints(node, idx)
+        if dynamic_category_hints and all(
+            normalize_download_category(category)
+            in NON_MODEL_REFERENCE_CATEGORIES
+            for category in dynamic_category_hints
+        ):
+            continue
+        model_widget_folder_key_hints = dynamic_category_hints
         model_widget_choice_info = get_dynamic_widget_choice_info(node, idx)
         model_widget_category_hints = get_model_widget_category_hints(node, idx)
         model_widget_category_hint = (
