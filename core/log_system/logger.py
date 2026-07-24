@@ -1,7 +1,7 @@
 """
 @author: Azornes
 @title: AzLogs
-@version: 2.0.0
+@version: 2.0.1
 @description: Logging Setup - Central logging system
 
 Features:
@@ -73,6 +73,26 @@ DEFAULT_CONFIG = {
 _WINDOWS_VT_PROCESSING_ENABLED = False
 
 
+def rotated_log_filename(default_name):
+    """Keep the .log extension at the end of rotated log filenames."""
+    match = re.fullmatch(r"(.+)\.log\.(\d+)", str(default_name or ""))
+    if not match:
+        return default_name
+    return f"{match.group(1)}.{match.group(2)}.log"
+
+
+def parse_rotated_log_filename(filename):
+    """Return the log family and rotation number for the current filename style."""
+    name = os.path.basename(str(filename or ""))
+    match = re.fullmatch(r"(.+)\.(\d+)\.log", name)
+    if match:
+        return match.group(1), int(match.group(2))
+
+    if name.endswith(".log"):
+        return name[:-4], 0
+    return None
+
+
 def _enable_windows_virtual_terminal_processing():
     """Enable ANSI escape sequence handling for classic Windows consoles."""
     global _WINDOWS_VT_PROCESSING_ENABLED
@@ -127,6 +147,7 @@ class SafeRotatingFileHandler(RotatingFileHandler):
     def __init__(self, *args, **kwargs):
         self._disabled_by_stream_error = False
         super().__init__(*args, **kwargs)
+        self.namer = rotated_log_filename
 
     def emit(self, record):
         if self._disabled_by_stream_error:

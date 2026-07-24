@@ -35,6 +35,7 @@ from .core.file_manager import (
 from .core.log_system import LogLevel, create_module_logger
 from .core.log_system import logger as backend_log_controller
 from .core.log_system.config import LOG_LEVEL as BACKEND_DEFAULT_LOG_LEVEL
+from .core.log_system.logger import parse_rotated_log_filename
 from .core.path_utils import get_filename_from_path, get_metadata_sidecar_path, get_safe_metadata_sidecar_path
 
 # Web directory for JavaScript interface
@@ -5039,17 +5040,10 @@ class ModelResolverExtension:
 
             def _backend_log_sort_key(path):
                 name = os.path.basename(path)
-                rotation = 0
-                if ".log." in name:
-                    base_name, rotation_text = name.rsplit(".log.", 1)
-                    try:
-                        rotation = int(rotation_text)
-                    except ValueError:
-                        rotation = 999
-                elif name.endswith(".log"):
-                    base_name = name[:-4]
-                else:
-                    base_name = name
+                parsed_name = parse_rotated_log_filename(name)
+                if parsed_name is None:
+                    return (name.lower(), 999)
+                base_name, rotation = parsed_name
                 return (base_name.lower(), rotation)
 
             def _collect_backend_log_files(log_dir):
@@ -5061,7 +5055,7 @@ class ModelResolverExtension:
                     name = str(entry or "")
                     if not name.startswith("azlogs_"):
                         continue
-                    if not (name.endswith(".log") or ".log." in name):
+                    if parse_rotated_log_filename(name) is None:
                         continue
 
                     path = os.path.abspath(os.path.join(log_dir, name))

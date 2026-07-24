@@ -1,7 +1,8 @@
 """
-AzLogs - Central logging system
-
-Provides colored console logging, file rotation, and per-module log levels.
+@author: Azornes
+@title: AzLogs
+@version: 2.0.1
+@description: Logging Initializer
 """
 
 from .log_funcs import create_module_logger
