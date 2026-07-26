@@ -29,6 +29,7 @@ export const modelInfoMethods = {
     showContextMenu(x, y, model) {
         if (!this.contextMenu) return;
 
+        this.hideTooltip?.();
         this._contextMenuModel = model;
         const canShowMore = this.canShowSourceDetails(model);
         const sourceLink = this.getContextMenuSourceLink(this.getContextMenuSourceLookupModel(model));

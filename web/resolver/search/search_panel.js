@@ -786,6 +786,10 @@ export const searchPanelMethods = {
 
     showTooltip(target) {
         if (!target || !this.tooltipElement) return;
+        if (this.contextMenu?.style.display === 'block') {
+            this.hideTooltip();
+            return;
+        }
         this.normalizeTooltipTarget(target);
         if (target.matches?.('.mr-footer-menu-button[aria-expanded="true"]')) {
             this.hideTooltip();

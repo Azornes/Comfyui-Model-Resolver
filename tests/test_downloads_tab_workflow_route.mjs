@@ -98,6 +98,29 @@ test('local and loaded model tooltips include preview image routes above full na
   }
 });
 
+test('model tooltip stays hidden while the context menu is visible', () => {
+  const showTooltip = eval(`(${extractMethod(searchPanelMethodsSource, 'showTooltip')})`);
+  const calls = [];
+  const dialog = {
+    contextMenu: { style: { display: 'block' } },
+    tooltipElement: {},
+    hideTooltip() {
+      calls.push('hide');
+    },
+    normalizeTooltipTarget() {
+      calls.push('normalize');
+    },
+  };
+
+  showTooltip.call(dialog, {});
+
+  assert.deepEqual(calls, ['hide']);
+  assert.match(
+    modelInfoMethodsSource,
+    /showContextMenu\(x, y, model\)[^]*this\.hideTooltip\?\.\(\)/
+  );
+});
+
 test('CivitAI Comfy workflow metadata is extracted as pasteable JSON', () => {
   const workflow = {
     last_node_id: 2,
