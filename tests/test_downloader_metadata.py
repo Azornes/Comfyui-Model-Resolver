@@ -1,9 +1,12 @@
 import json
 import hashlib
+from io import BytesIO
 import os
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
+
+from PIL import Image
 
 from core import downloader
 from core.downloader import (
@@ -191,6 +194,80 @@ class DownloaderMetadataSidecarTests(unittest.TestCase):
         self.assertEqual(["Image"], civitai["model"]["allowCommercialUse"])
         self.assertEqual(10, civitai["stats"]["downloadCount"])
         self.assertNotIn("token=", civitai["downloadUrl"])
+
+    def test_writes_optimized_jpeg_preview_from_first_model_image(self):
+        source_image = Image.new("RGBA", (960, 1440), (20, 40, 60, 128))
+        source_buffer = BytesIO()
+        source_image.save(source_buffer, format="PNG")
+        response = MagicMock()
+        response.headers = {"Content-Length": str(len(source_buffer.getvalue()))}
+        response.iter_content.return_value = [source_buffer.getvalue()]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_path = os.path.join(tmpdir, "preview-model.safetensors")
+            with open(model_path, "wb") as handle:
+                handle.write(b"abc")
+
+            with patch(
+                "core.downloader.request_public_url",
+                return_value=(
+                    response,
+                    "https://image.civitai.com/example.png",
+                    {},
+                ),
+            ):
+                metadata_path = write_lora_manager_metadata(
+                    model_path,
+                    {
+                        "source": "civitai",
+                        "images": [
+                            {
+                                "url": "https://image.civitai.com/example.png",
+                                "type": "image",
+                            }
+                        ],
+                    },
+                    category="loras",
+                    create_preview=True,
+                )
+
+            preview_path = os.path.join(tmpdir, "preview-model.jpeg")
+            self.assertTrue(os.path.isfile(preview_path))
+            with Image.open(preview_path) as preview_image:
+                self.assertEqual("JPEG", preview_image.format)
+                self.assertEqual((480, 720), preview_image.size)
+                self.assertEqual("RGB", preview_image.mode)
+                self.assertFalse(preview_image.getexif())
+            with open(metadata_path, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+
+        self.assertEqual(
+            preview_path.replace(os.sep, "/"),
+            payload["preview_url"],
+        )
+        response.raise_for_status.assert_called_once_with()
+        response.close.assert_called_once_with()
+
+    def test_preview_download_uses_system_trust_after_requests_ssl_error(self):
+        ssl_error = downloader.requests.exceptions.SSLError("certificate error")
+        with (
+            patch(
+                "core.downloader.request_public_url",
+                side_effect=ssl_error,
+            ),
+            patch(
+                "core.downloader._download_preview_image_with_system_trust",
+                return_value=b"preview-data",
+            ) as fallback,
+        ):
+            result = downloader._download_preview_image(
+                "https://image.civitai.com/example.jpeg"
+            )
+
+        self.assertEqual(b"preview-data", result)
+        fallback.assert_called_once_with(
+            "https://image.civitai.com/example.jpeg"
+        )
 
     def test_existing_file_with_same_hash_is_marked_already_downloaded(self):
         content = b"existing model"

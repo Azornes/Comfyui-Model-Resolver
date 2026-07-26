@@ -10,9 +10,11 @@ import secrets
 import shutil
 import socket
 import subprocess
+import tempfile
 import threading
 import time
 from collections import deque
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
@@ -83,6 +85,20 @@ ARIA2_STATUS_RPC_RETRIES = 4
 ARIA2_STATUS_RPC_RETRY_DELAY = 0.15
 ARIA2_IDLE_STOP_SECONDS = 5 * 60
 DOWNLOAD_USER_AGENT = DEFAULT_BROWSER_USER_AGENT
+MODEL_PREVIEW_WIDTH = 480
+MODEL_PREVIEW_MAX_HEIGHT = 4096
+MODEL_PREVIEW_QUALITY = 85
+MODEL_PREVIEW_MAX_DOWNLOAD_BYTES = 32 * 1024 * 1024
+MODEL_PREVIEW_EXTENSIONS = (
+    ".webp",
+    ".jpeg",
+    ".jpg",
+    ".png",
+    ".preview.webp",
+    ".preview.jpeg",
+    ".preview.jpg",
+    ".preview.png",
+)
 MANAGED_ARIA2_ROOT = Path(__file__).resolve().parents[1] / "tools" / "aria2"
 HF_XET_ARIA2_AUTH_HOSTS = {
     "cas-bridge.xethub.hf.co",
@@ -703,17 +719,249 @@ def build_lora_manager_metadata(
     return payload
 
 
+def _existing_model_preview_path(dest_path: str) -> str:
+    model_base_path, _model_ext = os.path.splitext(dest_path)
+    for extension in MODEL_PREVIEW_EXTENSIONS:
+        candidate = f"{model_base_path}{extension}"
+        if os.path.isfile(candidate):
+            return candidate
+    return ""
+
+
+def _first_model_preview_url(metadata: Dict[str, Any]) -> str:
+    candidates = [
+        metadata.get("preview_url"),
+        metadata.get("previewUrl"),
+        metadata.get("thumbnail_url"),
+        metadata.get("thumbnailUrl"),
+    ]
+    image_sources = [
+        metadata.get("images"),
+        _as_dict(metadata.get("civitai")).get("images"),
+        _as_dict(metadata.get("selected_version")).get("images"),
+        _as_dict(metadata.get("civitai_details")).get("images"),
+        _as_dict(_as_dict(metadata.get("civitai_details")).get("civitai")).get(
+            "images"
+        ),
+    ]
+    for images in image_sources:
+        for image in _as_list(images):
+            if not isinstance(image, dict):
+                continue
+            if str(image.get("type") or "").strip().lower() == "video":
+                continue
+            candidates.extend(
+                [
+                    image.get("url"),
+                    image.get("imageUrl"),
+                    image.get("src"),
+                ]
+            )
+
+    for value in candidates:
+        url = str(value or "").strip()
+        if url.startswith(("http://", "https://")):
+            return url
+    return ""
+
+
+def _download_preview_image(url: str) -> bytes:
+    response = None
+    try:
+        response, _final_url, _final_headers = request_public_url(
+            "GET",
+            url,
+            headers={
+                "User-Agent": DOWNLOAD_USER_AGENT,
+                "Accept": "image/avif,image/webp,image/*,*/*;q=0.8",
+            },
+            timeout=20,
+            stream=True,
+        )
+        response.raise_for_status()
+        content_length = int(response.headers.get("Content-Length") or 0)
+        if content_length > MODEL_PREVIEW_MAX_DOWNLOAD_BYTES:
+            raise ValueError("Preview image exceeds the download size limit")
+
+        chunks = []
+        downloaded = 0
+        for chunk in response.iter_content(chunk_size=64 * 1024):
+            if not chunk:
+                continue
+            downloaded += len(chunk)
+            if downloaded > MODEL_PREVIEW_MAX_DOWNLOAD_BYTES:
+                raise ValueError("Preview image exceeds the download size limit")
+            chunks.append(chunk)
+        return b"".join(chunks)
+    except requests.exceptions.SSLError:
+        return _download_preview_image_with_system_trust(url)
+    finally:
+        if response is not None:
+            response.close()
+
+
+def _download_preview_image_with_system_trust(url: str) -> bytes:
+    import ssl
+    from urllib.request import (
+        HTTPRedirectHandler,
+        HTTPSHandler,
+        Request,
+        build_opener,
+    )
+
+    class ValidatedRedirectHandler(HTTPRedirectHandler):
+        max_redirections = 5
+
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            validated_url = validate_public_http_url(newurl)
+            return super().redirect_request(
+                req,
+                fp,
+                code,
+                msg,
+                headers,
+                validated_url,
+            )
+
+    validated_url = validate_public_http_url(url)
+    request = Request(
+        validated_url,
+        headers={
+            "User-Agent": DOWNLOAD_USER_AGENT,
+            "Accept": "image/avif,image/webp,image/*,*/*;q=0.8",
+        },
+        method="GET",
+    )
+    opener = build_opener(
+        HTTPSHandler(context=ssl.create_default_context()),
+        ValidatedRedirectHandler(),
+    )
+    with opener.open(request, timeout=20) as response:
+        content_length = int(response.headers.get("Content-Length") or 0)
+        if content_length > MODEL_PREVIEW_MAX_DOWNLOAD_BYTES:
+            raise ValueError("Preview image exceeds the download size limit")
+
+        chunks = []
+        downloaded = 0
+        while True:
+            chunk = response.read(64 * 1024)
+            if not chunk:
+                break
+            downloaded += len(chunk)
+            if downloaded > MODEL_PREVIEW_MAX_DOWNLOAD_BYTES:
+                raise ValueError("Preview image exceeds the download size limit")
+            chunks.append(chunk)
+        return b"".join(chunks)
+
+
+def _save_optimized_jpeg(image_data: bytes, preview_path: str) -> None:
+    from PIL import Image, ImageOps
+
+    temp_path = ""
+    try:
+        with Image.open(BytesIO(image_data)) as source_image:
+            source_image.seek(0)
+            oriented_image = ImageOps.exif_transpose(source_image)
+            width, height = oriented_image.size
+            if width <= 0 or height <= 0:
+                raise ValueError("Preview image has invalid dimensions")
+
+            resize_scale = min(
+                MODEL_PREVIEW_WIDTH / width,
+                MODEL_PREVIEW_MAX_HEIGHT / height,
+            )
+            target_width = max(1, round(width * resize_scale))
+            target_height = max(1, round(height * resize_scale))
+            resampling = getattr(Image, "Resampling", Image)
+            resized_image = oriented_image.resize(
+                (target_width, target_height),
+                resampling.LANCZOS,
+            )
+
+            if resized_image.mode in {"RGBA", "LA"} or (
+                resized_image.mode == "P" and "transparency" in resized_image.info
+            ):
+                rgba_image = resized_image.convert("RGBA")
+                output_image = Image.new("RGB", rgba_image.size, "white")
+                output_image.paste(rgba_image, mask=rgba_image.getchannel("A"))
+            else:
+                output_image = resized_image.convert("RGB")
+
+            with tempfile.NamedTemporaryFile(
+                mode="wb",
+                dir=os.path.dirname(preview_path),
+                prefix=f".{os.path.basename(preview_path)}.",
+                suffix=".tmp",
+                delete=False,
+            ) as temp_file:
+                temp_path = temp_file.name
+                output_image.save(
+                    temp_file,
+                    format="JPEG",
+                    quality=MODEL_PREVIEW_QUALITY,
+                    optimize=True,
+                    progressive=True,
+                )
+            os.replace(temp_path, preview_path)
+            temp_path = ""
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
+
+
+def create_model_preview(
+    dest_path: str,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Create a compact LoRA Manager-compatible JPEG preview when one is missing."""
+    existing_path = _existing_model_preview_path(dest_path)
+    if existing_path:
+        return existing_path
+
+    source = metadata if isinstance(metadata, dict) else {}
+    preview_url = _first_model_preview_url(source)
+    if not preview_url:
+        return ""
+
+    model_base_path, _model_ext = os.path.splitext(dest_path)
+    preview_path = f"{model_base_path}.jpeg"
+    try:
+        image_data = _download_preview_image(preview_url)
+        if not image_data:
+            return ""
+        _save_optimized_jpeg(image_data, preview_path)
+        log.info(f"Preview saved: {preview_path}")
+        return preview_path
+    except Exception as exc:
+        log.warning(
+            f"Could not create preview for {get_filename_from_path(dest_path)}: {exc}"
+        )
+        return ""
+
+
 def write_lora_manager_metadata(
     dest_path: str,
     metadata: Optional[Dict[str, Any]] = None,
     category: str = "",
     source_url: str = "",
+    create_preview: bool = False,
 ) -> Optional[str]:
     """Write the LoRA Manager-compatible sidecar metadata next to a model file."""
     metadata_path = get_metadata_sidecar_path(dest_path)
 
     try:
         payload = build_lora_manager_metadata(dest_path, metadata, category, source_url)
+        if create_preview:
+            preview_source = {
+                **payload,
+                **(metadata if isinstance(metadata, dict) else {}),
+            }
+            preview_path = create_model_preview(dest_path, preview_source)
+            if preview_path:
+                payload["preview_url"] = _normalise_metadata_file_path(preview_path)
         write_json_atomic(metadata_path, payload, indent=2)
         log.info(f"Metadata saved: {metadata_path}")
         return metadata_path
@@ -1635,6 +1883,7 @@ def _download_huggingface_xet(
             metadata or {},
             category,
             validated_url,
+            create_preview=True,
         )
         with download_lock:
             state = download_progress.get(download_id)
@@ -1845,6 +2094,7 @@ def download_file_with_aria2(
                     metadata or {},
                     category,
                     url,
+                    create_preview=True,
                 )
                 with download_lock:
                     download_progress[download_id].update(
@@ -2159,6 +2409,7 @@ def download_file(
             metadata or {},
             category,
             url,
+            create_preview=True,
         )
         if metadata_path:
             result["metadata_path"] = metadata_path
@@ -2354,6 +2605,7 @@ def download_model(
                     metadata or {},
                     category,
                     url,
+                    create_preview=True,
                 ) or ""
                 size = os.path.getsize(dest_path)
                 with download_lock:

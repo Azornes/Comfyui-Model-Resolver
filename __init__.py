@@ -2587,6 +2587,7 @@ class ModelResolverExtension:
                             or result.get("platform_url")
                             or result.get("download_url")
                             or "",
+                            create_preview=True,
                         ) or ""
                         metadata_saved = bool(metadata_path)
                         if metadata_path:
@@ -2688,6 +2689,7 @@ class ModelResolverExtension:
                                     or result.get("url")
                                     or result.get("download_url")
                                     or "",
+                                    create_preview=True,
                                 ) or ""
                                 metadata_saved = bool(metadata_path)
                                 if metadata_path:
