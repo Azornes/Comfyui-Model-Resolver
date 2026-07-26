@@ -1968,6 +1968,13 @@ def _metadata_to_model_info(metadata: Dict[str, Any]) -> Dict[str, Any]:
         "tags": as_list(metadata.get("tags") or model_info.get("tags")),
         "trained_words": trained_words,
         "images": images,
+        "preview_url": first_non_empty(
+            metadata.get("preview_url"),
+            metadata.get("previewUrl"),
+            metadata.get("thumbnail_url"),
+            metadata.get("thumbnailUrl"),
+        )
+        or "",
         "clip_skip": civitai_data.get("clipSkip"),
         "description": first_non_empty(
             metadata.get("modelDescription"),

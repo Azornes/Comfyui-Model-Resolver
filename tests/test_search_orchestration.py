@@ -319,11 +319,14 @@ class SearchOrchestrationTests(unittest.IsolatedAsyncioTestCase):
     async def test_model_preview_route_serves_only_adjacent_preview(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             model_path = os.path.join(temp_dir, "model.safetensors")
-            preview_path = os.path.join(temp_dir, "model.jpeg")
+            image_path = os.path.join(temp_dir, "model.jpeg")
+            preview_path = os.path.join(temp_dir, "model.mp4")
             with open(model_path, "wb") as model_file:
                 model_file.write(b"model")
+            with open(image_path, "wb") as preview_file:
+                preview_file.write(b"old-image")
             with open(preview_path, "wb") as preview_file:
-                preview_file.write(b"preview")
+                preview_file.write(b"video-preview")
 
             mock_request = MagicMock()
             mock_request.query = {"path": model_path}
@@ -344,7 +347,7 @@ class SearchOrchestrationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsInstance(response, web.FileResponse)
         self.assertEqual(os.path.realpath(preview_path), os.path.realpath(response._path))
-        self.assertEqual("private, max-age=300", response.headers["Cache-Control"])
+        self.assertEqual("private, no-cache", response.headers["Cache-Control"])
 
     async def test_search_collects_local_hash_matches_for_any_remote_result_with_hash(self):
         file_hash = "c" * 64

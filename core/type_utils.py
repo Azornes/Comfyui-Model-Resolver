@@ -813,6 +813,12 @@ def normalize_model_image(image_data: Dict[str, Any], default_civitai_url: str =
 
     return {
         "url": url,
+        "type": (
+            image_data.get("type")
+            or image_data.get("mediaType")
+            or meta.get("type")
+            or ""
+        ),
         "civitaiUrl": civitai_url,
         "seed": image_data.get("seed") or meta.get("seed"),
         "steps": image_data.get("steps") or meta.get("steps"),

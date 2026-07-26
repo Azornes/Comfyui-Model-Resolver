@@ -4756,7 +4756,8 @@ button.mr-info-link:disabled {
     cursor: zoom-in;
 }
 
-.mr-info-image-item img {
+.mr-info-image-item img,
+.mr-info-image-item video {
     width: 100%;
     height: auto;
     display: block;
@@ -4859,7 +4860,8 @@ button.mr-info-link:disabled {
     font-weight: 700;
 }
 
-.mr-info-image-item:hover img {
+.mr-info-image-item:hover img,
+.mr-info-image-item:hover video {
     transform: scale(1.01);
     filter: brightness(0.82);
 }
@@ -5061,7 +5063,8 @@ button.mr-info-link:disabled {
     background: #0b0c0e;
 }
 
-.mr-image-preview-stage img {
+.mr-image-preview-stage img,
+.mr-image-preview-stage video {
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
@@ -5525,12 +5528,16 @@ a.mr-image-preview-resource-name:hover {
     cursor: grabbing;
 }
 
-.mr-model-details-image img {
+.mr-model-details-image img,
+.mr-model-details-image video {
     display: block;
     width: 100%;
     height: 100%;
     object-fit: contain;
     object-position: center;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-drag: none;
 }
 
 .mr-model-details-image-meta {
@@ -7582,6 +7589,12 @@ a.mr-image-preview-resource-name:hover {
     padding: 8px 3px 2px;
     white-space: pre-line;
     overflow-wrap: anywhere;
+}
+
+.mr-global-tooltip-with-image .mr-tooltip-label {
+    width: 100%;
+    box-sizing: border-box;
+    text-align: center;
 }
 
 .mr-options-input-row {

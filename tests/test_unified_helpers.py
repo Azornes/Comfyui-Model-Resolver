@@ -83,6 +83,28 @@ class UnifiedHelpersTests(unittest.TestCase):
         self.assertEqual(normalized["steps"], 25)
         self.assertEqual(normalized["sampler"], "Euler a")
 
+    def test_normalize_model_image_preserves_video_type(self):
+        normalized = normalize_model_image({
+            "url": "https://image.civitai.com/x/original=true/12345.mp4",
+            "type": "video",
+        })
+
+        self.assertEqual(normalized["type"], "video")
+
+    def test_local_civitai_metadata_preserves_video_preview_path(self):
+        from core.sources.civitai import _metadata_to_model_info
+
+        result = _metadata_to_model_info({
+            "preview_url": "E:/Models/video-model.mp4",
+            "images": [{
+                "url": "https://image.civitai.com/x/original=true/12345.mp4",
+                "type": "video",
+            }],
+        })
+
+        self.assertEqual(result["preview_url"], "E:/Models/video-model.mp4")
+        self.assertEqual(result["images"][0]["type"], "video")
+
     def test_normalize_model_image_preserves_metadata_when_normalized_again(self):
         workflow = '{"workflow":{"nodes":[{"id":1,"type":"KSampler"}]}}'
         normalized_image = {

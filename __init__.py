@@ -967,7 +967,7 @@ class ModelResolverExtension:
 
                 return web.FileResponse(
                     preview_path,
-                    headers={"Cache-Control": "private, max-age=300"},
+                    headers={"Cache-Control": "private, no-cache"},
                 )
 
             @routes.post("/model_resolver/workflow-model-hashes")
@@ -2665,17 +2665,9 @@ class ModelResolverExtension:
                             ):
                                 preview_url = result.get("preview_url") or ""
                                 if not preview_url:
-                                    model_base_path, _model_ext = _os.path.splitext(file_path)
-                                    for preview_ext in (
-                                        ".preview.png",
-                                        ".preview.jpg",
-                                        ".preview.jpeg",
-                                        ".preview.webp",
-                                    ):
-                                        preview_path = f"{model_base_path}{preview_ext}"
-                                        if _os.path.exists(preview_path):
-                                            preview_url = preview_path.replace("\\", "/")
-                                            break
+                                    preview_path = get_existing_model_preview_path(file_path)
+                                    if preview_path:
+                                        preview_url = preview_path.replace("\\", "/")
                                 metadata_payload = {
                                     "source": "metadata_import",
                                     "details_source": result.get("source") or "metadata",

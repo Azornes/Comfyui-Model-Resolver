@@ -784,7 +784,26 @@ export const searchPanelMethods = {
         return `<span class="mr-node-chip-icon" aria-hidden="true">${getSvgIcon('locate')}</span>`;
     },
 
-    showTooltip(target) {
+    async getTooltipPreviewMediaType(previewUrl) {
+        if (!previewUrl) return 'image';
+
+        let mediaType = 'image';
+        try {
+            const response = await fetch(previewUrl, {
+                method: 'HEAD',
+                cache: 'no-cache'
+            });
+            const contentType = String(response.headers.get('Content-Type') || '').toLowerCase();
+            if (response.ok && contentType.startsWith('video/')) {
+                mediaType = 'video';
+            }
+        } catch (error) {
+            console.debug('Model Resolver: Could not detect tooltip preview type:', error);
+        }
+        return mediaType;
+    },
+
+    async showTooltip(target) {
         if (!target || !this.tooltipElement) return;
         if (this.contextMenu?.style.display === 'block') {
             this.hideTooltip();
@@ -801,31 +820,55 @@ export const searchPanelMethods = {
         const imageUrl = target.getAttribute('data-tooltip-image');
         this._tooltipTarget = target;
         this.tooltipElement.replaceChildren();
-        this.tooltipElement.classList.toggle('mr-global-tooltip-with-image', Boolean(imageUrl));
+        this.tooltipElement.classList.remove('mr-global-tooltip-with-image');
 
         if (imageUrl) {
-            const image = document.createElement('img');
-            image.className = 'mr-tooltip-preview';
-            image.alt = '';
-            image.decoding = 'async';
-
             const label = document.createElement('div');
             label.className = 'mr-tooltip-label';
             label.textContent = text;
+            this.tooltipElement.append(label);
+            this.tooltipElement.style.display = 'block';
+            this.positionTooltip(target);
+            this.tooltipElement.setAttribute('data-visible', 'true');
 
-            image.addEventListener('load', () => {
+            const mediaType = await this.getTooltipPreviewMediaType(imageUrl);
+            if (
+                this._tooltipTarget !== target
+                || this.contextMenu?.style.display === 'block'
+            ) {
+                return;
+            }
+
+            const media = document.createElement(mediaType === 'video' ? 'video' : 'img');
+            media.className = 'mr-tooltip-preview';
+            if (mediaType === 'video') {
+                media.autoplay = true;
+                media.loop = true;
+                media.muted = true;
+                media.playsInline = true;
+                media.preload = 'metadata';
+            } else {
+                media.alt = '';
+                media.decoding = 'async';
+            }
+
+            media.addEventListener(mediaType === 'video' ? 'loadeddata' : 'load', () => {
                 if (this._tooltipTarget === target) {
                     this.positionTooltip(target);
+                    if (mediaType === 'video') {
+                        media.play?.().catch(() => {});
+                    }
                 }
             });
-            image.addEventListener('error', () => {
+            media.addEventListener('error', () => {
                 if (this._tooltipTarget !== target) return;
-                image.remove();
+                media.remove();
                 this.tooltipElement.classList.remove('mr-global-tooltip-with-image');
                 this.positionTooltip(target);
             });
-            image.src = imageUrl;
-            this.tooltipElement.append(image, label);
+            media.src = imageUrl;
+            this.tooltipElement.prepend(media);
+            this.tooltipElement.classList.add('mr-global-tooltip-with-image');
         } else {
             this.tooltipElement.textContent = text;
         }

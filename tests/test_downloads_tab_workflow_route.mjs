@@ -121,6 +121,99 @@ test('model tooltip stays hidden while the context menu is visible', () => {
   );
 });
 
+test('model tooltip revalidates and detects video previews from the preview route', async () => {
+  const getTooltipPreviewMediaType = eval(`(${extractMethod(searchPanelMethodsSource, 'getTooltipPreviewMediaType')})`);
+  const previousFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  globalThis.fetch = async () => {
+    fetchCalls += 1;
+    return {
+      ok: true,
+      headers: {
+        get(name) {
+          return name.toLowerCase() === 'content-type' ? 'video/mp4' : '';
+        },
+      },
+    };
+  };
+
+  try {
+    const dialog = {};
+    const previewUrl = '/model_resolver/model-preview?path=model.safetensors';
+    assert.equal(
+      await getTooltipPreviewMediaType.call(dialog, previewUrl),
+      'video'
+    );
+    assert.equal(
+      await getTooltipPreviewMediaType.call(dialog, previewUrl),
+      'video'
+    );
+    assert.equal(fetchCalls, 2);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test('Show info uses the local preview route and renders video media', () => {
+  const isInfoPreviewVideo = eval(`(${extractMethod(modelInfoMethodsSource, 'isInfoPreviewVideo')})`);
+  const getInfoDialogMedia = eval(`(${extractMethod(modelInfoMethodsSource, 'getInfoDialogMedia')})`);
+  const renderInfoPreviewMedia = eval(`(${extractMethod(modelInfoMethodsSource, 'renderInfoPreviewMedia')})`);
+  const previousApi = globalThis.api;
+  globalThis.api = {
+    apiURL(route) {
+      return `/comfy${route}`;
+    },
+  };
+
+  try {
+    const dialog = {
+      isInfoPreviewVideo,
+      getModelInfoResolvedPath(data) {
+        return data.resolved_path || '';
+      },
+      escapeHtml(value) {
+        return String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+      },
+    };
+    const media = getInfoDialogMedia.call(dialog, {
+      resolved_path: 'E:\\Models\\video-model.safetensors',
+      preview_url: 'E:/Models/video-model.mp4',
+      images: [{
+        url: 'https://image.civitai.com/original=true/12345.mp4',
+        type: 'video',
+        seed: 123,
+      }],
+    });
+
+    assert.equal(media.length, 1);
+    assert.equal(media[0].type, 'video');
+    assert.equal(media[0].seed, 123);
+    assert.match(
+      media[0].url,
+      /^\/comfy\/model_resolver\/model-preview\?path=E%3A%5CModels%5Cvideo-model\.safetensors$/
+    );
+    assert.equal(isInfoPreviewVideo({ url: media[0].url, type: 'video' }), true);
+
+    const thumbnail = renderInfoPreviewMedia.call(dialog, media[0], { thumbnail: true });
+    const fullPreview = renderInfoPreviewMedia.call(dialog, media[0]);
+    assert.match(thumbnail, /^<video /);
+    assert.match(thumbnail, /autoplay muted loop playsinline/);
+    assert.match(thumbnail, /draggable="false"/);
+    assert.doesNotMatch(thumbnail, / controls/);
+    assert.match(fullPreview, / controls autoplay muted loop playsinline/);
+    assert.match(
+      modelInfoMethodsSource,
+      /renderSourceModelDetails\(data = \{\}, contextModel = \{\}\)[^]*renderInfoPreviewMedia\(image, \{ thumbnail: true \}\)/
+    );
+  } finally {
+    if (previousApi === undefined) {
+      delete globalThis.api;
+    } else {
+      globalThis.api = previousApi;
+    }
+  }
+});
+
 test('CivitAI Comfy workflow metadata is extracted as pasteable JSON', () => {
   const workflow = {
     last_node_id: 2,

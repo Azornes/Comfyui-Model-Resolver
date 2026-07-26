@@ -2281,12 +2281,71 @@ export const modelInfoMethods = {
             }
         }
 
-        // Update images
-        this.updateInfoDialogImages(dialog, data.images || data.modelImages || []);
+        // Update preview media
+        this.updateInfoDialogImages(
+            dialog,
+            this.getInfoDialogMedia(dialog._infoDialogData)
+        );
+    },
+
+    isInfoPreviewVideo(media = {}) {
+        const declaredType = String(media.type || media.mediaType || '').trim().toLowerCase();
+        if (declaredType === 'video') return true;
+
+        let url = String(media.url || media.preview_url || media.previewUrl || '');
+        try {
+            url = decodeURIComponent(url);
+        } catch (_error) {
+            // Keep the original URL when it contains malformed escape sequences.
+        }
+        return /\.(?:mp4|webm)(?:$|[?#&])/i.test(url);
+    },
+
+    getInfoDialogMedia(data = {}) {
+        const sourceMedia = (
+            Array.isArray(data.images)
+                ? data.images
+                : Array.isArray(data.modelImages)
+                    ? data.modelImages
+                    : []
+        ).filter(media => media?.url);
+        const previewPath = String(data.preview_url || data.previewUrl || '').trim();
+        const modelPath = this.getModelInfoResolvedPath(data);
+        const isRemotePreview = /^(?:https?:|data:|blob:)/i.test(previewPath);
+
+        if (previewPath && modelPath && !isRemotePreview) {
+            const endpoint = api.apiURL('/model_resolver/model-preview');
+            const localPreview = {
+                ...(sourceMedia[0] || {}),
+                url: `${endpoint}?path=${encodeURIComponent(modelPath)}`,
+                type: this.isInfoPreviewVideo({ url: previewPath }) ? 'video' : 'image'
+            };
+            return [localPreview, ...sourceMedia.slice(1)];
+        }
+        if (!sourceMedia.length && previewPath) {
+            return [{
+                url: previewPath,
+                type: this.isInfoPreviewVideo({ url: previewPath }) ? 'video' : 'image'
+            }];
+        }
+        return sourceMedia;
+    },
+
+    renderInfoPreviewMedia(media = {}, options = {}) {
+        const url = this.escapeHtml(media.url || '');
+        const thumbnail = Boolean(options.thumbnail);
+        if (this.isInfoPreviewVideo(media)) {
+            return thumbnail
+                ? `<video src="${url}" autoplay muted loop playsinline preload="metadata" draggable="false" aria-label="Example video"></video>`
+                : `<video src="${url}" controls autoplay muted loop playsinline preload="metadata" aria-label="Preview video"></video>`;
+        }
+        return thumbnail
+            ? `<img src="${url}" alt="Example" loading="lazy" draggable="false" />`
+            : `<img src="${url}" alt="Preview image">`;
     },
 
     /**
-     * Update images in the info dialog
+     * Update preview media in the info dialog
      */
     updateInfoDialogImages(dialog, images) {
         const imagesContainer = dialog.querySelector('.mr-info-images');
@@ -2319,8 +2378,8 @@ export const modelInfoMethods = {
                                 CivitAI
                             </a>
                         ` : ''}
-                        <button type="button" class="mr-info-image-preview-btn" data-image-index="${index}" aria-label="Preview example image ${index + 1}">
-                        <img src="${this.escapeHtml(img.url)}" alt="Example" loading="lazy" />
+                        <button type="button" class="mr-info-image-preview-btn" data-image-index="${index}" aria-label="Preview example media ${index + 1}">
+                        ${this.renderInfoPreviewMedia(img, { thumbnail: true })}
                         <span class="mr-info-image-preview-label">${getSvgIcon('eye')} Preview</span>
                         </button>
                         <figcaption>${captionParts.join('')}</figcaption>
@@ -2329,7 +2388,7 @@ export const modelInfoMethods = {
             `;
         };
 
-        let imagesHtml = '<div class="mr-info-images-header">Example Images</div><div class="mr-info-images-layout">';
+        let imagesHtml = '<div class="mr-info-images-header">Example Media</div><div class="mr-info-images-layout">';
         imagesHtml += visibleImages.map(renderImageCard).join('');
         imagesHtml += '</div>';
         imagesContainer.innerHTML = imagesHtml;
@@ -2421,7 +2480,7 @@ export const modelInfoMethods = {
         const resources = this.getInfoImageResources(image);
         const comfyWorkflow = extractComfyWorkflow(image);
         const hasPrevious = images.length > 1;
-        const positionText = images.length > 1 ? `${index + 1} / ${images.length}` : '1 image';
+        const positionText = images.length > 1 ? `${index + 1} / ${images.length}` : '1 media';
 
         const metadataHtml = metadataRows.length
             ? metadataRows.map(([label, value]) => `
@@ -2455,7 +2514,7 @@ export const modelInfoMethods = {
             : '';
 
         return `
-            <div class="mr-image-preview-shell" role="dialog" aria-modal="true" aria-label="Image preview">
+            <div class="mr-image-preview-shell" role="dialog" aria-modal="true" aria-label="Media preview">
                 <div class="mr-image-preview-topbar">
                     <button type="button" class="mr-image-preview-icon-btn" data-action="close" aria-label="Close preview">${getSvgIcon('x')}</button>
                     <div class="mr-image-preview-counter">${this.escapeHtml(positionText)}</div>
@@ -2465,9 +2524,9 @@ export const modelInfoMethods = {
                 </div>
                 <main class="mr-image-preview-main">
                     <section class="mr-image-preview-stage">
-                        ${hasPrevious ? `<button type="button" class="mr-image-preview-nav is-left" data-action="previous" aria-label="Previous image">&lsaquo;</button>` : ''}
-                        <img src="${this.escapeHtml(image.url || '')}" alt="Preview image">
-                        ${hasPrevious ? `<button type="button" class="mr-image-preview-nav is-right" data-action="next" aria-label="Next image">&rsaquo;</button>` : ''}
+                        ${hasPrevious ? `<button type="button" class="mr-image-preview-nav is-left" data-action="previous" aria-label="Previous media">&lsaquo;</button>` : ''}
+                        ${this.renderInfoPreviewMedia(image)}
+                        ${hasPrevious ? `<button type="button" class="mr-image-preview-nav is-right" data-action="next" aria-label="Next media">&rsaquo;</button>` : ''}
                     </section>
                     <aside class="mr-image-preview-panel">
                         <section class="mr-image-preview-card">
@@ -2778,16 +2837,16 @@ export const modelInfoMethods = {
                             `).join('')}
                         </div>
                         <div class="mr-model-details-gallery ${images.length === 1 ? 'is-single' : ''}">
-                            ${images.length > 1 ? `<button type="button" class="mr-model-details-gallery-nav is-left" data-gallery-direction="-1" aria-label="Previous images">&lsaquo;</button>` : ''}
+                            ${images.length > 1 ? `<button type="button" class="mr-model-details-gallery-nav is-left" data-gallery-direction="-1" aria-label="Previous media">&lsaquo;</button>` : ''}
                             <div class="mr-model-details-gallery-strip">
                                 ${images.length ? images.map((image, index) => `
-                                    <button type="button" class="mr-model-details-image" style="${this.getSourceModelImageSizingStyle(image)}" data-image-index="${index}">
-                                        <img src="${this.escapeHtml(image.url)}" alt="Example image" loading="lazy" draggable="false">
+                                    <button type="button" class="mr-model-details-image" style="${this.getSourceModelImageSizingStyle(image)}" data-image-index="${index}" aria-label="Preview example media ${index + 1}">
+                                        ${this.renderInfoPreviewMedia(image, { thumbnail: true })}
                                         ${this.renderSourceModelImageMeta(image)}
                                     </button>
-                                `).join('') : '<div class="mr-model-details-empty">No example images available.</div>'}
+                                `).join('') : '<div class="mr-model-details-empty">No example media available.</div>'}
                             </div>
-                            ${images.length > 1 ? `<button type="button" class="mr-model-details-gallery-nav is-right" data-gallery-direction="1" aria-label="Next images">&rsaquo;</button>` : ''}
+                            ${images.length > 1 ? `<button type="button" class="mr-model-details-gallery-nav is-right" data-gallery-direction="1" aria-label="Next media">&rsaquo;</button>` : ''}
                         </div>
                         <div class="mr-model-details-description">
                             <h3>About</h3>

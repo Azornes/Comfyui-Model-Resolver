@@ -269,6 +269,66 @@ class DownloaderMetadataSidecarTests(unittest.TestCase):
             "https://image.civitai.com/example.jpeg"
         )
 
+    def test_writes_optimized_civitai_video_preview_and_prefers_it_over_jpeg(self):
+        video_data = b"\x00\x00\x00\x18ftypmp42preview-video"
+        response = MagicMock()
+        response.headers = {"Content-Length": str(len(video_data))}
+        response.iter_content.return_value = [video_data]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_path = os.path.join(tmpdir, "video-model.safetensors")
+            old_image_path = os.path.join(tmpdir, "video-model.jpeg")
+            with open(model_path, "wb") as handle:
+                handle.write(b"model")
+            with open(old_image_path, "wb") as handle:
+                handle.write(b"old-image")
+
+            with patch(
+                "core.downloader.request_public_url",
+                return_value=(
+                    response,
+                    "https://image.civitai.com/example.mp4",
+                    {},
+                ),
+            ) as request_preview:
+                metadata_path = write_lora_manager_metadata(
+                    model_path,
+                    {
+                        "images": [
+                            {
+                                "url": (
+                                    "https://image.civitai.com/x/"
+                                    "original=true/12345.mp4"
+                                ),
+                                "type": "video",
+                            }
+                        ],
+                    },
+                    category="loras",
+                    create_preview=True,
+                )
+
+            preview_path = os.path.join(tmpdir, "video-model.mp4")
+            self.assertTrue(os.path.isfile(preview_path))
+            with open(preview_path, "rb") as handle:
+                self.assertEqual(video_data, handle.read())
+            with open(metadata_path, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+
+            self.assertEqual(
+                preview_path,
+                downloader.get_existing_model_preview_path(model_path),
+            )
+
+        requested_url = request_preview.call_args.args[1]
+        self.assertIn(
+            "/transcode=true,width=450,optimized=true/",
+            requested_url,
+        )
+        self.assertEqual(preview_path.replace(os.sep, "/"), payload["preview_url"])
+        response.raise_for_status.assert_called_once_with()
+        response.close.assert_called_once_with()
+
     def test_existing_model_preview_path_finds_adjacent_preview(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             model_path = os.path.join(tmpdir, "model.safetensors")
