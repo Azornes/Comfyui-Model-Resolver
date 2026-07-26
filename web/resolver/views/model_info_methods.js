@@ -41,6 +41,7 @@ export const modelInfoMethods = {
         const isLocalModelContext = model?.context_scope === 'local_model' || model?.context_scope === 'local_match';
         const isFolderOnlyContext = isDownloadFolderContext || isDownloadRootContext;
         const isSourceModelContext = !isDownloadTableContext && !isFolderOnlyContext && !isDownloadQueueContext && !isDownloadHistoryContext;
+        const showSuggestSubfolder = this.canSuggestDownloadSubfolderFromContextMenu?.(model) || false;
         const hasLocalPath = Boolean(model?.open_path || model?.folder_path || model?.download_directory || model?.directory || model?.path || model?.resolved_path);
         const showOpenFolder = !isDownloadTableContext && hasLocalPath;
         const showCompareHashes = (isLocalModelContext || isDownloadFolderContext)
@@ -53,13 +54,14 @@ export const modelInfoMethods = {
             && model?.node_id !== '';
         this.setContextMenuItemVisible('showInfo', isSourceModelContext);
         this.setContextMenuItemVisible('showMore', canShowMore);
+        this.setContextMenuItemVisible('suggestSubfolder', showSuggestSubfolder);
         this.setContextMenuItemVisible('source', showSourceLink);
         this.setContextMenuItemVisible('civitai', false);
         this.setContextMenuItemVisible('locateNode', showLocateNode);
         this.setContextMenuItemVisible('switchWorkflow', showSwitchWorkflow);
         this.setContextMenuItemVisible('compareHashes', showCompareHashes);
         this.setContextMenuItemVisible('openFolder', showOpenFolder);
-        this.setContextMenuDividerVisible('source', showSourceLink && (isSourceModelContext || canShowMore));
+        this.setContextMenuDividerVisible('source', showSourceLink && (isSourceModelContext || canShowMore || showSuggestSubfolder));
         this.setContextMenuDividerVisible(
             'workflow',
             (showLocateNode || showSwitchWorkflow) && (isSourceModelContext || canShowMore || showSourceLink)
@@ -126,6 +128,22 @@ export const modelInfoMethods = {
             this.showModelInfo(model);
         } else if (action === 'showMore') {
             this.showSourceModelDetails(model);
+        } else if (action === 'suggestSubfolder') {
+            if (typeof this.suggestDownloadSubfolderFromContextMenu !== 'function') {
+                console.error('Model Resolver: Suggest Subfolder handler is unavailable.');
+                this.showNotification?.('Suggest Subfolder is unavailable. Reload ComfyUI and try again.', 'error');
+                return;
+            }
+            console.info('Model Resolver: Suggest Subfolder requested from the download result context menu.', {
+                source: model.details_source || model.source || '',
+                model: model.name || model.filename || '',
+                baseModel: model.base_model || model.baseModel || '',
+                tags: model.tags || []
+            });
+            Promise.resolve(this.suggestDownloadSubfolderFromContextMenu(model)).catch(error => {
+                console.error('Model Resolver: context-menu subfolder suggestion failed:', error);
+                this.showNotification?.('Could not apply a subfolder suggestion.', 'error');
+            });
         }
     },
 
@@ -451,6 +469,7 @@ export const modelInfoMethods = {
         const isDownloadHistoryContext = model?.context_scope === 'download_history';
         const isFolderOnlyContext = isDownloadFolderContext || isDownloadRootContext;
         const isSourceModelContext = !isDownloadTableContext && !isFolderOnlyContext && !isDownloadQueueContext && !isDownloadHistoryContext;
+        const showSuggestSubfolder = this.canSuggestDownloadSubfolderFromContextMenu?.(model) || false;
         const hasLocalPath = Boolean(model?.open_path || model?.folder_path || model?.download_directory || model?.directory || model?.path || model?.resolved_path);
         const showOpenFolder = !isDownloadTableContext && hasLocalPath;
         const showCompareHashes = (model?.context_scope === 'local_model' || model?.context_scope === 'local_match' || isDownloadFolderContext)
@@ -459,9 +478,10 @@ export const modelInfoMethods = {
         const showSwitchWorkflow = (isDownloadQueueContext || isDownloadHistoryContext) && Boolean(this.canSwitchToDownloadWorkflow?.(model));
         const showSourceLink = Boolean(sourceLink?.url);
 
+        this.setContextMenuItemVisible('suggestSubfolder', showSuggestSubfolder);
         this.setContextMenuItemVisible('source', showSourceLink);
         this.setContextMenuItemVisible('civitai', false);
-        this.setContextMenuDividerVisible('source', showSourceLink && (isSourceModelContext || canShowMore));
+        this.setContextMenuDividerVisible('source', showSourceLink && (isSourceModelContext || canShowMore || showSuggestSubfolder));
         this.setContextMenuDividerVisible('workflow', showSwitchWorkflow && (isSourceModelContext || canShowMore || showSourceLink));
         this.setContextMenuDividerVisible('folder', (showCompareHashes || showOpenFolder) && (isSourceModelContext || canShowMore || showSourceLink || showSwitchWorkflow));
         this.updateContextMenuSourceItem(sourceLink);

@@ -378,6 +378,155 @@ test('loaded model context menu locates its exact workflow node and subgraph', (
   assert.match(resolverDialogSource, /textContent: "Locate Node"/);
 });
 
+test('download result context menu offers subfolder suggestions only for CivitAI and CivArchive', () => {
+  const canSuggestDownloadSubfolderFromContextMenu = eval(`(${extractMethod(downloadTargetMethodsSource, 'canSuggestDownloadSubfolderFromContextMenu')})`);
+
+  assert.equal(canSuggestDownloadSubfolderFromContextMenu({
+    context_scope: 'download_table',
+    source: 'civitai',
+  }), true);
+  assert.equal(canSuggestDownloadSubfolderFromContextMenu({
+    context_scope: 'download_table',
+    details_source: 'civarchive',
+  }), true);
+  assert.equal(canSuggestDownloadSubfolderFromContextMenu({
+    context_scope: 'download_table',
+    source: 'huggingface',
+  }), false);
+  assert.equal(canSuggestDownloadSubfolderFromContextMenu({
+    context_scope: 'local_model',
+    source: 'civitai',
+  }), false);
+  assert.match(resolverDialogSource, /data-menu-action": "suggestSubfolder"/);
+  assert.match(resolverDialogSource, /textContent: "Suggest Subfolder"/);
+});
+
+test('download result context menu reuses the existing forced subfolder suggestion', async () => {
+  const getContextMenuDownloadMissing = eval(`(${extractMethod(downloadTargetMethodsSource, 'getContextMenuDownloadMissing')})`);
+  const suggestDownloadSubfolderFromContextMenu = eval(`(${extractMethod(downloadTargetMethodsSource, 'suggestDownloadSubfolderFromContextMenu')})`);
+  const missing = {
+    node_id: 19,
+    widget_index: 2,
+    subgraph_id: '',
+    is_top_level: true,
+  };
+  const categoryEl = {
+    closest() {
+      return { id: 'download-target' };
+    },
+  };
+  const subfolderEl = {};
+  const calls = [];
+  const dialog = {
+    missingModels: [missing],
+    contentElement: {
+      querySelector(selector) {
+        if (selector === '#download-category-19-2') return categoryEl;
+        if (selector === '#download-subfolder-19-2') return subfolderEl;
+        return null;
+      },
+    },
+    getMissingModelKey() {
+      return 'missing-19-2';
+    },
+    canSuggestDownloadSubfolderFromContextMenu() {
+      return true;
+    },
+    getContextMenuDownloadMissing,
+    async forceSuggestedDownloadSubfolder(...args) {
+      calls.push(['suggest', ...args]);
+      return {
+        category: 'loras',
+        subfolder: 'Krea 2/Concept',
+      };
+    },
+    refreshDownloadTargetHelp(...args) {
+      calls.push(['refresh', ...args]);
+    },
+    showNotification(...args) {
+      calls.push(['notification', ...args]);
+    },
+  };
+
+  await suggestDownloadSubfolderFromContextMenu.call(dialog, {
+    context_scope: 'download_table',
+    source: 'civitai',
+    missing_key: 'missing-19-2',
+    base_model: 'Krea 2',
+    tags: ['concept'],
+  });
+
+  assert.equal(calls[0][0], 'suggest');
+  assert.notEqual(calls[0][1], missing);
+  assert.equal(calls[0][1].download_source.base_model, 'Krea 2');
+  assert.deepEqual(calls[0][1].download_source.tags, ['concept']);
+  assert.deepEqual(calls[0].slice(2), [categoryEl, subfolderEl]);
+  assert.equal(calls[1][0], 'refresh');
+  assert.equal(calls[1][2].download_source.base_model, 'Krea 2');
+  assert.deepEqual(calls[1].slice(3), [categoryEl, subfolderEl]);
+  assert.deepEqual(calls[2], [
+    'notification',
+    'Suggested subfolder applied: Krea 2/Concept',
+    'success',
+  ]);
+});
+
+test('context menu dispatches Suggest Subfolder without a silent optional handler', async () => {
+  const handleContextMenuAction = eval(`(${extractMethod(modelInfoMethodsSource, 'handleContextMenuAction')})`);
+  const model = {
+    context_scope: 'download_table',
+    source: 'civarchive',
+    name: 'Cutifyier v2',
+  };
+  const calls = [];
+  const dialog = {
+    _contextMenuModel: model,
+    hideContextMenu() {},
+    suggestDownloadSubfolderFromContextMenu(value) {
+      calls.push(value);
+      return Promise.resolve();
+    },
+  };
+
+  handleContextMenuAction.call(dialog, 'suggestSubfolder');
+  await Promise.resolve();
+
+  assert.deepEqual(calls, [model]);
+});
+
+test('clicked Krea 2 concept metadata resolves to the matching LoRA subfolder', () => {
+  const normalizeFolderToken = eval(`(${extractMethod(downloadTargetMethodsSource, 'normalizeFolderToken')})`);
+  const getSuggestedLoraSubfolder = eval(`(${extractMethod(downloadTargetMethodsSource, 'getSuggestedLoraSubfolder')})`);
+  const dialog = {
+    normalizeFolderToken,
+    normalizeDownloadCategory(value = '') {
+      return String(value || '').toLowerCase();
+    },
+    getCachedSearchSuggestionData() {
+      return {};
+    },
+    getCompatibleCivitaiSearchResult() {
+      return {};
+    },
+  };
+  const suggestion = getSuggestedLoraSubfolder.call(dialog, {
+    download_source: {
+      base_model: 'Krea 2',
+      tags: ['concept'],
+    },
+  }, 'loras', [{
+    value: 'KREA2/concept',
+    label: 'KREA2 / concept',
+    baseDirectory: '',
+    segments: ['KREA2', 'concept'],
+    normalizedSegments: ['krea2', 'concept'],
+  }]);
+
+  assert.equal(suggestion.value, 'KREA2/concept');
+  assert.equal(suggestion.matchedBaseModel, 'Krea 2');
+  assert.equal(suggestion.matchedTag, 'concept');
+});
+
 test('queued workflow model selection survives missing data and completes after analysis', () => {
   const queueWorkflowModelReferenceSelection = eval(`(${extractMethod(missingBrowserMethodsSource, 'queueWorkflowModelReferenceSelection')})`);
   const applyPendingWorkflowModelSelection = eval(`(${extractMethod(missingBrowserMethodsSource, 'applyPendingWorkflowModelSelection')})`);

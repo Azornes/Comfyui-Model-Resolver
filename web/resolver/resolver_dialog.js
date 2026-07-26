@@ -134,6 +134,15 @@ export class ResolverManagerDialog extends ComfyDialog {
                 }),
                 $el("span", { textContent: "Show More" })
             ]),
+            $el("div.mr-context-menu-item.mr-context-menu-action-suggest-subfolder", {
+                "data-menu-action": "suggestSubfolder",
+                onclick: () => this.handleContextMenuAction('suggestSubfolder')
+            }, [
+                $el("span.mr-context-menu-item-icon", {
+                    innerHTML: getSvgIcon('lightbulb', 'currentColor', 'mr-context-menu-item-svg')
+                }),
+                $el("span", { textContent: "Suggest Subfolder" })
+            ]),
             $el("div.mr-context-menu-divider.mr-context-menu-divider-source", {
                 "data-menu-divider": "source"
             }),

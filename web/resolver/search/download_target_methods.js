@@ -2091,7 +2091,7 @@ export const downloadTargetMethods = {
     },
 
     async forceSuggestedDownloadSubfolder(missing, categoryEl, subfolderEl) {
-        if (!categoryEl || !subfolderEl) return;
+        if (!categoryEl || !subfolderEl) return null;
 
         const saved = this.getSavedDownloadTargetSelection(missing);
         const originalCategory = this.normalizeDownloadCategory(this.getDropdownValue(categoryEl));
@@ -2114,7 +2114,7 @@ export const downloadTargetMethods = {
 
         if (!suggestion) {
             this.showNotification?.('No subfolder suggestion available for this model.', 'info');
-            return;
+            return null;
         }
 
         this.setDropdownValue(categoryEl, category, this.getCategoryDisplayName(category));
@@ -2130,6 +2130,102 @@ export const downloadTargetMethods = {
             ...this.getSubfolderSuggestionTrackingPatch(suggestion, 'button')
         });
         this.syncDownloadTargetFolderContext(categoryEl, subfolderEl);
+        return {
+            category,
+            subfolder: suggestedSubfolder,
+            suggestion
+        };
+    },
+
+    canSuggestDownloadSubfolderFromContextMenu(model = {}) {
+        const source = String(model.details_source || model.source || '')
+            .toLowerCase()
+            .replace(/[-\s]+/g, '_');
+        return model.context_scope === 'download_table'
+            && ['civitai', 'civarchive'].includes(source);
+    },
+
+    getContextMenuDownloadMissing(model = {}) {
+        const missingModels = Array.isArray(this.missingModels) ? this.missingModels : [];
+        const missingKey = String(model.missing_key || '');
+        if (missingKey) {
+            const keyedMatch = missingModels.find(missing => (
+                String(this.getMissingModelKey?.(missing) || '') === missingKey
+            ));
+            if (keyedMatch) return keyedMatch;
+        }
+
+        return missingModels.find(missing => (
+            String(missing.node_id ?? '') === String(model.node_id ?? '')
+            && String(missing.widget_index ?? '') === String(model.widget_index ?? '')
+            && String(missing.subgraph_id || '') === String(model.subgraph_id || '')
+            && (missing.is_top_level !== false) === (model.is_top_level !== false)
+        )) || null;
+    },
+
+    async suggestDownloadSubfolderFromContextMenu(model = {}) {
+        if (!this.canSuggestDownloadSubfolderFromContextMenu(model)) {
+            console.warn('Model Resolver: ignored Suggest Subfolder for an unsupported context.', {
+                contextScope: model.context_scope || '',
+                source: model.details_source || model.source || ''
+            });
+            this.showNotification?.('Subfolder suggestions are available here only for CivitAI and CivArchive results.', 'info');
+            return null;
+        }
+
+        const missing = this.getContextMenuDownloadMissing(model);
+        if (!missing) {
+            console.warn('Model Resolver: could not match the context-menu result to a missing model.', {
+                missingKey: model.missing_key || '',
+                nodeId: model.node_id ?? '',
+                widgetIndex: model.widget_index ?? ''
+            });
+            this.showNotification?.('Could not find the model download controls.', 'info');
+            return null;
+        }
+
+        const categoryEl = this.contentElement?.querySelector(
+            `#download-category-${missing.node_id}-${missing.widget_index}`
+        );
+        const subfolderEl = this.contentElement?.querySelector(
+            `#download-subfolder-${missing.node_id}-${missing.widget_index}`
+        );
+        if (!categoryEl || !subfolderEl) {
+            console.warn('Model Resolver: download target controls were not found for Suggest Subfolder.', {
+                nodeId: missing.node_id ?? '',
+                widgetIndex: missing.widget_index ?? ''
+            });
+            this.showNotification?.('Could not find the model download controls.', 'info');
+            return null;
+        }
+
+        const sourceMetadata = {
+            ...model,
+            source: model.details_source || model.source || ''
+        };
+        const suggestionMissing = {
+            ...missing,
+            download_source: {
+                ...(missing.download_source || {}),
+                ...sourceMetadata
+            }
+        };
+        const applied = await this.forceSuggestedDownloadSubfolder(
+            suggestionMissing,
+            categoryEl,
+            subfolderEl
+        );
+        const container = categoryEl.closest?.('.mr-download-target') || this.contentElement;
+        this.refreshDownloadTargetHelp(container, suggestionMissing, categoryEl, subfolderEl);
+        if (applied?.subfolder) {
+            console.info('Model Resolver: applied context-menu subfolder suggestion.', {
+                category: applied.category,
+                subfolder: applied.subfolder,
+                source: sourceMetadata.source
+            });
+            this.showNotification?.(`Suggested subfolder applied: ${applied.subfolder}`, 'success');
+        }
+        return applied;
     },
 
     applySearchResultSuggestion(missing) {

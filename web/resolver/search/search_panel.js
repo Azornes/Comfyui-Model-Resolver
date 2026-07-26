@@ -1996,6 +1996,10 @@ export const searchPanelMethods = {
                 name: modelName,
                 filename: downloadFilename,
                 missing_key: this.getMissingModelKey(missing),
+                node_id: missing.node_id,
+                widget_index: missing.widget_index,
+                subgraph_id: missing.subgraph_id || '',
+                is_top_level: missing.is_top_level !== false,
                 category: rowCategory
             }
             : null;
