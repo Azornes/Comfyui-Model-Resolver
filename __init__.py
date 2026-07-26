@@ -424,6 +424,7 @@ class ModelResolverExtension:
                     get_all_progress,
                     get_aria2_status,
                     get_download_directory,
+                    get_existing_model_preview_path,
                     get_progress,
                     is_allowed_model_download_filename,
                     normalize_download_category,
@@ -932,6 +933,41 @@ class ModelResolverExtension:
 
                 return web.json_response(
                     get_local_model_hash_metadata(normalized_path, model=model)
+                )
+
+            @routes.get("/model_resolver/model-preview")
+            async def get_model_preview(request):
+                """Serve an adjacent model preview from a configured model directory."""
+                model_path = str(request.query.get("path") or "").strip()
+                if not model_path:
+                    return web.Response(text="path is required", status=400)
+
+                try:
+                    normalized_path = os.path.realpath(
+                        os.path.abspath(os.path.normpath(model_path))
+                    )
+                except (OSError, TypeError, ValueError):
+                    return web.Response(text="invalid model path", status=400)
+                if not os.path.isfile(normalized_path):
+                    return web.Response(text="model file does not exist", status=404)
+                if not is_path_in_configured_model_roots(normalized_path):
+                    return web.Response(
+                        text="path is outside configured model directories",
+                        status=403,
+                    )
+
+                preview_path = get_existing_model_preview_path(normalized_path)
+                if not preview_path:
+                    return web.Response(text="preview not found", status=404)
+                if not is_path_in_configured_model_roots(preview_path):
+                    return web.Response(
+                        text="preview is outside configured model directories",
+                        status=403,
+                    )
+
+                return web.FileResponse(
+                    preview_path,
+                    headers={"Cache-Control": "private, max-age=300"},
                 )
 
             @routes.post("/model_resolver/workflow-model-hashes")

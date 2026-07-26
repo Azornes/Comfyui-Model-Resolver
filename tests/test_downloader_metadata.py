@@ -269,6 +269,19 @@ class DownloaderMetadataSidecarTests(unittest.TestCase):
             "https://image.civitai.com/example.jpeg"
         )
 
+    def test_existing_model_preview_path_finds_adjacent_preview(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_path = os.path.join(tmpdir, "model.safetensors")
+            preview_path = os.path.join(tmpdir, "model.jpeg")
+            with open(model_path, "wb") as model_file:
+                model_file.write(b"model")
+            with open(preview_path, "wb") as preview_file:
+                preview_file.write(b"preview")
+
+            result = downloader.get_existing_model_preview_path(model_path)
+
+        self.assertEqual(preview_path, result)
+
     def test_existing_file_with_same_hash_is_marked_already_downloaded(self):
         content = b"existing model"
         expected_sha256 = hashlib.sha256(content).hexdigest()

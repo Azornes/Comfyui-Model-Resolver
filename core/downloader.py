@@ -719,7 +719,8 @@ def build_lora_manager_metadata(
     return payload
 
 
-def _existing_model_preview_path(dest_path: str) -> str:
+def get_existing_model_preview_path(dest_path: str) -> str:
+    """Return the first adjacent preview image available for a model file."""
     model_base_path, _model_ext = os.path.splitext(dest_path)
     for extension in MODEL_PREVIEW_EXTENSIONS:
         candidate = f"{model_base_path}{extension}"
@@ -917,7 +918,7 @@ def create_model_preview(
     metadata: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Create a compact LoRA Manager-compatible JPEG preview when one is missing."""
-    existing_path = _existing_model_preview_path(dest_path)
+    existing_path = get_existing_model_preview_path(dest_path)
     if existing_path:
         return existing_path
 

@@ -64,6 +64,40 @@ const renderFormatMethodsSource = fs.readFileSync(
   'utf8'
 );
 
+test('local and loaded model tooltips include preview image routes above full names', () => {
+  const getModelPreviewTooltipAttrs = eval(`(${extractMethod(renderFormatMethodsSource, 'getModelPreviewTooltipAttrs')})`);
+  const previousApi = globalThis.api;
+  globalThis.api = {
+    apiURL(route) {
+      return `/comfy${route}`;
+    },
+  };
+
+  try {
+    const attrs = getModelPreviewTooltipAttrs.call({
+      escapeHtml(value) {
+        return String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+      },
+    }, {
+      resolved_path: 'E:\\AI Models\\KREA2\\model.safetensors',
+    }, 'KREA2\\model.safetensors');
+
+    assert.match(attrs, /data-tooltip="KREA2\\model\.safetensors"/);
+    assert.match(
+      attrs,
+      /data-tooltip-image="\/comfy\/model_resolver\/model-preview\?path=E%3A%5CAI%20Models%5CKREA2%5Cmodel\.safetensors"/
+    );
+    assert.match(searchPanelMethodsSource, /mr-match-filename[^]*getModelPreviewTooltipAttrs/);
+    assert.match(tabsLoadedMethodsSource, /mr-model-chip[^]*getModelPreviewTooltipAttrs/);
+  } finally {
+    if (previousApi === undefined) {
+      delete globalThis.api;
+    } else {
+      globalThis.api = previousApi;
+    }
+  }
+});
+
 test('CivitAI Comfy workflow metadata is extracted as pasteable JSON', () => {
   const workflow = {
     last_node_id: 2,

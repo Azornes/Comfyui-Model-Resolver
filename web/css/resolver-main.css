@@ -7563,6 +7563,27 @@ a.mr-image-preview-resource-name:hover {
     z-index: var(--mr-z-tooltip);
 }
 
+.mr-global-tooltip.mr-global-tooltip-with-image {
+    width: min(300px, calc(100vw - 24px));
+    padding: 8px;
+    white-space: normal;
+}
+
+.mr-tooltip-preview {
+    display: block;
+    width: 100%;
+    max-height: min(360px, 55vh);
+    object-fit: contain;
+    border-radius: 7px;
+    background: rgba(0, 0, 0, 0.28);
+}
+
+.mr-tooltip-label {
+    padding: 8px 3px 2px;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+}
+
 .mr-options-input-row {
     display: grid;
     grid-template-columns: minmax(150px, 1fr) minmax(0, 380px) 42px;

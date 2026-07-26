@@ -21,6 +21,7 @@ search_handler = None
 civitai_search_handler = None
 local_matches_by_hash_handler = None
 custom_url_handler = None
+model_preview_handler = None
 
 def post_decorator(path):
     def decorator(func):
@@ -37,6 +38,16 @@ def post_decorator(path):
     return decorator
 
 mock_routes.post = post_decorator
+
+def get_decorator(path):
+    def decorator(func):
+        global model_preview_handler
+        if path == "/model_resolver/model-preview":
+            model_preview_handler = func
+        return func
+    return decorator
+
+mock_routes.get = get_decorator
 
 # Make sure the parent package directory is in sys.path
 parent_dir = r"e:\AI\AI\ComfyUI\ComfyUI_Windows_portable\ComfyUI\custom_nodes"
@@ -304,6 +315,36 @@ class SearchOrchestrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(body["local_hash_matches"]), 1)
         self.assertEqual(body["local_hash_matches"][0]["hash_lookup_source"], "civitai")
         self.assertEqual(body["local_hash_matches"][0]["hash_lookup_sha256"], file_hash)
+
+    async def test_model_preview_route_serves_only_adjacent_preview(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            model_path = os.path.join(temp_dir, "model.safetensors")
+            preview_path = os.path.join(temp_dir, "model.jpeg")
+            with open(model_path, "wb") as model_file:
+                model_file.write(b"model")
+            with open(preview_path, "wb") as preview_file:
+                preview_file.write(b"preview")
+
+            mock_request = MagicMock()
+            mock_request.query = {"path": model_path}
+
+            with (
+                patch(
+                    "folder_paths.folder_names_and_paths",
+                    {"loras": ([temp_dir], {".safetensors"})},
+                    create=True,
+                ),
+                patch(
+                    "folder_paths.get_folder_paths",
+                    return_value=[temp_dir],
+                    create=True,
+                ),
+            ):
+                response = await model_preview_handler(mock_request)
+
+        self.assertIsInstance(response, web.FileResponse)
+        self.assertEqual(os.path.realpath(preview_path), os.path.realpath(response._path))
+        self.assertEqual("private, max-age=300", response.headers["Cache-Control"])
 
     async def test_search_collects_local_hash_matches_for_any_remote_result_with_hash(self):
         file_hash = "c" * 64

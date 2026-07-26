@@ -281,7 +281,8 @@ export const tabsLoadedMethods = {
 
                 for (const model of modelsObj.active) {
                     const { name, strength } = this.getModelNameAndStrength(model);
-                    html += `<span class="mr-model-chip"${this.getContextMenuAttrs(this.getLoadedModelContext(model))}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
+                    const fullName = model.original_path || model.name || name;
+                    html += `<span class="mr-model-chip"${this.getContextMenuAttrs(this.getLoadedModelContext(model))}${this.getModelPreviewTooltipAttrs(model, fullName)}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
                 }
                 html += `</div></div>`;
             }
@@ -298,7 +299,8 @@ export const tabsLoadedMethods = {
 
                 for (const model of modelsObj.inactive) {
                     const { name, strength } = this.getModelNameAndStrength(model);
-                    html += `<span class="mr-model-chip"${this.getContextMenuAttrs(this.getLoadedModelContext(model))}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
+                    const fullName = model.original_path || model.name || name;
+                    html += `<span class="mr-model-chip"${this.getContextMenuAttrs(this.getLoadedModelContext(model))}${this.getModelPreviewTooltipAttrs(model, fullName)}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
                 }
                 html += `</div></div>`;
             }

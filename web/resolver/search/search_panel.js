@@ -794,9 +794,44 @@ export const searchPanelMethods = {
         const text = target.getAttribute('data-tooltip');
         if (!text) return;
 
-        this.tooltipElement.textContent = text;
-        this.tooltipElement.style.display = 'block';
+        const imageUrl = target.getAttribute('data-tooltip-image');
+        this._tooltipTarget = target;
+        this.tooltipElement.replaceChildren();
+        this.tooltipElement.classList.toggle('mr-global-tooltip-with-image', Boolean(imageUrl));
 
+        if (imageUrl) {
+            const image = document.createElement('img');
+            image.className = 'mr-tooltip-preview';
+            image.alt = '';
+            image.decoding = 'async';
+
+            const label = document.createElement('div');
+            label.className = 'mr-tooltip-label';
+            label.textContent = text;
+
+            image.addEventListener('load', () => {
+                if (this._tooltipTarget === target) {
+                    this.positionTooltip(target);
+                }
+            });
+            image.addEventListener('error', () => {
+                if (this._tooltipTarget !== target) return;
+                image.remove();
+                this.tooltipElement.classList.remove('mr-global-tooltip-with-image');
+                this.positionTooltip(target);
+            });
+            image.src = imageUrl;
+            this.tooltipElement.append(image, label);
+        } else {
+            this.tooltipElement.textContent = text;
+        }
+        this.tooltipElement.style.display = 'block';
+        this.positionTooltip(target);
+        this.tooltipElement.setAttribute('data-visible', 'true');
+    },
+
+    positionTooltip(target) {
+        if (!target || !this.tooltipElement || this._tooltipTarget !== target) return;
         const rect = target.getBoundingClientRect();
         const tooltipRect = this.tooltipElement.getBoundingClientRect();
         const margin = 12;
@@ -812,12 +847,14 @@ export const searchPanelMethods = {
 
         this.tooltipElement.style.left = `${Math.round(left)}px`;
         this.tooltipElement.style.top = `${Math.round(top)}px`;
-        this.tooltipElement.setAttribute('data-visible', 'true');
     },
 
     hideTooltip() {
         if (!this.tooltipElement) return;
+        this._tooltipTarget = null;
         this.tooltipElement.style.display = 'none';
+        this.tooltipElement.classList.remove('mr-global-tooltip-with-image');
+        this.tooltipElement.replaceChildren();
         this.tooltipElement.removeAttribute('data-visible');
     },
 
@@ -2741,7 +2778,7 @@ export const searchPanelMethods = {
 
                 html += `<div class="${rowClass}"${identityAttr}${this.getContextMenuAttrs(contextModel)}>`;
                 html += this.getConfidenceBadge(match.confidence);
-                html += `<span class="mr-match-filename" data-tooltip="${this.escapeHtml(matchPath)}">${this.escapeHtml(matchPath)}</span>`;
+                html += `<span class="mr-match-filename"${this.getModelPreviewTooltipAttrs(match.model || match, matchPath)}>${this.escapeHtml(matchPath)}</span>`;
                 html += this.renderLocalMatchStatusGroup(missing, match, hashLabelMap);
                 html += `<button id="${buttonId}" class="mr-btn mr-btn-secondary mr-btn-sm mr-btn-icon-only mr-local-link-btn" data-tooltip="Link this local match" aria-label="Link this local match">`;
                 html += getSvgIcon('link');
@@ -2774,7 +2811,7 @@ export const searchPanelMethods = {
                         : '';
                     html += `<div class="mr-match-row"${identityAttr}${this.getContextMenuAttrs(contextModel)}>`;
                     html += this.getConfidenceBadge(match.confidence);
-                    html += `<span class="mr-match-filename" data-tooltip="${this.escapeHtml(matchPath)}">${this.escapeHtml(matchPath)}</span>`;
+                    html += `<span class="mr-match-filename"${this.getModelPreviewTooltipAttrs(match.model || match, matchPath)}>${this.escapeHtml(matchPath)}</span>`;
                     html += this.renderLocalMatchStatusGroup(missing, match, hashLabelMap);
                     html += `<button id="${altBtnId}" class="mr-btn mr-btn-secondary mr-btn-sm mr-btn-icon-only mr-local-link-btn" data-tooltip="Link this local match" aria-label="Link this local match">${getSvgIcon('link')}</button>`;
                     html += `</div>`;

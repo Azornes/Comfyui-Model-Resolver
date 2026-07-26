@@ -1,3 +1,4 @@
+import { api } from "../../../../../scripts/api.js";
 import { escapeHtml, escapeJsString, getFilenameFromPath, pollBackgroundTask } from "./html_utils.js";
 
 export const renderFormatMethods = {
@@ -41,6 +42,24 @@ export const renderFormatMethods = {
         element.oncontextmenu = (event) => {
             window.MLOpenContextMenu?.(event, event.currentTarget);
         };
+    },
+
+    getModelPreviewTooltipAttrs(model = {}, label = '') {
+        const tooltipText = String(label || '').trim();
+        const tooltipAttr = tooltipText
+            ? ` data-tooltip="${this.escapeHtml(tooltipText)}"`
+            : '';
+        const modelPath = String(
+            model.resolved_path
+            || model.path
+            || model.full_path
+            || ''
+        ).trim();
+        if (!modelPath) return tooltipAttr;
+
+        const endpoint = api.apiURL('/model_resolver/model-preview');
+        const previewUrl = `${endpoint}?path=${encodeURIComponent(modelPath)}`;
+        return `${tooltipAttr} data-tooltip-image="${this.escapeHtml(previewUrl)}"`;
     },
 
     /**
