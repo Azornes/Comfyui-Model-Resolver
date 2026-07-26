@@ -130,6 +130,68 @@ class DownloaderMetadataSidecarTests(unittest.TestCase):
         self.assertIn("type=Model", payload["civitai"]["downloadUrl"])
         self.assertNotIn("secret", json.dumps(payload))
 
+    def test_uses_full_civitai_payload_from_fetched_details(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_path = os.path.join(tmpdir, "example.safetensors")
+            with open(model_path, "wb") as handle:
+                handle.write(b"abc")
+
+            payload = build_lora_manager_metadata(
+                model_path,
+                {
+                    "source": "civitai",
+                    "details_source": "civitai",
+                    "model_id": 123,
+                    "version_id": 456,
+                    "download_url": (
+                        "https://civitai.com/api/download/models/456?token=secret"
+                    ),
+                    "civitai_details": {
+                        "source": "civitai",
+                        "model_id": 123,
+                        "version_id": 456,
+                        "civitai": {
+                            "modelId": 123,
+                            "id": 456,
+                            "name": "v1",
+                            "images": [
+                                {
+                                    "url": "https://image.civitai.com/example.jpeg",
+                                    "nsfwLevel": 4,
+                                    "meta": {
+                                        "seed": 42,
+                                        "prompt": "Full prompt metadata",
+                                    },
+                                }
+                            ],
+                            "files": [
+                                {
+                                    "name": "example.safetensors",
+                                    "virusScanResult": "Success",
+                                }
+                            ],
+                            "model": {
+                                "name": "Example Model",
+                                "allowCommercialUse": ["Image"],
+                            },
+                            "stats": {"downloadCount": 10},
+                        },
+                    },
+                },
+                category="loras",
+            )
+
+        civitai = payload["civitai"]
+        self.assertEqual(4, civitai["images"][0]["nsfwLevel"])
+        self.assertEqual(
+            "Full prompt metadata",
+            civitai["images"][0]["meta"]["prompt"],
+        )
+        self.assertEqual("Success", civitai["files"][0]["virusScanResult"])
+        self.assertEqual(["Image"], civitai["model"]["allowCommercialUse"])
+        self.assertEqual(10, civitai["stats"]["downloadCount"])
+        self.assertNotIn("token=", civitai["downloadUrl"])
+
     def test_existing_file_with_same_hash_is_marked_already_downloaded(self):
         content = b"existing model"
         expected_sha256 = hashlib.sha256(content).hexdigest()

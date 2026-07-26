@@ -602,7 +602,16 @@ def build_lora_manager_metadata(
         and bool(source.get("civitai") or source.get("civitai_details"))
     )
     civitai_payload = (
-        dict(_as_dict(source.get("civitai"))) if is_civitai_source else {}
+        dict(
+            _as_dict(
+                _first_present(
+                    source.get("civitai"),
+                    details.get("civitai"),
+                )
+            )
+        )
+        if is_civitai_source
+        else {}
     )
     if is_civitai_source:
         if model_id and "modelId" not in civitai_payload:

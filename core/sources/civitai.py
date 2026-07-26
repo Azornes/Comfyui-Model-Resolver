@@ -1208,6 +1208,36 @@ def _normalize_civitai_file(
     )
 
 
+def _build_civitai_sidecar_payload(
+    model_data: Dict[str, Any],
+    version_data: Dict[str, Any],
+    model_id: int,
+) -> Dict[str, Any]:
+    """Preserve the selected CivitAI version for LoRA Manager sidecars."""
+    if not isinstance(version_data, dict):
+        return {}
+
+    payload = dict(version_data)
+    payload.setdefault("modelId", model_id)
+
+    model_payload = {
+        key: value
+        for key, value in model_data.items()
+        if key not in {"id", "modelVersions", "creator", "stats"}
+    }
+    existing_model = payload.get("model")
+    if isinstance(existing_model, dict):
+        model_payload.update(existing_model)
+    if model_payload:
+        payload["model"] = model_payload
+
+    creator = model_data.get("creator")
+    if isinstance(creator, dict) and "creator" not in payload:
+        payload["creator"] = creator
+
+    return payload
+
+
 def get_civitai_model_details(
     model_id: int,
     version_id: Optional[int] = None,
@@ -1228,11 +1258,14 @@ def get_civitai_model_details(
     versions = data.get("modelVersions") or []
     normalized_versions = []
     selected_version = None
+    selected_raw_version = None
+    raw_versions = []
 
     for version in versions:
         if not isinstance(version, dict):
             continue
 
+        raw_versions.append(version)
         current_version_id = version.get("id")
         files = [
             _normalize_civitai_file(file_info, model_id, current_version_id, api_key)
@@ -1256,11 +1289,18 @@ def get_civitai_model_details(
         normalized_versions.append(normalized)
         if version_id and str(current_version_id) == str(version_id):
             selected_version = normalized
+            selected_raw_version = version
 
     if not selected_version and normalized_versions:
         selected_version = normalized_versions[0]
+        selected_raw_version = raw_versions[0]
 
     selected_images = selected_version.get("images", []) if selected_version else []
+    civitai_payload = _build_civitai_sidecar_payload(
+        data,
+        selected_raw_version or {},
+        model_id,
+    )
     return {
         "source": "civitai",
         "model_id": model_id,
@@ -1276,6 +1316,7 @@ def get_civitai_model_details(
         "versions": normalized_versions,
         "selected_version": selected_version,
         "images": selected_images,
+        "civitai": civitai_payload,
     }
 
 

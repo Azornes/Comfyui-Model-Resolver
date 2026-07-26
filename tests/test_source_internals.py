@@ -49,6 +49,7 @@ from core.sources.civitai import (
     _search_civitai_trpc_candidates,
     build_civitai_session_cookie,
     clear_search_cache,
+    get_civitai_model_details,
     get_model_info_by_hash,
     get_model_info_for_file,
     parse_civitai_url,
@@ -98,6 +99,82 @@ class CivitaiResultBuilderTests(unittest.TestCase):
         self.assertEqual("Anima", result["base_model"])
         self.assertEqual("abc123", result["sha256"])
         self.assertEqual(10 * 1024, result["size"])
+
+
+class CivitaiModelDetailsTests(unittest.TestCase):
+
+    def test_preserves_full_selected_version_for_metadata_sidecar(self):
+        response = {
+            "id": 123,
+            "name": "Alt-Girl/E-Girl",
+            "type": "LORA",
+            "description": "Model description",
+            "tags": ["style", "e-girl"],
+            "allowNoCredit": True,
+            "allowCommercialUse": ["Image", "Sell"],
+            "creator": {"username": "TheAINovice", "image": None},
+            "stats": {"downloadCount": 1000},
+            "modelVersions": [
+                {
+                    "id": 456,
+                    "name": "Old version",
+                    "baseModel": "Krea 1",
+                    "images": [],
+                    "files": [],
+                },
+                {
+                    "id": 789,
+                    "name": "Krea2 v1.0",
+                    "baseModel": "Krea 2",
+                    "createdAt": "2026-07-14T05:52:54.321Z",
+                    "stats": {"downloadCount": 1705, "thumbsUpCount": 106},
+                    "images": [
+                        {
+                            "url": "https://image.civitai.com/example.jpeg",
+                            "nsfwLevel": 4,
+                            "hash": "blurhash",
+                            "meta": {
+                                "seed": 884670593557080,
+                                "prompt": "AltGirl prompt",
+                                "steps": 8,
+                            },
+                        }
+                    ],
+                    "files": [
+                        {
+                            "id": 321,
+                            "name": "AltGirlKrea.safetensors",
+                            "type": "Model",
+                            "pickleScanResult": "Success",
+                            "virusScanResult": "Success",
+                            "hashes": {"SHA256": "A" * 64},
+                            "primary": True,
+                        }
+                    ],
+                },
+            ],
+        }
+
+        with patch(
+            "core.sources.civitai.execute_provider_json_request",
+            return_value=response,
+        ):
+            details = get_civitai_model_details(123, 789)
+
+        self.assertIsNotNone(details)
+        civitai = details["civitai"]
+        self.assertEqual(789, civitai["id"])
+        self.assertEqual(123, civitai["modelId"])
+        self.assertEqual(4, civitai["images"][0]["nsfwLevel"])
+        self.assertEqual("AltGirl prompt", civitai["images"][0]["meta"]["prompt"])
+        self.assertEqual("Success", civitai["files"][0]["virusScanResult"])
+        self.assertEqual(1705, civitai["stats"]["downloadCount"])
+        self.assertEqual(
+            ["Image", "Sell"],
+            civitai["model"]["allowCommercialUse"],
+        )
+        self.assertEqual("TheAINovice", civitai["creator"]["username"])
+        self.assertNotIn("modelVersions", civitai["model"])
 
 
 class CivitaiHashLookupCacheTests(unittest.TestCase):
