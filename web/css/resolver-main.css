@@ -5233,6 +5233,33 @@ a.mr-image-preview-resource-name:hover {
     color: var(--mr-link-color, #8fc2ff);
 }
 
+.mr-image-preview-other-metadata {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 7px;
+    border-radius: 6px;
+    background: rgba(46, 144, 230, 0.14);
+    border: 1px solid rgba(80, 170, 255, 0.2);
+    color: #b9d9ff;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.mr-image-preview-workflow-copy {
+    min-height: 24px;
+    padding: 3px 7px;
+    border-color: rgba(80, 170, 255, 0.25);
+    background: rgba(46, 144, 230, 0.16);
+    color: #dceeff;
+}
+
+.mr-image-preview-workflow-copy:hover,
+.mr-image-preview-workflow-copy.is-copied {
+    background: rgba(46, 144, 230, 0.3);
+    border-color: rgba(80, 170, 255, 0.48);
+}
+
 .mr-image-preview-card p {
     margin: 0;
     color: #b9bbc4;

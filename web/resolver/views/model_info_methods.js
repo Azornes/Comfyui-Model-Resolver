@@ -4,6 +4,7 @@ import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
 import { escapeHtml, escapeJsString, getFilenameFromPath, sanitizeDescriptionHtml, pollBackgroundTask, safeStorage, copyTextWithFeedback } from "../utils/html_utils.js";
 import { getModelCardUrl } from "../utils/url_utils.js";
+import { extractComfyWorkflow } from "../utils/workflow_metadata.js";
 import { getCivitaiModelUrl } from "../globals.js";
 export const modelInfoMethods = {
     escapeHtml,
@@ -2417,6 +2418,7 @@ export const modelInfoMethods = {
         const image = images[index] || {};
         const metadataRows = this.getInfoImageMetadataRows(image);
         const resources = this.getInfoImageResources(image);
+        const comfyWorkflow = extractComfyWorkflow(image);
         const hasPrevious = images.length > 1;
         const positionText = images.length > 1 ? `${index + 1} / ${images.length}` : '1 image';
 
@@ -2482,6 +2484,20 @@ export const modelInfoMethods = {
                                     <h4>Resources used</h4>
                                 </div>
                                 <div class="mr-image-preview-resources">${resourcesHtml}</div>
+                            </section>
+                        ` : ''}
+                        ${comfyWorkflow ? `
+                            <section class="mr-image-preview-card">
+                                <div class="mr-image-preview-card-head">
+                                    <h4>Other metadata</h4>
+                                </div>
+                                <div class="mr-image-preview-other-metadata">
+                                    <span>comfy:</span>
+                                    <button type="button" class="mr-image-preview-copy mr-image-preview-workflow-copy" data-copy-key="workflow">
+                                        ${this.escapeHtml(comfyWorkflow.nodeCount)} ${comfyWorkflow.nodeCount === 1 ? 'Node' : 'Nodes'}
+                                        ${getSvgIcon('copy')}
+                                    </button>
+                                </div>
                             </section>
                         ` : ''}
                         ${this.renderInfoImagePreviewPrompt('Prompt', image.positive, 'positive')}
@@ -2562,7 +2578,10 @@ export const modelInfoMethods = {
         const key = button?.dataset?.copyKey || '';
         const metadataRows = this.getInfoImageMetadataRows(image);
         const resources = this.getInfoImageResources(image);
-        const text = key === 'positive'
+        const comfyWorkflow = extractComfyWorkflow(image);
+        const text = key === 'workflow'
+            ? comfyWorkflow?.text
+            : key === 'positive'
             ? image.positive
             : key === 'negative'
                 ? image.negative

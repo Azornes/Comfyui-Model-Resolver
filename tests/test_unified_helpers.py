@@ -83,6 +83,23 @@ class UnifiedHelpersTests(unittest.TestCase):
         self.assertEqual(normalized["steps"], 25)
         self.assertEqual(normalized["sampler"], "Euler a")
 
+    def test_normalize_model_image_preserves_metadata_when_normalized_again(self):
+        workflow = '{"workflow":{"nodes":[{"id":1,"type":"KSampler"}]}}'
+        normalized_image = {
+            "url": "https://image.civitai.com/x/width=1200/12345.jpeg",
+            "seed": 424242,
+            "metadata": {
+                "comfy": workflow,
+                "prompt": "portrait",
+            },
+        }
+
+        normalized_again = normalize_model_image(normalized_image)
+
+        self.assertEqual(normalized_again["metadata"]["comfy"], workflow)
+        self.assertEqual(normalized_again["positive"], "portrait")
+        self.assertEqual(normalized_again["seed"], 424242)
+
     def test_normalize_model_image_civarchive_format(self):
         raw_image = {
             "imageUrl": "https://civarchive.com/img/9999.png",

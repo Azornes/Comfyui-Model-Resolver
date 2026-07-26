@@ -794,6 +794,9 @@ def normalize_model_image(image_data: Dict[str, Any], default_civitai_url: str =
     meta = image_data.get("meta")
     if not isinstance(meta, dict):
         meta = {}
+    normalized_metadata = image_data.get("metadata")
+    if isinstance(normalized_metadata, dict):
+        meta = {**normalized_metadata, **meta}
 
     url = image_data.get("url") or image_data.get("imageUrl") or image_data.get("src") or ""
 

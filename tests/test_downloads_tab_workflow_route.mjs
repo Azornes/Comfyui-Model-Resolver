@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { html, normalizePathIdentity } from '../web/resolver/utils/html_utils.js';
 import { getModelCardUrl } from '../web/resolver/utils/url_utils.js';
+import { extractComfyWorkflow } from '../web/resolver/utils/workflow_metadata.js';
 import {
   buildModelResolverNodeMenu,
   getImmediateModelsForNode,
@@ -62,6 +63,70 @@ const renderFormatMethodsSource = fs.readFileSync(
   path.join(projectRoot, 'web/resolver/utils/render_format_methods.js'),
   'utf8'
 );
+
+test('CivitAI Comfy workflow metadata is extracted as pasteable JSON', () => {
+  const workflow = {
+    last_node_id: 2,
+    nodes: [
+      { id: 1, type: 'CheckpointLoaderSimple' },
+      { id: 2, type: 'KSampler' },
+    ],
+    links: [],
+  };
+
+  const result = extractComfyWorkflow({
+    metadata: {
+      comfy: JSON.stringify(workflow),
+    },
+  });
+
+  assert.equal(result.nodeCount, 2);
+  assert.deepEqual(JSON.parse(result.text), workflow);
+});
+
+test('CivitAI Comfy workflow metadata supports nested and double-encoded JSON', () => {
+  const workflow = {
+    nodes: [{ id: 7, type: 'SaveImage' }],
+    links: [],
+  };
+  const result = extractComfyWorkflow({
+    metadata: {
+      extra_pnginfo: JSON.stringify({
+        workflow: JSON.stringify(JSON.stringify(workflow)),
+      }),
+    },
+  });
+
+  assert.equal(result.nodeCount, 1);
+  assert.deepEqual(result.workflow, workflow);
+});
+
+test('CivitAI Comfy workflow metadata tolerates non-finite Python JSON numbers', () => {
+  const result = extractComfyWorkflow({
+    metadata: {
+      comfy: '{"prompt":{},"workflow":{"nodes":[{"id":1,"type":"KSampler","widgets_values":[NaN,"NaN",Infinity,-Infinity]}],"links":[]}}',
+    },
+  });
+
+  assert.equal(result.nodeCount, 1);
+  assert.deepEqual(result.workflow.nodes[0].widgets_values, [null, 'NaN', null, null]);
+  assert.deepEqual(JSON.parse(result.text), result.workflow);
+});
+
+test('API prompt metadata is not offered as a pasteable editor workflow', () => {
+  const result = extractComfyWorkflow({
+    metadata: {
+      comfy: {
+        1: {
+          class_type: 'KSampler',
+          inputs: {},
+        },
+      },
+    },
+  });
+
+  assert.equal(result, null);
+});
 
 test('node context menu includes only existing resolved models from the selected node scope', () => {
   const data = {
