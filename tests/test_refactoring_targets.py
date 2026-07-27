@@ -146,6 +146,42 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
             mock_json_res.assert_called_once_with({"status": "running"})
             mock_get_aria2_status.assert_called_once_with({"aria2c_path": "custom_path"})
 
+    async def test_workflow_model_hashes_reuses_shared_inventory(self):
+        post_handler = routes_registered.get(
+            ("POST", "/model_resolver/workflow-model-hashes")
+        )
+        self.assertIsNotNone(post_handler)
+
+        workflow = {"nodes": []}
+        mock_request = AsyncMock()
+        mock_request.json.return_value = {"workflow": workflow}
+        threaded_functions = []
+
+        async def fake_to_thread(func, *args, **kwargs):
+            function_name = getattr(func, "__name__", "")
+            threaded_functions.append(function_name or "<settings>")
+            if len(threaded_functions) == 1:
+                return {"workflow_hash_metadata_enabled": True}
+            if function_name == "get_workflow_model_inventory":
+                self.assertEqual((workflow,), args)
+                self.assertEqual({}, kwargs)
+                return {"available_models": [], "model_refs": []}
+            self.fail(f"Unexpected threaded function: {function_name}")
+
+        with (
+            patch("asyncio.to_thread", side_effect=fake_to_thread),
+            patch("aiohttp.web.json_response") as mock_json_res,
+        ):
+            await post_handler(mock_request)
+
+        self.assertEqual(
+            ["<settings>", "get_workflow_model_inventory"],
+            threaded_functions,
+        )
+        response_data = mock_json_res.call_args.args[0]
+        self.assertTrue(response_data["success"])
+        self.assertEqual(0, response_data["count"])
+
     async def test_search_progress_route(self):
         progress_id = "test_search_job"
         

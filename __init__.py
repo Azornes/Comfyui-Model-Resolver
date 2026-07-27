@@ -428,7 +428,6 @@ class ModelResolverExtension:
                 from .core.workflow_analyzer import (
                     NODE_TYPE_MODEL_WIDGET_CATEGORIES,
                     URN_TYPE_MAP,
-                    analyze_workflow_models,
                     get_workflow_model_inventory,
                 )
             except ImportError as e:
@@ -1016,12 +1015,11 @@ class ModelResolverExtension:
                         }
                     )
 
-                available_models = await asyncio.to_thread(get_model_files, False)
-                refs = await asyncio.to_thread(
-                    analyze_workflow_models,
+                inventory = await asyncio.to_thread(
+                    get_workflow_model_inventory,
                     workflow_json,
-                    available_models,
                 )
+                refs = inventory["model_refs"]
 
                 by_node = {}
                 by_path = {}
