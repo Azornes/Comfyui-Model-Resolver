@@ -59,6 +59,10 @@ const workflowStateMethodsSource = fs.readFileSync(
   path.join(projectRoot, 'web/resolver/shell/workflow_state_methods.js'),
   'utf8'
 );
+const lifecycleGraphMethodsSource = fs.readFileSync(
+  path.join(projectRoot, 'web/resolver/shell/lifecycle_graph_methods.js'),
+  'utf8'
+);
 const renderFormatMethodsSource = fs.readFileSync(
   path.join(projectRoot, 'web/resolver/utils/render_format_methods.js'),
   'utf8'
@@ -594,6 +598,182 @@ test('background Loaded Models refresh keeps the current view until new data is 
 
   assert.equal(contentElement.innerHTML, '<div>0.75</div>');
   assert.equal(contentElement.scrollTop, 48);
+});
+
+test('background Missing Models refresh keeps the current view until new data is ready', async () => {
+  const loadWorkflowData = eval(`(${extractMethod(lifecycleGraphMethodsSource, 'loadWorkflowData')})`);
+  const workflow = {
+    nodes: [{
+      id: 7,
+      type: 'LoraLoader',
+      widgets_values: ['model.safetensors', 0.75],
+    }],
+  };
+  const contentElement = {
+    innerHTML: '<div>Existing missing models</div>',
+    scrollTop: 36,
+  };
+  let resolveFetch;
+  const fetchPromise = new Promise(resolve => {
+    resolveFetch = resolve;
+  });
+  let progressRenderCount = 0;
+  let progressPollCount = 0;
+  const dialog = {
+    activeTab: 'missing',
+    contentElement,
+    cachedWorkflowSignature: 'old-signature',
+    cachedAnalysisData: { missing_models: [], resolved_models: [] },
+    syncWorkflowScopedQueue() {},
+    getWorkflowSignature: () => 'new-signature',
+    workflowHasNodes: () => true,
+    renderAnalysisProgress() {
+      progressRenderCount += 1;
+      return '<div>Progress</div>';
+    },
+    pollAnalysisProgress() {
+      progressPollCount += 1;
+      return Promise.resolve();
+    },
+    fetchJson: () => fetchPromise,
+    applyResolvedSelectionAliasesToAnalysisData() {},
+    saveAnalysisCacheForActiveWorkflow() {},
+    ensureDownloadDirectoriesLoaded: async () => {},
+    displayMissingModels(container, data) {
+      container.innerHTML = `<div>${data.resolved_models[0].strength}</div>`;
+      container.scrollTop = 0;
+    },
+    applyPendingWorkflowModelSelection() {},
+    reconnectActiveDownloads() {},
+  };
+
+  const refreshPromise = loadWorkflowData.call(
+    dialog,
+    workflow,
+    { preserveContent: true }
+  );
+  await Promise.resolve();
+
+  assert.equal(contentElement.innerHTML, '<div>Existing missing models</div>');
+  assert.equal(progressRenderCount, 0);
+  assert.equal(progressPollCount, 0);
+
+  resolveFetch({
+    missing_models: [],
+    resolved_models: [{ name: 'model.safetensors', strength: 0.75 }],
+    total_missing: 0,
+    total_resolved: 1,
+  });
+  await refreshPromise;
+
+  assert.equal(contentElement.innerHTML, '<div>0.75</div>');
+  assert.equal(contentElement.scrollTop, 36);
+});
+
+test('node widget changes request a content-preserving Missing Models refresh', async () => {
+  const log = { debug() {} };
+  const refreshForActiveWorkflowChange = eval(
+    `(${extractMethod(workflowStateMethodsSource, 'refreshForActiveWorkflowChange')})`
+  );
+  const workflow = {
+    nodes: [{
+      id: 7,
+      type: 'LoraLoader',
+      widgets_values: ['model.safetensors', 0.75],
+    }],
+  };
+  let loadArguments = null;
+  let preserveSearchCacheAtSync = false;
+  const dialog = {
+    _workflowRefreshGeneration: 1,
+    activeWorkflowRouteKey: 'workflow-a',
+    activeWorkflowSignature: 'old-signature',
+    activeTab: 'missing',
+    contentElement: { style: {} },
+    isVisible: () => true,
+    getActiveWorkflowRouteKey: () => 'workflow-a',
+    getCurrentWorkflow: () => workflow,
+    getWorkflowSignature: () => 'new-signature',
+    syncWorkflowScopedQueue() {
+      preserveSearchCacheAtSync = this.preserveSearchCacheAcrossNextWorkflowSync;
+    },
+    async loadWorkflowData(...args) {
+      loadArguments = args;
+    },
+  };
+
+  await refreshForActiveWorkflowChange.call(dialog, {
+    reason: 'node-widget-change',
+    expectedRoute: 'workflow-a',
+    previousSignature: 'old-signature',
+    attempt: 8,
+    generation: 1,
+    candidateRoute: 'workflow-a',
+    candidateSignature: 'new-signature',
+  });
+
+  assert.equal(loadArguments[0], workflow);
+  assert.deepEqual(loadArguments[1], { preserveContent: true });
+  assert.equal(preserveSearchCacheAtSync, true);
+});
+
+test('workflow synchronization carries searched results across a strength-only signature change', () => {
+  const syncWorkflowScopedQueue = eval(
+    `(${extractMethod(workflowStateMethodsSource, 'syncWorkflowScopedQueue')})`
+  );
+  const workflow = {
+    nodes: [{
+      id: 7,
+      type: 'LoraLoader',
+      widgets_values: ['missing.safetensors', 0.75],
+    }],
+  };
+  const searchedState = {
+    selectedSource: 'civitai',
+    results: {
+      civitai: { name: 'Found model' },
+    },
+  };
+  const dialog = {
+    preserveSearchCacheAcrossNextWorkflowSync: true,
+    activeWorkflowRouteKey: 'workflow-a',
+    activeWorkflowSignature: 'old-signature',
+    searchResultCache: new Map([['loras:missing.safetensors', searchedState]]),
+    backgroundSearchJobs: new Map(),
+    getCurrentWorkflow: () => workflow,
+    getActiveWorkflowRouteKey: () => 'workflow-a',
+    getWorkflowSignature: () => 'new-signature',
+    getWorkflowScopedQueueKey(route = dialog.activeWorkflowRouteKey, signature = dialog.activeWorkflowSignature) {
+      return `${route}\n${signature}`;
+    },
+    cloneSearchResultCache(cache) {
+      return new Map(cache);
+    },
+    savePendingQueueForActiveWorkflow() {},
+    saveAnalysisCacheForActiveWorkflow() {},
+    saveLoadedModelsCacheForActiveWorkflow() {},
+    saveSearchCacheForActiveWorkflow() {},
+    saveDownloadTargetSelectionsForActiveWorkflow() {},
+    clearWorkflowScopedState() {
+      this.searchResultCache.clear();
+    },
+    restorePendingQueueForActiveWorkflow() {},
+    restoreAnalysisCacheForActiveWorkflow() {},
+    restoreLoadedModelsCacheForActiveWorkflow() {},
+    restoreSearchCacheForActiveWorkflow() {
+      this.searchResultCache = new Map();
+    },
+    restoreDownloadTargetSelectionsForActiveWorkflow() {},
+  };
+
+  syncWorkflowScopedQueue.call(dialog, workflow);
+
+  assert.equal(dialog.activeWorkflowSignature, 'new-signature');
+  assert.equal(
+    dialog.searchResultCache.get('loras:missing.safetensors'),
+    searchedState
+  );
+  assert.equal(dialog.preserveSearchCacheAcrossNextWorkflowSync, false);
 });
 
 test('pending node context model resolves against the current workflow analysis before action', async () => {

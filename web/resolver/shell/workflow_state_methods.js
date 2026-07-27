@@ -790,21 +790,16 @@ export const workflowStateMethods = {
             tab: this.activeTab
         });
 
-        this.savePendingQueueForActiveWorkflow();
-        this.saveAnalysisCacheForActiveWorkflow();
-        this.saveLoadedModelsCacheForActiveWorkflow();
-        this.saveSearchCacheForActiveWorkflow();
-        this.clearWorkflowScopedState();
-        this.activeWorkflowRouteKey = currentRoute;
-        this.activeWorkflowSignature = signature;
-        this.restorePendingQueueForActiveWorkflow();
-        this.restoreAnalysisCacheForActiveWorkflow();
-        this.restoreLoadedModelsCacheForActiveWorkflow();
-        this.restoreSearchCacheForActiveWorkflow();
+        this.preserveSearchCacheAcrossNextWorkflowSync = Boolean(
+            !routeChanged && reason === 'node-widget-change'
+        );
+        this.syncWorkflowScopedQueue(workflow);
 
         if (this.activeTab === 'missing') {
             if (this.contentElement) this.contentElement.style.overflowY = 'auto';
-            await this.loadWorkflowData(workflow);
+            await this.loadWorkflowData(workflow, {
+                preserveContent: !routeChanged && reason === 'node-widget-change'
+            });
         } else if (this.activeTab === 'loaded') {
             if (this.contentElement) this.contentElement.style.overflowY = 'auto';
             await this.loadLoadedModels(workflow, {

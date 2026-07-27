@@ -4,6 +4,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from core import resolver as resolver_core
 from core import workflow_analyzer
 from core.scanner import invalidate_model_files_cache, scan_directory
 from core.workflow_analyzer import (
@@ -1203,6 +1204,55 @@ class WorkflowMissingReferenceGroupingTests(unittest.TestCase):
         )
 
 
+class WorkflowResolverMatchingTests(unittest.TestCase):
+    def test_resolved_models_skip_redundant_fuzzy_matching(self):
+        workflow = _workflow_with_model("existing.safetensors")
+        resolved_ref = {
+            "node_id": 1,
+            "node_type": "CheckpointLoaderSimple",
+            "widget_index": 0,
+            "original_path": "existing.safetensors",
+            "category": "checkpoints",
+            "exists": True,
+            "full_path": r"E:\models\existing.safetensors",
+        }
+        available_models = [
+            {
+                "filename": "existing.safetensors",
+                "relative_path": "existing.safetensors",
+                "path": resolved_ref["full_path"],
+                "category": "checkpoints",
+            }
+        ]
+        progress = []
+
+        with (
+            patch.object(
+                resolver_core,
+                "get_workflow_model_inventory",
+                return_value={
+                    "available_models": available_models,
+                    "model_refs": [resolved_ref],
+                },
+            ),
+            patch.object(resolver_core, "find_matches") as find_matches,
+        ):
+            result = resolver_core.analyze_and_find_matches(
+                workflow,
+                progress_callback=progress.append,
+            )
+
+        find_matches.assert_not_called()
+        self.assertEqual(1, result["total_resolved"])
+        self.assertEqual([], result["resolved_models"][0]["matches"])
+        self.assertFalse(
+            any(
+                "Analyzing resolved model" in str(update.get("message") or "")
+                for update in progress
+            )
+        )
+
+
 class WorkflowModelInventoryCacheTests(unittest.TestCase):
     def setUp(self):
         invalidate_workflow_model_inventory_cache()
@@ -1343,6 +1393,58 @@ class WorkflowModelInventoryCacheTests(unittest.TestCase):
         self.assertEqual(
             {"second.safetensors", "unchanged.safetensors"},
             {ref["original_path"] for ref in result["model_refs"]},
+        )
+
+    def test_changed_loader_keeps_previous_result_position(self):
+        first_workflow = {
+            "nodes": [
+                {
+                    **_workflow_with_model("first.safetensors")["nodes"][0],
+                    "id": 1,
+                },
+                {
+                    **_workflow_with_model("middle.safetensors")["nodes"][0],
+                    "id": 2,
+                },
+                {
+                    **_workflow_with_model("last.safetensors")["nodes"][0],
+                    "id": 3,
+                },
+            ]
+        }
+        second_workflow = {
+            "nodes": [
+                first_workflow["nodes"][0],
+                first_workflow["nodes"][2],
+                {
+                    **_workflow_with_model("middle-updated.safetensors")["nodes"][0],
+                    "id": 2,
+                },
+            ]
+        }
+
+        with (
+            patch(
+                "core.scanner.get_model_files",
+                return_value=[],
+            ),
+            patch.object(
+                workflow_analyzer,
+                "get_node_model_info",
+                wraps=workflow_analyzer.get_node_model_info,
+            ) as get_node_info,
+        ):
+            get_workflow_model_inventory(first_workflow)
+            result = get_workflow_model_inventory(second_workflow)
+
+        self.assertEqual(4, get_node_info.call_count)
+        self.assertEqual(
+            [
+                "first.safetensors",
+                "middle-updated.safetensors",
+                "last.safetensors",
+            ],
+            [ref["original_path"] for ref in result["model_refs"]],
         )
 
     def test_new_loader_does_not_reanalyze_existing_loader(self):

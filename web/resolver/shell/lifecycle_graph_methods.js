@@ -111,11 +111,17 @@ export const lifecycleGraphMethods = {
     /**
      * Load workflow data and display missing models
      */
-    async loadWorkflowData(workflow = null, { force = false, forceRescan = force } = {}) {
+    async loadWorkflowData(
+        workflow = null,
+        { force = false, forceRescan = force, preserveContent = false } = {}
+    ) {
         if (!this.contentElement) return;
 
         this._workflowDataLoadToken = null;
         let loadToken = null;
+        const preservedScrollTop = preserveContent
+            ? this.contentElement.scrollTop
+            : null;
         const shouldRenderMissingModels = () => (
             this.activeTab === 'missing' &&
             loadToken &&
@@ -187,7 +193,7 @@ export const lifecycleGraphMethods = {
 
             const analysisId = `an-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             this._analysisProgressToken = analysisId;
-            if (shouldRenderMissingModels()) {
+            if (!preserveContent && shouldRenderMissingModels()) {
                 this.contentElement.innerHTML = this.renderAnalysisProgress({
                     status: 'starting',
                     message: 'Starting analysis...',
@@ -197,7 +203,9 @@ export const lifecycleGraphMethods = {
             }
 
             // Call analyze endpoint
-            const progressPromise = this.pollAnalysisProgress(analysisId, analysisId);
+            const progressPromise = preserveContent
+                ? Promise.resolve()
+                : this.pollAnalysisProgress(analysisId, analysisId);
             let data;
             try {
                 data = await this.fetchJson('/model_resolver/analyze', {
@@ -220,6 +228,9 @@ export const lifecycleGraphMethods = {
                 await this.ensureDownloadDirectoriesLoaded();
                 this.displayMissingModels(this.contentElement, data);
                 this.applyPendingWorkflowModelSelection?.(data);
+                if (preservedScrollTop !== null) {
+                    this.contentElement.scrollTop = preservedScrollTop;
+                }
 
                 // Reconnect any active downloads to their new progress divs
                 this.reconnectActiveDownloads();
@@ -231,9 +242,14 @@ export const lifecycleGraphMethods = {
                 this._analysisProgressToken = null;
             }
             console.error('Model Resolver: Error loading workflow data:', error);
-            if (shouldRenderMissingModels()) {
+            if (!preserveContent && shouldRenderMissingModels()) {
                 this.contentElement.innerHTML = `<p class="mr-error-text">Error: ${error.message}</p>`;
-            } else if (!loadToken && this.activeTab === 'missing' && this.contentElement) {
+            } else if (
+                !preserveContent &&
+                !loadToken &&
+                this.activeTab === 'missing' &&
+                this.contentElement
+            ) {
                 this.contentElement.innerHTML = `<p class="mr-error-text">Error: ${error.message}</p>`;
             }
             return null;

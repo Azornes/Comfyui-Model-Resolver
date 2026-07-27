@@ -2308,6 +2308,49 @@ def _get_workflow_node_fingerprints(
     return fingerprints
 
 
+def _order_nodes_for_incremental_analysis(
+    nodes: List[Dict[str, Any]],
+    previous_node_cache: Optional[
+        Dict[tuple[str, str, str], Dict[str, Any]]
+    ],
+    *,
+    subgraph_id: Any = "",
+    is_top_level: bool,
+) -> List[Dict[str, Any]]:
+    """Keep existing nodes in their previous result positions during refreshes."""
+    if previous_node_cache is None or len(nodes) < 2:
+        return nodes
+
+    previous_positions = {
+        key: index for index, key in enumerate(previous_node_cache)
+    }
+    existing_nodes = []
+    new_nodes = []
+
+    for current_index, node in enumerate(nodes):
+        if not isinstance(node, dict):
+            new_nodes.append((current_index, node))
+            continue
+        node_key = _get_workflow_node_cache_key(
+            node,
+            subgraph_id=subgraph_id,
+            is_top_level=is_top_level,
+        )
+        previous_position = previous_positions.get(node_key)
+        if previous_position is None:
+            new_nodes.append((current_index, node))
+        else:
+            existing_nodes.append((previous_position, current_index, node))
+
+    existing_nodes.sort(key=lambda item: (item[0], item[1]))
+    new_nodes.sort(key=lambda item: item[0])
+    return [
+        node for _, _, node in existing_nodes
+    ] + [
+        node for _, node in new_nodes
+    ]
+
+
 def _get_promoted_widget_context_cache_key(
     workflow_json: Dict[str, Any],
 ) -> str:
@@ -2426,6 +2469,11 @@ def analyze_workflow_models(
     nodes = workflow_json.get("nodes", [])
     if not isinstance(nodes, list):
         nodes = []
+    nodes = _order_nodes_for_incremental_analysis(
+        nodes,
+        previous_node_cache,
+        is_top_level=True,
+    )
     total_nodes = len(nodes) + sum(
         len(subgraph_nodes)
         for subgraph in subgraphs
@@ -2542,6 +2590,12 @@ def analyze_workflow_models(
         subgraph_nodes = subgraph.get("nodes", [])
         if not isinstance(subgraph_nodes, list):
             subgraph_nodes = []
+        subgraph_nodes = _order_nodes_for_incremental_analysis(
+            subgraph_nodes,
+            previous_node_cache,
+            subgraph_id=subgraph_id,
+            is_top_level=False,
+        )
 
         analyzed_subgraph_nodes = 0
 

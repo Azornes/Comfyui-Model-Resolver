@@ -1028,7 +1028,7 @@ def analyze_and_find_matches(
                 missing["urn_version_id"] = urn.get("version_id")
                 missing["urn_type"] = urn.get("type", "")
 
-    total_matching_models = len(missing_models) + len(resolved_model_refs)
+    total_matching_models = len(missing_models)
     if progress_callback:
         progress_callback(
             {
@@ -1192,25 +1192,16 @@ def analyze_and_find_matches(
             "matches": find_local_matches_for_ref(missing),
         })
 
-    resolved_with_matches = []
-    total_resolved = len(resolved_model_refs)
-    for index, resolved in enumerate(resolved_model_refs, start=1):
-        if progress_callback:
-            progress_callback(
-                {
-                    "stage": "matching",
-                    "message": f"Analyzing resolved model {index} of {total_resolved}",
-                    "current": total_missing + index,
-                    "total": total_matching_models,
-                    "model_name": resolved.get("name")
-                    or resolved.get("original_path", ""),
-                }
-            )
-
-        resolved_with_matches.append({
+    # Existing models already have an exact local path. Fuzzy-matching every
+    # resolved reference against the full local model index is redundant and
+    # makes small workflow edits unnecessarily expensive.
+    resolved_with_matches = [
+        {
             **resolved,
-            "matches": find_local_matches_for_ref(resolved),
-        })
+            "matches": [],
+        }
+        for resolved in resolved_model_refs
+    ]
 
     result = {
         "missing_models": missing_with_matches,
