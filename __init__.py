@@ -51,8 +51,12 @@ MODEL_RESOLVER_DEPENDENCY_NODE_TYPE = "ModelResolverDependency"
 MODEL_RESOLVER_DEPENDENCY_NODE_DISPLAY_NAME = "Model Resolver Opener"
 MODEL_RESOLVER_DEPENDENCY_NODE_CATEGORY = "Model Resolver/Workflow"
 MODEL_RESOLVER_DEPENDENCY_NODE_DESCRIPTION = (
-    "A passive opener node for workflows that intentionally depend on "
-    "Model Resolver metadata. It does not process images, models, or prompts."
+    "This passive node declares Model Resolver as a workflow dependency and opens "
+    "its tools. It does not process images, models, or prompts. To stop adding it "
+    "automatically, open Model Resolver, go to Options -> Defaults -> and disable "
+    "'Embed opener node'. We recommend keeping it in an unobtrusive part of the "
+    "canvas: it helps ComfyUI-Manager identify and offer Model Resolver on other "
+    "ComfyUI installations, making the workflow easier to use in the future."
 )
 
 try:
