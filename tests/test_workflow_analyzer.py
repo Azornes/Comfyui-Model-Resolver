@@ -1305,6 +1305,141 @@ class WorkflowModelInventoryCacheTests(unittest.TestCase):
 
         self.assertEqual(2, analyze_models.call_count)
 
+    def test_only_changed_loader_is_reanalyzed(self):
+        first_workflow = {
+            "nodes": [
+                _workflow_with_model("first.safetensors")["nodes"][0],
+                {
+                    **_workflow_with_model("unchanged.safetensors")["nodes"][0],
+                    "id": 2,
+                },
+            ]
+        }
+        second_workflow = {
+            "nodes": [
+                _workflow_with_model("second.safetensors")["nodes"][0],
+                {
+                    **_workflow_with_model("unchanged.safetensors")["nodes"][0],
+                    "id": 2,
+                },
+            ]
+        }
+
+        with (
+            patch(
+                "core.scanner.get_model_files",
+                return_value=[],
+            ),
+            patch.object(
+                workflow_analyzer,
+                "get_node_model_info",
+                wraps=workflow_analyzer.get_node_model_info,
+            ) as get_node_info,
+        ):
+            get_workflow_model_inventory(first_workflow)
+            result = get_workflow_model_inventory(second_workflow)
+
+        self.assertEqual(3, get_node_info.call_count)
+        self.assertEqual(
+            {"second.safetensors", "unchanged.safetensors"},
+            {ref["original_path"] for ref in result["model_refs"]},
+        )
+
+    def test_new_loader_does_not_reanalyze_existing_loader(self):
+        first_workflow = _workflow_with_model("existing.safetensors")
+        second_workflow = {
+            "nodes": [
+                first_workflow["nodes"][0],
+                {
+                    **_workflow_with_model("new.safetensors")["nodes"][0],
+                    "id": 2,
+                },
+            ]
+        }
+
+        with (
+            patch(
+                "core.scanner.get_model_files",
+                return_value=[],
+            ),
+            patch.object(
+                workflow_analyzer,
+                "get_node_model_info",
+                wraps=workflow_analyzer.get_node_model_info,
+            ) as get_node_info,
+        ):
+            get_workflow_model_inventory(first_workflow)
+            get_workflow_model_inventory(second_workflow)
+
+        self.assertEqual(2, get_node_info.call_count)
+
+    def test_promoted_widget_context_change_uses_full_analysis(self):
+        def build_workflow(promoted_value):
+            return {
+                "nodes": [
+                    {
+                        "id": 1,
+                        "type": "subgraph-1",
+                        "widgets_values": [promoted_value],
+                        "properties": {
+                            "proxyWidgets": [["10", "ckpt_name"]],
+                        },
+                        "inputs": [],
+                        "outputs": [],
+                    },
+                    {
+                        **_workflow_with_model("top.safetensors")["nodes"][0],
+                        "id": 2,
+                    },
+                ],
+                "definitions": {
+                    "subgraphs": [
+                        {
+                            "id": "subgraph-1",
+                            "name": "Promoted loader",
+                            "inputs": [],
+                            "nodes": [
+                                {
+                                    **_workflow_with_model(
+                                        "inner.safetensors"
+                                    )["nodes"][0],
+                                    "id": 10,
+                                    "inputs": [
+                                        {
+                                            "name": "ckpt_name",
+                                            "widget": {
+                                                "name": "ckpt_name",
+                                            },
+                                            "link": None,
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                },
+            }
+
+        with (
+            patch(
+                "core.scanner.get_model_files",
+                return_value=[],
+            ),
+            patch.object(
+                workflow_analyzer,
+                "get_node_model_info",
+                wraps=workflow_analyzer.get_node_model_info,
+            ) as get_node_info,
+        ):
+            get_workflow_model_inventory(
+                build_workflow("first.safetensors")
+            )
+            get_workflow_model_inventory(
+                build_workflow("second.safetensors")
+            )
+
+        self.assertEqual(6, get_node_info.call_count)
+
     def test_scanner_invalidation_clears_shared_inventory(self):
         workflow = _workflow_with_model("invalidated.safetensors")
 

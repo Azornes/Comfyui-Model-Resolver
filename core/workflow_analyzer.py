@@ -2235,10 +2235,162 @@ def _apply_promoted_widget_locator(
     ref["locate_via_promoted_widget"] = True
 
 
+def _normalize_workflow_analysis_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        is_node = "id" in value and "type" in value
+        return {
+            key: _normalize_workflow_analysis_value(item)
+            for key, item in value.items()
+            if not (
+                is_node
+                and key in _WORKFLOW_MODEL_INVENTORY_IGNORED_NODE_KEYS
+            )
+        }
+    if isinstance(value, list):
+        return [_normalize_workflow_analysis_value(item) for item in value]
+    return value
+
+
+def _get_workflow_node_cache_key(
+    node: Dict[str, Any],
+    *,
+    subgraph_id: Any = "",
+    is_top_level: bool,
+) -> tuple[str, str, str]:
+    scope = "top" if is_top_level else "subgraph"
+    return (scope, "" if is_top_level else str(subgraph_id or ""), str(node.get("id")))
+
+
+def _get_workflow_node_fingerprint(node: Dict[str, Any]) -> str:
+    serialized_node = json.dumps(
+        _normalize_workflow_analysis_value(node),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(serialized_node.encode("utf-8")).hexdigest()
+
+
+def _get_workflow_node_fingerprints(
+    workflow_json: Dict[str, Any],
+) -> Dict[tuple[str, str, str], str]:
+    fingerprints = {}
+    nodes = workflow_json.get("nodes", [])
+    if isinstance(nodes, list):
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+            key = _get_workflow_node_cache_key(node, is_top_level=True)
+            fingerprints[key] = _get_workflow_node_fingerprint(node)
+
+    definitions = workflow_json.get("definitions", {})
+    subgraphs = definitions.get("subgraphs", []) if isinstance(definitions, dict) else []
+    if not isinstance(subgraphs, list):
+        return fingerprints
+
+    for subgraph in subgraphs:
+        if not isinstance(subgraph, dict):
+            continue
+        subgraph_id = subgraph.get("id")
+        subgraph_nodes = subgraph.get("nodes", [])
+        if not isinstance(subgraph_nodes, list):
+            continue
+        for node in subgraph_nodes:
+            if not isinstance(node, dict):
+                continue
+            key = _get_workflow_node_cache_key(
+                node,
+                subgraph_id=subgraph_id,
+                is_top_level=False,
+            )
+            fingerprints[key] = _get_workflow_node_fingerprint(node)
+
+    return fingerprints
+
+
+def _get_promoted_widget_context_cache_key(
+    workflow_json: Dict[str, Any],
+) -> str:
+    definitions = workflow_json.get("definitions", {})
+    subgraphs = definitions.get("subgraphs", []) if isinstance(definitions, dict) else []
+    if not isinstance(subgraphs, list):
+        subgraphs = []
+
+    subgraph_ids = {
+        str(subgraph.get("id"))
+        for subgraph in subgraphs
+        if isinstance(subgraph, dict) and subgraph.get("id")
+    }
+    context_subgraphs = []
+    for subgraph in subgraphs:
+        if not isinstance(subgraph, dict):
+            continue
+        context_nodes = []
+        nodes = subgraph.get("nodes", [])
+        if isinstance(nodes, list):
+            for node in nodes:
+                if not isinstance(node, dict):
+                    continue
+                widgets_values = node.get("widgets_values", [])
+                context_node = {
+                    **node,
+                    "widgets_values": (
+                        [None] * len(widgets_values)
+                        if isinstance(widgets_values, list)
+                        else []
+                    ),
+                }
+                context_nodes.append(
+                    _normalize_workflow_analysis_value(context_node)
+                )
+        context_subgraph = {
+            key: value
+            for key, value in subgraph.items()
+            if key != "nodes"
+        }
+        context_subgraphs.append(
+            _normalize_workflow_analysis_value(
+                {
+                    **context_subgraph,
+                    "nodes": context_nodes,
+                }
+            )
+        )
+
+    context_instances = []
+    nodes = workflow_json.get("nodes", [])
+    if isinstance(nodes, list):
+        for node in nodes:
+            if not isinstance(node, dict) or str(node.get("type")) not in subgraph_ids:
+                continue
+            context_instances.append(
+                _normalize_workflow_analysis_value(node)
+            )
+
+    serialized_context = json.dumps(
+        {
+            "subgraphs": context_subgraphs,
+            "instances": context_instances,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(serialized_context.encode("utf-8")).hexdigest()
+
+
 def analyze_workflow_models(
     workflow_json: Dict[str, Any],
     available_models: Optional[List[Dict[str, Any]]] = None,
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+    *,
+    previous_node_cache: Optional[
+        Dict[tuple[str, str, str], Dict[str, Any]]
+    ] = None,
+    node_cache_out: Optional[
+        Dict[tuple[str, str, str], Dict[str, Any]]
+    ] = None,
+    analysis_stats: Optional[Dict[str, int]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Extract all model references from a workflow, including nested subgraphs.
@@ -2253,6 +2405,8 @@ def analyze_workflow_models(
         Each dict includes 'subgraph_id' if the model is in a subgraph
     """
     all_model_refs = []
+    reused_nodes = 0
+    analyzed_nodes = 0
 
     # Get subgraph definitions first to check if node types are subgraph UUIDs
     definitions = workflow_json.get("definitions", {})
@@ -2281,7 +2435,12 @@ def analyze_workflow_models(
     )
     processed_nodes = 0
 
-    def report_node_progress(node: Dict[str, Any], subgraph_name: Optional[str] = None) -> None:
+    def report_node_progress(
+        node: Dict[str, Any],
+        subgraph_name: Optional[str] = None,
+        *,
+        reused: bool = False,
+    ) -> None:
         nonlocal processed_nodes
         processed_nodes += 1
         if not progress_callback:
@@ -2296,10 +2455,16 @@ def analyze_workflow_models(
             "node_id": node.get("id"),
             "node_type": node_type,
         }
+        if reused:
+            payload["message"] = (
+                f"Reusing workflow node {processed_nodes} of {total_nodes}"
+            )
+            payload["cached"] = True
         if subgraph_name:
             payload["subgraph_name"] = subgraph_name
             payload["message"] = (
-                f"Analyzing subgraph node {processed_nodes} of {total_nodes}"
+                f"{'Reusing' if reused else 'Analyzing'} subgraph node "
+                f"{processed_nodes} of {total_nodes}"
             )
 
         try:
@@ -2309,8 +2474,29 @@ def analyze_workflow_models(
 
     for node in nodes:
         try:
-            report_node_progress(node)
-            model_refs = get_node_model_info(node, available_models=available_models)
+            node_cache_key = _get_workflow_node_cache_key(
+                node,
+                is_top_level=True,
+            )
+            node_fingerprint = _get_workflow_node_fingerprint(node)
+            cached_node = (
+                previous_node_cache.get(node_cache_key)
+                if previous_node_cache is not None
+                else None
+            )
+            reused = bool(
+                cached_node
+                and cached_node.get("fingerprint") == node_fingerprint
+            )
+            if reused:
+                model_refs = cached_node.get("refs", [])
+                reused_nodes += 1
+            else:
+                model_refs = get_node_model_info(
+                    node,
+                    available_models=available_models,
+                )
+                analyzed_nodes += 1
             node_type = node.get("type", "")
 
             # Check if node type is a subgraph UUID
@@ -2323,18 +2509,25 @@ def analyze_workflow_models(
             # Mark with subgraph info if it's a subgraph node
             # For top-level subgraph instance nodes, subgraph_path is None
             # This distinguishes them from nodes within subgraph definitions
-            for ref in model_refs:
-                ref["subgraph_id"] = subgraph_id
-                ref["subgraph_name"] = subgraph_name
-                ref["subgraph_path"] = None  # Top-level, not in definitions.subgraphs
-                ref["is_top_level"] = True  # Flag to indicate this is a top-level node
-                if subgraph_id:
-                    context = promoted_widget_contexts.get(
-                        "instance_widgets", {}
-                    ).get((str(node.get("id")), ref.get("widget_index")))
-                    _apply_instance_promoted_widget_context(
-                        ref, context, available_models
-                    )
+            if not reused:
+                for ref in model_refs:
+                    ref["subgraph_id"] = subgraph_id
+                    ref["subgraph_name"] = subgraph_name
+                    ref["subgraph_path"] = None
+                    ref["is_top_level"] = True
+                    if subgraph_id:
+                        context = promoted_widget_contexts.get(
+                            "instance_widgets", {}
+                        ).get((str(node.get("id")), ref.get("widget_index")))
+                        _apply_instance_promoted_widget_context(
+                            ref, context, available_models
+                        )
+            if node_cache_out is not None:
+                node_cache_out[node_cache_key] = {
+                    "fingerprint": node_fingerprint,
+                    "refs": model_refs,
+                }
+            report_node_progress(node, reused=reused)
             all_model_refs.extend(model_refs)
         except Exception as e:
             log.warning(f"Error analyzing node {node.get('id', 'unknown')}: {e}")
@@ -2350,26 +2543,59 @@ def analyze_workflow_models(
         if not isinstance(subgraph_nodes, list):
             subgraph_nodes = []
 
-        log.debug(
-            f"Analyzing subgraph: {subgraph_name} (ID: {subgraph_id}) with {len(subgraph_nodes)} nodes"
-        )
+        analyzed_subgraph_nodes = 0
 
         for node in subgraph_nodes:
             try:
-                report_node_progress(node, subgraph_name)
-                model_refs = get_node_model_info(node, available_models=available_models)
-                # Mark as belonging to this subgraph definition
-                for ref in model_refs:
-                    ref["subgraph_id"] = subgraph_id
-                    ref["subgraph_name"] = subgraph_name
-                    ref["subgraph_path"] = [
-                        "definitions",
-                        "subgraphs",
-                        subgraph_id,
-                        "nodes",
-                    ]
-                    ref["is_top_level"] = False  # This is inside a subgraph definition
-                    _apply_promoted_widget_locator(ref, promoted_widget_contexts)
+                node_cache_key = _get_workflow_node_cache_key(
+                    node,
+                    subgraph_id=subgraph_id,
+                    is_top_level=False,
+                )
+                node_fingerprint = _get_workflow_node_fingerprint(node)
+                cached_node = (
+                    previous_node_cache.get(node_cache_key)
+                    if previous_node_cache is not None
+                    else None
+                )
+                reused = bool(
+                    cached_node
+                    and cached_node.get("fingerprint") == node_fingerprint
+                )
+                if reused:
+                    model_refs = cached_node.get("refs", [])
+                    reused_nodes += 1
+                else:
+                    model_refs = get_node_model_info(
+                        node,
+                        available_models=available_models,
+                    )
+                    analyzed_nodes += 1
+                    analyzed_subgraph_nodes += 1
+                    for ref in model_refs:
+                        ref["subgraph_id"] = subgraph_id
+                        ref["subgraph_name"] = subgraph_name
+                        ref["subgraph_path"] = [
+                            "definitions",
+                            "subgraphs",
+                            subgraph_id,
+                            "nodes",
+                        ]
+                        ref["is_top_level"] = False
+                        _apply_promoted_widget_locator(
+                            ref,
+                            promoted_widget_contexts,
+                        )
+                if node_cache_out is not None:
+                    node_cache_out[node_cache_key] = {
+                        "fingerprint": node_fingerprint,
+                        "refs": model_refs,
+                    }
+                report_node_progress(
+                    node,
+                    subgraph_name,
+                    reused=reused,
+                )
                 all_model_refs.extend(model_refs)
             except Exception as e:
                 log.warning(
@@ -2377,29 +2603,63 @@ def analyze_workflow_models(
                 )
                 continue
 
+        if analyzed_subgraph_nodes:
+            log.debug(
+                f"Analyzing subgraph: {subgraph_name} (ID: {subgraph_id}) "
+                f"with {analyzed_subgraph_nodes} changed nodes"
+            )
+
+    if analysis_stats is not None:
+        analysis_stats.update(
+            {
+                "total_nodes": reused_nodes + analyzed_nodes,
+                "reused_nodes": reused_nodes,
+                "analyzed_nodes": analyzed_nodes,
+            }
+        )
+
+    if previous_node_cache is not None:
+        log.debug(
+            f"Incremental workflow analysis: analyzed {analyzed_nodes} nodes, "
+            f"reused {reused_nodes} nodes"
+        )
+
     return all_model_refs
+
+
+def _build_workflow_node_cache(
+    workflow_json: Dict[str, Any],
+    model_refs: List[Dict[str, Any]],
+) -> Dict[tuple[str, str, str], Dict[str, Any]]:
+    fingerprints = _get_workflow_node_fingerprints(workflow_json)
+    refs_by_node: Dict[tuple[str, str, str], List[Dict[str, Any]]] = {
+        key: [] for key in fingerprints
+    }
+
+    for ref in model_refs:
+        is_top_level = ref.get("is_top_level") is not False
+        key = (
+            "top" if is_top_level else "subgraph",
+            "" if is_top_level else str(ref.get("subgraph_id") or ""),
+            str(ref.get("node_id")),
+        )
+        if key in refs_by_node:
+            refs_by_node[key].append(ref)
+
+    return {
+        key: {
+            "fingerprint": fingerprint,
+            "refs": refs_by_node.get(key, []),
+        }
+        for key, fingerprint in fingerprints.items()
+    }
 
 
 def _get_workflow_model_inventory_cache_key(
     workflow_json: Dict[str, Any],
 ) -> str:
-    def normalize_for_analysis(value: Any) -> Any:
-        if isinstance(value, dict):
-            is_node = "id" in value and "type" in value
-            return {
-                key: normalize_for_analysis(item)
-                for key, item in value.items()
-                if not (
-                    is_node
-                    and key in _WORKFLOW_MODEL_INVENTORY_IGNORED_NODE_KEYS
-                )
-            }
-        if isinstance(value, list):
-            return [normalize_for_analysis(item) for item in value]
-        return value
-
     serialized_workflow = json.dumps(
-        normalize_for_analysis(workflow_json),
+        _normalize_workflow_analysis_value(workflow_json),
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
@@ -2429,41 +2689,89 @@ def get_workflow_model_inventory(
     from .scanner import get_model_files
 
     cache_key = _get_workflow_model_inventory_cache_key(workflow_json)
+    promoted_context_key = _get_promoted_widget_context_cache_key(workflow_json)
+    current_node_fingerprints = _get_workflow_node_fingerprints(workflow_json)
     now = time.monotonic()
+    cached = None
+    previous_inventory = None
 
     if force_rescan:
         invalidate_workflow_model_inventory_cache()
     else:
         with _WORKFLOW_MODEL_INVENTORY_CACHE_LOCK:
+            expired_keys = [
+                key
+                for key, entry in _WORKFLOW_MODEL_INVENTORY_CACHE.items()
+                if now - entry["created_at"]
+                >= _WORKFLOW_MODEL_INVENTORY_CACHE_TTL_SECONDS
+            ]
+            for key in expired_keys:
+                _WORKFLOW_MODEL_INVENTORY_CACHE.pop(key, None)
+
             cached = _WORKFLOW_MODEL_INVENTORY_CACHE.get(cache_key)
             if cached is not None:
-                age = now - cached["created_at"]
-                if age < _WORKFLOW_MODEL_INVENTORY_CACHE_TTL_SECONDS:
-                    _WORKFLOW_MODEL_INVENTORY_CACHE.move_to_end(cache_key)
-                    model_refs = cached["model_refs"]
-                    if progress_callback:
-                        progress_callback(
-                            {
-                                "stage": "analyzing",
-                                "message": "Reusing shared workflow analysis...",
-                                "current": len(model_refs),
-                                "total": len(model_refs),
-                                "cached": True,
-                            }
-                        )
-                    log.debug("Reusing shared workflow model analysis")
-                    return {
-                        "available_models": cached["available_models"],
-                        "model_refs": model_refs,
-                    }
-                _WORKFLOW_MODEL_INVENTORY_CACHE.pop(cache_key, None)
+                _WORKFLOW_MODEL_INVENTORY_CACHE.move_to_end(cache_key)
+            else:
+                best_score = 0
+                for _, entry in reversed(
+                    list(_WORKFLOW_MODEL_INVENTORY_CACHE.items())
+                ):
+                    if entry.get("promoted_context_key") != promoted_context_key:
+                        continue
+                    node_cache = entry.get("node_cache", {})
+                    score = sum(
+                        1
+                        for key, fingerprint in current_node_fingerprints.items()
+                        if node_cache.get(key, {}).get("fingerprint")
+                        == fingerprint
+                    )
+                    if score > best_score:
+                        best_score = score
+                        previous_inventory = entry
 
-    available_models = get_model_files(force_rescan=force_rescan)
-    model_refs = analyze_workflow_models(
-        workflow_json,
-        available_models=available_models,
-        progress_callback=progress_callback,
-    )
+    if cached is not None:
+        model_refs = cached["model_refs"]
+        if progress_callback:
+            progress_callback(
+                {
+                    "stage": "analyzing",
+                    "message": "Reusing shared workflow analysis...",
+                    "current": len(cached.get("node_cache", {})),
+                    "total": len(cached.get("node_cache", {})),
+                    "cached": True,
+                }
+            )
+        log.debug("Reusing shared workflow model analysis")
+        return {
+            "available_models": cached["available_models"],
+            "model_refs": model_refs,
+        }
+
+    node_cache = {}
+    analysis_stats = {}
+    if previous_inventory is not None:
+        available_models = previous_inventory["available_models"]
+        model_refs = analyze_workflow_models(
+            workflow_json,
+            available_models=available_models,
+            progress_callback=progress_callback,
+            previous_node_cache=previous_inventory.get("node_cache", {}),
+            node_cache_out=node_cache,
+            analysis_stats=analysis_stats,
+        )
+    else:
+        available_models = get_model_files(force_rescan=force_rescan)
+        model_refs = analyze_workflow_models(
+            workflow_json,
+            available_models=available_models,
+            progress_callback=progress_callback,
+        )
+        node_cache = _build_workflow_node_cache(workflow_json, model_refs)
+        analysis_stats = {
+            "total_nodes": len(node_cache),
+            "reused_nodes": 0,
+            "analyzed_nodes": len(node_cache),
+        }
 
     with _WORKFLOW_MODEL_INVENTORY_CACHE_LOCK:
         expired_keys = [
@@ -2479,6 +2787,9 @@ def get_workflow_model_inventory(
             "created_at": time.monotonic(),
             "available_models": available_models,
             "model_refs": model_refs,
+            "node_cache": node_cache,
+            "promoted_context_key": promoted_context_key,
+            "analysis_stats": analysis_stats,
         }
         _WORKFLOW_MODEL_INVENTORY_CACHE.move_to_end(cache_key)
         while (

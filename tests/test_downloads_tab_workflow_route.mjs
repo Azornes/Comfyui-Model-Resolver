@@ -508,6 +508,7 @@ test('node context integration preserves existing menu hooks and refreshes after
     scheduleNodeContextMenuAnalysis: () => calls.push('refresh'),
     showResolvedNodeModelInResolver: () => {},
     dialog: {
+      scheduleActiveWorkflowRefresh: reason => calls.push(`dialog-refresh:${reason}`),
       getCategoryDisplayName: () => 'checkpoint',
       showModelInfo: () => {},
       openContainingFolder: () => {},
@@ -524,7 +525,75 @@ test('node context integration preserves existing menu hooks and refreshes after
   assert.equal(options[0].className, 'mdi mdi-link-variant mr-model-resolver-node-menu');
   assert.equal(options[1].content, 'Original action');
   assert.equal(node.onWidgetChanged('ckpt_name'), 'widget-result');
-  assert.deepEqual(calls, ['original-menu', 'original-widget:ckpt_name', 'refresh']);
+  assert.deepEqual(calls, [
+    'original-menu',
+    'original-widget:ckpt_name',
+    'refresh',
+    'dialog-refresh:node-widget-change',
+  ]);
+});
+
+test('background Loaded Models refresh keeps the current view until new data is ready', async () => {
+  const loadLoadedModels = eval(`(${extractMethod(tabsLoadedMethodsSource, 'loadLoadedModels')})`);
+  const workflow = {
+    nodes: [{
+      id: 7,
+      type: 'LoraLoader',
+      widgets_values: ['model.safetensors', 0.75],
+    }],
+  };
+  const contentElement = {
+    innerHTML: '<div>Existing loaded models</div>',
+    scrollTop: 48,
+  };
+  let resolveFetch;
+  const fetchPromise = new Promise(resolve => {
+    resolveFetch = resolve;
+  });
+  let progressRenderCount = 0;
+  let progressPollCount = 0;
+  const dialog = {
+    activeTab: 'loaded',
+    contentElement,
+    cachedLoadedModelsSignature: 'old-signature',
+    cachedLoadedModelsData: { loaded_models: [], total: 0 },
+    syncWorkflowScopedQueue() {},
+    getWorkflowSignature: () => 'new-signature',
+    renderLoadedModelsProgress() {
+      progressRenderCount += 1;
+      return '<div>Progress</div>';
+    },
+    pollLoadedModelsProgress() {
+      progressPollCount += 1;
+      return Promise.resolve();
+    },
+    fetchJson: () => fetchPromise,
+    saveLoadedModelsCacheForActiveWorkflow() {},
+    displayLoadedModels(container, data) {
+      container.innerHTML = `<div>${data.loaded_models[0].strength}</div>`;
+      container.scrollTop = 0;
+    },
+  };
+
+  const refreshPromise = loadLoadedModels.call(
+    dialog,
+    workflow,
+    { preserveContent: true }
+  );
+  await Promise.resolve();
+
+  assert.equal(contentElement.innerHTML, '<div>Existing loaded models</div>');
+  assert.equal(progressRenderCount, 0);
+  assert.equal(progressPollCount, 0);
+
+  resolveFetch({
+    loaded_models: [{ name: 'model.safetensors', strength: 0.75 }],
+    total: 1,
+  });
+  await refreshPromise;
+
+  assert.equal(contentElement.innerHTML, '<div>0.75</div>');
+  assert.equal(contentElement.scrollTop, 48);
 });
 
 test('pending node context model resolves against the current workflow analysis before action', async () => {

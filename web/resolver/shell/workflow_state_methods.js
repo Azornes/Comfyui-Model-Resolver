@@ -807,7 +807,9 @@ export const workflowStateMethods = {
             await this.loadWorkflowData(workflow);
         } else if (this.activeTab === 'loaded') {
             if (this.contentElement) this.contentElement.style.overflowY = 'auto';
-            await this.loadLoadedModels(workflow);
+            await this.loadLoadedModels(workflow, {
+                preserveContent: !routeChanged && reason === 'node-widget-change'
+            });
         }
     }
 };

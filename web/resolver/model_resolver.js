@@ -522,6 +522,7 @@ export class ModelResolver {
         nodeType.prototype.onWidgetChanged = function() {
             const result = originalOnWidgetChanged?.apply(this, arguments);
             owner.scheduleNodeContextMenuAnalysis();
+            owner.dialog?.scheduleActiveWorkflowRefresh?.('node-widget-change');
             return result;
         };
         nodeType.prototype.__modelResolverContextMenuPatched = true;

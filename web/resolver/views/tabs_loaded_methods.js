@@ -76,12 +76,18 @@ export const tabsLoadedMethods = {
         return null;
     },
 
-    async loadLoadedModels(workflow = null, { force = false } = {}) {
+    async loadLoadedModels(
+        workflow = null,
+        { force = false, preserveContent = false } = {}
+    ) {
         if (!this.contentElement) return;
 
         this._loadedModelsLoadToken = null;
         this._loadedModelsProgressToken = null;
         let loadToken = null;
+        const preservedScrollTop = preserveContent
+            ? this.contentElement.scrollTop
+            : null;
         const shouldRenderLoadedModels = () => (
             this.activeTab === 'loaded' &&
             loadToken &&
@@ -119,7 +125,7 @@ export const tabsLoadedMethods = {
 
             const loadedProgressId = `loaded-progress-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             this._loadedModelsProgressToken = loadedProgressId;
-            if (shouldRenderLoadedModels()) {
+            if (!preserveContent && shouldRenderLoadedModels()) {
                 this.contentElement.innerHTML = this.renderLoadedModelsProgress({
                     status: 'starting',
                     stage: 'starting',
@@ -130,7 +136,9 @@ export const tabsLoadedMethods = {
                 });
             }
 
-            const progressPromise = this.pollLoadedModelsProgress(loadedProgressId, loadedProgressId);
+            const progressPromise = preserveContent
+                ? Promise.resolve()
+                : this.pollLoadedModelsProgress(loadedProgressId, loadedProgressId);
             let data;
             try {
                 data = await this.fetchJson('/model_resolver/loaded', {
@@ -150,13 +158,21 @@ export const tabsLoadedMethods = {
             }
             if (shouldRenderLoadedModels()) {
                 this.displayLoadedModels(this.contentElement, data);
+                if (preservedScrollTop !== null) {
+                    this.contentElement.scrollTop = preservedScrollTop;
+                }
             }
 
         } catch (error) {
             console.error('Model Resolver: Error loading loaded models:', error);
-            if (shouldRenderLoadedModels()) {
+            if (!preserveContent && shouldRenderLoadedModels()) {
                 this.contentElement.innerHTML = `<p class="mr-error-text">Error: ${error.message}</p>`;
-            } else if (!loadToken && this.activeTab === 'loaded' && this.contentElement) {
+            } else if (
+                !preserveContent &&
+                !loadToken &&
+                this.activeTab === 'loaded' &&
+                this.contentElement
+            ) {
                 this.contentElement.innerHTML = `<p class="mr-error-text">Error: ${error.message}</p>`;
             }
         }
