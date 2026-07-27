@@ -1266,13 +1266,24 @@ export const modelInfoMethods = {
                                     <td>${this.renderInfoFieldLabel('wrench', 'Clip Skip', 'Recommended Clip Skip value from the model author, if one is provided.')}</td>
                                     <td><span class="mr-info-clip-skip"></span></td>
                                 </tr>
+                                <tr class="mr-info-description-row mr-info-version-description-row mr-hidden-initial">
+                                    <td>${this.renderInfoFieldLabel('fileText', 'Version notes', 'Description or release notes for the exact model version matched by SHA-256.')}</td>
+                                    <td>
+                                        <div class="mr-info-description-wrap">
+                                            <div class="mr-info-description mr-info-version-description"></div>
+                                            <div class="mr-info-description-actions mr-info-version-description-actions mr-hidden-initial">
+                                                <button type="button" class="mr-info-description-toggle mr-info-version-description-toggle" data-description-target=".mr-info-version-description">Show more</button>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
                                 <tr class="mr-info-description-row mr-hidden-initial">
                                     <td>${this.renderInfoFieldLabel('fileText', 'Description', 'Model description from CivitAI or local metadata. Long descriptions are shortened until you click Show more.')}</td>
                                     <td>
                                         <div class="mr-info-description-wrap">
                                             <div class="mr-info-description"></div>
                                             <div class="mr-info-description-actions mr-hidden-initial">
-                                                <button type="button" class="mr-info-description-toggle">Show more</button>
+                                                <button type="button" class="mr-info-description-toggle" data-description-target=".mr-info-description">Show more</button>
                                             </div>
                                         </div>
                                     </td>
@@ -1765,7 +1776,8 @@ export const modelInfoMethods = {
 
             const descToggleBtn = event.target.closest('.mr-info-description-toggle');
             if (descToggleBtn && dialog.contains(descToggleBtn)) {
-                const descEl = dialog.querySelector('.mr-info-description');
+                const targetSelector = descToggleBtn.dataset.descriptionTarget || '.mr-info-description';
+                const descEl = dialog.querySelector(targetSelector);
                 if (!descEl) return;
 
                 const isExpanded = descEl.classList.toggle('is-expanded');
@@ -1874,6 +1886,17 @@ export const modelInfoMethods = {
             base_model: modelData?.base_model || modelData?.baseModel || '',
             tags: modelData?.tags || [],
             trained_words: modelData?.trained_words || modelData?.trainedWords || [],
+            description: modelData?.model_description
+                || modelData?.modelDescription
+                || modelData?.description
+                || '',
+            model_description: modelData?.model_description
+                || modelData?.modelDescription
+                || modelData?.description
+                || '',
+            version_description: modelData?.version_description
+                || modelData?.versionDescription
+                || '',
             local_only: true,
             civitai_checked: false
         };
@@ -1981,6 +2004,13 @@ export const modelInfoMethods = {
                 })
             }, 'Fetch model metadata');
 
+            const modelDescription = result.model_description
+                || result.modelDescription
+                || result.description
+                || data.model_description
+                || data.modelDescription
+                || data.description
+                || '';
             const merged = {
                 ...data,
                 ...result,
@@ -1989,6 +2019,13 @@ export const modelInfoMethods = {
                 file_path: result.file_path || data.file_path || resolvedPath,
                 resolved_path: result.resolved_path || data.resolved_path || resolvedPath,
                 sha256: result.sha256 || hash,
+                description: modelDescription,
+                model_description: modelDescription,
+                version_description: result.version_description
+                    || result.versionDescription
+                    || data.version_description
+                    || data.versionDescription
+                    || '',
                 metadata_checked: true,
                 civitai_checked: true
             };
@@ -2047,6 +2084,48 @@ export const modelInfoMethods = {
 
     hasInfoMetadataBeenChecked(data = {}) {
         return Boolean(data.metadata_checked || data.metadataChecked || data.civitai_checked || data.civitaiChecked);
+    },
+
+    updateInfoDialogDescriptionSection(dialog, {
+        value = '',
+        contentSelector,
+        actionsSelector,
+        toggleSelector
+    } = {}) {
+        const descEl = dialog.querySelector(contentSelector);
+        if (!descEl) return;
+
+        const row = descEl.closest('tr');
+        if (!value) {
+            this.setInfoTableRowVisible(row, false);
+            return;
+        }
+
+        const actionsEl = dialog.querySelector(actionsSelector);
+        const toggleBtn = dialog.querySelector(toggleSelector);
+        let sanitizedHtml = '';
+        try {
+            sanitizedHtml = this.sanitizeDescriptionHtml(value);
+        } catch (error) {
+            console.error('Model Resolver: Failed to sanitize description HTML:', error);
+        }
+
+        const fallbackText = this.escapeHtml(String(value).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+        const finalHtml = sanitizedHtml && sanitizedHtml.trim() ? sanitizedHtml : `<p>${fallbackText}</p>`;
+        const textOnly = finalHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+        descEl.innerHTML = finalHtml;
+        descEl.classList.remove('is-expanded');
+
+        const shouldCollapse = textOnly.length > 520 || finalHtml.length > 900;
+        this.setInfoElementVisible(actionsEl, shouldCollapse);
+        if (toggleBtn) {
+            toggleBtn.textContent = 'Show more';
+        }
+        if (!shouldCollapse) {
+            descEl.classList.add('is-expanded');
+        }
+        this.setInfoTableRowVisible(row, true);
     },
 
     /**
@@ -2242,44 +2321,29 @@ export const modelInfoMethods = {
             }
         }
 
-        // Update description
-        const descEl = dialog.querySelector('.mr-info-description');
-        if (descEl) {
-            const desc = data.description || data.model_description || data.modelDescription || '';
-            if (desc) {
-                const actionsEl = dialog.querySelector('.mr-info-description-actions');
-                const toggleBtn = dialog.querySelector('.mr-info-description-toggle');
-
-                let sanitizedHtml = '';
-                try {
-                    sanitizedHtml = this.sanitizeDescriptionHtml(desc);
-                } catch (error) {
-                    console.error('Model Resolver: Failed to sanitize description HTML:', error);
-                }
-
-                const fallbackText = this.escapeHtml(String(desc).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
-                const finalHtml = sanitizedHtml && sanitizedHtml.trim() ? sanitizedHtml : `<p>${fallbackText}</p>`;
-                const textOnly = finalHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-
-                descEl.innerHTML = finalHtml;
-                descEl.classList.remove('is-expanded');
-
-                const shouldCollapse = textOnly.length > 520 || finalHtml.length > 900;
-                this.setInfoElementVisible(actionsEl, shouldCollapse);
-                if (toggleBtn) {
-                    toggleBtn.textContent = 'Show more';
-                }
-                if (!shouldCollapse) {
-                    descEl.classList.add('is-expanded');
-                }
-
-                const row = descEl.closest('tr');
-                this.setInfoTableRowVisible(row, true);
-            } else {
-                const row = descEl.closest('tr');
-                this.setInfoTableRowVisible(row, false);
-            }
-        }
+        // Keep the model description stable while exposing version-specific
+        // release notes separately.
+        const modelDescription = data.model_description
+            || data.modelDescription
+            || data.description
+            || '';
+        const versionDescription = data.version_description
+            || data.versionDescription
+            || '';
+        this.updateInfoDialogDescriptionSection(dialog, {
+            value: modelDescription,
+            contentSelector: '.mr-info-description:not(.mr-info-version-description)',
+            actionsSelector: '.mr-info-description-actions:not(.mr-info-version-description-actions)',
+            toggleSelector: '.mr-info-description-toggle:not(.mr-info-version-description-toggle)'
+        });
+        this.updateInfoDialogDescriptionSection(dialog, {
+            value: versionDescription && versionDescription !== modelDescription
+                ? versionDescription
+                : '',
+            contentSelector: '.mr-info-version-description',
+            actionsSelector: '.mr-info-version-description-actions',
+            toggleSelector: '.mr-info-version-description-toggle'
+        });
 
         // Update preview media
         this.updateInfoDialogImages(

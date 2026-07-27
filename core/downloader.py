@@ -602,16 +602,26 @@ def build_model_resolver_metadata(
         source.get("thumbnail_url"),
         source.get("thumbnailUrl"),
     )
-    model_description = _first_present(
+    explicit_model_description = _first_present(
         source.get("modelDescription"),
         source.get("model_description"),
-        source.get("description"),
         details.get("description"),
         _as_dict(source.get("model")).get("description"),
     )
+    model_description = _first_present(
+        explicit_model_description,
+        source.get("description"),
+    )
     version_description = _first_present(
-        selected_version.get("description"),
+        source.get("versionDescription"),
         source.get("version_description"),
+        selected_version.get("description"),
+        (
+            source.get("description")
+            if explicit_model_description
+            and source.get("description") != explicit_model_description
+            else None
+        ),
     )
 
     is_civitai_source = source_name in {
@@ -700,6 +710,7 @@ def build_model_resolver_metadata(
         "civitai": civitai_payload,
         "tags": tags,
         "modelDescription": str(model_description or ""),
+        "version_description": str(version_description or ""),
         "civitai_deleted": bool(source.get("is_deleted") or source.get("civitai_deleted")),
         "source": source_name,
         "details_source": source_name,

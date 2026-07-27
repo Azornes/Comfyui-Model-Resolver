@@ -107,6 +107,25 @@ class UnifiedHelpersTests(unittest.TestCase):
         self.assertEqual(result["preview_url"], "E:/Models/video-model.mp4")
         self.assertEqual(result["images"][0]["type"], "video")
 
+    def test_local_civitai_metadata_separates_model_and_version_descriptions(self):
+        from core.sources.civitai import _metadata_to_model_info
+
+        result = _metadata_to_model_info({
+            "modelDescription": "Model page description",
+            "version_description": "Version-specific release notes",
+            "civitai": {
+                "description": "Nested version notes",
+                "model": {"description": "Nested model description"},
+            },
+        })
+
+        self.assertEqual("Model page description", result["description"])
+        self.assertEqual("Model page description", result["model_description"])
+        self.assertEqual(
+            "Version-specific release notes",
+            result["version_description"],
+        )
+
     def test_normalize_model_image_preserves_metadata_when_normalized_again(self):
         workflow = '{"workflow":{"nodes":[{"id":1,"type":"KSampler"}]}}'
         normalized_image = {

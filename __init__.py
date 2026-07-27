@@ -362,6 +362,7 @@ class ModelResolverExtension:
                     calculate_file_sha256,
                     dedupe_local_base_directories,
                     extract_safetensors_header_sha256,
+                    find_external_metadata_sidecar_path,
                     get_comfy_root_path,
                     get_filename_from_path,
                     get_path_abs,
@@ -2286,8 +2287,55 @@ class ModelResolverExtension:
                     if file_location and not file_location.endswith("/"):
                         file_location += "/"
 
+                external_model_description = ""
+                if file_path:
+                    external_metadata_path = find_external_metadata_sidecar_path(
+                        file_path
+                    )
+                    external_metadata = (
+                        read_json_safe(external_metadata_path, {})
+                        if external_metadata_path
+                        else {}
+                    )
+                    if isinstance(external_metadata, dict):
+                        external_model_description = str(
+                            external_metadata.get("modelDescription")
+                            or external_metadata.get("model_description")
+                            or external_metadata.get("description")
+                            or ""
+                        ).strip()
+
                 def infer_model_type_from_category(value):
                     return normalize_category_to_model_type(value)
+
+                def split_result_descriptions(result, preferred_model_description=""):
+                    result = result if isinstance(result, dict) else {}
+                    explicit_model_description = (
+                        result.get("model_description")
+                        or result.get("modelDescription")
+                        or ""
+                    )
+                    generic_description = result.get("description") or ""
+                    model_description = (
+                        preferred_model_description
+                        or explicit_model_description
+                        or generic_description
+                    )
+                    version_description = (
+                        result.get("version_description")
+                        or result.get("versionDescription")
+                        or ""
+                    )
+                    if (
+                        not version_description
+                        and explicit_model_description
+                        and generic_description
+                        and generic_description != explicit_model_description
+                    ):
+                        version_description = generic_description
+                    if version_description == model_description:
+                        version_description = ""
+                    return model_description, version_description
 
                 def build_info_response(
                     result=None,
@@ -2298,6 +2346,12 @@ class ModelResolverExtension:
                     local_payload=False,
                 ):
                     result = result or {}
+                    model_description, version_description = (
+                        split_result_descriptions(
+                            result,
+                            external_model_description,
+                        )
+                    )
                     size_value = result.get("size")
                     if not size_value and file_path and _os.path.exists(file_path):
                         try:
@@ -2345,8 +2399,9 @@ class ModelResolverExtension:
                         "trained_words": result.get("trained_words", []),
                         "images": result.get("images", []),
                         "clip_skip": result.get("clip_skip"),
-                        "description": result.get("description", ""),
-                        "model_description": result.get("model_description", ""),
+                        "description": model_description,
+                        "model_description": model_description,
+                        "version_description": version_description,
                         "from_metadata": bool(result.get("from_metadata")),
                         "local_only": bool(local_payload),
                         "metadata_checked": bool(civitai_checked),
@@ -2589,6 +2644,9 @@ class ModelResolverExtension:
                     ):
                         return metadata_path, metadata_saved
                     try:
+                        model_description, version_description = (
+                            split_result_descriptions(result)
+                        )
                         metadata_payload = {
                             "source": source_name,
                             "details_source": result.get("details_source")
@@ -2613,8 +2671,9 @@ class ModelResolverExtension:
                             "trained_words": result.get("trained_words", []),
                             "images": result.get("images", []),
                             "clip_skip": result.get("clip_skip"),
-                            "description": result.get("description", ""),
-                            "model_description": result.get("model_description", ""),
+                            "description": model_description,
+                            "model_description": model_description,
+                            "version_description": version_description,
                             "download_url": result.get("download_url"),
                             "source_url": result.get("version_url") or result.get("url"),
                             "version_url": result.get("version_url") or result.get("url"),
@@ -2690,6 +2749,9 @@ class ModelResolverExtension:
                                     preview_path = get_existing_model_preview_path(file_path)
                                     if preview_path:
                                         preview_url = preview_path.replace("\\", "/")
+                                model_description, version_description = (
+                                    split_result_descriptions(result)
+                                )
                                 metadata_payload = {
                                     "source": "metadata_import",
                                     "details_source": result.get("source") or "metadata",
@@ -2711,8 +2773,9 @@ class ModelResolverExtension:
                                     "trained_words": result.get("trained_words", []),
                                     "images": result.get("images", []),
                                     "clip_skip": result.get("clip_skip"),
-                                    "description": result.get("description", ""),
-                                    "model_description": result.get("model_description", ""),
+                                    "description": model_description,
+                                    "model_description": model_description,
+                                    "version_description": version_description,
                                     "download_url": result.get("download_url"),
                                     "preview_url": preview_url,
                                     "source_url": result.get("version_url")
@@ -2967,6 +3030,16 @@ class ModelResolverExtension:
                             "base_model": response.get("base_model"),
                             "base_model_source": response.get("base_model_source"),
                             "base_model_inferred": bool(response.get("base_model_inferred")),
+                            "description": response.get("model_description")
+                            or response.get("description")
+                            or "",
+                            "model_description": response.get("model_description")
+                            or response.get("description")
+                            or "",
+                            "version_description": response.get(
+                                "version_description"
+                            )
+                            or "",
                             "civitai_deleted": True,
                             "civitai_checked": True,
                             "remote_metadata_missing": True,

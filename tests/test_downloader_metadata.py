@@ -19,6 +19,38 @@ from core.path_utils import get_model_resolver_sidecar_path
 
 
 class DownloaderMetadataSidecarTests(unittest.TestCase):
+    def test_keeps_model_description_separate_from_version_notes(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_path = os.path.join(tmpdir, "model.safetensors")
+            with open(model_path, "wb") as handle:
+                handle.write(b"abc")
+
+            payload = build_lora_manager_metadata(
+                model_path,
+                {
+                    "source": "civitai",
+                    "model_id": 123,
+                    "version_id": 456,
+                    "model_description": "Model page description",
+                    "description": "Version-specific release notes",
+                },
+                category="checkpoints",
+            )
+
+        self.assertEqual("Model page description", payload["modelDescription"])
+        self.assertEqual(
+            "Version-specific release notes",
+            payload["version_description"],
+        )
+        self.assertEqual(
+            "Model page description",
+            payload["civitai"]["model"]["description"],
+        )
+        self.assertEqual(
+            "Version-specific release notes",
+            payload["civitai"]["description"],
+        )
+
     def test_civarchive_metadata_keeps_provider_page_separate_from_hf_mirror(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             model_path = os.path.join(tmpdir, "model.safetensors")

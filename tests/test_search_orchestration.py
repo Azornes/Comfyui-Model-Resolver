@@ -283,6 +283,76 @@ class SearchOrchestrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(body["source"], "civarchive")
         self.assertEqual(body["sha256"], file_hash)
 
+    async def test_refetch_keeps_external_model_description_and_returns_version_notes(self):
+        file_hash = "b" * 64
+        with tempfile.TemporaryDirectory() as temp_dir:
+            model_path = os.path.join(temp_dir, "model.safetensors")
+            external_path = os.path.join(temp_dir, "model.metadata.json")
+            resolver_path = f"{model_path}.modelresolver.json"
+            external_payload = {
+                "description": "User-managed model description",
+                "sha256": file_hash,
+            }
+            with open(model_path, "wb") as model_file:
+                model_file.write(b"model")
+            with open(external_path, "w", encoding="utf-8") as metadata_file:
+                json.dump(external_payload, metadata_file)
+
+            mock_request = MagicMock()
+            mock_request.json = AsyncMock(return_value={
+                "filename": "model.safetensors",
+                "category": "checkpoints",
+                "resolved_path": model_path,
+                "sha256": file_hash,
+                "force_refresh": True,
+            })
+            remote_result = {
+                "source": "civitai",
+                "filename": "model.safetensors",
+                "model_name": "Remote model",
+                "model_id": 123,
+                "version_id": 456,
+                "sha256": file_hash,
+                "url": "https://civitai.com/models/123",
+                "version_url": (
+                    "https://civitai.com/models/123?modelVersionId=456"
+                ),
+                "model_description": "Fresh CivitAI model description",
+                "description": "Fresh CivitAI version notes",
+            }
+
+            with (
+                patch.object(
+                    civitai_sources,
+                    "get_model_info_by_hash",
+                    return_value=remote_result,
+                ),
+                patch("folder_paths.get_folder_paths", return_value=[temp_dir]),
+            ):
+                response = await civitai_search_handler(mock_request)
+
+            body = json.loads(response.text)
+            with open(external_path, encoding="utf-8") as metadata_file:
+                external_after = json.load(metadata_file)
+            with open(resolver_path, encoding="utf-8") as metadata_file:
+                resolver_metadata = json.load(metadata_file)
+
+        self.assertEqual("User-managed model description", body["description"])
+        self.assertEqual("User-managed model description", body["model_description"])
+        self.assertEqual(
+            "Fresh CivitAI version notes",
+            body["version_description"],
+        )
+        self.assertEqual(external_payload, external_after)
+        self.assertEqual(
+            "Fresh CivitAI model description",
+            resolver_metadata["modelDescription"],
+        )
+        self.assertEqual(
+            "Fresh CivitAI version notes",
+            resolver_metadata["version_description"],
+        )
+
     async def test_local_matches_by_hash_route_returns_enriched_hash_matches(self):
         file_hash = "b" * 64
         with tempfile.TemporaryDirectory() as temp_dir:

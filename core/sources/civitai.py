@@ -1909,6 +1909,20 @@ def _metadata_to_model_info(metadata: Dict[str, Any]) -> Dict[str, Any]:
         else civitai_model_url
     )
     page_url = stored_page_url or civitai_version_url
+    model_description = first_non_empty(
+        metadata.get("modelDescription"),
+        metadata.get("model_description"),
+        metadata.get("description"),
+        model_info.get("description"),
+    ) or ""
+    version_description = first_non_empty(
+        metadata.get("versionDescription"),
+        metadata.get("version_description"),
+        selected_version.get("description"),
+        civitai_data.get("description"),
+    ) or ""
+    if version_description == model_description:
+        version_description = ""
 
     return {
         "source": details_source,
@@ -1984,20 +1998,9 @@ def _metadata_to_model_info(metadata: Dict[str, Any]) -> Dict[str, Any]:
         )
         or "",
         "clip_skip": civitai_data.get("clipSkip"),
-        "description": first_non_empty(
-            metadata.get("modelDescription"),
-            metadata.get("model_description"),
-            metadata.get("description"),
-            model_info.get("description"),
-            civitai_data.get("description"),
-        )
-        or "",
-        "model_description": first_non_empty(
-            metadata.get("modelDescription"),
-            metadata.get("model_description"),
-            model_info.get("description"),
-        )
-        or "",
+        "description": model_description,
+        "model_description": model_description,
+        "version_description": version_description,
         "from_metadata": True,
     }
 
