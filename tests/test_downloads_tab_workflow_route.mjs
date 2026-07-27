@@ -91,6 +91,40 @@ test('Missing Models rows use fixed-size virtualization for smooth stable scroll
   assert.match(rowRule[1], /contain\s*:\s*layout paint style/);
 });
 
+test('manual model selection uses the two-line status card layout', () => {
+  const updateSelectedBarForMissing = extractMethod(
+    queueMethodsSource,
+    'updateSelectedBarForMissing'
+  );
+
+  assert.match(updateSelectedBarForMissing, /mr-selected-summary/);
+  assert.match(updateSelectedBarForMissing, /mr-selected-status-icon/);
+  assert.match(updateSelectedBarForMissing, /getSvgIcon\('circleCheckBig'\)/);
+  assert.match(updateSelectedBarForMissing, /<span>Selected<\/span>/);
+  assert.doesNotMatch(updateSelectedBarForMissing, /Selected:/);
+  assert.match(updateSelectedBarForMissing, /mr-selected-apply/);
+  assert.match(updateSelectedBarForMissing, /mr-selected-remove/);
+  assert.match(
+    updateSelectedBarForMissing,
+    /selectedBar\.innerHTML\s*=\s*`[\s\S]*?<div class="mr-selected-bar-inner"[\s\S]*?<\/div>\s*`;/
+  );
+  assert.doesNotMatch(updateSelectedBarForMissing, /selectedBar\.innerHTML\s*\+=/);
+  assert.match(resolverMainCssSource, /\.mr-selected-summary\s*\{[^}]*flex-direction:\s*column/s);
+  assert.match(
+    resolverMainCssSource,
+    /\.mr-missing-detail-pane \.model-resolver-selected\s*\{[^}]*height:\s*74px/s
+  );
+  assert.match(
+    resolverMainCssSource,
+    /\.mr-missing-detail-pane \.mr-selected-bar-inner\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto/s
+  );
+  assert.doesNotMatch(
+    resolverMainCssSource,
+    /\.mr-missing-detail-pane \.mr-selected-bar-inner\s*\{[^}]*flex-direction:\s*column/s
+  );
+  assert.match(resolverMainCssSource, /\.mr-btn-danger\s*\{[^}]*rgba\(239,\s*68,\s*68/s);
+});
+
 test('local and loaded model tooltips include preview image routes above full names', () => {
   const getModelPreviewTooltipAttrs = eval(`(${extractMethod(renderFormatMethodsSource, 'getModelPreviewTooltipAttrs')})`);
   const previousApi = globalThis.api;

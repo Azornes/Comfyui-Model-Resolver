@@ -9006,13 +9006,23 @@ a.mr-image-preview-resource-name:hover {
 
 #model-resolver-modal .mr-missing-detail-pane .model-resolver-selected {
     margin: 0 0 12px;
-    padding: 9px 11px;
-    background: linear-gradient(90deg, rgba(114, 211, 138, 0.11) 0%, rgba(114, 211, 138, 0.045) 100%);
-    border: 1px solid rgba(114, 211, 138, 0.20);
-    border-radius: 7px;
+    padding: 0;
+    width: 100%;
+    height: 74px;
+    min-height: 74px;
+    max-height: 74px;
+    box-sizing: border-box;
+    overflow: hidden;
+    background:
+        linear-gradient(90deg, rgba(45, 185, 112, 0.065) 0%, rgba(20, 24, 29, 0.96) 38%, rgba(17, 20, 25, 0.98) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.085);
+    border-left: 3px solid #43d184;
+    border-radius: 6px;
     color: var(--mr-text-soft);
     font-size: 12px;
-    box-shadow: none;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.025),
+        0 8px 24px rgba(0, 0, 0, 0.10);
 }
 
 /* Flatten right-side sections */
@@ -9071,34 +9081,77 @@ a.mr-image-preview-resource-name:hover {
 }
 
 #model-resolver-modal .mr-missing-detail-pane .mr-selected-bar-inner {
-    gap: 8px;
-    flex-wrap: nowrap;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    box-sizing: border-box;
+    padding: 11px 13px 11px 15px;
+    gap: 16px;
+}
+
+#model-resolver-modal .mr-missing-detail-pane .mr-selected-summary {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    align-self: center;
+    min-width: 0;
+    gap: 4px;
 }
 
 #model-resolver-modal .mr-missing-detail-pane .mr-selected-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
     color: #72d38a;
-    font-size: 11px;
-    font-weight: 750;
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 1;
     white-space: nowrap;
 }
 
+#model-resolver-modal .mr-missing-detail-pane .mr-selected-status-icon {
+    display: inline-flex;
+    width: 17px;
+    height: 17px;
+    color: #43d184;
+}
+
+#model-resolver-modal .mr-missing-detail-pane .mr-selected-status-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
 #model-resolver-modal .mr-missing-detail-pane .mr-selected-code {
+    display: block;
+    width: 100%;
     min-width: 0;
-    color: #d9d9d9;
+    padding: 0;
+    overflow: hidden;
+    background: transparent;
+    color: #ededed;
     font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
-    font-size: 11px;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.25;
+    text-overflow: ellipsis;
     white-space: nowrap;
 }
 
 #model-resolver-modal .mr-missing-detail-pane .mr-selected-actions {
-    gap: 8px;
-    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    align-self: center;
+    gap: 10px;
+    margin-left: 0;
 }
 
 #model-resolver-modal .mr-missing-detail-pane .model-resolver-selected .mr-btn {
-    min-height: var(--mr-missing-search-button-height, 34px);
-    height: var(--mr-missing-search-button-height, 34px);
-    padding: 0 12px;
+    min-height: 40px;
+    height: 40px;
+    padding: 0 17px;
     margin-left: 0;
     background: var(--mr-missing-control-bg, rgba(255, 255, 255, 0.035));
     border-color: var(--mr-missing-control-border, rgba(255, 255, 255, 0.105));
@@ -9116,14 +9169,17 @@ a.mr-image-preview-resource-name:hover {
 }
 
 #model-resolver-modal .mr-missing-detail-pane .model-resolver-selected .mr-btn-primary {
-    background: rgba(47, 128, 237, 0.18);
-    border-color: rgba(47, 128, 237, 0.34);
-    color: #dbeafe;
+    background: linear-gradient(180deg, rgba(37, 99, 190, 0.88) 0%, rgba(25, 72, 144, 0.92) 100%);
+    border-color: rgba(88, 151, 255, 0.46);
+    color: #edf5ff;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.11),
+        0 4px 12px rgba(16, 72, 156, 0.18) !important;
 }
 
 #model-resolver-modal .mr-missing-detail-pane .model-resolver-selected .mr-btn-primary:hover:not(:disabled) {
-    background: rgba(47, 128, 237, 0.26);
-    border-color: rgba(47, 128, 237, 0.48);
+    background: linear-gradient(180deg, rgba(47, 117, 218, 0.96) 0%, rgba(30, 85, 166, 0.98) 100%);
+    border-color: rgba(111, 170, 255, 0.62);
     color: #ffffff;
 }
 

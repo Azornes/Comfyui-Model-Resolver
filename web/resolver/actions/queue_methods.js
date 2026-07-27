@@ -1570,14 +1570,21 @@ export const queueMethods = {
         const applyBtnId = `selected-apply-${domKey}`;
         const removeBtnId = `selected-remove-${domKey}`;
 
-        selectedBar.innerHTML = `<div class="mr-selected-bar-inner"${selectedContextAttrs}>`;
-        selectedBar.innerHTML += `<span class="mr-selected-label">✓ Selected:</span>`;
-        selectedBar.innerHTML += `<code class="mr-selected-code">${this.escapeHtml(label)}</code>`;
-        selectedBar.innerHTML += `<span class="mr-selected-actions">`;
-        selectedBar.innerHTML += `<button id="${applyBtnId}" class="mr-btn mr-btn-primary mr-btn-sm" data-tooltip="Apply this selected local match to the workflow.">Apply</button>`;
-        selectedBar.innerHTML += `<button id="${removeBtnId}" class="mr-btn mr-btn-danger mr-btn-sm">Remove</button>`;
-        selectedBar.innerHTML += `</span>`;
-        selectedBar.innerHTML += `</div>`;
+        selectedBar.innerHTML = `
+            <div class="mr-selected-bar-inner"${selectedContextAttrs}>
+                <span class="mr-selected-summary">
+                    <span class="mr-selected-label">
+                        <span class="mr-selected-status-icon" aria-hidden="true">${getSvgIcon('circleCheckBig')}</span>
+                        <span>Selected</span>
+                    </span>
+                    <code class="mr-selected-code" data-tooltip="${this.escapeHtml(label)}">${this.escapeHtml(label)}</code>
+                </span>
+                <span class="mr-selected-actions">
+                    <button type="button" id="${applyBtnId}" class="mr-btn mr-btn-primary mr-btn-sm mr-selected-apply" data-tooltip="Apply this selected local match to the workflow.">Apply</button>
+                    <button type="button" id="${removeBtnId}" class="mr-btn mr-btn-danger mr-btn-sm mr-selected-remove" data-tooltip="Remove this selection.">Remove</button>
+                </span>
+            </div>
+        `;
         selectedBar.style.display = 'block';
 
         const applyBtn = selectedBar.querySelector(`#${applyBtnId}`);
