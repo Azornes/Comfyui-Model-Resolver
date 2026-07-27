@@ -112,7 +112,11 @@ test('manual model selection uses the two-line status card layout', () => {
   assert.match(resolverMainCssSource, /\.mr-selected-summary\s*\{[^}]*flex-direction:\s*column/s);
   assert.match(
     resolverMainCssSource,
-    /\.mr-missing-detail-pane \.model-resolver-selected\s*\{[^}]*height:\s*74px/s
+    /\.mr-missing-list-row\.is-selected,\s*#model-resolver-modal \.mr-missing-detail-pane \.model-resolver-selected\s*\{[^}]*background:\s*linear-gradient[^}]*box-shadow:\s*inset 3px 0 0/s
+  );
+  assert.match(
+    resolverMainCssSource,
+    /\.mr-missing-detail-pane \.model-resolver-selected\s*\{[^}]*height:\s*70px[^}]*border-radius:\s*0/s
   );
   assert.match(
     resolverMainCssSource,

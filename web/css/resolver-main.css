@@ -759,7 +759,8 @@
     box-shadow: inset 3px 0 0 rgba(114, 211, 138, 0.72), inset 0 0 0 1px rgba(114, 211, 138, 0.16);
 }
 
-#model-resolver-modal .mr-missing-list-row.is-selected {
+#model-resolver-modal .mr-missing-list-row.is-selected,
+#model-resolver-modal .mr-missing-detail-pane .model-resolver-selected {
     background: linear-gradient(90deg, rgba(114, 211, 138, 0.12) 0%, rgba(114, 211, 138, 0.055) 42%, rgba(114, 211, 138, 0.018) 100%);
     box-shadow: inset 3px 0 0 rgba(114, 211, 138, 0.92), inset 0 0 0 1px rgba(114, 211, 138, 0.12);
 }
@@ -9008,21 +9009,15 @@ a.mr-image-preview-resource-name:hover {
     margin: 0 0 12px;
     padding: 0;
     width: 100%;
-    height: 74px;
-    min-height: 74px;
-    max-height: 74px;
+    height: 70px;
+    min-height: 70px;
+    max-height: 70px;
     box-sizing: border-box;
     overflow: hidden;
-    background:
-        linear-gradient(90deg, rgba(45, 185, 112, 0.065) 0%, rgba(20, 24, 29, 0.96) 38%, rgba(17, 20, 25, 0.98) 100%);
-    border: 1px solid rgba(255, 255, 255, 0.085);
-    border-left: 3px solid #43d184;
-    border-radius: 6px;
+    border: 0;
+    border-radius: 0;
     color: var(--mr-text-soft);
     font-size: 12px;
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.025),
-        0 8px 24px rgba(0, 0, 0, 0.10);
 }
 
 /* Flatten right-side sections */
@@ -9088,8 +9083,8 @@ a.mr-image-preview-resource-name:hover {
     height: 100%;
     min-height: 0;
     box-sizing: border-box;
-    padding: 11px 13px 11px 15px;
-    gap: 16px;
+    padding: 9px 12px;
+    gap: 14px;
 }
 
 #model-resolver-modal .mr-missing-detail-pane .mr-selected-summary {
