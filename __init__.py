@@ -251,7 +251,7 @@ class ModelResolverExtension:
     def _update_analysis_progress(
         self,
         analysis_id: Optional[str],
-        payload: Dict[str, Any]
+        payload: Dict[str, Any],
     ) -> None:
         self.analysis_progress.update_from_payload(analysis_id, payload)
 
@@ -294,7 +294,9 @@ class ModelResolverExtension:
         loaded_id: Optional[str],
         workflow_node_count: int,
         interpolate_percent_fn,
-        payload: Dict[str, Any]
+        payload: Dict[str, Any],
+        start_percent: float = 35,
+        end_percent: float = 78,
     ) -> None:
         progress_payload = dict(payload or {})
         current = progress_payload.pop("current", 0)
@@ -306,7 +308,12 @@ class ModelResolverExtension:
             loaded_id,
             stage,
             message,
-            percent=interpolate_percent_fn(35, 78, current, total),
+            percent=interpolate_percent_fn(
+                start_percent,
+                end_percent,
+                current,
+                total,
+            ),
             current=current,
             total=total,
             **progress_payload,
@@ -422,6 +429,7 @@ class ModelResolverExtension:
                     NODE_TYPE_MODEL_WIDGET_CATEGORIES,
                     URN_TYPE_MAP,
                     analyze_workflow_models,
+                    get_workflow_model_inventory,
                 )
             except ImportError as e:
                 self.logger.error(f"Model Resolver: Could not import core modules: {e}")
@@ -1776,7 +1784,6 @@ class ModelResolverExtension:
                 def build_loaded_models_response():
                     from .core.workflow_analyzer import (
                         URN_TYPE_MAP,
-                        analyze_workflow_models,
                         get_lora_model_strength,
                     )
 
@@ -1786,8 +1793,24 @@ class ModelResolverExtension:
                         percent=5,
                     )
 
-                    # Get available models for existence checking
-                    available_models = get_model_files()
+                    workflow_node_count = get_workflow_node_count()
+
+                    def update_workflow_analysis_progress(payload):
+                        self._update_workflow_analysis_progress(
+                            loaded_id,
+                            workflow_node_count,
+                            interpolate_percent,
+                            payload,
+                            start_percent=5,
+                            end_percent=45,
+                        )
+
+                    inventory = get_workflow_model_inventory(
+                        workflow_json,
+                        progress_callback=update_workflow_analysis_progress,
+                    )
+                    available_models = inventory["available_models"]
+                    all_model_refs = inventory["model_refs"]
 
                     # Create lookup for full paths by filename (with and without extension)
                     path_by_filename = {}
@@ -1795,7 +1818,7 @@ class ModelResolverExtension:
                     update_loaded_progress(
                         "indexing",
                         f"Indexing {total_local_models} local models...",
-                        percent=15,
+                        percent=45,
                         current=0,
                         total=total_local_models,
                     )
@@ -1820,7 +1843,7 @@ class ModelResolverExtension:
                                 "indexing",
                                 f"Indexing local model {index} of {total_local_models}",
                                 percent=interpolate_percent(
-                                    15, 25, index, total_local_models
+                                    45, 55, index, total_local_models
                                 ),
                                 current=index,
                                 total=total_local_models,
@@ -1845,7 +1868,7 @@ class ModelResolverExtension:
                                 "indexing",
                                 f"Reading {category_name} model list...",
                                 percent=interpolate_percent(
-                                    25, 35, index - 1, len(folder_categories)
+                                    55, 65, index - 1, len(folder_categories)
                                 ),
                                 current=index - 1,
                                 total=len(folder_categories),
@@ -1870,30 +1893,6 @@ class ModelResolverExtension:
                                             path_by_filename[filename_no_ext] = full_path
                             except Exception:
                                 pass
-
-                    workflow_node_count = get_workflow_node_count()
-                    update_loaded_progress(
-                        "analyzing",
-                        "Analyzing workflow nodes...",
-                        percent=35,
-                        current=0,
-                        total=workflow_node_count,
-                    )
-
-                    def update_workflow_analysis_progress(payload):
-                        self._update_workflow_analysis_progress(
-                            loaded_id,
-                            workflow_node_count,
-                            interpolate_percent,
-                            payload,
-                        )
-
-                    # Analyze workflow to get all model references
-                    all_model_refs = analyze_workflow_models(
-                        workflow_json,
-                        available_models=available_models,
-                        progress_callback=update_workflow_analysis_progress,
-                    )
 
                     # Also extract from node.properties.models
                     workflow_nodes = workflow_json.get("nodes", [])
@@ -1963,7 +1962,7 @@ class ModelResolverExtension:
                     update_loaded_progress(
                         "building",
                         "Building loaded models list...",
-                        percent=78,
+                        percent=65,
                         current=0,
                         total=total_refs,
                     )
@@ -1974,7 +1973,7 @@ class ModelResolverExtension:
                             update_loaded_progress(
                                 "building",
                                 f"Building loaded model {index} of {total_refs}",
-                                percent=interpolate_percent(78, 94, index, total_refs),
+                                percent=interpolate_percent(65, 94, index, total_refs),
                                 current=index,
                                 total=total_refs,
                             )

@@ -120,6 +120,11 @@ export class ModelResolver {
         this.workflowHashMetadataSignature = null;
         this.workflowHashMetadataRefreshTimer = null;
         this.workflowHashMetadataRefreshing = false;
+        this.workflowHashMetadataRefreshPending = false;
+        this.workflowHashMetadataPendingWorkflow = null;
+        this.workflowHashMetadataPendingSignature = null;
+        this.workflowHashMetadataActiveSignature = null;
+        this.workflowHashMetadataPreparing = false;
         this.nodeContextAnalysisData = null;
         this.nodeContextAnalysisSignature = null;
         this.nodeContextAnalysisPromise = null;
@@ -1171,38 +1176,138 @@ export class ModelResolver {
         return workflow;
     }
 
-    scheduleWorkflowHashMetadataRefresh(workflow = null) {
-        if (!this.isWorkflowHashMetadataEnabled()) return;
+    getWorkflowHashMetadataSignature(workflow) {
+        if (!workflow || typeof workflow !== 'object') return '';
+
+        const dependencySignature = this.dialog?.getWorkflowSignature?.(workflow);
+        if (dependencySignature) return dependencySignature;
+
+        const normalizeNode = (node = {}) => ({
+            id: node.id,
+            type: node.type,
+            mode: node.mode,
+            widgets_values: node.widgets_values,
+            inputs: Array.isArray(node.inputs)
+                ? node.inputs.map(input => ({
+                    name: input?.name,
+                    type: input?.type,
+                    link: input?.link,
+                    widget: input?.widget
+                }))
+                : [],
+            outputs: Array.isArray(node.outputs)
+                ? node.outputs.map(output => ({
+                    name: output?.name,
+                    type: output?.type,
+                    links: output?.links
+                }))
+                : [],
+            properties: node.properties
+        });
+        const normalizeDefinition = (definition = {}) => ({
+            id: definition.id,
+            name: definition.name,
+            nodes: Array.isArray(definition.nodes)
+                ? definition.nodes.map(normalizeNode)
+                : [],
+            links: Array.isArray(definition.links) ? definition.links : []
+        });
+        const definitions = workflow.definitions && typeof workflow.definitions === 'object'
+            ? Object.fromEntries(Object.entries(workflow.definitions).map(([key, value]) => [
+                key,
+                Array.isArray(value)
+                    ? value.map(normalizeDefinition)
+                    : normalizeDefinition(value)
+            ]))
+            : {};
+
+        try {
+            return JSON.stringify({
+                nodes: Array.isArray(workflow.nodes)
+                    ? workflow.nodes.map(normalizeNode)
+                    : [],
+                links: Array.isArray(workflow.links) ? workflow.links : [],
+                definitions
+            });
+        } catch (error) {
+            log.debug('Model Resolver: workflow hash signature generation failed', error);
+            return '';
+        }
+    }
+
+    armWorkflowHashMetadataRefresh(delay = 800) {
         if (this.workflowHashMetadataRefreshTimer) {
             clearTimeout(this.workflowHashMetadataRefreshTimer);
         }
         this.workflowHashMetadataRefreshTimer = setTimeout(() => {
             this.workflowHashMetadataRefreshTimer = null;
-            this.refreshWorkflowHashMetadata(workflow);
-        }, 800);
+            this.flushWorkflowHashMetadataRefresh();
+        }, delay);
     }
 
-    async refreshWorkflowHashMetadata(workflow = null) {
+    scheduleWorkflowHashMetadataRefresh(workflow = null) {
+        if (!this.isWorkflowHashMetadataEnabled() || this.workflowHashMetadataPreparing) return;
+
+        const signature = workflow
+            ? this.getWorkflowHashMetadataSignature(workflow)
+            : null;
+        if (
+            signature
+            && (
+                signature === this.workflowHashMetadataSignature
+                || signature === this.workflowHashMetadataActiveSignature
+                || (
+                    this.workflowHashMetadataRefreshPending
+                    && signature === this.workflowHashMetadataPendingSignature
+                )
+            )
+        ) {
+            return;
+        }
+
+        this.workflowHashMetadataRefreshPending = true;
+        this.workflowHashMetadataPendingWorkflow = workflow;
+        this.workflowHashMetadataPendingSignature = signature;
+        this.armWorkflowHashMetadataRefresh();
+    }
+
+    async flushWorkflowHashMetadataRefresh() {
+        if (!this.workflowHashMetadataRefreshPending) return;
+        if (this.workflowHashMetadataRefreshing) {
+            this.armWorkflowHashMetadataRefresh(200);
+            return;
+        }
+
+        const workflow = this.workflowHashMetadataPendingWorkflow;
+        const signature = this.workflowHashMetadataPendingSignature;
+        this.workflowHashMetadataRefreshPending = false;
+        this.workflowHashMetadataPendingWorkflow = null;
+        this.workflowHashMetadataPendingSignature = null;
+        await this.refreshWorkflowHashMetadata(workflow, signature);
+    }
+
+    async refreshWorkflowHashMetadata(workflow = null, scheduledSignature = null) {
         if (this.workflowHashMetadataRefreshing || !this.isWorkflowHashMetadataEnabled()) return;
 
-        const currentWorkflow = workflow || app?.graph?.serialize?.();
+        let currentWorkflow = workflow;
+        if (!currentWorkflow) {
+            this.workflowHashMetadataPreparing = true;
+            try {
+                currentWorkflow = app?.graph?.serialize?.();
+            } finally {
+                this.workflowHashMetadataPreparing = false;
+            }
+        }
         if (!currentWorkflow) return;
 
-        let signature;
-        try {
-            signature = JSON.stringify((currentWorkflow.nodes || []).map((node) => [
-                node?.id,
-                node?.type,
-                node?.widgets_values
-            ]));
-        } catch (error) {
-            signature = '';
-        }
+        const signature = scheduledSignature
+            || this.getWorkflowHashMetadataSignature(currentWorkflow);
         if (signature && signature === this.workflowHashMetadataSignature && this.workflowHashMetadataCache) {
             return;
         }
 
         this.workflowHashMetadataRefreshing = true;
+        this.workflowHashMetadataActiveSignature = signature;
         try {
             const response = await api.fetchApi('/model_resolver/workflow-model-hashes', {
                 method: 'POST',
@@ -1227,6 +1332,13 @@ export class ModelResolver {
             log.debug('Model Resolver: workflow hash metadata refresh failed', error);
         } finally {
             this.workflowHashMetadataRefreshing = false;
+            this.workflowHashMetadataActiveSignature = null;
+            if (
+                this.workflowHashMetadataRefreshPending
+                && !this.workflowHashMetadataRefreshTimer
+            ) {
+                this.armWorkflowHashMetadataRefresh(200);
+            }
         }
     }
 

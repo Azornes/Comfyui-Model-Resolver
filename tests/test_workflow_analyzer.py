@@ -5,11 +5,13 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from core import workflow_analyzer
-from core.scanner import scan_directory
+from core.scanner import invalidate_model_files_cache, scan_directory
 from core.workflow_analyzer import (
     analyze_workflow_models,
     get_lora_model_strength,
+    get_workflow_model_inventory,
     identify_missing_models,
+    invalidate_workflow_model_inventory_cache,
 )
 
 
@@ -1199,6 +1201,129 @@ class WorkflowMissingReferenceGroupingTests(unittest.TestCase):
             {"checkpoints", "loras"},
             {item["category"] for item in missing},
         )
+
+
+class WorkflowModelInventoryCacheTests(unittest.TestCase):
+    def setUp(self):
+        invalidate_workflow_model_inventory_cache()
+
+    def tearDown(self):
+        invalidate_workflow_model_inventory_cache()
+
+    def test_unchanged_workflow_reuses_shared_inventory(self):
+        workflow = _workflow_with_model("shared.safetensors")
+        available_models = [{"filename": "shared.safetensors"}]
+        model_refs = [{"original_path": "shared.safetensors", "exists": True}]
+
+        with (
+            patch(
+                "core.scanner.get_model_files",
+                return_value=available_models,
+            ) as get_models,
+            patch.object(
+                workflow_analyzer,
+                "analyze_workflow_models",
+                return_value=model_refs,
+            ) as analyze_models,
+        ):
+            first = get_workflow_model_inventory(workflow)
+            second = get_workflow_model_inventory({"nodes": workflow["nodes"]})
+
+        self.assertIs(first["available_models"], available_models)
+        self.assertIs(second["model_refs"], model_refs)
+        get_models.assert_called_once_with(force_rescan=False)
+        analyze_models.assert_called_once_with(
+            workflow,
+            available_models=available_models,
+            progress_callback=None,
+        )
+
+    def test_force_rescan_rebuilds_shared_inventory(self):
+        workflow = _workflow_with_model("forced.safetensors")
+
+        with (
+            patch(
+                "core.scanner.get_model_files",
+                return_value=[],
+            ) as get_models,
+            patch.object(
+                workflow_analyzer,
+                "analyze_workflow_models",
+                return_value=[],
+            ) as analyze_models,
+        ):
+            get_workflow_model_inventory(workflow)
+            get_workflow_model_inventory(workflow, force_rescan=True)
+
+        self.assertEqual(2, get_models.call_count)
+        self.assertEqual(
+            {"force_rescan": True},
+            get_models.call_args_list[-1].kwargs,
+        )
+        self.assertEqual(2, analyze_models.call_count)
+
+    def test_node_layout_changes_reuse_shared_inventory(self):
+        workflow = _workflow_with_model("moved.safetensors")
+        workflow["nodes"][0]["pos"] = [10, 20]
+        moved_workflow = _workflow_with_model("moved.safetensors")
+        moved_workflow["nodes"][0]["pos"] = [300, 500]
+        moved_workflow["nodes"][0]["size"] = [420, 180]
+
+        with (
+            patch(
+                "core.scanner.get_model_files",
+                return_value=[],
+            ),
+            patch.object(
+                workflow_analyzer,
+                "analyze_workflow_models",
+                return_value=[],
+            ) as analyze_models,
+        ):
+            get_workflow_model_inventory(workflow)
+            get_workflow_model_inventory(moved_workflow)
+
+        analyze_models.assert_called_once()
+
+    def test_model_selection_change_rebuilds_shared_inventory(self):
+        first_workflow = _workflow_with_model("first.safetensors")
+        second_workflow = _workflow_with_model("second.safetensors")
+
+        with (
+            patch(
+                "core.scanner.get_model_files",
+                return_value=[],
+            ),
+            patch.object(
+                workflow_analyzer,
+                "analyze_workflow_models",
+                return_value=[],
+            ) as analyze_models,
+        ):
+            get_workflow_model_inventory(first_workflow)
+            get_workflow_model_inventory(second_workflow)
+
+        self.assertEqual(2, analyze_models.call_count)
+
+    def test_scanner_invalidation_clears_shared_inventory(self):
+        workflow = _workflow_with_model("invalidated.safetensors")
+
+        with (
+            patch(
+                "core.scanner.get_model_files",
+                return_value=[],
+            ),
+            patch.object(
+                workflow_analyzer,
+                "analyze_workflow_models",
+                return_value=[],
+            ) as analyze_models,
+        ):
+            get_workflow_model_inventory(workflow)
+            invalidate_model_files_cache()
+            get_workflow_model_inventory(workflow)
+
+        self.assertEqual(2, analyze_models.call_count)
 
 
 if __name__ == "__main__":

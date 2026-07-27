@@ -4,14 +4,32 @@ Workflow Analyzer Module
 Extracts model references from workflow JSON and identifies missing models.
 """
 
+import hashlib
+import json
 import os
 import re
 import threading
+import time
+from collections import OrderedDict
 from typing import Any, Callable, Dict, List, Optional, Set
 
 from .log_system import create_module_logger
 
 log = create_module_logger(__name__)
+
+_WORKFLOW_MODEL_INVENTORY_CACHE_TTL_SECONDS = 300.0
+_WORKFLOW_MODEL_INVENTORY_CACHE_MAX_ENTRIES = 8
+_WORKFLOW_MODEL_INVENTORY_CACHE_LOCK = threading.Lock()
+_WORKFLOW_MODEL_INVENTORY_CACHE: OrderedDict[str, Dict[str, Any]] = OrderedDict()
+_WORKFLOW_MODEL_INVENTORY_IGNORED_NODE_KEYS = {
+    "bgcolor",
+    "color",
+    "flags",
+    "order",
+    "pos",
+    "shape",
+    "size",
+}
 
 
 # Import folder_paths lazily - it may not be available until ComfyUI is initialized
@@ -2360,6 +2378,119 @@ def analyze_workflow_models(
                 continue
 
     return all_model_refs
+
+
+def _get_workflow_model_inventory_cache_key(
+    workflow_json: Dict[str, Any],
+) -> str:
+    def normalize_for_analysis(value: Any) -> Any:
+        if isinstance(value, dict):
+            is_node = "id" in value and "type" in value
+            return {
+                key: normalize_for_analysis(item)
+                for key, item in value.items()
+                if not (
+                    is_node
+                    and key in _WORKFLOW_MODEL_INVENTORY_IGNORED_NODE_KEYS
+                )
+            }
+        if isinstance(value, list):
+            return [normalize_for_analysis(item) for item in value]
+        return value
+
+    serialized_workflow = json.dumps(
+        normalize_for_analysis(workflow_json),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(serialized_workflow.encode("utf-8")).hexdigest()
+
+
+def invalidate_workflow_model_inventory_cache() -> None:
+    """Clear shared workflow model analysis snapshots."""
+    with _WORKFLOW_MODEL_INVENTORY_CACHE_LOCK:
+        _WORKFLOW_MODEL_INVENTORY_CACHE.clear()
+
+
+def get_workflow_model_inventory(
+    workflow_json: Dict[str, Any],
+    *,
+    force_rescan: bool = False,
+    progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    Return the shared base model inventory for a workflow.
+
+    Missing Models and Loaded Models use this snapshot so the same unchanged
+    workflow is not parsed separately by both endpoints. Callers must treat the
+    returned lists as read-only.
+    """
+    from .scanner import get_model_files
+
+    cache_key = _get_workflow_model_inventory_cache_key(workflow_json)
+    now = time.monotonic()
+
+    if force_rescan:
+        invalidate_workflow_model_inventory_cache()
+    else:
+        with _WORKFLOW_MODEL_INVENTORY_CACHE_LOCK:
+            cached = _WORKFLOW_MODEL_INVENTORY_CACHE.get(cache_key)
+            if cached is not None:
+                age = now - cached["created_at"]
+                if age < _WORKFLOW_MODEL_INVENTORY_CACHE_TTL_SECONDS:
+                    _WORKFLOW_MODEL_INVENTORY_CACHE.move_to_end(cache_key)
+                    model_refs = cached["model_refs"]
+                    if progress_callback:
+                        progress_callback(
+                            {
+                                "stage": "analyzing",
+                                "message": "Reusing shared workflow analysis...",
+                                "current": len(model_refs),
+                                "total": len(model_refs),
+                                "cached": True,
+                            }
+                        )
+                    log.debug("Reusing shared workflow model analysis")
+                    return {
+                        "available_models": cached["available_models"],
+                        "model_refs": model_refs,
+                    }
+                _WORKFLOW_MODEL_INVENTORY_CACHE.pop(cache_key, None)
+
+    available_models = get_model_files(force_rescan=force_rescan)
+    model_refs = analyze_workflow_models(
+        workflow_json,
+        available_models=available_models,
+        progress_callback=progress_callback,
+    )
+
+    with _WORKFLOW_MODEL_INVENTORY_CACHE_LOCK:
+        expired_keys = [
+            key
+            for key, entry in _WORKFLOW_MODEL_INVENTORY_CACHE.items()
+            if now - entry["created_at"]
+            >= _WORKFLOW_MODEL_INVENTORY_CACHE_TTL_SECONDS
+        ]
+        for key in expired_keys:
+            _WORKFLOW_MODEL_INVENTORY_CACHE.pop(key, None)
+
+        _WORKFLOW_MODEL_INVENTORY_CACHE[cache_key] = {
+            "created_at": time.monotonic(),
+            "available_models": available_models,
+            "model_refs": model_refs,
+        }
+        _WORKFLOW_MODEL_INVENTORY_CACHE.move_to_end(cache_key)
+        while (
+            len(_WORKFLOW_MODEL_INVENTORY_CACHE)
+            > _WORKFLOW_MODEL_INVENTORY_CACHE_MAX_ENTRIES
+        ):
+            _WORKFLOW_MODEL_INVENTORY_CACHE.popitem(last=False)
+
+    return {
+        "available_models": available_models,
+        "model_refs": model_refs,
+    }
 
 
 def identify_missing_models(

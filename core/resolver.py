@@ -29,8 +29,8 @@ from .type_utils import (
 from .workflow_analyzer import (
     NESTED_MODEL_KEYS,
     NODE_TYPE_TO_CATEGORY_HINTS,
-    analyze_workflow_models,
     get_model_widget_category_hint,
+    get_workflow_model_inventory,
     identify_missing_models,
     should_scan_as_model_reference,
 )
@@ -969,9 +969,13 @@ def analyze_and_find_matches(
             }
         )
 
-    # Analyze workflow to find all model references
-    # Get available models
-    available_models = get_model_files(force_rescan=force_rescan)
+    inventory = get_workflow_model_inventory(
+        workflow_json,
+        force_rescan=force_rescan,
+        progress_callback=progress_callback,
+    )
+    available_models = inventory["available_models"]
+    all_model_refs = inventory["model_refs"]
     available_models_by_category = {}
     for model in available_models:
         model_category = model.get("category", "")
@@ -980,21 +984,6 @@ def analyze_and_find_matches(
         available_models_by_category[model_category].append(model)
 
     ordered_candidates_cache: Dict[str, List[Dict[str, Any]]] = {}
-
-    if progress_callback:
-        progress_callback(
-            {
-                "stage": "analyzing",
-                "message": "Analyzing workflow nodes...",
-                "current": 0,
-                "total": 0,
-            }
-        )
-
-    # Analyze workflow using the same already-scanned model list
-    all_model_refs = analyze_workflow_models(
-        workflow_json, available_models=available_models
-    )
 
     if progress_callback:
         progress_callback(

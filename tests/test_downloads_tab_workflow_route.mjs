@@ -991,6 +991,81 @@ test('workflow signature tracks EasyLoraStack mode and indexed strengths', () =>
   ]);
 });
 
+test('workflow hash refresh ignores node movement and tracks model dependency changes', () => {
+  const getWorkflowSignature = eval(`(${extractMethod(workflowStateMethodsSource, 'getWorkflowSignature')})`);
+  const getWorkflowSignatureData = eval(`(${extractMethod(workflowStateMethodsSource, 'getWorkflowSignatureData')})`);
+  const getWorkflowHashMetadataSignature = eval(`(${extractMethod(modelResolverSource, 'getWorkflowHashMetadataSignature')})`);
+  const scheduleWorkflowHashMetadataRefresh = eval(`(${extractMethod(modelResolverSource, 'scheduleWorkflowHashMetadataRefresh')})`);
+  const dialog = {
+    capabilities: { node_rules: {} },
+    getWorkflowSignature,
+    getWorkflowSignatureData,
+  };
+  const makeWorkflow = (modelName, position = [0, 0]) => ({
+    nodes: [{
+      id: 12,
+      type: 'CheckpointLoaderSimple',
+      pos: position,
+      size: [320, 120],
+      inputs: [{ name: 'ckpt_name', widget: { name: 'ckpt_name' } }],
+      outputs: [{ name: 'MODEL', type: 'MODEL', links: [] }],
+      widgets_values: [modelName],
+    }],
+    links: [],
+    definitions: {
+      subgraphs: [{
+        id: 'subgraph-a',
+        name: 'Nested loader',
+        nodes: [{
+          id: 3,
+          type: 'VAELoader',
+          pos: [20, 30],
+          inputs: [{ name: 'vae_name', widget: { name: 'vae_name' } }],
+          outputs: [],
+          widgets_values: ['vae-a.safetensors'],
+        }],
+        links: [],
+      }],
+    },
+  });
+  const originalWorkflow = makeWorkflow('model-a.safetensors');
+  const originalSignature = getWorkflowHashMetadataSignature.call(
+    { dialog },
+    originalWorkflow
+  );
+  const resolver = {
+    dialog,
+    workflowHashMetadataSignature: originalSignature,
+    workflowHashMetadataActiveSignature: null,
+    workflowHashMetadataRefreshPending: false,
+    workflowHashMetadataPendingSignature: null,
+    workflowHashMetadataPreparing: false,
+    isWorkflowHashMetadataEnabled: () => true,
+    getWorkflowHashMetadataSignature,
+    armCalls: 0,
+    armWorkflowHashMetadataRefresh() {
+      this.armCalls += 1;
+    },
+  };
+  const movedWorkflow = makeWorkflow('model-a.safetensors', [800, 450]);
+  movedWorkflow.definitions.subgraphs[0].nodes[0].pos = [640, 320];
+
+  scheduleWorkflowHashMetadataRefresh.call(
+    resolver,
+    movedWorkflow
+  );
+  assert.equal(resolver.armCalls, 0);
+  assert.equal(resolver.workflowHashMetadataRefreshPending, false);
+
+  scheduleWorkflowHashMetadataRefresh.call(
+    resolver,
+    makeWorkflow('model-b.safetensors', [800, 450])
+  );
+  assert.equal(resolver.armCalls, 1);
+  assert.equal(resolver.workflowHashMetadataRefreshPending, true);
+  assert.notEqual(resolver.workflowHashMetadataPendingSignature, originalSignature);
+});
+
 test('download percent keeps native Xet progress below one percent visible', () => {
   const formatDownloadPercent = eval(`(${extractMethod(renderFormatMethodsSource, 'formatDownloadPercent')})`);
 
