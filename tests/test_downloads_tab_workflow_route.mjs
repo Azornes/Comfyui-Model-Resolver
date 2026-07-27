@@ -600,6 +600,52 @@ test('background Loaded Models refresh keeps the current view until new data is 
   assert.equal(contentElement.scrollTop, 48);
 });
 
+test('changed workflow model keeps the selected row and batch checkbox for the same loader slot', () => {
+  const encodeMissingModelKeyPart = eval(`(${extractMethod(lifecycleGraphMethodsSource, 'encodeMissingModelKeyPart')})`);
+  const getMissingModelIdentityPart = eval(`(${extractMethod(lifecycleGraphMethodsSource, 'getMissingModelIdentityPart')})`);
+  const getMissingModelKey = eval(`(${extractMethod(lifecycleGraphMethodsSource, 'getMissingModelKey')})`);
+  const getMissingModelWorkflowSlotKeys = eval(`(${extractMethod(lifecycleGraphMethodsSource, 'getMissingModelWorkflowSlotKeys')})`);
+  const findMissingModelReplacement = eval(`(${extractMethod(lifecycleGraphMethodsSource, 'findMissingModelReplacement')})`);
+  const resolvePreservedMissingModelKey = eval(`(${extractMethod(lifecycleGraphMethodsSource, 'resolvePreservedMissingModelKey')})`);
+  const remapMissingModelKeys = eval(`(${extractMethod(lifecycleGraphMethodsSource, 'remapMissingModelKeys')})`);
+  const dialog = {
+    encodeMissingModelKeyPart,
+    getMissingModelIdentityPart,
+    getMissingModelKey,
+    getMissingModelWorkflowSlotKeys,
+    findMissingModelReplacement,
+    resolvePreservedMissingModelKey,
+    remapMissingModelKeys,
+  };
+  const oldModels = [
+    { node_id: 73, widget_index: 0, category: 'loras', original_path: 'first.safetensors' },
+    { node_id: 74, widget_index: 0, category: 'loras', original_path: 'old-model.safetensors' },
+    { node_id: 75, widget_index: 0, category: 'loras', original_path: 'last.safetensors' },
+  ];
+  const newModels = [
+    { node_id: 73, widget_index: 0, category: 'loras', original_path: 'first.safetensors' },
+    { node_id: 74, widget_index: 0, category: 'loras', original_path: 'new-model.safetensors' },
+    { node_id: 75, widget_index: 0, category: 'loras', original_path: 'last.safetensors' },
+  ];
+  const oldSelectedKey = getMissingModelKey.call(dialog, oldModels[1]);
+  const unchangedBatchKey = getMissingModelKey.call(dialog, oldModels[2]);
+  const newSelectedKey = getMissingModelKey.call(dialog, newModels[1]);
+
+  assert.equal(
+    resolvePreservedMissingModelKey.call(dialog, newModels, oldModels, oldSelectedKey),
+    newSelectedKey
+  );
+  assert.deepEqual(
+    remapMissingModelKeys.call(
+      dialog,
+      newModels,
+      oldModels,
+      new Set([oldSelectedKey, unchangedBatchKey])
+    ),
+    new Set([newSelectedKey, unchangedBatchKey])
+  );
+});
+
 test('background Missing Models refresh keeps the current view until new data is ready', async () => {
   const loadWorkflowData = eval(`(${extractMethod(lifecycleGraphMethodsSource, 'loadWorkflowData')})`);
   const workflow = {

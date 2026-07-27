@@ -1956,6 +1956,12 @@ export const missingBrowserMethods = {
     displayMissingModels(container, data, options = {}) {
         const selectionOnly = !!options.selectionOnly;
         const listScrollSnapshot = this.getMissingListScrollSnapshot(container);
+        const previousMissingModels = Array.isArray(this.missingModels)
+            ? [...this.missingModels]
+            : [];
+        const previousSelectedMissingModelKey = this.selectedMissingModelKey || '';
+        const previousBatchSelectedMissingKeys = new Set(this.batchSelectedMissingKeys || []);
+        const previousLastBatchSelectedMissingKey = this.lastBatchSelectedMissingKey || '';
         // Resolving the download state used to serialize the whole workflow for
         // every missing model. Keep the scope stable for this render pass.
         const downloadWorkflowScope = this.getCurrentDownloadWorkflowScopeIdentity?.() || '';
@@ -2017,6 +2023,31 @@ export const missingBrowserMethods = {
         const visibleMissingModels = activeTypeFilter === 'all'
             ? typeFilterSourceModels
             : typeFilterSourceModels.filter(missing => getTypeFilterValue(missing) === activeTypeFilter);
+        const currentModelKeys = new Set(
+            allModelsForDisplay.map(missing => this.getMissingModelKey(missing))
+        );
+        const resolveSelectionKey = (previousKey) => {
+            if (!previousKey) return '';
+            if (currentModelKeys.has(previousKey)) {
+                return visibleMissingModels.some(
+                    missing => this.getMissingModelKey(missing) === previousKey
+                ) ? previousKey : '';
+            }
+            return this.resolvePreservedMissingModelKey(
+                visibleMissingModels,
+                previousMissingModels,
+                previousKey
+            );
+        };
+        this.selectedMissingModelKey = resolveSelectionKey(previousSelectedMissingModelKey)
+            || (visibleMissingModels.length ? this.getMissingModelKey(visibleMissingModels[0]) : null);
+        this.batchSelectedMissingKeys = this.remapMissingModelKeys(
+            visibleMissingModels,
+            previousMissingModels,
+            previousBatchSelectedMissingKeys,
+            allModelsForDisplay
+        );
+        this.lastBatchSelectedMissingKey = resolveSelectionKey(previousLastBatchSelectedMissingKey) || null;
         this.missingModels = visibleMissingModels;
         this.syncBatchSelectionForMissingModels(visibleMissingModels);
 
