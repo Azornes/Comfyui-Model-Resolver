@@ -137,6 +137,13 @@ class CivitaiModelDetailsTests(unittest.TestCase):
                                 "seed": 884670593557080,
                                 "prompt": "AltGirl prompt",
                                 "steps": 8,
+                                "additionalResources": [
+                                    {
+                                        "name": "support-style.safetensors",
+                                        "type": "lora",
+                                        "strength": 0.5,
+                                    }
+                                ],
                             },
                         }
                     ],
@@ -167,6 +174,26 @@ class CivitaiModelDetailsTests(unittest.TestCase):
         self.assertEqual(123, civitai["modelId"])
         self.assertEqual(4, civitai["images"][0]["nsfwLevel"])
         self.assertEqual("AltGirl prompt", civitai["images"][0]["meta"]["prompt"])
+        self.assertEqual(
+            {
+                "name": "Alt-Girl/E-Girl",
+                "versionName": "Krea2 v1.0",
+                "type": "LORA",
+                "modelId": 123,
+                "modelVersionId": 789,
+                "url": "https://civitai.com/models/123?modelVersionId=789",
+                "primary": True,
+            },
+            civitai["images"][0]["resources"][0],
+        )
+        self.assertEqual(
+            {
+                "name": "support-style.safetensors",
+                "type": "lora",
+                "strength": 0.5,
+            },
+            civitai["images"][0]["resources"][1],
+        )
         self.assertEqual("Success", civitai["files"][0]["virusScanResult"])
         self.assertEqual(1705, civitai["stats"]["downloadCount"])
         self.assertEqual(
@@ -1007,6 +1034,91 @@ class ExtractModelImagesTests(unittest.TestCase):
     def test_no_images_key_returns_empty(self):
         result = _extract_model_images({"name": "v1"})
         self.assertEqual(result, [])
+
+    def test_adds_linked_parent_model_without_replacing_additional_resources(self):
+        version_info = {
+            "id": 3084537,
+            "name": "Krea2 (v0.5)",
+            "modelId": 2268008,
+            "model": {
+                "name": "Realistic Snapshot (Z-Image-Turbo + Krea 2)",
+                "type": "LORA",
+            },
+            "images": [
+                {
+                    "url": "https://image.civitai.com/135642695.jpeg",
+                    "meta": {
+                        "additionalResources": [
+                            {
+                                "name": (
+                                    "dwdwadawdadw__realisticsnapshotideogram__"
+                                    "5th%20training6000.safetensors"
+                                ),
+                                "type": "lora",
+                                "strength": 2,
+                            },
+                            {
+                                "name": "lenovo_krea2.safetensors",
+                                "type": "lora",
+                                "strength": 0.5,
+                            }
+                        ]
+                    },
+                }
+            ],
+        }
+
+        result = _extract_model_images(version_info)
+
+        resources = result[0]["resources"]
+        self.assertEqual(
+            resources[0],
+            {
+                "name": "Realistic Snapshot (Z-Image-Turbo + Krea 2)",
+                "versionName": "Krea2 (v0.5)",
+                "type": "LORA",
+                "modelId": 2268008,
+                "modelVersionId": 3084537,
+                "url": (
+                    "https://civitai.com/models/2268008"
+                    "?modelVersionId=3084537"
+                ),
+                "primary": True,
+                "strength": 2,
+            },
+        )
+        self.assertEqual(
+            resources[1],
+            {
+                "name": "lenovo_krea2.safetensors",
+                "type": "lora",
+                "strength": 0.5,
+            },
+        )
+
+    def test_does_not_duplicate_an_existing_parent_model_resource(self):
+        version_info = {
+            "id": 3084537,
+            "name": "Krea2 (v0.5)",
+            "modelId": 2268008,
+            "model": {"name": "Realistic Snapshot", "type": "LORA"},
+            "images": [
+                {
+                    "url": "https://image.civitai.com/135642695.jpeg",
+                    "resources": [
+                        {
+                            "name": "Realistic Snapshot",
+                            "modelId": 2268008,
+                            "modelVersionId": 3084537,
+                        }
+                    ],
+                }
+            ],
+        }
+
+        result = _extract_model_images(version_info)
+
+        self.assertEqual(len(result[0]["resources"]), 1)
 
 
 # ===========================================================================

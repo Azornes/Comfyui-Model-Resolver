@@ -1284,7 +1284,11 @@ def get_civitai_model_details(
             "clip_skip": version.get("clipSkip"),
             "stats": version.get("stats") or {},
             "files": files,
-            "images": _extract_model_images(version),
+            "images": _extract_model_images(
+                version,
+                model_info=data,
+                model_id=model_id,
+            ),
             "url": f"https://civitai.com/models/{model_id}?modelVersionId={current_version_id}",
         }
         normalized_versions.append(normalized)
@@ -1302,6 +1306,27 @@ def get_civitai_model_details(
         selected_raw_version or {},
         model_id,
     )
+    if selected_images:
+        normalized_by_url = {
+            str(image.get("url")): image
+            for image in selected_images
+            if isinstance(image, dict) and image.get("url")
+        }
+        raw_images = civitai_payload.get("images")
+        if isinstance(raw_images, list):
+            enriched_raw_images = []
+            for raw_image in raw_images:
+                if not isinstance(raw_image, dict):
+                    enriched_raw_images.append(raw_image)
+                    continue
+                enriched_image = dict(raw_image)
+                normalized_image = normalized_by_url.get(str(raw_image.get("url") or ""))
+                if normalized_image and normalized_image.get("resources"):
+                    enriched_image["resources"] = normalized_image["resources"]
+                enriched_raw_images.append(enriched_image)
+            civitai_payload["images"] = enriched_raw_images
+        else:
+            civitai_payload["images"] = selected_images
     return {
         "source": "civitai",
         "model_id": model_id,
@@ -1516,7 +1541,11 @@ def get_model_info_by_hash(
             model_id = data.get("modelId") or model_info.get("id")
 
             # Extract images with metadata
-            images = _extract_model_images(version_info)
+            images = _extract_model_images(
+                version_info,
+                model_info=model_info,
+                model_id=model_id,
+            )
 
             result = {
                 "source": "civitai",
@@ -1570,12 +1599,18 @@ def get_model_info_by_hash(
         log.error(f"Error looking up model by hash {file_hash}: {e}")
         return None
 
-def _extract_model_images(version_info: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _extract_model_images(
+    version_info: Dict[str, Any],
+    *,
+    model_info: Optional[Dict[str, Any]] = None,
+    model_id: Any = None,
+) -> List[Dict[str, Any]]:
     """
     Extract images with metadata from model version info.
     Each image can have: url, civitaiUrl, seed, steps, cfg, sampler, model, positive, negative
     """
     images = []
+    image_version_info = version_info
 
     # Get images from modelVersions or direct images field
     images_data = version_info.get("images", [])
@@ -1583,7 +1618,44 @@ def _extract_model_images(version_info: Dict[str, Any]) -> List[Dict[str, Any]]:
         # Check nested modelVersions
         model_versions = version_info.get("modelVersions", [])
         if model_versions and len(model_versions) > 0:
-            images_data = model_versions[0].get("images", [])
+            image_version_info = model_versions[0]
+            images_data = image_version_info.get("images", [])
+
+    resolved_model_info = model_info
+    if not isinstance(resolved_model_info, dict):
+        nested_model_info = version_info.get("model")
+        resolved_model_info = (
+            nested_model_info
+            if isinstance(nested_model_info, dict)
+            else version_info
+            if version_info.get("modelVersions")
+            else {}
+        )
+
+    resolved_model_id = (
+        model_id
+        or image_version_info.get("modelId")
+        or version_info.get("modelId")
+        or resolved_model_info.get("id")
+    )
+    version_id = image_version_info.get("id")
+    model_name = resolved_model_info.get("name") or ""
+    version_name = image_version_info.get("name") or ""
+    model_type = resolved_model_info.get("type") or ""
+    primary_resource = None
+    if resolved_model_id and version_id and model_name:
+        primary_resource = {
+            "name": model_name,
+            "versionName": version_name,
+            "type": model_type,
+            "modelId": resolved_model_id,
+            "modelVersionId": version_id,
+            "url": (
+                f"https://civitai.com/models/{resolved_model_id}"
+                f"?modelVersionId={version_id}"
+            ),
+            "primary": True,
+        }
 
     for img in images_data:
         if not isinstance(img, dict):
@@ -1591,9 +1663,80 @@ def _extract_model_images(version_info: Dict[str, Any]) -> List[Dict[str, Any]]:
 
         img_info = normalize_model_image(img)
         if img_info.get("url"):
+            resources = img_info.get("resources")
+            if not isinstance(resources, list):
+                resources = []
+            has_linked_primary = any(
+                isinstance(resource, dict)
+                and str(resource.get("modelId") or resource.get("model_id") or "")
+                == str(resolved_model_id)
+                and str(
+                    resource.get("modelVersionId")
+                    or resource.get("versionId")
+                    or resource.get("model_version_id")
+                    or ""
+                )
+                == str(version_id)
+                for resource in resources
+            )
+            if primary_resource and not has_linked_primary:
+                matching_resource = next(
+                    (
+                        resource
+                        for resource in resources
+                        if _resource_matches_parent_model(
+                            resource,
+                            image_version_info,
+                            model_name,
+                        )
+                    ),
+                    None,
+                )
+                enriched_primary = dict(primary_resource)
+                if matching_resource:
+                    for weight_key in ("strength", "weight", "value"):
+                        if weight_key in matching_resource:
+                            enriched_primary[weight_key] = matching_resource[weight_key]
+                    resources = [
+                        resource
+                        for resource in resources
+                        if resource is not matching_resource
+                    ]
+                img_info["resources"] = [enriched_primary, *resources]
             images.append(img_info)
 
     return images
+
+
+def _resource_matches_parent_model(
+    resource: Any,
+    version_info: Dict[str, Any],
+    model_name: str,
+) -> bool:
+    """Match an unlinked image resource to the model version that owns the image."""
+    if not isinstance(resource, dict):
+        return False
+
+    resource_name = str(
+        resource.get("name")
+        or resource.get("modelName")
+        or resource.get("model")
+        or ""
+    ).strip()
+    if not resource_name:
+        return False
+
+    for file_info in version_info.get("files") or []:
+        if not isinstance(file_info, dict):
+            continue
+        file_name = str(file_info.get("name") or "").strip()
+        if file_name and calculate_filename_confidence(resource_name, file_name) >= 95:
+            return True
+
+    title_prefix = re.split(r"[\(\[\|]", str(model_name or ""), maxsplit=1)[0]
+    compact_title = re.sub(r"[^a-z0-9]+", "", title_prefix.lower())
+    compact_resource = re.sub(r"[^a-z0-9]+", "", resource_name.lower())
+    return len(compact_title) >= 8 and compact_title in compact_resource
 
 
 def _read_model_metadata(
