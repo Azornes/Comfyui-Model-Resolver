@@ -6,7 +6,10 @@ export function startSplitterDrag(event, {
     anchor = 'right',
     startWidth,
     bounds = { min: 100, max: 800 },
+    dragThreshold = 0,
+    layoutFrameStride = 1,
     onBeforeDrag = null,
+    onPreview = null,
     onDrag = () => {},
     onEnd = () => {}
 }) {
@@ -15,14 +18,42 @@ export function startSplitterDrag(event, {
     event?.stopPropagation?.();
 
     const startX = event.clientX;
+    const movementThreshold = Math.max(0, Number(dragThreshold) || 0);
+    const frameStride = Math.max(1, Math.round(Number(layoutFrameStride) || 1));
     let pendingWidth = startWidth;
     let appliedWidth = startWidth;
     let animationFrame = null;
     let isDragging = true;
+    let didDrag = false;
+    let frameCount = 0;
 
     const moveEvent = event?.type === 'pointerdown' ? 'pointermove' : 'mousemove';
     const upEvent = event?.type === 'pointerdown' ? 'pointerup' : 'mouseup';
     const cancelEvent = event?.type === 'pointerdown' ? 'pointercancel' : null;
+
+    const scheduleFrame = () => {
+        if (animationFrame) return;
+        animationFrame = requestAnimationFrame(() => {
+            animationFrame = null;
+            if (!isDragging) return;
+
+            frameCount += 1;
+            const shouldApplyLayout = frameCount % frameStride === 0;
+            if (shouldApplyLayout && pendingWidth !== appliedWidth) {
+                onDrag(pendingWidth);
+                appliedWidth = pendingWidth;
+            }
+
+            onPreview?.(pendingWidth, appliedWidth, {
+                didApplyLayout: shouldApplyLayout,
+                final: false
+            });
+
+            if (pendingWidth !== appliedWidth) {
+                scheduleFrame();
+            }
+        });
+    };
 
     const handleMove = (e) => {
         if (!isDragging) return;
@@ -30,6 +61,8 @@ export function startSplitterDrag(event, {
         e?.stopPropagation?.();
 
         const dx = e.clientX - startX;
+        if (!didDrag && Math.abs(dx) < movementThreshold) return;
+        didDrag = true;
         let newWidth = anchor === 'right' ? startWidth - dx : startWidth + dx;
 
         if (onBeforeDrag) {
@@ -39,18 +72,10 @@ export function startSplitterDrag(event, {
             if (newWidth > bounds.max) newWidth = bounds.max;
         }
 
-        pendingWidth = Math.round(newWidth);
-
-        if (pendingWidth === appliedWidth) return;
-
-        if (!animationFrame) {
-            animationFrame = requestAnimationFrame(() => {
-                animationFrame = null;
-                if (!isDragging) return;
-                onDrag(pendingWidth);
-                appliedWidth = pendingWidth;
-            });
-        }
+        const nextWidth = Math.round(newWidth);
+        if (nextWidth === pendingWidth) return;
+        pendingWidth = nextWidth;
+        scheduleFrame();
     };
 
     const handleUp = (e) => {
@@ -71,7 +96,13 @@ export function startSplitterDrag(event, {
             animationFrame = null;
         }
 
-        onEnd(pendingWidth || appliedWidth);
+        if (didDrag) {
+            onPreview?.(pendingWidth, pendingWidth, {
+                didApplyLayout: pendingWidth === appliedWidth,
+                final: true
+            });
+        }
+        onEnd(pendingWidth, { didDrag, appliedWidth });
     };
 
     document.addEventListener(moveEvent, handleMove, true);
@@ -91,6 +122,12 @@ export function startSplitterDrag(event, {
             if (animationFrame) {
                 cancelAnimationFrame(animationFrame);
                 animationFrame = null;
+            }
+            if (didDrag) {
+                onPreview?.(appliedWidth, appliedWidth, {
+                    cancelled: true,
+                    final: true
+                });
             }
         }
     };

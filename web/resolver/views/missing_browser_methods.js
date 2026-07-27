@@ -1105,7 +1105,6 @@ export const missingBrowserMethods = {
         event.preventDefault();
         event.stopPropagation?.();
         this.cancelMissingBrowserPrewarmFrame();
-        this.flushMissingBrowserSplitReleaseUi();
 
         const detailPane = panes.detailPane instanceof HTMLElement
             ? panes.detailPane
@@ -1139,6 +1138,9 @@ export const missingBrowserMethods = {
         this._missingBrowserSplitListPane = listPane;
         this._missingBrowserSplitDetailPane = detailPane;
         this._missingBrowserSplitSplitter = releaseSplitter;
+        if (releaseSplitter instanceof HTMLElement) {
+            releaseSplitter.style.willChange = 'transform';
+        }
         this._missingBrowserSplitDragging = true;
         this._missingBrowserSplitStart = {
             x: event.clientX,
@@ -1155,6 +1157,19 @@ export const missingBrowserMethods = {
             anchor: 'right',
             startWidth: detailWidth,
             bounds,
+            dragThreshold: 4,
+            layoutFrameStride: 2,
+            onPreview: (pendingWidth, appliedWidth) => {
+                this._pendingMissingBrowserSplitWidth = pendingWidth;
+                this.activateMissingBrowserSplitUi();
+                if (!(releaseSplitter instanceof HTMLElement)) return;
+
+                const visualOffset = Math.round(appliedWidth - pendingWidth);
+                releaseSplitter.style.transform = visualOffset
+                    ? `translate3d(${visualOffset}px, 0, 0)`
+                    : '';
+                releaseSplitter.style.willChange = visualOffset ? 'transform' : '';
+            },
             onDrag: (width) => {
                 this._pendingMissingBrowserSplitWidth = width;
                 this.activateMissingBrowserSplitUi();
@@ -1166,14 +1181,17 @@ export const missingBrowserMethods = {
                 });
                 this._appliedMissingBrowserSplitWidth = width;
             },
-            onEnd: (finalWidth) => {
-                const settlingNow = typeof performance === 'object' && typeof performance.now === 'function'
-                    ? performance.now()
-                    : Date.now();
-                this._missingBrowserSplitSettlingUntil = settlingNow + 350;
+            onEnd: (finalWidth, { didDrag = false } = {}) => {
                 this._missingBrowserSplitDragging = false;
 
-                if (detailPane && finalWidth) {
+                if (didDrag) {
+                    const settlingNow = typeof performance === 'object' && typeof performance.now === 'function'
+                        ? performance.now()
+                        : Date.now();
+                    this._missingBrowserSplitSettlingUntil = settlingNow + 350;
+                }
+
+                if (didDrag && detailPane && finalWidth) {
                     this.applyMissingBrowserDetailWidth(detailPane, finalWidth, {
                         browserWidth,
                         availableWidth: bounds.available,
@@ -1181,10 +1199,13 @@ export const missingBrowserMethods = {
                     });
                     this._appliedMissingBrowserSplitWidth = finalWidth;
                 }
-                if (finalWidth) {
+                if (didDrag && finalWidth) {
                     this.persistMissingBrowserSplitWidth(finalWidth, { delay: 600 });
                 }
-                this.deferMissingBrowserSplitReleaseUi(releaseSplitter, !!this._missingBrowserSplitUiActive);
+                this.applyMissingBrowserSplitReleaseCleanup({
+                    browser,
+                    splitter: releaseSplitter
+                });
 
                 this._missingBrowserSplitBrowser = null;
                 this._missingBrowserSplitListPane = null;
@@ -1202,56 +1223,17 @@ export const missingBrowserMethods = {
     activateMissingBrowserSplitUi() {
         if (this._missingBrowserSplitUiActive) return;
         this._missingBrowserSplitUiActive = true;
-        if (this._missingBrowserResizeClassFrame) {
-            cancelAnimationFrame(this._missingBrowserResizeClassFrame);
-            this._missingBrowserResizeClassFrame = null;
-        }
-        this._missingBrowserResizeClassFrame = requestAnimationFrame(() => {
-            this._missingBrowserResizeClassFrame = requestAnimationFrame(() => {
-                this._missingBrowserResizeClassFrame = null;
-                if (this._missingBrowserSplitDragging) {
-                    this._missingBrowserSplitSplitter?.classList?.add('is-resizing');
-                }
-            });
-        });
+        this._missingBrowserSplitBrowser?.classList?.add('is-resizing');
+        this._missingBrowserSplitSplitter?.classList?.add('is-resizing');
     },
 
     applyMissingBrowserSplitReleaseCleanup(cleanup) {
         if (!cleanup) return;
+        cleanup.browser?.classList?.remove('is-resizing');
         cleanup.splitter?.classList?.remove('is-resizing');
-    },
-
-    flushMissingBrowserSplitReleaseUi() {
-        if (this._missingBrowserReleaseCleanupFrame) {
-            cancelAnimationFrame(this._missingBrowserReleaseCleanupFrame);
-            this._missingBrowserReleaseCleanupFrame = null;
-        }
-        const cleanup = this._missingBrowserPendingReleaseCleanup;
-        this._missingBrowserPendingReleaseCleanup = null;
-        this.applyMissingBrowserSplitReleaseCleanup(cleanup);
-    },
-
-    deferMissingBrowserSplitReleaseUi(splitter, shouldCleanup = true) {
-        if (this._missingBrowserResizeClassFrame) {
-            cancelAnimationFrame(this._missingBrowserResizeClassFrame);
-            this._missingBrowserResizeClassFrame = null;
-        }
-        this._missingBrowserPendingReleaseCleanup = {
-            splitter,
-            shouldCleanup
-        };
-        const release = () => {
-            this._missingBrowserReleaseCleanupFrame = null;
-            const cleanup = this._missingBrowserPendingReleaseCleanup;
-            this._missingBrowserPendingReleaseCleanup = null;
-            this.applyMissingBrowserSplitReleaseCleanup(cleanup);
-        };
-        if (typeof requestAnimationFrame === 'function') {
-            this._missingBrowserReleaseCleanupFrame = requestAnimationFrame(() => {
-                this._missingBrowserReleaseCleanupFrame = requestAnimationFrame(release);
-            });
-        } else {
-            release();
+        if (cleanup.splitter?.style) {
+            cleanup.splitter.style.transform = '';
+            cleanup.splitter.style.willChange = '';
         }
     },
 
@@ -1264,7 +1246,7 @@ export const missingBrowserMethods = {
         this.setMissingBrowserDetailWidth(browser, currentWidth + delta);
     },
 
-    applyMissingBrowserDetailWidth(target, width, { skipIfUnchanged = false, browserWidth = null, availableWidth = null, splitBounds = null } = {}) {
+    applyMissingBrowserDetailWidth(target, width, { skipIfUnchanged = false, browserWidth = null, splitBounds = null } = {}) {
         const detailPane = target instanceof HTMLElement && target.classList.contains('mr-missing-detail-pane')
             ? target
             : target?.querySelector?.('.mr-missing-detail-pane');
@@ -1282,26 +1264,26 @@ export const missingBrowserMethods = {
             : Number.isFinite(measuredWidth) && measuredWidth > 0
             ? this.getMissingBrowserSplitBoundsForWidth(measuredWidth)
             : this.getMissingBrowserSplitBounds(browser);
-        const available = Number.isFinite(Number(availableWidth)) && Number(availableWidth) > 0
-            ? Number(availableWidth)
-            : bounds.available;
         const nextWidth = Math.round(Math.max(bounds.min, Math.min(bounds.max, width)));
-        const listWidth = Math.max(1, Math.round(available - nextWidth));
         const detailValue = `${nextWidth}px`;
-        const listValue = `${listWidth}px`;
+        const listValue = '0px';
 
         if (
             skipIfUnchanged
             && detailPane.style.flexBasis === detailValue
-            && (!(listPane instanceof HTMLElement) || listPane.style.flexBasis === listValue)
+            && (!(listPane instanceof HTMLElement) || (
+                listPane.style.flexBasis === listValue
+                && listPane.style.flexGrow === '1'
+                && listPane.style.flexShrink === '1'
+            ))
         ) {
             return false;
         }
 
         if (listPane instanceof HTMLElement) {
             if (listPane.style.flexBasis !== listValue) listPane.style.flexBasis = listValue;
-            if (listPane.style.flexGrow !== '0') listPane.style.flexGrow = '0';
-            if (listPane.style.flexShrink !== '0') listPane.style.flexShrink = '0';
+            if (listPane.style.flexGrow !== '1') listPane.style.flexGrow = '1';
+            if (listPane.style.flexShrink !== '1') listPane.style.flexShrink = '1';
         }
         if (detailPane.style.flexBasis !== detailValue) detailPane.style.flexBasis = detailValue;
         if (detailPane.style.flexGrow !== '0') detailPane.style.flexGrow = '0';

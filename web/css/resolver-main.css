@@ -504,6 +504,7 @@
     --mr-missing-radius: 6px;
     --mr-missing-splitter-track: 10px;
     --mr-missing-list-track: calc(100% - var(--mr-missing-splitter-track) - var(--mr-missing-detail-track, 42%));
+    position: relative;
     display: flex;
     gap: 0;
     height: 100%;
@@ -525,7 +526,7 @@
 }
 
 .mr-missing-list-pane {
-    flex: 0 0 var(--mr-missing-list-track);
+    flex: 1 1 0;
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
     border-right: 0;
@@ -534,6 +535,7 @@
 
 .mr-missing-browser-splitter {
     position: relative;
+    z-index: 2;
     flex: 0 0 var(--mr-missing-splitter-track);
     min-width: var(--mr-missing-splitter-track);
     width: var(--mr-missing-splitter-track);
@@ -564,6 +566,7 @@
 .mr-missing-browser-splitter.is-resizing::before {
     background: rgba(114, 211, 138, 0.78);
     box-shadow: 0 0 0 3px rgba(114, 211, 138, 0.12);
+    transition: none;
 }
 
 .mr-missing-list-toolbar {
@@ -726,6 +729,15 @@
     scrollbar-gutter: stable;
     scrollbar-width: auto;
     background: var(--mr-missing-bg);
+}
+
+.mr-missing-browser.is-resizing::after {
+    content: "";
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+    cursor: col-resize;
+    pointer-events: auto;
 }
 
 #model-resolver-modal .mr-missing-list-row {

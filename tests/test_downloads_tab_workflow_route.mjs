@@ -13,6 +13,7 @@ import {
   matchesWorkflowModelReference,
   toResolverContextModel,
 } from '../web/resolver/node_context_menu.js';
+import { startSplitterDrag } from '../web/resolver/utils/splitter_drag.js';
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
 const queueMethodsSource = fs.readFileSync(
@@ -238,6 +239,96 @@ test('floating dialog drag stays on the compositor without forced style reads', 
   } finally {
     globalThis.requestAnimationFrame = previousRequestAnimationFrame;
   }
+});
+
+test('missing browser splitter keeps a compositor preview between live layout frames', () => {
+  const previousDocument = globalThis.document;
+  const previousRequestAnimationFrame = globalThis.requestAnimationFrame;
+  const previousCancelAnimationFrame = globalThis.cancelAnimationFrame;
+  const listeners = new Map();
+  const frames = [];
+  const previews = [];
+  const layouts = [];
+  let endState = null;
+
+  globalThis.document = {
+    addEventListener(type, handler) {
+      listeners.set(type, handler);
+    },
+    removeEventListener(type, handler) {
+      if (listeners.get(type) === handler) listeners.delete(type);
+    },
+  };
+  globalThis.requestAnimationFrame = callback => {
+    frames.push(callback);
+    return frames.length;
+  };
+  globalThis.cancelAnimationFrame = () => {};
+
+  try {
+    startSplitterDrag({
+      type: 'pointerdown',
+      button: 0,
+      clientX: 100,
+      preventDefault() {},
+      stopPropagation() {},
+    }, {
+      anchor: 'left',
+      startWidth: 300,
+      bounds: { min: 200, max: 500 },
+      dragThreshold: 4,
+      layoutFrameStride: 2,
+      onPreview: (pending, applied) => previews.push([pending, applied]),
+      onDrag: width => layouts.push(width),
+      onEnd: (width, state) => {
+        endState = { width, ...state };
+      },
+    });
+
+    listeners.get('pointermove')({
+      clientX: 102,
+      preventDefault() {},
+      stopPropagation() {},
+    });
+    assert.equal(frames.length, 0, 'movement below the threshold must remain a cheap click');
+
+    listeners.get('pointermove')({
+      clientX: 112,
+      preventDefault() {},
+      stopPropagation() {},
+    });
+    frames.shift()();
+    assert.deepEqual(layouts, []);
+    assert.deepEqual(previews.at(-1), [312, 300]);
+
+    frames.shift()();
+    assert.deepEqual(layouts, [312]);
+    assert.deepEqual(previews.at(-1), [312, 312]);
+
+    listeners.get('pointerup')({
+      preventDefault() {},
+      stopPropagation() {},
+    });
+    assert.equal(endState.width, 312);
+    assert.equal(endState.didDrag, true);
+  } finally {
+    globalThis.document = previousDocument;
+    globalThis.requestAnimationFrame = previousRequestAnimationFrame;
+    globalThis.cancelAnimationFrame = previousCancelAnimationFrame;
+  }
+
+  assert.match(missingBrowserMethodsSource, /dragThreshold:\s*4/);
+  assert.match(missingBrowserMethodsSource, /layoutFrameStride:\s*2/);
+  assert.match(missingBrowserMethodsSource, /translate3d\(/);
+  assert.match(
+    resolverMainCssSource,
+    /\.mr-missing-browser\.is-resizing::after\s*\{[^}]*pointer-events:\s*auto/s
+  );
+  assert.doesNotMatch(
+    resolverMainCssSource,
+    /\.mr-missing-browser\.is-resizing \.mr-missing-(?:list|detail)-pane/
+  );
+  assert.doesNotMatch(missingBrowserMethodsSource, /deferMissingBrowserSplitReleaseUi/);
 });
 
 test('local and loaded model tooltips include preview image routes above full names', () => {
