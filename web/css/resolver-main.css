@@ -723,19 +723,23 @@
 .mr-missing-list {
     min-height: 0;
     overflow-y: auto;
+    scrollbar-gutter: stable;
     scrollbar-width: auto;
     background: var(--mr-missing-bg);
 }
 
 #model-resolver-modal .mr-missing-list-row {
     content-visibility: auto;
-    contain-intrinsic-size: auto 64px;
+    contain-intrinsic-size: 70px;
     width: 100%;
-    min-height: 64px;
+    height: 70px;
+    min-height: 70px;
     padding: 9px 12px 9px 8px;
+    overflow: hidden;
     border: 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.052);
     border-radius: 0;
+    box-sizing: border-box;
     background: transparent;
     color: var(--mr-text);
     cursor: pointer;
@@ -744,13 +748,6 @@
     text-align: left;
     contain: layout paint style;
     transition: background 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease;
-}
-
-@supports (content-visibility: auto) {
-    #model-resolver-modal .mr-missing-list-row {
-        content-visibility: auto;
-        contain-intrinsic-size: auto 64px;
-    }
 }
 
 #model-resolver-modal .mr-missing-list-row:hover {
@@ -1175,6 +1172,11 @@
 
     #model-resolver-modal .mr-missing-list-row {
         grid-template-columns: 24px 18px minmax(0, 1fr);
+        content-visibility: visible;
+        contain-intrinsic-size: none;
+        height: auto;
+        min-height: 64px;
+        overflow: visible;
         gap: 7px;
     }
 

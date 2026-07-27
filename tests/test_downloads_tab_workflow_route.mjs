@@ -71,6 +71,25 @@ const renderFormatMethodsSource = fs.readFileSync(
   path.join(projectRoot, 'web/resolver/utils/render_format_methods.js'),
   'utf8'
 );
+const resolverMainCssSource = fs.readFileSync(
+  path.join(projectRoot, 'web/css/resolver-main.css'),
+  'utf8'
+);
+
+test('Missing Models rows use fixed-size virtualization for smooth stable scrolling', () => {
+  const rowRules = Array.from(
+    resolverMainCssSource.matchAll(/#model-resolver-modal \.mr-missing-list-row\s*\{([^}]+)\}/g)
+  );
+  const rowRule = rowRules.find(match => /width\s*:\s*100%/.test(match[1]));
+
+  assert.ok(rowRule, 'Expected the Missing Models row style');
+  assert.match(rowRule[1], /content-visibility\s*:\s*auto/);
+  assert.match(rowRule[1], /contain-intrinsic-size\s*:\s*70px/);
+  assert.match(rowRule[1], /height\s*:\s*70px/);
+  assert.match(rowRule[1], /min-height\s*:\s*70px/);
+  assert.match(rowRule[1], /box-sizing\s*:\s*border-box/);
+  assert.match(rowRule[1], /contain\s*:\s*layout paint style/);
+});
 
 test('local and loaded model tooltips include preview image routes above full names', () => {
   const getModelPreviewTooltipAttrs = eval(`(${extractMethod(renderFormatMethodsSource, 'getModelPreviewTooltipAttrs')})`);
