@@ -668,6 +668,7 @@ export class ModelResolver {
             this.dialog = new ResolverManagerDialog();
             window.ModelResolverDialog = this.dialog;
         }
+        this.dialog.rememberDockDropPreviewWidth?.(element);
 
         if (this.dialog.shouldOpenFromSidebarFloating()) {
             if (this.dialog.isVisible() && !this.dialog.docked) {

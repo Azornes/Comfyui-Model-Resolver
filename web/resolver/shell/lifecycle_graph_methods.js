@@ -66,8 +66,9 @@ export const lifecycleGraphMethods = {
         if (!handle || !topbar) return;
 
         const onMouseDown = (e) => {
-            if (this.fullscreen || this.docked) return; // no drag in fullscreen or docked mode
+            if (this.fullscreen) return;
             if (e.button !== 0 || this.isTopbarDragExcluded(e.target)) return;
+            if (this.docked && !e.target?.closest?.('#model-resolver-drag-handle')) return;
             topbar.classList.add('mr-is-dragging');
             this.startDrag(e);
         };
@@ -97,6 +98,8 @@ export const lifecycleGraphMethods = {
     close({ collapseSidebar = true } = {}) {
         const wasDocked = this.docked;
         const dockContainer = this.dockContainer;
+        this.setDockDropPreviewActive(false);
+        this.setUndockDropPreviewActive(false);
         this.rememberSidebarOpenMode(this.docked ? 'docked' : 'floating');
         this._hidePreview?.();
         this.hideTooltip();

@@ -177,6 +177,7 @@ export const dialogShellMethods = {
     dockTo(container) {
         if (!container || !this.element) return;
 
+        this.rememberDockDropPreviewWidth(container);
         if (!this.docked) {
             if (this._pendingDragDockRect) {
                 this._floatingRectBeforeDock = this._pendingDragDockRect;
@@ -187,6 +188,7 @@ export const dialogShellMethods = {
         }
 
         this.setDockDropPreviewActive(false);
+        this.setUndockDropPreviewActive(false);
         if (this.fullscreen) {
             this.setFullScreen(false);
         }
@@ -305,9 +307,13 @@ export const dialogShellMethods = {
         if (!this.element) return;
 
         this.setDockDropPreviewActive(false);
+        this.setUndockDropPreviewActive(false);
         this._pendingDragDockRect = null;
         const wasDocked = this.docked;
         const dockContainer = this.dockContainer;
+        if (wasDocked) {
+            this.rememberDockDropPreviewWidth(dockContainer);
+        }
         this.docked = false;
         this.dockContainer = null;
         this.element.classList.remove('mr-is-docked');
@@ -564,6 +570,29 @@ export const dialogShellMethods = {
         return Math.max(40, Math.min(64, viewportWidth * 0.045));
     },
 
+    rememberDockDropPreviewWidth(container = this.lastDockContainer) {
+        if (!(container instanceof HTMLElement) || !container.isConnected) return;
+
+        const width = container.getBoundingClientRect().width;
+        if (Number.isFinite(width) && width > 0) {
+            this._lastDockContainerWidth = Math.round(width);
+        }
+    },
+
+    updateDockDropPreviewWidth() {
+        this.rememberDockDropPreviewWidth();
+        if (!this.dockDropPreview) return;
+
+        const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+        const availableWidth = Math.max(0, viewportWidth - 16);
+        const width = Math.min(Number(this._lastDockContainerWidth) || 0, availableWidth);
+        if (width > 0) {
+            this.dockDropPreview.style.width = `${Math.round(width)}px`;
+        } else {
+            this.dockDropPreview.style.removeProperty('width');
+        }
+    },
+
     setDockDropPreviewActive(active) {
         const nextActive = Boolean(active && !this.docked && !this.fullscreen);
         if (this._dragDockCandidate === nextActive) return;
@@ -573,9 +602,149 @@ export const dialogShellMethods = {
         this.dockDropPreview?.setAttribute('aria-hidden', nextActive ? 'false' : 'true');
     },
 
+    getRememberedFloatingSize() {
+        const rememberedRect = this._floatingRectBeforeDock;
+        if (rememberedRect?.width > 0 && rememberedRect?.height > 0) {
+            return {
+                width: rememberedRect.width,
+                height: rememberedRect.height
+            };
+        }
+
+        let storedSize;
+        try {
+            storedSize = JSON.parse(safeStorage.getItem('model_resolver_modal_size_before_fs') || 'null');
+        } catch {
+            storedSize = null;
+        }
+
+        return {
+            width: Number(storedSize?.w) || 1100,
+            height: Number(storedSize?.h) || 700
+        };
+    },
+
+    getDockedDragPreviewRect(clientX, clientY) {
+        const start = this._dockedDragStart;
+        if (!start) return null;
+
+        const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+        const width = Math.min(Math.max(start.width, 640), viewportWidth);
+        const height = Math.min(Math.max(start.height, 420), viewportHeight);
+        const maxLeft = Math.max(0, viewportWidth - width);
+        const maxTop = Math.max(0, viewportHeight - height);
+        const left = Math.max(0, Math.min(maxLeft, clientX - start.pointerOffsetLeft));
+        const top = Math.max(0, Math.min(maxTop, clientY - start.pointerOffsetTop));
+
+        return {
+            top: Math.round(top),
+            left: Math.round(left),
+            width: Math.round(width),
+            height: Math.round(height)
+        };
+    },
+
+    setUndockDropPreviewActive(active) {
+        const nextActive = Boolean(active && this.docked && !this.fullscreen);
+        if (this._dragUndockCandidate === nextActive) return;
+
+        this._dragUndockCandidate = nextActive;
+        this.undockDropPreview?.classList.toggle('is-active', nextActive);
+        this.undockDropPreview?.setAttribute('aria-hidden', nextActive ? 'false' : 'true');
+    },
+
+    startDockedDrag(e) {
+        const el = this.element;
+        if (!el || !this.docked || this.fullscreen) return;
+
+        e.preventDefault?.();
+        this.setDockDropPreviewActive(false);
+        this.setUndockDropPreviewActive(false);
+
+        const rect = el.getBoundingClientRect();
+        const size = this.getRememberedFloatingSize();
+        this._dockedDragStart = {
+            x: e.clientX,
+            y: e.clientY,
+            pointerOffsetLeft: Math.max(0, e.clientX - rect.left),
+            pointerOffsetTop: Math.max(0, e.clientY - rect.top),
+            width: size.width,
+            height: size.height
+        };
+        this._dockedDragPendingRect = this.getDockedDragPreviewRect(e.clientX, e.clientY);
+
+        if (this.undockDropPreview && this._dockedDragPendingRect) {
+            this.undockDropPreview.style.width = `${this._dockedDragPendingRect.width}px`;
+            this.undockDropPreview.style.height = `${this._dockedDragPendingRect.height}px`;
+            this.undockDropPreview.style.transform = `translate3d(${this._dockedDragPendingRect.left}px, ${this._dockedDragPendingRect.top}px, 0)`;
+            this.undockDropPreview.style.willChange = 'transform';
+        }
+
+        this._onMouseMove = (ev) => this.onDockedDrag(ev);
+        this._onMouseUp = () => this.endDockedDrag();
+        document.addEventListener('mousemove', this._onMouseMove);
+        document.addEventListener('mouseup', this._onMouseUp, { once: true });
+    },
+
+    onDockedDrag(e) {
+        const start = this._dockedDragStart;
+        if (!start) return;
+
+        const dx = e.clientX - start.x;
+        const dy = e.clientY - start.y;
+        if (!this._dragUndockCandidate && Math.hypot(dx, dy) < 5) return;
+
+        this._dockedDragPendingRect = this.getDockedDragPreviewRect(e.clientX, e.clientY);
+        this.setUndockDropPreviewActive(true);
+        if (this._dockedDragAnimationFrame || !this._dockedDragPendingRect) return;
+
+        this._dockedDragAnimationFrame = requestAnimationFrame(() => {
+            this._dockedDragAnimationFrame = null;
+            if (!this._dragUndockCandidate || !this._dockedDragPendingRect || !this.undockDropPreview) return;
+
+            const { left, top } = this._dockedDragPendingRect;
+            this.undockDropPreview.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+        });
+    },
+
+    endDockedDrag() {
+        if (!this._dockedDragStart) return;
+
+        const shouldUndock = this._dragUndockCandidate;
+        const finalRect = shouldUndock ? this._dockedDragPendingRect : null;
+        document.removeEventListener('mousemove', this._onMouseMove);
+        this.setUndockDropPreviewActive(false);
+
+        if (this._dockedDragAnimationFrame) {
+            cancelAnimationFrame(this._dockedDragAnimationFrame);
+            this._dockedDragAnimationFrame = null;
+        }
+
+        if (this.undockDropPreview) {
+            this.undockDropPreview.style.willChange = '';
+        }
+        this._dockedDragStart = null;
+        this._dockedDragPendingRect = null;
+
+        if (finalRect) {
+            this.undockToFloating({ persist: false });
+            this.element.style.width = `${finalRect.width}px`;
+            this.element.style.height = `${finalRect.height}px`;
+            this.element.style.top = `${finalRect.top}px`;
+            this.element.style.left = `${finalRect.left}px`;
+            this.element.style.transform = 'none';
+            this._floatingRectBeforeDock = { ...finalRect };
+            this.saveModalPosition(finalRect);
+        }
+    },
+
     // Begin window drag
     startDrag(e) {
-        if (this.docked) return;
+        if (this.docked) {
+            this.startDockedDrag(e);
+            return;
+        }
 
         try {
             const el = this.element;
@@ -587,6 +756,7 @@ export const dialogShellMethods = {
             }
             this._pendingDragDockRect = null;
             this.setDockDropPreviewActive(false);
+            this.updateDockDropPreviewWidth();
             const rect = el.getBoundingClientRect();
             const vw = window.innerWidth || document.documentElement.clientWidth || 0;
             const vh = window.innerHeight || document.documentElement.clientHeight || 0;

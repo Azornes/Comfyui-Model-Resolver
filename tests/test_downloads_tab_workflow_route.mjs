@@ -143,14 +143,19 @@ test('floating dialog drag stays on the compositor without forced style reads', 
   const startDrag = extractMethod(dialogShellMethodsSource, 'startDrag');
   const onDrag = eval(`(${extractMethod(dialogShellMethodsSource, 'onDrag')})`);
   const endDrag = extractMethod(dialogShellMethodsSource, 'endDrag');
+  const startDockedDrag = extractMethod(dialogShellMethodsSource, 'startDockedDrag');
+  const onDockedDrag = extractMethod(dialogShellMethodsSource, 'onDockedDrag');
+  const endDockedDrag = extractMethod(dialogShellMethodsSource, 'endDockedDrag');
 
   assert.doesNotMatch(isVisible, /getComputedStyle/);
   assert.match(isVisible, /style\.display\s*===\s*['"]flex['"]/);
   assert.match(saveModalPosition, /Number\(position\?\.top\)/);
   assert.match(saveModalPosition, /Number\.isFinite\(top\)\s*&&\s*Number\.isFinite\(left\)/);
   assert.match(startDrag, /preventDefault/);
+  assert.match(startDrag, /if \(this\.docked\)\s*\{\s*this\.startDockedDrag\(e\)/);
   assert.match(startDrag, /style\.willChange\s*=\s*['"]transform['"]/);
   assert.match(startDrag, /setDockDropPreviewActive\(false\)/);
+  assert.match(startDrag, /updateDockDropPreviewWidth\(\)/);
   assert.doesNotMatch(startDrag, /document\.body\.style\.userSelect/);
   assert.doesNotMatch(startDrag, /classList\.add\(['"]mr-is-window-dragging['"]\)/);
   assert.match(endDrag, /cancelAnimationFrame/);
@@ -163,6 +168,20 @@ test('floating dialog drag stays on the compositor without forced style reads', 
   assert.match(endDrag, /if \(shouldDock\)\s*\{\s*this\.dockToSidebar\(\)/);
   assert.doesNotMatch(resolverShellCssSource, /mr-is-window-dragging/);
   assert.match(resolverDialogSource, /mr-dock-drop-preview/);
+  assert.match(resolverDialogSource, /mr-undock-drop-preview/);
+  assert.match(startDockedDrag, /getRememberedFloatingSize\(\)/);
+  assert.match(onDockedDrag, /Math\.hypot\(dx,\s*dy\)\s*<\s*5/);
+  assert.match(onDockedDrag, /requestAnimationFrame/);
+  assert.match(endDockedDrag, /this\.undockToFloating\(\{\s*persist:\s*false\s*\}\)/);
+  assert.match(endDockedDrag, /this\._floatingRectBeforeDock\s*=\s*\{\s*\.\.\.finalRect\s*\}/);
+  assert.match(
+    resolverShellCssSource,
+    /\.mr-undock-drop-preview\s*\{[^}]*pointer-events:\s*none[^}]*visibility:\s*hidden[^}]*opacity:\s*0/s
+  );
+  assert.match(
+    modelResolverSource,
+    /renderSidebarPanel\(element\)[\s\S]*?rememberDockDropPreviewWidth\?\.\(element\)/
+  );
   assert.match(
     resolverShellCssSource,
     /\.mr-dock-drop-preview\s*\{[^}]*pointer-events:\s*none[^}]*visibility:\s*hidden[^}]*opacity:\s*0/s
@@ -201,6 +220,7 @@ test('floating dialog drag stays on the compositor without forced style reads', 
       _dragAnimationFrame: null,
       getDockSnapThreshold: () => 64,
       setDockDropPreviewActive: active => dockPreviewStates.push(active),
+      updateDockDropPreviewWidth: () => {},
     };
 
     onDrag.call(dialog, { clientX: 50, clientY: 70 });

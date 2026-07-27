@@ -95,6 +95,11 @@ export class ResolverManagerDialog extends ComfyDialog {
         this._dragLayerCleanupTimer = null;
         this._dragDockCandidate = false;
         this._pendingDragDockRect = null;
+        this._lastDockContainerWidth = null;
+        this._dockedDragStart = null;
+        this._dockedDragPendingRect = null;
+        this._dockedDragAnimationFrame = null;
+        this._dragUndockCandidate = false;
         this._analysisProgressToken = null;
         this._workflowDataLoadToken = null;
         this._loadedModelsLoadToken = null;
@@ -127,6 +132,16 @@ export class ResolverManagerDialog extends ComfyDialog {
                 <span class="mr-dock-drop-preview-icon">${getSvgIcon('internalLink')}</span>
                 <strong>Dock to sidebar</strong>
                 <span>Release to dock Model Resolver</span>
+            `
+        });
+
+        this.undockDropPreview = $el("div.mr-undock-drop-preview", {
+            parent: document.body,
+            ariaHidden: "true",
+            innerHTML: `
+                <span class="mr-dock-drop-preview-icon">${getSvgIcon('externalLink')}</span>
+                <strong>Undock to floating window</strong>
+                <span>Release to undock Model Resolver</span>
             `
         });
 
