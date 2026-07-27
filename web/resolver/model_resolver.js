@@ -523,10 +523,12 @@ export class ModelResolver {
         nodeType.prototype.onWidgetChanged = function() {
             const result = originalOnWidgetChanged?.apply(this, arguments);
             const widgetName = arguments[0];
-            if (!owner.dialog?.isWorkflowStrengthWidgetName?.(widgetName)) {
-                owner.scheduleNodeContextMenuAnalysis();
+            if (!owner.dialog?.isWorkflowRefreshSuppressed?.()) {
+                if (!owner.dialog?.isWorkflowStrengthWidgetName?.(widgetName)) {
+                    owner.scheduleNodeContextMenuAnalysis();
+                }
+                owner.dialog?.scheduleActiveWorkflowRefresh?.('node-widget-change');
             }
-            owner.dialog?.scheduleActiveWorkflowRefresh?.('node-widget-change');
             return result;
         };
         nodeType.prototype.__modelResolverContextMenuPatched = true;

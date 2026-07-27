@@ -4,6 +4,36 @@ import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
 import { getModelCardUrl } from "../utils/url_utils.js";
 export const workflowUpdateMethods = {
+    isWorkflowRefreshSuppressed() {
+        return Number(this._workflowRefreshSuppressionDepth || 0) > 0;
+    },
+
+    async runWithWorkflowRefreshSuppressed(callback) {
+        this._workflowRefreshSuppressionDepth = Number(this._workflowRefreshSuppressionDepth || 0) + 1;
+        try {
+            return await callback();
+        } finally {
+            this._workflowRefreshSuppressionDepth = Math.max(
+                0,
+                Number(this._workflowRefreshSuppressionDepth || 0) - 1
+            );
+        }
+    },
+
+    scheduleComfyModelCatalogRefreshAfterApply(workflow = null, resolutions = []) {
+        setTimeout(() => {
+            this.runWithWorkflowRefreshSuppressed(
+                () => this.refreshComfyModelCatalogAfterApply(workflow, resolutions)
+            ).then(refreshed => {
+                if (refreshed) {
+                    this.scheduleActiveWorkflowRefresh?.('node-widget-change');
+                }
+            }).catch(error => {
+                console.warn('Model Resolver: deferred ComfyUI model catalog refresh failed:', error);
+            });
+        }, 0);
+    },
+
     async refreshComfyModelCatalogAfterApply(workflow = null, resolutions = []) {
         if (!this.isAutoRefreshComfyModelsAfterApplyEnabled()) {
             return false;
@@ -278,42 +308,118 @@ export const workflowUpdateMethods = {
      * Update workflow in ComfyUI's UI/memory
      * Updates the current workflow in place instead of creating a new tab
      */
-    async updateWorkflowInComfyUI(workflow) {
-        if (!app || !app.graph) {
-            console.warn('Model Resolver: Could not update workflow - app or app.graph not available');
-            return;
+    cloneWorkflowWidgetValue(value) {
+        if (!value || typeof value !== 'object') return value;
+
+        if (typeof structuredClone === 'function') {
+            try {
+                return structuredClone(value);
+            } catch {
+                // Fall back to JSON for plain serialized workflow values.
+            }
         }
 
         try {
-            // Method 1: Try to directly update the current graph using configure
-            // This is the most direct way to update in place
-            if (app.graph && typeof app.graph.configure === 'function') {
-                app.graph.configure(workflow);
-                return;
-            }
-
-            // Method 2: Try deserialize to update the graph in place
-            if (app.graph && typeof app.graph.deserialize === 'function') {
-                app.graph.deserialize(workflow);
-                return;
-            }
-
-            // Method 3: Use loadGraphData with explicit parameters to update current tab
-            // The key is to NOT create a new workflow - pass null or undefined for the workflow parameter
-            // clean=false means don't clear the graph first
-            // restore_view=false means don't restore the viewport
-            // workflow=null means update current workflow instead of creating new one
-            if (app.loadGraphData) {
-                // Try with null as 4th parameter first
-                await app.loadGraphData(workflow, false, false, null);
-                return;
-            }
-
-            console.warn('Model Resolver: No method available to update workflow');
-        } catch (error) {
-            console.error('Model Resolver: Error updating workflow in ComfyUI:', error);
-            // Don't throw - allow the workflow update to continue even if UI update fails
-            // The backend has already updated the workflow data
+            return JSON.parse(JSON.stringify(value));
+        } catch {
+            return value;
         }
+    },
+
+    applyWorkflowResolutionValuesToGraph(workflow, resolutions = []) {
+        const graph = app?.graph;
+        if (!graph || !workflow || !Array.isArray(resolutions) || !resolutions.length) {
+            return false;
+        }
+
+        const graphNodes = Array.isArray(graph.nodes)
+            ? graph.nodes
+            : (Array.isArray(graph._nodes) ? graph._nodes : []);
+        const updates = new Map();
+
+        for (const resolution of resolutions) {
+            if (resolution?.is_top_level === false) return false;
+
+            const nodeId = String(resolution?.node_id ?? '');
+            const widgetIndex = Number(resolution?.widget_index);
+            if (!nodeId || !Number.isInteger(widgetIndex) || widgetIndex < 0) return false;
+
+            const workflowNode = this.findWorkflowNodeForResolution(workflow, resolution);
+            const graphNode = graph.getNodeById?.(resolution.node_id)
+                || graphNodes.find(node => String(node?.id) === nodeId);
+            const widget = graphNode?.widgets?.[widgetIndex];
+            if (!workflowNode || !graphNode || !widget || !Array.isArray(workflowNode.widgets_values)) {
+                return false;
+            }
+
+            updates.set(`${nodeId}:${widgetIndex}`, {
+                graphNode,
+                widget,
+                widgetIndex,
+                value: workflowNode.widgets_values[widgetIndex]
+            });
+        }
+
+        if (!updates.size) return false;
+
+        graph.beforeChange?.();
+        try {
+            for (const { graphNode, widget, widgetIndex, value } of updates.values()) {
+                const oldValue = widget.value;
+                const nextValue = this.cloneWorkflowWidgetValue(value);
+                widget.value = nextValue;
+
+                if (Array.isArray(graphNode.widgets_values)) {
+                    graphNode.widgets_values[widgetIndex] = this.cloneWorkflowWidgetValue(value);
+                }
+
+                try {
+                    graphNode.onWidgetChanged?.(widget.name, nextValue, oldValue, widget);
+                } catch (error) {
+                    console.warn('Model Resolver: node rejected a linked widget update:', error);
+                }
+            }
+        } finally {
+            graph.afterChange?.();
+        }
+
+        graph.setDirtyCanvas?.(true, true);
+        return true;
+    },
+
+    async updateWorkflowInComfyUI(workflow, resolutions = []) {
+        if (!app || !app.graph) {
+            console.warn('Model Resolver: Could not update workflow - app or app.graph not available');
+            return false;
+        }
+
+        return await this.runWithWorkflowRefreshSuppressed(async () => {
+            try {
+                if (this.applyWorkflowResolutionValuesToGraph(workflow, resolutions)) {
+                    return true;
+                }
+
+                if (typeof app.graph.configure === 'function') {
+                    app.graph.configure(workflow);
+                    return true;
+                }
+
+                if (typeof app.graph.deserialize === 'function') {
+                    app.graph.deserialize(workflow);
+                    return true;
+                }
+
+                if (app.loadGraphData) {
+                    await app.loadGraphData(workflow, false, false, null);
+                    return true;
+                }
+
+                console.warn('Model Resolver: No method available to update workflow');
+                return false;
+            } catch (error) {
+                console.error('Model Resolver: Error updating workflow in ComfyUI:', error);
+                return false;
+            }
+        });
     }
 };

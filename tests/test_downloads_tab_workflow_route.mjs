@@ -63,6 +63,10 @@ const lifecycleGraphMethodsSource = fs.readFileSync(
   path.join(projectRoot, 'web/resolver/shell/lifecycle_graph_methods.js'),
   'utf8'
 );
+const workflowUpdateMethodsSource = fs.readFileSync(
+  path.join(projectRoot, 'web/resolver/shell/workflow_update_methods.js'),
+  'utf8'
+);
 const renderFormatMethodsSource = fs.readFileSync(
   path.join(projectRoot, 'web/resolver/utils/render_format_methods.js'),
   'utf8'
@@ -561,6 +565,175 @@ test('strength widget changes skip proactive node context analysis', () => {
   assert.deepEqual(calls, [
     'dialog-refresh:node-widget-change',
     'dialog-refresh:node-widget-change',
+  ]);
+});
+
+test('internally applied widget changes suppress duplicate workflow analysis hooks', () => {
+  const configureNodeContextMenu = eval(`(${extractMethod(modelResolverSource, 'configureNodeContextMenu')})`);
+  const calls = [];
+  class NodeType {}
+  NodeType.prototype.onWidgetChanged = function(name) {
+    calls.push(`original-widget:${name}`);
+  };
+  const resolver = {
+    getResolvedModelsForNodeContextMenu: () => [],
+    scheduleNodeContextMenuAnalysis: () => calls.push('context-analysis'),
+    dialog: {
+      isWorkflowRefreshSuppressed: () => true,
+      isWorkflowStrengthWidgetName: () => false,
+      scheduleActiveWorkflowRefresh: reason => calls.push(`dialog-refresh:${reason}`),
+    },
+  };
+
+  configureNodeContextMenu.call(resolver, NodeType);
+  new NodeType().onWidgetChanged('ckpt_name');
+
+  assert.deepEqual(calls, ['original-widget:ckpt_name']);
+});
+
+test('Apply updates only linked top-level widgets without reconfiguring the graph', async () => {
+  const cloneWorkflowWidgetValue = eval(
+    `(${extractMethod(workflowUpdateMethodsSource, 'cloneWorkflowWidgetValue')})`
+  );
+  const findWorkflowNodeForResolution = eval(
+    `(${extractMethod(workflowUpdateMethodsSource, 'findWorkflowNodeForResolution')})`
+  );
+  const applyWorkflowResolutionValuesToGraph = eval(
+    `(${extractMethod(workflowUpdateMethodsSource, 'applyWorkflowResolutionValuesToGraph')})`
+  );
+  const isWorkflowRefreshSuppressed = eval(
+    `(${extractMethod(workflowUpdateMethodsSource, 'isWorkflowRefreshSuppressed')})`
+  );
+  const runWithWorkflowRefreshSuppressed = eval(
+    `(${extractMethod(workflowUpdateMethodsSource, 'runWithWorkflowRefreshSuppressed')})`
+  );
+  const updateWorkflowInComfyUI = eval(
+    `(${extractMethod(workflowUpdateMethodsSource, 'updateWorkflowInComfyUI')})`
+  );
+  const previousApp = globalThis.app;
+  const calls = [];
+  const graphNode = {
+    id: 7,
+    widgets: [{ name: 'ckpt_name', value: 'old.safetensors' }],
+    widgets_values: ['old.safetensors'],
+    onWidgetChanged(name, value, oldValue) {
+      calls.push(`widget:${name}:${oldValue}->${value}`);
+      calls.push(`suppressed:${dialog.isWorkflowRefreshSuppressed()}`);
+    },
+  };
+  globalThis.app = {
+    graph: {
+      nodes: [graphNode],
+      getNodeById: id => String(id) === '7' ? graphNode : null,
+      beforeChange: () => calls.push('before'),
+      afterChange: () => calls.push('after'),
+      setDirtyCanvas: () => calls.push('dirty'),
+      configure: () => calls.push('configure'),
+    },
+  };
+  const dialog = {
+    cloneWorkflowWidgetValue,
+    findWorkflowNodeForResolution,
+    applyWorkflowResolutionValuesToGraph,
+    isWorkflowRefreshSuppressed,
+    runWithWorkflowRefreshSuppressed,
+  };
+  const workflow = {
+    nodes: [{ id: 7, widgets_values: ['SD15\\realisticVision.safetensors'] }],
+  };
+  const resolutions = [{ node_id: 7, widget_index: 0, is_top_level: true }];
+
+  try {
+    const updated = await updateWorkflowInComfyUI.call(dialog, workflow, resolutions);
+
+    assert.equal(updated, true);
+    assert.equal(graphNode.widgets[0].value, 'SD15\\realisticVision.safetensors');
+    assert.equal(graphNode.widgets_values[0], 'SD15\\realisticVision.safetensors');
+    assert.equal(dialog.isWorkflowRefreshSuppressed(), false);
+    assert.deepEqual(calls, [
+      'before',
+      'widget:ckpt_name:old.safetensors->SD15\\realisticVision.safetensors',
+      'suppressed:true',
+      'after',
+      'dirty',
+    ]);
+  } finally {
+    if (previousApp === undefined) {
+      delete globalThis.app;
+    } else {
+      globalThis.app = previousApp;
+    }
+  }
+});
+
+test('Apply defers model catalog refresh until after the linking path returns', async () => {
+  const scheduleComfyModelCatalogRefreshAfterApply = eval(
+    `(${extractMethod(workflowUpdateMethodsSource, 'scheduleComfyModelCatalogRefreshAfterApply')})`
+  );
+  const runWithWorkflowRefreshSuppressed = eval(
+    `(${extractMethod(workflowUpdateMethodsSource, 'runWithWorkflowRefreshSuppressed')})`
+  );
+  const calls = [];
+  let finish;
+  const finished = new Promise(resolve => {
+    finish = resolve;
+  });
+  const dialog = {
+    runWithWorkflowRefreshSuppressed,
+    async refreshComfyModelCatalogAfterApply() {
+      calls.push('catalog');
+      return true;
+    },
+    scheduleActiveWorkflowRefresh(reason) {
+      calls.push(`refresh:${reason}`);
+      finish();
+    },
+  };
+
+  scheduleComfyModelCatalogRefreshAfterApply.call(dialog, { nodes: [] }, []);
+  assert.deepEqual(calls, []);
+
+  await finished;
+  assert.deepEqual(calls, ['catalog', 'refresh:node-widget-change']);
+});
+
+test('background Apply validation uses the Missing Models workflow signature', async () => {
+  const refreshAnalysisInBackground = eval(
+    `(${extractMethod(queueMethodsSource, 'refreshAnalysisInBackground')})`
+  );
+  const workflow = { nodes: [{ id: 7, widgets_values: ['linked.safetensors', 1.25] }] };
+  const returnedData = { missing_models: [], resolved_models: [{ node_id: 7 }] };
+  const calls = [];
+  const dialog = {
+    activeWorkflowSignature: 'different-full-signature',
+    activeMissingWorkflowSignature: 'linked-missing-signature',
+    cachedWorkflowSignature: null,
+    cachedAnalysisData: null,
+    activeTab: 'loaded',
+    getMissingWorkflowSignature(value) {
+      assert.equal(value, workflow);
+      return 'linked-missing-signature';
+    },
+    async fetchJson(url) {
+      calls.push(url);
+      return returnedData;
+    },
+    applyResolvedSelectionAliasesToAnalysisData(data) {
+      calls.push(data);
+    },
+    saveAnalysisCacheForActiveWorkflow() {
+      calls.push('save');
+    },
+  };
+
+  await refreshAnalysisInBackground.call(dialog, workflow);
+
+  assert.equal(dialog.cachedWorkflowSignature, 'linked-missing-signature');
+  assert.equal(dialog.cachedAnalysisData, returnedData);
+  assert.deepEqual(calls, [
+    '/model_resolver/analyze',
+    returnedData,
+    'save',
   ]);
 });
 

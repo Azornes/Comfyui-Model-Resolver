@@ -103,6 +103,7 @@ export class ResolverManagerDialog extends ComfyDialog {
         this._workflowRefreshGeneration = 0;
         this._workflowRefreshExpectedRoute = null;
         this._workflowRefreshPreviousSignature = null;
+        this._workflowRefreshSuppressionDepth = 0;
         this._comfyModelCatalogRefreshPromise = null;
         this._contextMenuSourceLookupCache = new Map();
         this._contextMenuSourceLookupToken = 0;

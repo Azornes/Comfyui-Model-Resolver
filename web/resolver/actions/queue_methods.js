@@ -2226,8 +2226,7 @@ export const queueMethods = {
             }, 'Apply resolutions');
             if (data.success) {
                 const optimisticData = this.getOptimisticAnalysisDataAfterApply(appliedSelections);
-                await this.refreshComfyModelCatalogAfterApply?.(data.workflow, applyResolutions);
-                await this.updateWorkflowInComfyUI(data.workflow);
+                await this.updateWorkflowInComfyUI(data.workflow, applyResolutions);
                 this.rememberAppliedResolvedSelections(appliedSelections);
 
                 const appliedKeys = new Set(appliedSelections.map(selection => this.getResolutionQueueKey(selection)));
@@ -2254,7 +2253,8 @@ export const queueMethods = {
                     ? ` (${applyResolutions.length} references)`
                     : '';
                 this.showNotification(`✓ Linked ${selectionCount} selection${selectionCount > 1 ? 's' : ''}${refText}`, 'success');
-                this.refreshAnalysisInBackground(data.workflow, this.getWorkflowSignature(data.workflow));
+                this.scheduleComfyModelCatalogRefreshAfterApply?.(data.workflow, applyResolutions);
+                this.refreshAnalysisInBackground(data.workflow, this.getMissingWorkflowSignature(data.workflow));
                 return data.workflow || null;
             } else {
                 this.showNotification('Failed to apply selections: ' + (data.error || 'Unknown error'), 'error');
@@ -2581,7 +2581,7 @@ export const queueMethods = {
         if (!data) return false;
 
         this.applyResolvedSelectionAliasesToAnalysisData(data);
-        const workflowSignature = this.getWorkflowSignature(workflow || this.getCurrentWorkflow());
+        const workflowSignature = this.getMissingWorkflowSignature(workflow || this.getCurrentWorkflow());
         if (workflowSignature) {
             this.cachedWorkflowSignature = workflowSignature;
         }
@@ -2602,7 +2602,7 @@ export const queueMethods = {
     async refreshAnalysisInBackground(workflow, expectedSignature = null) {
         if (!workflow) return;
 
-        const signature = expectedSignature || this.getWorkflowSignature(workflow);
+        const signature = expectedSignature || this.getMissingWorkflowSignature(workflow);
         try {
             const data = await this.fetchJson('/model_resolver/analyze', {
                 method: 'POST',
@@ -2610,7 +2610,7 @@ export const queueMethods = {
                 silent: true
             }, 'Background analysis');
 
-            if (signature && this.activeWorkflowSignature !== signature) return;
+            if (signature && this.activeMissingWorkflowSignature !== signature) return;
             this.applyResolvedSelectionAliasesToAnalysisData(data);
             this.cachedWorkflowSignature = signature || this.cachedWorkflowSignature;
             this.cachedAnalysisData = data;
