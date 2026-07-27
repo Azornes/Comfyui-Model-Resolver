@@ -28,7 +28,10 @@ from core.network_utils import (
     request_public_url,
     validate_public_http_url,
 )
-from core.path_utils import get_safe_metadata_sidecar_path, is_path_in_configured_model_roots
+from core.path_utils import (
+    get_safe_model_resolver_sidecar_path,
+    is_path_in_configured_model_roots,
+)
 
 
 class DummyFolderPaths:
@@ -133,15 +136,18 @@ class PathSecurityTests(unittest.TestCase):
         self.assertFalse(is_allowed_model_download_filename("payload.exe"))
         self.assertTrue(is_allowed_model_download_filename("model.safetensors"))
 
-    def test_metadata_path_is_always_canonical_sidecar(self):
+    def test_metadata_path_is_always_model_resolver_sidecar(self):
         with tempfile.TemporaryDirectory() as model_root:
             model_path = os.path.join(model_root, "model.safetensors")
             with open(model_path, "wb") as handle:
                 handle.write(b"model")
 
-            metadata_path = get_safe_metadata_sidecar_path(model_path)
+            metadata_path = get_safe_model_resolver_sidecar_path(model_path)
             self.assertEqual(
-                os.path.join(model_root, "model.metadata.json"),
+                os.path.join(
+                    model_root,
+                    "model.safetensors.modelresolver.json",
+                ),
                 metadata_path,
             )
             self.assertNotEqual(model_path, metadata_path)
@@ -272,7 +278,7 @@ class PathSecurityTests(unittest.TestCase):
                     "totalLength": "5",
                 },
             ), patch(
-                "core.downloader.write_lora_manager_metadata",
+                "core.downloader.write_model_resolver_metadata",
                 return_value="",
             ), patch(
                 "core.downloader._schedule_aria2_idle_stop",
@@ -451,8 +457,11 @@ class PathSecurityTests(unittest.TestCase):
                 ),
                 create=True,
             ), patch(
-                "core.downloader.write_lora_manager_metadata",
-                return_value=os.path.join(temp_dir, "model.metadata.json"),
+                "core.downloader.write_model_resolver_metadata",
+                return_value=os.path.join(
+                    temp_dir,
+                    "model.safetensors.modelresolver.json",
+                ),
             ):
                 result = _download_huggingface_xet(
                     "https://huggingface.co/example/model/resolve/main/model.safetensors",

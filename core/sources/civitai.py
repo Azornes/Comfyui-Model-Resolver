@@ -36,6 +36,7 @@ from ..path_utils import (
     get_filename_from_path,
     infer_safetensors_base_model,
     read_json_safe,
+    read_merged_model_metadata,
 )
 from ..progress import get_progress_reporter
 from ..type_utils import (
@@ -1595,12 +1596,19 @@ def _extract_model_images(version_info: Dict[str, Any]) -> List[Dict[str, Any]]:
     return images
 
 
-def _read_model_metadata(metadata_path: str) -> Optional[Dict[str, Any]]:
+def _read_model_metadata(
+    metadata_path: str,
+    model_path: str = "",
+) -> Optional[Dict[str, Any]]:
     """
     Read model metadata from a JSON file.
     Returns the metadata if found and valid, None otherwise.
     """
-    data = read_json_safe(metadata_path, None)
+    data = (
+        read_merged_model_metadata(model_path, None)
+        if model_path
+        else read_json_safe(metadata_path, None)
+    )
     if not isinstance(data, dict):
         return None
 
@@ -2017,7 +2025,7 @@ def get_model_info_for_file(
     log.info(f"Looking for metadata file, checked: {metadata_path}")
 
     if metadata_path:
-        metadata = _read_model_metadata(metadata_path)
+        metadata = _read_model_metadata(metadata_path, file_path)
         if metadata:
             log.info(f"Using metadata file for {file_path}")
             result = _metadata_to_model_info(metadata)

@@ -31,13 +31,16 @@ from .network_utils import (
     validate_public_http_url,
 )
 from .path_utils import (
+    MODEL_RESOLVER_METADATA_SCHEMA,
+    MODEL_RESOLVER_METADATA_SCHEMA_VERSION,
     calculate_file_sha256,
+    find_metadata_sidecar_path,
     get_comfy_root_path,
     get_filename_from_path,
-    get_metadata_sidecar_path,
+    get_model_resolver_sidecar_path,
     get_path_identity,
     is_path_within,
-    read_json_safe,
+    read_merged_model_metadata,
     write_json_atomic,
 )
 from .resolver import invalidate_local_hash_match_cache, normalize_sha256
@@ -431,12 +434,9 @@ def _extract_expected_sha256(metadata: Optional[Dict[str, Any]]) -> str:
 
 
 def read_completed_metadata_sha256(file_path: str) -> str:
-    """Read a trusted SHA256 from a LoRA Manager-compatible sidecar if available."""
-    metadata_path = get_metadata_sidecar_path(file_path)
-    if not os.path.exists(metadata_path):
-        return ""
-
-    payload = read_json_safe(metadata_path, {})
+    """Read a trusted SHA256 from merged local metadata when available."""
+    metadata_path = find_metadata_sidecar_path(file_path)
+    payload = read_merged_model_metadata(file_path, {})
     if not isinstance(payload, dict) or not payload:
         return ""
 
@@ -450,13 +450,13 @@ def read_completed_metadata_sha256(file_path: str) -> str:
     return normalize_sha256(payload.get("sha256") or payload.get("hash"))
 
 
-def build_lora_manager_metadata(
+def build_model_resolver_metadata(
     dest_path: str,
     metadata: Optional[Dict[str, Any]] = None,
     category: str = "",
     source_url: str = "",
 ) -> Dict[str, Any]:
-    """Build a LoRA Manager-compatible .metadata.json payload."""
+    """Build the LoRA Manager-shaped payload stored in our own sidecar."""
     source = _json_safe_metadata(metadata or {})
     if not isinstance(source, dict):
         source = {}
@@ -680,7 +680,11 @@ def build_lora_manager_metadata(
         size = _coerce_size(_first_present(source.get("size"), file_info.get("size")))
 
     payload: Dict[str, Any] = {
+        "schema": MODEL_RESOLVER_METADATA_SCHEMA,
+        "schema_version": MODEL_RESOLVER_METADATA_SCHEMA_VERSION,
+        "managed_by": MODEL_RESOLVER_METADATA_SCHEMA,
         "file_name": file_name,
+        "filename": basename,
         "model_name": str(model_name or file_name),
         "file_path": _normalise_metadata_file_path(dest_path),
         "size": size,
@@ -689,7 +693,6 @@ def build_lora_manager_metadata(
         "base_model": str(base_model or "Unknown"),
         "preview_url": str(preview_url or ""),
         "preview_nsfw_level": 0,
-        "notes": "",
         "from_civitai": bool(
             is_civitai_source
             and (metadata_source or model_id or version_id or civitai_payload)
@@ -698,10 +701,6 @@ def build_lora_manager_metadata(
         "tags": tags,
         "modelDescription": str(model_description or ""),
         "civitai_deleted": bool(source.get("is_deleted") or source.get("civitai_deleted")),
-        "favorite": False,
-        "exclude": False,
-        "db_checked": False,
-        "skip_metadata_refresh": False,
         "source": source_name,
         "details_source": source_name,
         "source_url": _strip_sensitive_url_params(str(source_page_url or "")),
@@ -722,6 +721,16 @@ def build_lora_manager_metadata(
         payload["sub_type"] = lora_manager_type
 
     return payload
+
+
+def build_lora_manager_metadata(
+    dest_path: str,
+    metadata: Optional[Dict[str, Any]] = None,
+    category: str = "",
+    source_url: str = "",
+) -> Dict[str, Any]:
+    """Compatibility alias for the Model Resolver metadata payload builder."""
+    return build_model_resolver_metadata(dest_path, metadata, category, source_url)
 
 
 def get_existing_model_preview_path(dest_path: str) -> str:
@@ -1082,18 +1091,18 @@ def create_model_preview(
     return existing_path
 
 
-def write_lora_manager_metadata(
+def write_model_resolver_metadata(
     dest_path: str,
     metadata: Optional[Dict[str, Any]] = None,
     category: str = "",
     source_url: str = "",
     create_preview: bool = False,
 ) -> Optional[str]:
-    """Write the LoRA Manager-compatible sidecar metadata next to a model file."""
-    metadata_path = get_metadata_sidecar_path(dest_path)
+    """Write metadata only to the sidecar owned by Model Resolver."""
+    metadata_path = get_model_resolver_sidecar_path(dest_path)
 
     try:
-        payload = build_lora_manager_metadata(dest_path, metadata, category, source_url)
+        payload = build_model_resolver_metadata(dest_path, metadata, category, source_url)
         if create_preview:
             preview_source = {
                 **payload,
@@ -1108,6 +1117,23 @@ def write_lora_manager_metadata(
     except Exception as e:
         log.warning(f"Could not save metadata sidecar for {dest_path}: {e}")
         return None
+
+
+def write_lora_manager_metadata(
+    dest_path: str,
+    metadata: Optional[Dict[str, Any]] = None,
+    category: str = "",
+    source_url: str = "",
+    create_preview: bool = False,
+) -> Optional[str]:
+    """Compatibility alias that writes only Model Resolver-owned metadata."""
+    return write_model_resolver_metadata(
+        dest_path,
+        metadata,
+        category,
+        source_url,
+        create_preview,
+    )
 
 
 
@@ -2018,7 +2044,7 @@ def _download_huggingface_xet(
             )
         os.replace(partial_path, dest_path)
 
-        metadata_path = write_lora_manager_metadata(
+        metadata_path = write_model_resolver_metadata(
             dest_path,
             metadata or {},
             category,
@@ -2229,7 +2255,7 @@ def download_file_with_aria2(
             if state == "complete":
                 completed_path = _resolve_aria2_completed_path(status, dest_path)
                 size = os.path.getsize(completed_path) if os.path.exists(completed_path) else downloaded
-                metadata_path = write_lora_manager_metadata(
+                metadata_path = write_model_resolver_metadata(
                     completed_path,
                     metadata or {},
                     category,
@@ -2544,7 +2570,7 @@ def download_file(
 
         result["success"] = True
         result["size"] = downloaded
-        metadata_path = write_lora_manager_metadata(
+        metadata_path = write_model_resolver_metadata(
             dest_path,
             metadata or {},
             category,
@@ -2740,7 +2766,7 @@ def download_model(
                 # Refresh the sidecar even when it already exists. The selected
                 # source may be more authoritative than metadata left by an
                 # earlier fuzzy search or manual download attempt.
-                metadata_path = write_lora_manager_metadata(
+                metadata_path = write_model_resolver_metadata(
                     dest_path,
                     metadata or {},
                     category,

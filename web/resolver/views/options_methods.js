@@ -841,6 +841,16 @@ export const optionsMethods = {
                                             </div>
                                             <div class="mr-options-number-row mr-options-wide-row">
                                                 <div class="mr-options-number-copy">
+                                                    <span class="mr-options-label">Metadata source</span>
+                                                    <span id="mr-options-metadata-build-mode-hint" class="mr-options-db-message mr-options-inline-hint">Calculate a new SHA-256 directly from each model file.</span>
+                                                </div>
+                                                <select id="mr-options-metadata-build-mode" class="mr-options-input">
+                                                    <option value="calculate_fresh">Calculate SHA-256 from scratch</option>
+                                                    <option value="import_existing">Use existing plugin metadata</option>
+                                                </select>
+                                            </div>
+                                            <div class="mr-options-number-row mr-options-wide-row">
+                                                <div class="mr-options-number-copy">
                                                     <span class="mr-options-label">Concurrent hash workers</span>
                                                     <span id="mr-options-metadata-build-worker-hint" class="mr-options-db-message mr-options-inline-hint">Loading CPU details...</span>
                                                 </div>
@@ -1000,6 +1010,8 @@ export const optionsMethods = {
         const metadataBuildWorkersEl = this.contentElement.querySelector('#mr-options-metadata-build-workers');
         const metadataBuildWorkerInput = this.contentElement.querySelector('#mr-options-metadata-build-worker-count');
         const metadataBuildWorkerHint = this.contentElement.querySelector('#mr-options-metadata-build-worker-hint');
+        const metadataBuildModeSelect = this.contentElement.querySelector('#mr-options-metadata-build-mode');
+        const metadataBuildModeHint = this.contentElement.querySelector('#mr-options-metadata-build-mode-hint');
         const metadataBuildScannedEl = this.contentElement.querySelector('#mr-options-metadata-build-scanned');
         const metadataBuildCreatedEl = this.contentElement.querySelector('#mr-options-metadata-build-created');
         const metadataBuildUpdatedEl = this.contentElement.querySelector('#mr-options-metadata-build-updated');
@@ -1384,7 +1396,11 @@ export const optionsMethods = {
             }
         };
 
-        const setMetadataBuildBusy = (busy) => setControlsBusyState(metadataBuildStartBtn, busy, metadataBuildCancelBtn);
+        const setMetadataBuildBusy = (busy) => {
+            setControlsBusyState(metadataBuildStartBtn, busy, metadataBuildCancelBtn);
+            if (metadataBuildWorkerInput) metadataBuildWorkerInput.disabled = busy;
+            if (metadataBuildModeSelect) metadataBuildModeSelect.disabled = busy;
+        };
 
         const setMetadataBuildStatus = (text, mode = '') => setElementStatusText(metadataBuildStatus, text, mode);
 
@@ -1511,6 +1527,14 @@ export const optionsMethods = {
             return workerCount;
         };
 
+        const updateMetadataBuildModeHint = () => {
+            if (!metadataBuildModeHint) return;
+            const metadataMode = metadataBuildModeSelect?.value || 'calculate_fresh';
+            metadataBuildModeHint.textContent = metadataMode === 'import_existing'
+                ? 'Read metadata from other plugins without modifying it. Reuse a completed SHA-256 when available; otherwise calculate it.'
+                : 'Ignore metadata from other plugins and calculate a new SHA-256 directly from each model file.';
+        };
+
         const renderMetadataBuildCapabilities = (data = {}) => {
             this.metadataBuildCapabilities = data && typeof data === 'object' ? data : {};
             const cpuCount = Number(this.metadataBuildCapabilities.cpu_count || navigator.hardwareConcurrency || 1);
@@ -1524,6 +1548,20 @@ export const optionsMethods = {
             if (metadataBuildWorkerHint) {
                 metadataBuildWorkerHint.textContent = `CPU cores: ${cpuCount.toLocaleString()}. Max workers: ${maxWorkers.toLocaleString()}.`;
             }
+            const supportedModes = Array.isArray(this.metadataBuildCapabilities.metadata_modes)
+                ? this.metadataBuildCapabilities.metadata_modes.map((item) => item?.value).filter(Boolean)
+                : [];
+            const defaultMode = this.metadataBuildCapabilities.default_metadata_mode || 'calculate_fresh';
+            if (
+                metadataBuildModeSelect
+                && (
+                    !metadataBuildModeSelect.dataset.userEdited
+                    || (supportedModes.length > 0 && !supportedModes.includes(metadataBuildModeSelect.value))
+                )
+            ) {
+                metadataBuildModeSelect.value = defaultMode;
+            }
+            updateMetadataBuildModeHint();
             if (metadataBuildWorkersEl) metadataBuildWorkersEl.textContent = normalizeMetadataBuildWorkerCount().toLocaleString();
         };
 
@@ -2099,18 +2137,23 @@ export const optionsMethods = {
             setMetadataBuildStatus('Preparing local metadata build...', 'is-pending');
             try {
                 const workerCount = normalizeMetadataBuildWorkerCount();
+                const metadataMode = metadataBuildModeSelect?.value || 'calculate_fresh';
+                const modeLabel = metadataMode === 'import_existing'
+                    ? 'using existing plugin metadata'
+                    : 'calculating SHA-256 from scratch';
                 const start = await this.fetchJson('/model_resolver/metadata-build/start', {
                     method: 'POST',
                     body: JSON.stringify({
                         force_rescan: true,
-                        worker_count: workerCount
+                        worker_count: workerCount,
+                        metadata_mode: metadataMode
                     })
                 }, 'Start metadata build');
                 if (!start?.progress_id) {
                     throw new Error('Metadata build did not return a progress id.');
                 }
                 this.metadataBuildProgressId = start.progress_id;
-                setMetadataBuildStatus('Building local metadata...', 'is-pending');
+                setMetadataBuildStatus(`Building local metadata, ${modeLabel}...`, 'is-pending');
                 pollMetadataBuildProgress();
             } catch (error) {
                 this.metadataBuildProgressId = '';
@@ -3276,6 +3319,13 @@ export const optionsMethods = {
                 if (metadataBuildWorkersEl && !this.metadataBuildProgressId) {
                     metadataBuildWorkersEl.textContent = workerCount.toLocaleString();
                 }
+            });
+        }
+
+        if (metadataBuildModeSelect) {
+            metadataBuildModeSelect.addEventListener('change', () => {
+                metadataBuildModeSelect.dataset.userEdited = 'true';
+                updateMetadataBuildModeHint();
             });
         }
 

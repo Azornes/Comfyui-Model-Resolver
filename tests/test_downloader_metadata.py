@@ -12,10 +12,10 @@ from core import downloader
 from core.downloader import (
     build_lora_manager_metadata,
     download_model,
-    get_metadata_sidecar_path,
     get_progress,
     write_lora_manager_metadata,
 )
+from core.path_utils import get_model_resolver_sidecar_path
 
 
 class DownloaderMetadataSidecarTests(unittest.TestCase):
@@ -85,6 +85,13 @@ class DownloaderMetadataSidecarTests(unittest.TestCase):
             model_path = os.path.join(tmpdir, "example.safetensors")
             with open(model_path, "wb") as handle:
                 handle.write(b"abc")
+            external_metadata_path = os.path.join(tmpdir, "example.metadata.json")
+            external_payload = {
+                "notes": "user note",
+                "favorite": True,
+            }
+            with open(external_metadata_path, "w", encoding="utf-8") as handle:
+                json.dump(external_payload, handle)
 
             metadata_path = write_lora_manager_metadata(
                 model_path,
@@ -114,10 +121,20 @@ class DownloaderMetadataSidecarTests(unittest.TestCase):
                 source_url="https://civitai.com/api/download/models/456?token=secret",
             )
 
-            self.assertEqual(get_metadata_sidecar_path(model_path), metadata_path)
+            self.assertEqual(
+                get_model_resolver_sidecar_path(model_path),
+                metadata_path,
+            )
             with open(metadata_path, "r", encoding="utf-8") as handle:
                 payload = json.load(handle)
+            with open(external_metadata_path, "r", encoding="utf-8") as handle:
+                external_after = json.load(handle)
 
+        self.assertEqual(external_payload, external_after)
+        self.assertEqual("comfyui-model-resolver", payload["managed_by"])
+        self.assertEqual(1, payload["schema_version"])
+        self.assertNotIn("notes", payload)
+        self.assertNotIn("favorite", payload)
         self.assertEqual("example", payload["file_name"])
         self.assertEqual("Example Model", payload["model_name"])
         self.assertEqual(3, payload["size"])
@@ -386,7 +403,7 @@ class DownloaderMetadataSidecarTests(unittest.TestCase):
             model_path = os.path.join(tmpdir, "existing.safetensors")
             with open(model_path, "wb") as handle:
                 handle.write(content)
-            metadata_path = get_metadata_sidecar_path(model_path)
+            metadata_path = get_model_resolver_sidecar_path(model_path)
             with open(metadata_path, "w", encoding="utf-8") as handle:
                 json.dump(
                     {
@@ -432,7 +449,11 @@ class DownloaderMetadataSidecarTests(unittest.TestCase):
             model_path = os.path.join(tmpdir, "existing.safetensors")
             with open(model_path, "wb") as handle:
                 handle.write(b"large local file")
-            with open(get_metadata_sidecar_path(model_path), "w", encoding="utf-8") as handle:
+            with open(
+                get_model_resolver_sidecar_path(model_path),
+                "w",
+                encoding="utf-8",
+            ) as handle:
                 json.dump(
                     {
                         "sha256": expected_sha256,

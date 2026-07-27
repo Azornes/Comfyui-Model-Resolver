@@ -21,8 +21,10 @@ from core.path_utils import (
     extract_safetensors_header_sha256,
     extract_safetensors_header_metadata,
     find_metadata_sidecar_path,
+    get_model_resolver_sidecar_path,
     infer_safetensors_base_model,
     read_json_safe,
+    read_merged_model_metadata,
     write_json_atomic,
 )
 
@@ -1069,6 +1071,57 @@ class UnifiedHelpersTests(unittest.TestCase):
 
         path = find_metadata_sidecar_path("e:/models/ae.metadata.json")
         self.assertEqual(path, "")
+
+    def test_merges_external_user_fields_with_model_resolver_metadata(self):
+        import json
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_path = os.path.join(tmpdir, "layered.safetensors")
+            with open(model_path, "wb") as handle:
+                handle.write(b"model")
+
+            external_path = os.path.join(tmpdir, "layered.metadata.json")
+            external_payload = {
+                "notes": "manual note",
+                "favorite": True,
+                "description": "manual description",
+                "tags": ["external", "shared"],
+                "trained_words": ["manual trigger"],
+                "sha256": "a" * 64,
+            }
+            with open(external_path, "w", encoding="utf-8") as handle:
+                json.dump(external_payload, handle)
+
+            resolver_path = get_model_resolver_sidecar_path(model_path)
+            resolver_payload = {
+                "managed_by": "comfyui-model-resolver",
+                "notes": "must not replace external note",
+                "description": "remote description",
+                "tags": ["resolver", "shared"],
+                "trained_words": ["remote trigger"],
+                "sha256": "b" * 64,
+            }
+            with open(resolver_path, "w", encoding="utf-8") as handle:
+                json.dump(resolver_payload, handle)
+
+            merged = read_merged_model_metadata(model_path, {})
+            selected_path = find_metadata_sidecar_path(model_path)
+            with open(external_path, "r", encoding="utf-8") as handle:
+                external_after = json.load(handle)
+
+        self.assertEqual(resolver_path, selected_path)
+        self.assertEqual(external_payload, external_after)
+        self.assertEqual("b" * 64, merged["sha256"])
+        self.assertEqual("manual note", merged["notes"])
+        self.assertTrue(merged["favorite"])
+        self.assertEqual("manual description", merged["description"])
+        self.assertEqual(["external", "shared", "resolver"], merged["tags"])
+        self.assertEqual(
+            ["manual trigger", "remote trigger"],
+            merged["trained_words"],
+        )
 
     def test_normalize_category_to_model_type(self):
         self.assertEqual(normalize_category_to_model_type("checkpoints"), "checkpoint")

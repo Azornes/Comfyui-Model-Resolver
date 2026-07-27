@@ -47,7 +47,7 @@ from .path_utils import (
     find_metadata_sidecar_path,
     get_filename_from_path,
     get_path_identity,
-    read_json_safe,
+    read_merged_model_metadata,
 )
 
 # Imported from .matcher
@@ -204,7 +204,7 @@ def _build_local_hash_match_cache(
         if not metadata_path:
             continue
 
-        metadata = read_json_safe(metadata_path, None)
+        metadata = read_merged_model_metadata(model_path, None)
         if not isinstance(metadata, dict) or not metadata:
             log.debug(f"Could not read metadata sidecar for hash match: {metadata_path}")
             continue
@@ -700,7 +700,7 @@ def get_local_model_hash_metadata(
     metadata_path = find_metadata_sidecar_path(normalized_path)
     last_hash_status = ""
     if metadata_path:
-        metadata = read_json_safe(metadata_path, None)
+        metadata = read_merged_model_metadata(normalized_path, None)
         if isinstance(metadata, dict) and metadata:
             last_hash_status = str(metadata.get("hash_status") or "").strip()
             hashes = _extract_model_sha256_from_metadata(metadata, model_info)

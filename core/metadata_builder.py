@@ -14,13 +14,15 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .log_system import create_module_logger
 from .path_utils import (
+    MODEL_RESOLVER_METADATA_SCHEMA,
+    MODEL_RESOLVER_METADATA_SCHEMA_VERSION,
     HashCalculationCancelled,
     _metadata_sidecar_paths,  # noqa: F401
     calculate_file_sha256,
     extract_safetensors_header_metadata,
+    find_external_metadata_sidecar_path,
     get_filename_from_path,
-    get_metadata_sidecar_path,
-    get_or_build_model_sidecar_info,
+    get_model_resolver_sidecar_path,
     get_path_identity,
     read_json_safe,
     read_safetensors_header,
@@ -45,11 +47,18 @@ LOCAL_HEADER_MAX_CHARS = 20000
 MIN_METADATA_BUILD_WORKERS = 1
 MAX_METADATA_BUILD_WORKERS = 64
 DEFAULT_METADATA_BUILD_WORKER_LIMIT = 4
+METADATA_BUILD_MODE_CALCULATE_FRESH = "calculate_fresh"
+METADATA_BUILD_MODE_IMPORT_EXISTING = "import_existing"
+METADATA_BUILD_MODES = {
+    METADATA_BUILD_MODE_CALCULATE_FRESH,
+    METADATA_BUILD_MODE_IMPORT_EXISTING,
+}
 
 
-def _select_metadata_path(model_path: str) -> Tuple[str, bool]:
-    sidecar_path, exists, _ = get_or_build_model_sidecar_info(model_path)
-    return sidecar_path, exists
+def _select_metadata_path(model_path: str) -> Tuple[str, str, bool]:
+    target_path = get_model_resolver_sidecar_path(model_path)
+    target_exists = os.path.isfile(target_path)
+    return target_path, target_path if target_exists else "", target_exists
 
 
 def _is_model_file_path(path: str) -> bool:
@@ -123,7 +132,66 @@ def get_metadata_build_capabilities() -> Dict[str, Any]:
         ),
         "min_worker_count": MIN_METADATA_BUILD_WORKERS,
         "max_worker_count": MAX_METADATA_BUILD_WORKERS,
+        "default_metadata_mode": METADATA_BUILD_MODE_CALCULATE_FRESH,
+        "metadata_modes": [
+            {
+                "value": METADATA_BUILD_MODE_CALCULATE_FRESH,
+                "label": "Calculate SHA-256 from scratch",
+            },
+            {
+                "value": METADATA_BUILD_MODE_IMPORT_EXISTING,
+                "label": "Use existing plugin metadata",
+            },
+        ],
     }
+
+
+def normalize_metadata_build_mode(value: Any) -> str:
+    """Return a supported metadata builder source mode."""
+    normalized = str(value or "").strip().lower()
+    if normalized in METADATA_BUILD_MODES:
+        return normalized
+    return METADATA_BUILD_MODE_CALCULATE_FRESH
+
+
+def _trusted_external_sha256(metadata: Dict[str, Any]) -> str:
+    hash_status = str(metadata.get("hash_status") or "").strip().lower()
+    if hash_status and hash_status != "completed":
+        return ""
+    return normalize_sha256(extract_sha256_from_metadata(metadata))
+
+
+def _build_external_metadata_seed(
+    model_path: str,
+    model: Dict[str, Any],
+) -> Tuple[Dict[str, Any], str, str]:
+    external_path = find_external_metadata_sidecar_path(model_path)
+    if not external_path:
+        return {}, "", ""
+
+    external_raw = read_json_safe(external_path, {})
+    if not isinstance(external_raw, dict) or not external_raw:
+        return {}, external_path, ""
+
+    from .downloader import build_model_resolver_metadata
+
+    trusted_sha256 = _trusted_external_sha256(external_raw)
+    seed = build_model_resolver_metadata(
+        model_path,
+        external_raw,
+        str(model.get("category") or ""),
+    )
+    if trusted_sha256:
+        seed["sha256"] = trusted_sha256
+        seed["hash_status"] = "completed"
+    else:
+        seed.pop("sha256", None)
+        seed.pop("hash", None)
+        seed.pop("hashes", None)
+        seed["hash_status"] = "pending"
+    seed["imported_from"] = external_path.replace(os.sep, "/")
+    seed["metadata_build_mode"] = METADATA_BUILD_MODE_IMPORT_EXISTING
+    return seed, external_path, trusted_sha256
 
 
 def _limited_local_value(value: Any, *, depth: int = 0) -> Any:
@@ -258,6 +326,13 @@ def _build_local_metadata_payload(
         if _set_if_missing(payload, key, value):
             changed_fields.append(key)
 
+    mark_set("schema", MODEL_RESOLVER_METADATA_SCHEMA, force=True)
+    mark_set(
+        "schema_version",
+        MODEL_RESOLVER_METADATA_SCHEMA_VERSION,
+        force=True,
+    )
+    mark_set("managed_by", MODEL_RESOLVER_METADATA_SCHEMA, force=True)
     mark_set("file_name", stem, force=_is_empty_value(payload.get("file_name")))
     fill("filename", filename)
     fill("model_name", header_metadata.get("model_name") or stem)
@@ -355,11 +430,6 @@ def _build_local_metadata_payload(
         mark_set("local_metadata_available", True, force=True)
 
     fill("preview_nsfw_level", 0)
-    fill("notes", "")
-    fill("favorite", False)
-    fill("exclude", False)
-    fill("db_checked", False)
-    fill("skip_metadata_refresh", False)
     mark_set("metadata_path", _normalise_metadata_file_path(metadata_path), force=True)
     return payload, sorted(set(changed_fields))
 
@@ -455,7 +525,7 @@ def _history_items_for_model(model: Dict[str, Any], result: Dict[str, Any]) -> L
 
     filename = get_filename_from_path(str(model.get("path") or "")) or str(model.get("filename") or "Model")
     model_path = str(model.get("path") or "").strip()
-    metadata_path = get_metadata_sidecar_path(model_path) if model_path else ""
+    metadata_path = get_model_resolver_sidecar_path(model_path) if model_path else ""
     base_item = {
         "filename": filename,
         "relative_path": model.get("relative_path") or filename,
@@ -492,6 +562,7 @@ def _build_missing_local_metadata_parallel(
     *,
     worker_count: int,
     cpu_count: int,
+    metadata_mode: str,
     progress_callback: Optional[ProgressCallback] = None,
     is_cancelled: Optional[CancelCallback] = None,
 ) -> Dict[str, Any]:
@@ -579,6 +650,7 @@ def _build_missing_local_metadata_parallel(
             models=[model],
             force_rescan=False,
             worker_count=1,
+            metadata_mode=metadata_mode,
             progress_callback=child_progress,
             is_cancelled=is_cancelled,
         )
@@ -617,7 +689,7 @@ def _build_missing_local_metadata_parallel(
                             "filename": filename,
                             "relative_path": model.get("relative_path") or filename,
                             "model_path": model_path,
-                            "metadata_path": get_metadata_sidecar_path(model_path),
+                            "metadata_path": get_model_resolver_sidecar_path(model_path),
                             "message": str(exc) or "Metadata build failed.",
                         }
                     ],
@@ -660,6 +732,7 @@ def _build_missing_local_metadata_parallel(
         worker_count=worker_count,
         cpu_count=cpu_count,
     )
+    result["metadata_mode"] = metadata_mode
     _emit(
         progress_callback,
         {
@@ -686,15 +759,19 @@ def build_missing_local_metadata(
     *,
     force_rescan: bool = True,
     worker_count: Optional[int] = None,
+    metadata_mode: str = METADATA_BUILD_MODE_CALCULATE_FRESH,
     progress_callback: Optional[ProgressCallback] = None,
     is_cancelled: Optional[CancelCallback] = None,
 ) -> Dict[str, Any]:
     """
     Create missing sidecar metadata files and add missing SHA256 values.
 
-    Existing sidecars are preserved and only filled with local technical values
-    when missing. No remote metadata providers are used.
+    Existing Model Resolver sidecars are preserved and filled with local
+    technical values when missing. External sidecars are never modified.
+    No remote metadata providers are used.
     """
+    metadata_mode = normalize_metadata_build_mode(metadata_mode)
+
     if models is None:
         from .scanner import get_model_files
 
@@ -712,6 +789,7 @@ def build_missing_local_metadata(
             model_items,
             worker_count=resolved_worker_count,
             cpu_count=cpu_count,
+            metadata_mode=metadata_mode,
             progress_callback=progress_callback,
             is_cancelled=is_cancelled,
         )
@@ -778,7 +856,7 @@ def build_missing_local_metadata(
         model_path = str(model.get("path") or "").strip()
         filename = get_filename_from_path(model_path)
         relative_path = model.get("relative_path") or filename
-        metadata_path, metadata_exists = _select_metadata_path(model_path)
+        metadata_path, existing_metadata_path, metadata_exists = _select_metadata_path(model_path)
         scanned_models += 1
 
         _emit(
@@ -797,12 +875,18 @@ def build_missing_local_metadata(
 
         try:
             file_size = os.path.getsize(model_path)
-            existing_raw = read_json_safe(metadata_path, {}) if metadata_exists else {}
+            existing_raw = (
+                read_json_safe(existing_metadata_path, {})
+                if existing_metadata_path
+                else {}
+            )
             if not isinstance(existing_raw, dict):
                 existing_raw = {}
                 invalid_metadata += 1
 
-            existing_sha256 = extract_sha256_from_metadata(existing_raw)
+            existing_sha256 = normalize_sha256(
+                extract_sha256_from_metadata(existing_raw)
+            )
             if metadata_exists and existing_sha256:
                 skipped_complete += 1
                 history_item = {
@@ -816,8 +900,9 @@ def build_missing_local_metadata(
                     "size": file_size,
                     "size_label": format_size_bytes(file_size),
                     "sha256": existing_sha256,
-                    "sha256_source": "existing_metadata",
-                    "message": "Already had SHA256",
+                        "sha256_source": "existing_metadata",
+                        "metadata_mode": metadata_mode,
+                        "message": "Already had SHA256",
                 }
                 history.append(history_item)
                 _emit(
@@ -842,13 +927,38 @@ def build_missing_local_metadata(
                 )
                 continue
 
+            external_metadata_path = ""
+            external_sha256 = ""
+            if metadata_mode == METADATA_BUILD_MODE_IMPORT_EXISTING:
+                (
+                    external_seed,
+                    external_metadata_path,
+                    external_sha256,
+                ) = _build_external_metadata_seed(model_path, model)
+                if external_seed:
+                    existing_raw = {**external_seed, **existing_raw}
+                    existing_sha256 = normalize_sha256(
+                        extract_sha256_from_metadata(existing_raw)
+                    )
+
             header_metadata = extract_safetensors_header_metadata(model_path)
             header_snapshot = extract_local_header_snapshot(model_path)
             if header_metadata or header_snapshot:
                 header_metadata_count += 1
 
-            sha256 = existing_sha256 or normalize_sha256(header_metadata.get("sha256"))
-            sha256_source = "existing_metadata" if existing_sha256 else ""
+            allow_header_sha256 = (
+                metadata_mode != METADATA_BUILD_MODE_CALCULATE_FRESH
+            )
+            header_sha256 = (
+                normalize_sha256(header_metadata.get("sha256"))
+                if allow_header_sha256
+                else ""
+            )
+            sha256 = existing_sha256 or header_sha256
+            if external_sha256 and sha256 == external_sha256:
+                sha256_source = "external_metadata"
+            else:
+                sha256_source = "existing_metadata" if existing_sha256 else ""
             if sha256 and not existing_sha256:
                 sha256_source = str(header_metadata.get("sha256_source") or "safetensors_header")
                 header_hashes += 1
@@ -905,7 +1015,7 @@ def build_missing_local_metadata(
                     chunk_size=1024 * 1024 * 4,
                     on_progress=on_hash_progress,
                     is_cancelled=is_cancelled,
-                    use_safetensors_header=True,
+                    use_safetensors_header=allow_header_sha256,
                     on_hash_source=on_hash_source,
                 ) or ""
                 sha256 = normalize_sha256(sha256)
@@ -940,6 +1050,9 @@ def build_missing_local_metadata(
                 sha256=sha256,
                 sha256_source=sha256_source,
             )
+            if external_metadata_path:
+                payload["imported_from"] = external_metadata_path.replace(os.sep, "/")
+            payload["metadata_build_mode"] = metadata_mode
 
             should_write = not metadata_exists or bool(changed_fields) or not existing_sha256
             history_item = None
@@ -962,6 +1075,8 @@ def build_missing_local_metadata(
                     "size_label": format_size_bytes(file_size),
                     "sha256": sha256,
                     "sha256_source": sha256_source,
+                    "metadata_mode": metadata_mode,
+                    "imported_from": external_metadata_path,
                     "changed_fields": changed_fields,
                 }
                 updated.append(history_item)
@@ -980,6 +1095,7 @@ def build_missing_local_metadata(
                     "size_label": format_size_bytes(file_size),
                     "sha256": sha256,
                     "sha256_source": sha256_source,
+                    "metadata_mode": metadata_mode,
                     "message": "No changes needed",
                 }
                 history.append(history_item)
@@ -1091,6 +1207,7 @@ def build_missing_local_metadata(
         "updated_count": len(updated),
         "history": history,
         "history_count": len(history),
+        "metadata_mode": metadata_mode,
     }
     _emit(
         progress_callback,

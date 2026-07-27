@@ -13,6 +13,26 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 _log = None
 
+MODEL_RESOLVER_METADATA_SUFFIX = ".modelresolver.json"
+MODEL_RESOLVER_METADATA_SCHEMA = "comfyui-model-resolver"
+MODEL_RESOLVER_METADATA_SCHEMA_VERSION = 1
+
+_EXTERNAL_METADATA_PREFERRED_FIELDS = {
+    "notes",
+    "favorite",
+    "exclude",
+    "skip_metadata_refresh",
+    "db_checked",
+    "description",
+    "model_description",
+    "modelDescription",
+}
+_MERGED_METADATA_LIST_FIELDS = {
+    "tags",
+    "trained_words",
+    "trainedWords",
+}
+
 
 def _get_log():
     """Return a lazily-created module logger (avoids circular imports)."""
@@ -351,11 +371,11 @@ def get_or_build_model_sidecar_info(
     if not model_path:
         return "", False, None
 
-    found_path = find_metadata_sidecar_path(model_path)
+    found_path = find_model_resolver_sidecar_path(model_path)
     if found_path and os.path.isfile(found_path):
         return found_path, True, None
 
-    default_sidecar = get_metadata_sidecar_path(model_path)
+    default_sidecar = get_model_resolver_sidecar_path(model_path)
     header_json = None
     if read_header_if_missing and str(model_path).lower().endswith(".safetensors"):
         header_json = read_safetensors_header(model_path)
@@ -1053,11 +1073,10 @@ def get_comfy_root_path(folder_paths_module: Optional[Any] = None) -> str:
     return ""
 
 
-def find_metadata_sidecar_path(model_path: str) -> str:
+def find_external_metadata_sidecar_path(model_path: str) -> str:
     """
-    Find an existing metadata sidecar file (for example .metadata.json,
-    .civitai.info, or .json) associated with a model file and return its
-    absolute path. Returns an empty string when no sidecar exists.
+    Find metadata owned by another tool (for example .metadata.json,
+    .civitai.info, or .json). These files are read-only to Model Resolver.
     """
     if not model_path:
         return ""
@@ -1068,16 +1087,30 @@ def find_metadata_sidecar_path(model_path: str) -> str:
 
     # Base name without extension
     base_name = filename.rsplit(".", 1)[0] if "." in filename else filename
+    has_stem_collision = has_model_sidecar_name_collision(model_path)
+    exact_metadata_path = os.path.join(directory, filename + ".metadata.json")
+    prefer_exact_names = has_stem_collision or os.path.isfile(exact_metadata_path)
 
     # Name patterns based on civitai.py and resolver.py.
-    possible_names = [
-        base_name + ".metadata.json",
+    exact_names = [
         filename + ".metadata.json",
-        base_name + ".civitai.info",
         filename + ".civitai.info",
-        base_name + ".json",
         filename + ".json",
+    ]
+    legacy_names = [
+        base_name + ".metadata.json",
+        base_name + ".civitai.info",
+        base_name + ".json",
         filename.replace("_", " ").split()[0] + ".metadata.json" if "_" in base_name else None,
+    ]
+    possible_names = exact_names + legacy_names if prefer_exact_names else [
+        legacy_names[0],
+        exact_names[0],
+        legacy_names[1],
+        exact_names[1],
+        legacy_names[2],
+        exact_names[2],
+        legacy_names[3],
     ]
 
     for name in possible_names:
@@ -1085,10 +1118,108 @@ def find_metadata_sidecar_path(model_path: str) -> str:
             path = os.path.join(directory, name)
             if os.path.normcase(os.path.abspath(path)) == normalized_model_path:
                 continue
-            if os.path.exists(path):
-                return path
+            if not os.path.exists(path):
+                continue
+            if (
+                has_stem_collision
+                and name in legacy_names
+                and not _metadata_sidecar_matches_model(path, model_path)
+            ):
+                continue
+            return path
 
     return ""
+
+
+def get_model_resolver_sidecar_path(model_path: str) -> str:
+    """Return the sidecar path exclusively owned by Model Resolver."""
+    directory = os.path.dirname(model_path)
+    filename = get_filename_from_path(model_path)
+    return os.path.join(directory, f"{filename}{MODEL_RESOLVER_METADATA_SUFFIX}")
+
+
+def find_model_resolver_sidecar_path(model_path: str) -> str:
+    """Return the existing Model Resolver sidecar path, if present."""
+    if not model_path:
+        return ""
+    metadata_path = get_model_resolver_sidecar_path(model_path)
+    normalized_model_path = os.path.normcase(os.path.abspath(model_path))
+    if (
+        os.path.normcase(os.path.abspath(metadata_path)) != normalized_model_path
+        and os.path.isfile(metadata_path)
+    ):
+        return metadata_path
+    return ""
+
+
+def find_metadata_sidecar_path(model_path: str) -> str:
+    """
+    Return the preferred readable sidecar path.
+
+    Model Resolver metadata takes precedence. External metadata remains
+    available as a read-only fallback.
+    """
+    return (
+        find_model_resolver_sidecar_path(model_path)
+        or find_external_metadata_sidecar_path(model_path)
+    )
+
+
+def _metadata_list_values(value: Any) -> List[Any]:
+    if isinstance(value, (list, tuple, set)):
+        return list(value)
+    if value in (None, ""):
+        return []
+    return [value]
+
+
+def _merge_metadata_lists(external_value: Any, resolver_value: Any) -> List[Any]:
+    result: List[Any] = []
+    seen = set()
+    for item in _metadata_list_values(external_value) + _metadata_list_values(resolver_value):
+        try:
+            key = json.dumps(item, sort_keys=True, ensure_ascii=False)
+        except (TypeError, ValueError):
+            key = str(item)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(item)
+    return result
+
+
+def read_merged_model_metadata(model_path: str, default: Any = None) -> Any:
+    """
+    Read external and Model Resolver sidecars without modifying either file.
+
+    Resolver-owned technical/provider fields take precedence. User-editable
+    external fields remain authoritative, while common list fields are merged.
+    """
+    external_path = find_external_metadata_sidecar_path(model_path)
+    resolver_path = find_model_resolver_sidecar_path(model_path)
+    external = read_json_safe(external_path, {}) if external_path else {}
+    resolver = read_json_safe(resolver_path, {}) if resolver_path else {}
+    external = external if isinstance(external, dict) else {}
+    resolver = resolver if isinstance(resolver, dict) else {}
+
+    if not external and not resolver:
+        return default
+    if not external:
+        return dict(resolver)
+    if not resolver:
+        return dict(external)
+
+    merged = {**external, **resolver}
+    for field in _EXTERNAL_METADATA_PREFERRED_FIELDS:
+        if field in external:
+            merged[field] = external[field]
+    for field in _MERGED_METADATA_LIST_FIELDS:
+        if field in external or field in resolver:
+            merged[field] = _merge_metadata_lists(
+                external.get(field),
+                resolver.get(field),
+            )
+    return merged
 
 
 def split_path_segments(path_value: Any, filter_dots: bool = True) -> list[str]:
@@ -1109,14 +1240,73 @@ def split_path_segments(path_value: Any, filter_dots: bool = True) -> list[str]:
     return parts
 
 
+def has_model_sidecar_name_collision(model_path: str) -> bool:
+    """Return whether another model file shares this file's stem."""
+    if not model_path:
+        return False
+
+    directory = os.path.dirname(model_path)
+    filename = get_filename_from_path(model_path)
+    base_name, extension = os.path.splitext(filename)
+    if not base_name or not extension:
+        return False
+
+    from .type_utils import MODEL_EXTENSIONS
+
+    normalized_model_path = os.path.normcase(os.path.abspath(model_path))
+    for candidate_extension in MODEL_EXTENSIONS:
+        candidate_path = os.path.join(directory, f"{base_name}{candidate_extension}")
+        if os.path.normcase(os.path.abspath(candidate_path)) == normalized_model_path:
+            continue
+        if os.path.isfile(candidate_path):
+            return True
+    return False
+
+
+def _metadata_sidecar_matches_model(metadata_path: str, model_path: str) -> bool:
+    """Return whether an ambiguous legacy sidecar names the selected model file."""
+    metadata = read_json_safe(metadata_path, {})
+    if not isinstance(metadata, dict):
+        return False
+
+    candidate_values = [
+        metadata.get("filename"),
+        metadata.get("file_path"),
+        metadata.get("model_path"),
+        metadata.get("path"),
+    ]
+    for key in ("file", "file_info", "selected_file", "selectedFile"):
+        nested = metadata.get(key)
+        if isinstance(nested, dict):
+            candidate_values.extend(
+                [
+                    nested.get("name"),
+                    nested.get("filename"),
+                    nested.get("file_name"),
+                    nested.get("fileName"),
+                    nested.get("path"),
+                ]
+            )
+
+    model_filename = os.path.normcase(get_filename_from_path(model_path))
+    return any(
+        os.path.normcase(get_filename_from_path(value)) == model_filename
+        for value in candidate_values
+        if value
+    )
+
+
 def _metadata_sidecar_paths(model_path: str) -> List[str]:
     directory = os.path.dirname(model_path)
     filename = get_filename_from_path(model_path)
     base_name = os.path.splitext(filename)[0]
-    candidates = [
-        os.path.join(directory, f"{base_name}.metadata.json"),
-        os.path.join(directory, f"{filename}.metadata.json"),
-    ]
+    legacy_path = os.path.join(directory, f"{base_name}.metadata.json")
+    exact_path = os.path.join(directory, f"{filename}.metadata.json")
+    candidates = (
+        [exact_path, legacy_path]
+        if has_model_sidecar_name_collision(model_path) or os.path.isfile(exact_path)
+        else [legacy_path, exact_path]
+    )
 
     result: List[str] = []
     seen = set()
@@ -1133,18 +1323,36 @@ def _metadata_sidecar_paths(model_path: str) -> List[str]:
 
 
 def get_metadata_sidecar_path(model_path: str) -> str:
-    """Return the canonical local metadata sidecar path for a model file."""
+    """Return the legacy external .metadata.json path for read compatibility."""
     return _metadata_sidecar_paths(model_path)[0]
 
 
 def get_safe_metadata_sidecar_path(file_path: str) -> str:
-    """Return the canonical sidecar path without allowing caller-selected targets."""
+    """Return a validated legacy external sidecar path for compatibility."""
     raw_model_path = str(file_path or "").strip()
     if not raw_model_path:
         raise ValueError("A model path is required")
     model_path = os.path.realpath(os.path.abspath(raw_model_path))
     model_dir = os.path.realpath(os.path.dirname(model_path))
     metadata_path = os.path.realpath(get_metadata_sidecar_path(model_path))
+    if (
+        not model_dir
+        or os.path.dirname(metadata_path) != model_dir
+        or metadata_path == model_path
+        or not is_path_within(metadata_path, model_dir)
+    ):
+        raise ValueError("Metadata path is outside the model directory")
+    return metadata_path
+
+
+def get_safe_model_resolver_sidecar_path(file_path: str) -> str:
+    """Return a validated sidecar path owned exclusively by Model Resolver."""
+    raw_model_path = str(file_path or "").strip()
+    if not raw_model_path:
+        raise ValueError("A model path is required")
+    model_path = os.path.realpath(os.path.abspath(raw_model_path))
+    model_dir = os.path.realpath(os.path.dirname(model_path))
+    metadata_path = os.path.realpath(get_model_resolver_sidecar_path(model_path))
     if (
         not model_dir
         or os.path.dirname(metadata_path) != model_dir

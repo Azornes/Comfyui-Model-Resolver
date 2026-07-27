@@ -36,7 +36,13 @@ from .core.log_system import LogLevel, create_module_logger
 from .core.log_system import logger as backend_log_controller
 from .core.log_system.config import LOG_LEVEL as BACKEND_DEFAULT_LOG_LEVEL
 from .core.log_system.logger import parse_rotated_log_filename
-from .core.path_utils import get_filename_from_path, get_metadata_sidecar_path, get_safe_metadata_sidecar_path
+from .core.path_utils import (
+    MODEL_RESOLVER_METADATA_SCHEMA,
+    MODEL_RESOLVER_METADATA_SCHEMA_VERSION,
+    get_filename_from_path,
+    get_model_resolver_sidecar_path,
+    get_safe_model_resolver_sidecar_path,
+)
 
 # Web directory for JavaScript interface
 WEB_DIRECTORY = "./web"
@@ -342,6 +348,7 @@ class ModelResolverExtension:
                 from .core.metadata_builder import (
                     build_missing_local_metadata,
                     get_metadata_build_capabilities,
+                    normalize_metadata_build_mode,
                 )
                 from .core.network_utils import (
                     UnsafeUrlError,
@@ -434,7 +441,7 @@ class ModelResolverExtension:
                     start_aria2_daemon,
                     start_background_download,
                     stop_aria2_daemon,
-                    write_lora_manager_metadata,
+                    write_model_resolver_metadata,
                 )
                 from .core.sources import clear_all_search_caches
                 from .core.sources.civarchive import (
@@ -1224,7 +1231,9 @@ class ModelResolverExtension:
             ):
                 import os as _os
 
-                resolved_metadata_path = get_safe_metadata_sidecar_path(normalized_path)
+                resolved_metadata_path = get_safe_model_resolver_sidecar_path(
+                    normalized_path
+                )
 
                 metadata_updated = False
                 try:
@@ -1239,6 +1248,11 @@ class ModelResolverExtension:
                         hashes = {}
                     hashes["SHA256"] = sha256
 
+                    metadata["schema"] = MODEL_RESOLVER_METADATA_SCHEMA
+                    metadata["schema_version"] = (
+                        MODEL_RESOLVER_METADATA_SCHEMA_VERSION
+                    )
+                    metadata["managed_by"] = MODEL_RESOLVER_METADATA_SCHEMA
                     metadata["sha256"] = sha256
                     metadata["hashes"] = hashes
                     metadata["hash_status"] = "completed"
@@ -1580,6 +1594,9 @@ class ModelResolverExtension:
 
                 force_rescan = to_bool(payload.get("force_rescan"), True)
                 worker_count = to_int(payload.get("worker_count"), 0)
+                metadata_mode = normalize_metadata_build_mode(
+                    payload.get("metadata_mode")
+                )
                 self.metadata_builder_progress.cleanup()
                 progress_id = f"metadata_build_{uuid.uuid4().hex}"
                 self.metadata_builder_progress.update(
@@ -1591,6 +1608,7 @@ class ModelResolverExtension:
                     current=0,
                     total=0,
                     requested_worker_count=worker_count,
+                    metadata_mode=metadata_mode,
                 )
 
                 def update_metadata_build_progress(progress_payload):
@@ -1605,6 +1623,7 @@ class ModelResolverExtension:
                     result = build_missing_local_metadata(
                         force_rescan=force_rescan,
                         worker_count=worker_count,
+                        metadata_mode=metadata_mode,
                         progress_callback=update_metadata_build_progress,
                         is_cancelled=is_metadata_build_cancelled,
                     )
@@ -1673,6 +1692,7 @@ class ModelResolverExtension:
                     {
                         "success": True,
                         "progress_id": progress_id,
+                        "metadata_mode": metadata_mode,
                     }
                 )
 
@@ -2614,7 +2634,7 @@ class ModelResolverExtension:
                             },
                         }
                         add_local_metadata_fields(metadata_payload, result)
-                        metadata_path = write_lora_manager_metadata(
+                        metadata_path = write_model_resolver_metadata(
                             file_path,
                             metadata_payload,
                             category,
@@ -2653,7 +2673,9 @@ class ModelResolverExtension:
                                 if isinstance(result, dict)
                                 else ""
                             )
-                            canonical_metadata_path = get_metadata_sidecar_path(file_path)
+                            canonical_metadata_path = get_model_resolver_sidecar_path(
+                                file_path
+                            )
                             if (
                                 isinstance(result, dict)
                                 and result.get("from_metadata")
@@ -2709,7 +2731,7 @@ class ModelResolverExtension:
                                     },
                                 }
                                 add_local_metadata_fields(metadata_payload, result)
-                                metadata_path = write_lora_manager_metadata(
+                                metadata_path = write_model_resolver_metadata(
                                     file_path,
                                     metadata_payload,
                                     category,
@@ -2952,7 +2974,7 @@ class ModelResolverExtension:
                             "details_source": response.get("details_source") or "",
                         }
                         add_local_metadata_fields(metadata_payload, response)
-                        metadata_path = write_lora_manager_metadata(
+                        metadata_path = write_model_resolver_metadata(
                             file_path,
                             metadata_payload,
                             category,

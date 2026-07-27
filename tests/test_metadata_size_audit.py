@@ -4,6 +4,7 @@ import tempfile
 import unittest
 
 from core.metadata_audit import audit_metadata_sizes
+from core.path_utils import get_model_resolver_sidecar_path
 
 
 class MetadataSizeAuditTests(unittest.TestCase):
@@ -87,6 +88,79 @@ class MetadataSizeAuditTests(unittest.TestCase):
         self.assertEqual(1024, mismatch["metadata_size"])
         self.assertEqual(6, mismatch["actual_size"])
         self.assertEqual("files[].sizeKB", mismatch["size_field"])
+
+    def test_collision_audits_only_each_models_exact_sidecar(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bin_path = self._write_model(tmpdir, "adapter.bin", b"123")
+            safetensors_path = self._write_model(
+                tmpdir,
+                "adapter.safetensors",
+                b"12345",
+            )
+            with open(f"{bin_path}.metadata.json", "w", encoding="utf-8") as handle:
+                json.dump({"filename": "adapter.bin", "size": 3}, handle)
+            with open(
+                f"{safetensors_path}.metadata.json",
+                "w",
+                encoding="utf-8",
+            ) as handle:
+                json.dump(
+                    {"filename": "adapter.safetensors", "size": 5},
+                    handle,
+                )
+            self._write_metadata(
+                bin_path,
+                {"filename": "adapter.bin", "size": 999},
+            )
+
+            result = audit_metadata_sizes(
+                models=[
+                    self._model_info(bin_path),
+                    self._model_info(safetensors_path),
+                ]
+            )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(2, result["metadata_files"])
+        self.assertEqual(2, result["checked_metadata"])
+        self.assertEqual(0, result["mismatch_count"])
+
+    def test_model_resolver_technical_size_overrides_external_size(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_path = self._write_model(
+                tmpdir,
+                "layered.safetensors",
+                b"12345",
+            )
+            external_path = self._write_metadata(
+                model_path,
+                {
+                    "size": 999,
+                    "notes": "external user note",
+                },
+            )
+            resolver_path = get_model_resolver_sidecar_path(model_path)
+            with open(resolver_path, "w", encoding="utf-8") as handle:
+                json.dump(
+                    {
+                        "managed_by": "comfyui-model-resolver",
+                        "size": 4,
+                    },
+                    handle,
+                )
+
+            result = audit_metadata_sizes(models=[self._model_info(model_path)])
+            with open(external_path, "r", encoding="utf-8") as handle:
+                external_after = json.load(handle)
+
+        self.assertEqual(
+            {"size": 999, "notes": "external user note"},
+            external_after,
+        )
+        self.assertEqual(1, result["checked_metadata"])
+        self.assertEqual(1, result["mismatch_count"])
+        self.assertEqual(resolver_path, result["mismatches"][0]["metadata_path"])
+        self.assertEqual(4, result["mismatches"][0]["metadata_size"])
 
     def test_skips_metadata_files_returned_by_scanner(self):
         with tempfile.TemporaryDirectory() as tmpdir:

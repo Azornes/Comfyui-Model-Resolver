@@ -10,7 +10,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from .log_system import create_module_logger
-from .path_utils import _metadata_sidecar_paths, get_filename_from_path, get_path_identity, read_json_safe
+from .path_utils import (
+    _metadata_sidecar_paths,  # noqa: F401
+    find_metadata_sidecar_path,
+    get_filename_from_path,
+    get_path_identity,
+    read_merged_model_metadata,
+)
 from .type_utils import MODEL_EXTENSIONS, format_size_bytes
 
 log = create_module_logger(__name__)
@@ -288,11 +294,12 @@ def _audit_one_model(model: Dict[str, Any]) -> Dict[str, Any]:
         )
         return result
 
-    existing_metadata_paths = [
-        metadata_path
-        for metadata_path in _metadata_sidecar_paths(model_path)
-        if os.path.isfile(metadata_path)
-    ]
+    selected_metadata_path = find_metadata_sidecar_path(model_path)
+    existing_metadata_paths = (
+        [selected_metadata_path]
+        if selected_metadata_path and os.path.isfile(selected_metadata_path)
+        else []
+    )
     if not existing_metadata_paths:
         result["missing_metadata"] += 1
         return result
@@ -306,7 +313,7 @@ def _audit_one_model(model: Dict[str, Any]) -> Dict[str, Any]:
         seen_entries.add(entry_key)
         result["metadata_files"] += 1
 
-        metadata = read_json_safe(metadata_path, None)
+        metadata = read_merged_model_metadata(model_path, None)
         if not isinstance(metadata, dict):
             result["invalid_metadata"] += 1
             result["errors"].append(

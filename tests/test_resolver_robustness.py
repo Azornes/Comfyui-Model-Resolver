@@ -11,7 +11,6 @@ import requests
 # Ensure we import core modules correctly
 from core.downloader import (
     write_lora_manager_metadata,
-    get_metadata_sidecar_path,
     download_model,
     get_progress,
     _resolve_download_url_for_aria2,
@@ -21,6 +20,7 @@ from core.downloader import (
     download_lock,
     read_completed_metadata_sha256,
 )
+from core.path_utils import get_metadata_sidecar_path
 from core.workflow_updater import (
     convert_to_relative_path,
     update_model_path,

@@ -271,16 +271,33 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
     def test_metadata_sidecar_paths_behavior(self):
         from core.metadata_audit import _metadata_sidecar_paths as ma_sidecars
         from core.metadata_builder import _metadata_sidecar_paths as mb_sidecars
-        from core.path_utils import get_metadata_sidecar_path, get_safe_metadata_sidecar_path
+        from core.path_utils import (
+            get_metadata_sidecar_path,
+            get_model_resolver_sidecar_path,
+            get_safe_metadata_sidecar_path,
+            get_safe_model_resolver_sidecar_path,
+        )
 
         model_path = os.path.abspath("e:/models/checkpoints/sd15.safetensors")
         expected_sidecar = os.path.abspath("e:/models/checkpoints/sd15.metadata.json")
+        expected_resolver_sidecar = os.path.abspath(
+            "e:/models/checkpoints/sd15.safetensors.modelresolver.json"
+        )
 
         self.assertEqual(get_metadata_sidecar_path(model_path), expected_sidecar)
+        self.assertEqual(
+            get_model_resolver_sidecar_path(model_path),
+            expected_resolver_sidecar,
+        )
         
         # Safe sidecar path checks
         safe_path = get_safe_metadata_sidecar_path(model_path)
         self.assertEqual(os.path.normcase(safe_path), os.path.normcase(expected_sidecar))
+        safe_resolver_path = get_safe_model_resolver_sidecar_path(model_path)
+        self.assertEqual(
+            os.path.normcase(safe_resolver_path),
+            os.path.normcase(expected_resolver_sidecar),
+        )
         
         # Test MB and MA sidecar candidates
         mb_candidates = mb_sidecars(model_path)
