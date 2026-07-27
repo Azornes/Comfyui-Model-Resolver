@@ -150,7 +150,7 @@ export const lifecycleGraphMethods = {
             loadToken = `missing-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             this._workflowDataLoadToken = loadToken;
 
-            const workflowSignature = this.getWorkflowSignature(workflow);
+            const workflowSignature = this.getMissingWorkflowSignature(workflow);
             if (force) {
                 this.invalidateLoadedModelsCacheForActiveWorkflow();
             }

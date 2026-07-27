@@ -331,7 +331,8 @@ export class ModelResolver {
         const workflow = app?.graph?.serialize?.();
         if (!workflow) return { workflow: null, signature: null };
 
-        const signature = this.dialog?.getWorkflowSignature?.(workflow)
+        const signature = this.dialog?.getMissingWorkflowSignature?.(workflow)
+            || this.dialog?.getWorkflowSignature?.(workflow)
             || JSON.stringify(workflow);
         return { workflow, signature };
     }
@@ -521,7 +522,10 @@ export class ModelResolver {
         };
         nodeType.prototype.onWidgetChanged = function() {
             const result = originalOnWidgetChanged?.apply(this, arguments);
-            owner.scheduleNodeContextMenuAnalysis();
+            const widgetName = arguments[0];
+            if (!owner.dialog?.isWorkflowStrengthWidgetName?.(widgetName)) {
+                owner.scheduleNodeContextMenuAnalysis();
+            }
             owner.dialog?.scheduleActiveWorkflowRefresh?.('node-widget-change');
             return result;
         };

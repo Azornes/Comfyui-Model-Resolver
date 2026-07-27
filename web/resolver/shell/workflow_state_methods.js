@@ -7,17 +7,28 @@ import { getSvgIcon } from "../../utils/icon_utils.js";
 const log = createModuleLogger('workflow_state_methods');
 
 export const workflowStateMethods = {
-    getWorkflowSignature(workflow) {
+    getWorkflowSignature(workflow, options = {}) {
         if (!workflow) return null;
         try {
-            return JSON.stringify(this.getWorkflowSignatureData(workflow));
+            return JSON.stringify(this.getWorkflowSignatureData(workflow, options));
         } catch (error) {
             console.warn('Model Resolver: workflow signature generation failed', error);
             return null;
         }
     },
 
-    getWorkflowSignatureData(workflow) {
+    getMissingWorkflowSignature(workflow) {
+        return this.getWorkflowSignature(workflow, { includeStrength: false });
+    },
+
+    isWorkflowStrengthWidgetName(name = '') {
+        const normalized = String(name || '').trim().replace(/[-\s]/g, '_').toLowerCase();
+        return normalized === 'strength_model'
+            || normalized === 'strength_clip'
+            || /(?:^|_)(?:strength|model_strength|clip_strength)$/.test(normalized);
+    },
+
+    getWorkflowSignatureData(workflow, { includeStrength = true } = {}) {
         const modelExtensionPattern = /\.(ckpt|pt2?|bin|pth|safetensors|pkl|sft|onnx|gguf)(?:$|[?#])/i;
         const urnPattern = /^urn:air:[^:]+:[^:]+:[^:]+:\d+@\d+$/i;
         const urlPattern = /^https?:\/\//i;
@@ -62,10 +73,12 @@ export const workflowStateMethods = {
             'modelid',
             'version_id',
             'versionid',
-            'strength',
             'active',
             'on'
         ]);
+        if (includeStrength) {
+            modelMetadataKeys.add('strength');
+        }
         const loraStrengthNodeTypes = new Set([
             'LoraLoader',
             'LoraLoaderModelOnly',
@@ -176,8 +189,10 @@ export const workflowStateMethods = {
         };
         const isRelevantScalarKey = (key = '') => {
             const normalizedKey = normalizeKey(key);
-            return loraStrengthKeys.has(normalizedKey)
+            return (includeStrength && (
+                loraStrengthKeys.has(normalizedKey)
                 || indexedLoraStrengthPattern.test(normalizedKey)
+            ))
                 || loraStackStateKeys.has(normalizedKey)
                 || ['active', 'on', 'model_id', 'modelid', 'version_id', 'versionid'].includes(normalizedKey);
         };
@@ -245,7 +260,8 @@ export const workflowStateMethods = {
                     );
 
                     if (
-                        normalized === null
+                        includeStrength
+                        && normalized === null
                         && loraStrengthNodeTypes.has(nodeType)
                         && (
                             normalizeRelevantValue(widgetsValues[index - 1], widgetValueKey(index - 1)) !== null
@@ -351,7 +367,10 @@ export const workflowStateMethods = {
         }
     },
 
-    getWorkflowScopedQueueKey(route = this.activeWorkflowRouteKey, signature = this.activeWorkflowSignature) {
+    getWorkflowScopedQueueKey(
+        route = this.activeWorkflowRouteKey,
+        signature = this.activeMissingWorkflowSignature || this.activeWorkflowSignature
+    ) {
         if (route && signature) return `${route}\n${signature}`;
         return route || signature || null;
     },
@@ -598,8 +617,12 @@ export const workflowStateMethods = {
         const currentWorkflow = workflow || this.getCurrentWorkflow();
         const nextRoute = this.getActiveWorkflowRouteKey();
         const nextSignature = this.getWorkflowSignature(currentWorkflow);
+        const nextMissingSignature = this.getMissingWorkflowSignature(currentWorkflow);
         const previousKey = this.getWorkflowScopedQueueKey();
-        const nextKey = this.getWorkflowScopedQueueKey(nextRoute, nextSignature);
+        const nextKey = this.getWorkflowScopedQueueKey(
+            nextRoute,
+            nextMissingSignature || nextSignature
+        );
         const preserveSearchCache = Boolean(this.preserveSearchCacheAcrossNextWorkflowSync);
         const previousSearchCache = preserveSearchCache
             ? this.cloneSearchResultCache(this.searchResultCache, {
@@ -624,6 +647,7 @@ export const workflowStateMethods = {
         if (!nextKey || nextKey === previousKey) {
             this.activeWorkflowRouteKey = nextRoute;
             this.activeWorkflowSignature = nextSignature;
+            this.activeMissingWorkflowSignature = nextMissingSignature;
             this.preserveSearchCacheAcrossNextWorkflowSync = false;
             return;
         }
@@ -636,6 +660,7 @@ export const workflowStateMethods = {
         this.clearWorkflowScopedState();
         this.activeWorkflowRouteKey = nextRoute;
         this.activeWorkflowSignature = nextSignature;
+        this.activeMissingWorkflowSignature = nextMissingSignature;
         this.restorePendingQueueForActiveWorkflow();
         this.restoreAnalysisCacheForActiveWorkflow();
         this.restoreLoadedModelsCacheForActiveWorkflow();
@@ -744,8 +769,11 @@ export const workflowStateMethods = {
 
         const workflow = this.getCurrentWorkflow();
         const signature = this.getWorkflowSignature(workflow);
+        const missingSignature = this.getMissingWorkflowSignature(workflow);
         const routeChanged = currentRoute !== this.activeWorkflowRouteKey;
         const signatureChanged = signature && signature !== this.activeWorkflowSignature;
+        const missingSignatureChanged = missingSignature
+            && missingSignature !== this.activeMissingWorkflowSignature;
         const graphStillLooksOld = routeChanged && previousSignature && signature === previousSignature;
 
         if ((!signature || graphStillLooksOld) && attempt < 8) {
@@ -796,6 +824,10 @@ export const workflowStateMethods = {
         this.syncWorkflowScopedQueue(workflow);
 
         if (this.activeTab === 'missing') {
+            if (!routeChanged && missingSignature && !missingSignatureChanged) {
+                log.debug('Model Resolver: skipping Missing Models refresh for a strength-only workflow change');
+                return;
+            }
             if (this.contentElement) this.contentElement.style.overflowY = 'auto';
             await this.loadWorkflowData(workflow, {
                 preserveContent: !routeChanged && reason === 'node-widget-change'

@@ -537,6 +537,33 @@ test('node context integration preserves existing menu hooks and refreshes after
   ]);
 });
 
+test('strength widget changes skip proactive node context analysis', () => {
+  const configureNodeContextMenu = eval(`(${extractMethod(modelResolverSource, 'configureNodeContextMenu')})`);
+  const isWorkflowStrengthWidgetName = eval(
+    `(${extractMethod(workflowStateMethodsSource, 'isWorkflowStrengthWidgetName')})`
+  );
+  const calls = [];
+  class NodeType {}
+  const resolver = {
+    getResolvedModelsForNodeContextMenu: () => [],
+    scheduleNodeContextMenuAnalysis: () => calls.push('context-analysis'),
+    dialog: {
+      isWorkflowStrengthWidgetName,
+      scheduleActiveWorkflowRefresh: reason => calls.push(`dialog-refresh:${reason}`),
+    },
+  };
+
+  configureNodeContextMenu.call(resolver, NodeType);
+  const node = new NodeType();
+  node.onWidgetChanged('strength_model');
+  node.onWidgetChanged('lora_2_clip_strength');
+
+  assert.deepEqual(calls, [
+    'dialog-refresh:node-widget-change',
+    'dialog-refresh:node-widget-change',
+  ]);
+});
+
 test('background Loaded Models refresh keeps the current view until new data is ready', async () => {
   const loadLoadedModels = eval(`(${extractMethod(tabsLoadedMethodsSource, 'loadLoadedModels')})`);
   const workflow = {
@@ -671,7 +698,7 @@ test('background Missing Models refresh keeps the current view until new data is
     cachedWorkflowSignature: 'old-signature',
     cachedAnalysisData: { missing_models: [], resolved_models: [] },
     syncWorkflowScopedQueue() {},
-    getWorkflowSignature: () => 'new-signature',
+    getMissingWorkflowSignature: () => 'new-signature',
     workflowHasNodes: () => true,
     renderAnalysisProgress() {
       progressRenderCount += 1;
@@ -734,12 +761,14 @@ test('node widget changes request a content-preserving Missing Models refresh', 
     _workflowRefreshGeneration: 1,
     activeWorkflowRouteKey: 'workflow-a',
     activeWorkflowSignature: 'old-signature',
+    activeMissingWorkflowSignature: 'old-missing-signature',
     activeTab: 'missing',
     contentElement: { style: {} },
     isVisible: () => true,
     getActiveWorkflowRouteKey: () => 'workflow-a',
     getCurrentWorkflow: () => workflow,
     getWorkflowSignature: () => 'new-signature',
+    getMissingWorkflowSignature: () => 'new-missing-signature',
     syncWorkflowScopedQueue() {
       preserveSearchCacheAtSync = this.preserveSearchCacheAcrossNextWorkflowSync;
     },
@@ -763,6 +792,55 @@ test('node widget changes request a content-preserving Missing Models refresh', 
   assert.equal(preserveSearchCacheAtSync, true);
 });
 
+test('strength-only widget changes synchronize workflow state without refreshing Missing Models', async () => {
+  const log = { debug() {} };
+  const refreshForActiveWorkflowChange = eval(
+    `(${extractMethod(workflowStateMethodsSource, 'refreshForActiveWorkflowChange')})`
+  );
+  const workflow = {
+    nodes: [{
+      id: 7,
+      type: 'LoraLoader',
+      widgets_values: ['model.safetensors', 1.25],
+    }],
+  };
+  let syncCount = 0;
+  let loadCount = 0;
+  const dialog = {
+    _workflowRefreshGeneration: 1,
+    activeWorkflowRouteKey: 'workflow-a',
+    activeWorkflowSignature: 'old-full-signature',
+    activeMissingWorkflowSignature: 'same-missing-signature',
+    activeTab: 'missing',
+    contentElement: { style: {} },
+    isVisible: () => true,
+    getActiveWorkflowRouteKey: () => 'workflow-a',
+    getCurrentWorkflow: () => workflow,
+    getWorkflowSignature: () => 'new-full-signature',
+    getMissingWorkflowSignature: () => 'same-missing-signature',
+    syncWorkflowScopedQueue() {
+      syncCount += 1;
+    },
+    async loadWorkflowData() {
+      loadCount += 1;
+    },
+  };
+
+  await refreshForActiveWorkflowChange.call(dialog, {
+    reason: 'node-widget-change',
+    expectedRoute: 'workflow-a',
+    previousSignature: 'old-full-signature',
+    attempt: 8,
+    generation: 1,
+    candidateRoute: 'workflow-a',
+    candidateSignature: 'new-full-signature',
+  });
+
+  assert.equal(syncCount, 1);
+  assert.equal(loadCount, 0);
+  assert.equal(dialog.preserveSearchCacheAcrossNextWorkflowSync, true);
+});
+
 test('workflow synchronization carries searched results across a strength-only signature change', () => {
   const syncWorkflowScopedQueue = eval(
     `(${extractMethod(workflowStateMethodsSource, 'syncWorkflowScopedQueue')})`
@@ -784,12 +862,17 @@ test('workflow synchronization carries searched results across a strength-only s
     preserveSearchCacheAcrossNextWorkflowSync: true,
     activeWorkflowRouteKey: 'workflow-a',
     activeWorkflowSignature: 'old-signature',
+    activeMissingWorkflowSignature: 'same-missing-signature',
     searchResultCache: new Map([['loras:missing.safetensors', searchedState]]),
     backgroundSearchJobs: new Map(),
     getCurrentWorkflow: () => workflow,
     getActiveWorkflowRouteKey: () => 'workflow-a',
     getWorkflowSignature: () => 'new-signature',
-    getWorkflowScopedQueueKey(route = dialog.activeWorkflowRouteKey, signature = dialog.activeWorkflowSignature) {
+    getMissingWorkflowSignature: () => 'same-missing-signature',
+    getWorkflowScopedQueueKey(
+      route = dialog.activeWorkflowRouteKey,
+      signature = dialog.activeMissingWorkflowSignature || dialog.activeWorkflowSignature
+    ) {
       return `${route}\n${signature}`;
     },
     cloneSearchResultCache(cache) {
@@ -815,6 +898,7 @@ test('workflow synchronization carries searched results across a strength-only s
   syncWorkflowScopedQueue.call(dialog, workflow);
 
   assert.equal(dialog.activeWorkflowSignature, 'new-signature');
+  assert.equal(dialog.activeMissingWorkflowSignature, 'same-missing-signature');
   assert.equal(
     dialog.searchResultCache.get('loras:missing.safetensors'),
     searchedState
@@ -1284,6 +1368,47 @@ test('workflow signature tracks EasyLoraStack mode and indexed strengths', () =>
     { index: 5, value: 0.45 },
     { index: 6, value: 0.25 },
   ]);
+});
+
+test('Missing Models signature ignores strength but tracks model identity changes', () => {
+  const getWorkflowSignature = eval(`(${extractMethod(workflowStateMethodsSource, 'getWorkflowSignature')})`);
+  const getMissingWorkflowSignature = eval(`(${extractMethod(workflowStateMethodsSource, 'getMissingWorkflowSignature')})`);
+  const getWorkflowSignatureData = eval(`(${extractMethod(workflowStateMethodsSource, 'getWorkflowSignatureData')})`);
+  const dialog = {
+    capabilities: { node_rules: {} },
+    getWorkflowSignature,
+    getMissingWorkflowSignature,
+    getWorkflowSignatureData,
+  };
+  const makeWorkflow = (modelName, strength) => ({
+    nodes: [{
+      id: 34,
+      type: 'LoraLoader',
+      inputs: [
+        { name: 'lora_name', widget: { name: 'lora_name' } },
+        { name: 'strength_model', widget: { name: 'strength_model' } },
+      ],
+      outputs: [],
+      widgets_values: [modelName, strength],
+    }],
+    links: [],
+  });
+  const original = makeWorkflow('AnimeEditV2.safetensors', 0.65);
+  const strengthChanged = makeWorkflow('AnimeEditV2.safetensors', 1.25);
+  const modelChanged = makeWorkflow('AnotherModel.safetensors', 1.25);
+
+  assert.notEqual(
+    getWorkflowSignature.call(dialog, original),
+    getWorkflowSignature.call(dialog, strengthChanged)
+  );
+  assert.equal(
+    getMissingWorkflowSignature.call(dialog, original),
+    getMissingWorkflowSignature.call(dialog, strengthChanged)
+  );
+  assert.notEqual(
+    getMissingWorkflowSignature.call(dialog, strengthChanged),
+    getMissingWorkflowSignature.call(dialog, modelChanged)
+  );
 });
 
 test('workflow hash refresh ignores node movement and tracks model dependency changes', () => {

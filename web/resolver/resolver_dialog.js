@@ -97,6 +97,7 @@ export class ResolverManagerDialog extends ComfyDialog {
         this._viewportClampFrame = null;
         this.activeWorkflowRouteKey = this.getActiveWorkflowRouteKey();
         this.activeWorkflowSignature = null;
+        this.activeMissingWorkflowSignature = null;
         this._workflowRefreshTimer = null;
         this._workflowRefreshRetryTimer = null;
         this._workflowRefreshGeneration = 0;
