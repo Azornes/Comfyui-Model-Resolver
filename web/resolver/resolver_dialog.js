@@ -89,6 +89,12 @@ export class ResolverManagerDialog extends ComfyDialog {
         this._floatingRectBeforeDock = null;
         this._dragging = false;
         this._dragStart = null;
+        this._dragBounds = null;
+        this._dragPendingPosition = null;
+        this._dragAnimationFrame = null;
+        this._dragLayerCleanupTimer = null;
+        this._dragDockCandidate = false;
+        this._pendingDragDockRect = null;
         this._analysisProgressToken = null;
         this._workflowDataLoadToken = null;
         this._loadedModelsLoadToken = null;
@@ -112,6 +118,16 @@ export class ResolverManagerDialog extends ComfyDialog {
         // Create backdrop overlay for click-outside-to-close
         this.backdrop = $el("div.model-resolver-backdrop", {
             parent: document.body
+        });
+
+        this.dockDropPreview = $el("div.mr-dock-drop-preview", {
+            parent: document.body,
+            ariaHidden: "true",
+            innerHTML: `
+                <span class="mr-dock-drop-preview-icon">${getSvgIcon('internalLink')}</span>
+                <strong>Dock to sidebar</strong>
+                <span>Release to dock Model Resolver</span>
+            `
         });
 
         // Create context menu for model chips

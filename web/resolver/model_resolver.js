@@ -780,10 +780,9 @@ export class ModelResolver {
         };
         const documentClickHandler = (event) => {
             const owner = window.__ModelResolverWorkflowChangeOwner;
-            if (!owner?.dialog?.isVisible()) return;
-
             const target = event.target instanceof Element ? event.target : null;
             if (target?.closest('#model-resolver-modal, .model-resolver-backdrop')) return;
+            if (!owner?.dialog?.isVisible()) return;
             if (!owner.isLikelyWorkflowTabClickTarget(target)) return;
 
             setTimeout(() => {

@@ -171,16 +171,22 @@ export const dialogShellMethods = {
 
     isVisible() {
         if (!this.element?.isConnected) return false;
-        return getComputedStyle(this.element).display !== 'none';
+        return this.element.style.display === 'flex';
     },
 
     dockTo(container) {
         if (!container || !this.element) return;
 
         if (!this.docked) {
-            this.captureFloatingRect();
+            if (this._pendingDragDockRect) {
+                this._floatingRectBeforeDock = this._pendingDragDockRect;
+                this._pendingDragDockRect = null;
+            } else {
+                this.captureFloatingRect();
+            }
         }
 
+        this.setDockDropPreviewActive(false);
         if (this.fullscreen) {
             this.setFullScreen(false);
         }
@@ -298,6 +304,8 @@ export const dialogShellMethods = {
     undockToFloating({ persist = true, closeSidebar = true } = {}) {
         if (!this.element) return;
 
+        this.setDockDropPreviewActive(false);
+        this._pendingDragDockRect = null;
         const wasDocked = this.docked;
         const dockContainer = this.dockContainer;
         this.docked = false;
@@ -498,20 +506,33 @@ export const dialogShellMethods = {
         return { top, left };
     },
 
-    saveModalPosition() {
+    saveModalPosition(position = null) {
         if (this.docked) return;
 
         const el = this.element;
         if (!el) return;
+        const top = Number(position?.top);
+        const left = Number(position?.left);
+        if (Number.isFinite(top) && Number.isFinite(left)) {
+            safeStorage.setItem('model_resolver_modal_pos', JSON.stringify({
+                top: Math.round(top),
+                left: Math.round(left)
+            }));
+            return;
+        }
+
         const rect = el.getBoundingClientRect();
-        safeStorage.setItem('model_resolver_modal_pos', JSON.stringify({ top: Math.round(rect.top), left: Math.round(rect.left) }));
+        safeStorage.setItem('model_resolver_modal_pos', JSON.stringify({
+            top: Math.round(rect.top),
+            left: Math.round(rect.left)
+        }));
     },
 
     ensureModalHandleInViewport({ persist = false } = {}) {
         if (this.docked) return;
         if (this.fullscreen) return;
         const el = this.element;
-        if (!el || getComputedStyle(el).display === 'none') return;
+        if (!el || !this.isVisible()) return;
 
         const rect = el.getBoundingClientRect();
         const { top, left } = this.getViewportClampedModalPosition(rect.top, rect.left);
@@ -538,6 +559,20 @@ export const dialogShellMethods = {
         });
     },
 
+    getDockSnapThreshold() {
+        const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+        return Math.max(40, Math.min(64, viewportWidth * 0.045));
+    },
+
+    setDockDropPreviewActive(active) {
+        const nextActive = Boolean(active && !this.docked && !this.fullscreen);
+        if (this._dragDockCandidate === nextActive) return;
+
+        this._dragDockCandidate = nextActive;
+        this.dockDropPreview?.classList.toggle('is-active', nextActive);
+        this.dockDropPreview?.setAttribute('aria-hidden', nextActive ? 'false' : 'true');
+    },
+
     // Begin window drag
     startDrag(e) {
         if (this.docked) return;
@@ -545,21 +580,58 @@ export const dialogShellMethods = {
         try {
             const el = this.element;
             if (!el) return;
+            e.preventDefault?.();
+            if (this._dragLayerCleanupTimer) {
+                clearTimeout(this._dragLayerCleanupTimer);
+                this._dragLayerCleanupTimer = null;
+            }
+            this._pendingDragDockRect = null;
+            this.setDockDropPreviewActive(false);
             const rect = el.getBoundingClientRect();
+            const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+            const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+            const pad = 4;
+            const handle = document.getElementById('model-resolver-drag-handle');
+
+            if (handle) {
+                const handleRect = handle.getBoundingClientRect();
+                const handleOffsetLeft = handleRect.left - rect.left;
+                const handleOffsetTop = handleRect.top - rect.top;
+                const handleWidth = handleRect.width || handle.offsetWidth;
+                const handleHeight = handleRect.height || handle.offsetHeight;
+                this._dragBounds = {
+                    minLeft: pad - handleOffsetLeft,
+                    maxLeft: vw - pad - handleOffsetLeft - handleWidth,
+                    minTop: pad - handleOffsetTop,
+                    maxTop: vh - pad - handleOffsetTop - handleHeight
+                };
+            } else {
+                this._dragBounds = {
+                    minLeft: -rect.width + pad,
+                    maxLeft: vw - pad,
+                    minTop: -rect.height + pad,
+                    maxTop: vh - pad
+                };
+            }
+
             // Switch to absolute top/left (no transform) before dragging
             el.style.top = `${rect.top}px`;
             el.style.left = `${rect.left}px`;
             el.style.transform = 'none';
+            el.style.willChange = 'transform';
             this._dragging = true;
             this._dragStart = {
                 x: e.clientX,
                 y: e.clientY,
                 top: rect.top,
-                left: rect.left
+                left: rect.left,
+                width: rect.width,
+                height: rect.height
             };
-            // Prevent text selection while dragging
-            this._prevUserSelect = document.body.style.userSelect;
-            document.body.style.userSelect = 'none';
+            this._dragPendingPosition = {
+                top: Math.round(rect.top),
+                left: Math.round(rect.left)
+            };
             // Attach listeners
             this._onMouseMove = (ev) => this.onDrag(ev);
             this._onMouseUp = () => this.endDrag();
@@ -576,19 +648,73 @@ export const dialogShellMethods = {
         const dy = e.clientY - this._dragStart.y;
         let top = this._dragStart.top + dy;
         let left = this._dragStart.left + dx;
-        ({ top, left } = this.getViewportClampedModalPosition(top, left));
-        el.style.top = `${Math.round(top)}px`;
-        el.style.left = `${Math.round(left)}px`;
+        const bounds = this._dragBounds;
+        if (bounds) {
+            left = Math.max(bounds.minLeft, Math.min(bounds.maxLeft, left));
+            top = Math.max(bounds.minTop, Math.min(bounds.maxTop, top));
+        }
+
+        this._dragPendingPosition = {
+            top: Math.round(top),
+            left: Math.round(left)
+        };
+        this.setDockDropPreviewActive(e.clientX <= this.getDockSnapThreshold());
+        if (this._dragAnimationFrame) return;
+
+        this._dragAnimationFrame = requestAnimationFrame(() => {
+            this._dragAnimationFrame = null;
+            if (!this._dragging || !this._dragStart || !this._dragPendingPosition) return;
+
+            const translateX = this._dragPendingPosition.left - this._dragStart.left;
+            const translateY = this._dragPendingPosition.top - this._dragStart.top;
+            el.style.transform = `translate3d(${translateX}px, ${translateY}px, 0)`;
+        });
     },
 
     endDrag() {
         if (!this._dragging) return;
+        const shouldDock = this._dragDockCandidate;
         this._dragging = false;
         document.removeEventListener('mousemove', this._onMouseMove);
+        this.setDockDropPreviewActive(false);
+
+        if (this._dragAnimationFrame) {
+            cancelAnimationFrame(this._dragAnimationFrame);
+            this._dragAnimationFrame = null;
+        }
+
+        const el = this.element;
+        const finalPosition = this._dragPendingPosition || this._dragStart;
+        if (shouldDock && finalPosition && this._dragStart) {
+            this._pendingDragDockRect = {
+                top: Math.round(finalPosition.top),
+                left: Math.round(finalPosition.left),
+                width: this._dragStart.width,
+                height: this._dragStart.height
+            };
+        }
+        if (el && finalPosition) {
+            el.style.top = `${Math.round(finalPosition.top)}px`;
+            el.style.left = `${Math.round(finalPosition.left)}px`;
+            el.style.transform = 'none';
+        }
+
+        this._dragStart = null;
+        this._dragBounds = null;
+        this._dragPendingPosition = null;
         // Persist position
-        this.saveModalPosition();
-        // Restore selection
-        try { document.body.style.userSelect = this._prevUserSelect || ''; } catch (e) {}
+        this.saveModalPosition(finalPosition);
+
+        this._dragLayerCleanupTimer = setTimeout(() => {
+            this._dragLayerCleanupTimer = null;
+            if (!this._dragging && this.element) {
+                this.element.style.willChange = '';
+            }
+        }, 120);
+
+        if (shouldDock) {
+            this.dockToSidebar();
+        }
     },
 
     /**

@@ -67,12 +67,20 @@ const workflowUpdateMethodsSource = fs.readFileSync(
   path.join(projectRoot, 'web/resolver/shell/workflow_update_methods.js'),
   'utf8'
 );
+const dialogShellMethodsSource = fs.readFileSync(
+  path.join(projectRoot, 'web/resolver/shell/dialog_shell_methods.js'),
+  'utf8'
+);
 const renderFormatMethodsSource = fs.readFileSync(
   path.join(projectRoot, 'web/resolver/utils/render_format_methods.js'),
   'utf8'
 );
 const resolverMainCssSource = fs.readFileSync(
   path.join(projectRoot, 'web/css/resolver-main.css'),
+  'utf8'
+);
+const resolverShellCssSource = fs.readFileSync(
+  path.join(projectRoot, 'web/css/resolver-shell.css'),
   'utf8'
 );
 
@@ -127,6 +135,89 @@ test('manual model selection uses the two-line status card layout', () => {
     /\.mr-missing-detail-pane \.mr-selected-bar-inner\s*\{[^}]*flex-direction:\s*column/s
   );
   assert.match(resolverMainCssSource, /\.mr-btn-danger\s*\{[^}]*rgba\(239,\s*68,\s*68/s);
+});
+
+test('floating dialog drag stays on the compositor without forced style reads', () => {
+  const isVisible = extractMethod(dialogShellMethodsSource, 'isVisible');
+  const saveModalPosition = extractMethod(dialogShellMethodsSource, 'saveModalPosition');
+  const startDrag = extractMethod(dialogShellMethodsSource, 'startDrag');
+  const onDrag = eval(`(${extractMethod(dialogShellMethodsSource, 'onDrag')})`);
+  const endDrag = extractMethod(dialogShellMethodsSource, 'endDrag');
+
+  assert.doesNotMatch(isVisible, /getComputedStyle/);
+  assert.match(isVisible, /style\.display\s*===\s*['"]flex['"]/);
+  assert.match(saveModalPosition, /Number\(position\?\.top\)/);
+  assert.match(saveModalPosition, /Number\.isFinite\(top\)\s*&&\s*Number\.isFinite\(left\)/);
+  assert.match(startDrag, /preventDefault/);
+  assert.match(startDrag, /style\.willChange\s*=\s*['"]transform['"]/);
+  assert.match(startDrag, /setDockDropPreviewActive\(false\)/);
+  assert.doesNotMatch(startDrag, /document\.body\.style\.userSelect/);
+  assert.doesNotMatch(startDrag, /classList\.add\(['"]mr-is-window-dragging['"]\)/);
+  assert.match(endDrag, /cancelAnimationFrame/);
+  assert.match(endDrag, /style\.top/);
+  assert.match(endDrag, /style\.left/);
+  assert.match(endDrag, /style\.transform\s*=\s*['"]none['"]/);
+  assert.match(endDrag, /saveModalPosition\(finalPosition\)/);
+  assert.match(endDrag, /style\.willChange\s*=\s*['"]['"]/);
+  assert.match(endDrag, /const shouldDock = this\._dragDockCandidate/);
+  assert.match(endDrag, /if \(shouldDock\)\s*\{\s*this\.dockToSidebar\(\)/);
+  assert.doesNotMatch(resolverShellCssSource, /mr-is-window-dragging/);
+  assert.match(resolverDialogSource, /mr-dock-drop-preview/);
+  assert.match(
+    resolverShellCssSource,
+    /\.mr-dock-drop-preview\s*\{[^}]*pointer-events:\s*none[^}]*visibility:\s*hidden[^}]*opacity:\s*0/s
+  );
+  assert.match(
+    resolverShellCssSource,
+    /\.mr-dock-drop-preview\.is-active\s*\{[^}]*visibility:\s*visible[^}]*opacity:\s*1/s
+  );
+
+  const handlerStart = modelResolverSource.indexOf('const documentClickHandler = (event) => {');
+  const handlerEnd = modelResolverSource.indexOf('const focusHandler =', handlerStart);
+  const handlerSource = modelResolverSource.slice(handlerStart, handlerEnd);
+  assert.ok(handlerStart >= 0 && handlerEnd > handlerStart);
+  assert.ok(
+    handlerSource.indexOf("target?.closest('#model-resolver-modal, .model-resolver-backdrop')") <
+      handlerSource.indexOf('dialog?.isVisible()'),
+    'clicks inside the resolver must return before checking dialog visibility'
+  );
+
+  const previousRequestAnimationFrame = globalThis.requestAnimationFrame;
+  let frameCallback = null;
+  globalThis.requestAnimationFrame = callback => {
+    frameCallback = callback;
+    return 17;
+  };
+
+  try {
+    const element = { style: {} };
+    const dockPreviewStates = [];
+    const dialog = {
+      element,
+      _dragging: true,
+      _dragStart: { x: 10, y: 20, top: 100, left: 200 },
+      _dragBounds: { minLeft: 0, maxLeft: 500, minTop: 0, maxTop: 400 },
+      _dragPendingPosition: null,
+      _dragAnimationFrame: null,
+      getDockSnapThreshold: () => 64,
+      setDockDropPreviewActive: active => dockPreviewStates.push(active),
+    };
+
+    onDrag.call(dialog, { clientX: 50, clientY: 70 });
+
+    assert.equal(element.style.top, undefined);
+    assert.equal(element.style.left, undefined);
+    assert.equal(dialog._dragAnimationFrame, 17);
+    assert.equal(typeof frameCallback, 'function');
+    assert.deepEqual(dockPreviewStates, [true]);
+
+    frameCallback();
+
+    assert.equal(element.style.transform, 'translate3d(40px, 50px, 0)');
+    assert.deepEqual(dialog._dragPendingPosition, { top: 150, left: 240 });
+  } finally {
+    globalThis.requestAnimationFrame = previousRequestAnimationFrame;
+  }
 });
 
 test('local and loaded model tooltips include preview image routes above full names', () => {
