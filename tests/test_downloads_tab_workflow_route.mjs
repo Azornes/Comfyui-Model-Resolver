@@ -1933,6 +1933,31 @@ test('content-preserving Missing Models refresh patches the browser instead of c
   );
 });
 
+test('cached Missing Models refresh preserves browser geometry after linking a local match', () => {
+  const refreshMissingModelsBrowserFromCache = eval(
+    `(${extractMethod(missingBrowserMethodsSource, 'refreshMissingModelsBrowserFromCache')})`
+  );
+  const contentElement = {};
+  const cachedAnalysisData = { missing_models: [{ filename: 'model.safetensors' }] };
+  let renderCall = null;
+  const dialog = {
+    activeTab: 'missing',
+    contentElement,
+    cachedAnalysisData,
+    displayMissingModels(...args) {
+      renderCall = args;
+    },
+  };
+
+  refreshMissingModelsBrowserFromCache.call(dialog);
+
+  assert.deepEqual(renderCall, [
+    contentElement,
+    cachedAnalysisData,
+    { preserveBrowser: true },
+  ]);
+});
+
 test('node widget changes request a content-preserving Missing Models refresh', async () => {
   const log = { debug() {} };
   const refreshForActiveWorkflowChange = eval(

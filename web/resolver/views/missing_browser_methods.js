@@ -594,7 +594,11 @@ export const missingBrowserMethods = {
 
     refreshMissingModelsBrowserFromCache() {
         if (this.activeTab !== 'missing' || !this.contentElement || !this.cachedAnalysisData) return;
-        this.displayMissingModels(this.contentElement, this.cachedAnalysisData);
+        this.displayMissingModels(
+            this.contentElement,
+            this.cachedAnalysisData,
+            { preserveBrowser: true }
+        );
     },
 
     getMissingListScrollSnapshot(container) {
