@@ -199,6 +199,176 @@ export const tabsLoadedMethods = {
         };
     },
 
+    getLoadedModelDomKey(model = {}) {
+        return this.getMissingModelKey(model);
+    },
+
+    normalizeLoadedModelIdentity(value) {
+        return String(value || '')
+            .trim()
+            .replace(/\\/g, '/')
+            .toLowerCase();
+    },
+
+    updateLoadedModelCopyValues(container, loadedModels = []) {
+        if (!container) return;
+
+        const byCategory = {};
+        for (const model of loadedModels) {
+            const category = model.category || 'unknown';
+            if (!byCategory[category]) {
+                byCategory[category] = { active: [], inactive: [] };
+            }
+            const filter = model.active !== false && model.connected !== false
+                ? 'active'
+                : 'inactive';
+            byCategory[category][filter].push(model);
+        }
+
+        const buildString = (filter) => Object.entries(byCategory)
+            .flatMap(([category, models]) => {
+                const selected = filter === 'all'
+                    ? [...models.active, ...models.inactive]
+                    : models[filter];
+                return selected.map(model => this.getModelToken(model, category));
+            })
+            .join(' ');
+        const strings = {
+            active: buildString('active'),
+            inactive: buildString('inactive'),
+            all: buildString('all'),
+        };
+
+        container.dataset.mlActiveString = strings.active;
+        container.dataset.mlInactiveString = strings.inactive;
+        container.dataset.mlAllString = strings.all;
+
+        const copySection = container.querySelector?.('.mr-copy-section');
+        if (copySection) {
+            copySection.dataset.mlActive = strings.active;
+            copySection.dataset.mlInactive = strings.inactive;
+            copySection.dataset.mlAll = strings.all;
+            const activeMode = copySection.querySelector?.('.mr-copy-mode.active')
+                ?.dataset?.mlCopyMode || 'all';
+            const copyCode = copySection.querySelector?.('.mr-copy-code');
+            if (copyCode) {
+                copyCode.textContent = strings[activeMode] || strings.all;
+            }
+        }
+
+        const sections = container.querySelectorAll?.(
+            '.mr-model-section[data-ml-category]'
+        ) || [];
+        for (const section of sections) {
+            const category = section.dataset?.mlCategory || 'unknown';
+            const categoryModels = byCategory[category];
+            if (!categoryModels) continue;
+            for (const filter of ['active', 'inactive']) {
+                const button = section.querySelector?.(
+                    `.mr-model-group-${filter} .mr-btn-copy-compact`
+                );
+                if (!button) continue;
+                const text = categoryModels[filter]
+                    .map(model => this.getModelToken(model, category))
+                    .join(' ');
+                button.setAttribute(
+                    'onclick',
+                    `window.MLCopy(${this.escapeJsString(text)}, this)`
+                );
+            }
+        }
+    },
+
+    updateLoadedModelStrengthsFromNode(node) {
+        if (
+            this.activeTab !== 'loaded'
+            || !this.contentElement
+            || !Array.isArray(this.cachedLoadedModelsData?.loaded_models)
+        ) {
+            return false;
+        }
+
+        const widgets = Array.isArray(node?.widgets) ? node.widgets : [];
+        const dynamicLoras = widgets
+            .filter(widget => /^lora_\d+$/.test(widget?.name) && widget?.value?.lora)
+            .map(widget => widget.value);
+        const lorasWidget = widgets.find(widget => widget?.name === 'loras');
+        const loras = dynamicLoras.length
+            ? dynamicLoras
+            : (Array.isArray(lorasWidget?.value) ? lorasWidget.value : []);
+        const entries = loras
+            .map((lora) => {
+                if (!lora || typeof lora !== 'object') return null;
+                const identity = lora.lora
+                    || lora.name
+                    || lora.filename
+                    || lora.path
+                    || '';
+                const strength = Number(lora.strength);
+                return identity && Number.isFinite(strength)
+                    ? {
+                        identity: this.normalizeLoadedModelIdentity(identity),
+                        strength,
+                    }
+                    : null;
+            })
+            .filter(Boolean);
+        if (!entries.length) return false;
+
+        const nodeId = String(node?.id ?? '');
+        const modelBuckets = new Map();
+        for (const model of this.cachedLoadedModelsData.loaded_models) {
+            if (String(model.node_id ?? '') !== nodeId) continue;
+            const identity = this.normalizeLoadedModelIdentity(
+                model.original_lora_name
+                || model.original_path
+                || model.name
+                || model.filename
+            );
+            if (!identity) continue;
+            if (!modelBuckets.has(identity)) {
+                modelBuckets.set(identity, []);
+            }
+            modelBuckets.get(identity).push(model);
+        }
+
+        const chips = Array.from(
+            this.contentElement.querySelectorAll?.('[data-ml-loaded-model-key]') || []
+        );
+        let updated = false;
+        for (const entry of entries) {
+            const model = modelBuckets.get(entry.identity)?.shift();
+            if (!model || Number(model.strength) === entry.strength) continue;
+
+            model.strength = entry.strength;
+            const modelKey = this.getLoadedModelDomKey(model);
+            const chip = chips.find(
+                candidate => candidate.dataset?.mlLoadedModelKey === modelKey
+            );
+            const strengthElement = chip?.querySelector?.('.mr-model-chip-strength');
+            if (strengthElement) {
+                strengthElement.textContent = entry.strength.toFixed(2);
+            }
+            updated = true;
+        }
+        if (!updated) return false;
+
+        this.updateLoadedModelCopyValues(
+            this.contentElement,
+            this.cachedLoadedModelsData.loaded_models
+        );
+        const workflow = this.getCurrentWorkflow?.();
+        const workflowSignature = workflow
+            ? this.getWorkflowSignature?.(workflow)
+            : '';
+        if (workflowSignature) {
+            this.cachedLoadedModelsSignature = workflowSignature;
+            this.activeWorkflowSignature = workflowSignature;
+        }
+        this.saveLoadedModelsCacheForActiveWorkflow?.();
+        return true;
+    },
+
     displayLoadedModels(container, data) {
         const loadedModels = data.loaded_models || [];
         const total = data.total || 0;
@@ -272,7 +442,7 @@ export const tabsLoadedMethods = {
             const hasInactive = modelsObj.inactive.length > 0;
             const sectionTotal = modelsObj.active.length + modelsObj.inactive.length;
 
-            html += `<div class="mr-model-section" data-ml-filter="all" data-ml-active="${hasActive}" data-ml-inactive="${hasInactive}">`;
+            html += `<div class="mr-model-section" data-ml-filter="all" data-ml-category="${this.escapeHtml(category)}" data-ml-active="${hasActive}" data-ml-inactive="${hasInactive}">`;
 
             html += `<div class="mr-model-section-header">
                 <div class="mr-model-section-heading">
@@ -298,7 +468,8 @@ export const tabsLoadedMethods = {
                 for (const model of modelsObj.active) {
                     const { name, strength } = this.getModelNameAndStrength(model);
                     const fullName = model.original_path || model.name || name;
-                    html += `<span class="mr-model-chip"${this.getContextMenuAttrs(this.getLoadedModelContext(model))}${this.getModelPreviewTooltipAttrs(model, fullName)}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
+                    const modelKey = this.getLoadedModelDomKey(model);
+                    html += `<span class="mr-model-chip" data-ml-loaded-model-key="${this.escapeHtml(modelKey)}"${this.getContextMenuAttrs(this.getLoadedModelContext(model))}${this.getModelPreviewTooltipAttrs(model, fullName)}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
                 }
                 html += `</div></div>`;
             }
@@ -316,7 +487,8 @@ export const tabsLoadedMethods = {
                 for (const model of modelsObj.inactive) {
                     const { name, strength } = this.getModelNameAndStrength(model);
                     const fullName = model.original_path || model.name || name;
-                    html += `<span class="mr-model-chip"${this.getContextMenuAttrs(this.getLoadedModelContext(model))}${this.getModelPreviewTooltipAttrs(model, fullName)}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
+                    const modelKey = this.getLoadedModelDomKey(model);
+                    html += `<span class="mr-model-chip" data-ml-loaded-model-key="${this.escapeHtml(modelKey)}"${this.getContextMenuAttrs(this.getLoadedModelContext(model))}${this.getModelPreviewTooltipAttrs(model, fullName)}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
                 }
                 html += `</div></div>`;
             }

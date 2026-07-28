@@ -1166,6 +1166,262 @@ test('node context integration preserves existing menu hooks and refreshes after
   ]);
 });
 
+test('LoRA Manager callback-driven widgets refresh the open workflow analysis', () => {
+  const CALLBACK_DRIVEN_MODEL_WIDGETS = {
+    LoraLoaderV2: new Set(['text', 'loras']),
+    'Lora Loader (LoraManager)': new Set(['text', 'loras']),
+    'Lora Stacker (LoraManager)': new Set(['text', 'loras']),
+    'Power Lora Loader (rgthree)': new Set(),
+  };
+  const configureCallbackDrivenModelWidgets = eval(
+    `(${extractMethod(modelResolverSource, 'configureCallbackDrivenModelWidgets')})`
+  );
+  const getCallbackDrivenModelListSignature = eval(
+    `(${extractMethod(modelResolverSource, 'getCallbackDrivenModelListSignature')})`
+  );
+  const getCallbackDrivenModelStrengthSignature = eval(
+    `(${extractMethod(modelResolverSource, 'getCallbackDrivenModelStrengthSignature')})`
+  );
+  const calls = [];
+  const lorasWidget = {
+    name: 'loras',
+    value: [],
+    callback(value) {
+      calls.push(['original-loras', value]);
+      return 'callback-result';
+    },
+  };
+  const textWidget = {
+    name: 'text',
+    callback(value) {
+      calls.push(['original-text', value]);
+      if (value === '<lora:second:1>') {
+        lorasWidget.value = [
+          ...lorasWidget.value,
+          { name: 'second', strength: 1, active: true },
+        ];
+      }
+    },
+  };
+  const unrelatedWidget = {
+    name: 'seed',
+    callback() {
+      calls.push(['unrelated']);
+    },
+  };
+  const resolver = {
+    callbackDrivenModelWidgetStates: new WeakMap(),
+    getCallbackDrivenModelListSignature,
+    getCallbackDrivenModelStrengthSignature,
+    scheduleNodeContextMenuAnalysis: () => calls.push(['context-analysis']),
+    dialog: {
+      isWorkflowRefreshSuppressed: () => false,
+      scheduleActiveWorkflowRefresh: reason => calls.push(['dialog-refresh', reason]),
+    },
+  };
+  const node = {
+    comfyClass: 'Lora Loader (LoraManager)',
+    widgets: [textWidget, lorasWidget, unrelatedWidget],
+  };
+
+  configureCallbackDrivenModelWidgets.call(resolver, node);
+  lorasWidget.value = [{ name: 'existing', strength: 1, active: true }];
+  configureCallbackDrivenModelWidgets.call(resolver, node);
+
+  textWidget.callback('<lora:second');
+  lorasWidget.value = [{ name: 'existing', strength: 0.5, active: true }];
+  assert.equal(lorasWidget.callback(lorasWidget.value), 'callback-result');
+  textWidget.callback('<lora:second:1>');
+  unrelatedWidget.callback();
+  assert.deepEqual(calls, [
+    ['original-text', '<lora:second'],
+    ['original-loras', [{ name: 'existing', strength: 0.5, active: true }]],
+    ['original-text', '<lora:second:1>'],
+    ['context-analysis'],
+    ['dialog-refresh', 'node-widget-change'],
+    ['unrelated'],
+  ]);
+});
+
+test('callback-driven widget refresh respects internal workflow update suppression', () => {
+  const CALLBACK_DRIVEN_MODEL_WIDGETS = {
+    LoraLoaderV2: new Set(['text', 'loras']),
+    'Lora Loader (LoraManager)': new Set(['text', 'loras']),
+    'Lora Stacker (LoraManager)': new Set(['text', 'loras']),
+    'Power Lora Loader (rgthree)': new Set(),
+  };
+  const configureCallbackDrivenModelWidgets = eval(
+    `(${extractMethod(modelResolverSource, 'configureCallbackDrivenModelWidgets')})`
+  );
+  const getCallbackDrivenModelListSignature = eval(
+    `(${extractMethod(modelResolverSource, 'getCallbackDrivenModelListSignature')})`
+  );
+  const getCallbackDrivenModelStrengthSignature = eval(
+    `(${extractMethod(modelResolverSource, 'getCallbackDrivenModelStrengthSignature')})`
+  );
+  const calls = [];
+  const widget = {
+    name: 'loras',
+    value: [],
+    callback: () => calls.push('original'),
+  };
+  const resolver = {
+    callbackDrivenModelWidgetStates: new WeakMap(),
+    getCallbackDrivenModelListSignature,
+    getCallbackDrivenModelStrengthSignature,
+    scheduleNodeContextMenuAnalysis: () => calls.push('context-analysis'),
+    dialog: {
+      isWorkflowRefreshSuppressed: () => true,
+      scheduleActiveWorkflowRefresh: () => calls.push('dialog-refresh'),
+    },
+  };
+
+  configureCallbackDrivenModelWidgets.call(resolver, {
+    comfyClass: 'Lora Stacker (LoraManager)',
+    widgets: [widget],
+  });
+  widget.value = [{ name: 'new-lora', strength: 1, active: true }];
+  widget.callback(widget.value);
+
+  assert.deepEqual(calls, ['original']);
+});
+
+test('rgthree Power Lora Loader updates strength without reloading workflow analysis', async () => {
+  const CALLBACK_DRIVEN_MODEL_WIDGETS = {
+    LoraLoaderV2: new Set(['text', 'loras']),
+    'Lora Loader (LoraManager)': new Set(['text', 'loras']),
+    'Lora Stacker (LoraManager)': new Set(['text', 'loras']),
+    'Power Lora Loader (rgthree)': new Set(),
+  };
+  const configureCallbackDrivenModelWidgets = eval(
+    `(${extractMethod(modelResolverSource, 'configureCallbackDrivenModelWidgets')})`
+  );
+  const getCallbackDrivenModelListSignature = eval(
+    `(${extractMethod(modelResolverSource, 'getCallbackDrivenModelListSignature')})`
+  );
+  const getCallbackDrivenModelStrengthSignature = eval(
+    `(${extractMethod(modelResolverSource, 'getCallbackDrivenModelStrengthSignature')})`
+  );
+  const calls = [];
+  const node = {
+    comfyClass: 'Power Lora Loader (rgthree)',
+    widgets: [{
+      name: 'lora_1',
+      value: {
+        on: true,
+        lora: 'existing.safetensors',
+        strength: 1,
+      },
+    }],
+    setDirtyCanvas() {
+      calls.push('dirty');
+    },
+  };
+  const resolver = {
+    callbackDrivenModelWidgetStates: new WeakMap(),
+    getCallbackDrivenModelListSignature,
+    getCallbackDrivenModelStrengthSignature,
+    scheduleNodeContextMenuAnalysis: () => calls.push('context-analysis'),
+    dialog: {
+      isWorkflowRefreshSuppressed: () => false,
+      updateLoadedModelStrengthsFromNode: () => calls.push('loaded-strength-update'),
+      scheduleActiveWorkflowRefresh: reason => calls.push(`dialog-refresh:${reason}`),
+    },
+  };
+
+  configureCallbackDrivenModelWidgets.call(resolver, node);
+
+  node.widgets[0].value.strength = 0.5;
+  node.setDirtyCanvas(true, true);
+  await Promise.resolve();
+
+  node.widgets.push({
+    name: 'lora_2',
+    value: {
+      on: true,
+      lora: 'new-model.safetensors',
+      strength: 1,
+    },
+  });
+  node.setDirtyCanvas(true, true);
+  await Promise.resolve();
+
+  assert.deepEqual(calls, [
+    'dirty',
+    'loaded-strength-update',
+    'dirty',
+    'context-analysis',
+    'dialog-refresh:node-widget-change',
+  ]);
+});
+
+test('rgthree dynamic lora widgets bypass the generic full workflow refresh', () => {
+  const CALLBACK_DRIVEN_MODEL_WIDGETS = {
+    LoraLoaderV2: new Set(['text', 'loras']),
+    'Lora Loader (LoraManager)': new Set(['text', 'loras']),
+    'Lora Stacker (LoraManager)': new Set(['text', 'loras']),
+    'Power Lora Loader (rgthree)': new Set(),
+  };
+  const configureNodeContextMenu = eval(
+    `(${extractMethod(modelResolverSource, 'configureNodeContextMenu')})`
+  );
+  const isCallbackDrivenModelWidget = eval(
+    `(${extractMethod(modelResolverSource, 'isCallbackDrivenModelWidget')})`
+  );
+  const calls = [];
+  class NodeType {}
+  NodeType.prototype.comfyClass = 'Power Lora Loader (rgthree)';
+  NodeType.prototype.onWidgetChanged = function(name) {
+    calls.push(`original:${name}`);
+  };
+  const node = new NodeType();
+  const resolver = {
+    callbackDrivenModelWidgetStates: new WeakMap([
+      [node, { notify: () => calls.push('selective-update') }],
+    ]),
+    getResolvedModelsForNodeContextMenu: () => [],
+    isCallbackDrivenModelWidget,
+    scheduleNodeContextMenuAnalysis: () => calls.push('context-analysis'),
+    dialog: {
+      isWorkflowRefreshSuppressed: () => false,
+      isWorkflowStrengthWidgetName: () => false,
+      scheduleActiveWorkflowRefresh: () => calls.push('dialog-refresh'),
+    },
+  };
+
+  configureNodeContextMenu.call(resolver, NodeType);
+  node.onWidgetChanged('lora_1');
+
+  assert.deepEqual(calls, [
+    'original:lora_1',
+    'selective-update',
+  ]);
+});
+
+test('LoRA Manager text onWidgetChanged waits for a confirmed model-list change', () => {
+  const configureNodeContextMenu = eval(`(${extractMethod(modelResolverSource, 'configureNodeContextMenu')})`);
+  const calls = [];
+  class NodeType {}
+  NodeType.prototype.onWidgetChanged = function(name) {
+    calls.push(`original:${name}`);
+  };
+  const resolver = {
+    getResolvedModelsForNodeContextMenu: () => [],
+    isCallbackDrivenModelWidget: (_node, widgetName) => widgetName === 'text',
+    scheduleNodeContextMenuAnalysis: () => calls.push('context-analysis'),
+    dialog: {
+      isWorkflowRefreshSuppressed: () => false,
+      isWorkflowStrengthWidgetName: () => false,
+      scheduleActiveWorkflowRefresh: () => calls.push('dialog-refresh'),
+    },
+  };
+
+  configureNodeContextMenu.call(resolver, NodeType);
+  new NodeType().onWidgetChanged('text');
+
+  assert.deepEqual(calls, ['original:text']);
+});
+
 test('strength widget changes skip proactive node context analysis', () => {
   const configureNodeContextMenu = eval(`(${extractMethod(modelResolverSource, 'configureNodeContextMenu')})`);
   const isWorkflowStrengthWidgetName = eval(
@@ -1423,6 +1679,83 @@ test('background Loaded Models refresh keeps the current view until new data is 
 
   assert.equal(contentElement.innerHTML, '<div>0.75</div>');
   assert.equal(contentElement.scrollTop, 48);
+});
+
+test('Power Lora Loader strength updates only its Loaded Models chip and cache', () => {
+  const updateLoadedModelStrengthsFromNode = eval(
+    `(${extractMethod(tabsLoadedMethodsSource, 'updateLoadedModelStrengthsFromNode')})`
+  );
+  const normalizeLoadedModelIdentity = eval(
+    `(${extractMethod(tabsLoadedMethodsSource, 'normalizeLoadedModelIdentity')})`
+  );
+  const getLoadedModelDomKey = eval(
+    `(${extractMethod(tabsLoadedMethodsSource, 'getLoadedModelDomKey')})`
+  );
+  const strengthElement = { textContent: '1.00' };
+  const chip = {
+    dataset: { mlLoadedModelKey: 'model-key' },
+    querySelector: selector => (
+      selector === '.mr-model-chip-strength' ? strengthElement : null
+    ),
+  };
+  const contentElement = {
+    querySelectorAll: selector => (
+      selector === '[data-ml-loaded-model-key]' ? [chip] : []
+    ),
+  };
+  const loadedModel = {
+    node_id: 91,
+    widget_index: 0,
+    nested_key: 'lora',
+    category: 'loras',
+    original_path: 'styles/existing.safetensors',
+    strength: 1,
+  };
+  const calls = [];
+  const dialog = {
+    activeTab: 'loaded',
+    contentElement,
+    cachedLoadedModelsData: {
+      loaded_models: [loadedModel],
+      total: 1,
+    },
+    cachedLoadedModelsSignature: 'old-signature',
+    activeWorkflowSignature: 'old-signature',
+    normalizeLoadedModelIdentity,
+    getLoadedModelDomKey,
+    getMissingModelKey: () => 'model-key',
+    updateLoadedModelCopyValues: (_container, models) => {
+      calls.push(['copy-values', models[0].strength]);
+    },
+    getCurrentWorkflow: () => ({ nodes: [{ id: 91 }] }),
+    getWorkflowSignature: () => 'strength-signature',
+    saveLoadedModelsCacheForActiveWorkflow: () => calls.push(['save-cache']),
+    displayLoadedModels: () => calls.push(['full-render']),
+  };
+  const node = {
+    id: 91,
+    comfyClass: 'Power Lora Loader (rgthree)',
+    widgets: [{
+      name: 'lora_1',
+      value: {
+        on: true,
+        lora: 'styles/existing.safetensors',
+        strength: 0.5,
+      },
+    }],
+  };
+
+  const updated = updateLoadedModelStrengthsFromNode.call(dialog, node);
+
+  assert.equal(updated, true);
+  assert.equal(loadedModel.strength, 0.5);
+  assert.equal(strengthElement.textContent, '0.50');
+  assert.equal(dialog.cachedLoadedModelsSignature, 'strength-signature');
+  assert.equal(dialog.activeWorkflowSignature, 'strength-signature');
+  assert.deepEqual(calls, [
+    ['copy-values', 0.5],
+    ['save-cache'],
+  ]);
 });
 
 test('changed workflow model keeps the selected row and batch checkbox for the same loader slot', () => {
@@ -2206,6 +2539,49 @@ test('Missing Models signature ignores strength but tracks model identity change
   assert.notEqual(
     getMissingWorkflowSignature.call(dialog, strengthChanged),
     getMissingWorkflowSignature.call(dialog, modelChanged)
+  );
+});
+
+test('Missing Models signature tracks LoRA Manager list membership changes', () => {
+  const getWorkflowSignature = eval(`(${extractMethod(workflowStateMethodsSource, 'getWorkflowSignature')})`);
+  const getMissingWorkflowSignature = eval(`(${extractMethod(workflowStateMethodsSource, 'getMissingWorkflowSignature')})`);
+  const getWorkflowSignatureData = eval(`(${extractMethod(workflowStateMethodsSource, 'getWorkflowSignatureData')})`);
+  const dialog = {
+    capabilities: { node_rules: {} },
+    getWorkflowSignature,
+    getMissingWorkflowSignature,
+    getWorkflowSignatureData,
+  };
+  const makeWorkflow = (loras) => ({
+    nodes: [{
+      id: 83,
+      type: 'Lora Loader (LoraManager)',
+      widgets_values: [
+        { version: 1, textWidgetName: 'text' },
+        '<lora:first:1>',
+        loras,
+      ],
+    }],
+    links: [],
+  });
+  const original = makeWorkflow([
+    { name: 'first', strength: 1, active: true },
+  ]);
+  const strengthChanged = makeWorkflow([
+    { name: 'first', strength: 0.5, active: true },
+  ]);
+  const loraAdded = makeWorkflow([
+    { name: 'first', strength: 0.5, active: true },
+    { name: 'second', strength: 1, active: true },
+  ]);
+
+  assert.equal(
+    getMissingWorkflowSignature.call(dialog, original),
+    getMissingWorkflowSignature.call(dialog, strengthChanged)
+  );
+  assert.notEqual(
+    getMissingWorkflowSignature.call(dialog, strengthChanged),
+    getMissingWorkflowSignature.call(dialog, loraAdded)
   );
 });
 

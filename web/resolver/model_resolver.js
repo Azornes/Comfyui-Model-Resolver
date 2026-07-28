@@ -36,6 +36,12 @@ const WORKFLOW_DEPENDENCY_MARKER_BUTTON_NAME = "Open Model Resolver";
 const WORKFLOW_DEPENDENCY_MARKER_AUTO_ID = -918273646;
 const WORKFLOW_DEPENDENCY_MARKER_DEFAULT_SIZE = Object.freeze([160, 40]);
 const WORKFLOW_DEPENDENCY_MARKER_MIN_SIZE = Object.freeze([160, 40]);
+const CALLBACK_DRIVEN_MODEL_WIDGETS = Object.freeze({
+    LoraLoaderV2: new Set(["text", "loras"]),
+    "Lora Loader (LoraManager)": new Set(["text", "loras"]),
+    "Lora Stacker (LoraManager)": new Set(["text", "loras"]),
+    "Power Lora Loader (rgthree)": new Set(),
+});
 
 function getKeybindingSetting(id) {
     try {
@@ -129,6 +135,7 @@ export class ModelResolver {
         this.nodeContextAnalysisSignature = null;
         this.nodeContextAnalysisPromise = null;
         this.nodeContextAnalysisTimer = null;
+        this.callbackDrivenModelWidgetStates = new WeakMap();
     }
 
     setup = async () => {
@@ -523,7 +530,13 @@ export class ModelResolver {
         nodeType.prototype.onWidgetChanged = function() {
             const result = originalOnWidgetChanged?.apply(this, arguments);
             const widgetName = arguments[0];
-            if (!owner.dialog?.isWorkflowRefreshSuppressed?.()) {
+            const handledByCallbackDrivenWidget = owner.isCallbackDrivenModelWidget?.(
+                this,
+                widgetName
+            );
+            if (handledByCallbackDrivenWidget) {
+                owner.callbackDrivenModelWidgetStates?.get(this)?.notify?.();
+            } else if (!owner.dialog?.isWorkflowRefreshSuppressed?.()) {
                 if (!owner.dialog?.isWorkflowStrengthWidgetName?.(widgetName)) {
                     owner.scheduleNodeContextMenuAnalysis();
                 }
@@ -532,6 +545,187 @@ export class ModelResolver {
             return result;
         };
         nodeType.prototype.__modelResolverContextMenuPatched = true;
+    }
+
+    isCallbackDrivenModelWidget(node, widgetName = '') {
+        const nodeTypes = [
+            node?.comfyClass,
+            node?.type,
+            node?.constructor?.comfyClass,
+            node?.constructor?.ComfyClass,
+        ];
+        const nodeType = nodeTypes.find(candidate => CALLBACK_DRIVEN_MODEL_WIDGETS[candidate]);
+        if (
+            nodeType === 'Power Lora Loader (rgthree)'
+            && /^lora_\d+$/.test(widgetName)
+        ) {
+            return true;
+        }
+        return Boolean(CALLBACK_DRIVEN_MODEL_WIDGETS[nodeType]?.has(widgetName));
+    }
+
+    getCallbackDrivenModelListSignature(node) {
+        const widgets = Array.isArray(node?.widgets) ? node.widgets : [];
+        const isRgthreePowerLoraLoader = [
+            node?.comfyClass,
+            node?.type,
+            node?.constructor?.comfyClass,
+            node?.constructor?.ComfyClass,
+        ].includes('Power Lora Loader (rgthree)');
+        const lorasWidget = widgets.find(widget => widget?.name === 'loras');
+        const loras = isRgthreePowerLoraLoader
+            ? widgets
+                .filter(widget => /^lora_\d+$/.test(widget?.name) && widget?.value?.lora)
+                .map(widget => ({
+                    name: widget.value.lora,
+                    active: widget.value.on !== false,
+                }))
+            : (Array.isArray(lorasWidget?.value) ? lorasWidget.value : []);
+        const normalized = loras
+            .map((lora) => {
+                if (lora && typeof lora === 'object') {
+                    const name = String(
+                        lora.name
+                        || lora.filename
+                        || lora.path
+                        || ''
+                    ).trim();
+                    return name ? { name, active: lora.active !== false } : null;
+                }
+                const name = String(lora || '').trim();
+                return name ? { name, active: true } : null;
+            })
+            .filter(Boolean)
+            .sort((left, right) => (
+                left.name.localeCompare(right.name)
+                || Number(left.active) - Number(right.active)
+            ));
+        return JSON.stringify(normalized);
+    }
+
+    getCallbackDrivenModelStrengthSignature(node) {
+        const widgets = Array.isArray(node?.widgets) ? node.widgets : [];
+        const isRgthreePowerLoraLoader = [
+            node?.comfyClass,
+            node?.type,
+            node?.constructor?.comfyClass,
+            node?.constructor?.ComfyClass,
+        ].includes('Power Lora Loader (rgthree)');
+        const lorasWidget = widgets.find(widget => widget?.name === 'loras');
+        const loras = isRgthreePowerLoraLoader
+            ? widgets
+                .filter(widget => /^lora_\d+$/.test(widget?.name) && widget?.value?.lora)
+                .map(widget => ({
+                    name: widget.value.lora,
+                    strength: widget.value.strength,
+                }))
+            : (Array.isArray(lorasWidget?.value) ? lorasWidget.value : []);
+        const normalized = loras
+            .map((lora) => {
+                if (!lora || typeof lora !== 'object') return null;
+                const name = String(
+                    lora.name
+                    || lora.filename
+                    || lora.path
+                    || ''
+                ).trim();
+                if (!name) return null;
+                const numericStrength = Number(lora.strength);
+                return {
+                    name,
+                    strength: Number.isFinite(numericStrength) ? numericStrength : null,
+                };
+            })
+            .filter(Boolean)
+            .sort((left, right) => (
+                left.name.localeCompare(right.name)
+                || (left.strength ?? 0) - (right.strength ?? 0)
+            ));
+        return JSON.stringify(normalized);
+    }
+
+    configureCallbackDrivenModelWidgets(node) {
+        const nodeTypes = [
+            node?.comfyClass,
+            node?.type,
+            node?.constructor?.comfyClass,
+            node?.constructor?.ComfyClass,
+        ];
+        const nodeType = nodeTypes.find(candidate => CALLBACK_DRIVEN_MODEL_WIDGETS[candidate]);
+        const watchedWidgetNames = CALLBACK_DRIVEN_MODEL_WIDGETS[nodeType];
+        if (!watchedWidgetNames || !Array.isArray(node?.widgets)) return;
+
+        const owner = this;
+        if (!(this.callbackDrivenModelWidgetStates instanceof WeakMap)) {
+            this.callbackDrivenModelWidgetStates = new WeakMap();
+        }
+        let state = this.callbackDrivenModelWidgetStates.get(node);
+        if (!state) {
+            state = {
+                signature: this.getCallbackDrivenModelListSignature(node),
+                strengthSignature: this.getCallbackDrivenModelStrengthSignature(node),
+            };
+            this.callbackDrivenModelWidgetStates.set(node, state);
+        } else {
+            state.signature = this.getCallbackDrivenModelListSignature(node);
+            state.strengthSignature = this.getCallbackDrivenModelStrengthSignature(node);
+        }
+
+        const notifyIfModelListChanged = () => {
+            const nextSignature = owner.getCallbackDrivenModelListSignature(node);
+            const nextStrengthSignature = owner.getCallbackDrivenModelStrengthSignature(node);
+            const modelListChanged = nextSignature !== state.signature;
+            const strengthChanged = nextStrengthSignature !== state.strengthSignature;
+            state.signature = nextSignature;
+            state.strengthSignature = nextStrengthSignature;
+            if (owner.dialog?.isWorkflowRefreshSuppressed?.()) return;
+
+            if (
+                modelListChanged
+            ) {
+                owner.scheduleNodeContextMenuAnalysis();
+                owner.dialog?.scheduleActiveWorkflowRefresh?.('node-widget-change');
+            } else if (strengthChanged) {
+                owner.dialog?.updateLoadedModelStrengthsFromNode?.(node);
+            }
+        };
+        state.notify = notifyIfModelListChanged;
+
+        for (const widget of node.widgets) {
+            if (!watchedWidgetNames.has(widget?.name)) continue;
+            if (widget.callback?.__modelResolverCallbackDrivenWidget) continue;
+
+            const originalCallback = widget.callback;
+            const wrappedCallback = function() {
+                const result = originalCallback?.apply(this, arguments);
+                notifyIfModelListChanged();
+                return result;
+            };
+            wrappedCallback.__modelResolverCallbackDrivenWidget = true;
+            widget.callback = wrappedCallback;
+        }
+
+        if (
+            nodeType === 'Power Lora Loader (rgthree)'
+            && typeof node.setDirtyCanvas === 'function'
+            && !node.setDirtyCanvas.__modelResolverCallbackDrivenNode
+        ) {
+            const originalSetDirtyCanvas = node.setDirtyCanvas;
+            let inspectionQueued = false;
+            const wrappedSetDirtyCanvas = function() {
+                const result = originalSetDirtyCanvas.apply(this, arguments);
+                if (!inspectionQueued) {
+                    inspectionQueued = true;
+                    queueMicrotask(() => {
+                        inspectionQueued = false;
+                        notifyIfModelListChanged();
+                    });
+                }
+                return result;
+            };
+            wrappedSetDirtyCanvas.__modelResolverCallbackDrivenNode = true;
+            node.setDirtyCanvas = wrappedSetDirtyCanvas;
+        }
     }
 
     waitForResolverDialogReady(timeoutMs = 2500) {

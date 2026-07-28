@@ -35,10 +35,12 @@ app.registerExtension({
     },
     nodeCreated(node) {
         modelResolver.configureWorkflowDependencyMarkerNode(node);
+        modelResolver.configureCallbackDrivenModelWidgets(node);
         modelResolver.scheduleNodeContextMenuAnalysis();
     },
     loadedGraphNode(node) {
         modelResolver.configureWorkflowDependencyMarkerNode(node);
+        modelResolver.configureCallbackDrivenModelWidgets(node);
         modelResolver.scheduleNodeContextMenuAnalysis();
     },
     afterConfigureGraph() {
