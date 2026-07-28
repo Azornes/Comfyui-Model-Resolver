@@ -538,23 +538,46 @@ export const missingBrowserMethods = {
         return selected;
     },
 
-    selectWorkflowModelReference(reference = {}, data = this.cachedAnalysisData || {}) {
+    selectWorkflowModelReference(
+        reference = {},
+        data = this.cachedAnalysisData || {},
+        options = {}
+    ) {
         const selected = this.getResolvedWorkflowModels(data)
             .find(model => matchesWorkflowModelReference(model, reference));
         if (!selected || !this.contentElement) return null;
 
-        this.showResolvedModels = true;
-        this.missingModelsTypeFilter = 'all';
-        this.missingModelsTypeFilterMenuOpen = false;
-        safeStorage.setItem(this.showResolvedModelsStorageKey, '1');
-        this.selectedMissingModelKey = this.getMissingModelKey(selected);
-        this.displayMissingModels(this.contentElement, data);
+        const selectedKey = this.getMissingModelKey(selected);
+        const selectionChanged = selectedKey !== this.selectedMissingModelKey;
+        const existingRow = Array.from(
+            this.contentElement.querySelectorAll?.('.mr-missing-list-row') || []
+        ).find(item => item.dataset.missingKey === selectedKey);
+        const reuseExistingBrowser = Boolean(
+            options.preferExistingBrowser && existingRow
+        );
+        this.selectedMissingModelKey = selectedKey;
+
+        if (reuseExistingBrowser) {
+            if (selectionChanged) {
+                this.displayMissingModels(
+                    this.contentElement,
+                    data,
+                    { selectionOnly: true }
+                );
+            }
+        } else {
+            this.showResolvedModels = true;
+            this.missingModelsTypeFilter = 'all';
+            this.missingModelsTypeFilterMenuOpen = false;
+            safeStorage.setItem(this.showResolvedModelsStorageKey, '1');
+            this.displayMissingModels(this.contentElement, data);
+        }
 
         requestAnimationFrame(() => {
             const row = Array.from(
                 this.contentElement?.querySelectorAll?.('.mr-missing-list-row') || []
             ).find(item => item.dataset.missingKey === this.selectedMissingModelKey);
-            row?.scrollIntoView?.({ block: 'nearest' });
+            row?.scrollIntoView?.({ block: 'center', inline: 'nearest' });
         });
         return selected;
     },

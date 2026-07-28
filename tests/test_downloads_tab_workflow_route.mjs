@@ -2,7 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { html, normalizePathIdentity } from '../web/resolver/utils/html_utils.js';
+import {
+  html,
+  normalizePathIdentity,
+  safeStorage,
+} from '../web/resolver/utils/html_utils.js';
 import { getModelCardUrl } from '../web/resolver/utils/url_utils.js';
 import { extractComfyWorkflow } from '../web/resolver/utils/workflow_metadata.js';
 import {
@@ -2318,6 +2322,133 @@ test('workflow model selection wait resolves only after the queued request compl
   const completed = await waitForWorkflowModelSelection.call(resolver, request, 500);
   assert.equal(completed, request);
   assert.equal(completed.status, 'selected');
+});
+
+test('Show in Model Resolver reuses the visible Missing Models browser without reloading', async () => {
+  const showResolvedNodeModelInResolver = eval(
+    `(${extractMethod(modelResolverSource, 'showResolvedNodeModelInResolver')})`
+  );
+  const reference = {
+    node_id: 7,
+    widget_index: 0,
+    original_path: 'model.safetensors',
+  };
+  const analysisData = { resolved_models: [reference] };
+  const selectCalls = [];
+  let loadCount = 0;
+  let queueCount = 0;
+  const previousLocalStorageDescriptor = Object.getOwnPropertyDescriptor(
+    globalThis,
+    'localStorage'
+  );
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: { setItem() {} },
+  });
+
+  const resolver = {
+    dialog: {
+      activeTab: 'missing',
+      cachedAnalysisData: analysisData,
+      isVisible: () => true,
+      persistActiveTab() {},
+      selectWorkflowModelReference(...args) {
+        selectCalls.push(args);
+        return reference;
+      },
+      queueWorkflowModelReferenceSelection() {
+        queueCount += 1;
+        return { status: 'pending' };
+      },
+      async loadWorkflowData() {
+        loadCount += 1;
+      },
+    },
+    getNodeContextWorkflowState: () => ({ signature: 'current' }),
+    getCurrentNodeContextAnalysis: () => analysisData,
+    waitForResolverDialogReady: () => {
+      throw new Error('The already visible browser should not wait for reopening');
+    },
+  };
+
+  try {
+    await showResolvedNodeModelInResolver.call(resolver, reference);
+  } finally {
+    if (previousLocalStorageDescriptor) {
+      Object.defineProperty(
+        globalThis,
+        'localStorage',
+        previousLocalStorageDescriptor
+      );
+    } else {
+      delete globalThis.localStorage;
+    }
+  }
+
+  assert.equal(loadCount, 0);
+  assert.equal(queueCount, 0);
+  assert.equal(selectCalls.length, 1);
+  assert.equal(selectCalls[0][0], reference);
+  assert.equal(selectCalls[0][1], analysisData);
+  assert.deepEqual(selectCalls[0][2], { preferExistingBrowser: true });
+});
+
+test('workflow model selection patches the existing browser and centers its row', () => {
+  const selectWorkflowModelReference = eval(
+    `(${extractMethod(missingBrowserMethodsSource, 'selectWorkflowModelReference')})`
+  );
+  const selected = {
+    node_id: 7,
+    widget_index: 0,
+    original_path: 'model.safetensors',
+  };
+  const row = {
+    dataset: { missingKey: 'selected-key' },
+    scrollIntoViewOptions: null,
+    scrollIntoView(options) {
+      this.scrollIntoViewOptions = options;
+    },
+  };
+  const renderOptions = [];
+  const previousRequestAnimationFrame = globalThis.requestAnimationFrame;
+  globalThis.requestAnimationFrame = callback => callback();
+
+  const dialog = {
+    cachedAnalysisData: { resolved_models: [selected] },
+    contentElement: {
+      querySelectorAll: () => [row],
+    },
+    selectedMissingModelKey: 'previous-key',
+    getResolvedWorkflowModels: data => data.resolved_models,
+    getMissingModelKey: () => 'selected-key',
+    displayMissingModels(_container, _data, options) {
+      renderOptions.push(options);
+    },
+  };
+
+  try {
+    assert.equal(
+      selectWorkflowModelReference.call(
+        dialog,
+        selected,
+        dialog.cachedAnalysisData,
+        { preferExistingBrowser: true }
+      ),
+      selected
+    );
+  } finally {
+    if (previousRequestAnimationFrame) {
+      globalThis.requestAnimationFrame = previousRequestAnimationFrame;
+    } else {
+      delete globalThis.requestAnimationFrame;
+    }
+  }
+
+  assert.deepEqual(renderOptions, [{ selectionOnly: true }]);
+  assert.deepEqual(row.scrollIntoViewOptions, {
+    block: 'center',
+    inline: 'nearest',
+  });
 });
 
 test('Local Database source ignores installed local model matches before search', () => {

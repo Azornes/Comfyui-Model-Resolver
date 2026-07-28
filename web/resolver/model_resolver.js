@@ -654,17 +654,26 @@ export class ModelResolver {
         }
 
         this.dialog.persistActiveTab?.('missing');
+
+        if (wasVisible && wasOnMissingTab) {
+            const selected = this.dialog.selectWorkflowModelReference?.(
+                reference,
+                analysisData || this.dialog.cachedAnalysisData,
+                { preferExistingBrowser: true }
+            );
+            if (selected) return;
+        }
+
         this.dialog.showResolvedModels = true;
         this.dialog.missingModelsTypeFilter = 'all';
         this.dialog.missingModelsTypeFilterMenuOpen = false;
-        const selectionRequest = this.dialog.queueWorkflowModelReferenceSelection?.(reference);
-
         try {
             localStorage.setItem(this.dialog.showResolvedModelsStorageKey, '1');
         } catch (error) {
             log.debug('Model Resolver: failed to persist resolved-model visibility.', error);
         }
 
+        const selectionRequest = this.dialog.queueWorkflowModelReferenceSelection?.(reference);
         if (!wasVisible) {
             this.dialog.activeTab = 'missing';
             this.activateResolverButton();
