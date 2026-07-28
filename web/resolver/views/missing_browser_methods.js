@@ -1317,8 +1317,12 @@ export const missingBrowserMethods = {
             : Number.isFinite(measuredWidth) && measuredWidth > 0
             ? this.getMissingBrowserSplitBoundsForWidth(measuredWidth)
             : this.getMissingBrowserSplitBounds(browser);
-        const nextWidth = Math.round(Math.max(bounds.min, Math.min(bounds.max, width)));
-        const detailValue = `${nextWidth}px`;
+        const requestedWidth = Number.isFinite(Number(width)) ? Number(width) : bounds.min;
+        const nextWidth = Math.round(Math.max(bounds.min, Math.min(bounds.max, requestedWidth)));
+        const shouldPinList = requestedWidth > bounds.max;
+        const wasListPinned = browser.classList.contains('is-list-pinned');
+        browser.classList.toggle('is-list-pinned', shouldPinList);
+        const detailValue = `${Math.round(shouldPinList ? requestedWidth : nextWidth)}px`;
         const listValue = '0px';
 
         if (
@@ -1330,7 +1334,7 @@ export const missingBrowserMethods = {
                 && listPane.style.flexShrink === '1'
             ))
         ) {
-            return false;
+            return wasListPinned !== shouldPinList;
         }
 
         if (listPane instanceof HTMLElement) {
@@ -1356,6 +1360,7 @@ export const missingBrowserMethods = {
             pane.style.removeProperty('flex-grow');
             pane.style.removeProperty('flex-shrink');
         });
+        browser.classList.remove('is-list-pinned');
         detailPane?.style?.removeProperty('--mr-missing-detail-track');
     },
 
@@ -1414,7 +1419,7 @@ export const missingBrowserMethods = {
         const nextWidth = Math.round(Math.max(bounds.min, Math.min(bounds.max, width)));
         const detailPane = browser.querySelector('.mr-missing-detail-pane');
         const target = detailPane instanceof HTMLElement ? detailPane : browser;
-        this.applyMissingBrowserDetailWidth(target, nextWidth, {
+        this.applyMissingBrowserDetailWidth(target, width, {
             browserWidth: Number.isFinite(Number(browserWidth)) && Number(browserWidth) > 0
                 ? Number(browserWidth)
                 : null,

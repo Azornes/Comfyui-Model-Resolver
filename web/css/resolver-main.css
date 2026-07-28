@@ -1121,6 +1121,14 @@
     background: var(--mr-missing-bg);
 }
 
+.mr-missing-browser.is-list-pinned .mr-missing-list-pane {
+    flex: 0 0 var(--mr-missing-list-min-width) !important;
+}
+
+.mr-missing-browser.is-list-pinned .mr-missing-detail-pane {
+    flex: 1 1 0 !important;
+}
+
 .mr-missing-detail-pane .mr-card {
     margin: 0;
     padding: 18px;

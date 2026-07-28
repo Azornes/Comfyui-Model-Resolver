@@ -507,6 +507,75 @@ test('missing browser splitter preserves the table through the Type column', () 
   );
 });
 
+test('missing browser keeps the list edge pinned until saved detail width fits', () => {
+  const applyDetailWidth = eval(
+    `(${extractMethod(missingBrowserMethodsSource, 'applyMissingBrowserDetailWidth')})`
+  );
+  const previousHTMLElement = globalThis.HTMLElement;
+
+  class FakeHTMLElement {}
+  globalThis.HTMLElement = FakeHTMLElement;
+
+  try {
+    const pinnedClasses = new Set();
+    const browser = new FakeHTMLElement();
+    const listPane = new FakeHTMLElement();
+    const detailPane = new FakeHTMLElement();
+    listPane.isConnected = true;
+    listPane.style = { flexBasis: '', flexGrow: '', flexShrink: '' };
+    detailPane.style = { flexBasis: '', flexGrow: '', flexShrink: '' };
+    browser.classList = {
+      contains(name) {
+        return pinnedClasses.has(name);
+      },
+      toggle(name, enabled) {
+        if (enabled) pinnedClasses.add(name);
+        else pinnedClasses.delete(name);
+      },
+    };
+    browser.querySelector = selector => (
+      selector === '.mr-missing-list-pane' ? listPane : detailPane
+    );
+    detailPane.classList = {
+      contains(name) {
+        return name === 'mr-missing-detail-pane';
+      },
+    };
+    detailPane.closest = () => browser;
+
+    const context = {
+      _missingBrowserSplitListPane: listPane,
+      _missingBrowserLastDetailWidth: null,
+    };
+
+    applyDetailWidth.call(context, detailPane, 420, {
+      splitBounds: { min: 270, max: 300, available: 640 },
+    });
+
+    assert.equal(pinnedClasses.has('is-list-pinned'), true);
+    assert.equal(detailPane.style.flexBasis, '420px');
+    assert.equal(context._missingBrowserLastDetailWidth, 300);
+
+    applyDetailWidth.call(context, detailPane, 420, {
+      splitBounds: { min: 300, max: 450, available: 790 },
+    });
+
+    assert.equal(pinnedClasses.has('is-list-pinned'), false);
+    assert.equal(detailPane.style.flexBasis, '420px');
+  } finally {
+    globalThis.HTMLElement = previousHTMLElement;
+  }
+
+  assert.match(
+    resolverMainCssSource,
+    /\.mr-missing-browser\.is-list-pinned \.mr-missing-list-pane\s*\{[^}]*flex:\s*0 0 var\(--mr-missing-list-min-width\) !important;/s
+  );
+  assert.match(
+    resolverMainCssSource,
+    /\.mr-missing-browser\.is-list-pinned \.mr-missing-detail-pane\s*\{[^}]*flex:\s*1 1 0 !important;/s
+  );
+});
+
 test('local and loaded model tooltips include preview image routes above full names', () => {
   const getModelPreviewTooltipAttrs = eval(`(${extractMethod(renderFormatMethodsSource, 'getModelPreviewTooltipAttrs')})`);
   const previousApi = globalThis.api;
