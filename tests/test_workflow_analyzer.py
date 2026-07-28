@@ -1141,6 +1141,37 @@ class WorkflowLoraStrengthTests(unittest.TestCase):
         self.assertEqual(0.45, strength)
 
 
+class WorkflowCustomNodeAdapterTests(unittest.TestCase):
+    def test_lora_manager_list_is_extracted_by_adapter(self):
+        workflow = {
+            "nodes": [
+                {
+                    "id": 390,
+                    "type": "Lora Loader (LoraManager)",
+                    "widgets_values": [
+                        {"version": 1, "textWidgetName": "text"},
+                        "<lora:missing_style:0.65>",
+                        [
+                            {
+                                "name": "missing_style",
+                                "strength": 0.65,
+                                "active": True,
+                            }
+                        ],
+                    ],
+                }
+            ]
+        }
+
+        refs = analyze_workflow_models(workflow, available_models=[])
+
+        self.assertEqual(1, len(refs))
+        self.assertEqual("lora-manager", refs[0]["custom_node_adapter"])
+        self.assertEqual("missing_style", refs[0]["original_path"])
+        self.assertEqual(0.65, refs[0]["strength"])
+        self.assertTrue(refs[0]["active"])
+
+
 class WorkflowMissingReferenceGroupingTests(unittest.TestCase):
     def test_power_lora_duplicate_missing_tracks_all_node_refs(self):
         workflow = {
@@ -1166,6 +1197,10 @@ class WorkflowMissingReferenceGroupingTests(unittest.TestCase):
         missing = identify_missing_models(refs, [])
 
         self.assertEqual(2, len(refs))
+        self.assertEqual(
+            ["rgthree-power-lora-loader", "rgthree-power-lora-loader"],
+            [ref["custom_node_adapter"] for ref in refs],
+        )
         self.assertEqual(1, len(missing))
         self.assertEqual(2, missing[0]["reference_count"])
         self.assertEqual(

@@ -7,6 +7,7 @@ Updates workflow JSON by replacing model paths in nodes.
 import os
 from typing import Any, Dict, List, Optional
 
+from .custom_nodes import update_custom_node_model_path
 from .log_system import create_module_logger
 
 log = create_module_logger(__name__)
@@ -140,7 +141,7 @@ def update_model_path(
             resolved_model: Model dict from scanner
             subgraph_id: Subgraph ID (if node is in subgraph)
             is_top_level: Whether node is in top-level (not subgraph definition)
-            mapping: Full mapping dict with is_lora_v2 and original_lora_name for LoraManager
+            mapping: Full mapping dictionary for standard or custom node updates
 
     Returns:
             True if update was successful, False otherwise
@@ -212,89 +213,14 @@ def update_model_path(
     if not category and resolved_model:
         category = resolved_model.get("category")
 
-    # Check if this is a LoraManager (LoraLoaderV2) node with is_lora_v2 flag
-    is_lora_v2 = mapping.get("is_lora_v2") if mapping else False
-    original_lora_name = mapping.get("original_lora_name") if mapping else None
-    log.info(
-        f"@@ update_model_path: node={node_id}, idx={widget_index}, is_lora_v2={is_lora_v2}, original={original_lora_name}"
+    custom_update_result = update_custom_node_model_path(
+        node,
+        widget_index,
+        resolved_model,
+        mapping,
     )
-
-    # Special handling for LoraManager nodes: update lora name in lora list
-    if is_lora_v2 and original_lora_name and widget_index == 2:
-        # For LoraManager, we need to update the name in the lora list (widgets_values[2])
-        lora_list = widgets_values[2]
-        log.info(
-            f">>> LoraManager: original_lora={original_lora_name}, widget_index={widget_index}, list_type={type(lora_list)}"
-        )
-
-        if isinstance(lora_list, list):
-            # Get the new lora name from resolved_model
-            new_lora_name = None
-            if resolved_model:
-                # Use filename without extension
-                new_lora_name = resolved_model.get("filename") or resolved_model.get(
-                    "name", ""
-                )
-                if new_lora_name and "." in new_lora_name:
-                    # Remove extension if present
-                    new_lora_name = new_lora_name.rsplit(".", 1)[0]
-
-            log.debug(
-                f"LoraManager update: original={original_lora_name}, new={new_lora_name}"
-            )
-
-            if new_lora_name:
-                updated = False
-                original_stripped = original_lora_name.strip()
-
-                for lora_item in lora_list:
-                    if isinstance(lora_item, dict):
-                        lora_name_in_list = lora_item.get("name", "").strip()
-                        # Try exact match first, then case-insensitive
-                        if lora_name_in_list == original_stripped:
-                            lora_item["name"] = new_lora_name
-                            updated = True
-                            log.info(
-                                f"Updated LoraManager lora (exact): {original_lora_name} -> {new_lora_name}"
-                            )
-                            break
-                        elif lora_name_in_list.lower() == original_stripped.lower():
-                            lora_item["name"] = new_lora_name
-                            updated = True
-                            log.info(
-                                f"Updated LoraManager lora (case-insensitive): {original_lora_name} -> {new_lora_name}"
-                            )
-                            break
-
-                if updated:
-                    # Also update the text widget (widgets_values[1]) which contains formatted lora string
-                    if len(widgets_values) > 1 and isinstance(widgets_values[1], str):
-                        old_text = widgets_values[1]
-                        # Replace the lora name in the text format
-                        new_text = old_text.replace(
-                            f"<lora:{original_lora_name}:", f"<lora:{new_lora_name}:"
-                        )
-                        # Also handle case without lora: prefix
-                        new_text = new_text.replace(
-                            f":{original_lora_name}:", f":{new_lora_name}:"
-                        )
-                        widgets_values[1] = new_text
-
-                    log.info(
-                        f"Updated node {node_id} LoraManager lora list - new text: {widgets_values[1]}"
-                    )
-                    return True
-                else:
-                    # Log the actual lora list for debugging
-                    log.warning(
-                        f"Lora '{original_lora_name}' not found in lora list. Available: {[li.get('name') for li in lora_list if isinstance(li, dict)]}"
-                    )
-                    return False
-        else:
-            log.warning(
-                f"LoraManager widget_index == 2 but lora_list is not a list: {type(lora_list)}"
-            )
-            return False
+    if custom_update_result is not None:
+        return custom_update_result
 
     # Standard handling: convert absolute path to relative path for workflow storage
     # IMPORTANT: Use the category from resolved_model, not the original missing model category
@@ -312,7 +238,7 @@ def update_model_path(
         relative_path = resolved_path
 
     # Update the widget value
-    # Handle nested dict values (e.g. Power Lora Loader with {"on": true, "lora": "name.safetensors", "strength": 1.0})
+    # Handle model references stored inside dictionary widget values.
     nested_key = mapping.get("nested_key") if mapping else None
     if nested_key and isinstance(widgets_values[widget_index], dict):
         widgets_values[widget_index][nested_key] = relative_path
@@ -381,7 +307,7 @@ def update_workflow_nodes(
             resolved_model,
             subgraph_id,
             is_top_level,
-            mapping,  # Pass full mapping for LoraManager special handling
+            mapping,
         )
 
         if success:

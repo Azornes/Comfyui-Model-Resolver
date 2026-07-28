@@ -2,6 +2,7 @@ import { app } from "../../../../../scripts/app.js";
 import { api } from "../../../../../scripts/api.js";
 import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
+import { getCustomNodeOriginalIdentity } from "../custom_nodes/registry.js";
 import { safeStorage } from "../utils/html_utils.js";
 export const lifecycleGraphMethods = {
     async show(workflow = null) {
@@ -798,7 +799,7 @@ export const lifecycleGraphMethods = {
     },
 
     getMissingModelIdentityPart(missing = {}) {
-        return missing.original_lora_name
+        return getCustomNodeOriginalIdentity(missing)
             || missing.original_path
             || missing.expected_filename
             || missing.name

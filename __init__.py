@@ -355,6 +355,10 @@ class ModelResolverExtension:
 
             # Import resolver modules
             try:
+                from .core.custom_nodes import (
+                    adapt_custom_node_loaded_model,
+                    should_skip_existing_custom_node_reference,
+                )
                 from .core.metadata_audit import audit_metadata_sizes
                 from .core.metadata_builder import (
                     build_missing_local_metadata,
@@ -712,22 +716,14 @@ class ModelResolverExtension:
                         force_rescan=force_rescan,
                     )
 
-                    # Filter out LoraManager lorAs that already exist locally (exists=True)
-                    # These should not appear in missing models at all
                     missing_models = result.get("missing_models", [])
                     filtered_missing = []
                     for missing in missing_models:
-                        is_lora = missing.get("is_lora_v2")
-                        exists = missing.get("exists")
                         name = missing.get("name") or missing.get("original_path", "")
-                        self.logger.debug(
-                            f"Filtering: {name} is_lora_v2={is_lora} exists={exists}"
-                        )
-
-                        # Skip LoraManager lorAs that already exist locally
-                        if is_lora and exists:
+                        if should_skip_existing_custom_node_reference(missing):
                             self.logger.info(
-                                f"Filtered out LoraManager lora: {name}"
+                                "Filtered existing custom-node model "
+                                f"reference: {name}"
                             )
                             continue
                         filtered_missing.append(missing)
@@ -2001,10 +1997,11 @@ class ModelResolverExtension:
                         if ref.get("strength") is not None:
                             strength = ref.get("strength")
 
-                        # For text-based lora loaders (LoraLoaderV2, LoraManager), get strength from ref
-                        if ref.get("is_lora_v2"):
-                            strength = ref.get("strength")
-                            model_name = ref.get("name", model_name)
+                        model_name, strength = adapt_custom_node_loaded_model(
+                            ref,
+                            model_name,
+                            strength,
+                        )
 
                         # Check if model exists locally
                         exists = ref.get("exists", False)
@@ -2050,7 +2047,9 @@ class ModelResolverExtension:
                                 "strength": strength,
                                 "original_path": original_path,
                                 "is_urn": ref.get("is_urn", False),
-                                "is_lora_v2": ref.get("is_lora_v2", False),
+                                "custom_node_adapter": ref.get(
+                                    "custom_node_adapter"
+                                ),
                                 "active": ref.get("active"),
                                 "connected": ref.get("connected", True),
                                 "resolved_path": (

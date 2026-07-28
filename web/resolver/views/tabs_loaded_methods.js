@@ -3,6 +3,10 @@ import { api } from "../../../../../scripts/api.js";
 import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
 import { escapeHtml } from "../utils/html_utils.js";
+import {
+    getCustomNodeModelEntries,
+    getCustomNodeOriginalIdentity,
+} from "../custom_nodes/registry.js";
 export const tabsLoadedMethods = {
     escapeHtml(value) {
         return escapeHtml(value);
@@ -288,31 +292,12 @@ export const tabsLoadedMethods = {
             return false;
         }
 
-        const widgets = Array.isArray(node?.widgets) ? node.widgets : [];
-        const dynamicLoras = widgets
-            .filter(widget => /^lora_\d+$/.test(widget?.name) && widget?.value?.lora)
-            .map(widget => widget.value);
-        const lorasWidget = widgets.find(widget => widget?.name === 'loras');
-        const loras = dynamicLoras.length
-            ? dynamicLoras
-            : (Array.isArray(lorasWidget?.value) ? lorasWidget.value : []);
-        const entries = loras
-            .map((lora) => {
-                if (!lora || typeof lora !== 'object') return null;
-                const identity = lora.lora
-                    || lora.name
-                    || lora.filename
-                    || lora.path
-                    || '';
-                const strength = Number(lora.strength);
-                return identity && Number.isFinite(strength)
-                    ? {
-                        identity: this.normalizeLoadedModelIdentity(identity),
-                        strength,
-                    }
-                    : null;
-            })
-            .filter(Boolean);
+        const entries = getCustomNodeModelEntries(node)
+            .filter(entry => Number.isFinite(entry.strength))
+            .map(entry => ({
+                identity: this.normalizeLoadedModelIdentity(entry.identity),
+                strength: entry.strength,
+            }));
         if (!entries.length) return false;
 
         const nodeId = String(node?.id ?? '');
@@ -320,7 +305,7 @@ export const tabsLoadedMethods = {
         for (const model of this.cachedLoadedModelsData.loaded_models) {
             if (String(model.node_id ?? '') !== nodeId) continue;
             const identity = this.normalizeLoadedModelIdentity(
-                model.original_lora_name
+                getCustomNodeOriginalIdentity(model)
                 || model.original_path
                 || model.name
                 || model.filename
@@ -386,8 +371,7 @@ export const tabsLoadedMethods = {
                 byCategory[cat] = { active: [], inactive: [] };
             }
 
-            // Some loaders expose per-model enablement, e.g. LoraManager's
-            // active flag and rgthree Power Lora Loader's on flag.
+            // Some loaders expose per-model enablement separately from links.
             const isActive = model.active !== false && model.connected !== false;
 
             if (isActive) {

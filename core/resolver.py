@@ -11,6 +11,11 @@ import threading
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import unquote
 
+from .custom_nodes import (
+    custom_node_has_potential_model_reference,
+    get_custom_node_resolution_metadata,
+    should_skip_existing_custom_node_reference,
+)
 from .log_system import create_module_logger
 
 log = create_module_logger(__name__)
@@ -456,19 +461,8 @@ def node_has_potential_model_reference(node: Dict[str, Any]) -> bool:
     if not isinstance(widgets_values, list) or not widgets_values:
         return False
 
-    node_type = node.get("type", "")
-    if (
-        node_type in {
-            "LoraLoaderV2",
-            "Lora Loader (LoraManager)",
-            "Lora Stacker (LoraManager)",
-        }
-        and len(widgets_values) >= 3
-        and isinstance(widgets_values[2], list)
-    ):
-        for lora_item in widgets_values[2]:
-            if isinstance(lora_item, dict) and str(lora_item.get("name") or "").strip():
-                return True
+    if custom_node_has_potential_model_reference(node):
+        return True
 
     for idx, value in enumerate(widgets_values):
         model_widget_category_hint = get_model_widget_category_hint(node, idx)
@@ -1177,14 +1171,11 @@ def analyze_and_find_matches(
                 }
             )
 
-        # Skip LoraManager lorAs that already exist locally (exists=True means no linking needed)
-        is_lora_v2 = missing.get("is_lora_v2")
-        exists = missing.get("exists")
         name = missing.get("name") or missing.get("original_path", "")
-        log.debug(f"Checking {name}: is_lora_v2={is_lora_v2}, exists={exists}")
-
-        if is_lora_v2 and exists:
-            log.info(f"Skipping LoraManager lora {name} - already exists locally")
+        if should_skip_existing_custom_node_reference(missing):
+            log.info(
+                f"Skipping existing custom-node model reference: {name}"
+            )
             continue
 
         missing_with_matches.append({
@@ -1260,13 +1251,10 @@ def apply_resolution(
             "is_top_level": resolution.get(
                 "is_top_level"
             ),  # True for top-level nodes, False for nodes in subgraph definitions
-            "is_lora_v2": resolution.get("is_lora_v2"),  # Flag for LoraManager nodes
-            "original_lora_name": resolution.get(
-                "original_lora_name"
-            ),  # Original lora name for LoraManager replacement
             "nested_key": resolution.get(
                 "nested_key"
-            ),  # For dict-type widgets (e.g. Power Lora Loader)
+            ),  # For dict-type widget values
+            **get_custom_node_resolution_metadata(resolution),
         }
 
         # If resolved_model provided, extract path if needed

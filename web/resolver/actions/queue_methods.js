@@ -1672,7 +1672,12 @@ export const queueMethods = {
             subgraph_id: ref.subgraph_id,
             subgraph_name: ref.subgraph_name,
             is_top_level: ref.is_top_level,
-            is_lora_v2: ref.is_lora_v2,
+            custom_node_adapter: ref.custom_node_adapter,
+            custom_node_original_identity: (
+                ref.custom_node_original_identity
+                || ref.name
+                || ref.original_path
+            ),
             nested_key: ref.nested_key
         }));
     },
@@ -1695,8 +1700,18 @@ export const queueMethods = {
                     category: ref.category || baseResolution.category,
                     subgraph_id: ref.subgraph_id ?? baseResolution.subgraph_id,
                     is_top_level: ref.is_top_level ?? baseResolution.is_top_level,
-                    is_lora_v2: ref.is_lora_v2 ?? baseResolution.is_lora_v2,
-                    original_lora_name: ref.name || ref.original_path || baseResolution.original_lora_name || baseResolution.name || baseResolution.original_path,
+                    custom_node_adapter: (
+                        ref.custom_node_adapter
+                        || baseResolution.custom_node_adapter
+                    ),
+                    custom_node_original_identity: (
+                        ref.custom_node_original_identity
+                        || ref.name
+                        || ref.original_path
+                        || baseResolution.custom_node_original_identity
+                        || baseResolution.name
+                        || baseResolution.original_path
+                    ),
                     nested_key: ref.nested_key ?? baseResolution.nested_key,
                     original_path: ref.original_path || baseResolution.original_path,
                     node_type: ref.node_type || baseResolution.node_type,
@@ -1708,7 +1723,7 @@ export const queueMethods = {
                     item.subgraph_id || '',
                     item.is_top_level !== false ? 'T' : 'F',
                     item.nested_key || '',
-                    item.original_lora_name || item.original_path || ''
+                    item.custom_node_original_identity || item.original_path || ''
                 ].join(':');
                 if (seen.has(itemKey)) continue;
                 seen.add(itemKey);
@@ -2155,8 +2170,12 @@ export const queueMethods = {
             urn_string: missing.urn_string,
             subgraph_id: missing.subgraph_id,
             is_top_level: missing.is_top_level,
-            is_lora_v2: missing.is_lora_v2,
-            original_lora_name: missing.original_lora_name || missing.name || missing.original_path,
+            custom_node_adapter: missing.custom_node_adapter,
+            custom_node_original_identity: (
+                missing.custom_node_original_identity
+                || missing.name
+                || missing.original_path
+            ),
             nested_key: missing.nested_key,
             node_refs: this.getResolutionNodeRefs(missing),
             node_type: missing.node_type,

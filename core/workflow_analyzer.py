@@ -40,6 +40,12 @@ except ImportError:
     log.warning("Model Resolver: folder_paths not available yet - will retry later")
 
 
+from .custom_nodes import (
+    analyze_custom_node_references,
+    get_custom_node_category_hints,
+    get_custom_node_model_adapter,
+    get_custom_node_widget_categories,
+)
 from .type_utils import (
     MODEL_EXTENSIONS,
     URN_TYPE_MAP,
@@ -155,6 +161,7 @@ NODE_TYPE_MODEL_WIDGET_CATEGORIES = {
     "LTXVGemmaCLIPModelLoader": {0: "text_encoders"},
     "LTXAVTextEncoderLoader": {0: "text_encoders", 1: "checkpoints"},
 }
+NODE_TYPE_MODEL_WIDGET_CATEGORIES.update(get_custom_node_widget_categories())
 
 # Mapping of common node types to their expected model category.
 # Derived dynamically from NODE_TYPE_MODEL_WIDGET_CATEGORIES.
@@ -163,14 +170,7 @@ NODE_TYPE_TO_CATEGORY_HINTS = {
     for node_type, widget_map in NODE_TYPE_MODEL_WIDGET_CATEGORIES.items()
     if widget_map
 }
-
-# Fallbacks and overrides for custom nodes that do not use standard model widget indices
-NODE_TYPE_TO_CATEGORY_HINTS.update({
-    "LoraLoaderV2": "loras",
-    "Lora Loader (LoraManager)": "loras",
-    "Lora Stacker (LoraManager)": "loras",
-    "Power Lora Loader (rgthree)": "loras",
-})
+NODE_TYPE_TO_CATEGORY_HINTS.update(get_custom_node_category_hints())
 
 # Model category hints by widget/input name. Workflow JSON does not always preserve
 # widget names, but when it does this catches custom loaders without a node-type entry.
@@ -223,8 +223,6 @@ MODEL_OUTPUT_TYPE_TO_CATEGORY = {
 }
 
 # Keys within dict-type widget values that contain model file references.
-# Some nodes (e.g. rgthree Power Lora Loader) store model info as objects like
-# {"on": true, "lora": "name.safetensors", "strength": 1.0} inside widgets_values.
 # Maps nested key name -> category hint.
 NESTED_MODEL_KEYS = {
     "lora": "loras",
@@ -1617,98 +1615,14 @@ def get_node_model_info(
     if not widgets_values:
         return model_refs
 
-    # Special handling for text-based lora loaders (LoraLoaderV2, LoraManager, etc.)
-    lora_text_types = [
-        "LoraLoaderV2",
-        "Lora Loader (LoraManager)",
-        "Lora Stacker (LoraManager)",
-    ]
-    is_lora_text = node_type in lora_text_types
-    if is_lora_text and len(widgets_values) >= 3:
-        # widgets_values[0] = {"version": 1, "textWidgetName": "text"}
-        # widgets_values[1] = "<lora:name1:strength> <lora:name2:strength>"
-        # widgets_values[2] = [{"name": "...", "strength": 1, "active": true}, ...]
-
-        # Get all lora files using scanner for recursive search
-        from .scanner import get_model_files
-
-        all_loras = available_models if available_models is not None else get_model_files()
-        lora_files = [m for m in all_loras if m.get("category") == "loras"]
-
-        # Build a lookup by filename (without extension)
-        lora_lookup = {}
-        for lf in lora_files:
-            fname = lf.get("filename", "")
-            if fname:
-                # Get name without extension for matching
-                base_name = os.path.splitext(fname)[0]
-                if base_name not in lora_lookup:
-                    lora_lookup[base_name] = []
-                lora_lookup[base_name].append(lf)
-
-        lora_list = widgets_values[2]
-        if isinstance(lora_list, list):
-            for lora_item in lora_list:
-                if isinstance(lora_item, dict):
-                    name = lora_item.get("name", "")
-                    strength = lora_item.get("strength", 1.0)
-                    active = lora_item.get("active", True)
-
-                    if name:
-                        # Check if lora exists locally using scanner data (recursive search)
-                        lora_exists = False
-                        lora_full_path = None
-
-                        # Try exact name first (without extension)
-                        if name in lora_lookup:
-                            lora_full_path = lora_lookup[name][0].get("path")
-                            lora_exists = (
-                                os.path.exists(lora_full_path)
-                                if lora_full_path
-                                else False
-                            )
-                        else:
-                            # Try with common extensions
-                            for ext in [".safetensors", ".ckpt", ".pt", ".pth"]:
-                                test_name = name + ext
-                                if test_name in lora_lookup:
-                                    lora_full_path = lora_lookup[test_name][0].get(
-                                        "path"
-                                    )
-                                    lora_exists = (
-                                        os.path.exists(lora_full_path)
-                                        if lora_full_path
-                                        else False
-                                    )
-                                    if lora_exists:
-                                        break
-
-                        log.debug(
-                            f"Lora {name}: exists={lora_exists}, path={lora_full_path}"
-                        )
-
-                        model_refs.append(
-                            {
-                                "node_id": node_id,
-                                "node_type": node_type,
-                                "widget_index": 2,  # Index in lora list
-                                "widget_name": get_widget_name_hint(node, 2),
-                                "original_path": name,
-                                "name": name,
-                                "strength": float(strength),
-                                "active": active,
-                                "node_title": node_title,
-                                "category": "loras",
-                                "category_hints": ["loras"],
-                                "folder_key_hints": ["loras"],
-                                "full_path": lora_full_path,
-                                "exists": lora_exists,
-                                "is_urn": False,
-                                "is_lora_v2": is_lora_text,
-                                "connected": is_active,
-                            }
-                        )
-        return model_refs
+    custom_model_refs = analyze_custom_node_references(
+        node,
+        available_models,
+        is_active=is_active,
+        get_widget_name_hint=get_widget_name_hint,
+    )
+    if custom_model_refs is not None:
+        return custom_model_refs
 
     # For each widget value, check if it looks like a model file or URN
     for idx, value in enumerate(widgets_values):
@@ -1802,8 +1716,7 @@ def get_node_model_info(
                 category_backed_model_widget or named_model_file_widget
             ),
         ):
-            # Check for dict-type widget values containing model references (e.g. Power Lora Loader)
-            # Some nodes store model info as objects like {"on": true, "lora": "name.safetensors", "strength": 1.0}
+            # Check for dict-type widget values containing model references.
             if isinstance(value, dict):
                 for nested_key, nested_category_hint in NESTED_MODEL_KEYS.items():
                     nested_value = value.get(nested_key)
@@ -1850,6 +1763,9 @@ def get_node_model_info(
                         "connected": is_active,
                         "nested_key": nested_key,  # Track nested key for updates
                     }
+                    custom_adapter = get_custom_node_model_adapter(node)
+                    if custom_adapter:
+                        ref["custom_node_adapter"] = custom_adapter.adapter_id
 
                     if nested_key == "lora":
                         strength = value.get("strength")

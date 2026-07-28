@@ -2,6 +2,7 @@ import { app } from "../../../../../scripts/app.js";
 import { api } from "../../../../../scripts/api.js";
 import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
+import { getCustomNodeModelCategory } from "../custom_nodes/registry.js";
 import { createFloatingTreePicker } from "../utils/tree_picker.js";
 import { safeStorage } from "../utils/html_utils.js";
 const localStorage = safeStorage;
@@ -293,6 +294,10 @@ export const downloadTargetMethods = {
                 }
             }
         }
+        const customNodeCategory = getCustomNodeModelCategory(normalizedNodeType);
+        if (customNodeCategory) {
+            return customNodeCategory;
+        }
         const exactMap = {
             CheckpointLoaderSimple: 'checkpoints',
             CheckpointLoader: 'checkpoints',
@@ -308,7 +313,6 @@ export const downloadTargetMethods = {
             LoraLoaderModelOnly: 'loras',
             LoraLoaderBypass: 'loras',
             LoraLoaderBypassModelOnly: 'loras',
-            LoraLoaderV2: 'loras',
             ControlNetLoader: 'controlnet',
             CLIPLoader: 'text_encoders',
             DualCLIPLoader: 'text_encoders',

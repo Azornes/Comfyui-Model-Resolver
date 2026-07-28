@@ -14,6 +14,12 @@ import {
     matchesWorkflowModelReference,
     toResolverContextModel,
 } from "./node_context_menu.js";
+import {
+    getCustomNodeModelAdapter,
+    getCustomNodeModelListSignature as createCustomNodeModelListSignature,
+    getCustomNodeModelStrengthSignature as createCustomNodeModelStrengthSignature,
+    isCustomNodeModelWidget as matchesCustomNodeModelWidget,
+} from "./custom_nodes/registry.js";
 
 const log = createModuleLogger('model_resolver');
 export const MODEL_RESOLVER_OPEN_COMMAND_ID = "ModelResolver.OpenModelResolver";
@@ -36,12 +42,6 @@ const WORKFLOW_DEPENDENCY_MARKER_BUTTON_NAME = "Open Model Resolver";
 const WORKFLOW_DEPENDENCY_MARKER_AUTO_ID = -918273646;
 const WORKFLOW_DEPENDENCY_MARKER_DEFAULT_SIZE = Object.freeze([160, 40]);
 const WORKFLOW_DEPENDENCY_MARKER_MIN_SIZE = Object.freeze([160, 40]);
-const CALLBACK_DRIVEN_MODEL_WIDGETS = Object.freeze({
-    LoraLoaderV2: new Set(["text", "loras"]),
-    "Lora Loader (LoraManager)": new Set(["text", "loras"]),
-    "Lora Stacker (LoraManager)": new Set(["text", "loras"]),
-    "Power Lora Loader (rgthree)": new Set(),
-});
 
 function getKeybindingSetting(id) {
     try {
@@ -135,7 +135,7 @@ export class ModelResolver {
         this.nodeContextAnalysisSignature = null;
         this.nodeContextAnalysisPromise = null;
         this.nodeContextAnalysisTimer = null;
-        this.callbackDrivenModelWidgetStates = new WeakMap();
+        this.customNodeModelAdapterStates = new WeakMap();
     }
 
     setup = async () => {
@@ -530,12 +530,12 @@ export class ModelResolver {
         nodeType.prototype.onWidgetChanged = function() {
             const result = originalOnWidgetChanged?.apply(this, arguments);
             const widgetName = arguments[0];
-            const handledByCallbackDrivenWidget = owner.isCallbackDrivenModelWidget?.(
+            const handledByCustomNodeAdapter = owner.isCustomNodeModelWidget?.(
                 this,
                 widgetName
             );
-            if (handledByCallbackDrivenWidget) {
-                owner.callbackDrivenModelWidgetStates?.get(this)?.notify?.();
+            if (handledByCustomNodeAdapter) {
+                owner.customNodeModelAdapterStates?.get(this)?.notify?.();
             } else if (!owner.dialog?.isWorkflowRefreshSuppressed?.()) {
                 if (!owner.dialog?.isWorkflowStrengthWidgetName?.(widgetName)) {
                     owner.scheduleNodeContextMenuAnalysis();
@@ -547,133 +547,41 @@ export class ModelResolver {
         nodeType.prototype.__modelResolverContextMenuPatched = true;
     }
 
-    isCallbackDrivenModelWidget(node, widgetName = '') {
-        const nodeTypes = [
-            node?.comfyClass,
-            node?.type,
-            node?.constructor?.comfyClass,
-            node?.constructor?.ComfyClass,
-        ];
-        const nodeType = nodeTypes.find(candidate => CALLBACK_DRIVEN_MODEL_WIDGETS[candidate]);
-        if (
-            nodeType === 'Power Lora Loader (rgthree)'
-            && /^lora_\d+$/.test(widgetName)
-        ) {
-            return true;
-        }
-        return Boolean(CALLBACK_DRIVEN_MODEL_WIDGETS[nodeType]?.has(widgetName));
+    isCustomNodeModelWidget(node, widgetName = '') {
+        return matchesCustomNodeModelWidget(node, widgetName);
     }
 
-    getCallbackDrivenModelListSignature(node) {
-        const widgets = Array.isArray(node?.widgets) ? node.widgets : [];
-        const isRgthreePowerLoraLoader = [
-            node?.comfyClass,
-            node?.type,
-            node?.constructor?.comfyClass,
-            node?.constructor?.ComfyClass,
-        ].includes('Power Lora Loader (rgthree)');
-        const lorasWidget = widgets.find(widget => widget?.name === 'loras');
-        const loras = isRgthreePowerLoraLoader
-            ? widgets
-                .filter(widget => /^lora_\d+$/.test(widget?.name) && widget?.value?.lora)
-                .map(widget => ({
-                    name: widget.value.lora,
-                    active: widget.value.on !== false,
-                }))
-            : (Array.isArray(lorasWidget?.value) ? lorasWidget.value : []);
-        const normalized = loras
-            .map((lora) => {
-                if (lora && typeof lora === 'object') {
-                    const name = String(
-                        lora.name
-                        || lora.filename
-                        || lora.path
-                        || ''
-                    ).trim();
-                    return name ? { name, active: lora.active !== false } : null;
-                }
-                const name = String(lora || '').trim();
-                return name ? { name, active: true } : null;
-            })
-            .filter(Boolean)
-            .sort((left, right) => (
-                left.name.localeCompare(right.name)
-                || Number(left.active) - Number(right.active)
-            ));
-        return JSON.stringify(normalized);
+    getCustomNodeModelListSignature(node) {
+        return createCustomNodeModelListSignature(node);
     }
 
-    getCallbackDrivenModelStrengthSignature(node) {
-        const widgets = Array.isArray(node?.widgets) ? node.widgets : [];
-        const isRgthreePowerLoraLoader = [
-            node?.comfyClass,
-            node?.type,
-            node?.constructor?.comfyClass,
-            node?.constructor?.ComfyClass,
-        ].includes('Power Lora Loader (rgthree)');
-        const lorasWidget = widgets.find(widget => widget?.name === 'loras');
-        const loras = isRgthreePowerLoraLoader
-            ? widgets
-                .filter(widget => /^lora_\d+$/.test(widget?.name) && widget?.value?.lora)
-                .map(widget => ({
-                    name: widget.value.lora,
-                    strength: widget.value.strength,
-                }))
-            : (Array.isArray(lorasWidget?.value) ? lorasWidget.value : []);
-        const normalized = loras
-            .map((lora) => {
-                if (!lora || typeof lora !== 'object') return null;
-                const name = String(
-                    lora.name
-                    || lora.filename
-                    || lora.path
-                    || ''
-                ).trim();
-                if (!name) return null;
-                const numericStrength = Number(lora.strength);
-                return {
-                    name,
-                    strength: Number.isFinite(numericStrength) ? numericStrength : null,
-                };
-            })
-            .filter(Boolean)
-            .sort((left, right) => (
-                left.name.localeCompare(right.name)
-                || (left.strength ?? 0) - (right.strength ?? 0)
-            ));
-        return JSON.stringify(normalized);
+    getCustomNodeModelStrengthSignature(node) {
+        return createCustomNodeModelStrengthSignature(node);
     }
 
-    configureCallbackDrivenModelWidgets(node) {
-        const nodeTypes = [
-            node?.comfyClass,
-            node?.type,
-            node?.constructor?.comfyClass,
-            node?.constructor?.ComfyClass,
-        ];
-        const nodeType = nodeTypes.find(candidate => CALLBACK_DRIVEN_MODEL_WIDGETS[candidate]);
-        const watchedWidgetNames = CALLBACK_DRIVEN_MODEL_WIDGETS[nodeType];
-        if (!watchedWidgetNames || !Array.isArray(node?.widgets)) return;
+    configureCustomNodeModelAdapter(node) {
+        const adapter = getCustomNodeModelAdapter(node);
+        if (!adapter || !Array.isArray(node?.widgets)) return;
 
         const owner = this;
-        if (!(this.callbackDrivenModelWidgetStates instanceof WeakMap)) {
-            this.callbackDrivenModelWidgetStates = new WeakMap();
+        if (!(this.customNodeModelAdapterStates instanceof WeakMap)) {
+            this.customNodeModelAdapterStates = new WeakMap();
         }
-        let state = this.callbackDrivenModelWidgetStates.get(node);
+        let state = this.customNodeModelAdapterStates.get(node);
         if (!state) {
             state = {
-                signature: this.getCallbackDrivenModelListSignature(node),
-                strengthSignature: this.getCallbackDrivenModelStrengthSignature(node),
+                signature: this.getCustomNodeModelListSignature(node),
+                strengthSignature: this.getCustomNodeModelStrengthSignature(node),
             };
-            this.callbackDrivenModelWidgetStates.set(node, state);
+            this.customNodeModelAdapterStates.set(node, state);
         } else {
-            state.signature = this.getCallbackDrivenModelListSignature(node);
-            state.strengthSignature = this.getCallbackDrivenModelStrengthSignature(node);
+            state.signature = this.getCustomNodeModelListSignature(node);
+            state.strengthSignature = this.getCustomNodeModelStrengthSignature(node);
         }
 
-        const notifyIfModelListChanged = () => {
-            const nextSignature = owner.getCallbackDrivenModelListSignature(node);
-            const nextStrengthSignature = owner.getCallbackDrivenModelStrengthSignature(node);
+        const notifyIfModelsChanged = () => {
+            const nextSignature = owner.getCustomNodeModelListSignature(node);
+            const nextStrengthSignature = owner.getCustomNodeModelStrengthSignature(node);
             const modelListChanged = nextSignature !== state.signature;
             const strengthChanged = nextStrengthSignature !== state.strengthSignature;
             state.signature = nextSignature;
@@ -689,43 +597,8 @@ export class ModelResolver {
                 owner.dialog?.updateLoadedModelStrengthsFromNode?.(node);
             }
         };
-        state.notify = notifyIfModelListChanged;
-
-        for (const widget of node.widgets) {
-            if (!watchedWidgetNames.has(widget?.name)) continue;
-            if (widget.callback?.__modelResolverCallbackDrivenWidget) continue;
-
-            const originalCallback = widget.callback;
-            const wrappedCallback = function() {
-                const result = originalCallback?.apply(this, arguments);
-                notifyIfModelListChanged();
-                return result;
-            };
-            wrappedCallback.__modelResolverCallbackDrivenWidget = true;
-            widget.callback = wrappedCallback;
-        }
-
-        if (
-            nodeType === 'Power Lora Loader (rgthree)'
-            && typeof node.setDirtyCanvas === 'function'
-            && !node.setDirtyCanvas.__modelResolverCallbackDrivenNode
-        ) {
-            const originalSetDirtyCanvas = node.setDirtyCanvas;
-            let inspectionQueued = false;
-            const wrappedSetDirtyCanvas = function() {
-                const result = originalSetDirtyCanvas.apply(this, arguments);
-                if (!inspectionQueued) {
-                    inspectionQueued = true;
-                    queueMicrotask(() => {
-                        inspectionQueued = false;
-                        notifyIfModelListChanged();
-                    });
-                }
-                return result;
-            };
-            wrappedSetDirtyCanvas.__modelResolverCallbackDrivenNode = true;
-            node.setDirtyCanvas = wrappedSetDirtyCanvas;
-        }
+        state.notify = notifyIfModelsChanged;
+        adapter.observe(node, notifyIfModelsChanged);
     }
 
     waitForResolverDialogReady(timeoutMs = 2500) {

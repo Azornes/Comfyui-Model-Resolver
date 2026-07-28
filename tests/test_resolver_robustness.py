@@ -143,8 +143,8 @@ class ModelResolverRobustnessTests(unittest.TestCase):
             ]
         }
         mapping = {
-            "is_lora_v2": True,
-            "original_lora_name": "OLD_LORA_NAME"
+            "custom_node_adapter": "lora-manager",
+            "custom_node_original_identity": "OLD_LORA_NAME",
         }
         resolved_model = {
             "filename": "new_lora_name.safetensors",

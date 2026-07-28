@@ -14,6 +14,15 @@ import {
   toResolverContextModel,
 } from '../web/resolver/node_context_menu.js';
 import { startSplitterDrag } from '../web/resolver/utils/splitter_drag.js';
+import {
+  getCustomNodeModelAdapter,
+  getCustomNodeModelCategory,
+  getCustomNodeModelEntries,
+  getCustomNodeModelListSignature as createCustomNodeModelListSignature,
+  getCustomNodeModelStrengthSignature as createCustomNodeModelStrengthSignature,
+  getCustomNodeOriginalIdentity,
+  isCustomNodeModelWidget as matchesCustomNodeModelWidget,
+} from '../web/resolver/custom_nodes/registry.js';
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
 const queueMethodsSource = fs.readFileSync(
@@ -1166,21 +1175,42 @@ test('node context integration preserves existing menu hooks and refreshes after
   ]);
 });
 
-test('LoRA Manager callback-driven widgets refresh the open workflow analysis', () => {
-  const CALLBACK_DRIVEN_MODEL_WIDGETS = {
-    LoraLoaderV2: new Set(['text', 'loras']),
-    'Lora Loader (LoraManager)': new Set(['text', 'loras']),
-    'Lora Stacker (LoraManager)': new Set(['text', 'loras']),
-    'Power Lora Loader (rgthree)': new Set(),
+test('custom node registry exposes normalized LoRA Manager entries', () => {
+  const node = {
+    comfyClass: 'Lora Loader (LoraManager)',
+    widgets: [{
+      name: 'loras',
+      value: [
+        'plain.safetensors',
+        { name: 'weighted.safetensors', strength: '0.65', active: false },
+      ],
+    }],
   };
-  const configureCallbackDrivenModelWidgets = eval(
-    `(${extractMethod(modelResolverSource, 'configureCallbackDrivenModelWidgets')})`
+
+  assert.equal(getCustomNodeModelAdapter(node)?.id, 'lora-manager');
+  assert.deepEqual(getCustomNodeModelEntries(node), [
+    {
+      identity: 'plain.safetensors',
+      active: true,
+      strength: null,
+    },
+    {
+      identity: 'weighted.safetensors',
+      active: false,
+      strength: 0.65,
+    },
+  ]);
+});
+
+test('LoRA Manager adapter refreshes analysis only after its model list changes', () => {
+  const configureCustomNodeModelAdapter = eval(
+    `(${extractMethod(modelResolverSource, 'configureCustomNodeModelAdapter')})`
   );
-  const getCallbackDrivenModelListSignature = eval(
-    `(${extractMethod(modelResolverSource, 'getCallbackDrivenModelListSignature')})`
+  const getCustomNodeModelListSignature = eval(
+    `(${extractMethod(modelResolverSource, 'getCustomNodeModelListSignature')})`
   );
-  const getCallbackDrivenModelStrengthSignature = eval(
-    `(${extractMethod(modelResolverSource, 'getCallbackDrivenModelStrengthSignature')})`
+  const getCustomNodeModelStrengthSignature = eval(
+    `(${extractMethod(modelResolverSource, 'getCustomNodeModelStrengthSignature')})`
   );
   const calls = [];
   const lorasWidget = {
@@ -1210,9 +1240,9 @@ test('LoRA Manager callback-driven widgets refresh the open workflow analysis', 
     },
   };
   const resolver = {
-    callbackDrivenModelWidgetStates: new WeakMap(),
-    getCallbackDrivenModelListSignature,
-    getCallbackDrivenModelStrengthSignature,
+    customNodeModelAdapterStates: new WeakMap(),
+    getCustomNodeModelListSignature,
+    getCustomNodeModelStrengthSignature,
     scheduleNodeContextMenuAnalysis: () => calls.push(['context-analysis']),
     dialog: {
       isWorkflowRefreshSuppressed: () => false,
@@ -1224,9 +1254,9 @@ test('LoRA Manager callback-driven widgets refresh the open workflow analysis', 
     widgets: [textWidget, lorasWidget, unrelatedWidget],
   };
 
-  configureCallbackDrivenModelWidgets.call(resolver, node);
+  configureCustomNodeModelAdapter.call(resolver, node);
   lorasWidget.value = [{ name: 'existing', strength: 1, active: true }];
-  configureCallbackDrivenModelWidgets.call(resolver, node);
+  configureCustomNodeModelAdapter.call(resolver, node);
 
   textWidget.callback('<lora:second');
   lorasWidget.value = [{ name: 'existing', strength: 0.5, active: true }];
@@ -1243,21 +1273,15 @@ test('LoRA Manager callback-driven widgets refresh the open workflow analysis', 
   ]);
 });
 
-test('callback-driven widget refresh respects internal workflow update suppression', () => {
-  const CALLBACK_DRIVEN_MODEL_WIDGETS = {
-    LoraLoaderV2: new Set(['text', 'loras']),
-    'Lora Loader (LoraManager)': new Set(['text', 'loras']),
-    'Lora Stacker (LoraManager)': new Set(['text', 'loras']),
-    'Power Lora Loader (rgthree)': new Set(),
-  };
-  const configureCallbackDrivenModelWidgets = eval(
-    `(${extractMethod(modelResolverSource, 'configureCallbackDrivenModelWidgets')})`
+test('custom node adapter refresh respects internal workflow update suppression', () => {
+  const configureCustomNodeModelAdapter = eval(
+    `(${extractMethod(modelResolverSource, 'configureCustomNodeModelAdapter')})`
   );
-  const getCallbackDrivenModelListSignature = eval(
-    `(${extractMethod(modelResolverSource, 'getCallbackDrivenModelListSignature')})`
+  const getCustomNodeModelListSignature = eval(
+    `(${extractMethod(modelResolverSource, 'getCustomNodeModelListSignature')})`
   );
-  const getCallbackDrivenModelStrengthSignature = eval(
-    `(${extractMethod(modelResolverSource, 'getCallbackDrivenModelStrengthSignature')})`
+  const getCustomNodeModelStrengthSignature = eval(
+    `(${extractMethod(modelResolverSource, 'getCustomNodeModelStrengthSignature')})`
   );
   const calls = [];
   const widget = {
@@ -1266,9 +1290,9 @@ test('callback-driven widget refresh respects internal workflow update suppressi
     callback: () => calls.push('original'),
   };
   const resolver = {
-    callbackDrivenModelWidgetStates: new WeakMap(),
-    getCallbackDrivenModelListSignature,
-    getCallbackDrivenModelStrengthSignature,
+    customNodeModelAdapterStates: new WeakMap(),
+    getCustomNodeModelListSignature,
+    getCustomNodeModelStrengthSignature,
     scheduleNodeContextMenuAnalysis: () => calls.push('context-analysis'),
     dialog: {
       isWorkflowRefreshSuppressed: () => true,
@@ -1276,7 +1300,7 @@ test('callback-driven widget refresh respects internal workflow update suppressi
     },
   };
 
-  configureCallbackDrivenModelWidgets.call(resolver, {
+  configureCustomNodeModelAdapter.call(resolver, {
     comfyClass: 'Lora Stacker (LoraManager)',
     widgets: [widget],
   });
@@ -1287,20 +1311,14 @@ test('callback-driven widget refresh respects internal workflow update suppressi
 });
 
 test('rgthree Power Lora Loader updates strength without reloading workflow analysis', async () => {
-  const CALLBACK_DRIVEN_MODEL_WIDGETS = {
-    LoraLoaderV2: new Set(['text', 'loras']),
-    'Lora Loader (LoraManager)': new Set(['text', 'loras']),
-    'Lora Stacker (LoraManager)': new Set(['text', 'loras']),
-    'Power Lora Loader (rgthree)': new Set(),
-  };
-  const configureCallbackDrivenModelWidgets = eval(
-    `(${extractMethod(modelResolverSource, 'configureCallbackDrivenModelWidgets')})`
+  const configureCustomNodeModelAdapter = eval(
+    `(${extractMethod(modelResolverSource, 'configureCustomNodeModelAdapter')})`
   );
-  const getCallbackDrivenModelListSignature = eval(
-    `(${extractMethod(modelResolverSource, 'getCallbackDrivenModelListSignature')})`
+  const getCustomNodeModelListSignature = eval(
+    `(${extractMethod(modelResolverSource, 'getCustomNodeModelListSignature')})`
   );
-  const getCallbackDrivenModelStrengthSignature = eval(
-    `(${extractMethod(modelResolverSource, 'getCallbackDrivenModelStrengthSignature')})`
+  const getCustomNodeModelStrengthSignature = eval(
+    `(${extractMethod(modelResolverSource, 'getCustomNodeModelStrengthSignature')})`
   );
   const calls = [];
   const node = {
@@ -1318,9 +1336,9 @@ test('rgthree Power Lora Loader updates strength without reloading workflow anal
     },
   };
   const resolver = {
-    callbackDrivenModelWidgetStates: new WeakMap(),
-    getCallbackDrivenModelListSignature,
-    getCallbackDrivenModelStrengthSignature,
+    customNodeModelAdapterStates: new WeakMap(),
+    getCustomNodeModelListSignature,
+    getCustomNodeModelStrengthSignature,
     scheduleNodeContextMenuAnalysis: () => calls.push('context-analysis'),
     dialog: {
       isWorkflowRefreshSuppressed: () => false,
@@ -1329,7 +1347,7 @@ test('rgthree Power Lora Loader updates strength without reloading workflow anal
     },
   };
 
-  configureCallbackDrivenModelWidgets.call(resolver, node);
+  configureCustomNodeModelAdapter.call(resolver, node);
 
   node.widgets[0].value.strength = 0.5;
   node.setDirtyCanvas(true, true);
@@ -1356,17 +1374,11 @@ test('rgthree Power Lora Loader updates strength without reloading workflow anal
 });
 
 test('rgthree dynamic lora widgets bypass the generic full workflow refresh', () => {
-  const CALLBACK_DRIVEN_MODEL_WIDGETS = {
-    LoraLoaderV2: new Set(['text', 'loras']),
-    'Lora Loader (LoraManager)': new Set(['text', 'loras']),
-    'Lora Stacker (LoraManager)': new Set(['text', 'loras']),
-    'Power Lora Loader (rgthree)': new Set(),
-  };
   const configureNodeContextMenu = eval(
     `(${extractMethod(modelResolverSource, 'configureNodeContextMenu')})`
   );
-  const isCallbackDrivenModelWidget = eval(
-    `(${extractMethod(modelResolverSource, 'isCallbackDrivenModelWidget')})`
+  const isCustomNodeModelWidget = eval(
+    `(${extractMethod(modelResolverSource, 'isCustomNodeModelWidget')})`
   );
   const calls = [];
   class NodeType {}
@@ -1376,11 +1388,11 @@ test('rgthree dynamic lora widgets bypass the generic full workflow refresh', ()
   };
   const node = new NodeType();
   const resolver = {
-    callbackDrivenModelWidgetStates: new WeakMap([
+    customNodeModelAdapterStates: new WeakMap([
       [node, { notify: () => calls.push('selective-update') }],
     ]),
     getResolvedModelsForNodeContextMenu: () => [],
-    isCallbackDrivenModelWidget,
+    isCustomNodeModelWidget,
     scheduleNodeContextMenuAnalysis: () => calls.push('context-analysis'),
     dialog: {
       isWorkflowRefreshSuppressed: () => false,
@@ -1407,7 +1419,7 @@ test('LoRA Manager text onWidgetChanged waits for a confirmed model-list change'
   };
   const resolver = {
     getResolvedModelsForNodeContextMenu: () => [],
-    isCallbackDrivenModelWidget: (_node, widgetName) => widgetName === 'text',
+    isCustomNodeModelWidget: (_node, widgetName) => widgetName === 'text',
     scheduleNodeContextMenuAnalysis: () => calls.push('context-analysis'),
     dialog: {
       isWorkflowRefreshSuppressed: () => false,
