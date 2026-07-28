@@ -73,6 +73,10 @@ export class ResolverManagerDialog extends ComfyDialog {
         this.sidebarTabId = "comfyui-model-resolver";
         this.sidebarOpenModeStorageKey = "model_resolver_sidebar_open_mode";
         this.missingBrowserSplitStorageKey = "model_resolver_missing_browser_detail_w";
+        this._missingBrowserExternalResizeTimer = null;
+        this._pendingMissingBrowserExternalResizeBrowser = null;
+        this._pendingMissingBrowserExternalResizeWidth = null;
+        this._missingBrowserObservedHostWidth = null;
         this.showResolvedModelsStorageKey = "model_resolver_show_resolved_models";
         this.showAutoDownloadModelsStorageKey = "model_resolver_show_auto_download_models";
         this.localMatchAlternativesCollapsedStorageKey = "model_resolver_local_match_alternatives_collapsed";
@@ -100,6 +104,9 @@ export class ResolverManagerDialog extends ComfyDialog {
         this._dockedDragPendingRect = null;
         this._dockedDragAnimationFrame = null;
         this._dragUndockCandidate = false;
+        this._sidebarSplitterPointerDownHandler = null;
+        this._sidebarSplitterMouseDownHandler = null;
+        this._sidebarSplitterDragState = null;
         this._analysisProgressToken = null;
         this._workflowDataLoadToken = null;
         this._loadedModelsLoadToken = null;

@@ -329,6 +329,137 @@ test('missing browser splitter keeps a compositor preview between live layout fr
     /\.mr-missing-browser\.is-resizing \.mr-missing-(?:list|detail)-pane/
   );
   assert.doesNotMatch(missingBrowserMethodsSource, /deferMissingBrowserSplitReleaseUi/);
+  assert.match(missingBrowserMethodsSource, /observedWidth\s*<\s*760/);
+  assert.match(missingBrowserMethodsSource, /observedWidth\s*<\s*700/);
+  assert.match(
+    missingBrowserMethodsSource,
+    /scheduleMissingBrowserExternalResizeRestore\(browser,\s*observedWidth\)/
+  );
+  assert.match(
+    resolverMainCssSource,
+    /\.mr-missing-browser\.is-detail-collapsed \.mr-missing-detail-pane\s*\{[^}]*display:\s*none/s
+  );
+  assert.doesNotMatch(missingBrowserMethodsSource, /startMissingBrowserExternalResizeLock/);
+  assert.doesNotMatch(resolverMainCssSource, /mr-resolver-external-resizing/);
+  assert.doesNotMatch(
+    resolverMainCssSource,
+    /@media\s*\(max-width:\s*980px\)\s*\{\s*\.mr-missing-browser/
+  );
+});
+
+test('docked ComfyUI splitter coalesces live layout while its gutter stays responsive', () => {
+  const queueResize = eval(
+    `(${extractMethod(dialogShellMethodsSource, 'queueSidebarSplitterResize')})`
+  );
+  const flushResize = eval(
+    `(${extractMethod(dialogShellMethodsSource, 'flushSidebarSplitterResize')})`
+  );
+  const previousRequestAnimationFrame = globalThis.requestAnimationFrame;
+  const previousWindow = globalThis.window;
+  const frames = [];
+  const originalCalls = [];
+
+  globalThis.requestAnimationFrame = callback => {
+    frames.push(callback);
+    return frames.length;
+  };
+  globalThis.window = {
+    setTimeout(callback) {
+      callback();
+      return 1;
+    },
+  };
+
+  try {
+    const gutter = {
+      style: {
+        transform: '',
+        willChange: '',
+      },
+    };
+    const state = {
+      proxy: {},
+      originalResize(...args) {
+        originalCalls.push(args);
+      },
+      gutter,
+      originalTransform: '',
+      pendingArgs: null,
+      animationFrame: null,
+      delayTimer: null,
+      lastLayoutAt: Number.NEGATIVE_INFINITY,
+      minLayoutInterval: 40,
+      appliedPageX: 100,
+      appliedPageY: 0,
+      vertical: false,
+      hasMoved: false,
+    };
+    const context = {
+      _sidebarSplitterDragState: state,
+      flushSidebarSplitterResize: flushResize,
+    };
+
+    queueResize.call(context, state, [{ pageX: 112, pageY: 0 }]);
+    queueResize.call(context, state, [{ pageX: 128, pageY: 0 }]);
+
+    assert.equal(frames.length, 1);
+    assert.equal(gutter.style.transform, 'translate3d(28px, 0px, 0)');
+    assert.equal(originalCalls.length, 0);
+
+    frames.shift()();
+    assert.equal(originalCalls.length, 1);
+    assert.equal(originalCalls[0][0].pageX, 128);
+    assert.equal(state.appliedPageX, 128);
+    assert.equal(gutter.style.transform, '');
+  } finally {
+    globalThis.requestAnimationFrame = previousRequestAnimationFrame;
+    globalThis.window = previousWindow;
+  }
+
+  assert.match(dialogShellMethodsSource, /minLayoutInterval:\s*40/);
+  assert.match(dialogShellMethodsSource, /setPointerCapture\(event\.pointerId\)/);
+  assert.match(dialogShellMethodsSource, /translate3d\(/);
+  assert.match(dialogShellMethodsSource, /requestAnimationFrame\(/);
+  assert.doesNotMatch(dialogShellMethodsSource, /mr-resolver-external-resizing/);
+});
+
+test('missing browser detail collapse follows container width with hysteresis', () => {
+  const previousHTMLElement = globalThis.HTMLElement;
+  class FakeHTMLElement {}
+  globalThis.HTMLElement = FakeHTMLElement;
+
+  try {
+    const classes = new Set();
+    const browser = new FakeHTMLElement();
+    browser.classList = {
+      contains(name) {
+        return classes.has(name);
+      },
+      toggle(name, enabled) {
+        if (enabled) classes.add(name);
+        else classes.delete(name);
+      },
+    };
+
+    const context = {
+      _missingBrowserRestoreFrame: null,
+      cancelMissingBrowserExternalResizeRestore() {},
+    };
+    const updateDetailCollapse = eval(
+      `(${extractMethod(missingBrowserMethodsSource, 'updateMissingBrowserDetailCollapse')})`
+    );
+
+    assert.equal(updateDetailCollapse.call(context, browser, 690), true);
+    assert.equal(classes.has('is-detail-collapsed'), true);
+
+    assert.equal(updateDetailCollapse.call(context, browser, 730), false);
+    assert.equal(classes.has('is-detail-collapsed'), true);
+
+    assert.equal(updateDetailCollapse.call(context, browser, 770), true);
+    assert.equal(classes.has('is-detail-collapsed'), false);
+  } finally {
+    globalThis.HTMLElement = previousHTMLElement;
+  }
 });
 
 test('local and loaded model tooltips include preview image routes above full names', () => {

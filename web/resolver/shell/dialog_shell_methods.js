@@ -207,6 +207,210 @@ export const dialogShellMethods = {
         if (this.element.parentNode !== container) {
             container.appendChild(this.element);
         }
+        this.installSidebarSplitterOptimization();
+    },
+
+    installSidebarSplitterOptimization() {
+        if (this._sidebarSplitterPointerDownHandler || this._sidebarSplitterMouseDownHandler) return;
+
+        this._sidebarSplitterPointerDownHandler = (event) => {
+            if (event.button !== undefined && event.button !== 0) return;
+            const gutter = this.getResolverSidebarGutter(event.target);
+            if (!gutter || typeof gutter.setPointerCapture !== 'function') return;
+            try {
+                gutter.setPointerCapture(event.pointerId);
+            } catch {
+                // Pointer capture is an optional optimization and can fail for synthetic events.
+            }
+        };
+        this._sidebarSplitterMouseDownHandler = (event) => {
+            if (event.button !== undefined && event.button !== 0) return;
+            const gutter = this.getResolverSidebarGutter(event.target);
+            if (gutter) this.startSidebarSplitterDragOptimization(event, gutter);
+        };
+
+        document.addEventListener('pointerdown', this._sidebarSplitterPointerDownHandler, true);
+        document.addEventListener('mousedown', this._sidebarSplitterMouseDownHandler, true);
+    },
+
+    removeSidebarSplitterOptimization() {
+        this.finishSidebarSplitterDragOptimization({ flush: true });
+        if (this._sidebarSplitterPointerDownHandler) {
+            document.removeEventListener('pointerdown', this._sidebarSplitterPointerDownHandler, true);
+            this._sidebarSplitterPointerDownHandler = null;
+        }
+        if (this._sidebarSplitterMouseDownHandler) {
+            document.removeEventListener('mousedown', this._sidebarSplitterMouseDownHandler, true);
+            this._sidebarSplitterMouseDownHandler = null;
+        }
+    },
+
+    getResolverSidebarGutter(target) {
+        if (!this.docked || !(this.dockContainer instanceof HTMLElement) || !this.dockContainer.isConnected) {
+            return null;
+        }
+
+        const element = target instanceof Element ? target : null;
+        const gutter = element?.closest?.('.p-splitter-gutter');
+        const panel = this.dockContainer.closest?.('[data-pc-name="splitterpanel"]');
+        if (!(gutter instanceof HTMLElement) || !(panel instanceof HTMLElement)) return null;
+
+        return gutter.previousElementSibling === panel || gutter.nextElementSibling === panel
+            ? gutter
+            : null;
+    },
+
+    findPrimeVueSplitterResizeOwner(gutter) {
+        if (!(gutter instanceof HTMLElement)) return null;
+
+        let instance = gutter.__vueParentComponent || gutter.parentElement?.__vueParentComponent || null;
+        for (let depth = 0; instance && depth < 10; depth += 1, instance = instance.parent) {
+            const owner = instance.ctx;
+            if (
+                owner
+                && typeof owner.onResize === 'function'
+                && typeof owner.onResizeStart === 'function'
+            ) {
+                return {
+                    owner,
+                    proxy: instance.proxy || owner
+                };
+            }
+        }
+        return null;
+    },
+
+    startSidebarSplitterDragOptimization(event, gutter) {
+        if (this._sidebarSplitterDragState) {
+            this.finishSidebarSplitterDragOptimization({ flush: true });
+        }
+
+        const resizeTarget = this.findPrimeVueSplitterResizeOwner(gutter);
+        if (!resizeTarget) return false;
+
+        const { owner, proxy } = resizeTarget;
+        const originalResize = owner.onResize;
+        const state = {
+            owner,
+            proxy,
+            originalResize,
+            wrappedResize: null,
+            gutter,
+            originalTransform: gutter.style.transform,
+            originalWillChange: gutter.style.willChange,
+            pendingArgs: null,
+            animationFrame: null,
+            delayTimer: null,
+            lastLayoutAt: typeof performance === 'object' ? performance.now() : Date.now(),
+            minLayoutInterval: 40,
+            appliedPageX: Number(event.pageX ?? event.clientX) || 0,
+            appliedPageY: Number(event.pageY ?? event.clientY) || 0,
+            vertical: proxy?.horizontal === false,
+            hasMoved: false,
+            mouseUpHandler: null,
+            blurHandler: null
+        };
+
+        state.wrappedResize = (...args) => this.queueSidebarSplitterResize(state, args);
+        try {
+            owner.onResize = state.wrappedResize;
+        } catch {
+            return false;
+        }
+        if (owner.onResize !== state.wrappedResize) return false;
+
+        state.mouseUpHandler = (mouseEvent) => {
+            this.finishSidebarSplitterDragOptimization({
+                flush: true,
+                finalEvent: mouseEvent
+            });
+        };
+        state.blurHandler = () => this.finishSidebarSplitterDragOptimization({ flush: true });
+        this._sidebarSplitterDragState = state;
+        document.addEventListener('mouseup', state.mouseUpHandler, true);
+        window.addEventListener('blur', state.blurHandler, { once: true });
+        return true;
+    },
+
+    queueSidebarSplitterResize(state, args) {
+        if (!state || this._sidebarSplitterDragState !== state) {
+            return state?.originalResize?.apply(state.proxy, args);
+        }
+
+        const event = args?.[0];
+        const pageX = Number(event?.pageX ?? event?.clientX);
+        const pageY = Number(event?.pageY ?? event?.clientY);
+        state.pendingArgs = args;
+        state.hasMoved = true;
+
+        const offset = state.vertical
+            ? pageY - state.appliedPageY
+            : pageX - state.appliedPageX;
+        if (Number.isFinite(offset)) {
+            state.gutter.style.willChange = 'transform';
+            state.gutter.style.transform = offset
+                ? `translate3d(${state.vertical ? 0 : Math.round(offset)}px, ${state.vertical ? Math.round(offset) : 0}px, 0)`
+                : state.originalTransform;
+        }
+
+        if (state.animationFrame || state.delayTimer) return;
+        const now = typeof performance === 'object' ? performance.now() : Date.now();
+        const delay = Math.max(0, state.minLayoutInterval - (now - state.lastLayoutAt));
+        const requestFlush = () => {
+            state.delayTimer = null;
+            state.animationFrame = requestAnimationFrame(() => {
+                state.animationFrame = null;
+                this.flushSidebarSplitterResize(state);
+            });
+        };
+
+        if (delay > 0) {
+            state.delayTimer = window.setTimeout(requestFlush, delay);
+        } else {
+            requestFlush();
+        }
+    },
+
+    flushSidebarSplitterResize(state) {
+        if (!state?.pendingArgs) return false;
+
+        const args = state.pendingArgs;
+        state.pendingArgs = null;
+        const event = args[0];
+        state.originalResize.apply(state.proxy, args);
+        state.appliedPageX = Number(event?.pageX ?? event?.clientX) || state.appliedPageX;
+        state.appliedPageY = Number(event?.pageY ?? event?.clientY) || state.appliedPageY;
+        state.lastLayoutAt = typeof performance === 'object' ? performance.now() : Date.now();
+        state.gutter.style.transform = state.originalTransform;
+        return true;
+    },
+
+    finishSidebarSplitterDragOptimization({ flush = false, finalEvent = null } = {}) {
+        const state = this._sidebarSplitterDragState;
+        if (!state) return false;
+        this._sidebarSplitterDragState = null;
+
+        if (state.delayTimer) {
+            clearTimeout(state.delayTimer);
+            state.delayTimer = null;
+        }
+        if (state.animationFrame) {
+            cancelAnimationFrame(state.animationFrame);
+            state.animationFrame = null;
+        }
+        if (flush && state.hasMoved && finalEvent) {
+            state.pendingArgs = [finalEvent];
+        }
+        if (flush) this.flushSidebarSplitterResize(state);
+
+        if (state.owner.onResize === state.wrappedResize) {
+            state.owner.onResize = state.originalResize;
+        }
+        state.gutter.style.transform = state.originalTransform;
+        state.gutter.style.willChange = state.originalWillChange;
+        document.removeEventListener('mouseup', state.mouseUpHandler, true);
+        window.removeEventListener('blur', state.blurHandler);
+        return true;
     },
 
     dockToSidebar() {
@@ -306,6 +510,7 @@ export const dialogShellMethods = {
     undockToFloating({ persist = true, closeSidebar = true } = {}) {
         if (!this.element) return;
 
+        this.removeSidebarSplitterOptimization();
         this.setDockDropPreviewActive(false);
         this.setUndockDropPreviewActive(false);
         this._pendingDragDockRect = null;

@@ -959,20 +959,39 @@ export const missingBrowserMethods = {
             this.resizeMissingBrowserDetailBy(browser, event.key === 'ArrowLeft' ? 32 : -32);
         });
 
+        this.cancelMissingBrowserExternalResizeRestore();
         this._missingBrowserResizeObserver?.disconnect?.();
         if (typeof ResizeObserver === 'function') {
+            const resizeHost = browser.parentElement instanceof HTMLElement
+                ? browser.parentElement
+                : browser;
+            this._missingBrowserObservedHostWidth = null;
             this._missingBrowserResizeObserver = new ResizeObserver((entries) => {
                 const observedWidth = Number(entries?.[0]?.contentRect?.width);
+                if (!Number.isFinite(observedWidth) || observedWidth <= 0) return;
+
+                const previousHostWidth = Number(this._missingBrowserObservedHostWidth);
+                this._missingBrowserObservedHostWidth = observedWidth;
                 this.rememberMissingBrowserWidth(observedWidth);
+
+                if (!Number.isFinite(previousHostWidth) || previousHostWidth <= 0) {
+                    this.updateMissingBrowserDetailCollapse(browser, observedWidth);
+                    return;
+                }
+                if (Math.abs(previousHostWidth - observedWidth) < 0.5) return;
+
                 const settlingUntil = Number(this._missingBrowserSplitSettlingUntil || 0);
                 const isSettling = typeof performance === 'object'
                     && typeof performance.now === 'function'
                     && performance.now() < settlingUntil;
-                if (!this._missingBrowserSplitDragging && !isSettling) {
-                    this.scheduleMissingBrowserSplitRestore(browser, observedWidth, { useDefault: false });
+                if (
+                    !this._missingBrowserSplitDragging
+                    && !isSettling
+                ) {
+                    this.scheduleMissingBrowserExternalResizeRestore(browser, observedWidth);
                 }
             });
-            this._missingBrowserResizeObserver.observe(browser);
+            this._missingBrowserResizeObserver.observe(resizeHost);
         } else {
             this.cancelMissingBrowserPrewarmFrame();
             this._missingBrowserPrewarmFrame = requestAnimationFrame(() => {
@@ -981,7 +1000,8 @@ export const missingBrowserMethods = {
                 if (this._missingBrowserSplitDragging) return;
                 const measuredWidth = Number(browser.clientWidth || browser.getBoundingClientRect().width);
                 this.rememberMissingBrowserWidth(measuredWidth);
-                if (!this._missingBrowserSplitDragging) {
+                this.updateMissingBrowserDetailCollapse(browser, measuredWidth);
+                if (!this._missingBrowserSplitDragging && !browser.classList.contains('is-detail-collapsed')) {
                     this.scheduleMissingBrowserSplitRestore(browser, measuredWidth, { useDefault: false });
                 }
             });
@@ -992,6 +1012,68 @@ export const missingBrowserMethods = {
         if (!this._missingBrowserPrewarmFrame) return;
         cancelAnimationFrame(this._missingBrowserPrewarmFrame);
         this._missingBrowserPrewarmFrame = null;
+    },
+
+    updateMissingBrowserDetailCollapse(browser, width) {
+        if (!(browser instanceof HTMLElement)) return false;
+        const observedWidth = Number(width);
+        if (!Number.isFinite(observedWidth) || observedWidth <= 0) return false;
+
+        const wasCollapsed = browser.classList.contains('is-detail-collapsed');
+        const shouldCollapse = wasCollapsed
+            ? observedWidth < 760
+            : observedWidth < 700;
+        if (shouldCollapse === wasCollapsed) return false;
+
+        browser.classList.toggle('is-detail-collapsed', shouldCollapse);
+        if (shouldCollapse) {
+            this.cancelMissingBrowserExternalResizeRestore();
+            if (this._missingBrowserRestoreFrame) {
+                cancelAnimationFrame(this._missingBrowserRestoreFrame);
+                this._missingBrowserRestoreFrame = null;
+            }
+            this._pendingMissingBrowserRestoreBrowser = null;
+            this._pendingMissingBrowserRestoreWidth = null;
+            this._pendingMissingBrowserRestoreUseDefault = false;
+        }
+        return true;
+    },
+
+    cancelMissingBrowserExternalResizeRestore() {
+        if (this._missingBrowserExternalResizeTimer) {
+            clearTimeout(this._missingBrowserExternalResizeTimer);
+        }
+        this._missingBrowserExternalResizeTimer = null;
+        this._pendingMissingBrowserExternalResizeBrowser = null;
+        this._pendingMissingBrowserExternalResizeWidth = null;
+    },
+
+    scheduleMissingBrowserExternalResizeRestore(browser, browserWidth, delay = 120) {
+        if (!(browser instanceof HTMLElement)) return;
+
+        this._pendingMissingBrowserExternalResizeBrowser = browser;
+        this._pendingMissingBrowserExternalResizeWidth = Number(browserWidth) || null;
+        if (this._missingBrowserExternalResizeTimer) {
+            clearTimeout(this._missingBrowserExternalResizeTimer);
+        }
+
+        this._missingBrowserExternalResizeTimer = setTimeout(() => {
+            this._missingBrowserExternalResizeTimer = null;
+            const targetBrowser = this._pendingMissingBrowserExternalResizeBrowser;
+            const targetWidth = this._pendingMissingBrowserExternalResizeWidth;
+            this._pendingMissingBrowserExternalResizeBrowser = null;
+            this._pendingMissingBrowserExternalResizeWidth = null;
+
+            if (
+                !targetBrowser?.isConnected
+                || this._missingBrowserSplitDragging
+            ) {
+                return;
+            }
+            this.updateMissingBrowserDetailCollapse(targetBrowser, targetWidth);
+            if (targetBrowser.classList.contains('is-detail-collapsed')) return;
+            this.scheduleMissingBrowserSplitRestore(targetBrowser, targetWidth, { useDefault: false });
+        }, Math.max(0, Number(delay) || 0));
     },
 
     getStoredMissingBrowserSplitWidth() {
@@ -1060,7 +1142,7 @@ export const missingBrowserMethods = {
     },
 
     scheduleMissingBrowserSplitRestore(browser, browserWidth = null, { useDefault = false } = {}) {
-        if (!(browser instanceof HTMLElement)) return;
+        if (!(browser instanceof HTMLElement) || browser.classList.contains('is-detail-collapsed')) return;
 
         this._pendingMissingBrowserRestoreBrowser = browser;
         this._pendingMissingBrowserRestoreWidth = Number.isFinite(Number(browserWidth)) && Number(browserWidth) > 0
@@ -1100,7 +1182,7 @@ export const missingBrowserMethods = {
     },
 
     startMissingBrowserSplitDrag(event, browser, splitter = null, panes = {}) {
-        if (!(browser instanceof HTMLElement)) return;
+        if (!(browser instanceof HTMLElement) || browser.classList.contains('is-detail-collapsed')) return;
 
         event.preventDefault();
         event.stopPropagation?.();

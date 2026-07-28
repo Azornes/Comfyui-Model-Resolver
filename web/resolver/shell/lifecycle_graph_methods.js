@@ -98,6 +98,7 @@ export const lifecycleGraphMethods = {
     close({ collapseSidebar = true } = {}) {
         const wasDocked = this.docked;
         const dockContainer = this.dockContainer;
+        this.removeSidebarSplitterOptimization?.();
         this.setDockDropPreviewActive(false);
         this.setUndockDropPreviewActive(false);
         this.rememberSidebarOpenMode(this.docked ? 'docked' : 'floating');
