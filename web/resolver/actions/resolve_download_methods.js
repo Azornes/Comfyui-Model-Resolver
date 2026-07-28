@@ -3,7 +3,7 @@ import { api } from "../../../../../scripts/api.js";
 import { $el } from "../../../../../scripts/ui.js";
 import { createModuleLogger } from "../../log_system/log_funcs.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
-import { getModelCardUrl } from "../utils/url_utils.js";
+import { getModelCardUrl, parseHuggingFaceFileUrl } from "../utils/url_utils.js";
 import { getCivitaiModelUrl } from "../globals.js";
 import { normalizePathIdentity } from "../utils/html_utils.js";
 const log = createModuleLogger('resolve_download_methods');
@@ -3060,6 +3060,22 @@ export const resolveDownloadMethods = {
         if (modelListResult && modelListResult.url) {
             const modelListHash = getHashMatchDisplay('model_list', modelListResult);
             const missingCategory = this.getMissingDownloadCategory?.(missing, 'checkpoints') || missing.category || 'checkpoints';
+            const huggingFaceFile = parseHuggingFaceFileUrl(modelListResult.url);
+            const modelListDetailsContext = huggingFaceFile
+                ? {
+                    ...modelListResult,
+                    source: modelListResult.source || 'model_list',
+                    details_source: 'huggingface',
+                    model_id: huggingFaceFile.repo,
+                    repo_id: huggingFaceFile.repo,
+                    version_id: huggingFaceFile.revision,
+                    branch: huggingFaceFile.revision,
+                    path: huggingFaceFile.path,
+                    filename: modelListResult.filename || huggingFaceFile.filename,
+                    missing_key: this.getMissingModelKey(missing),
+                    category: modelListResult.directory || missingCategory
+                }
+                : null;
             addRow({
                 sourceKey: 'model-list',
                 sourceLabel: 'Local Database',
@@ -3073,7 +3089,8 @@ export const resolveDownloadMethods = {
                 category: modelListResult.directory || missingCategory,
                 openUrl: getModelCardUrl(modelListResult.url),
                 searchedAt: this.getSearchResultTimestamp(modelListResult),
-                localHashMatchIdentities: modelListHash.identities
+                localHashMatchIdentities: modelListHash.identities,
+                detailsContext: modelListDetailsContext
             });
         }
 
@@ -3095,7 +3112,15 @@ export const resolveDownloadMethods = {
                 category: missingCategory,
                 openUrl: hfModelUrl,
                 searchedAt: this.getSearchResultTimestamp(hfResult),
-                localHashMatchIdentities: hfHash.identities
+                localHashMatchIdentities: hfHash.identities,
+                detailsContext: {
+                    ...hfResult,
+                    name: hfRepo || hfResult.filename,
+                    filename: hfResult.filename,
+                    details_source: 'huggingface',
+                    missing_key: this.getMissingModelKey(missing),
+                    category: missingCategory
+                }
             });
         }
 

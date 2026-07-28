@@ -9,6 +9,7 @@ from core.sources.huggingface import (
     _is_author_index_fresh,
     _read_persistent_author_indexes,
     build_huggingface_custom_result,
+    get_huggingface_model_details,
     parse_huggingface_url,
     get_huggingface_download_url,
     _normalize_huggingface_size_probe_url,
@@ -192,3 +193,78 @@ class HuggingFaceSourceTests(unittest.TestCase):
         queries = build_filename_search_queries("some_model_bf16.safetensors")
         self.assertIn("some_model", queries)
         self.assertIn("some_model_bf16", queries)
+
+    def test_model_details_lists_only_variants_from_matched_folder(self):
+        sha256 = "b" * 64
+        tree = [
+            {
+                "path": "diffusion_models/model_fp8_scaled.safetensors",
+                "size": 100,
+                "lfs": {"oid": f"sha256:{sha256}", "size": 100},
+            },
+            {
+                "path": "diffusion_models/model_int8_convrot.safetensors",
+                "size": 80,
+            },
+            {
+                "path": "text_encoders/encoder_fp8.safetensors",
+                "size": 50,
+            },
+            {"path": "diffusion_models/README.md", "size": 10},
+        ]
+        with patch("core.sources.huggingface._get_repo_tree", return_value=tree):
+            with patch(
+                "core.sources.huggingface.execute_provider_json_request",
+                return_value={
+                    "modelId": "Comfy-Org/example",
+                    "author": "Comfy-Org",
+                    "downloads": 123,
+                    "likes": 4,
+                    "tags": ["comfyui"],
+                },
+            ):
+                details = get_huggingface_model_details(
+                    "Comfy-Org/example",
+                    "diffusion_models/model_fp8_scaled.safetensors",
+                )
+
+        self.assertIsNotNone(details)
+        self.assertEqual("huggingface", details["source"])
+        self.assertEqual("diffusion_models", details["folder"])
+        files = details["selected_version"]["files"]
+        self.assertEqual(
+            [
+                "model_fp8_scaled.safetensors",
+                "model_int8_convrot.safetensors",
+            ],
+            [file_info["name"] for file_info in files],
+        )
+        self.assertTrue(files[0]["primary"])
+        self.assertEqual("FP8 scaled", files[0]["metadata"]["fp"])
+        self.assertEqual(sha256, files[0]["sha256"])
+        self.assertEqual("INT8 convrot", files[1]["metadata"]["fp"])
+
+    def test_model_details_passes_huggingface_token_to_tree_and_metadata(self):
+        tree = [{"path": "model.safetensors", "size": 100}]
+        with patch(
+            "core.sources.huggingface._get_repo_tree",
+            return_value=tree,
+        ) as mock_tree:
+            with patch(
+                "core.sources.huggingface.execute_provider_json_request",
+                return_value={},
+            ) as mock_request:
+                details = get_huggingface_model_details(
+                    "private/repo",
+                    "model.safetensors",
+                    token="hf_secret",
+                )
+
+        self.assertIsNotNone(details)
+        expected_headers = {"Authorization": "Bearer hf_secret"}
+        mock_tree.assert_called_once_with(
+            "private/repo",
+            headers=expected_headers,
+            branch="main",
+        )
+        self.assertEqual(expected_headers, mock_request.call_args.kwargs["headers"])

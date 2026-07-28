@@ -496,6 +496,7 @@ class ModelResolverExtension:
                     check_huggingface_token,
                     get_author_fallback_index_status,
                     get_huggingface_download_url,
+                    get_huggingface_model_details,
                     parse_huggingface_url,
                     refresh_author_fallback_index,
                     search_huggingface_for_file,
@@ -3332,37 +3333,46 @@ class ModelResolverExtension:
                 model_id = data.get("model_id")
                 version_id = data.get("version_id")
                 civitai_key = data.get("civitai_key", "")
+                hf_token = data.get("hf_token", "")
+                file_path = data.get("file_path", "")
+                branch = data.get("branch", "")
 
                 if not download_available:
                     return web.json_response(
                         {"error": "Download providers are not available"}, status=503
                     )
 
-                try:
-                    model_id = (
-                        int(model_id)
-                        if model_id is not None and str(model_id).strip()
-                        else None
-                    )
-                except (TypeError, ValueError):
-                    model_id = None
-
-                try:
-                    version_id = (
-                        int(version_id)
-                        if version_id is not None and str(version_id).strip()
-                        else None
-                    )
-                except (TypeError, ValueError):
-                    version_id = None
-
                 if source == "lora_manager_archive":
                     source = "civitai"
 
-                if source not in {"civitai", "civarchive"}:
+                if source not in {"civitai", "civarchive", "huggingface"}:
                     return web.json_response(
                         {"error": "Unsupported model details source"}, status=400
                     )
+
+                if source == "huggingface":
+                    model_id = str(model_id or "").strip()
+                    branch = str(branch or version_id or "main").strip() or "main"
+                    version_id = branch
+                else:
+                    try:
+                        model_id = (
+                            int(model_id)
+                            if model_id is not None and str(model_id).strip()
+                            else None
+                        )
+                    except (TypeError, ValueError):
+                        model_id = None
+
+                    try:
+                        version_id = (
+                            int(version_id)
+                            if version_id is not None and str(version_id).strip()
+                            else None
+                        )
+                    except (TypeError, ValueError):
+                        version_id = None
+
                 if not model_id:
                     return web.json_response(
                         {"error": "model_id is required"}, status=400
@@ -3375,11 +3385,19 @@ class ModelResolverExtension:
                         version_id,
                         civitai_key or None,
                     )
-                else:
+                elif source == "civarchive":
                     details = await asyncio.to_thread(
                         get_civarchive_model_details,
                         model_id,
                         version_id,
+                    )
+                else:
+                    details = await asyncio.to_thread(
+                        get_huggingface_model_details,
+                        model_id,
+                        file_path,
+                        branch,
+                        hf_token or None,
                     )
 
                 if not details:

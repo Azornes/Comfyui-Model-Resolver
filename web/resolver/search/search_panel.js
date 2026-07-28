@@ -2,7 +2,7 @@ import { app } from "../../../../../scripts/app.js";
 import { api } from "../../../../../scripts/api.js";
 import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
-import { getModelCardUrl } from "../utils/url_utils.js";
+import { getModelCardUrl, parseHuggingFaceFileUrl } from "../utils/url_utils.js";
 import { getCivitaiModelUrl } from "../globals.js";
 import { safeStorage, normalizePathIdentity } from "../utils/html_utils.js";
 const localStorage = safeStorage;
@@ -2045,6 +2045,12 @@ export const searchPanelMethods = {
             || downloadSource.workflow_model_url
             || downloadSource.url;
         const modelUrl = getModelCardUrl(rawModelUrl) || rawModelUrl;
+        const normalizedSource = String(source).toLowerCase();
+        const huggingFaceFile = normalizedSource === 'huggingface'
+            ? parseHuggingFaceFileUrl(
+                downloadSource.download_url || downloadSource.url || rawModelUrl
+            )
+            : null;
         const versionName = downloadSource.version_name || missing.civitai_info?.version_name || '';
         const modelParts = this.getModelVersionParts(
             downloadSource.name || missing.civitai_info?.model_name || '',
@@ -2070,13 +2076,16 @@ export const searchPanelMethods = {
             version: modelParts.version,
             category: rowCategory
         });
-        const rowDetailsContext = ['civitai', 'civarchive'].includes(String(source).toLowerCase())
+        const rowDetailsContext = ['civitai', 'civarchive', 'huggingface'].includes(normalizedSource)
             ? {
                 ...downloadSource,
                 source,
-                details_source: String(source).toLowerCase(),
-                model_id: downloadSource.model_id,
-                version_id: downloadSource.version_id,
+                details_source: normalizedSource,
+                model_id: downloadSource.model_id || huggingFaceFile?.repo,
+                repo_id: downloadSource.repo_id || downloadSource.repo || huggingFaceFile?.repo,
+                version_id: downloadSource.version_id || huggingFaceFile?.revision,
+                branch: downloadSource.branch || huggingFaceFile?.revision || '',
+                path: downloadSource.path || huggingFaceFile?.path || '',
                 name: modelName,
                 filename: downloadFilename,
                 missing_key: this.getMissingModelKey(missing),

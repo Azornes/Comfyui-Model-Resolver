@@ -5,6 +5,7 @@ Search and download models from HuggingFace Hub.
 """
 
 import os
+import posixpath
 import re
 import threading
 import time
@@ -331,7 +332,214 @@ def parse_huggingface_url(url: str) -> Optional[Dict[str, str]]:
 
 def get_huggingface_download_url(repo: str, filename: str, branch: str = "main") -> str:
     """Generate a direct download URL for a HuggingFace file."""
-    return f"https://huggingface.co/{repo}/resolve/{branch}/{quote(filename)}"
+    return (
+        f"https://huggingface.co/{repo}/resolve/"
+        f"{quote(branch, safe='')}/{quote(filename)}"
+    )
+
+
+def _normalize_huggingface_path(value: Any) -> str:
+    return str(value or "").replace("\\", "/").strip("/")
+
+
+def _get_huggingface_variant_label(filename: str) -> str:
+    """Return a concise precision/quantization label inferred from a filename."""
+    stem = os.path.splitext(get_filename_from_path(filename))[0].lower()
+    patterns = (
+        ("nvfp4_mixed", "NVFP4 mixed"),
+        ("fp8_scaled", "FP8 scaled"),
+        ("int8_convrot", "INT8 convrot"),
+        ("nvfp4", "NVFP4"),
+        ("fp8", "FP8"),
+        ("bf16", "BF16"),
+        ("fp16", "FP16"),
+        ("int8", "INT8"),
+        ("int4", "INT4"),
+    )
+    for token, label in patterns:
+        if re.search(rf"(?:^|[_.-]){re.escape(token)}(?:$|[_.-])", stem):
+            return label
+    return ""
+
+
+def _normalize_huggingface_details_file(
+    repo_id: str,
+    branch: str,
+    file_info: Dict[str, Any],
+    target_path: str,
+) -> Optional[Dict[str, Any]]:
+    file_path = _normalize_huggingface_path(file_info.get("path"))
+    if not file_path:
+        return None
+
+    download_url = get_huggingface_download_url(repo_id, file_path, branch)
+    if not looks_like_model_file(download_url):
+        return None
+
+    filename = get_filename_from_path(file_path)
+    sha256 = _extract_huggingface_file_sha256(file_info)
+    extension = os.path.splitext(filename)[1].lstrip(".")
+    metadata = {
+        "format": extension.upper() if extension else "",
+        "fp": _get_huggingface_variant_label(filename),
+    }
+    metadata = {key: value for key, value in metadata.items() if value}
+    page_url = (
+        f"https://huggingface.co/{repo_id}/blob/"
+        f"{quote(branch, safe='')}/{quote(file_path, safe='/')}"
+    )
+
+    return {
+        "name": filename,
+        "filename": filename,
+        "path": file_path,
+        "size": extract_file_size(file_info),
+        "sha256": sha256,
+        "hash": sha256,
+        "hashes": {"SHA256": sha256} if sha256 else {},
+        "download_url": download_url,
+        "url": page_url,
+        "primary": bool(target_path and file_path == target_path),
+        "metadata": metadata,
+    }
+
+
+def get_huggingface_model_details(
+    repo_id: str,
+    file_path: str = "",
+    branch: str = "main",
+    token: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Fetch model-file variants from the folder containing a matched HF file."""
+    normalized_repo_id = str(repo_id or "").strip().strip("/")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", normalized_repo_id):
+        return None
+
+    normalized_branch = str(branch or "main").strip() or "main"
+    if len(normalized_branch) > 200 or any(
+        character in normalized_branch for character in "\r\n?#"
+    ):
+        return None
+
+    target_path = _normalize_huggingface_path(file_path)
+    target_directory = posixpath.dirname(target_path)
+    headers = {"Authorization": f"Bearer {token.strip()}"} if token and token.strip() else {}
+    repo_tree = _get_repo_tree(
+        normalized_repo_id,
+        headers=headers,
+        branch=normalized_branch,
+    )
+    if not repo_tree:
+        return None
+
+    normalized_files = []
+    for file_info in repo_tree:
+        candidate_path = _normalize_huggingface_path(file_info.get("path"))
+        if not candidate_path:
+            continue
+        if target_path and posixpath.dirname(candidate_path) != target_directory:
+            continue
+
+        normalized_file = _normalize_huggingface_details_file(
+            normalized_repo_id,
+            normalized_branch,
+            file_info,
+            target_path,
+        )
+        if normalized_file:
+            normalized_files.append(normalized_file)
+
+    if not normalized_files:
+        return None
+
+    normalized_files.sort(
+        key=lambda item: (
+            not item.get("primary", False),
+            str(item.get("name") or "").lower(),
+        )
+    )
+
+    model_data: Dict[str, Any] = {}
+    try:
+        response_data = execute_provider_json_request(
+            "HuggingFace model details",
+            f"{HF_API_URL}/models/{normalized_repo_id}",
+            headers=headers,
+            timeout=15,
+        )
+        if isinstance(response_data, dict):
+            model_data = response_data
+    except Exception as e:
+        log.debug(
+            f"Error getting HuggingFace model metadata for {normalized_repo_id}: {e}"
+        )
+
+    card_data = (
+        model_data.get("cardData")
+        if isinstance(model_data.get("cardData"), dict)
+        else {}
+    )
+    tags = model_data.get("tags") if isinstance(model_data.get("tags"), list) else []
+    repo_url = f"https://huggingface.co/{normalized_repo_id}"
+    tree_url = (
+        f"{repo_url}/tree/{quote(normalized_branch, safe='')}"
+        + (
+            f"/{quote(target_directory, safe='/')}"
+            if target_directory
+            else ""
+        )
+    )
+    version = {
+        "id": normalized_branch,
+        "name": normalized_branch,
+        "published_at": model_data.get("createdAt") or "",
+        "updated_at": model_data.get("lastModified") or "",
+        "description": "",
+        "trained_words": [],
+        "stats": {
+            "downloads": model_data.get("downloads", 0),
+            "thumbsUpCount": model_data.get("likes", 0),
+        },
+        "files": normalized_files,
+        "images": [],
+        "url": tree_url,
+    }
+    owner = normalized_repo_id.split("/", 1)[0]
+    description = (
+        model_data.get("description")
+        or card_data.get("description")
+        or (
+            f"Select a model file from `{target_directory}` in this Hugging Face "
+            "repository."
+            if target_directory
+            else "Select a model file from this Hugging Face repository."
+        )
+    )
+
+    return {
+        "source": "huggingface",
+        "details_source": "huggingface",
+        "model_id": normalized_repo_id,
+        "version_id": normalized_branch,
+        "name": model_data.get("modelId") or normalized_repo_id,
+        "type": model_data.get("pipeline_tag")
+        or model_data.get("library_name")
+        or "Model repository",
+        "description": description,
+        "creator": {"username": model_data.get("author") or owner},
+        "stats": {
+            "downloads": model_data.get("downloads", 0),
+            "thumbsUpCount": model_data.get("likes", 0),
+        },
+        "tags": tags,
+        "url": repo_url,
+        "version_url": tree_url,
+        "folder": target_directory,
+        "branch": normalized_branch,
+        "versions": [version],
+        "selected_version": version,
+        "images": [],
+    }
 
 
 
@@ -381,6 +589,7 @@ def _build_huggingface_result(
         sha256=sha256,
         repo_id=repo_id,
         path=file_path,
+        branch="main",
     )
 
 
@@ -1077,6 +1286,7 @@ def build_huggingface_custom_result(
         repo_id=repo_id,
         repo=repo_id,
         path=file_path,
+        branch=branch,
         page_url=page_url,
         version_url=page_url,
         custom_url=True,

@@ -3,41 +3,40 @@
   "authors": {
     "Comfy-Org": {
       "author": "Comfy-Org",
-      "updated_at": 1785152935.3565392,
+      "updated_at": 1785251562.9864817,
       "repo_count": 81,
       "file_count": 719,
       "repos": [
         "Comfy-Org/Mage-Flow",
         "Comfy-Org/Krea-2",
-        "Comfy-Org/JoyAI-Image-Edit",
-        "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
         "Comfy-Org/Wan_2.2_ComfyUI_Repackaged",
         "Comfy-Org/sam-3d-body",
-        "Comfy-Org/z_image_turbo",
+        "Comfy-Org/JoyAI-Image-Edit",
         "Comfy-Org/SeedVR2",
+        "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+        "Comfy-Org/z_image_turbo",
         "Comfy-Org/sam3.1",
-        "Comfy-Org/PixelDiT",
+        "Comfy-Org/gemma-4",
         "Comfy-Org/Ideogram-4",
+        "Comfy-Org/Qwen-Image-Edit_ComfyUI",
         "Comfy-Org/flux2-dev",
         "Comfy-Org/ace_step_1.5_ComfyUI_files",
-        "Comfy-Org/gemma-4",
+        "Comfy-Org/PixelDiT",
         "Comfy-Org/Qwen3-VL",
         "Comfy-Org/SCAIL-2",
-        "Comfy-Org/Qwen-Image-Edit_ComfyUI",
-        "Comfy-Org/Wan-Dancer",
-        "Comfy-Org/Anima-LLLite",
-        "Comfy-Org/flux1-dev",
         "Comfy-Org/Qwen-Image_ComfyUI",
         "Comfy-Org/ltx-2",
-        "Comfy-Org/vae-text-encorder-for-flux-klein-4b",
         "Comfy-Org/vae-text-encorder-for-flux-klein-9b",
         "Comfy-Org/frame_interpolation",
         "Comfy-Org/Bernini-R",
+        "Comfy-Org/flux1-dev",
         "Comfy-Org/Cosmos_Predict2_repackaged",
-        "Comfy-Org/flux1-kontext-dev_ComfyUI",
         "Comfy-Org/Qwen-Image-DiffSynth-ControlNets",
+        "Comfy-Org/hunyuan3D_2.1_repackaged",
         "Comfy-Org/HunyuanVideo_1.5_repackaged",
         "Comfy-Org/Qwen-Image-Layered_ComfyUI",
+        "Comfy-Org/vae-text-encorder-for-flux-klein-4b",
+        "Comfy-Org/Wan-Dancer",
         "Comfy-Org/SDPose",
         "Comfy-Org/Qwen3.5",
         "Comfy-Org/causal_forcing_framewise_ComfyUI_repackaged",
@@ -56,6 +55,7 @@
         "Comfy-Org/ACE-Step_ComfyUI_repackaged",
         "Comfy-Org/lotus",
         "Comfy-Org/Omnigen2_ComfyUI_repackaged",
+        "Comfy-Org/flux1-kontext-dev_ComfyUI",
         "Comfy-Org/Real-ESRGAN_repackaged",
         "Comfy-Org/hunyuan3D_2.0_repackaged",
         "Comfy-Org/stable-audio-open-1.0_repackaged",
@@ -63,7 +63,6 @@
         "Comfy-Org/FLUX.1-Krea-dev_ComfyUI",
         "Comfy-Org/Qwen-Image-InstantX-ControlNets",
         "Comfy-Org/USO_1.0_Repackaged",
-        "Comfy-Org/hunyuan3D_2.1_repackaged",
         "Comfy-Org/HunyuanImage_2.1_ComfyUI",
         "Comfy-Org/OneReward_repackaged",
         "Comfy-Org/HuMo_ComfyUI",
@@ -87,7 +86,8 @@
         "Comfy-Org/mediapipe",
         "Comfy-Org/Depth-Anything-3",
         "Comfy-Org/RT-DETR",
-        "Comfy-Org/Pixal3D"
+        "Comfy-Org/Pixal3D",
+        "Comfy-Org/Anima-LLLite"
       ],
       "files": [
         {
@@ -310,276 +310,6 @@
           "repo_id": "Comfy-Org/Krea-2",
           "path": "vae/qwen_image_vae.safetensors",
           "filename": "qwen_image_vae.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/JoyAI-Image-Edit",
-          "path": ".gitattributes",
-          "filename": ".gitattributes",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/JoyAI-Image-Edit",
-          "path": "README.md",
-          "filename": "README.md",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/JoyAI-Image-Edit",
-          "path": "diffusion_models/joyai_image_edit_bf16.safetensors",
-          "filename": "joyai_image_edit_bf16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/JoyAI-Image-Edit",
-          "path": "diffusion_models/joyai_image_edit_int8_convrot.safetensors",
-          "filename": "joyai_image_edit_int8_convrot.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/JoyAI-Image-Edit",
-          "path": "text_encoders/qwen3vl_8b_joyimage_edit_bf16.safetensors",
-          "filename": "qwen3vl_8b_joyimage_edit_bf16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/JoyAI-Image-Edit",
-          "path": "text_encoders/qwen3vl_8b_joyimage_edit_int8_convrot.safetensors",
-          "filename": "qwen3vl_8b_joyimage_edit_int8_convrot.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/JoyAI-Image-Edit",
-          "path": "vae/wan_2.1_vae.safetensors",
-          "filename": "wan_2.1_vae.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": ".gitattributes",
-          "filename": ".gitattributes",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "README.md",
-          "filename": "README.md",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "example workflows_Wan2.1/image_to_video_wan_480p_example.json",
-          "filename": "image_to_video_wan_480p_example.json",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "example workflows_Wan2.1/image_to_video_wan_720p_example.json",
-          "filename": "image_to_video_wan_720p_example.json",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "example workflows_Wan2.1/text_to_video_wan.json",
-          "filename": "text_to_video_wan.json",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/clip_vision/clip_vision_h.safetensors",
-          "filename": "clip_vision_h.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/diffusion_models/wan2.1_flf2v_720p_14B_fp16.safetensors",
-          "filename": "wan2.1_flf2v_720p_14B_fp16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/diffusion_models/wan2.1_flf2v_720p_14B_fp8_e4m3fn.safetensors",
-          "filename": "wan2.1_flf2v_720p_14B_fp8_e4m3fn.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/diffusion_models/wan2.1_fun_camera_v1.1_1.3B_bf16.safetensors",
-          "filename": "wan2.1_fun_camera_v1.1_1.3B_bf16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/diffusion_models/wan2.1_fun_camera_v1.1_14B_bf16.safetensors",
-          "filename": "wan2.1_fun_camera_v1.1_14B_bf16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/diffusion_models/wan2.1_fun_control_1.3B_bf16.safetensors",
-          "filename": "wan2.1_fun_control_1.3B_bf16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/diffusion_models/wan2.1_fun_inp_1.3B_bf16.safetensors",
-          "filename": "wan2.1_fun_inp_1.3B_bf16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/diffusion_models/wan2.1_i2v_480p_14B_bf16.safetensors",
-          "filename": "wan2.1_i2v_480p_14B_bf16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/diffusion_models/wan2.1_i2v_480p_14B_fp16.safetensors",
-          "filename": "wan2.1_i2v_480p_14B_fp16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/diffusion_models/wan2.1_i2v_480p_14B_fp8_e4m3fn.safetensors",
-          "filename": "wan2.1_i2v_480p_14B_fp8_e4m3fn.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/diffusion_models/wan2.1_i2v_480p_14B_fp8_scaled.safetensors",
-          "filename": "wan2.1_i2v_480p_14B_fp8_scaled.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/diffusion_models/wan2.1_i2v_720p_14B_bf16.safetensors",
-          "filename": "wan2.1_i2v_720p_14B_bf16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/diffusion_models/wan2.1_i2v_720p_14B_fp16.safetensors",
-          "filename": "wan2.1_i2v_720p_14B_fp16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/diffusion_models/wan2.1_i2v_720p_14B_fp8_e4m3fn.safetensors",
-          "filename": "wan2.1_i2v_720p_14B_fp8_e4m3fn.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/diffusion_models/wan2.1_i2v_720p_14B_fp8_scaled.safetensors",
-          "filename": "wan2.1_i2v_720p_14B_fp8_scaled.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/diffusion_models/wan2.1_magref_14B_fp16.safetensors",
-          "filename": "wan2.1_magref_14B_fp16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/diffusion_models/wan2.1_t2v_1.3B_bf16.safetensors",
-          "filename": "wan2.1_t2v_1.3B_bf16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/diffusion_models/wan2.1_t2v_1.3B_fp16.safetensors",
-          "filename": "wan2.1_t2v_1.3B_fp16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/diffusion_models/wan2.1_t2v_14B_bf16.safetensors",
-          "filename": "wan2.1_t2v_14B_bf16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/diffusion_models/wan2.1_t2v_14B_fp16.safetensors",
-          "filename": "wan2.1_t2v_14B_fp16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/diffusion_models/wan2.1_t2v_14B_fp8_e4m3fn.safetensors",
-          "filename": "wan2.1_t2v_14B_fp8_e4m3fn.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/diffusion_models/wan2.1_t2v_14B_fp8_scaled.safetensors",
-          "filename": "wan2.1_t2v_14B_fp8_scaled.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/diffusion_models/wan2.1_vace_1.3B_fp16.safetensors",
-          "filename": "wan2.1_vace_1.3B_fp16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/diffusion_models/wan2.1_vace_1.3B_preview_fp16.safetensors",
-          "filename": "wan2.1_vace_1.3B_preview_fp16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/diffusion_models/wan2.1_vace_14B_fp16.safetensors",
-          "filename": "wan2.1_vace_14B_fp16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/loras/wan_alpha_2.1_rgba_lora.safetensors",
-          "filename": "wan_alpha_2.1_rgba_lora.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/model_patches/wan2.1_infiniteTalk_multi_fp16.safetensors",
-          "filename": "wan2.1_infiniteTalk_multi_fp16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/model_patches/wan2.1_infiniteTalk_single_fp16.safetensors",
-          "filename": "wan2.1_infiniteTalk_single_fp16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/text_encoders/umt5_xxl_fp16.safetensors",
-          "filename": "umt5_xxl_fp16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-          "filename": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/vae/wan_2.1_vae.safetensors",
-          "filename": "wan_2.1_vae.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/vae/wan_alpha_2.1_vae_alpha_channel.safetensors",
-          "filename": "wan_alpha_2.1_vae_alpha_channel.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
-          "path": "split_files/vae/wan_alpha_2.1_vae_rgb_channel.safetensors",
-          "filename": "wan_alpha_2.1_vae_rgb_channel.safetensors",
           "size": null
         },
         {
@@ -877,69 +607,45 @@
           "size": null
         },
         {
-          "repo_id": "Comfy-Org/z_image_turbo",
+          "repo_id": "Comfy-Org/JoyAI-Image-Edit",
           "path": ".gitattributes",
           "filename": ".gitattributes",
           "size": null
         },
         {
-          "repo_id": "Comfy-Org/z_image_turbo",
+          "repo_id": "Comfy-Org/JoyAI-Image-Edit",
           "path": "README.md",
           "filename": "README.md",
           "size": null
         },
         {
-          "repo_id": "Comfy-Org/z_image_turbo",
-          "path": "split_files/diffusion_models/z_image_turbo_bf16.safetensors",
-          "filename": "z_image_turbo_bf16.safetensors",
+          "repo_id": "Comfy-Org/JoyAI-Image-Edit",
+          "path": "diffusion_models/joyai_image_edit_bf16.safetensors",
+          "filename": "joyai_image_edit_bf16.safetensors",
           "size": null
         },
         {
-          "repo_id": "Comfy-Org/z_image_turbo",
-          "path": "split_files/diffusion_models/z_image_turbo_int8_convrot.safetensors",
-          "filename": "z_image_turbo_int8_convrot.safetensors",
+          "repo_id": "Comfy-Org/JoyAI-Image-Edit",
+          "path": "diffusion_models/joyai_image_edit_int8_convrot.safetensors",
+          "filename": "joyai_image_edit_int8_convrot.safetensors",
           "size": null
         },
         {
-          "repo_id": "Comfy-Org/z_image_turbo",
-          "path": "split_files/diffusion_models/z_image_turbo_nvfp4.safetensors",
-          "filename": "z_image_turbo_nvfp4.safetensors",
+          "repo_id": "Comfy-Org/JoyAI-Image-Edit",
+          "path": "text_encoders/qwen3vl_8b_joyimage_edit_bf16.safetensors",
+          "filename": "qwen3vl_8b_joyimage_edit_bf16.safetensors",
           "size": null
         },
         {
-          "repo_id": "Comfy-Org/z_image_turbo",
-          "path": "split_files/loras/z_image_turbo_distill_patch_lora_bf16.safetensors",
-          "filename": "z_image_turbo_distill_patch_lora_bf16.safetensors",
+          "repo_id": "Comfy-Org/JoyAI-Image-Edit",
+          "path": "text_encoders/qwen3vl_8b_joyimage_edit_int8_convrot.safetensors",
+          "filename": "qwen3vl_8b_joyimage_edit_int8_convrot.safetensors",
           "size": null
         },
         {
-          "repo_id": "Comfy-Org/z_image_turbo",
-          "path": "split_files/text_encoders/qwen_3_4b.safetensors",
-          "filename": "qwen_3_4b.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/z_image_turbo",
-          "path": "split_files/text_encoders/qwen_3_4b_fp4_mixed.safetensors",
-          "filename": "qwen_3_4b_fp4_mixed.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/z_image_turbo",
-          "path": "split_files/text_encoders/qwen_3_4b_fp8_mixed.safetensors",
-          "filename": "qwen_3_4b_fp8_mixed.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/z_image_turbo",
-          "path": "split_files/vae/ae.safetensors",
-          "filename": "ae.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/z_image_turbo",
-          "path": "z_image_convert_original_to_comfy.py",
-          "filename": "z_image_convert_original_to_comfy.py",
+          "repo_id": "Comfy-Org/JoyAI-Image-Edit",
+          "path": "vae/wan_2.1_vae.safetensors",
+          "filename": "wan_2.1_vae.safetensors",
           "size": null
         },
         {
@@ -1057,6 +763,300 @@
           "size": null
         },
         {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": ".gitattributes",
+          "filename": ".gitattributes",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "README.md",
+          "filename": "README.md",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "example workflows_Wan2.1/image_to_video_wan_480p_example.json",
+          "filename": "image_to_video_wan_480p_example.json",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "example workflows_Wan2.1/image_to_video_wan_720p_example.json",
+          "filename": "image_to_video_wan_720p_example.json",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "example workflows_Wan2.1/text_to_video_wan.json",
+          "filename": "text_to_video_wan.json",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/clip_vision/clip_vision_h.safetensors",
+          "filename": "clip_vision_h.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/diffusion_models/wan2.1_flf2v_720p_14B_fp16.safetensors",
+          "filename": "wan2.1_flf2v_720p_14B_fp16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/diffusion_models/wan2.1_flf2v_720p_14B_fp8_e4m3fn.safetensors",
+          "filename": "wan2.1_flf2v_720p_14B_fp8_e4m3fn.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/diffusion_models/wan2.1_fun_camera_v1.1_1.3B_bf16.safetensors",
+          "filename": "wan2.1_fun_camera_v1.1_1.3B_bf16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/diffusion_models/wan2.1_fun_camera_v1.1_14B_bf16.safetensors",
+          "filename": "wan2.1_fun_camera_v1.1_14B_bf16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/diffusion_models/wan2.1_fun_control_1.3B_bf16.safetensors",
+          "filename": "wan2.1_fun_control_1.3B_bf16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/diffusion_models/wan2.1_fun_inp_1.3B_bf16.safetensors",
+          "filename": "wan2.1_fun_inp_1.3B_bf16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/diffusion_models/wan2.1_i2v_480p_14B_bf16.safetensors",
+          "filename": "wan2.1_i2v_480p_14B_bf16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/diffusion_models/wan2.1_i2v_480p_14B_fp16.safetensors",
+          "filename": "wan2.1_i2v_480p_14B_fp16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/diffusion_models/wan2.1_i2v_480p_14B_fp8_e4m3fn.safetensors",
+          "filename": "wan2.1_i2v_480p_14B_fp8_e4m3fn.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/diffusion_models/wan2.1_i2v_480p_14B_fp8_scaled.safetensors",
+          "filename": "wan2.1_i2v_480p_14B_fp8_scaled.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/diffusion_models/wan2.1_i2v_720p_14B_bf16.safetensors",
+          "filename": "wan2.1_i2v_720p_14B_bf16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/diffusion_models/wan2.1_i2v_720p_14B_fp16.safetensors",
+          "filename": "wan2.1_i2v_720p_14B_fp16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/diffusion_models/wan2.1_i2v_720p_14B_fp8_e4m3fn.safetensors",
+          "filename": "wan2.1_i2v_720p_14B_fp8_e4m3fn.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/diffusion_models/wan2.1_i2v_720p_14B_fp8_scaled.safetensors",
+          "filename": "wan2.1_i2v_720p_14B_fp8_scaled.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/diffusion_models/wan2.1_magref_14B_fp16.safetensors",
+          "filename": "wan2.1_magref_14B_fp16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/diffusion_models/wan2.1_t2v_1.3B_bf16.safetensors",
+          "filename": "wan2.1_t2v_1.3B_bf16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/diffusion_models/wan2.1_t2v_1.3B_fp16.safetensors",
+          "filename": "wan2.1_t2v_1.3B_fp16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/diffusion_models/wan2.1_t2v_14B_bf16.safetensors",
+          "filename": "wan2.1_t2v_14B_bf16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/diffusion_models/wan2.1_t2v_14B_fp16.safetensors",
+          "filename": "wan2.1_t2v_14B_fp16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/diffusion_models/wan2.1_t2v_14B_fp8_e4m3fn.safetensors",
+          "filename": "wan2.1_t2v_14B_fp8_e4m3fn.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/diffusion_models/wan2.1_t2v_14B_fp8_scaled.safetensors",
+          "filename": "wan2.1_t2v_14B_fp8_scaled.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/diffusion_models/wan2.1_vace_1.3B_fp16.safetensors",
+          "filename": "wan2.1_vace_1.3B_fp16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/diffusion_models/wan2.1_vace_1.3B_preview_fp16.safetensors",
+          "filename": "wan2.1_vace_1.3B_preview_fp16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/diffusion_models/wan2.1_vace_14B_fp16.safetensors",
+          "filename": "wan2.1_vace_14B_fp16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/loras/wan_alpha_2.1_rgba_lora.safetensors",
+          "filename": "wan_alpha_2.1_rgba_lora.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/model_patches/wan2.1_infiniteTalk_multi_fp16.safetensors",
+          "filename": "wan2.1_infiniteTalk_multi_fp16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/model_patches/wan2.1_infiniteTalk_single_fp16.safetensors",
+          "filename": "wan2.1_infiniteTalk_single_fp16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/text_encoders/umt5_xxl_fp16.safetensors",
+          "filename": "umt5_xxl_fp16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+          "filename": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/vae/wan_2.1_vae.safetensors",
+          "filename": "wan_2.1_vae.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/vae/wan_alpha_2.1_vae_alpha_channel.safetensors",
+          "filename": "wan_alpha_2.1_vae_alpha_channel.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+          "path": "split_files/vae/wan_alpha_2.1_vae_rgb_channel.safetensors",
+          "filename": "wan_alpha_2.1_vae_rgb_channel.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/z_image_turbo",
+          "path": ".gitattributes",
+          "filename": ".gitattributes",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/z_image_turbo",
+          "path": "README.md",
+          "filename": "README.md",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/z_image_turbo",
+          "path": "split_files/diffusion_models/z_image_turbo_bf16.safetensors",
+          "filename": "z_image_turbo_bf16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/z_image_turbo",
+          "path": "split_files/diffusion_models/z_image_turbo_int8_convrot.safetensors",
+          "filename": "z_image_turbo_int8_convrot.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/z_image_turbo",
+          "path": "split_files/diffusion_models/z_image_turbo_nvfp4.safetensors",
+          "filename": "z_image_turbo_nvfp4.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/z_image_turbo",
+          "path": "split_files/loras/z_image_turbo_distill_patch_lora_bf16.safetensors",
+          "filename": "z_image_turbo_distill_patch_lora_bf16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/z_image_turbo",
+          "path": "split_files/text_encoders/qwen_3_4b.safetensors",
+          "filename": "qwen_3_4b.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/z_image_turbo",
+          "path": "split_files/text_encoders/qwen_3_4b_fp4_mixed.safetensors",
+          "filename": "qwen_3_4b_fp4_mixed.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/z_image_turbo",
+          "path": "split_files/text_encoders/qwen_3_4b_fp8_mixed.safetensors",
+          "filename": "qwen_3_4b_fp8_mixed.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/z_image_turbo",
+          "path": "split_files/vae/ae.safetensors",
+          "filename": "ae.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/z_image_turbo",
+          "path": "z_image_convert_original_to_comfy.py",
+          "filename": "z_image_convert_original_to_comfy.py",
+          "size": null
+        },
+        {
           "repo_id": "Comfy-Org/sam3.1",
           "path": ".gitattributes",
           "filename": ".gitattributes",
@@ -1078,6 +1078,336 @@
           "repo_id": "Comfy-Org/sam3.1",
           "path": "checkpoints/sam3.1_multiplex_fp16.safetensors",
           "filename": "sam3.1_multiplex_fp16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/gemma-4",
+          "path": ".gitattributes",
+          "filename": ".gitattributes",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/gemma-4",
+          "path": "README.md",
+          "filename": "README.md",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/gemma-4",
+          "path": "text_encoders/gemma4_12b_bf16.safetensors",
+          "filename": "gemma4_12b_bf16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/gemma-4",
+          "path": "text_encoders/gemma4_e2b_it_bf16.safetensors",
+          "filename": "gemma4_e2b_it_bf16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/gemma-4",
+          "path": "text_encoders/gemma4_e4b_it_bf16.safetensors",
+          "filename": "gemma4_e4b_it_bf16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/gemma-4",
+          "path": "text_encoders/gemma4_e4b_it_fp8_scaled.safetensors",
+          "filename": "gemma4_e4b_it_fp8_scaled.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Ideogram-4",
+          "path": ".gitattributes",
+          "filename": ".gitattributes",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Ideogram-4",
+          "path": "README.md",
+          "filename": "README.md",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Ideogram-4",
+          "path": "diffusion_models/ideogram4_fp8_scaled.safetensors",
+          "filename": "ideogram4_fp8_scaled.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Ideogram-4",
+          "path": "diffusion_models/ideogram4_int8_convrot.safetensors",
+          "filename": "ideogram4_int8_convrot.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Ideogram-4",
+          "path": "diffusion_models/ideogram4_nvfp4_mixed.safetensors",
+          "filename": "ideogram4_nvfp4_mixed.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Ideogram-4",
+          "path": "diffusion_models/ideogram4_unconditional_fp8_scaled.safetensors",
+          "filename": "ideogram4_unconditional_fp8_scaled.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Ideogram-4",
+          "path": "diffusion_models/ideogram4_unconditional_int8_convrot.safetensors",
+          "filename": "ideogram4_unconditional_int8_convrot.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Ideogram-4",
+          "path": "diffusion_models/ideogram4_unconditional_nvfp4_mixed.safetensors",
+          "filename": "ideogram4_unconditional_nvfp4_mixed.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Ideogram-4",
+          "path": "text_encoders/qwen3vl_8b_fp8_scaled.safetensors",
+          "filename": "qwen3vl_8b_fp8_scaled.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Ideogram-4",
+          "path": "text_encoders/qwen3vl_8b_nvfp4.safetensors",
+          "filename": "qwen3vl_8b_nvfp4.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Ideogram-4",
+          "path": "vae/flux2-vae.safetensors",
+          "filename": "flux2-vae.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
+          "path": ".gitattributes",
+          "filename": ".gitattributes",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
+          "path": "README.md",
+          "filename": "README.md",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
+          "path": "split_files/diffusion_models/firered_image_edit_1.0_bf16.safetensors",
+          "filename": "firered_image_edit_1.0_bf16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
+          "path": "split_files/diffusion_models/qwen_image_edit_2509_bf16.safetensors",
+          "filename": "qwen_image_edit_2509_bf16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
+          "path": "split_files/diffusion_models/qwen_image_edit_2509_fp8_e4m3fn.safetensors",
+          "filename": "qwen_image_edit_2509_fp8_e4m3fn.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
+          "path": "split_files/diffusion_models/qwen_image_edit_2509_fp8mixed.safetensors",
+          "filename": "qwen_image_edit_2509_fp8mixed.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
+          "path": "split_files/diffusion_models/qwen_image_edit_2511_bf16.safetensors",
+          "filename": "qwen_image_edit_2511_bf16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
+          "path": "split_files/diffusion_models/qwen_image_edit_2511_fp8mixed.safetensors",
+          "filename": "qwen_image_edit_2511_fp8mixed.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
+          "path": "split_files/diffusion_models/qwen_image_edit_2511_int8_convrot.safetensors",
+          "filename": "qwen_image_edit_2511_int8_convrot.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
+          "path": "split_files/diffusion_models/qwen_image_edit_bf16.safetensors",
+          "filename": "qwen_image_edit_bf16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
+          "path": "split_files/diffusion_models/qwen_image_edit_fp8_e4m3fn.safetensors",
+          "filename": "qwen_image_edit_fp8_e4m3fn.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
+          "path": "split_files/loras/Qwen-Edit-2509-Multiple-angles.safetensors",
+          "filename": "Qwen-Edit-2509-Multiple-angles.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
+          "path": "split_files/loras/Qwen-Image-Edit-2509-Anything2RealAlpha.safetensors",
+          "filename": "Qwen-Image-Edit-2509-Anything2RealAlpha.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
+          "path": "split_files/loras/Qwen-Image-Edit-2509-Fusion.safetensors",
+          "filename": "Qwen-Image-Edit-2509-Fusion.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
+          "path": "split_files/loras/Qwen-Image-Edit-2509-Light-Migration.safetensors",
+          "filename": "Qwen-Image-Edit-2509-Light-Migration.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
+          "path": "split_files/loras/Qwen-Image-Edit-2509-Relight.safetensors",
+          "filename": "Qwen-Image-Edit-2509-Relight.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
+          "path": "split_files/loras/Qwen-Image-Edit-2509-White_to_Scene.safetensors",
+          "filename": "Qwen-Image-Edit-2509-White_to_Scene.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/flux2-dev",
+          "path": ".gitattributes",
+          "filename": ".gitattributes",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/flux2-dev",
+          "path": "README.md",
+          "filename": "README.md",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/flux2-dev",
+          "path": "split_files/diffusion_models/flux2_dev_fp8mixed.safetensors",
+          "filename": "flux2_dev_fp8mixed.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/flux2-dev",
+          "path": "split_files/loras/Flux2TurboComfyv2.safetensors",
+          "filename": "Flux2TurboComfyv2.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/flux2-dev",
+          "path": "split_files/loras/Flux_2-Turbo-LoRA_comfyui.safetensors",
+          "filename": "Flux_2-Turbo-LoRA_comfyui.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/flux2-dev",
+          "path": "split_files/text_encoders/mistral_3_small_flux2_bf16.safetensors",
+          "filename": "mistral_3_small_flux2_bf16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/flux2-dev",
+          "path": "split_files/text_encoders/mistral_3_small_flux2_fp4_mixed.safetensors",
+          "filename": "mistral_3_small_flux2_fp4_mixed.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/flux2-dev",
+          "path": "split_files/text_encoders/mistral_3_small_flux2_fp8.safetensors",
+          "filename": "mistral_3_small_flux2_fp8.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/flux2-dev",
+          "path": "split_files/vae/flux2-vae.safetensors",
+          "filename": "flux2-vae.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/ace_step_1.5_ComfyUI_files",
+          "path": ".gitattributes",
+          "filename": ".gitattributes",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/ace_step_1.5_ComfyUI_files",
+          "path": "README.md",
+          "filename": "README.md",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/ace_step_1.5_ComfyUI_files",
+          "path": "checkpoints/ace_step_1.5_turbo_aio.safetensors",
+          "filename": "ace_step_1.5_turbo_aio.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/ace_step_1.5_ComfyUI_files",
+          "path": "split_files/diffusion_models/acestep_v1.5_base.safetensors",
+          "filename": "acestep_v1.5_base.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/ace_step_1.5_ComfyUI_files",
+          "path": "split_files/diffusion_models/acestep_v1.5_turbo.safetensors",
+          "filename": "acestep_v1.5_turbo.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/ace_step_1.5_ComfyUI_files",
+          "path": "split_files/diffusion_models/acestep_v1.5_xl_base_bf16.safetensors",
+          "filename": "acestep_v1.5_xl_base_bf16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/ace_step_1.5_ComfyUI_files",
+          "path": "split_files/diffusion_models/acestep_v1.5_xl_sft_bf16.safetensors",
+          "filename": "acestep_v1.5_xl_sft_bf16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/ace_step_1.5_ComfyUI_files",
+          "path": "split_files/diffusion_models/acestep_v1.5_xl_turbo_bf16.safetensors",
+          "filename": "acestep_v1.5_xl_turbo_bf16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/ace_step_1.5_ComfyUI_files",
+          "path": "split_files/text_encoders/qwen_0.6b_ace15.safetensors",
+          "filename": "qwen_0.6b_ace15.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/ace_step_1.5_ComfyUI_files",
+          "path": "split_files/text_encoders/qwen_1.7b_ace15.safetensors",
+          "filename": "qwen_1.7b_ace15.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/ace_step_1.5_ComfyUI_files",
+          "path": "split_files/text_encoders/qwen_4b_ace15.safetensors",
+          "filename": "qwen_4b_ace15.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/ace_step_1.5_ComfyUI_files",
+          "path": "split_files/vae/ace_1.5_vae.safetensors",
+          "filename": "ace_1.5_vae.safetensors",
           "size": null
         },
         {
@@ -1273,234 +1603,6 @@
           "size": null
         },
         {
-          "repo_id": "Comfy-Org/Ideogram-4",
-          "path": ".gitattributes",
-          "filename": ".gitattributes",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Ideogram-4",
-          "path": "README.md",
-          "filename": "README.md",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Ideogram-4",
-          "path": "diffusion_models/ideogram4_fp8_scaled.safetensors",
-          "filename": "ideogram4_fp8_scaled.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Ideogram-4",
-          "path": "diffusion_models/ideogram4_int8_convrot.safetensors",
-          "filename": "ideogram4_int8_convrot.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Ideogram-4",
-          "path": "diffusion_models/ideogram4_nvfp4_mixed.safetensors",
-          "filename": "ideogram4_nvfp4_mixed.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Ideogram-4",
-          "path": "diffusion_models/ideogram4_unconditional_fp8_scaled.safetensors",
-          "filename": "ideogram4_unconditional_fp8_scaled.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Ideogram-4",
-          "path": "diffusion_models/ideogram4_unconditional_int8_convrot.safetensors",
-          "filename": "ideogram4_unconditional_int8_convrot.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Ideogram-4",
-          "path": "diffusion_models/ideogram4_unconditional_nvfp4_mixed.safetensors",
-          "filename": "ideogram4_unconditional_nvfp4_mixed.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Ideogram-4",
-          "path": "text_encoders/qwen3vl_8b_fp8_scaled.safetensors",
-          "filename": "qwen3vl_8b_fp8_scaled.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Ideogram-4",
-          "path": "text_encoders/qwen3vl_8b_nvfp4.safetensors",
-          "filename": "qwen3vl_8b_nvfp4.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Ideogram-4",
-          "path": "vae/flux2-vae.safetensors",
-          "filename": "flux2-vae.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/flux2-dev",
-          "path": ".gitattributes",
-          "filename": ".gitattributes",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/flux2-dev",
-          "path": "README.md",
-          "filename": "README.md",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/flux2-dev",
-          "path": "split_files/diffusion_models/flux2_dev_fp8mixed.safetensors",
-          "filename": "flux2_dev_fp8mixed.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/flux2-dev",
-          "path": "split_files/loras/Flux2TurboComfyv2.safetensors",
-          "filename": "Flux2TurboComfyv2.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/flux2-dev",
-          "path": "split_files/loras/Flux_2-Turbo-LoRA_comfyui.safetensors",
-          "filename": "Flux_2-Turbo-LoRA_comfyui.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/flux2-dev",
-          "path": "split_files/text_encoders/mistral_3_small_flux2_bf16.safetensors",
-          "filename": "mistral_3_small_flux2_bf16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/flux2-dev",
-          "path": "split_files/text_encoders/mistral_3_small_flux2_fp4_mixed.safetensors",
-          "filename": "mistral_3_small_flux2_fp4_mixed.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/flux2-dev",
-          "path": "split_files/text_encoders/mistral_3_small_flux2_fp8.safetensors",
-          "filename": "mistral_3_small_flux2_fp8.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/flux2-dev",
-          "path": "split_files/vae/flux2-vae.safetensors",
-          "filename": "flux2-vae.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/ace_step_1.5_ComfyUI_files",
-          "path": ".gitattributes",
-          "filename": ".gitattributes",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/ace_step_1.5_ComfyUI_files",
-          "path": "README.md",
-          "filename": "README.md",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/ace_step_1.5_ComfyUI_files",
-          "path": "checkpoints/ace_step_1.5_turbo_aio.safetensors",
-          "filename": "ace_step_1.5_turbo_aio.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/ace_step_1.5_ComfyUI_files",
-          "path": "split_files/diffusion_models/acestep_v1.5_base.safetensors",
-          "filename": "acestep_v1.5_base.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/ace_step_1.5_ComfyUI_files",
-          "path": "split_files/diffusion_models/acestep_v1.5_turbo.safetensors",
-          "filename": "acestep_v1.5_turbo.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/ace_step_1.5_ComfyUI_files",
-          "path": "split_files/diffusion_models/acestep_v1.5_xl_base_bf16.safetensors",
-          "filename": "acestep_v1.5_xl_base_bf16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/ace_step_1.5_ComfyUI_files",
-          "path": "split_files/diffusion_models/acestep_v1.5_xl_sft_bf16.safetensors",
-          "filename": "acestep_v1.5_xl_sft_bf16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/ace_step_1.5_ComfyUI_files",
-          "path": "split_files/diffusion_models/acestep_v1.5_xl_turbo_bf16.safetensors",
-          "filename": "acestep_v1.5_xl_turbo_bf16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/ace_step_1.5_ComfyUI_files",
-          "path": "split_files/text_encoders/qwen_0.6b_ace15.safetensors",
-          "filename": "qwen_0.6b_ace15.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/ace_step_1.5_ComfyUI_files",
-          "path": "split_files/text_encoders/qwen_1.7b_ace15.safetensors",
-          "filename": "qwen_1.7b_ace15.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/ace_step_1.5_ComfyUI_files",
-          "path": "split_files/text_encoders/qwen_4b_ace15.safetensors",
-          "filename": "qwen_4b_ace15.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/ace_step_1.5_ComfyUI_files",
-          "path": "split_files/vae/ace_1.5_vae.safetensors",
-          "filename": "ace_1.5_vae.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/gemma-4",
-          "path": ".gitattributes",
-          "filename": ".gitattributes",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/gemma-4",
-          "path": "README.md",
-          "filename": "README.md",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/gemma-4",
-          "path": "text_encoders/gemma4_12b_bf16.safetensors",
-          "filename": "gemma4_12b_bf16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/gemma-4",
-          "path": "text_encoders/gemma4_e2b_it_bf16.safetensors",
-          "filename": "gemma4_e2b_it_bf16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/gemma-4",
-          "path": "text_encoders/gemma4_e4b_it_bf16.safetensors",
-          "filename": "gemma4_e4b_it_bf16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/gemma-4",
-          "path": "text_encoders/gemma4_e4b_it_fp8_scaled.safetensors",
-          "filename": "gemma4_e4b_it_fp8_scaled.safetensors",
-          "size": null
-        },
-        {
           "repo_id": "Comfy-Org/Qwen3-VL",
           "path": ".gitattributes",
           "filename": ".gitattributes",
@@ -1594,252 +1696,6 @@
           "repo_id": "Comfy-Org/SCAIL-2",
           "path": "loras/wan2.1_SCAIL_2_relight_lora_bf16.safetensors",
           "filename": "wan2.1_SCAIL_2_relight_lora_bf16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
-          "path": ".gitattributes",
-          "filename": ".gitattributes",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
-          "path": "README.md",
-          "filename": "README.md",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
-          "path": "split_files/diffusion_models/firered_image_edit_1.0_bf16.safetensors",
-          "filename": "firered_image_edit_1.0_bf16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
-          "path": "split_files/diffusion_models/qwen_image_edit_2509_bf16.safetensors",
-          "filename": "qwen_image_edit_2509_bf16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
-          "path": "split_files/diffusion_models/qwen_image_edit_2509_fp8_e4m3fn.safetensors",
-          "filename": "qwen_image_edit_2509_fp8_e4m3fn.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
-          "path": "split_files/diffusion_models/qwen_image_edit_2509_fp8mixed.safetensors",
-          "filename": "qwen_image_edit_2509_fp8mixed.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
-          "path": "split_files/diffusion_models/qwen_image_edit_2511_bf16.safetensors",
-          "filename": "qwen_image_edit_2511_bf16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
-          "path": "split_files/diffusion_models/qwen_image_edit_2511_fp8mixed.safetensors",
-          "filename": "qwen_image_edit_2511_fp8mixed.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
-          "path": "split_files/diffusion_models/qwen_image_edit_2511_int8_convrot.safetensors",
-          "filename": "qwen_image_edit_2511_int8_convrot.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
-          "path": "split_files/diffusion_models/qwen_image_edit_bf16.safetensors",
-          "filename": "qwen_image_edit_bf16.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
-          "path": "split_files/diffusion_models/qwen_image_edit_fp8_e4m3fn.safetensors",
-          "filename": "qwen_image_edit_fp8_e4m3fn.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
-          "path": "split_files/loras/Qwen-Edit-2509-Multiple-angles.safetensors",
-          "filename": "Qwen-Edit-2509-Multiple-angles.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
-          "path": "split_files/loras/Qwen-Image-Edit-2509-Anything2RealAlpha.safetensors",
-          "filename": "Qwen-Image-Edit-2509-Anything2RealAlpha.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
-          "path": "split_files/loras/Qwen-Image-Edit-2509-Fusion.safetensors",
-          "filename": "Qwen-Image-Edit-2509-Fusion.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
-          "path": "split_files/loras/Qwen-Image-Edit-2509-Light-Migration.safetensors",
-          "filename": "Qwen-Image-Edit-2509-Light-Migration.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
-          "path": "split_files/loras/Qwen-Image-Edit-2509-Relight.safetensors",
-          "filename": "Qwen-Image-Edit-2509-Relight.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Qwen-Image-Edit_ComfyUI",
-          "path": "split_files/loras/Qwen-Image-Edit-2509-White_to_Scene.safetensors",
-          "filename": "Qwen-Image-Edit-2509-White_to_Scene.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan-Dancer",
-          "path": ".gitattributes",
-          "filename": ".gitattributes",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan-Dancer",
-          "path": "README.md",
-          "filename": "README.md",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan-Dancer",
-          "path": "diffusion_models/wan2.2_dancer_14b_global_fp8_scaled.safetensors",
-          "filename": "wan2.2_dancer_14b_global_fp8_scaled.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Wan-Dancer",
-          "path": "diffusion_models/wan2.2_dancer_14b_local_fp8_scaled.safetensors",
-          "filename": "wan2.2_dancer_14b_local_fp8_scaled.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Anima-LLLite",
-          "path": ".gitattributes",
-          "filename": ".gitattributes",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Anima-LLLite",
-          "path": "README.md",
-          "filename": "README.md",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Anima-LLLite",
-          "path": "model_patches/anima-lllite-any-test-like-1-step1000.safetensors",
-          "filename": "anima-lllite-any-test-like-1-step1000.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Anima-LLLite",
-          "path": "model_patches/anima-lllite-any-test-like-1-step2000.safetensors",
-          "filename": "anima-lllite-any-test-like-1-step2000.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Anima-LLLite",
-          "path": "model_patches/anima-lllite-any-test-like-v2-beta-epoch-03.safetensors",
-          "filename": "anima-lllite-any-test-like-v2-beta-epoch-03.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Anima-LLLite",
-          "path": "model_patches/anima-lllite-any-test-like-v2.safetensors",
-          "filename": "anima-lllite-any-test-like-v2.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Anima-LLLite",
-          "path": "model_patches/anima-lllite-depth-1.safetensors",
-          "filename": "anima-lllite-depth-1.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Anima-LLLite",
-          "path": "model_patches/anima-lllite-inpainting-v1.safetensors",
-          "filename": "anima-lllite-inpainting-v1.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Anima-LLLite",
-          "path": "model_patches/anima-lllite-inpainting-v2.safetensors",
-          "filename": "anima-lllite-inpainting-v2.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Anima-LLLite",
-          "path": "model_patches/anima-lllite-lineart-1.safetensors",
-          "filename": "anima-lllite-lineart-1.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Anima-LLLite",
-          "path": "model_patches/anima-lllite-pose-1.safetensors",
-          "filename": "anima-lllite-pose-1.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/Anima-LLLite",
-          "path": "model_patches/anima-lllite-scribble-1.safetensors",
-          "filename": "anima-lllite-scribble-1.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/flux1-dev",
-          "path": ".gitattributes",
-          "filename": ".gitattributes",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/flux1-dev",
-          "path": "README.md",
-          "filename": "README.md",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/flux1-dev",
-          "path": "flux1-dev-fp8.safetensors",
-          "filename": "flux1-dev-fp8.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/flux1-dev",
-          "path": "flux1-dev.safetensors",
-          "filename": "flux1-dev.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/flux1-dev",
-          "path": "split_files/diffusion_models/flux1-canny-dev.safetensors",
-          "filename": "flux1-canny-dev.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/flux1-dev",
-          "path": "split_files/diffusion_models/flux1-depth-dev-nvfp4.safetensors",
-          "filename": "flux1-depth-dev-nvfp4.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/flux1-dev",
-          "path": "split_files/diffusion_models/flux1-fill-dev.safetensors",
-          "filename": "flux1-fill-dev.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/flux1-dev",
-          "path": "split_files/loras/flux1-depth-dev-lora.safetensors",
-          "filename": "flux1-depth-dev-lora.safetensors",
           "size": null
         },
         {
@@ -1993,42 +1849,6 @@
           "size": null
         },
         {
-          "repo_id": "Comfy-Org/vae-text-encorder-for-flux-klein-4b",
-          "path": ".gitattributes",
-          "filename": ".gitattributes",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/vae-text-encorder-for-flux-klein-4b",
-          "path": "split_files/diffusion_models/flux-2-klein-4b.safetensors",
-          "filename": "flux-2-klein-4b.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/vae-text-encorder-for-flux-klein-4b",
-          "path": "split_files/diffusion_models/flux-2-klein-base-4b.safetensors",
-          "filename": "flux-2-klein-base-4b.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/vae-text-encorder-for-flux-klein-4b",
-          "path": "split_files/text_encoders/qwen_3_4b.safetensors",
-          "filename": "qwen_3_4b.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/vae-text-encorder-for-flux-klein-4b",
-          "path": "split_files/text_encoders/qwen_3_4b_fp4_flux2.safetensors",
-          "filename": "qwen_3_4b_fp4_flux2.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/vae-text-encorder-for-flux-klein-4b",
-          "path": "split_files/vae/flux2-vae.safetensors",
-          "filename": "flux2-vae.safetensors",
-          "size": null
-        },
-        {
           "repo_id": "Comfy-Org/vae-text-encorder-for-flux-klein-9b",
           "path": ".gitattributes",
           "filename": ".gitattributes",
@@ -2173,6 +1993,54 @@
           "size": null
         },
         {
+          "repo_id": "Comfy-Org/flux1-dev",
+          "path": ".gitattributes",
+          "filename": ".gitattributes",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/flux1-dev",
+          "path": "README.md",
+          "filename": "README.md",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/flux1-dev",
+          "path": "flux1-dev-fp8.safetensors",
+          "filename": "flux1-dev-fp8.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/flux1-dev",
+          "path": "flux1-dev.safetensors",
+          "filename": "flux1-dev.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/flux1-dev",
+          "path": "split_files/diffusion_models/flux1-canny-dev.safetensors",
+          "filename": "flux1-canny-dev.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/flux1-dev",
+          "path": "split_files/diffusion_models/flux1-depth-dev-nvfp4.safetensors",
+          "filename": "flux1-depth-dev-nvfp4.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/flux1-dev",
+          "path": "split_files/diffusion_models/flux1-fill-dev.safetensors",
+          "filename": "flux1-fill-dev.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/flux1-dev",
+          "path": "split_files/loras/flux1-depth-dev-lora.safetensors",
+          "filename": "flux1-depth-dev-lora.safetensors",
+          "size": null
+        },
+        {
           "repo_id": "Comfy-Org/Cosmos_Predict2_repackaged",
           "path": ".gitattributes",
           "filename": ".gitattributes",
@@ -2245,24 +2113,6 @@
           "size": null
         },
         {
-          "repo_id": "Comfy-Org/flux1-kontext-dev_ComfyUI",
-          "path": ".gitattributes",
-          "filename": ".gitattributes",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/flux1-kontext-dev_ComfyUI",
-          "path": "README.md",
-          "filename": "README.md",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/flux1-kontext-dev_ComfyUI",
-          "path": "split_files/diffusion_models/flux1-dev-kontext_fp8_scaled.safetensors",
-          "filename": "flux1-dev-kontext_fp8_scaled.safetensors",
-          "size": null
-        },
-        {
           "repo_id": "Comfy-Org/Qwen-Image-DiffSynth-ControlNets",
           "path": ".gitattributes",
           "filename": ".gitattributes",
@@ -2296,6 +2146,24 @@
           "repo_id": "Comfy-Org/Qwen-Image-DiffSynth-ControlNets",
           "path": "split_files/model_patches/qwen_image_inpaint_diffsynth_controlnet.safetensors",
           "filename": "qwen_image_inpaint_diffsynth_controlnet.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/hunyuan3D_2.1_repackaged",
+          "path": ".gitattributes",
+          "filename": ".gitattributes",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/hunyuan3D_2.1_repackaged",
+          "path": "README.md",
+          "filename": "README.md",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/hunyuan3D_2.1_repackaged",
+          "path": "hunyuan_3d_v2.1.safetensors",
+          "filename": "hunyuan_3d_v2.1.safetensors",
           "size": null
         },
         {
@@ -2488,6 +2356,66 @@
           "repo_id": "Comfy-Org/Qwen-Image-Layered_ComfyUI",
           "path": "split_files/vae/qwen_image_layered_vae.safetensors",
           "filename": "qwen_image_layered_vae.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/vae-text-encorder-for-flux-klein-4b",
+          "path": ".gitattributes",
+          "filename": ".gitattributes",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/vae-text-encorder-for-flux-klein-4b",
+          "path": "split_files/diffusion_models/flux-2-klein-4b.safetensors",
+          "filename": "flux-2-klein-4b.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/vae-text-encorder-for-flux-klein-4b",
+          "path": "split_files/diffusion_models/flux-2-klein-base-4b.safetensors",
+          "filename": "flux-2-klein-base-4b.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/vae-text-encorder-for-flux-klein-4b",
+          "path": "split_files/text_encoders/qwen_3_4b.safetensors",
+          "filename": "qwen_3_4b.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/vae-text-encorder-for-flux-klein-4b",
+          "path": "split_files/text_encoders/qwen_3_4b_fp4_flux2.safetensors",
+          "filename": "qwen_3_4b_fp4_flux2.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/vae-text-encorder-for-flux-klein-4b",
+          "path": "split_files/vae/flux2-vae.safetensors",
+          "filename": "flux2-vae.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan-Dancer",
+          "path": ".gitattributes",
+          "filename": ".gitattributes",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan-Dancer",
+          "path": "README.md",
+          "filename": "README.md",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan-Dancer",
+          "path": "diffusion_models/wan2.2_dancer_14b_global_fp8_scaled.safetensors",
+          "filename": "wan2.2_dancer_14b_global_fp8_scaled.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Wan-Dancer",
+          "path": "diffusion_models/wan2.2_dancer_14b_local_fp8_scaled.safetensors",
+          "filename": "wan2.2_dancer_14b_local_fp8_scaled.safetensors",
           "size": null
         },
         {
@@ -3277,6 +3205,24 @@
           "size": null
         },
         {
+          "repo_id": "Comfy-Org/flux1-kontext-dev_ComfyUI",
+          "path": ".gitattributes",
+          "filename": ".gitattributes",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/flux1-kontext-dev_ComfyUI",
+          "path": "README.md",
+          "filename": "README.md",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/flux1-kontext-dev_ComfyUI",
+          "path": "split_files/diffusion_models/flux1-dev-kontext_fp8_scaled.safetensors",
+          "filename": "flux1-dev-kontext_fp8_scaled.safetensors",
+          "size": null
+        },
+        {
           "repo_id": "Comfy-Org/Real-ESRGAN_repackaged",
           "path": ".gitattributes",
           "filename": ".gitattributes",
@@ -3448,24 +3394,6 @@
           "repo_id": "Comfy-Org/USO_1.0_Repackaged",
           "path": "split_files/model_patches/uso-flux1-projector-v1.safetensors",
           "filename": "uso-flux1-projector-v1.safetensors",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/hunyuan3D_2.1_repackaged",
-          "path": ".gitattributes",
-          "filename": ".gitattributes",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/hunyuan3D_2.1_repackaged",
-          "path": "README.md",
-          "filename": "README.md",
-          "size": null
-        },
-        {
-          "repo_id": "Comfy-Org/hunyuan3D_2.1_repackaged",
-          "path": "hunyuan_3d_v2.1.safetensors",
-          "filename": "hunyuan_3d_v2.1.safetensors",
           "size": null
         },
         {
@@ -4402,6 +4330,78 @@
           "repo_id": "Comfy-Org/Pixal3D",
           "path": "vae/trellis_2_texture_vae_bf16.safetensors",
           "filename": "trellis_2_texture_vae_bf16.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Anima-LLLite",
+          "path": ".gitattributes",
+          "filename": ".gitattributes",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Anima-LLLite",
+          "path": "README.md",
+          "filename": "README.md",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Anima-LLLite",
+          "path": "model_patches/anima-lllite-any-test-like-1-step1000.safetensors",
+          "filename": "anima-lllite-any-test-like-1-step1000.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Anima-LLLite",
+          "path": "model_patches/anima-lllite-any-test-like-1-step2000.safetensors",
+          "filename": "anima-lllite-any-test-like-1-step2000.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Anima-LLLite",
+          "path": "model_patches/anima-lllite-any-test-like-v2-beta-epoch-03.safetensors",
+          "filename": "anima-lllite-any-test-like-v2-beta-epoch-03.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Anima-LLLite",
+          "path": "model_patches/anima-lllite-any-test-like-v2.safetensors",
+          "filename": "anima-lllite-any-test-like-v2.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Anima-LLLite",
+          "path": "model_patches/anima-lllite-depth-1.safetensors",
+          "filename": "anima-lllite-depth-1.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Anima-LLLite",
+          "path": "model_patches/anima-lllite-inpainting-v1.safetensors",
+          "filename": "anima-lllite-inpainting-v1.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Anima-LLLite",
+          "path": "model_patches/anima-lllite-inpainting-v2.safetensors",
+          "filename": "anima-lllite-inpainting-v2.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Anima-LLLite",
+          "path": "model_patches/anima-lllite-lineart-1.safetensors",
+          "filename": "anima-lllite-lineart-1.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Anima-LLLite",
+          "path": "model_patches/anima-lllite-pose-1.safetensors",
+          "filename": "anima-lllite-pose-1.safetensors",
+          "size": null
+        },
+        {
+          "repo_id": "Comfy-Org/Anima-LLLite",
+          "path": "model_patches/anima-lllite-scribble-1.safetensors",
+          "filename": "anima-lllite-scribble-1.safetensors",
           "size": null
         }
       ]

@@ -563,7 +563,7 @@ export const modelInfoMethods = {
     canShowSourceDetails(model = {}) {
         const source = String(model.details_source || model.source || '').toLowerCase();
         return model?.context_scope === 'download_table'
-            && ['civitai', 'civarchive', 'lora_manager_archive'].includes(source)
+            && ['civitai', 'civarchive', 'huggingface', 'lora_manager_archive'].includes(source)
             && Boolean(model.model_id || model.modelId);
     },
 
@@ -2766,7 +2766,15 @@ export const modelInfoMethods = {
                     source: model.details_source || model.source,
                     model_id: model.model_id || model.modelId,
                     version_id: model.version_id || model.versionId,
-                    civitai_key: tokens.civitai_key || ''
+                    file_path: model.path
+                        || model.file_path
+                        || model.selected_file?.path
+                        || model.file_info?.path
+                        || model.file?.path
+                        || '',
+                    branch: model.branch || '',
+                    civitai_key: tokens.civitai_key || '',
+                    hf_token: tokens.hf_token || ''
                 })
             }, 'Fetch model details');
             details._detailsData = data;
@@ -2830,7 +2838,15 @@ export const modelInfoMethods = {
                     source: data.source || details._sourceModel?.details_source || details._sourceModel?.source,
                     model_id: data.model_id || details._sourceModel?.model_id || details._sourceModel?.modelId,
                     version_id: versionId,
-                    civitai_key: tokens.civitai_key || ''
+                    file_path: details._sourceModel?.path
+                        || details._sourceModel?.file_path
+                        || details._sourceModel?.selected_file?.path
+                        || details._sourceModel?.file_info?.path
+                        || details._sourceModel?.file?.path
+                        || '',
+                    branch: data.branch || details._sourceModel?.branch || '',
+                    civitai_key: tokens.civitai_key || '',
+                    hf_token: tokens.hf_token || ''
                 })
             }, 'Fetch model version details');
             const freshVersion = fresh.selected_version;
@@ -2864,6 +2880,7 @@ export const modelInfoMethods = {
         const description = data.description || selectedVersion.description || '';
         const sanitizedDescription = description ? this.sanitizeDescriptionHtml(description) : '';
         const source = data.source || contextModel.details_source || contextModel.source || '';
+        const isHuggingFace = String(source).toLowerCase() === 'huggingface';
         const creator = data.creator || {};
         const creatorName = creator.username || creator.name || '';
         const pageUrl = data.version_url || data.url || '';
@@ -2878,7 +2895,7 @@ export const modelInfoMethods = {
         ].filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== '');
 
         return `
-            <div class="mr-model-details-shell">
+            <div class="mr-model-details-shell ${isHuggingFace ? 'is-huggingface' : ''}">
                 <div class="mr-model-details-topbar">
                     <button type="button" class="mr-model-details-icon-btn" data-action="close" aria-label="Close">${getSvgIcon('x')}</button>
                     <div class="mr-model-details-title">
@@ -2890,7 +2907,7 @@ export const modelInfoMethods = {
                         ${pageUrl ? `<a class="mr-model-details-action" href="${this.escapeHtml(pageUrl)}" target="_blank" rel="noopener noreferrer">${getSvgIcon('externalLink')} Open page</a>` : ''}
                     </div>
                 </div>
-                <div class="mr-model-details-main">
+                <div class="mr-model-details-main ${isHuggingFace ? 'is-huggingface' : ''}">
                     <section class="mr-model-details-content">
                         <div class="mr-model-details-version-tabs">
                             ${versions.map(version => `
@@ -2917,8 +2934,8 @@ export const modelInfoMethods = {
                             ${sanitizedDescription ? sanitizedDescription : '<p>No description available.</p>'}
                         </div>
                     </section>
-                    <aside class="mr-model-details-side">
-                        <section class="mr-model-details-panel">
+                    <aside class="mr-model-details-side ${isHuggingFace ? 'is-huggingface' : ''}">
+                        <section class="mr-model-details-panel mr-model-details-summary-panel">
                             <h3>Details</h3>
                             <div class="mr-model-details-kv">
                                 <div><span>Type</span><strong>${this.escapeHtml(data.type || '-')}</strong></div>
@@ -2934,9 +2951,17 @@ export const modelInfoMethods = {
                                 <div class="mr-model-details-tags">${trainedWords.map(word => `<span>${this.escapeHtml(word)}</span>`).join('')}</div>
                             </section>
                         ` : ''}
-                        <section class="mr-model-details-panel">
+                        <section class="mr-model-details-panel mr-model-details-variants-panel">
                             <h3>Download Variants</h3>
-                            <div class="mr-model-details-files">
+                            <div class="mr-model-details-files ${isHuggingFace ? 'is-table' : ''}">
+                                ${isHuggingFace ? `
+                                    <div class="mr-model-details-file-table-header" aria-hidden="true">
+                                        <span>File</span>
+                                        <span>Size / Hash</span>
+                                        <span>Variant</span>
+                                        <span>Action</span>
+                                    </div>
+                                ` : ''}
                                 ${this.renderSourceModelDetailsFiles(selectedVersion, data, contextModel)}
                             </div>
                         </section>
@@ -2988,6 +3013,8 @@ export const modelInfoMethods = {
 
     renderSourceModelDetailsFiles(version = {}, data = {}, contextModel = {}) {
         const files = Array.isArray(version.files) ? version.files.filter(file => file?.download_url) : [];
+        const source = String(data.source || contextModel.details_source || contextModel.source || '').toLowerCase();
+        const isHuggingFace = source === 'huggingface';
         if (!files.length) {
             return '<div class="mr-model-details-empty">No downloadable files available for this version.</div>';
         }
@@ -3048,6 +3075,8 @@ export const modelInfoMethods = {
                 selected_version: selectedVersion,
                 base_model: version.base_model || contextModel.base_model,
                 tags: data.tags || [],
+                path: file.path || '',
+                branch: data.branch || contextModel.branch || '',
                 match_type: 'selected',
                 confidence: 100
             };
@@ -3059,6 +3088,33 @@ export const modelInfoMethods = {
                 file.primary ? 'Primary' : '',
                 mirrors.length ? `${mirrors.length} mirrors` : ''
             ].filter(Boolean);
+            const compactBadges = Array.from(new Set([
+                ...summaryBadges,
+                ...fileMeta.badges
+            ]));
+            const selectionData = this.escapeHtml(encodeURIComponent(JSON.stringify(payload)));
+            const actionLabel = isTarget ? 'Use matched file' : 'Use this file';
+            if (isHuggingFace) {
+                return `
+                    <div class="mr-model-details-file-table-row ${file.primary ? 'is-primary' : ''} ${isTarget ? 'is-target' : ''}">
+                        <div class="mr-model-details-file-table-name">
+                            <strong>${this.escapeHtml(file.name || `File ${index + 1}`)}</strong>
+                        </div>
+                        <div class="mr-model-details-file-table-summary" data-tooltip="${this.escapeHtml(fileMeta.summary)}">
+                            ${this.escapeHtml(fileMeta.summary)}
+                        </div>
+                        <div class="mr-model-details-file-table-badges">
+                            ${compactBadges.length
+                                ? compactBadges.map(badge => `<span>${this.escapeHtml(badge)}</span>`).join('')
+                                : '<span class="is-empty">Model file</span>'}
+                        </div>
+                        <button type="button" class="mr-btn mr-btn-primary mr-model-details-use mr-model-details-file-table-use" data-selection="${selectionData}">
+                            ${actionLabel}
+                        </button>
+                        ${mirrorList ? `<div class="mr-model-details-file-table-mirrors">${mirrorList}</div>` : ''}
+                    </div>
+                `;
+            }
             const openAttr = index === 0 ? ' open' : '';
             return `
                 <details class="mr-model-details-file ${file.primary ? 'is-primary' : ''} ${isTarget ? 'is-target' : ''}"${openAttr}>
@@ -3072,8 +3128,8 @@ export const modelInfoMethods = {
                     </summary>
                     <div class="mr-model-details-file-body">
                         ${fileMeta.badges.length ? `<div class="mr-model-details-file-badges">${fileMeta.badges.map(badge => `<span>${this.escapeHtml(badge)}</span>`).join('')}</div>` : ''}
-                        <button type="button" class="mr-btn mr-btn-primary mr-model-details-use" data-selection="${this.escapeHtml(encodeURIComponent(JSON.stringify(payload)))}">
-                            ${isTarget ? 'Use matched file' : 'Use this file'}
+                        <button type="button" class="mr-btn mr-btn-primary mr-model-details-use" data-selection="${selectionData}">
+                            ${actionLabel}
                         </button>
                         ${mirrorList}
                     </div>
@@ -3546,6 +3602,8 @@ export const modelInfoMethods = {
             sha256: selectionSha256,
             hash: selectionSha256,
             tags: selection.tags || [],
+            path: selection.path || selectionFile?.path || '',
+            branch: selection.branch || contextModel.branch || '',
             match_type: selection.match_type || 'selected',
             confidence: selection.confidence || 100,
             searchedAt: new Date().toISOString()
