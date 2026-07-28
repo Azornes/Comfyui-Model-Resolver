@@ -329,16 +329,12 @@ test('missing browser splitter keeps a compositor preview between live layout fr
     /\.mr-missing-browser\.is-resizing \.mr-missing-(?:list|detail)-pane/
   );
   assert.doesNotMatch(missingBrowserMethodsSource, /deferMissingBrowserSplitReleaseUi/);
-  assert.match(missingBrowserMethodsSource, /observedWidth\s*<\s*760/);
-  assert.match(missingBrowserMethodsSource, /observedWidth\s*<\s*700/);
   assert.match(
     missingBrowserMethodsSource,
     /scheduleMissingBrowserExternalResizeRestore\(browser,\s*observedWidth\)/
   );
-  assert.match(
-    resolverMainCssSource,
-    /\.mr-missing-browser\.is-detail-collapsed \.mr-missing-detail-pane\s*\{[^}]*display:\s*none/s
-  );
+  assert.doesNotMatch(missingBrowserMethodsSource, /is-detail-collapsed/);
+  assert.doesNotMatch(resolverMainCssSource, /is-detail-collapsed/);
   assert.doesNotMatch(missingBrowserMethodsSource, /startMissingBrowserExternalResizeLock/);
   assert.doesNotMatch(resolverMainCssSource, /mr-resolver-external-resizing/);
   assert.doesNotMatch(
@@ -423,43 +419,92 @@ test('docked ComfyUI splitter coalesces live layout while its gutter stays respo
   assert.doesNotMatch(dialogShellMethodsSource, /mr-resolver-external-resizing/);
 });
 
-test('missing browser detail collapse follows container width with hysteresis', () => {
+test('missing browser detail remains available at narrow widths', () => {
+  assert.doesNotMatch(missingBrowserMethodsSource, /updateMissingBrowserDetailCollapse/);
+  assert.doesNotMatch(missingBrowserMethodsSource, /is-detail-collapsed/);
+  assert.doesNotMatch(resolverMainCssSource, /is-detail-collapsed/);
+});
+
+test('missing browser detail follows external splitter resizing every animation frame', () => {
+  const scheduleRestore = eval(
+    `(${extractMethod(missingBrowserMethodsSource, 'scheduleMissingBrowserExternalResizeRestore')})`
+  );
   const previousHTMLElement = globalThis.HTMLElement;
+  const previousRequestAnimationFrame = globalThis.requestAnimationFrame;
+  const frames = [];
+  const restores = [];
+
   class FakeHTMLElement {}
   globalThis.HTMLElement = FakeHTMLElement;
+  globalThis.requestAnimationFrame = callback => {
+    frames.push(callback);
+    return frames.length;
+  };
 
   try {
-    const classes = new Set();
     const browser = new FakeHTMLElement();
-    browser.classList = {
-      contains(name) {
-        return classes.has(name);
-      },
-      toggle(name, enabled) {
-        if (enabled) classes.add(name);
-        else classes.delete(name);
-      },
-    };
-
+    browser.isConnected = true;
     const context = {
-      _missingBrowserRestoreFrame: null,
-      cancelMissingBrowserExternalResizeRestore() {},
+      _missingBrowserExternalResizeFrame: null,
+      _pendingMissingBrowserExternalResizeBrowser: null,
+      _pendingMissingBrowserExternalResizeWidth: null,
+      _missingBrowserSplitDragging: false,
+      restoreMissingBrowserSplitWidth(target, options) {
+        restores.push([target, options]);
+      },
     };
-    const updateDetailCollapse = eval(
-      `(${extractMethod(missingBrowserMethodsSource, 'updateMissingBrowserDetailCollapse')})`
-    );
 
-    assert.equal(updateDetailCollapse.call(context, browser, 690), true);
-    assert.equal(classes.has('is-detail-collapsed'), true);
+    scheduleRestore.call(context, browser, 620);
+    scheduleRestore.call(context, browser, 540);
 
-    assert.equal(updateDetailCollapse.call(context, browser, 730), false);
-    assert.equal(classes.has('is-detail-collapsed'), true);
+    assert.equal(frames.length, 1);
+    assert.equal(restores.length, 0);
 
-    assert.equal(updateDetailCollapse.call(context, browser, 770), true);
-    assert.equal(classes.has('is-detail-collapsed'), false);
+    frames.shift()();
+
+    assert.equal(restores.length, 1);
+    assert.equal(restores[0][0], browser);
+    assert.deepEqual(restores[0][1], {
+      browserWidth: 540,
+      useDefault: false,
+    });
   } finally {
     globalThis.HTMLElement = previousHTMLElement;
+    globalThis.requestAnimationFrame = previousRequestAnimationFrame;
   }
+
+  assert.doesNotMatch(
+    extractMethod(missingBrowserMethodsSource, 'scheduleMissingBrowserExternalResizeRestore'),
+    /setTimeout|120/
+  );
+});
+
+test('missing browser splitter preserves the table through the Type column', () => {
+  const getSplitBounds = eval(
+    `(${extractMethod(missingBrowserMethodsSource, 'getMissingBrowserSplitBoundsForWidth')})`
+  );
+  const regularBounds = getSplitBounds(1000);
+  const narrowBounds = getSplitBounds(620);
+
+  assert.equal(regularBounds.available - regularBounds.max, 340);
+  assert.equal(narrowBounds.available - narrowBounds.max, 340);
+  assert.equal(narrowBounds.min, narrowBounds.max);
+  assert.match(
+    extractMethod(missingBrowserMethodsSource, 'getMissingBrowserSplitBoundsForWidth'),
+    /Math\.min\(340,\s*available\)/
+  );
+  assert.match(
+    resolverMainCssSource,
+    /\.mr-missing-browser\s*\{[^}]*--mr-missing-list-min-width:\s*340px;/s
+  );
+  assert.match(
+    resolverMainCssSource,
+    /\.mr-missing-list-pane\s*\{[^}]*min-width:\s*var\(--mr-missing-list-min-width\);/s
+  );
+  assert.doesNotMatch(
+    resolverMainCssSource,
+    /\.mr-missing-row-best,[\s\S]*?\.mr-missing-row-sources\s*\{[^}]*display:\s*none;/
+  );
 });
 
 test('local and loaded model tooltips include preview image routes above full names', () => {

@@ -975,7 +975,7 @@ export const missingBrowserMethods = {
                 this.rememberMissingBrowserWidth(observedWidth);
 
                 if (!Number.isFinite(previousHostWidth) || previousHostWidth <= 0) {
-                    this.updateMissingBrowserDetailCollapse(browser, observedWidth);
+                    this.scheduleMissingBrowserSplitRestore(browser, observedWidth, { useDefault: false });
                     return;
                 }
                 if (Math.abs(previousHostWidth - observedWidth) < 0.5) return;
@@ -1000,10 +1000,7 @@ export const missingBrowserMethods = {
                 if (this._missingBrowserSplitDragging) return;
                 const measuredWidth = Number(browser.clientWidth || browser.getBoundingClientRect().width);
                 this.rememberMissingBrowserWidth(measuredWidth);
-                this.updateMissingBrowserDetailCollapse(browser, measuredWidth);
-                if (!this._missingBrowserSplitDragging && !browser.classList.contains('is-detail-collapsed')) {
-                    this.scheduleMissingBrowserSplitRestore(browser, measuredWidth, { useDefault: false });
-                }
+                this.scheduleMissingBrowserSplitRestore(browser, measuredWidth, { useDefault: false });
             });
         }
     },
@@ -1014,51 +1011,24 @@ export const missingBrowserMethods = {
         this._missingBrowserPrewarmFrame = null;
     },
 
-    updateMissingBrowserDetailCollapse(browser, width) {
-        if (!(browser instanceof HTMLElement)) return false;
-        const observedWidth = Number(width);
-        if (!Number.isFinite(observedWidth) || observedWidth <= 0) return false;
-
-        const wasCollapsed = browser.classList.contains('is-detail-collapsed');
-        const shouldCollapse = wasCollapsed
-            ? observedWidth < 760
-            : observedWidth < 700;
-        if (shouldCollapse === wasCollapsed) return false;
-
-        browser.classList.toggle('is-detail-collapsed', shouldCollapse);
-        if (shouldCollapse) {
-            this.cancelMissingBrowserExternalResizeRestore();
-            if (this._missingBrowserRestoreFrame) {
-                cancelAnimationFrame(this._missingBrowserRestoreFrame);
-                this._missingBrowserRestoreFrame = null;
-            }
-            this._pendingMissingBrowserRestoreBrowser = null;
-            this._pendingMissingBrowserRestoreWidth = null;
-            this._pendingMissingBrowserRestoreUseDefault = false;
-        }
-        return true;
-    },
-
     cancelMissingBrowserExternalResizeRestore() {
-        if (this._missingBrowserExternalResizeTimer) {
-            clearTimeout(this._missingBrowserExternalResizeTimer);
+        if (this._missingBrowserExternalResizeFrame) {
+            cancelAnimationFrame(this._missingBrowserExternalResizeFrame);
         }
-        this._missingBrowserExternalResizeTimer = null;
+        this._missingBrowserExternalResizeFrame = null;
         this._pendingMissingBrowserExternalResizeBrowser = null;
         this._pendingMissingBrowserExternalResizeWidth = null;
     },
 
-    scheduleMissingBrowserExternalResizeRestore(browser, browserWidth, delay = 120) {
+    scheduleMissingBrowserExternalResizeRestore(browser, browserWidth) {
         if (!(browser instanceof HTMLElement)) return;
 
         this._pendingMissingBrowserExternalResizeBrowser = browser;
         this._pendingMissingBrowserExternalResizeWidth = Number(browserWidth) || null;
-        if (this._missingBrowserExternalResizeTimer) {
-            clearTimeout(this._missingBrowserExternalResizeTimer);
-        }
+        if (this._missingBrowserExternalResizeFrame) return;
 
-        this._missingBrowserExternalResizeTimer = setTimeout(() => {
-            this._missingBrowserExternalResizeTimer = null;
+        this._missingBrowserExternalResizeFrame = requestAnimationFrame(() => {
+            this._missingBrowserExternalResizeFrame = null;
             const targetBrowser = this._pendingMissingBrowserExternalResizeBrowser;
             const targetWidth = this._pendingMissingBrowserExternalResizeWidth;
             this._pendingMissingBrowserExternalResizeBrowser = null;
@@ -1070,10 +1040,11 @@ export const missingBrowserMethods = {
             ) {
                 return;
             }
-            this.updateMissingBrowserDetailCollapse(targetBrowser, targetWidth);
-            if (targetBrowser.classList.contains('is-detail-collapsed')) return;
-            this.scheduleMissingBrowserSplitRestore(targetBrowser, targetWidth, { useDefault: false });
-        }, Math.max(0, Number(delay) || 0));
+            this.restoreMissingBrowserSplitWidth(targetBrowser, {
+                browserWidth: targetWidth,
+                useDefault: false
+            });
+        });
     },
 
     getStoredMissingBrowserSplitWidth() {
@@ -1125,7 +1096,7 @@ export const missingBrowserMethods = {
     getMissingBrowserSplitBoundsForWidth(width) {
         const safeWidth = Math.max(1, Number(width) || 1);
         const available = Math.max(1, safeWidth - 10);
-        const minListWidth = Math.min(360, Math.max(240, Math.floor(available * 0.28)));
+        const minListWidth = Math.min(340, available);
         const max = Math.max(1, available - minListWidth);
         const min = Math.min(max, Math.min(420, Math.max(300, Math.floor(available * 0.3))));
 
@@ -1142,7 +1113,7 @@ export const missingBrowserMethods = {
     },
 
     scheduleMissingBrowserSplitRestore(browser, browserWidth = null, { useDefault = false } = {}) {
-        if (!(browser instanceof HTMLElement) || browser.classList.contains('is-detail-collapsed')) return;
+        if (!(browser instanceof HTMLElement)) return;
 
         this._pendingMissingBrowserRestoreBrowser = browser;
         this._pendingMissingBrowserRestoreWidth = Number.isFinite(Number(browserWidth)) && Number(browserWidth) > 0
@@ -1182,7 +1153,7 @@ export const missingBrowserMethods = {
     },
 
     startMissingBrowserSplitDrag(event, browser, splitter = null, panes = {}) {
-        if (!(browser instanceof HTMLElement) || browser.classList.contains('is-detail-collapsed')) return;
+        if (!(browser instanceof HTMLElement)) return;
 
         event.preventDefault();
         event.stopPropagation?.();

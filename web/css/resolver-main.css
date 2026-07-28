@@ -503,6 +503,7 @@
     --mr-missing-line-strong: rgba(255, 255, 255, 0.13);
     --mr-missing-radius: 6px;
     --mr-missing-splitter-track: 10px;
+    --mr-missing-list-min-width: 340px;
     --mr-missing-list-track: calc(100% - var(--mr-missing-splitter-track) - var(--mr-missing-detail-track, 42%));
     position: relative;
     display: flex;
@@ -527,6 +528,7 @@
 
 .mr-missing-list-pane {
     flex: 1 1 0;
+    min-width: var(--mr-missing-list-min-width);
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
     border-right: 0;
@@ -1154,54 +1156,6 @@
     border: 1px solid var(--mr-missing-line);
     border-radius: var(--mr-missing-radius);
     box-shadow: none;
-}
-
-.mr-missing-browser.is-detail-collapsed .mr-missing-browser-splitter,
-.mr-missing-browser.is-detail-collapsed .mr-missing-detail-pane {
-    display: none;
-}
-
-.mr-missing-browser.is-detail-collapsed .mr-missing-list-pane {
-    flex: 1 1 100% !important;
-    width: 100%;
-    border-right: 0;
-}
-
-@media (max-width: 760px) {
-    .mr-missing-list-head {
-        display: none;
-    }
-
-    #model-resolver-modal .mr-missing-list-row {
-        grid-template-columns: 24px 18px minmax(0, 1fr);
-        content-visibility: visible;
-        contain-intrinsic-size: none;
-        height: auto;
-        min-height: 64px;
-        overflow: visible;
-        gap: 7px;
-    }
-
-    .mr-missing-row-select {
-        grid-row: 1 / span 4;
-        align-self: start;
-        margin-top: 1px;
-    }
-
-    .mr-missing-row-index {
-        grid-row: 1 / span 4;
-        align-self: start;
-        margin-top: 1px;
-        text-align: center;
-    }
-
-    .mr-missing-row-model,
-    .mr-missing-row-type,
-    .mr-missing-row-best,
-    .mr-missing-row-match,
-    .mr-missing-row-sources {
-        grid-column: 3;
-    }
 }
 
 /* Card Styles */

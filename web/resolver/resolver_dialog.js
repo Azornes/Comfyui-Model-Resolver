@@ -73,7 +73,7 @@ export class ResolverManagerDialog extends ComfyDialog {
         this.sidebarTabId = "comfyui-model-resolver";
         this.sidebarOpenModeStorageKey = "model_resolver_sidebar_open_mode";
         this.missingBrowserSplitStorageKey = "model_resolver_missing_browser_detail_w";
-        this._missingBrowserExternalResizeTimer = null;
+        this._missingBrowserExternalResizeFrame = null;
         this._pendingMissingBrowserExternalResizeBrowser = null;
         this._pendingMissingBrowserExternalResizeWidth = null;
         this._missingBrowserObservedHostWidth = null;
