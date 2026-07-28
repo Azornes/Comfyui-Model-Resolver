@@ -341,7 +341,11 @@ export const dialogShellMethods = {
         const pageX = Number(event?.pageX ?? event?.clientX);
         const pageY = Number(event?.pageY ?? event?.clientY);
         state.pendingArgs = args;
-        state.hasMoved = true;
+        if (!state.hasMoved) {
+            state.hasMoved = true;
+            state.gutter?.classList?.add('is-resizing');
+            state.gutter?.parentElement?.classList?.add('is-resizing');
+        }
 
         const offset = state.vertical
             ? pageY - state.appliedPageY
@@ -408,6 +412,8 @@ export const dialogShellMethods = {
         }
         state.gutter.style.transform = state.originalTransform;
         state.gutter.style.willChange = state.originalWillChange;
+        state.gutter?.classList?.remove('is-resizing');
+        state.gutter?.parentElement?.classList?.remove('is-resizing');
         document.removeEventListener('mouseup', state.mouseUpHandler, true);
         window.removeEventListener('blur', state.blurHandler);
         return true;
