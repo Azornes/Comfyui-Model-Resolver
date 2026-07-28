@@ -1839,6 +1839,7 @@ test('background Missing Models refresh keeps the current view until new data is
   });
   let progressRenderCount = 0;
   let progressPollCount = 0;
+  let displayOptions = null;
   const dialog = {
     activeTab: 'missing',
     contentElement,
@@ -1859,7 +1860,8 @@ test('background Missing Models refresh keeps the current view until new data is
     applyResolvedSelectionAliasesToAnalysisData() {},
     saveAnalysisCacheForActiveWorkflow() {},
     ensureDownloadDirectoriesLoaded: async () => {},
-    displayMissingModels(container, data) {
+    displayMissingModels(container, data, options) {
+      displayOptions = options;
       container.innerHTML = `<div>${data.resolved_models[0].strength}</div>`;
       container.scrollTop = 0;
     },
@@ -1888,6 +1890,47 @@ test('background Missing Models refresh keeps the current view until new data is
 
   assert.equal(contentElement.innerHTML, '<div>0.75</div>');
   assert.equal(contentElement.scrollTop, 36);
+  assert.deepEqual(displayOptions, { preserveBrowser: true });
+});
+
+test('content-preserving Missing Models refresh patches the browser instead of clearing it', () => {
+  const patchMissingModelsBrowserElement = extractMethod(
+    missingBrowserMethodsSource,
+    'patchMissingModelsBrowserElement'
+  );
+  const displayMissingModels = extractMethod(
+    missingBrowserMethodsSource,
+    'displayMissingModels'
+  );
+
+  assert.match(
+    patchMissingModelsBrowserElement,
+    /currentRow\?\.outerHTML === nextRow\.outerHTML/
+  );
+  assert.doesNotMatch(
+    patchMissingModelsBrowserElement,
+    /currentBrowser\.replaceWith\(nextBrowser\)/
+  );
+  assert.match(
+    patchMissingModelsBrowserElement,
+    /currentList\.appendChild\(row\)/
+  );
+  assert.match(
+    patchMissingModelsBrowserElement,
+    /currentDetail\.innerHTML = nextDetail\.innerHTML/
+  );
+  assert.doesNotMatch(
+    patchMissingModelsBrowserElement,
+    /currentDetail\.replaceWith\(nextDetail\)/
+  );
+  assert.match(
+    displayMissingModels,
+    /options\.preserveBrowser[\s\S]*?patchMissingModelsBrowserElement/
+  );
+  assert.match(
+    displayMissingModels,
+    /if \(!browserPatched\) \{\s*container\.innerHTML = browserHtml;/
+  );
 });
 
 test('node widget changes request a content-preserving Missing Models refresh', async () => {

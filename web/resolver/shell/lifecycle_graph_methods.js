@@ -167,7 +167,11 @@ export const lifecycleGraphMethods = {
             ) {
                 if (shouldRenderMissingModels()) {
                     await this.ensureDownloadDirectoriesLoaded();
-                    this.displayMissingModels(this.contentElement, this.cachedAnalysisData);
+                    this.displayMissingModels(
+                        this.contentElement,
+                        this.cachedAnalysisData,
+                        { preserveBrowser: preserveContent }
+                    );
                     this.applyPendingWorkflowModelSelection?.(this.cachedAnalysisData);
                     this.reconnectActiveDownloads();
                 }
@@ -190,7 +194,11 @@ export const lifecycleGraphMethods = {
                 }
                 if (shouldRenderMissingModels()) {
                     await this.ensureDownloadDirectoriesLoaded();
-                    this.displayMissingModels(this.contentElement, data);
+                    this.displayMissingModels(
+                        this.contentElement,
+                        data,
+                        { preserveBrowser: preserveContent }
+                    );
                     this.applyPendingWorkflowModelSelection?.(data);
                 }
                 return data;
@@ -231,7 +239,11 @@ export const lifecycleGraphMethods = {
             }
             if (shouldRenderMissingModels()) {
                 await this.ensureDownloadDirectoriesLoaded();
-                this.displayMissingModels(this.contentElement, data);
+                this.displayMissingModels(
+                    this.contentElement,
+                    data,
+                    { preserveBrowser: preserveContent }
+                );
                 this.applyPendingWorkflowModelSelection?.(data);
                 if (preservedScrollTop !== null) {
                     this.contentElement.scrollTop = preservedScrollTop;

@@ -784,17 +784,99 @@ export const missingBrowserMethods = {
         return html;
     },
 
+    patchMissingModelsBrowserElement(container, html) {
+        const currentBrowser = container?.querySelector?.('.mr-missing-browser');
+        if (!currentBrowser || typeof document === 'undefined') return false;
+
+        const template = document.createElement('template');
+        template.innerHTML = String(html || '').trim();
+        const nextBrowser = template.content.firstElementChild;
+        const currentList = currentBrowser.querySelector('.mr-missing-list');
+        const nextList = nextBrowser?.querySelector?.('.mr-missing-list');
+        if (!nextBrowser || !currentList || !nextList) return false;
+
+        currentBrowser.style.cssText = nextBrowser.style.cssText;
+        const currentToolbar = currentBrowser.querySelector('.mr-missing-list-toolbar');
+        const nextToolbar = nextBrowser.querySelector('.mr-missing-list-toolbar');
+        if (currentToolbar && nextToolbar) {
+            currentToolbar.replaceWith(nextToolbar);
+        }
+
+        const currentHead = currentList.querySelector('.mr-missing-list-head');
+        const nextHead = nextList.querySelector('.mr-missing-list-head');
+        if (currentHead && nextHead) {
+            currentHead.replaceWith(nextHead);
+        }
+
+        const currentRows = new Map(
+            Array.from(currentList.querySelectorAll('.mr-missing-list-row'))
+                .map(row => [row.dataset.missingKey || '', row])
+                .filter(([key]) => key)
+        );
+        const retainedRows = new Set();
+        nextList.querySelectorAll('.mr-missing-list-row').forEach((nextRow) => {
+            const currentRow = currentRows.get(nextRow.dataset.missingKey || '');
+            const row = currentRow?.outerHTML === nextRow.outerHTML
+                ? currentRow
+                : nextRow;
+            retainedRows.add(row);
+            currentList.appendChild(row);
+        });
+        currentRows.forEach((row) => {
+            if (!retainedRows.has(row)) row.remove();
+        });
+
+        const currentSplitter = currentBrowser.querySelector('.mr-missing-browser-splitter');
+        const nextSplitter = nextBrowser.querySelector('.mr-missing-browser-splitter');
+        if (currentSplitter && nextSplitter) {
+            currentSplitter.replaceWith(nextSplitter);
+        }
+
+        const currentDetail = currentBrowser.querySelector('.mr-missing-detail-pane');
+        const nextDetail = nextBrowser.querySelector('.mr-missing-detail-pane');
+        this._missingBrowserDetailPreserved = Boolean(
+            currentDetail
+            && nextDetail
+            && currentDetail.outerHTML === nextDetail.outerHTML
+        );
+        if (currentDetail && nextDetail && !this._missingBrowserDetailPreserved) {
+            currentDetail.innerHTML = nextDetail.innerHTML;
+        }
+        return true;
+    },
+
     wireMissingModelsBrowser(container, data, sortedMissingModels) {
         this.wireMissingBrowserSplitter(container);
 
         const browser = container.querySelector('.mr-missing-browser');
+        const getCurrentData = () => this.cachedAnalysisData || data;
+        const getCurrentMissingModels = () => (
+            Array.isArray(this.missingModels)
+                ? this.missingModels
+                : sortedMissingModels
+        );
+        if (!(this._wiredMissingModelRows instanceof WeakSet)) {
+            this._wiredMissingModelRows = new WeakSet();
+        }
+        if (!(this._wiredMissingLocateButtons instanceof WeakSet)) {
+            this._wiredMissingLocateButtons = new WeakSet();
+        }
+        if (!(this._wiredMissingBrowsers instanceof WeakSet)) {
+            this._wiredMissingBrowsers = new WeakSet();
+        }
         const typeFilterToggle = browser?.querySelector('[data-missing-type-filter-toggle]');
-        const typeFilterMenu = browser?.querySelector('.mr-missing-type-filter-menu');
         const setTypeFilterMenuOpen = (open) => {
             this.missingModelsTypeFilterMenuOpen = Boolean(open);
-            if (typeFilterMenu) typeFilterMenu.hidden = !this.missingModelsTypeFilterMenuOpen;
-            if (typeFilterToggle) {
-                typeFilterToggle.setAttribute('aria-expanded', this.missingModelsTypeFilterMenuOpen ? 'true' : 'false');
+            const activeMenu = browser?.querySelector('.mr-missing-type-filter-menu');
+            const activeToggle = browser?.querySelector('[data-missing-type-filter-toggle]');
+            if (activeMenu) {
+                activeMenu.hidden = !this.missingModelsTypeFilterMenuOpen;
+            }
+            if (activeToggle) {
+                activeToggle.setAttribute(
+                    'aria-expanded',
+                    this.missingModelsTypeFilterMenuOpen ? 'true' : 'false'
+                );
             }
         };
 
@@ -814,18 +896,31 @@ export const missingBrowserMethods = {
             });
         });
 
-        browser?.addEventListener('click', (event) => {
-            if (!this.missingModelsTypeFilterMenuOpen) return;
-            if (event.target instanceof Element && event.target.closest('.mr-missing-type-filter-wrap')) return;
-            setTypeFilterMenuOpen(false);
-        });
+        if (browser && !this._wiredMissingBrowsers.has(browser)) {
+            this._wiredMissingBrowsers.add(browser);
+            browser.addEventListener('click', (event) => {
+                if (!this.missingModelsTypeFilterMenuOpen) return;
+                if (
+                    event.target instanceof Element
+                    && event.target.closest('.mr-missing-type-filter-wrap')
+                ) {
+                    return;
+                }
+                setTypeFilterMenuOpen(false);
+            });
 
-        browser?.addEventListener('keydown', (event) => {
-            if (event.key !== 'Escape' || !this.missingModelsTypeFilterMenuOpen) return;
-            event.preventDefault();
-            setTypeFilterMenuOpen(false);
-            typeFilterToggle?.focus();
-        });
+            browser.addEventListener('keydown', (event) => {
+                if (
+                    event.key !== 'Escape'
+                    || !this.missingModelsTypeFilterMenuOpen
+                ) {
+                    return;
+                }
+                event.preventDefault();
+                setTypeFilterMenuOpen(false);
+                browser.querySelector('[data-missing-type-filter-toggle]')?.focus();
+            });
+        }
 
         const refreshBtn = container.querySelector('#mr-refresh-missing-analysis');
         if (refreshBtn && refreshBtn.dataset.mlRefreshBound !== 'true') {
@@ -861,7 +956,11 @@ export const missingBrowserMethods = {
             const key = row.dataset.missingKey;
             if (!key || key === this.selectedMissingModelKey) return;
             this.selectedMissingModelKey = key;
-            this.displayMissingModels(container, data, { selectionOnly: true });
+            this.displayMissingModels(
+                container,
+                getCurrentData(),
+                { selectionOnly: true }
+            );
         };
 
         const selectAllCheckbox = container.querySelector('.mr-missing-select-all-check');
@@ -873,7 +972,7 @@ export const missingBrowserMethods = {
             selectAllCheckbox.addEventListener('change', () => {
                 const shouldSelectAll = selectAllCheckbox.checked;
                 this.batchSelectedMissingKeys = shouldSelectAll
-                    ? new Set((sortedMissingModels || []).map(missing => this.getMissingModelKey(missing)))
+                    ? new Set(getCurrentMissingModels().map(missing => this.getMissingModelKey(missing)))
                     : new Set();
                 this.lastBatchSelectedMissingKey = null;
                 this.refreshBatchSelectionUi();
@@ -882,21 +981,24 @@ export const missingBrowserMethods = {
         }
 
         container.querySelectorAll('.mr-missing-list-row').forEach(row => {
+            if (this._wiredMissingModelRows.has(row)) return;
+            this._wiredMissingModelRows.add(row);
             const checkbox = row.querySelector('.mr-missing-row-check');
             if (checkbox) {
                 checkbox.addEventListener('click', (event) => {
                     event.stopPropagation();
-                    checkbox.dataset.shiftClick = event.shiftKey ? '1' : '0';
+                    checkbox._missingShiftClick = event.shiftKey;
                 });
                 checkbox.addEventListener('change', (event) => {
                     const key = row.dataset.missingKey;
                     if (!key) return;
                     const selected = checkbox.checked;
-                    const isShiftRange = event.shiftKey || checkbox.dataset.shiftClick === '1';
+                    const isShiftRange = event.shiftKey || checkbox._missingShiftClick === true;
+                    const currentMissingModels = getCurrentMissingModels();
 
                     if (isShiftRange && this.lastBatchSelectedMissingKey) {
                         this.applyBatchSelectionRange(
-                            sortedMissingModels,
+                            currentMissingModels,
                             this.lastBatchSelectedMissingKey,
                             key,
                             selected
@@ -925,6 +1027,8 @@ export const missingBrowserMethods = {
         });
 
         container.querySelectorAll('.mr-missing-row-locate').forEach(button => {
+            if (this._wiredMissingLocateButtons.has(button)) return;
+            this._wiredMissingLocateButtons.add(button);
             button.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -938,7 +1042,9 @@ export const missingBrowserMethods = {
         });
 
         const selectedMissing = sortedMissingModels.find(missing => this.getMissingModelKey(missing) === this.selectedMissingModelKey);
-        if (!selectedMissing) return;
+        const detailPreserved = this._missingBrowserDetailPreserved === true;
+        this._missingBrowserDetailPreserved = false;
+        if (!selectedMissing || detailPreserved) return;
 
         const selectedIndex = sortedMissingModels.indexOf(selectedMissing);
         this.wireMissingModelDetail(container, selectedMissing, selectedIndex);
@@ -2244,7 +2350,7 @@ export const missingBrowserMethods = {
             return;
         }
 
-        container.innerHTML = this.renderMissingModelsBrowser(
+        const browserHtml = this.renderMissingModelsBrowser(
             sortedMissingModels,
             this.selectedMissingModelKey,
             sortedMissingModels.length,
@@ -2261,6 +2367,12 @@ export const missingBrowserMethods = {
                 activeTypeFilter,
             }
         );
+        this._missingBrowserDetailPreserved = false;
+        const browserPatched = options.preserveBrowser
+            && this.patchMissingModelsBrowserElement(container, browserHtml);
+        if (!browserPatched) {
+            container.innerHTML = browserHtml;
+        }
         this.wireMissingModelsBrowser(container, data, sortedMissingModels);
         this.restoreMissingListScroll(container, listScrollSnapshot);
         this.scheduleInitialUrnLocalMatchRefresh(sortedMissingModels, container, data);
