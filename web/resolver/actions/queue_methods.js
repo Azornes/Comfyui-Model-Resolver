@@ -2633,7 +2633,11 @@ export const queueMethods = {
         this.saveAnalysisCacheForActiveWorkflow?.();
 
         if (this.activeTab === 'missing' && this.contentElement) {
-            this.displayMissingModels(this.contentElement, data);
+            this.displayMissingModels(
+                this.contentElement,
+                data,
+                { preserveBrowser: true }
+            );
             this.reconnectActiveDownloads?.();
         } else {
             this.missingModels = Array.isArray(data.missing_models) ? data.missing_models : [];
@@ -2661,7 +2665,11 @@ export const queueMethods = {
             this.saveAnalysisCacheForActiveWorkflow?.();
 
             if (this.activeTab === 'missing' && this.contentElement && !this._analysisProgressToken) {
-                this.displayMissingModels(this.contentElement, data);
+                this.displayMissingModels(
+                    this.contentElement,
+                    data,
+                    { preserveBrowser: true }
+                );
                 this.reconnectActiveDownloads?.();
             }
         } catch (error) {

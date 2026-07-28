@@ -1634,6 +1634,53 @@ test('background Apply validation uses the Missing Models workflow signature', a
   ]);
 });
 
+test('Apply selected model preserves Missing Models browser geometry during both refresh stages', async () => {
+  const applyOptimisticAnalysisData = eval(
+    `(${extractMethod(queueMethodsSource, 'applyOptimisticAnalysisData')})`
+  );
+  const refreshAnalysisInBackground = eval(
+    `(${extractMethod(queueMethodsSource, 'refreshAnalysisInBackground')})`
+  );
+  const contentElement = {};
+  const workflow = { nodes: [{ id: 7, widgets_values: ['linked.safetensors'] }] };
+  const optimisticData = { missing_models: [], resolved_models: [{ node_id: 7, optimistic: true }] };
+  const analyzedData = { missing_models: [], resolved_models: [{ node_id: 7, optimistic: false }] };
+  const renderCalls = [];
+  const dialog = {
+    activeTab: 'missing',
+    contentElement,
+    activeMissingWorkflowSignature: 'linked-missing-signature',
+    cachedWorkflowSignature: null,
+    cachedAnalysisData: null,
+    applyResolvedSelectionAliasesToAnalysisData() {},
+    getMissingWorkflowSignature() {
+      return 'linked-missing-signature';
+    },
+    getCurrentWorkflow() {
+      return workflow;
+    },
+    cloneAnalysisData(data) {
+      return data;
+    },
+    saveAnalysisCacheForActiveWorkflow() {},
+    displayMissingModels(...args) {
+      renderCalls.push(args);
+    },
+    reconnectActiveDownloads() {},
+    async fetchJson() {
+      return analyzedData;
+    },
+  };
+
+  applyOptimisticAnalysisData.call(dialog, optimisticData, workflow);
+  await refreshAnalysisInBackground.call(dialog, workflow);
+
+  assert.deepEqual(renderCalls, [
+    [contentElement, optimisticData, { preserveBrowser: true }],
+    [contentElement, analyzedData, { preserveBrowser: true }],
+  ]);
+});
+
 test('background Loaded Models refresh keeps the current view until new data is ready', async () => {
   const loadLoadedModels = eval(`(${extractMethod(tabsLoadedMethodsSource, 'loadLoadedModels')})`);
   const workflow = {
