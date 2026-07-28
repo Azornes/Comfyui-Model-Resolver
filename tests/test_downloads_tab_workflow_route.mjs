@@ -4259,6 +4259,45 @@ test('progress polling explicitly handles cancelling as a non-interactive state'
   );
 });
 
+test('Missing Models download progress preserves hovered controls between polling updates', () => {
+  const renderDownloadSnapshot = extractMethod(
+    resolveDownloadMethodsSource,
+    'renderDownloadSnapshot'
+  );
+  const renderDownloadProgressGroupForMissing = extractMethod(
+    resolveDownloadMethodsSource,
+    'renderDownloadProgressGroupForMissing'
+  );
+  const patchDownloadProgressContent = extractMethod(
+    resolveDownloadMethodsSource,
+    'patchDownloadProgressContent'
+  );
+  const pollDownloadProgress = extractMethod(
+    resolveDownloadMethodsSource,
+    'pollDownloadProgress'
+  );
+
+  assert.match(renderDownloadSnapshot, /patchDownloadProgressContent\(/);
+  assert.doesNotMatch(renderDownloadSnapshot, /progressDiv\.innerHTML\s*=/);
+  assert.match(renderDownloadProgressGroupForMissing, /patchDownloadProgressContent\(/);
+  assert.doesNotMatch(renderDownloadProgressGroupForMissing, /progressDiv\.innerHTML\s*=/);
+  assert.match(
+    patchDownloadProgressContent,
+    /patchDownloadsPanelElement\(progressDiv,\s*nextProgressDiv\)/
+  );
+
+  const activeProgressBranch = pollDownloadProgress.match(
+    /if \(progress\.status === 'downloading'[\s\S]*?\} else if \(progress\.status === 'cancelling'\)/
+  )?.[0] || '';
+  const cancellingBranch = pollDownloadProgress.match(
+    /else if \(progress\.status === 'cancelling'\)[\s\S]*?\} else if \(progress\.status === 'completed'\)/
+  )?.[0] || '';
+  assert.ok(activeProgressBranch);
+  assert.ok(cancellingBranch);
+  assert.doesNotMatch(activeProgressBranch, /refreshLocalMatchesUiForMissing/);
+  assert.doesNotMatch(cancellingBranch, /refreshLocalMatchesUiForMissing/);
+});
+
 test('native Xet progress polling refreshes every 200 milliseconds', () => {
   const getDownloadProgressPollDelay = eval(`(${extractMethod(resolveDownloadMethodsSource, 'getDownloadProgressPollDelay')})`);
 

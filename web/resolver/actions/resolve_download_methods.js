@@ -1253,6 +1253,25 @@ export const resolveDownloadMethods = {
         `;
     },
 
+    patchDownloadProgressContent(progressDiv, html) {
+        if (!progressDiv) return;
+
+        const nextHtml = String(html || '');
+        if (
+            typeof progressDiv.cloneNode !== 'function'
+            || typeof this.patchDownloadsPanelElement !== 'function'
+        ) {
+            if (progressDiv.innerHTML !== nextHtml) {
+                progressDiv.innerHTML = nextHtml;
+            }
+            return;
+        }
+
+        const nextProgressDiv = progressDiv.cloneNode(false);
+        nextProgressDiv.innerHTML = nextHtml;
+        this.patchDownloadsPanelElement(progressDiv, nextProgressDiv);
+    },
+
     renderDownloadProgressGroupForMissing(missing, progressDiv, { includeDownloadId = '', includeSnapshot = null } = {}) {
         if (!missing || !progressDiv) return false;
 
@@ -1271,9 +1290,22 @@ export const resolveDownloadMethods = {
 
         progressDiv.classList.remove('mr-is-hidden');
         progressDiv.classList.add('mr-is-visible');
-        progressDiv.innerHTML = `<div class="mr-download-progress-list">${items.join('')}</div>`;
+        this.patchDownloadProgressContent(
+            progressDiv,
+            `<div class="mr-download-progress-list">${items.join('')}</div>`
+        );
         this.attachDownloadActionHandlers(progressDiv, includeDownloadId);
         return true;
+    },
+
+    ensureSearchDownloadButtonIcon(downloadBtn) {
+        if (
+            !downloadBtn?.classList?.contains('search-download-btn')
+            || downloadBtn.querySelector?.('svg')
+        ) {
+            return;
+        }
+        downloadBtn.innerHTML = getSvgIcon('download');
     },
 
     updateDownloadButtonForSnapshot(downloadBtn, progress, status, shouldRenderProgress) {
@@ -1293,7 +1325,7 @@ export const resolveDownloadMethods = {
                     ? `Paused ${percentLabel}`.trim()
                     : (percentLabel ? `Downloading ${percentLabel}` : 'Starting download...'));
             if (downloadBtn.classList.contains('search-download-btn')) {
-                downloadBtn.innerHTML = getSvgIcon('download');
+                this.ensureSearchDownloadButtonIcon(downloadBtn);
                 downloadBtn.setAttribute('data-tooltip', label);
                 downloadBtn.setAttribute('aria-label', label);
             } else {
@@ -1307,7 +1339,7 @@ export const resolveDownloadMethods = {
             downloadBtn.disabled = true;
             downloadBtn.classList.remove('mr-is-success-action', 'mr-btn-primary');
             if (downloadBtn.classList.contains('search-download-btn')) {
-                downloadBtn.innerHTML = getSvgIcon('download');
+                this.ensureSearchDownloadButtonIcon(downloadBtn);
                 downloadBtn.setAttribute('data-tooltip', 'Cancelling download...');
                 downloadBtn.setAttribute('aria-label', 'Cancelling download');
             } else {
@@ -1317,7 +1349,7 @@ export const resolveDownloadMethods = {
             downloadBtn.disabled = false;
             downloadBtn.classList.remove('mr-is-success-action', 'mr-btn-primary');
             if (downloadBtn.classList.contains('search-download-btn')) {
-                downloadBtn.innerHTML = getSvgIcon('download');
+                this.ensureSearchDownloadButtonIcon(downloadBtn);
                 downloadBtn.setAttribute('data-tooltip', 'Retry download');
                 downloadBtn.setAttribute('aria-label', 'Retry download');
             } else {
@@ -1354,7 +1386,10 @@ export const resolveDownloadMethods = {
         if (progressDiv) {
             progressDiv.classList.remove('mr-is-hidden');
             progressDiv.classList.add('mr-is-visible');
-            progressDiv.innerHTML = this.renderDownloadSnapshotMarkup(downloadId, snapshot);
+            this.patchDownloadProgressContent(
+                progressDiv,
+                this.renderDownloadSnapshotMarkup(downloadId, snapshot)
+            );
             this.attachDownloadActionHandlers(progressDiv, downloadId);
         }
 
@@ -1873,7 +1908,6 @@ export const resolveDownloadMethods = {
 
             if (progress.status === 'downloading' || progress.status === 'starting' || progress.status === 'paused') {
                 this.renderDownloadSnapshot(downloadId, snapshot, { progressDiv, downloadBtn });
-                this.refreshLocalMatchesUiForMissing?.(missing);
                 if (typeof this.requestQueuePanelUpdate === 'function') {
                     this.requestQueuePanelUpdate();
                 } else {
@@ -1886,7 +1920,6 @@ export const resolveDownloadMethods = {
 
             } else if (progress.status === 'cancelling') {
                 this.renderDownloadSnapshot(downloadId, snapshot, { progressDiv, downloadBtn });
-                this.refreshLocalMatchesUiForMissing?.(missing);
                 this.updateQueuePanel?.();
                 setTimeout(() => this.pollDownloadProgress(downloadId), 500);
 
