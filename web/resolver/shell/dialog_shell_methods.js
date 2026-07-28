@@ -906,8 +906,14 @@ export const dialogShellMethods = {
         const dy = e.clientY - start.y;
         if (!this._dragUndockCandidate && Math.hypot(dx, dy) < 5) return;
 
+        const shouldUndock = e.clientX > this.getDockSnapThreshold();
+        this.setUndockDropPreviewActive(shouldUndock);
+        if (!shouldUndock) {
+            this._dockedDragPendingRect = null;
+            return;
+        }
+
         this._dockedDragPendingRect = this.getDockedDragPreviewRect(e.clientX, e.clientY);
-        this.setUndockDropPreviewActive(true);
         if (this._dockedDragAnimationFrame || !this._dockedDragPendingRect) return;
 
         this._dockedDragAnimationFrame = requestAnimationFrame(() => {

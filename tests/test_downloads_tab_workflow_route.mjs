@@ -172,6 +172,8 @@ test('floating dialog drag stays on the compositor without forced style reads', 
   assert.match(resolverDialogSource, /mr-undock-drop-preview/);
   assert.match(startDockedDrag, /getRememberedFloatingSize\(\)/);
   assert.match(onDockedDrag, /Math\.hypot\(dx,\s*dy\)\s*<\s*5/);
+  assert.match(onDockedDrag, /e\.clientX\s*>\s*this\.getDockSnapThreshold\(\)/);
+  assert.match(onDockedDrag, /setUndockDropPreviewActive\(shouldUndock\)/);
   assert.match(onDockedDrag, /requestAnimationFrame/);
   assert.match(endDockedDrag, /this\.undockToFloating\(\{\s*persist:\s*false\s*\}\)/);
   assert.match(endDockedDrag, /this\._floatingRectBeforeDock\s*=\s*\{\s*\.\.\.finalRect\s*\}/);
@@ -238,6 +240,70 @@ test('floating dialog drag stays on the compositor without forced style reads', 
     assert.deepEqual(dialog._dragPendingPosition, { top: 150, left: 240 });
   } finally {
     globalThis.requestAnimationFrame = previousRequestAnimationFrame;
+  }
+});
+
+test('docked dialog drag stays docked after returning to the dock edge', () => {
+  const onDockedDrag = eval(`(${extractMethod(dialogShellMethodsSource, 'onDockedDrag')})`);
+  const endDockedDrag = eval(`(${extractMethod(dialogShellMethodsSource, 'endDockedDrag')})`);
+  const previousDocument = globalThis.document;
+  const previousRequestAnimationFrame = globalThis.requestAnimationFrame;
+  const previousCancelAnimationFrame = globalThis.cancelAnimationFrame;
+  let undockCalls = 0;
+  let cancelledFrame = null;
+
+  globalThis.document = {
+    removeEventListener() {},
+  };
+  globalThis.requestAnimationFrame = () => 23;
+  globalThis.cancelAnimationFrame = frame => {
+    cancelledFrame = frame;
+  };
+
+  try {
+    const dialog = {
+      docked: true,
+      fullscreen: false,
+      element: { style: {} },
+      undockDropPreview: { style: {} },
+      _dockedDragStart: { x: 20, y: 20 },
+      _dockedDragPendingRect: null,
+      _dockedDragAnimationFrame: null,
+      _dragUndockCandidate: false,
+      getDockSnapThreshold: () => 64,
+      getDockedDragPreviewRect: (clientX, clientY) => ({
+        top: clientY,
+        left: clientX,
+        width: 800,
+        height: 600,
+      }),
+      setUndockDropPreviewActive(active) {
+        this._dragUndockCandidate = Boolean(active && this.docked && !this.fullscreen);
+      },
+      undockToFloating() {
+        undockCalls += 1;
+      },
+      saveModalPosition() {},
+    };
+
+    onDockedDrag.call(dialog, { clientX: 120, clientY: 40 });
+    assert.equal(dialog._dragUndockCandidate, true);
+    assert.equal(dialog._dockedDragAnimationFrame, 23);
+
+    onDockedDrag.call(dialog, { clientX: 20, clientY: 40 });
+    assert.equal(dialog._dragUndockCandidate, false);
+    assert.equal(dialog._dockedDragPendingRect, null);
+
+    endDockedDrag.call(dialog);
+
+    assert.equal(undockCalls, 0);
+    assert.equal(dialog.docked, true);
+    assert.equal(cancelledFrame, 23);
+    assert.equal(dialog._dockedDragStart, null);
+  } finally {
+    globalThis.document = previousDocument;
+    globalThis.requestAnimationFrame = previousRequestAnimationFrame;
+    globalThis.cancelAnimationFrame = previousCancelAnimationFrame;
   }
 });
 
@@ -417,6 +483,61 @@ test('docked ComfyUI splitter coalesces live layout while its gutter stays respo
   assert.match(dialogShellMethodsSource, /translate3d\(/);
   assert.match(dialogShellMethodsSource, /requestAnimationFrame\(/);
   assert.doesNotMatch(dialogShellMethodsSource, /mr-resolver-external-resizing/);
+});
+
+test('queue splitter suppresses tooltips while resizing', () => {
+  const activateQueueSplitUi = eval(
+    `(${extractMethod(queueMethodsSource, 'activateQueueSplitUi')})`
+  );
+  const deactivateQueueSplitUi = eval(
+    `(${extractMethod(queueMethodsSource, 'deactivateQueueSplitUi')})`
+  );
+  const classes = new Set();
+  const splitterClasses = new Set();
+  let hideTooltipCalls = 0;
+  const body = {
+    classList: {
+      add: value => classes.add(value),
+      remove: value => classes.delete(value),
+    },
+  };
+  const dialog = {
+    _queueSplitUiActive: false,
+    splitterElement: {
+      classList: {
+        add: value => splitterClasses.add(value),
+        remove: value => splitterClasses.delete(value),
+      },
+    },
+    hideTooltip() {
+      hideTooltipCalls += 1;
+    },
+  };
+
+  activateQueueSplitUi.call(dialog, body);
+  activateQueueSplitUi.call(dialog, body);
+
+  assert.equal(hideTooltipCalls, 1);
+  assert.equal(classes.has('is-resizing'), true);
+  assert.equal(splitterClasses.has('is-resizing'), true);
+
+  deactivateQueueSplitUi.call(dialog, body);
+
+  assert.equal(dialog._queueSplitUiActive, false);
+  assert.equal(classes.has('is-resizing'), false);
+  assert.equal(splitterClasses.has('is-resizing'), false);
+  assert.match(
+    queueMethodsSource,
+    /onBeforeDrag:\s*\(newW\)\s*=>\s*\{\s*this\.activateQueueSplitUi\(body\)/
+  );
+  assert.match(
+    queueMethodsSource,
+    /onEnd:\s*\(finalWidth\)\s*=>\s*\{[^]*this\.deactivateQueueSplitUi\(body\)/
+  );
+  assert.match(
+    resolverMainCssSource,
+    /#model-resolver-body\.is-resizing::after\s*\{[^}]*pointer-events:\s*auto/s
+  );
 });
 
 test('missing browser detail remains available at narrow widths', () => {

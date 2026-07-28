@@ -1955,6 +1955,23 @@ export const queueMethods = {
         });
     },
 
+    activateQueueSplitUi(body) {
+        if (this._queueSplitUiActive) return;
+
+        const targetBody = body || this.getQueueSplitBody();
+        this._queueSplitUiActive = true;
+        this.hideTooltip?.();
+        targetBody?.classList?.add('is-resizing');
+        this.splitterElement?.classList?.add('is-resizing');
+    },
+
+    deactivateQueueSplitUi(body) {
+        const targetBody = body || this.getQueueSplitBody();
+        this._queueSplitUiActive = false;
+        targetBody?.classList?.remove('is-resizing');
+        this.splitterElement?.classList?.remove('is-resizing');
+    },
+
     // Begin split drag for resizable panels
     startSplitDrag(e, { startWidth = null, edgeOpen = false, startCollapsedPreview = false } = {}) {
         try {
@@ -1987,12 +2004,14 @@ export const queueMethods = {
             this._splitPreviewCollapsed = !!startCollapsedPreview;
             this._splitEdgeOpen = !!edgeOpen;
             this._splitEdgeOpenedPastThreshold = false;
+            const body = this.getQueueSplitBody();
 
             this._splitInteraction = startSplitterDrag(e, {
                 anchor: 'right',
                 startWidth: initialWidth,
                 bounds,
                 onBeforeDrag: (newW) => {
+                    this.activateQueueSplitUi(body);
                     if (newW < bounds.min) newW = bounds.min;
                     if (newW > bounds.max) newW = bounds.max;
                     return newW;
@@ -2041,6 +2060,7 @@ export const queueMethods = {
                 },
                 onEnd: (finalWidth) => {
                     this._splitDragging = false;
+                    this.deactivateQueueSplitUi(body);
                     if (this.queueElement && finalWidth && !this._splitPreviewCollapsed) {
                         this.applyQueueSplitWidth(finalWidth, {
                             bounds: this._splitStart?.bounds,
@@ -2048,8 +2068,6 @@ export const queueMethods = {
                             skipIfUnchanged: true
                         });
                     }
-
-                    const body = this.getQueueSplitBody();
 
                     if (this._splitEdgeOpen && !this._pendingSplitWidth) {
                         try {

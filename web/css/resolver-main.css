@@ -742,6 +742,15 @@
     pointer-events: auto;
 }
 
+#model-resolver-body.is-resizing::after {
+    content: "";
+    position: absolute;
+    z-index: 9999;
+    inset: 0;
+    cursor: col-resize;
+    pointer-events: auto;
+}
+
 #model-resolver-modal .mr-missing-list-row {
     content-visibility: auto;
     contain-intrinsic-size: 70px;
