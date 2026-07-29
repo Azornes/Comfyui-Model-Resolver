@@ -2845,23 +2845,28 @@ test('Missing Models signature tracks LoRA Manager list membership changes', () 
 
 test('workflow hash refresh ignores node movement and tracks model dependency changes', () => {
   const getWorkflowSignature = eval(`(${extractMethod(workflowStateMethodsSource, 'getWorkflowSignature')})`);
+  const getMissingWorkflowSignature = eval(`(${extractMethod(workflowStateMethodsSource, 'getMissingWorkflowSignature')})`);
   const getWorkflowSignatureData = eval(`(${extractMethod(workflowStateMethodsSource, 'getWorkflowSignatureData')})`);
   const getWorkflowHashMetadataSignature = eval(`(${extractMethod(modelResolverSource, 'getWorkflowHashMetadataSignature')})`);
   const scheduleWorkflowHashMetadataRefresh = eval(`(${extractMethod(modelResolverSource, 'scheduleWorkflowHashMetadataRefresh')})`);
   const dialog = {
     capabilities: { node_rules: {} },
     getWorkflowSignature,
+    getMissingWorkflowSignature,
     getWorkflowSignatureData,
   };
-  const makeWorkflow = (modelName, position = [0, 0]) => ({
+  const makeWorkflow = (modelName, position = [0, 0], strength = 0.75) => ({
     nodes: [{
       id: 12,
-      type: 'CheckpointLoaderSimple',
+      type: 'LoraLoader',
       pos: position,
       size: [320, 120],
-      inputs: [{ name: 'ckpt_name', widget: { name: 'ckpt_name' } }],
+      inputs: [
+        { name: 'lora_name', widget: { name: 'lora_name' } },
+        { name: 'strength_model', widget: { name: 'strength_model' } },
+      ],
       outputs: [{ name: 'MODEL', type: 'MODEL', links: [] }],
-      widgets_values: [modelName],
+      widgets_values: [modelName, strength],
     }],
     links: [],
     definitions: {
@@ -2905,6 +2910,13 @@ test('workflow hash refresh ignores node movement and tracks model dependency ch
   scheduleWorkflowHashMetadataRefresh.call(
     resolver,
     movedWorkflow
+  );
+  assert.equal(resolver.armCalls, 0);
+  assert.equal(resolver.workflowHashMetadataRefreshPending, false);
+
+  scheduleWorkflowHashMetadataRefresh.call(
+    resolver,
+    makeWorkflow('model-a.safetensors', [800, 450], 1.25)
   );
   assert.equal(resolver.armCalls, 0);
   assert.equal(resolver.workflowHashMetadataRefreshPending, false);

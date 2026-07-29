@@ -1262,7 +1262,8 @@ export class ModelResolver {
     getWorkflowHashMetadataSignature(workflow) {
         if (!workflow || typeof workflow !== 'object') return '';
 
-        const dependencySignature = this.dialog?.getWorkflowSignature?.(workflow);
+        const dependencySignature = this.dialog?.getMissingWorkflowSignature?.(workflow)
+            || this.dialog?.getWorkflowSignature?.(workflow);
         if (dependencySignature) return dependencySignature;
 
         const normalizeNode = (node = {}) => ({
