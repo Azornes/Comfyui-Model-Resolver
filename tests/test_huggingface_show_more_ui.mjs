@@ -14,6 +14,10 @@ const modelInfoSource = await readFile(
   new URL('../web/resolver/views/model_info_methods.js', import.meta.url),
   'utf8'
 );
+const optionsSource = await readFile(
+  new URL('../web/resolver/views/options_methods.js', import.meta.url),
+  'utf8'
+);
 const resolveDownloadSource = await readFile(
   new URL('../web/resolver/actions/resolve_download_methods.js', import.meta.url),
   'utf8'
@@ -22,6 +26,13 @@ const resolverCssSource = await readFile(
   new URL('../web/css/resolver-main.css', import.meta.url),
   'utf8'
 );
+
+test('known HuggingFace fallback shows Comfy-Org and Kijai index counts', () => {
+  assert.match(optionsSource, /Use known HuggingFace fallback/);
+  assert.match(optionsSource, /<span>Comfy-Org files<\/span>/);
+  assert.match(optionsSource, /<span>Kijai files<\/span>/);
+  assert.match(optionsSource, /Array\.isArray\(data\.authors\)/);
+});
 
 test('HuggingFace download rows expose the Show More action', () => {
   assert.match(

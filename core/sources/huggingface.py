@@ -33,7 +33,7 @@ from ..type_utils import (
 from .common import build_unified_search_result
 
 HF_API_URL = "https://huggingface.co/api"
-HF_AUTHOR_FALLBACKS = ["Comfy-Org"]
+HF_AUTHOR_FALLBACKS = ["Comfy-Org", "Kijai"]
 BRAVE_SEARCH_API_URL = "https://api.search.brave.com/res/v1/web/search"
 HF_AUTHOR_INDEX_CACHE_TTL_SECONDS = 24 * 60 * 60
 HF_AUTHOR_INDEX_CACHE_VERSION = 1
@@ -284,6 +284,33 @@ def get_author_fallback_index_status(author: str = "Comfy-Org") -> Dict[str, Any
     }
 
 
+def get_known_author_fallback_indexes_status() -> Dict[str, Any]:
+    """Return aggregate status for all known HuggingFace author indexes."""
+    author_statuses = [
+        get_author_fallback_index_status(author) for author in HF_AUTHOR_FALLBACKS
+    ]
+    updated_times = [
+        status["updated_at"]
+        for status in author_statuses
+        if isinstance(status.get("updated_at"), (int, float))
+    ]
+    cached_author_count = sum(bool(status["exists"]) for status in author_statuses)
+    fully_cached = cached_author_count == len(author_statuses)
+
+    return {
+        "authors": author_statuses,
+        "author_count": len(author_statuses),
+        "cached_author_count": cached_author_count,
+        "exists": cached_author_count > 0,
+        "fully_cached": fully_cached,
+        "updated_at": max(updated_times) if updated_times else None,
+        "stale": not fully_cached
+        or any(bool(status["stale"]) for status in author_statuses),
+        "repo_count": sum(int(status["repo_count"]) for status in author_statuses),
+        "file_count": sum(int(status["file_count"]) for status in author_statuses),
+    }
+
+
 def refresh_author_fallback_index(
     token: Optional[str] = None, author: str = "Comfy-Org"
 ) -> Dict[str, Any]:
@@ -294,6 +321,25 @@ def refresh_author_fallback_index(
     status = get_author_fallback_index_status(author)
     status["success"] = bool(index)
     status["persisted"] = bool(index)
+    return status
+
+
+def refresh_known_author_fallback_indexes(
+    token: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Force refresh all known public HuggingFace author indexes."""
+    refresh_results = [
+        refresh_author_fallback_index(token, author) for author in HF_AUTHOR_FALLBACKS
+    ]
+    status = get_known_author_fallback_indexes_status()
+    failed_authors = [
+        result["author"] for result in refresh_results if not result.get("success")
+    ]
+    status["success"] = not failed_authors
+    status["persisted"] = all(
+        bool(result.get("persisted")) for result in refresh_results
+    )
+    status["failed_authors"] = failed_authors
     return status
 
 

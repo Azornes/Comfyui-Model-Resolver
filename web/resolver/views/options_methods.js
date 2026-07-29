@@ -628,7 +628,7 @@ export const optionsMethods = {
                                         </div>
                                         <label class="mr-options-toggle-row">
                                             <div class="mr-options-toggle-copy">
-                                                <span class="mr-options-toggle-title">Use Comfy-Org fallback <span class="mr-tooltip-badge" data-tooltip="Checks Comfy-Org repositories directly. Useful for ComfyUI model packs that normal Hugging Face search may miss.">?</span></span>
+                                                <span class="mr-options-toggle-title">Use known HuggingFace fallback <span class="mr-tooltip-badge" data-tooltip="Checks cached indexes from known Hugging Face publishers such as Comfy-Org and Kijai. Useful for model files that normal Hugging Face search may miss.">?</span></span>
                                             </div>
                                             <span class="mr-options-toggle-control">
                                                 <input id="mr-options-hf-use-comfy-org-fallback" class="mr-options-switch-input" type="checkbox" ${tokens.hf_use_comfy_org_fallback ? 'checked' : ''}>
@@ -637,9 +637,15 @@ export const optionsMethods = {
                                         </label>
                                         <div class="mr-options-dependent-block">
                                             <div class="mr-options-db-summary">
-                                                <div class="mr-options-db-row">
-                                                    <span>Comfy-Org files</span>
-                                                    <strong id="mr-options-hf-index-count">Loading...</strong>
+                                                <div id="mr-options-hf-index-authors">
+                                                    <div class="mr-options-db-row">
+                                                        <span>Comfy-Org files</span>
+                                                        <strong>Loading...</strong>
+                                                    </div>
+                                                    <div class="mr-options-db-row">
+                                                        <span>Kijai files</span>
+                                                        <strong>Loading...</strong>
+                                                    </div>
                                                 </div>
                                                 <div class="mr-options-db-row">
                                                     <span>Last refresh</span>
@@ -650,9 +656,9 @@ export const optionsMethods = {
                                                     <strong id="mr-options-hf-index-state">Checking local index...</strong>
                                                 </div>
                                             </div>
-                                            <div id="mr-options-hf-index-message" class="mr-options-db-message">Comfy-Org fallback uses a cached HuggingFace file index.</div>
+                                            <div id="mr-options-hf-index-message" class="mr-options-db-message">Known HuggingFace fallback uses cached file indexes.</div>
                                             <div class="mr-options-db-actions">
-                                                <button id="mr-options-hf-index-refresh" type="button" class="mr-btn mr-btn-secondary">${getSvgIcon('refreshCw')} Refresh Comfy-Org Index</button>
+                                                <button id="mr-options-hf-index-refresh" type="button" class="mr-btn mr-btn-secondary">${getSvgIcon('refreshCw')} Refresh Known Indexes</button>
                                             </div>
                                         </div>
                                         <label class="mr-options-toggle-row">
@@ -972,7 +978,7 @@ export const optionsMethods = {
         const baseModelsMessageEl = this.contentElement.querySelector('#mr-options-base-models-message');
         const baseModelsCheckBtn = this.contentElement.querySelector('#mr-options-base-models-check');
         const baseModelsUpdateBtn = this.contentElement.querySelector('#mr-options-base-models-update');
-        const hfIndexCountEl = this.contentElement.querySelector('#mr-options-hf-index-count');
+        const hfIndexAuthorsEl = this.contentElement.querySelector('#mr-options-hf-index-authors');
         const hfIndexUpdatedEl = this.contentElement.querySelector('#mr-options-hf-index-updated');
         const hfIndexStateEl = this.contentElement.querySelector('#mr-options-hf-index-state');
         const hfIndexMessageEl = this.contentElement.querySelector('#mr-options-hf-index-message');
@@ -2641,10 +2647,22 @@ export const optionsMethods = {
         });
 
         const renderHfIndexStatus = (data = {}) => {
-            if (hfIndexCountEl) {
-                hfIndexCountEl.textContent = Number.isFinite(Number(data.file_count))
-                    ? Number(data.file_count).toLocaleString()
-                    : '-';
+            const authorStatuses = Array.isArray(data.authors) && data.authors.length
+                ? data.authors
+                : [data];
+            if (hfIndexAuthorsEl) {
+                hfIndexAuthorsEl.innerHTML = authorStatuses.map((status) => {
+                    const author = escapeHtml(String(status.author || 'Unknown'));
+                    const fileCount = Number.isFinite(Number(status.file_count))
+                        ? Number(status.file_count).toLocaleString()
+                        : '-';
+                    return `
+                        <div class="mr-options-db-row">
+                            <span>${author} files</span>
+                            <strong>${fileCount}</strong>
+                        </div>
+                    `;
+                }).join('');
             }
             if (hfIndexUpdatedEl) {
                 hfIndexUpdatedEl.textContent = data.updated_at
@@ -2654,6 +2672,8 @@ export const optionsMethods = {
             if (hfIndexStateEl) {
                 if (!data.exists) {
                     hfIndexStateEl.textContent = 'Not cached';
+                } else if (data.fully_cached === false) {
+                    hfIndexStateEl.textContent = 'Partially cached';
                 } else if (data.stale) {
                     hfIndexStateEl.textContent = 'Refresh due';
                 } else {
@@ -2662,11 +2682,13 @@ export const optionsMethods = {
             }
             if (hfIndexMessageEl) {
                 if (!data.exists) {
-                    hfIndexMessageEl.textContent = 'The first Comfy-Org fallback search will build the local HuggingFace file index.';
+                    hfIndexMessageEl.textContent = 'The first known-source fallback search will build the local HuggingFace file indexes.';
+                } else if (data.fully_cached === false) {
+                    hfIndexMessageEl.textContent = `${Number(data.cached_author_count || 0).toLocaleString()} of ${Number(data.author_count || authorStatuses.length).toLocaleString()} known-source indexes are cached.`;
                 } else if (data.stale) {
-                    hfIndexMessageEl.textContent = `Index has ${Number(data.repo_count || 0).toLocaleString()} repos and should be refreshed.`;
+                    hfIndexMessageEl.textContent = `Indexes have ${Number(data.repo_count || 0).toLocaleString()} repos and should be refreshed.`;
                 } else {
-                    hfIndexMessageEl.textContent = `Index has ${Number(data.repo_count || 0).toLocaleString()} repos and is used before per-repo fallback checks.`;
+                    hfIndexMessageEl.textContent = `Indexes have ${Number(data.repo_count || 0).toLocaleString()} repos and are used before per-repo fallback checks.`;
                 }
             }
         };
@@ -2686,7 +2708,7 @@ export const optionsMethods = {
             stateEl: hfIndexStateEl,
             messageEl: hfIndexMessageEl,
             loadingText: 'Refreshing...',
-            startingMessageText: 'Downloading Comfy-Org file index from HuggingFace...',
+            startingMessageText: 'Downloading known-source file indexes from HuggingFace...',
             endpoint: '/model_resolver/huggingface/author-index/refresh',
             fetchOptions: {
                 method: 'POST',
@@ -2702,7 +2724,7 @@ export const optionsMethods = {
             successCallback: (data) => {
                 renderHfIndexStatus(data);
                 if (hfIndexStateEl) hfIndexStateEl.textContent = 'Refreshed';
-                this.showNotification('HuggingFace Comfy-Org index refreshed', 'success');
+                this.showNotification('Known HuggingFace indexes refreshed', 'success');
             },
             errorFallbackText: 'Failed to refresh HuggingFace index.',
             notificationErrorText: 'HuggingFace index refresh failed'

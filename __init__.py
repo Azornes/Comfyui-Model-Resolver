@@ -494,11 +494,11 @@ class ModelResolverExtension:
                     build_huggingface_custom_result,
                     check_brave_search_api_key,
                     check_huggingface_token,
-                    get_author_fallback_index_status,
                     get_huggingface_download_url,
                     get_huggingface_model_details,
+                    get_known_author_fallback_indexes_status,
                     parse_huggingface_url,
-                    refresh_author_fallback_index,
+                    refresh_known_author_fallback_indexes,
                     search_huggingface_for_file,
                 )
                 from .core.sources.huggingface import (
@@ -4535,7 +4535,9 @@ class ModelResolverExtension:
                 @json_api_endpoint("HuggingFace author index status")
                 async def huggingface_author_index_status_route(request):
                     """Return local HuggingFace author fallback index status."""
-                    return web.json_response(get_author_fallback_index_status())
+                    return web.json_response(
+                        get_known_author_fallback_indexes_status()
+                    )
 
                 @routes.post("/model_resolver/huggingface/author-index/refresh")
                 @json_api_endpoint("HuggingFace author index refresh")
@@ -4544,7 +4546,7 @@ class ModelResolverExtension:
                     data = await request.json()
                     hf_token = data.get("hf_token", "")
                     result = await asyncio.to_thread(
-                        refresh_author_fallback_index, hf_token or None
+                        refresh_known_author_fallback_indexes, hf_token or None
                     )
                     clear_huggingface_search_cache()
                     return web.json_response(result)

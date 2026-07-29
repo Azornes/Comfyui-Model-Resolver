@@ -5,10 +5,12 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 from core.sources.huggingface import (
+    HF_AUTHOR_FALLBACKS,
     _fetch_author_index,
     _is_author_index_fresh,
     _read_persistent_author_indexes,
     build_huggingface_custom_result,
+    get_known_author_fallback_indexes_status,
     get_huggingface_model_details,
     parse_huggingface_url,
     get_huggingface_download_url,
@@ -19,6 +21,51 @@ from core.matcher import build_filename_search_queries
 from core.type_utils import extract_file_size
 
 class HuggingFaceSourceTests(unittest.TestCase):
+
+    def test_known_author_fallbacks_include_comfy_org_and_kijai(self):
+        self.assertEqual(["Comfy-Org", "Kijai"], HF_AUTHOR_FALLBACKS)
+
+    def test_known_author_status_reports_each_author_file_count(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            index_path = Path(tmpdir) / "huggingface-author-index.json"
+            index_path.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "authors": {
+                            "Comfy-Org": {
+                                "author": "Comfy-Org",
+                                "updated_at": 1,
+                                "repo_count": 2,
+                                "file_count": 3,
+                                "repos": [],
+                                "files": [],
+                            },
+                            "Kijai": {
+                                "author": "Kijai",
+                                "updated_at": 2,
+                                "repo_count": 4,
+                                "file_count": 5,
+                                "repos": [],
+                                "files": [],
+                            },
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with patch(
+                "core.sources.huggingface.HF_AUTHOR_INDEX_CACHE_PATH",
+                str(index_path),
+            ):
+                status = get_known_author_fallback_indexes_status()
+
+        self.assertEqual(
+            {"Comfy-Org": 3, "Kijai": 5},
+            {item["author"]: item["file_count"] for item in status["authors"]},
+        )
+        self.assertEqual(8, status["file_count"])
+        self.assertTrue(status["fully_cached"])
 
     def test_fetch_author_index_builds_index_from_provider_repo_list(self):
         with patch(

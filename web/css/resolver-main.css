@@ -6687,6 +6687,10 @@ a.mr-image-preview-resource-name:hover {
     background: rgba(255, 255, 255, 0.03);
 }
 
+#mr-options-hf-index-authors {
+    display: contents;
+}
+
 .mr-options-db-row {
     display: flex;
     align-items: center;
