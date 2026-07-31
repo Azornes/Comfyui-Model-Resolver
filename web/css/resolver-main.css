@@ -751,6 +751,12 @@
     pointer-events: auto;
 }
 
+.mr-missing-browser.is-resizing *,
+.mr-missing-browser.is-resizing .mr-missing-list-row,
+.mr-missing-browser.is-resizing .mr-card {
+    transition: none !important;
+}
+
 #model-resolver-modal .mr-missing-list-row {
     content-visibility: auto;
     contain-intrinsic-size: 70px;
@@ -8959,6 +8965,11 @@ a.mr-image-preview-resource-name:hover {
     #model-resolver-modal .mr-missing-detail-pane .mr-search-results-table-wrap {
         content-visibility: auto;
         contain-intrinsic-size: auto 220px;
+    }
+
+    .mr-missing-browser.is-resizing .mr-search-results-table-wrap,
+    .mr-missing-browser.is-resizing .mr-match-row {
+        content-visibility: hidden !important;
     }
 }
 

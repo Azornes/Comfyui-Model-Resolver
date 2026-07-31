@@ -1344,7 +1344,7 @@ export const missingBrowserMethods = {
             startWidth: detailWidth,
             bounds,
             dragThreshold: 4,
-            layoutFrameStride: 2,
+            layoutFrameStride: 3,
             onPreview: (pendingWidth, appliedWidth) => {
                 this._pendingMissingBrowserSplitWidth = pendingWidth;
                 this.activateMissingBrowserSplitUi();
