@@ -1324,9 +1324,6 @@ export const missingBrowserMethods = {
         this._missingBrowserSplitListPane = listPane;
         this._missingBrowserSplitDetailPane = detailPane;
         this._missingBrowserSplitSplitter = releaseSplitter;
-        if (releaseSplitter instanceof HTMLElement) {
-            releaseSplitter.style.willChange = 'transform';
-        }
         this._missingBrowserSplitDragging = true;
         this._missingBrowserSplitStart = {
             x: event.clientX,
@@ -1345,16 +1342,9 @@ export const missingBrowserMethods = {
             bounds,
             dragThreshold: 4,
             layoutFrameStride: 3,
-            onPreview: (pendingWidth, appliedWidth) => {
+            onPreview: (pendingWidth) => {
                 this._pendingMissingBrowserSplitWidth = pendingWidth;
                 this.activateMissingBrowserSplitUi();
-                if (!(releaseSplitter instanceof HTMLElement)) return;
-
-                const visualOffset = Math.round(appliedWidth - pendingWidth);
-                releaseSplitter.style.transform = visualOffset
-                    ? `translate3d(${visualOffset}px, 0, 0)`
-                    : '';
-                releaseSplitter.style.willChange = visualOffset ? 'transform' : '';
             },
             onDrag: (width) => {
                 this._pendingMissingBrowserSplitWidth = width;

@@ -398,7 +398,7 @@ test('missing browser splitter keeps a compositor preview between live layout fr
 
   assert.match(missingBrowserMethodsSource, /dragThreshold:\s*4/);
   assert.match(missingBrowserMethodsSource, /layoutFrameStride:\s*3/);
-  assert.match(missingBrowserMethodsSource, /translate3d\(/);
+  assert.doesNotMatch(missingBrowserMethodsSource, /translate3d\(/);
   assert.match(
     resolverMainCssSource,
     /\.mr-missing-browser\.is-resizing::after\s*\{[^}]*pointer-events:\s*auto/s
