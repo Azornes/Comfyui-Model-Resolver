@@ -3,6 +3,8 @@ import { api } from "../../../../../scripts/api.js";
 import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
 import { startSplitterDrag } from "../utils/splitter_drag.js";
+const FOOTER_VERSION_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
 export const queueMethods = {
     createContent() {
         // Wrap the body in a two-column layout: left = items, right = queued panel
@@ -2830,8 +2832,7 @@ export const queueMethods = {
 
         this.footerElement.classList.toggle('mr-footer-is-missing', this.activeTab === 'missing');
         this.footerStarLink.classList.remove('mr-footer-star-hidden');
-
-        if (this.activeTab !== 'missing') return;
+        this.footerVersionElement?.classList.remove('mr-footer-version-hidden');
 
         const footerStyle = getComputedStyle(this.footerElement);
         const footerWidth = (this.footerElement.clientWidth || 0)
@@ -2839,11 +2840,13 @@ export const queueMethods = {
             - (parseFloat(footerStyle.paddingRight) || 0);
         if (footerWidth <= 0) return;
 
-        const actionItems = Array.from(this.footerActions.children || []).filter((element) => {
-            const style = getComputedStyle(element);
-            return style.display !== 'none' && style.visibility !== 'hidden';
-        });
-        if (!actionItems.length) return;
+        const actionsVisible = getComputedStyle(this.footerActions).display !== 'none';
+        const actionItems = actionsVisible
+            ? Array.from(this.footerActions.children || []).filter((element) => {
+                const style = getComputedStyle(element);
+                return style.display !== 'none' && style.visibility !== 'hidden';
+            })
+            : [];
 
         const gap = parseFloat(footerStyle.columnGap || footerStyle.gap || '0') || 0;
         const actionsStyle = getComputedStyle(this.footerActions);
@@ -2851,8 +2854,24 @@ export const queueMethods = {
         const actionsWidth = actionItems.reduce((total, element) => {
             return total + element.getBoundingClientRect().width;
         }, 0) + (Math.max(0, actionItems.length - 1) * actionGap);
-        const requiredWidth = this.footerStarLink.scrollWidth + actionsWidth + gap;
-        this.footerStarLink.classList.toggle('mr-footer-star-hidden', requiredWidth > footerWidth);
+        const starWidth = this.footerStarLink.scrollWidth;
+        const versionWidth = this.footerVersionElement?.scrollWidth || 0;
+        const getRequiredWidth = ({ includeStar = true, includeVersion = true } = {}) => {
+            const itemWidths = [
+                includeStar ? starWidth : 0,
+                actionsWidth,
+                includeVersion ? versionWidth : 0
+            ];
+            const visibleWidths = itemWidths.filter((width) => width > 0);
+            return visibleWidths.reduce((total, width) => total + width, 0)
+                + (Math.max(0, visibleWidths.length - 1) * gap);
+        };
+
+        const shouldHideStar = getRequiredWidth() > footerWidth;
+        const shouldHideVersion = versionWidth > 0
+            && getRequiredWidth({ includeStar: !shouldHideStar }) > footerWidth;
+        this.footerVersionElement?.classList.toggle('mr-footer-version-hidden', shouldHideVersion);
+        this.footerStarLink.classList.toggle('mr-footer-star-hidden', shouldHideStar);
     },
 
     bindFooterStarLayoutObserver() {
@@ -2860,6 +2879,65 @@ export const queueMethods = {
         this._footerStarResizeObserver = new ResizeObserver(() => this.updateFooterStarLayout());
         this._footerStarResizeObserver.observe(this.footerElement);
         this._footerStarResizeObserver.observe(this.footerActions);
+        if (this.footerVersionElement) this._footerStarResizeObserver.observe(this.footerVersionElement);
+    },
+
+    async loadFooterVersion() {
+        if (!this.footerVersionCurrent || !this.footerVersionLatest) return;
+
+        const now = Date.now();
+        if (
+            this._footerVersionLastCheckedAt
+            && now - this._footerVersionLastCheckedAt < FOOTER_VERSION_REFRESH_INTERVAL_MS
+        ) {
+            return;
+        }
+        this._footerVersionLastCheckedAt = now;
+
+        try {
+            const data = await this.fetchJson(
+                '/model_resolver/version',
+                { silent: true },
+                'Get Model Resolver version'
+            );
+            const formatVersion = (value) => {
+                const version = String(value || '').trim().replace(/^v/i, '');
+                return version ? `v${version}` : '';
+            };
+            const currentVersion = formatVersion(data?.current_version);
+            const latestVersion = formatVersion(data?.latest_version);
+
+            this.footerVersionCurrent.textContent = currentVersion || 'v—';
+            this.footerVersionLatest.textContent = latestVersion
+                ? `(latest: ${latestVersion})`
+                : '(latest: unavailable)';
+            const isUpToDate = data?.status === 'current';
+            const isOutdated = data?.status === 'update_available';
+            this.footerVersionElement?.classList.toggle('mr-footer-version-up-to-date', isUpToDate);
+            this.footerVersionElement?.classList.toggle('mr-footer-version-outdated', isOutdated);
+            this.footerVersionLatest.classList.toggle(
+                'mr-footer-version-update',
+                isOutdated
+            );
+            this.footerVersionLatest.title = data?.status === 'update_available'
+                ? 'A newer Model Resolver version is available on GitHub.'
+                : 'Model Resolver version status';
+            this.footerVersionElement?.setAttribute(
+                'aria-label',
+                latestVersion
+                    ? `Model Resolver ${currentVersion}; latest GitHub version ${latestVersion}`
+                    : `Model Resolver ${currentVersion}; latest GitHub version unavailable`
+            );
+            this.updateFooterStarLayout();
+        } catch (_) {
+            this.footerVersionLatest.textContent = '(latest: unavailable)';
+            this.footerVersionElement?.classList.remove(
+                'mr-footer-version-up-to-date',
+                'mr-footer-version-outdated'
+            );
+            this.footerVersionLatest.classList.remove('mr-footer-version-update');
+            this.updateFooterStarLayout();
+        }
     },
 
     createFooter() {
@@ -3007,7 +3085,23 @@ export const queueMethods = {
             })
         ]);
 
+        const versionCurrent = $el("span.mr-footer-version-current", {
+            textContent: "v—"
+        });
+        const versionLatest = $el("a.mr-footer-version-latest", {
+            href: "https://github.com/Azornes/Comfyui-Model-Resolver",
+            target: "_blank",
+            rel: "noopener noreferrer",
+            textContent: "(latest: checking…)"
+        });
+        const versionElement = $el("span.mr-footer-version", {
+            title: "Model Resolver version"
+        }, [versionCurrent, versionLatest]);
+
         this.footerStarLink = starLink;
+        this.footerVersionElement = versionElement;
+        this.footerVersionCurrent = versionCurrent;
+        this.footerVersionLatest = versionLatest;
         this.footerActions = $el("div.mr-footer-actions", {}, [
             selectMenu,
             searchMenu,
@@ -3016,7 +3110,8 @@ export const queueMethods = {
         ]);
         this.footerElement = $el("div.mr-footer", {}, [
             starLink,
-            this.footerActions
+            this.footerActions,
+            versionElement
         ]);
         this.bindFooterStarLayoutObserver();
         queueMicrotask(() => this.updateFooterStarLayout());

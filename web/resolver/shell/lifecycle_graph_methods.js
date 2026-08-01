@@ -18,6 +18,7 @@ export const lifecycleGraphMethods = {
     async showContent(workflow = null, { restoreFullscreen = true } = {}) {
         this.backdrop.style.display = "none";
         this.element.style.display = "flex";
+        void this.loadFooterVersion();
         if (!this.docked) {
             this.scheduleModalViewportClamp();
         }
