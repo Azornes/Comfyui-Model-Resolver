@@ -174,7 +174,7 @@
     flex: 0 0 auto;
     align-self: stretch;
     gap: 0;
-    margin: -var(--mr-spacing-6) -var(--mr-spacing-10) 0 0;
+    margin: -6px -10px 0 0;
 }
 
 #model-resolver-drag-handle {
@@ -424,11 +424,11 @@
     align-self: stretch;
     flex: 0 0 auto;
     height: 34px;
-    margin: 0 0 -var(--mr-spacing-1);
+    margin: 0 0 -1px;
     padding: 0 var(--mr-spacing-4);
     overflow: visible;
-    background: var(--mr-card-bg-alt);
-    --mr-tab-active-bg: #111;
+    background: #1f1f1f;
+    --mr-tab-active-bg: var(--mr-bg);
     --mr-tab-corner-size: 12px;
 }
 
@@ -527,7 +527,7 @@
 }
 
 .mr-downloads-subtabs {
-    margin: 0 0 -var(--mr-spacing-1);
+    margin: 0 0 -1px;
 }
 
 .mr-queue-items {
