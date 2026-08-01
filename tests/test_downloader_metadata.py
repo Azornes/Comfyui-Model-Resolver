@@ -10,6 +10,7 @@ from PIL import Image
 
 from core import downloader
 from core.downloader import (
+    _extract_expected_sha256,
     build_lora_manager_metadata,
     download_model,
     get_progress,
@@ -19,6 +20,34 @@ from core.path_utils import get_model_resolver_sidecar_path
 
 
 class DownloaderMetadataSidecarTests(unittest.TestCase):
+    def test_selected_file_hash_overrides_stale_source_hash(self):
+        stale_hash = "1" * 64
+        selected_hash = "f" * 64
+        metadata = {
+            "source": "lora_manager_archive",
+            "filename": "CBS_novuschroma21 style.safetensors",
+            "sha256": stale_hash,
+            "selected_file": {
+                "name": "CBS_novuschroma21 style.safetensors",
+                "hashes": {"SHA256": selected_hash},
+            },
+        }
+
+        self.assertEqual(selected_hash, _extract_expected_sha256(metadata))
+
+    def test_selected_file_without_hash_does_not_fall_back_to_stale_source_hash(self):
+        stale_hash = "1" * 64
+        metadata = {
+            "source": "lora_manager_archive",
+            "filename": "another-variant.safetensors",
+            "sha256": stale_hash,
+            "selected_file": {
+                "name": "another-variant.safetensors",
+            },
+        }
+
+        self.assertEqual("", _extract_expected_sha256(metadata))
+
     def test_keeps_model_description_separate_from_version_notes(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             model_path = os.path.join(tmpdir, "model.safetensors")

@@ -377,7 +377,10 @@ def _find_metadata_file_info(
     selected_version: Dict[str, Any],
     filename: str,
 ) -> Dict[str, Any]:
-    for key in ("file_info", "file"):
+    # A selected file is the most specific provenance available.  It must be
+    # checked before the source-level hash because the latter can still belong
+    # to the workflow's original model after the user chooses another variant.
+    for key in ("selected_file", "selectedFile", "file_info", "file"):
         value = source.get(key)
         if isinstance(value, dict):
             return value
@@ -421,13 +424,28 @@ def _extract_expected_sha256(metadata: Optional[Dict[str, Any]]) -> str:
         path_metadata.get("filename"),
     )
     file_info = _find_metadata_file_info(source, selected_version, str(filename))
-    hashes = _as_dict(_first_present(file_info.get("hashes"), source.get("hashes")))
+    file_hashes = _as_dict(file_info.get("hashes"))
+    file_sha256 = normalize_sha256(
+        _first_present(
+            file_info.get("sha256"),
+            file_info.get("hash"),
+            file_hashes.get("SHA256"),
+            file_hashes.get("sha256"),
+        )
+    )
+    if file_info:
+        # An explicit file entry without a hash means this provider did not
+        # declare a checksum for the selected URL.  Do not fall back to a
+        # stale source/workflow hash and reject a user-selected download.
+        return file_sha256
+
+    # Keep the source-level fallback for providers that expose one hash but no
+    # file object.
+    hashes = _as_dict(source.get("hashes"))
     return normalize_sha256(
         _first_present(
             source.get("sha256"),
             source.get("hash"),
-            file_info.get("sha256"),
-            file_info.get("hash"),
             hashes.get("SHA256"),
             hashes.get("sha256"),
         )
@@ -545,15 +563,24 @@ def build_model_resolver_metadata(
         _first_present(source.get("creator"), details.get("creator"), path_metadata.get("creator"))
     )
     file_info = _find_metadata_file_info(source, selected_version, str(filename))
-    hashes = _as_dict(_first_present(file_info.get("hashes"), source.get("hashes")))
-    sha256 = str(
-        _first_present(
-            source.get("sha256"),
-            source.get("hash"),
+    hashes = _as_dict(file_info.get("hashes") if file_info else source.get("hashes"))
+    hash_values = (
+        (
             file_info.get("sha256"),
+            file_info.get("hash"),
             hashes.get("SHA256"),
             hashes.get("sha256"),
         )
+        if file_info
+        else (
+            source.get("sha256"),
+            source.get("hash"),
+            hashes.get("SHA256"),
+            hashes.get("sha256"),
+        )
+    )
+    sha256 = str(
+        _first_present(*hash_values)
         or ""
     ).lower()
     direct_url = _first_present(

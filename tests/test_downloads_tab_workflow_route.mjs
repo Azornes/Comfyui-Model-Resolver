@@ -3549,6 +3549,92 @@ test('manual URL download metadata never inherits provider identity or hash from
   assert.equal('civitai' in metadata, false);
 });
 
+test('selected provider file hash overrides stale workflow hash', () => {
+  const getDownloadMetadata = eval(`(${extractMethod(downloadTargetMethodsSource, 'getDownloadMetadata')})`);
+  const staleHash = '1'.repeat(64);
+  const selectedHash = 'f'.repeat(64);
+  const missing = {
+    original_path: 'Other/CBS_novuschroma21 style.safetensors',
+    category: 'loras',
+    civitai_info: { sha256: staleHash, hashes: { SHA256: staleHash } },
+    download_source: { source: 'civitai', sha256: staleHash }
+  };
+  const source = {
+    source: 'lora_manager_archive',
+    details_source: 'lora_manager_archive',
+    model_id: 525933,
+    version_id: 123,
+    match_type: 'selected',
+    filename: 'CBS_novuschroma21 style.safetensors',
+    download_url: 'https://civitai.com/api/download/models/123',
+    selected_file: {
+      name: 'CBS_novuschroma21 style.safetensors',
+      hashes: { SHA256: selectedHash }
+    }
+  };
+  const dialog = {
+    getCachedSearchSuggestionData() {
+      throw new Error('selected provider metadata must not read cached search metadata');
+    },
+    getCompatibleCivitaiSearchResult() {
+      throw new Error('selected provider metadata must not read compatible search metadata');
+    },
+    getFilenameFromPath(value = '') {
+      return String(value).split(/[\\/]/).at(-1) || '';
+    }
+  };
+
+  const metadata = getDownloadMetadata.call(dialog, missing, source, {
+    filename: source.filename,
+    category: 'loras',
+    url: source.download_url,
+    pathMetadata: { filename: source.filename, category: 'loras' }
+  });
+
+  assert.equal(metadata.source, 'lora_manager_archive');
+  assert.equal(metadata.sha256, selectedHash);
+  assert.deepEqual(metadata.selected_file.hashes, { SHA256: selectedHash });
+});
+
+test('selected provider without a file hash does not inherit workflow hash', () => {
+  const getDownloadMetadata = eval(`(${extractMethod(downloadTargetMethodsSource, 'getDownloadMetadata')})`);
+  const staleHash = '1'.repeat(64);
+  const missing = {
+    original_path: 'Other/another-variant.safetensors',
+    category: 'loras',
+    civitai_info: { sha256: staleHash },
+    download_source: { source: 'civitai', sha256: staleHash }
+  };
+  const source = {
+    source: 'lora_manager_archive',
+    details_source: 'lora_manager_archive',
+    match_type: 'selected',
+    filename: 'another-variant.safetensors',
+    download_url: 'https://civitai.com/api/download/models/456',
+    selected_file: { name: 'another-variant.safetensors' }
+  };
+  const dialog = {
+    getCachedSearchSuggestionData() {
+      throw new Error('selected provider metadata must not read cached search metadata');
+    },
+    getCompatibleCivitaiSearchResult() {
+      throw new Error('selected provider metadata must not read compatible search metadata');
+    },
+    getFilenameFromPath(value = '') {
+      return String(value).split(/[\\/]/).at(-1) || '';
+    }
+  };
+
+  const metadata = getDownloadMetadata.call(dialog, missing, source, {
+    filename: source.filename,
+    category: 'loras',
+    url: source.download_url,
+    pathMetadata: { filename: source.filename, category: 'loras' }
+  });
+
+  assert.equal(metadata.sha256, '');
+});
+
 test('CivArchive metadata keeps its page URL when the download mirror is HuggingFace', () => {
   const getDownloadMetadata = eval(`(${extractMethod(downloadTargetMethodsSource, 'getDownloadMetadata')})`);
   const civarchivePage = 'https://civarchive.com/models/123?modelVersionId=456';

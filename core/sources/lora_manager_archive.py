@@ -417,6 +417,16 @@ def _build_result_from_row(
         if isinstance(version_data.get("files"), list) and version_data.get("files")
         else ""
     )
+    primary_hashes = (
+        primary_file.get("hashes")
+        if primary_file and isinstance(primary_file.get("hashes"), dict)
+        else {}
+    )
+    primary_sha256 = (
+        primary_file.get("sha256")
+        if primary_file
+        else ""
+    ) or primary_hashes.get("SHA256") or primary_hashes.get("sha256")
 
     tags = model_data.get("tags", [])
     if not isinstance(tags, list):
@@ -457,6 +467,8 @@ def _build_result_from_row(
         images=version_data.get("images", []),
         match_type=match_type,
         confidence=confidence,
+        sha256=primary_sha256,
+        hashes=primary_hashes,
         description=model_data.get("description", ""),
         model_description=model_data.get("description", ""),
         creator=model_data.get("creator", {}),

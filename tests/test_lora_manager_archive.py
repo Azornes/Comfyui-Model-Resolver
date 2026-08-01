@@ -67,7 +67,19 @@ class LoraManagerArchiveTests(unittest.TestCase):
         # Insert dummy data
         conn.execute("INSERT INTO models VALUES (1, 'ghost_checkpoint', 'CHECKPOINT', ?)", (json.dumps({"tags": ["anime"]}),))
         conn.execute("INSERT INTO model_versions VALUES (10, 1, 'v1.0', 'SD 1.5', 1, ?)", (json.dumps({"trainedWords": ["ghost_word"]}),))
-        conn.execute("INSERT INTO model_files VALUES (100, 10, 'Model', ?)", (json.dumps({"name": "ghost_v1.safetensors"}),))
+        archive_hash = "a" * 64
+        conn.execute(
+            "INSERT INTO model_files VALUES (100, 10, 'Model', ?)",
+            (
+                json.dumps(
+                    {
+                        "name": "ghost_v1.safetensors",
+                        "downloadUrl": "https://civitai.com/api/download/models/10",
+                        "hashes": {"SHA256": archive_hash},
+                    }
+                ),
+            ),
+        )
         conn.commit()
 
         # Test querying candidates
@@ -88,5 +100,7 @@ class LoraManagerArchiveTests(unittest.TestCase):
         self.assertEqual(result["filename"], "ghost_v1.safetensors")
         self.assertEqual(result["name"], "ghost_checkpoint")
         self.assertEqual(result["trained_words"], ["ghost_word"])
+        self.assertEqual(result["sha256"], archive_hash)
+        self.assertEqual(result["hashes"], {"SHA256": archive_hash})
 
         conn.close()

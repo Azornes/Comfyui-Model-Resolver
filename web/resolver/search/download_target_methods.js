@@ -1328,15 +1328,22 @@ export const downloadTargetMethods = {
             || sourceData.match_type === 'custom_url'
             || sourceData.provided_url
         );
+        const sourceIdentity = String(
+            sourceData.details_source || sourceData.source || sourceData.sourceKey || ''
+        ).trim().toLowerCase().replace(/[-\s]+/g, '_');
+        const isProviderSelection = sourceData.match_type === 'selected'
+            || ['civitai', 'civarchive', 'huggingface', 'lora_manager_archive'].includes(sourceIdentity);
+        const useSourceProvenanceBoundary = isProvidedUrl || isProviderSelection;
         // A URL explicitly selected by the user is an authoritative provenance
         // boundary. Never fill its hash, provider IDs, or file details from an
-        // earlier fuzzy search result belonging to another provider.
-        const searchSuggestion = isProvidedUrl ? null : this.getCachedSearchSuggestionData(missing);
-        const compatibleCivitaiSearch = isProvidedUrl
+        // earlier fuzzy search result belonging to another provider. The same
+        // rule applies to a selected/provider result, including LoRA Archive.
+        const searchSuggestion = useSourceProvenanceBoundary ? null : this.getCachedSearchSuggestionData(missing);
+        const compatibleCivitaiSearch = useSourceProvenanceBoundary
             ? {}
             : (this.getCompatibleCivitaiSearchResult?.(missing) || {});
-        const inheritedDownloadSource = isProvidedUrl ? {} : (missing?.download_source || {});
-        const inheritedCivitaiInfo = isProvidedUrl ? {} : (missing?.civitai_info || {});
+        const inheritedDownloadSource = useSourceProvenanceBoundary ? {} : (missing?.download_source || {});
+        const inheritedCivitaiInfo = useSourceProvenanceBoundary ? {} : (missing?.civitai_info || {});
         const merged = {
             ...inheritedCivitaiInfo,
             ...compatibleCivitaiSearch,
@@ -1385,6 +1392,36 @@ export const downloadTargetMethods = {
             || (merged.creator_username ? { username: merged.creator_username } : null)
             || (merged.username ? { username: merged.username } : null)
             || null;
+        const getHashFromValue = (value) => {
+            if (!value || typeof value !== 'object') return '';
+            const hashes = value.hashes && typeof value.hashes === 'object' ? value.hashes : {};
+            return String(
+                value.sha256
+                || value.hash
+                || hashes.SHA256
+                || hashes.sha256
+                || ''
+            ).trim().toLowerCase();
+        };
+        const getComparableFilename = (value) => String(value || '').split(/[\\/]+/).pop().trim().toLowerCase();
+        const selectedFilename = getComparableFilename(
+            options.filename || sourceData.filename || sourceData.file_name || merged.filename
+        );
+        const fileCandidates = [
+            sourceData.selected_file,
+            sourceData.selectedFile,
+            sourceData.file_info,
+            sourceData.file,
+            ...(Array.isArray(sourceData.selected_version?.files) ? sourceData.selected_version.files : []),
+            ...(Array.isArray(sourceData.files) ? sourceData.files : [])
+        ].filter(file => file && typeof file === 'object');
+        const selectedFile = fileCandidates.find(file => {
+            const filename = getComparableFilename(file.name || file.filename || file.fileName);
+            return selectedFilename && filename === selectedFilename;
+        }) || fileCandidates[0] || null;
+        const selectedFileSha256 = getHashFromValue(selectedFile);
+        const sourceDataSha256 = getHashFromValue(sourceData);
+        const selectedSourceSha256 = selectedFileSha256 || sourceDataSha256;
         const sourceName = sourceData.details_source
             || sourceData.source
             || sourceData.sourceKey
@@ -1452,7 +1489,9 @@ export const downloadTargetMethods = {
             platform_url: sourceData.platform_url || sourceData.platformUrl || merged.platform_url || merged.platformUrl || '',
             download_url: options.url || merged.download_url || merged.downloadUrl || merged.url || '',
             size: merged.size || merged.size_bytes || '',
-            sha256: merged.sha256 || merged.hash || merged.hashes?.SHA256 || merged.hashes?.sha256 || '',
+            sha256: selectedSourceSha256 || (useSourceProvenanceBoundary
+                ? ''
+                : (merged.sha256 || merged.hash || merged.hashes?.SHA256 || merged.hashes?.sha256 || '')),
             path_metadata: pathMetadata
         };
 
