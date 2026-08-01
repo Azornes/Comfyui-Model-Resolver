@@ -17,7 +17,7 @@ AGENTS.md
 *.swp
 *.swo
 *~
-
+.VSCodeCounter/
 # OS
 .DS_Store
 Thumbs.db
