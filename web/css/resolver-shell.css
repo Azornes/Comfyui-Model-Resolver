@@ -18,14 +18,14 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: var(--mr-spacing-8);
     pointer-events: none;
     visibility: hidden;
     opacity: 0;
     color: var(--mr-text, #f3f3f3);
     background: linear-gradient(180deg, rgba(38, 77, 50, 0.82), rgba(18, 35, 24, 0.88));
     border: 2px solid rgba(114, 211, 138, 0.72);
-    border-radius: 8px;
+    border-radius: var(--mr-radius-xl);
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
     transform: translateX(-12px) scale(0.985);
     transition: opacity 100ms ease, transform 100ms ease, visibility 0s linear 100ms;
@@ -42,14 +42,14 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: var(--mr-spacing-8);
     pointer-events: none;
     visibility: hidden;
     opacity: 0;
     color: var(--mr-text, #f3f3f3);
     background: linear-gradient(180deg, rgba(38, 77, 50, 0.78), rgba(18, 35, 24, 0.84));
     border: 2px solid rgba(114, 211, 138, 0.72);
-    border-radius: 8px;
+    border-radius: var(--mr-radius-xl);
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
     transition: opacity 100ms ease, visibility 0s linear 100ms;
     contain: layout paint style;
@@ -67,7 +67,7 @@
 
 .mr-undock-drop-preview>span:last-child {
     color: var(--mr-text-muted, #b1b1b1);
-    font-size: 12px;
+    font-size: var(--mr-font-md);
 }
 
 .mr-dock-drop-preview.is-active {
@@ -91,7 +91,7 @@
 
 .mr-dock-drop-preview>span:last-child {
     color: var(--mr-text-muted, #b1b1b1);
-    font-size: 12px;
+    font-size: var(--mr-font-md);
 }
 
 .model-resolver-modal {
@@ -114,8 +114,8 @@
     z-index: var(--mr-z-dialog);
     color: var(--mr-text, #fff);
     background: linear-gradient(180deg, #171717 0%, #111 100%);
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    border-radius: 7px;
+    border: 1px solid var(--mr-border-strong);
+    border-radius: var(--mr-missing-control-radius);
     font-family: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
     box-shadow: 0 18px 46px rgba(0, 0, 0, 0.42);
 }
@@ -145,7 +145,7 @@
     align-items: center;
     gap: var(--mr-spacing-10);
     min-height: 42px;
-    padding: 6px 10px 0;
+    padding: var(--mr-spacing-6) var(--mr-spacing-10) 0;
     border-bottom: 1px solid rgba(0, 0, 0, 0.38);
     background: #1f1f1f;
     cursor: grab;
@@ -174,7 +174,7 @@
     flex: 0 0 auto;
     align-self: stretch;
     gap: 0;
-    margin: -6px -10px 0 0;
+    margin: -var(--mr-spacing-6) -var(--mr-spacing-10) 0 0;
 }
 
 #model-resolver-drag-handle {
@@ -184,13 +184,13 @@
     justify-content: center;
     width: 30px;
     height: 30px;
-    margin-top: 1px;
+    margin-top: var(--mr-spacing-1);
     padding: 0;
     opacity: 0.82;
     cursor: grab;
     user-select: none;
     border: 1px solid rgba(255, 255, 255, 0.11);
-    border-radius: 8px;
+    border-radius: var(--mr-radius-xl);
     background: rgba(255, 255, 255, 0.025);
     box-sizing: border-box;
 }
@@ -264,7 +264,7 @@
 #model-resolver-body {
     display: flex;
     gap: 0;
-    padding: 8px 6px 6px;
+    padding: var(--mr-spacing-8) var(--mr-spacing-6) var(--mr-spacing-6);
     flex: 1;
     min-height: 0;
     min-width: 0;
@@ -316,7 +316,7 @@
     bottom: 16px;
     left: 50%;
     width: 2px;
-    border-radius: 999px;
+    border-radius: var(--mr-missing-chip-radius);
     background: rgba(255, 255, 255, 0.13);
     transform: translateX(-50%);
     transition: background 0.15s ease, box-shadow 0.15s ease;
@@ -377,7 +377,7 @@
     bottom: 8px;
     left: 50%;
     width: 2px;
-    border-radius: 999px;
+    border-radius: var(--mr-missing-chip-radius);
     background: rgba(255, 255, 255, 0.34);
     transform: translateX(-50%);
     transition: background 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
@@ -412,7 +412,7 @@
     gap: var(--mr-spacing-6);
     min-height: 36px;
     margin: 0;
-    padding: 6px 0 8px;
+    padding: var(--mr-spacing-6) 0 var(--mr-spacing-8);
 }
 
 .mr-queue-actions {
@@ -424,8 +424,8 @@
     align-self: stretch;
     flex: 0 0 auto;
     height: 34px;
-    margin: 0 0 -1px;
-    padding: 0 4px;
+    margin: 0 0 -var(--mr-spacing-1);
+    padding: 0 var(--mr-spacing-4);
     overflow: visible;
     background: #1f1f1f;
     --mr-tab-active-bg: #111;
@@ -437,7 +437,7 @@
     min-width: 0;
     height: 32px;
     min-height: 32px;
-    padding: 0 12px 5px;
+    padding: 0 var(--mr-spacing-12) var(--mr-spacing-5);
     font-weight: 700;
 }
 
@@ -451,7 +451,7 @@
 .mr-queue-tab.mr-tab:not(.mr-tab-active):hover,
 .mr-queue-tab.mr-tab:not(.mr-tab-active):focus,
 .mr-queue-tab.mr-tab:not(.mr-tab-active):active {
-    padding: 0 12px 5px !important;
+    padding: 0 var(--mr-spacing-12) var(--mr-spacing-5) !important;
 }
 
 .mr-queue-tab.mr-tab:not(.mr-tab-active)::after {
@@ -466,7 +466,7 @@
 .mr-queue-tab.mr-tab.mr-tab-active {
     height: 32px;
     min-height: 32px;
-    padding: 0 12px 5px;
+    padding: 0 var(--mr-spacing-12) var(--mr-spacing-5);
 }
 
 .mr-queue-tab.mr-tab.mr-tab-active::before,
@@ -511,13 +511,13 @@
     padding: 0;
     background: #111;
     border: 1px solid rgba(255, 255, 255, 0.075);
-    border-radius: 6px;
+    border-radius: var(--mr-radius-lg);
 }
 
 .mr-queue-empty {
-    padding: 12px;
+    padding: var(--mr-spacing-12);
     color: var(--mr-text-muted, #b1b1b1);
-    font-size: 13px;
+    font-size: var(--mr-font-base);
 }
 
 .mr-downloads-panel {
@@ -527,7 +527,7 @@
 }
 
 .mr-downloads-subtabs {
-    margin: 0 0 -1px;
+    margin: 0 0 -var(--mr-spacing-1);
 }
 
 .mr-queue-items {
@@ -540,8 +540,8 @@
     content-visibility: auto;
     contain-intrinsic-size: auto 54px;
     display: grid;
-    gap: 4px;
-    padding: 10px 0;
+    gap: var(--mr-spacing-4);
+    padding: var(--mr-spacing-10) 0;
     background: transparent;
     border: 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.052);
@@ -568,9 +568,9 @@
     display: grid;
     grid-template-columns: 50px minmax(0, 1fr);
     align-items: baseline;
-    gap: 6px;
+    gap: var(--mr-spacing-6);
     color: var(--mr-text-muted, #b1b1b1);
-    font-size: 11px;
+    font-size: var(--mr-font-sm);
     line-height: 1.35;
 }
 
@@ -585,7 +585,7 @@
     overflow: hidden;
     color: #dedede;
     font-family: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
-    font-size: 11px;
+    font-size: var(--mr-font-sm);
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -599,14 +599,14 @@
 }
 
 .mr-queue-item-actions {
-    margin-top: 6px;
+    margin-top: var(--mr-spacing-6);
 }
 
 .mr-download-queue-title {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--mr-spacing-8);
     min-width: 0;
 }
 
@@ -620,10 +620,10 @@
 .mr-download-queue-status {
     flex: 0 0 auto;
     max-width: 92px;
-    padding: 2px 6px;
+    padding: var(--mr-spacing-2) var(--mr-spacing-6);
     overflow: hidden;
     color: #c9f5d2;
-    font-size: 10px;
+    font-size: var(--mr-font-xs);
     font-weight: 800;
     line-height: 1.2;
     text-overflow: ellipsis;
@@ -631,36 +631,36 @@
     white-space: nowrap;
     background: rgba(114, 211, 138, 0.14);
     border: 1px solid rgba(114, 211, 138, 0.24);
-    border-radius: 999px;
+    border-radius: var(--mr-missing-chip-radius);
 }
 
 .mr-download-history-toolbar {
     display: flex;
     justify-content: flex-end;
-    padding: 0 8px 4px;
+    padding: 0 var(--mr-spacing-8) var(--mr-spacing-4);
 }
 
 .mr-download-history-status {
     flex: 0 0 auto;
     max-width: 130px;
-    padding: 2px 6px;
+    padding: var(--mr-spacing-2) var(--mr-spacing-6);
     overflow: hidden;
     color: #d7d7d7;
-    font-size: 10px;
+    font-size: var(--mr-font-xs);
     font-weight: 800;
     line-height: 1.2;
     text-overflow: ellipsis;
     text-transform: uppercase;
     white-space: nowrap;
     background: rgba(255, 255, 255, 0.07);
-    border: 1px solid rgba(255, 255, 255, 0.105);
-    border-radius: 999px;
+    border: 1px solid var(--mr-missing-control-border);
+    border-radius: var(--mr-missing-chip-radius);
 }
 
 .mr-download-queue-progress {
     display: grid;
-    gap: 4px;
-    margin-top: 4px;
+    gap: var(--mr-spacing-4);
+    margin-top: var(--mr-spacing-4);
 }
 
 .mr-download-queue-progress .mr-progress-bar {
@@ -782,7 +782,7 @@
 
 .comfyui-model-resolver-tab-button .mdi,
 .comfyui-model-resolver-tab-button .mdi-link-variant {
-    font-size: 18px;
+    font-size: var(--mr-font-2xl);
     line-height: 1;
 }
 
