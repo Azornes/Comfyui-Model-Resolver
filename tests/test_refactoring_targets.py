@@ -1197,3 +1197,90 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
             dependency_type = getattr(dependencies_module, class_name)
             with self.assertRaises(KeyError):
                 dependency_type.from_context(RouteContext({"self": extension}))
+
+    async def test_civitai_service_rejects_resolved_path_outside_model_roots(self):
+        def to_bool(value, default=False):
+            return default if value is None else bool(value)
+
+        service = self._build_model_service_for_unit_test(
+            service_module="civitai_search_service",
+            service_class="CivitAISearchService",
+            to_bool=to_bool,
+            normalize_sha256=lambda value: "",
+            is_path_in_configured_model_roots=lambda path: False,
+        )
+        request = AsyncMock()
+        request.json.return_value = {
+            "filename": "model.safetensors",
+            "resolved_path": "E:/outside/model.safetensors",
+        }
+
+        response = await service.civitai_search(request)
+
+        self.assertEqual(response.status, 403)
+        self.assertEqual(
+            json.loads(response.text)["error"],
+            "resolved_path is outside configured model directories",
+        )
+
+    async def test_custom_url_service_rejects_unsafe_url(self):
+        class TestUnsafeUrlError(Exception):
+            pass
+
+        async def to_thread(function, *args, **kwargs):
+            return function(*args, **kwargs)
+
+        def validate_public_http_url(url):
+            raise TestUnsafeUrlError("Unsafe URL")
+
+        service = self._build_model_service_for_unit_test(
+            service_module="custom_url_service",
+            service_class="CustomUrlService",
+            UnsafeUrlError=TestUnsafeUrlError,
+            asyncio=type("TestAsyncio", (), {"to_thread": staticmethod(to_thread)}),
+            validate_public_http_url=validate_public_http_url,
+        )
+        request = AsyncMock()
+        request.json.return_value = {"url": "http://localhost/model.safetensors"}
+
+        response = await service.custom_url(request)
+
+        self.assertEqual(response.status, 400)
+        self.assertEqual(json.loads(response.text)["error"], "Unsafe URL")
+
+    async def test_model_details_service_returns_unavailable_when_providers_are_missing(self):
+        service = self._build_model_service_for_unit_test(
+            service_module="model_details_service",
+            service_class="ModelDetailsService",
+            download_available=False,
+        )
+        request = AsyncMock()
+        request.json.return_value = {"source": "civitai", "model_id": 1}
+
+        response = await service.model_details(request)
+
+        self.assertEqual(response.status, 503)
+        self.assertEqual(
+            json.loads(response.text)["error"],
+            "Download providers are not available",
+        )
+
+    async def test_model_details_service_returns_not_found_for_empty_provider_result(self):
+        async def to_thread(function, *args, **kwargs):
+            return None
+
+        service = self._build_model_service_for_unit_test(
+            service_module="model_details_service",
+            service_class="ModelDetailsService",
+            asyncio=type("TestAsyncio", (), {"to_thread": staticmethod(to_thread)}),
+        )
+        request = AsyncMock()
+        request.json.return_value = {"source": "civitai", "model_id": 1}
+
+        response = await service.model_details(request)
+
+        self.assertEqual(response.status, 404)
+        self.assertEqual(
+            json.loads(response.text)["error"],
+            "Model details not found",
+        )

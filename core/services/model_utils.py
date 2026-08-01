@@ -1,11 +1,206 @@
 """Typed dependency models shared by model-related services."""
 
 from dataclasses import dataclass, fields
-from typing import Any, Callable, Optional
+from typing import Any, Dict, Iterable, Optional, Protocol, Tuple
 
 from ..routes.context import RouteContext
 
-DependencyCallable = Callable[..., Any]
+ModelResult = Optional[Dict[str, Any]]
+
+
+class ExtractSha256Protocol(Protocol):
+    def __call__(self, metadata: Any) -> str: ...
+
+
+class FindExternalMetadataProtocol(Protocol):
+    def __call__(self, model_path: str) -> str: ...
+
+
+class FindLocalFileProtocol(Protocol):
+    def __call__(
+        self, filename: str, category: Optional[str] = None
+    ) -> Optional[str]: ...
+
+
+class GetPreviewProtocol(Protocol):
+    def __call__(self, model_path: str) -> str: ...
+
+
+class GetFilenameProtocol(Protocol):
+    def __call__(self, path: Any) -> str: ...
+
+
+class IsPathInRootsProtocol(Protocol):
+    def __call__(self, path_value: Any, folder_paths_module: Any = None) -> bool: ...
+
+
+class LooksLikeModelFileProtocol(Protocol):
+    def __call__(self, url: str, expected_filename: str = "") -> bool: ...
+
+
+class NormalizeCategoryProtocol(Protocol):
+    def __call__(self, category: str) -> str: ...
+
+
+class NormalizeSha256Protocol(Protocol):
+    def __call__(self, value: Any) -> str: ...
+
+
+class ReadJsonProtocol(Protocol):
+    def __call__(self, file_path: str, default: Any = None) -> Any: ...
+
+
+class RequestPublicUrlProtocol(Protocol):
+    def __call__(
+        self,
+        method: str,
+        url: Any,
+        *,
+        headers: Optional[Dict[str, str]] = None,
+        timeout: Any = 30,
+        stream: bool = True,
+        max_redirects: int = 5,
+        trusted_sensitive_redirect_hosts: Optional[Iterable[str]] = None,
+        trusted_sensitive_redirect_headers: Optional[Iterable[str]] = None,
+    ) -> Tuple[Any, str, Dict[str, str]]: ...
+
+
+class ResolveCivarchiveByHashProtocol(Protocol):
+    def __call__(
+        self,
+        sha256: str,
+        query: str = "",
+        exact_only: bool = False,
+        model_type: Optional[str] = None,
+    ) -> ModelResult: ...
+
+
+class SearchHuggingFaceProtocol(Protocol):
+    def __call__(
+        self,
+        filename: str,
+        token: Optional[str] = None,
+        exact_only: bool = False,
+        brave_api_key: Optional[str] = None,
+        use_api_search: bool = True,
+        use_comfy_org_fallback: bool = True,
+        use_brave_fallback: bool = True,
+        force_refresh: bool = False,
+        progress_callback: Any = None,
+    ) -> ModelResult: ...
+
+
+class ToBoolProtocol(Protocol):
+    def __call__(self, value: Any, default: bool = False) -> bool: ...
+
+
+class WriteMetadataProtocol(Protocol):
+    def __call__(
+        self,
+        dest_path: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        category: str = "",
+        source_url: str = "",
+        create_preview: bool = False,
+    ) -> Optional[str]: ...
+
+
+class BuildCivarchiveCustomResultProtocol(Protocol):
+    def __call__(
+        self, details: Dict[str, Any], expected_filename: str = ""
+    ) -> ModelResult: ...
+
+
+class BuildCivitaiCustomResultProtocol(Protocol):
+    def __call__(
+        self,
+        details: Dict[str, Any],
+        expected_filename: str = "",
+        api_key: Optional[str] = None,
+    ) -> ModelResult: ...
+
+
+class BuildHuggingFaceCustomResultProtocol(Protocol):
+    def __call__(
+        self,
+        url: str,
+        expected_filename: str = "",
+        token: Optional[str] = None,
+    ) -> ModelResult: ...
+
+
+class GetCivarchiveModelDetailsProtocol(Protocol):
+    def __call__(
+        self,
+        model_id: int,
+        version_id: Optional[int] = None,
+        prefer_page: bool = False,
+    ) -> ModelResult: ...
+
+
+class GetCivitaiDownloadUrlProtocol(Protocol):
+    def __call__(self, version_id: int, api_key: Optional[str] = None) -> str: ...
+
+
+class GetCivitaiModelDetailsProtocol(Protocol):
+    def __call__(
+        self,
+        model_id: int,
+        version_id: Optional[int] = None,
+        api_key: Optional[str] = None,
+    ) -> ModelResult: ...
+
+
+class GetHuggingFaceModelDetailsProtocol(Protocol):
+    def __call__(
+        self,
+        repo_id: str,
+        file_path: str = "",
+        branch: str = "main",
+        token: Optional[str] = None,
+    ) -> ModelResult: ...
+
+
+class HostMatchesDomainProtocol(Protocol):
+    def __call__(self, host: Any, *domains: str) -> bool: ...
+
+
+class ParseProviderUrlProtocol(Protocol):
+    def __call__(self, url: str) -> Optional[Dict[str, Any]]: ...
+
+
+class ResolveCivarchiveModelVersionProtocol(Protocol):
+    def __call__(
+        self,
+        model_id: int,
+        version_id: Optional[int] = None,
+        query: str = "",
+        exact_only: bool = False,
+        prefer_page: bool = False,
+    ) -> ModelResult: ...
+
+
+class ResolveCivitaiVersionProtocol(Protocol):
+    def __call__(
+        self,
+        version_id: int,
+        expected_filename: str = "",
+        api_key: Optional[str] = None,
+    ) -> ModelResult: ...
+
+
+class SearchLocalMatchesByHashProtocol(Protocol):
+    def __call__(
+        self,
+        sha256: str,
+        category: Optional[str] = None,
+        max_matches: int = 20,
+        force_rescan: bool = False,
+    ) -> list[Dict[str, Any]]: ...
+
+
+class ValidatePublicHttpUrlProtocol(Protocol):
+    def __call__(self, url: Any) -> str: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -14,23 +209,23 @@ class CivitAISearchDependencies:
 
     logger: Any
     download_available: bool
-    extract_sha256_from_metadata: DependencyCallable
-    find_external_metadata_sidecar_path: DependencyCallable
-    find_local_file_path: DependencyCallable
-    get_existing_model_preview_path: Optional[DependencyCallable]
-    get_filename_from_path: DependencyCallable
-    get_model_resolver_sidecar_path: Optional[DependencyCallable]
-    is_path_in_configured_model_roots: DependencyCallable
-    looks_like_model_file: DependencyCallable
-    normalize_category_to_model_type: DependencyCallable
-    normalize_sha256: DependencyCallable
-    read_json_safe: DependencyCallable
-    request_public_url: DependencyCallable
-    resolve_civarchive_by_hash: Optional[DependencyCallable]
-    search_huggingface_for_file: Optional[DependencyCallable]
-    to_bool: DependencyCallable
+    extract_sha256_from_metadata: ExtractSha256Protocol
+    find_external_metadata_sidecar_path: FindExternalMetadataProtocol
+    find_local_file_path: FindLocalFileProtocol
+    get_existing_model_preview_path: Optional[GetPreviewProtocol]
+    get_filename_from_path: GetFilenameProtocol
+    get_model_resolver_sidecar_path: Optional[GetPreviewProtocol]
+    is_path_in_configured_model_roots: IsPathInRootsProtocol
+    looks_like_model_file: LooksLikeModelFileProtocol
+    normalize_category_to_model_type: NormalizeCategoryProtocol
+    normalize_sha256: NormalizeSha256Protocol
+    read_json_safe: ReadJsonProtocol
+    request_public_url: RequestPublicUrlProtocol
+    resolve_civarchive_by_hash: Optional[ResolveCivarchiveByHashProtocol]
+    search_huggingface_for_file: Optional[SearchHuggingFaceProtocol]
+    to_bool: ToBoolProtocol
     web: Any
-    write_model_resolver_metadata: Optional[DependencyCallable]
+    write_model_resolver_metadata: Optional[WriteMetadataProtocol]
 
     @classmethod
     def from_context(cls, context: RouteContext) -> "CivitAISearchDependencies":
@@ -81,26 +276,26 @@ class CustomUrlDependencies:
     logger: Any
     UnsafeUrlError: type[Exception]
     asyncio: Any
-    build_civarchive_custom_result: Optional[DependencyCallable]
-    build_civitai_custom_result: Optional[DependencyCallable]
-    build_huggingface_custom_result: Optional[DependencyCallable]
-    extract_sha256_from_metadata: DependencyCallable
-    get_civarchive_model_details: Optional[DependencyCallable]
-    get_civitai_download_url: Optional[DependencyCallable]
-    get_civitai_model_details: Optional[DependencyCallable]
-    get_filename_from_path: DependencyCallable
-    host_matches_domain: DependencyCallable
-    looks_like_model_file: DependencyCallable
-    normalize_category_to_model_type: DependencyCallable
-    normalize_sha256: DependencyCallable
-    parse_civarchive_url: Optional[DependencyCallable]
-    parse_civitai_url: Optional[DependencyCallable]
-    resolve_civarchive_by_hash: Optional[DependencyCallable]
-    resolve_civarchive_model_version: Optional[DependencyCallable]
-    resolve_civitai_version_custom_result: Optional[DependencyCallable]
-    search_local_matches_by_hash: DependencyCallable
+    build_civarchive_custom_result: Optional[BuildCivarchiveCustomResultProtocol]
+    build_civitai_custom_result: Optional[BuildCivitaiCustomResultProtocol]
+    build_huggingface_custom_result: Optional[BuildHuggingFaceCustomResultProtocol]
+    extract_sha256_from_metadata: ExtractSha256Protocol
+    get_civarchive_model_details: Optional[GetCivarchiveModelDetailsProtocol]
+    get_civitai_download_url: Optional[GetCivitaiDownloadUrlProtocol]
+    get_civitai_model_details: Optional[GetCivitaiModelDetailsProtocol]
+    get_filename_from_path: GetFilenameProtocol
+    host_matches_domain: HostMatchesDomainProtocol
+    looks_like_model_file: LooksLikeModelFileProtocol
+    normalize_category_to_model_type: NormalizeCategoryProtocol
+    normalize_sha256: NormalizeSha256Protocol
+    parse_civarchive_url: Optional[ParseProviderUrlProtocol]
+    parse_civitai_url: Optional[ParseProviderUrlProtocol]
+    resolve_civarchive_by_hash: Optional[ResolveCivarchiveByHashProtocol]
+    resolve_civarchive_model_version: Optional[ResolveCivarchiveModelVersionProtocol]
+    resolve_civitai_version_custom_result: Optional[ResolveCivitaiVersionProtocol]
+    search_local_matches_by_hash: SearchLocalMatchesByHashProtocol
     time: Any
-    validate_public_http_url: DependencyCallable
+    validate_public_http_url: ValidatePublicHttpUrlProtocol
     web: Any
 
     @classmethod
@@ -159,9 +354,9 @@ class ModelDetailsDependencies:
     logger: Any
     asyncio: Any
     download_available: bool
-    get_civarchive_model_details: Optional[DependencyCallable]
-    get_civitai_model_details: Optional[DependencyCallable]
-    get_huggingface_model_details: Optional[DependencyCallable]
+    get_civarchive_model_details: Optional[GetCivarchiveModelDetailsProtocol]
+    get_civitai_model_details: Optional[GetCivitaiModelDetailsProtocol]
+    get_huggingface_model_details: Optional[GetHuggingFaceModelDetailsProtocol]
     web: Any
 
     @classmethod
