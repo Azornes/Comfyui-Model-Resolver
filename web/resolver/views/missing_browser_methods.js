@@ -601,6 +601,31 @@ export const missingBrowserMethods = {
         );
     },
 
+    getMissingBrowserDetailWidthForRerender(browser = null) {
+        if (!(browser instanceof HTMLElement)) return null;
+
+        const detailPane = browser.querySelector('.mr-missing-detail-pane');
+        if (!(detailPane instanceof HTMLElement)) return null;
+
+        const explicitWidth = this.getMissingBrowserDetailTrackWidth(detailPane);
+        if (Number.isFinite(explicitWidth) && explicitWidth > 0) return explicitWidth;
+
+        const browserTrack = String(
+            browser.style.getPropertyValue('--mr-missing-detail-track') || ''
+        ).trim();
+        if (browserTrack.endsWith('px')) {
+            const browserWidth = parseFloat(browserTrack);
+            if (Number.isFinite(browserWidth) && browserWidth > 0) return browserWidth;
+        }
+
+        const rect = detailPane.getBoundingClientRect?.();
+        const rectWidth = Number(rect?.width);
+        if (Number.isFinite(rectWidth) && rectWidth > 0) return rectWidth;
+
+        const clientWidth = Number(detailPane.clientWidth || detailPane.offsetWidth);
+        return Number.isFinite(clientWidth) && clientWidth > 0 ? clientWidth : null;
+    },
+
     getMissingListScrollSnapshot(container) {
         const list = container?.querySelector?.('.mr-missing-list');
         if (!(list instanceof HTMLElement)) return null;
@@ -652,7 +677,10 @@ export const missingBrowserMethods = {
             ? `${hiddenAutoDownloadCount} auto-download hidden`
             : (hasAny100Match ? 'Auto-link ready for exact matches' : 'Review matches or search online');
         const listLayout = this.getMissingModelsListLayout(missingModels);
-        const savedDetailWidth = this.getStoredMissingBrowserSplitWidth();
+        const requestedDetailWidth = Number(options.detailWidth);
+        const savedDetailWidth = Number.isFinite(requestedDetailWidth) && requestedDetailWidth > 0
+            ? Math.round(requestedDetailWidth)
+            : this.getStoredMissingBrowserSplitWidth();
         const splitStyle = Number.isFinite(savedDetailWidth) && savedDetailWidth > 0
             ? `--mr-missing-detail-track:${savedDetailWidth}px;`
             : '';
@@ -940,7 +968,7 @@ export const missingBrowserMethods = {
                 try {
                     safeStorage.setItem(this.showResolvedModelsStorageKey, this.showResolvedModels ? '1' : '0');
                 } catch (e) {}
-                this.displayMissingModels(container, data);
+                this.displayMissingModels(container, data, { preserveBrowser: true });
             });
         }
 
@@ -952,7 +980,7 @@ export const missingBrowserMethods = {
                 try {
                     safeStorage.setItem(this.showAutoDownloadModelsStorageKey, this.showAutoDownloadModels ? '1' : '0');
                 } catch (e) {}
-                this.displayMissingModels(container, data);
+                this.displayMissingModels(container, data, { preserveBrowser: true });
             });
         }
 
@@ -2317,6 +2345,7 @@ export const missingBrowserMethods = {
         const existingBrowser = container.querySelector('.mr-missing-browser');
         const detailPane = existingBrowser?.querySelector('.mr-missing-detail-pane');
         const listContainer = existingBrowser?.querySelector('.mr-missing-list');
+        const preservedDetailWidth = this.getMissingBrowserDetailWidthForRerender(existingBrowser);
 
         if (selectionOnly && existingBrowser && detailPane && listContainer) {
             const rows = listContainer.querySelectorAll('.mr-missing-list-row');
@@ -2359,6 +2388,7 @@ export const missingBrowserMethods = {
                 missingCount: unresolvedMissingCount,
                 typeFilterOptions,
                 activeTypeFilter,
+                detailWidth: preservedDetailWidth,
             }
         );
         this._missingBrowserDetailPreserved = false;
