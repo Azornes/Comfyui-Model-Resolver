@@ -79,6 +79,77 @@ def _find_bound_extension(handler):
 
 class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
 
+    ROUTE_GROUPS = {
+        "workflow": {
+            ("POST", "/model_resolver/analyze"),
+            ("GET", "/model_resolver/analyze-progress/{analysis_id}"),
+            ("POST", "/model_resolver/resolve"),
+            ("POST", "/model_resolver/local-matches"),
+            ("POST", "/model_resolver/local-model-hashes"),
+            ("GET", "/model_resolver/model-preview"),
+            ("POST", "/model_resolver/workflow-model-hashes"),
+            ("POST", "/model_resolver/local-matches-by-hash"),
+            ("POST", "/model_resolver/open-containing-folder"),
+            ("POST", "/model_resolver/calculate-file-hash"),
+            ("POST", "/model_resolver/calculate-file-hash/start"),
+            ("GET", "/model_resolver/calculate-file-hash/progress/{progress_id}"),
+            ("POST", "/model_resolver/calculate-file-hash/cancel/{progress_id}"),
+        },
+        "metadata": {
+            ("GET", "/model_resolver/models"),
+            ("POST", "/model_resolver/metadata-size-audit"),
+            ("GET", "/model_resolver/metadata-build/capabilities"),
+            ("POST", "/model_resolver/metadata-build/start"),
+            ("GET", "/model_resolver/metadata-build/progress/{progress_id}"),
+            ("POST", "/model_resolver/metadata-build/cancel/{progress_id}"),
+        },
+        "loaded": {
+            ("POST", "/model_resolver/loaded"),
+            ("GET", "/model_resolver/loaded-progress/{loaded_id}"),
+        },
+        "model_info": {
+            ("POST", "/model_resolver/civitai-search"),
+            ("POST", "/model_resolver/custom-url"),
+            ("POST", "/model_resolver/model-details"),
+        },
+        "search": {
+            ("GET", "/model_resolver/search-progress/{progress_id}"),
+            ("POST", "/model_resolver/search-cancel/{progress_id}"),
+            ("POST", "/model_resolver/search"),
+            ("POST", "/model_resolver/clear-search-cache"),
+            ("POST", "/model_resolver/civitai/session-token/check"),
+            ("POST", "/model_resolver/civitai/api-key/check"),
+            ("POST", "/model_resolver/huggingface/token/check"),
+            ("POST", "/model_resolver/brave/api-key/check"),
+            ("GET", "/model_resolver/huggingface/author-index/status"),
+            ("POST", "/model_resolver/huggingface/author-index/refresh"),
+            ("GET", "/model_resolver/model-list/status"),
+            ("POST", "/model_resolver/model-list/update"),
+        },
+        "downloads": {
+            ("POST", "/model_resolver/download"),
+            ("GET", "/model_resolver/progress/{download_id}"),
+            ("GET", "/model_resolver/progress"),
+            ("POST", "/model_resolver/cancel/{download_id}"),
+            ("POST", "/model_resolver/pause/{download_id}"),
+            ("POST", "/model_resolver/resume/{download_id}"),
+            ("POST", "/model_resolver/clear_completed_downloads"),
+            ("GET", "/model_resolver/aria2/status"),
+            ("POST", "/model_resolver/aria2/status"),
+            ("POST", "/model_resolver/aria2/start"),
+            ("GET", "/model_resolver/aria2/stop"),
+            ("POST", "/model_resolver/aria2/stop"),
+            ("POST", "/model_resolver/aria2/install"),
+        },
+        "directories": {
+            ("GET", "/model_resolver/directories"),
+            ("GET", "/model_resolver/root-directories"),
+            ("GET", "/model_resolver/path-template-suggestions"),
+            ("GET", "/model_resolver/capabilities"),
+            ("GET", "/model_resolver/subfolders/{category}"),
+        },
+    }
+
     def test_all_api_routes_are_registered(self):
         expected_routes = {
             ("GET", "/model_resolver/base-models"),
@@ -145,6 +216,26 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
         }
         self.assertEqual(expected_routes, set(routes_registered))
 
+    def test_route_groups_cover_the_registered_feature_routes(self):
+        grouped_routes = set().union(*self.ROUTE_GROUPS.values())
+        self.assertEqual(
+            grouped_routes,
+            set(routes_registered)
+            - {
+                ("GET", "/model_resolver/base-models"),
+                ("GET", "/model_resolver/base-models/status"),
+                ("POST", "/model_resolver/base-models/update"),
+                ("GET", "/model_resolver/version"),
+                ("GET", "/model_resolver/logs/backend/export"),
+                ("GET", "/model_resolver/settings"),
+                ("POST", "/model_resolver/settings"),
+            },
+        )
+        self.assertEqual(
+            sum(len(routes) for routes in self.ROUTE_GROUPS.values()),
+            len(grouped_routes),
+        )
+
     def test_project_version_helpers_preserve_version_comparison_behavior(self):
         self.assertEqual(
             node_mod._extract_project_version('version = "1.2.3"'),
@@ -198,6 +289,28 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
         payload = mock_json_response.call_args.args[0]
         self.assertIn("settings", payload)
         self.assertIn("schema", payload)
+
+    async def test_metadata_capabilities_route_returns_capabilities(self):
+        get_handler = routes_registered[("GET", "/model_resolver/metadata-build/capabilities")]
+        with patch("aiohttp.web.json_response") as mock_json_response:
+            await get_handler(MagicMock())
+
+        payload = mock_json_response.call_args.args[0]
+        self.assertIn("metadata_modes", payload)
+        self.assertIn("default_metadata_mode", payload)
+
+    async def test_custom_url_route_rejects_missing_url(self):
+        post_handler = routes_registered[("POST", "/model_resolver/custom-url")]
+        request = AsyncMock()
+        request.json.return_value = {}
+
+        with patch("aiohttp.web.json_response") as mock_json_response:
+            await post_handler(request)
+
+        mock_json_response.assert_called_once_with(
+            {"error": "URL is required"},
+            status=400,
+        )
     
     @classmethod
     def tearDownClass(cls):
