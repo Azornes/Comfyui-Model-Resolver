@@ -207,4 +207,20 @@
     --mr-type-guider-text: #c7ffff;
     --mr-type-taesd-rgb: 220, 194, 116;
     --mr-type-taesd-text: #efd991;
+
+    --mr-badge-success-bg: rgba(34, 197, 94, 0.1);
+    --mr-badge-success-border: rgba(34, 197, 94, 0.24);
+    --mr-badge-success-text: #43d184;
+    --mr-badge-error-bg: rgba(239, 68, 68, 0.16);
+    --mr-badge-error-border: rgba(239, 68, 68, 0.34);
+    --mr-badge-info-bg: rgba(96, 165, 250, 0.1);
+    --mr-badge-info-border: rgba(78, 161, 255, 0.3);
+    --mr-gradient-blue-primary: linear-gradient(180deg, rgba(37, 99, 190, 0.88) 0%, rgba(25, 72, 144, 0.92) 100%);
+    --mr-gradient-blue-hover: linear-gradient(180deg, rgba(47, 117, 218, 0.96) 0%, rgba(30, 85, 166, 0.98) 100%);
+    --mr-gradient-dock-preview: linear-gradient(180deg, rgba(38, 77, 50, 0.82), rgba(18, 35, 24, 0.88));
+    --mr-surface-glass-02: rgba(255, 255, 255, 0.025);
+    --mr-surface-glass-03: rgba(255, 255, 255, 0.035);
+    --mr-surface-glass-05: rgba(255, 255, 255, 0.052);
+    --mr-surface-slate-dark: rgba(15, 23, 42, 0.20);
 }
+
