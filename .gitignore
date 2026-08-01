@@ -31,6 +31,12 @@ Thumbs.db
 *.cache
 scratch/
 
+# Test coverage reports
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
 # Downloaded external tools
 tools/aria2/
 
