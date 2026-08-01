@@ -6,6 +6,94 @@
     display: none;
 }
 
+.mr-dock-drop-preview {
+    position: fixed;
+    z-index: var(--mr-z-dropdown);
+    top: 8px;
+    bottom: 8px;
+    left: 8px;
+    display: flex;
+    width: clamp(220px, 26vw, 380px);
+    box-sizing: border-box;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    pointer-events: none;
+    visibility: hidden;
+    opacity: 0;
+    color: var(--mr-text, #f3f3f3);
+    background: linear-gradient(180deg, rgba(38, 77, 50, 0.82), rgba(18, 35, 24, 0.88));
+    border: 2px solid rgba(114, 211, 138, 0.72);
+    border-radius: 8px;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    transform: translateX(-12px) scale(0.985);
+    transition: opacity 100ms ease, transform 100ms ease, visibility 0s linear 100ms;
+    contain: layout paint style;
+}
+
+.mr-undock-drop-preview {
+    position: fixed;
+    z-index: var(--mr-z-dialog);
+    top: 0;
+    left: 0;
+    display: flex;
+    box-sizing: border-box;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    pointer-events: none;
+    visibility: hidden;
+    opacity: 0;
+    color: var(--mr-text, #f3f3f3);
+    background: linear-gradient(180deg, rgba(38, 77, 50, 0.78), rgba(18, 35, 24, 0.84));
+    border: 2px solid rgba(114, 211, 138, 0.72);
+    border-radius: 8px;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    transition: opacity 100ms ease, visibility 0s linear 100ms;
+    contain: layout paint style;
+}
+
+.mr-undock-drop-preview.is-active {
+    visibility: visible;
+    opacity: 1;
+    transition-delay: 0s;
+}
+
+.mr-undock-drop-preview strong {
+    font-size: 15px;
+}
+
+.mr-undock-drop-preview>span:last-child {
+    color: var(--mr-text-muted, #b1b1b1);
+    font-size: 12px;
+}
+
+.mr-dock-drop-preview.is-active {
+    visibility: visible;
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    transition-delay: 0s;
+}
+
+.mr-dock-drop-preview-icon,
+.mr-dock-drop-preview-icon svg {
+    display: block;
+    width: 26px;
+    height: 26px;
+    color: var(--mr-accent, #72d38a);
+}
+
+.mr-dock-drop-preview strong {
+    font-size: 15px;
+}
+
+.mr-dock-drop-preview>span:last-child {
+    color: var(--mr-text-muted, #b1b1b1);
+    font-size: 12px;
+}
+
 .model-resolver-modal {
     position: fixed;
     top: 50%;
@@ -24,7 +112,7 @@
     overflow: hidden;
     resize: both;
     z-index: var(--mr-z-dialog);
-    color: var(--input-text, #fff);
+    color: var(--mr-text, #fff);
     background: linear-gradient(180deg, #171717 0%, #111 100%);
     border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 7px;
@@ -236,9 +324,32 @@
 
 #model-resolver-splitter:hover::before,
 #model-resolver-splitter:focus-visible::before,
+#model-resolver-splitter.is-resizing::before,
 #model-resolver-body.mr-queue-preview-collapsed #model-resolver-splitter::before {
     background: rgba(114, 211, 138, 0.78);
     box-shadow: 0 0 0 3px rgba(114, 211, 138, 0.12);
+}
+
+.p-splitter.is-resizing::after,
+#model-resolver-panel.is-resizing::after {
+    content: "";
+    position: absolute;
+    z-index: 9999;
+    inset: 0;
+    cursor: col-resize;
+    pointer-events: auto;
+}
+
+.mr-missing-detail-pane,
+.mr-missing-list-pane,
+.p-splitter-panel {
+    contain: layout style;
+}
+
+.mr-missing-browser-splitter.is-resizing,
+.p-splitter-gutter.is-resizing,
+#model-resolver-splitter.is-resizing {
+    will-change: transform;
 }
 
 #queue-toggle-icon {
@@ -656,16 +767,16 @@
     right: var(--mr-spacing-10);
     z-index: var(--mr-z-floating-button);
     padding: var(--mr-spacing-8) var(--mr-spacing-16);
-    color: var(--input-text, #fff);
+    color: var(--mr-text, #fff);
     font-size: var(--mr-font-lg);
-    background: var(--comfy-input-bg, #353535);
-    border: 2px solid var(--primary-color, #007acc);
+    background: var(--mr-panel-bg-strong, #353535);
+    border: 2px solid var(--mr-accent, #72d38a);
     border-radius: var(--mr-radius-lg);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .model-resolver-floating-button:hover {
-    background: var(--primary-color, #007acc);
+    background: var(--mr-accent, #72d38a);
     transform: scale(1.05);
 }
 

@@ -1,8 +1,22 @@
 #model-resolver-modal,
 #model-resolver-modal button,
 #model-resolver-modal input,
+#model-resolver-modal textarea,
 #model-resolver-modal select {
-    font-family: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+
+#model-resolver-modal {
+    /* Keep third-party ComfyUI rules that target .comfy-modal on our own palette. */
+    --input-text: var(--mr-text, #f3f3f3);
+    --comfy-input-bg: var(--mr-panel-bg, #202020);
+    --comfy-menu-bg: var(--mr-panel-bg-strong, #262626);
+    --border-color: var(--mr-border-strong, rgba(255, 255, 255, 0.14));
+    --primary-color: var(--mr-accent, #72d38a);
+    color: var(--mr-text, #f3f3f3) !important;
+    color-scheme: dark;
+    font-size: var(--mr-font-base, 13px);
+    line-height: var(--mr-line-height-normal, 1.5);
 }
 
 #model-resolver-modal button {
@@ -3755,6 +3769,10 @@
 #model-resolver-modal .mr-tab {
     border-width: 0 !important;
     margin: 0 !important;
+    color: rgba(255, 255, 255, 0.68) !important;
+    font-family: inherit !important;
+    font-size: 12px !important;
+    line-height: 1 !important;
 }
 
 #model-resolver-modal .mr-tab:not(.mr-tab-active) {
@@ -3769,7 +3787,28 @@
 
 #model-resolver-modal .mr-tab.mr-tab-active {
     margin-bottom: 0 !important;
+    color: var(--mr-text, #eef2f7) !important;
     box-shadow: 0 1px 0 var(--mr-tab-active-bg) !important;
+}
+
+#model-resolver-modal .mr-tab.mr-tab-active:hover,
+#model-resolver-modal .mr-tab.mr-tab-active:focus,
+#model-resolver-modal .mr-tab.mr-tab-active:active {
+    color: var(--mr-text, #eef2f7) !important;
+}
+
+/* Form controls must keep the resolver palette when ComfyUI themes change. */
+#model-resolver-modal input:not([type="checkbox"]):not([type="radio"]),
+#model-resolver-modal textarea,
+#model-resolver-modal select {
+    color: var(--mr-text, #f3f3f3) !important;
+    font-family: inherit !important;
+}
+
+#model-resolver-modal input::placeholder,
+#model-resolver-modal textarea::placeholder {
+    color: var(--mr-text-muted, #b1b1b1) !important;
+    opacity: 1;
 }
 
 /* Loaded Models Tab */
@@ -3884,8 +3923,8 @@
 /* Context menu */
 .mr-context-menu {
     position: fixed;
-    background: var(--comfy-menu-bg, #202020);
-    border: 1px solid var(--border-color, #555555);
+    background: var(--mr-panel-bg-strong, #202020);
+    border: 1px solid var(--mr-border-strong, #555555);
     border-radius: 6px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
     z-index: var(--mr-z-context-menu-popup, calc(var(--mr-z-context-menu) + 1));
@@ -3899,7 +3938,7 @@
     gap: 8px;
     padding: 8px 12px;
     font-size: 12px;
-    color: var(--input-text, #e0e0e0);
+    color: var(--mr-text, #e0e0e0);
     cursor: pointer;
     transition: background 0.15s ease;
 }
@@ -3932,7 +3971,7 @@
 
 .mr-context-menu-divider {
     height: 1px;
-    background: var(--border-color, #555555);
+    background: var(--mr-border-strong, #555555);
     margin: 4px 0;
 }
 
@@ -3957,8 +3996,8 @@
 }
 
 .mr-info-dialog {
-    background: var(--comfy-menu-bg, #202020);
-    border: 2px solid var(--border-color, #555555);
+    background: var(--mr-panel-bg-strong, #202020);
+    border: 2px solid var(--mr-border-strong, #555555);
     border-radius: 8px;
     width: 640px;
     max-width: 92vw;
@@ -3986,7 +4025,7 @@
     margin: 0;
     font-size: 16px;
     line-height: 1.35;
-    color: var(--input-text, #e0e0e0);
+    color: var(--mr-text, #e0e0e0);
     min-width: 0;
 }
 
@@ -4001,7 +4040,7 @@
     background: none;
     border: none;
     font-size: 24px;
-    color: var(--input-text, #e0e0e0);
+    color: var(--mr-text, #e0e0e0);
     cursor: pointer;
     padding: 0;
     width: 30px;
@@ -4031,7 +4070,7 @@
 .mr-info-section {
     margin-bottom: 16px;
     padding-bottom: 16px;
-    border-bottom: 1px solid var(--border-color, #555555);
+    border-bottom: 1px solid var(--mr-border-strong, #555555);
 }
 
 .mr-info-section-header {
@@ -4056,7 +4095,7 @@
 }
 
 .mr-info-value {
-    color: var(--input-text, #e0e0e0);
+    color: var(--mr-text, #e0e0e0);
     font-size: 13px;
     font-weight: 500;
 }
@@ -4093,7 +4132,7 @@
     padding: 5px 10px;
     border: 1px solid rgba(255, 255, 255, 0.22);
     background: rgba(255, 255, 255, 0.055);
-    color: var(--input-text, #e0e0e0);
+    color: var(--mr-text, #e0e0e0);
     border-radius: 6px;
     text-decoration: none;
     font-size: 12px;
@@ -4150,7 +4189,7 @@ button.mr-info-link:disabled {
     border-radius: 4px;
     font-size: 11px;
     font-weight: 600;
-    color: var(--input-text, #e0e0e0);
+    color: var(--mr-text, #e0e0e0);
 }
 
 .mr-info-tag.-type-lora {
@@ -4317,7 +4356,7 @@ button.mr-info-link:disabled {
 }
 
 .mr-info-table td:last-child {
-    color: var(--input-text, #e0e0e0);
+    color: var(--mr-text, #e0e0e0);
     font-weight: 650;
     word-break: break-word;
 }
@@ -4588,7 +4627,7 @@ button.mr-info-link:disabled {
 
 .mr-info-description {
     line-height: 1.55;
-    color: var(--input-text, #e0e0e0);
+    color: var(--mr-text, #e0e0e0);
     max-height: 220px;
     overflow: hidden;
     position: relative;
@@ -4687,7 +4726,7 @@ button.mr-info-link:disabled {
 .mr-info-images {
     margin-top: 16px;
     padding-top: 16px;
-    border-top: 1px solid var(--border-color, #555555);
+    border-top: 1px solid var(--mr-border-strong, #555555);
 }
 
 .mr-info-images-header {
@@ -4904,7 +4943,7 @@ button.mr-info-link:disabled {
 /* Footer */
 .mr-info-dialog-footer {
     padding: 12px 20px;
-    border-top: 1px solid var(--border-color, #555555);
+    border-top: 1px solid var(--mr-border-strong, #555555);
     display: flex;
     justify-content: flex-end;
     gap: 8px;
