@@ -1,4 +1,5 @@
 import importlib
+import json
 import os
 import sys
 import unittest
@@ -1012,3 +1013,78 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
 
         # Require download excludes main.safetensors because it has no download url
         self.assertEqual(select_primary_model_file(files, require_download=True)["id"], 1)
+
+    def _build_model_service_for_unit_test(
+        self,
+        service_module="model_service",
+        service_class="ModelService",
+        **dependencies,
+    ):
+        from aiohttp import web
+
+        RouteContext = importlib.import_module(
+            "comfyui-model-resolver.core.routes.context"
+        ).RouteContext
+        service_type = getattr(
+            importlib.import_module(
+                f"comfyui-model-resolver.core.services.{service_module}"
+            ),
+            service_class,
+        )
+
+        extension = MagicMock()
+        extension.logger = MagicMock()
+        values = {
+            "self": extension,
+            "download_available": True,
+            "web": web,
+        }
+        values.update(dependencies)
+        return service_type(RouteContext(values))
+
+    async def test_model_service_civitai_search_validates_filename(self):
+        def to_bool(value, default=False):
+            return default if value is None else bool(value)
+
+        service = self._build_model_service_for_unit_test(
+            service_module="civitai_search_service",
+            service_class="CivitAISearchService",
+            to_bool=to_bool,
+            normalize_sha256=lambda value: value,
+        )
+        request = AsyncMock()
+        request.json.return_value = {}
+
+        response = await service.civitai_search(request)
+
+        self.assertEqual(response.status, 400)
+        self.assertEqual(json.loads(response.text)["error"], "Filename is required")
+
+    async def test_model_service_custom_url_validates_url(self):
+        service = self._build_model_service_for_unit_test(
+            service_module="custom_url_service",
+            service_class="CustomUrlService",
+        )
+        request = AsyncMock()
+        request.json.return_value = {}
+
+        response = await service.custom_url(request)
+
+        self.assertEqual(response.status, 400)
+        self.assertEqual(json.loads(response.text)["error"], "URL is required")
+
+    async def test_model_service_model_details_validates_source(self):
+        service = self._build_model_service_for_unit_test(
+            service_module="model_details_service",
+            service_class="ModelDetailsService",
+        )
+        request = AsyncMock()
+        request.json.return_value = {"source": "unsupported", "model_id": 1}
+
+        response = await service.model_details(request)
+
+        self.assertEqual(response.status, 400)
+        self.assertEqual(
+            json.loads(response.text)["error"],
+            "Unsupported model details source",
+        )
