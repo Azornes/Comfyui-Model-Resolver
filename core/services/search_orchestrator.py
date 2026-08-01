@@ -2,6 +2,7 @@
 
 from ..routes.context import RouteContext
 from .search_cache import SearchResultCache
+from .search_dependencies import SearchDependencies
 from .search_providers import (
     SearchCancelled,
     SearchProviderRunner,
@@ -13,59 +14,46 @@ class SearchOrchestrator:
     """Parse search requests, coordinate providers, and build responses."""
 
     def __init__(self, context: RouteContext):
-        extension = context.get("self")
-        self.search_tracker = extension.search_tracker
-        self.search_result_timestamps = extension.search_result_timestamps
-        self.logger = extension.logger
-        self.CivArchiveSearchError = context.get("CivArchiveSearchError")
-        self.asyncio = context.get("asyncio")
-        self.build_search_result = context.get("build_search_result")
-        self.cancel_progress_response = context.get("cancel_progress_response")
-        self.clear_civarchive_search_cache = context.get(
-            "clear_civarchive_search_cache"
+        dependencies = SearchDependencies.from_context(context)
+        self.dependencies = dependencies
+        self.search_tracker = dependencies.search_tracker
+        self.search_result_timestamps = dependencies.search_result_timestamps
+        self.logger = dependencies.logger
+        self.CivArchiveSearchError = dependencies.civarchive_search_error
+        self.asyncio = dependencies.asyncio
+        self.build_search_result = dependencies.build_search_result
+        self.clear_civarchive_search_cache = (
+            dependencies.clear_civarchive_search_cache
         )
-        self.clear_civitai_search_cache = context.get(
-            "clear_civitai_search_cache"
+        self.clear_civitai_search_cache = dependencies.clear_civitai_search_cache
+        self.clear_huggingface_search_cache = (
+            dependencies.clear_huggingface_search_cache
         )
-        self.clear_huggingface_search_cache = context.get(
-            "clear_huggingface_search_cache"
+        self.clear_lora_manager_archive_search_cache = (
+            dependencies.clear_lora_manager_archive_search_cache
         )
-        self.clear_lora_manager_archive_search_cache = context.get(
-            "clear_lora_manager_archive_search_cache"
+        self.extract_sha256_from_metadata = dependencies.extract_sha256_from_metadata
+        self.format_size_bytes = dependencies.format_size_bytes
+        self.get_civitai_download_url = dependencies.get_civitai_download_url
+        self.get_popular_model_url = dependencies.get_popular_model_url
+        self.reload_model_list = dependencies.reload_model_list
+        self.reload_popular_databases = dependencies.reload_popular_databases
+        self.resolve_civarchive_model_version = (
+            dependencies.resolve_civarchive_model_version
         )
-        self.extract_sha256_from_metadata = context.get(
-            "extract_sha256_from_metadata"
+        self.resolve_urn = dependencies.resolve_urn
+        self.search_civarchive_for_file = dependencies.search_civarchive_for_file
+        self.search_civitai = dependencies.search_civitai
+        self.search_civitai_for_file = dependencies.search_civitai_for_file
+        self.search_huggingface_for_file = dependencies.search_huggingface_for_file
+        self.search_local_matches_by_hash = dependencies.search_local_matches_by_hash
+        self.search_lora_manager_archive_for_file = (
+            dependencies.search_lora_manager_archive_for_file
         )
-        self.format_size_bytes = context.get("format_size_bytes")
-        self.get_civitai_download_url = context.get("get_civitai_download_url")
-        self.get_popular_model_url = context.get("get_popular_model_url")
-        self.get_progress_response = context.get("get_progress_response")
-        self.json_api_endpoint = context.get("json_api_endpoint")
-        self.reload_model_list = context.get("reload_model_list")
-        self.reload_popular_databases = context.get("reload_popular_databases")
-        self.resolve_civarchive_model_version = context.get(
-            "resolve_civarchive_model_version"
-        )
-        self.resolve_urn = context.get("resolve_urn")
-        self.routes = context.get("routes")
-        self.search_civarchive_for_file = context.get(
-            "search_civarchive_for_file"
-        )
-        self.search_civitai = context.get("search_civitai")
-        self.search_civitai_for_file = context.get("search_civitai_for_file")
-        self.search_huggingface_for_file = context.get(
-            "search_huggingface_for_file"
-        )
-        self.search_local_matches_by_hash = context.get(
-            "search_local_matches_by_hash"
-        )
-        self.search_lora_manager_archive_for_file = context.get(
-            "search_lora_manager_archive_for_file"
-        )
-        self.search_model_list = context.get("search_model_list")
-        self.to_bool = context.get("to_bool")
-        self.to_int = context.get("to_int")
-        self.web = context.get("web")
+        self.search_model_list = dependencies.search_model_list
+        self.to_bool = dependencies.to_bool
+        self.to_int = dependencies.to_int
+        self.web = dependencies.web
         self.search_cache = SearchResultCache(self.search_result_timestamps)
         self.provider_runner = SearchProviderRunner(self)
 

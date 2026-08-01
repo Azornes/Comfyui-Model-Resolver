@@ -3,7 +3,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from core.routes.context import RouteContext
 from core.services.search_cache import SearchResultCache
+from core.services.search_dependencies import SearchDependencies
 from core.services.search_providers import SearchCancelled, SearchProviderRunner
 
 
@@ -98,3 +100,19 @@ def test_search_provider_runner_raises_cancellation_before_provider_call():
 
     with pytest.raises(SearchCancelled):
         runner.raise_if_search_cancelled(_request(), "civitai")
+
+
+def test_search_dependencies_require_extension_context():
+    with pytest.raises(KeyError, match="Missing route dependency: self"):
+        SearchDependencies.from_context(RouteContext({}))
+
+
+def test_search_dependencies_require_core_provider_dependencies():
+    extension = SimpleNamespace(
+        logger=MagicMock(),
+        search_result_timestamps={},
+        search_tracker=MagicMock(),
+    )
+
+    with pytest.raises(KeyError, match="Missing route dependency: asyncio"):
+        SearchDependencies.from_context(RouteContext({"self": extension}))
