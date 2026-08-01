@@ -1,11 +1,13 @@
+import asyncio
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from core.routes.context import RouteContext
 from core.services.search_cache import SearchResultCache
 from core.services.search_dependencies import SearchDependencies
+from core.services.search_orchestrator import SearchOrchestrator
 from core.services.search_providers import SearchCancelled, SearchProviderRunner
 
 
@@ -20,6 +22,87 @@ def _request(**overrides):
     }
     values.update(overrides)
     return SimpleNamespace(**values)
+
+
+def _build_search_orchestrator():
+    tracker = MagicMock()
+    tracker.is_cancelled.return_value = False
+    extension = SimpleNamespace(
+        search_tracker=tracker,
+        search_result_timestamps={},
+        logger=MagicMock(),
+    )
+
+    def to_bool(value, default=False):
+        if value is None:
+            return default
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(value)
+
+    def to_int(value, default=0):
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    def extract_sha256(metadata):
+        return metadata.get("sha256") or (
+            metadata.get("hashes") or {}
+        ).get("SHA256")
+
+    context_values = {
+        "self": extension,
+        "asyncio": asyncio,
+        "CivArchiveSearchError": Exception,
+        "build_search_result": lambda source, **fields: {
+            "source": source,
+            **fields,
+        },
+        "clear_civarchive_search_cache": MagicMock(),
+        "clear_civitai_search_cache": MagicMock(),
+        "clear_huggingface_search_cache": MagicMock(),
+        "clear_lora_manager_archive_search_cache": MagicMock(),
+        "extract_sha256_from_metadata": extract_sha256,
+        "format_size_bytes": lambda value, include_space=True: str(value),
+        "get_civitai_download_url": MagicMock(),
+        "get_popular_model_url": MagicMock(),
+        "reload_model_list": MagicMock(),
+        "reload_popular_databases": MagicMock(),
+        "resolve_civarchive_model_version": MagicMock(),
+        "resolve_urn": MagicMock(),
+        "search_civarchive_for_file": MagicMock(),
+        "search_civitai": MagicMock(),
+        "search_civitai_for_file": MagicMock(),
+        "search_huggingface_for_file": MagicMock(),
+        "search_local_matches_by_hash": MagicMock(return_value=[]),
+        "search_lora_manager_archive_for_file": MagicMock(),
+        "search_model_list": MagicMock(),
+        "to_bool": to_bool,
+        "to_int": to_int,
+        "web": SimpleNamespace(
+            json_response=lambda payload, status=200: SimpleNamespace(
+                payload=payload,
+                status=status,
+            )
+        ),
+    }
+    return SearchOrchestrator(RouteContext(context_values)), context_values
+
+
+class _StaticSearchRunner:
+    def __init__(self, source_results, source_found):
+        self.source_results = source_results
+        self.source_found = source_found
+
+    def create_search_tasks(self, request):
+        async def search_task():
+            return self.source_results, self.source_found
+
+        return [search_task()]
+
+    def raise_if_search_cancelled(self, request, source=""):
+        return None
 
 
 def test_search_result_cache_reuses_timestamp_for_same_result():
@@ -359,3 +442,177 @@ def test_search_dependencies_require_core_provider_dependencies():
 
     with pytest.raises(KeyError, match="Missing route dependency: asyncio"):
         SearchDependencies.from_context(RouteContext({"self": extension}))
+
+
+def test_search_orchestrator_formats_log_values_and_result_details():
+    orchestrator, _ = _build_search_orchestrator()
+
+    assert orchestrator.format_log_value(None) is None
+    assert orchestrator.format_log_value("") is None
+    assert orchestrator.format_log_value(False) == "no"
+    assert orchestrator.format_log_value(["civitai", "huggingface"]) == (
+        "civitai,huggingface"
+    )
+    assert orchestrator.format_log_value('model "one"') == '"model \\"one\\""'
+    assert orchestrator.format_log_value("plain") == "plain"
+    assert orchestrator.format_log_fields(
+        enabled=False,
+        tags=["one", "two"],
+        missing=None,
+    ) == "enabled=no tags=one,two"
+    assert orchestrator.format_result_details([{"name": "one"}]) == "count=1"
+    assert orchestrator.format_result_details(
+        None,
+        {"model_id": 10, "files_count": 2},
+    ) == "result=none ids=10 files=2"
+    assert "ids=10@20" in orchestrator.format_result_details(
+        {
+            "name": "Model",
+            "filename": "model.safetensors",
+            "model_id": 10,
+            "version_id": 20,
+            "size": 1024,
+        }
+    )
+
+
+@pytest.mark.asyncio
+async def test_search_orchestrator_force_search_refreshes_selected_caches():
+    orchestrator, dependencies = _build_search_orchestrator()
+    orchestrator.provider_runner = _StaticSearchRunner({}, False)
+    request = SimpleNamespace(
+        json=AsyncMock(
+            return_value={
+                "filename": "model.safetensors",
+                "sources": [
+                    "local",
+                    "huggingface",
+                    "civitai",
+                    "civarchive",
+                    "lora_manager_archive",
+                ],
+                "force_search": True,
+                "progress_id": "force-search",
+            }
+        )
+    )
+
+    response = await orchestrator.search_sources(request)
+
+    assert response.status == 200
+    assert response.payload["found"] is False
+    dependencies["reload_popular_databases"].assert_called_once_with()
+    dependencies["reload_model_list"].assert_called_once_with()
+    dependencies["clear_huggingface_search_cache"].assert_called_once_with()
+    dependencies["clear_civitai_search_cache"].assert_called_once_with()
+    dependencies["clear_civarchive_search_cache"].assert_called_once_with()
+    dependencies[
+        "clear_lora_manager_archive_search_cache"
+    ].assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_search_orchestrator_returns_cancelled_response():
+    orchestrator, dependencies = _build_search_orchestrator()
+    dependencies["self"].search_tracker.is_cancelled.return_value = True
+    request = SimpleNamespace(
+        json=AsyncMock(
+            return_value={
+                "filename": "model.safetensors",
+                "sources": ["civitai"],
+                "progress_id": "cancelled-search",
+            }
+        )
+    )
+
+    response = await orchestrator.search_sources(request)
+
+    assert response.status == 200
+    assert response.payload["cancelled"] is True
+    assert response.payload["found"] is False
+    assert response.payload["searched_sources"] == ["civitai"]
+    cancelled_updates = [
+        call
+        for call in dependencies["self"].search_tracker.update.call_args_list
+        if len(call.args) >= 3 and call.args[2] == "cancelled"
+    ]
+    assert cancelled_updates
+    assert cancelled_updates[-1].kwargs == {
+        "status": "cancelled",
+        "cancelled": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_search_orchestrator_returns_error_response_for_unexpected_failure():
+    orchestrator, dependencies = _build_search_orchestrator()
+    request = SimpleNamespace(
+        json=AsyncMock(side_effect=ValueError("invalid request"))
+    )
+
+    response = await orchestrator.search_sources(request)
+
+    assert response.status == 500
+    assert response.payload == {"error": "invalid request"}
+    error_update = dependencies["self"].search_tracker.update.call_args
+    assert error_update.args[:5] == ("", "", "error", "invalid request", 100)
+    assert error_update.kwargs == {"status": "error"}
+    dependencies["self"].logger.exception.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_search_orchestrator_deduplicates_local_hash_matches_and_keeps_errors():
+    orchestrator, dependencies = _build_search_orchestrator()
+    first_hash = "a" * 64
+    failing_hash = "b" * 64
+
+    def lookup_by_hash(sha256, **kwargs):
+        if sha256 == first_hash:
+            return [
+                {"model": {"path": r"C:\\Models\\Local.safetensors"}},
+                {"path": r"c:\\models\\local.safetensors"},
+            ]
+        raise RuntimeError("local index unavailable")
+
+    dependencies["search_local_matches_by_hash"].side_effect = lookup_by_hash
+    orchestrator.provider_runner = _StaticSearchRunner(
+        {
+            "civitai": [
+                {
+                    "filename": "remote.safetensors",
+                    "hashes": {"SHA256": first_hash},
+                },
+                {"filename": "without-hash.safetensors"},
+                {"filename": "failing.safetensors", "sha256": failing_hash},
+            ],
+            "source_errors": {"civarchive": "provider unavailable"},
+        },
+        True,
+    )
+    request = SimpleNamespace(
+        json=AsyncMock(
+            return_value={
+                "filename": "remote.safetensors",
+                "category": "checkpoints",
+                "sources": ["civitai"],
+                "progress_id": "hash-search",
+            }
+        )
+    )
+
+    response = await orchestrator.search_sources(request)
+
+    assert response.status == 200
+    assert response.payload["found"] is True
+    assert response.payload["source_errors"] == {
+        "civarchive": "provider unavailable"
+    }
+    assert len(response.payload["local_hash_matches"]) == 1
+    assert response.payload["local_hash_matches"][0]["hash_lookup_sha256"] == (
+        first_hash
+    )
+    assert response.payload["local_hash_matches"][0]["hash_lookup_source"] == (
+        "civitai"
+    )
+    assert dependencies["search_local_matches_by_hash"].call_count == 2
+    dependencies["self"].logger.warning.assert_called_once()
