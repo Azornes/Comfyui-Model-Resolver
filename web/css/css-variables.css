@@ -237,6 +237,9 @@
     --mr-button-height-md: 30px;
     --mr-scrollbar-thumb: rgba(255, 255, 255, 0.18);
     --mr-scrollbar-thumb-hover: rgba(255, 255, 255, 0.34);
+    --mr-missing-row-height: 70px;
+    --mr-queue-drawer-width: 320px;
+    --mr-splitter-width: 10px;
 }
 
 

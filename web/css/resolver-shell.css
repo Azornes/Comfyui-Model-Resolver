@@ -284,10 +284,10 @@
 }
 
 #model-resolver-queue {
-    width: 320px;
+    width: var(--mr-queue-drawer-width);
     min-width: 240px;
     max-width: 70%;
-    flex: 0 0 320px;
+    flex: 0 0 var(--mr-queue-drawer-width);
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
@@ -299,8 +299,8 @@
 
 #model-resolver-splitter {
     position: relative;
-    width: 10px;
-    min-width: 10px;
+    width: var(--mr-splitter-width);
+    min-width: var(--mr-splitter-width);
     opacity: 1;
     cursor: col-resize;
     background: var(--mr-bg, #121212);
