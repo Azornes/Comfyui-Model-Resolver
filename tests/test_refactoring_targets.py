@@ -2,6 +2,7 @@ import importlib
 import os
 import sys
 import unittest
+from typing import ClassVar
 from unittest.mock import AsyncMock, MagicMock, patch
 
 # Make sure parent package directory is in sys.path
@@ -79,7 +80,7 @@ def _find_bound_extension(handler):
 
 class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
 
-    ROUTE_GROUPS = {
+    ROUTE_GROUPS: ClassVar = {
         "workflow": {
             ("POST", "/model_resolver/analyze"),
             ("GET", "/model_resolver/analyze-progress/{analysis_id}"),
@@ -150,7 +151,7 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
         },
     }
 
-    ROUTE_SUBGROUPS = {
+    ROUTE_SUBGROUPS: ClassVar = {
         "workflow_analysis": {
             ("POST", "/model_resolver/analyze"),
             ("GET", "/model_resolver/analyze-progress/{analysis_id}"),
@@ -396,6 +397,250 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
             status=400,
         )
 
+    async def test_custom_url_route_returns_mocked_huggingface_result(self):
+        post_handler = routes_registered[("POST", "/model_resolver/custom-url")]
+        url = "https://example.com/model.safetensors"
+        request = AsyncMock()
+        request.json.return_value = {
+            "url": url,
+            "filename": "model.safetensors",
+            "category": "checkpoints",
+        }
+
+        async def fake_to_thread(func, *args, **kwargs):
+            function_name = getattr(func, "__name__", "")
+            if function_name == "validate_public_http_url":
+                return args[0]
+            if function_name == "build_huggingface_custom_result":
+                self.assertEqual(args, (url, "model.safetensors", None))
+                self.assertEqual(kwargs, {})
+                return {
+                    "source": "huggingface",
+                    "filename": "model.safetensors",
+                    "url": url,
+                    "download_url": url,
+                }
+            self.fail(f"Unexpected threaded function: {function_name}")
+
+        with (
+            patch("asyncio.to_thread", side_effect=fake_to_thread),
+            patch("aiohttp.web.json_response") as mock_json_response,
+        ):
+            await post_handler(request)
+
+        payload = mock_json_response.call_args.args[0]
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["source"], "huggingface")
+        self.assertEqual(payload["result"]["provided_url"], url)
+
+    async def test_analyze_route_rejects_missing_workflow(self):
+        post_handler = routes_registered[("POST", "/model_resolver/analyze")]
+        request = AsyncMock()
+        request.json.return_value = {}
+
+        with patch("aiohttp.web.json_response") as mock_json_response:
+            await post_handler(request)
+
+        mock_json_response.assert_called_once_with(
+            {"error": "Workflow JSON is required"},
+            status=400,
+        )
+
+    async def test_analyze_route_returns_threaded_result(self):
+        post_handler = routes_registered[("POST", "/model_resolver/analyze")]
+        workflow = {"nodes": []}
+        request = AsyncMock()
+        request.json.return_value = {
+            "workflow": workflow,
+            "analysis_id": "analysis-test",
+        }
+
+        async def fake_to_thread(func, *args, **kwargs):
+            self.assertEqual(getattr(func, "__name__", ""), "analyze_and_find_matches")
+            self.assertEqual(args[:3], (workflow, 0.0, 10))
+            self.assertEqual(kwargs["force_rescan"], False)
+            return {
+                "missing_models": [
+                    {
+                        "name": "already-matched.safetensors",
+                        "matches": [{"confidence": 100}],
+                    }
+                ]
+            }
+
+        with (
+            patch("asyncio.to_thread", side_effect=fake_to_thread),
+            patch("aiohttp.web.json_response") as mock_json_response,
+        ):
+            await post_handler(request)
+
+        payload = mock_json_response.call_args.args[0]
+        self.assertEqual(payload["total_missing"], 1)
+        self.assertEqual(payload["missing_models"][0]["name"], "already-matched.safetensors")
+
+    async def test_analyze_route_rejects_non_object_workflow(self):
+        post_handler = routes_registered[("POST", "/model_resolver/analyze")]
+        request = AsyncMock()
+        request.json.return_value = {"workflow": ["invalid-workflow"]}
+
+        with patch("aiohttp.web.json_response") as mock_json_response:
+            await post_handler(request)
+
+        mock_json_response.assert_called_once_with(
+            {"error": "Workflow JSON must be an object"},
+            status=400,
+        )
+
+    async def test_resolve_route_rejects_missing_resolutions(self):
+        post_handler = routes_registered[("POST", "/model_resolver/resolve")]
+        request = AsyncMock()
+        request.json.return_value = {"workflow": {"nodes": []}}
+
+        with patch("aiohttp.web.json_response") as mock_json_response:
+            await post_handler(request)
+
+        mock_json_response.assert_called_once_with(
+            {"error": "Resolutions array is required"},
+            status=400,
+        )
+
+    async def test_resolve_route_returns_updated_workflow(self):
+        post_handler = routes_registered[("POST", "/model_resolver/resolve")]
+        workflow = {"nodes": []}
+        request = AsyncMock()
+        request.json.return_value = {
+            "workflow": workflow,
+            "resolutions": [{"node_id": 1, "widget_index": 0}],
+        }
+
+        with patch("aiohttp.web.json_response") as mock_json_response:
+            await post_handler(request)
+
+        mock_json_response.assert_called_once_with(
+            {"workflow": workflow, "success": True}
+        )
+
+    async def test_loaded_models_route_rejects_missing_workflow(self):
+        post_handler = routes_registered[("POST", "/model_resolver/loaded")]
+        request = AsyncMock()
+        request.json.return_value = {}
+
+        with patch("aiohttp.web.json_response") as mock_json_response:
+            await post_handler(request)
+
+        mock_json_response.assert_called_once_with(
+            {"error": "Workflow JSON is required"},
+            status=400,
+        )
+
+    async def test_loaded_models_route_returns_threaded_result(self):
+        post_handler = routes_registered[("POST", "/model_resolver/loaded")]
+        workflow = {"nodes": []}
+        request = AsyncMock()
+        request.json.return_value = {
+            "workflow": workflow,
+            "loaded_id": "loaded-test",
+        }
+
+        async def fake_to_thread(func, *args, **kwargs):
+            self.assertEqual(getattr(func, "__name__", ""), "build_loaded_models_response")
+            self.assertEqual(args, ())
+            self.assertEqual(kwargs, {})
+            return {"loaded_models": [], "total": 0}
+
+        with (
+            patch("asyncio.to_thread", side_effect=fake_to_thread),
+            patch("aiohttp.web.json_response") as mock_json_response,
+        ):
+            await post_handler(request)
+
+        mock_json_response.assert_called_once_with(
+            {"loaded_models": [], "total": 0}
+        )
+
+    async def test_loaded_models_route_rejects_non_object_workflow(self):
+        post_handler = routes_registered[("POST", "/model_resolver/loaded")]
+        request = AsyncMock()
+        request.json.return_value = {"workflow": ["invalid-workflow"]}
+
+        with patch("aiohttp.web.json_response") as mock_json_response:
+            await post_handler(request)
+
+        mock_json_response.assert_called_once_with(
+            {"error": "Workflow JSON must be an object"},
+            status=400,
+        )
+
+    async def test_local_matches_by_hash_route_rejects_missing_hash(self):
+        post_handler = routes_registered[("POST", "/model_resolver/local-matches-by-hash")]
+        request = AsyncMock()
+        request.json.return_value = {}
+
+        with patch("aiohttp.web.json_response") as mock_json_response:
+            await post_handler(request)
+
+        mock_json_response.assert_called_once_with(
+            {"error": "sha256 is required"},
+            status=400,
+        )
+
+    async def test_download_progress_route_returns_not_found(self):
+        get_handler = routes_registered[("GET", "/model_resolver/progress/{download_id}")]
+        request = MagicMock()
+        request.match_info = {"download_id": "missing-download"}
+
+        with patch("aiohttp.web.json_response") as mock_json_response:
+            await get_handler(request)
+
+        mock_json_response.assert_called_once_with(
+            {"error": "Download not found"},
+            status=404,
+        )
+
+    async def test_source_search_route_rejects_missing_filename(self):
+        post_handler = routes_registered[("POST", "/model_resolver/search")]
+        request = AsyncMock()
+        request.json.return_value = {}
+
+        with patch("aiohttp.web.json_response") as mock_json_response:
+            await post_handler(request)
+
+        mock_json_response.assert_called_once_with(
+            {
+                "error": (
+                    "Filename is required for non-URN, or model_id+version_id for URN"
+                )
+            },
+            status=400,
+        )
+
+    async def test_source_search_route_returns_empty_result_for_unknown_source(self):
+        post_handler = routes_registered[("POST", "/model_resolver/search")]
+        request = AsyncMock()
+        request.json.return_value = {
+            "filename": "model.safetensors",
+            "sources": ["unknown"],
+            "progress_id": "empty-search-test",
+        }
+
+        with patch("aiohttp.web.json_response") as mock_json_response:
+            await post_handler(request)
+
+        payload = mock_json_response.call_args.args[0]
+        self.assertFalse(payload["found"])
+        self.assertEqual(payload["searched_sources"], ["unknown"])
+        self.assertEqual(payload["local_hash_matches"], [])
+
+    async def test_directories_capabilities_route_returns_source_capabilities(self):
+        get_handler = routes_registered[("GET", "/model_resolver/capabilities")]
+
+        with patch("aiohttp.web.json_response") as mock_json_response:
+            await get_handler(MagicMock())
+
+        payload = mock_json_response.call_args.args[0]
+        self.assertIn("sources", payload)
+        self.assertIn("node_rules", payload)
+
     async def test_local_model_hashes_route_rejects_missing_path(self):
         post_handler = routes_registered[("POST", "/model_resolver/local-model-hashes")]
         request = AsyncMock()
@@ -419,6 +664,56 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
 
         mock_json_response.assert_called_once_with(
             {"error": "Unsupported model details source"},
+            status=400,
+        )
+
+    async def test_model_details_route_returns_threaded_provider_result(self):
+        post_handler = routes_registered[("POST", "/model_resolver/model-details")]
+        request = AsyncMock()
+        request.json.return_value = {
+            "source": "civitai",
+            "model_id": "123",
+            "version_id": "456",
+        }
+        expected = {"source": "civitai", "model_id": 123, "version_id": 456}
+
+        async def fake_to_thread(func, *args, **kwargs):
+            self.assertEqual(getattr(func, "__name__", ""), "get_civitai_model_details")
+            self.assertEqual(args, (123, 456, None))
+            self.assertEqual(kwargs, {})
+            return expected
+
+        with (
+            patch("asyncio.to_thread", side_effect=fake_to_thread),
+            patch("aiohttp.web.json_response") as mock_json_response,
+        ):
+            await post_handler(request)
+
+        mock_json_response.assert_called_once_with(expected)
+
+    async def test_model_details_route_rejects_missing_supported_model_id(self):
+        post_handler = routes_registered[("POST", "/model_resolver/model-details")]
+        request = AsyncMock()
+        request.json.return_value = {"source": "civitai"}
+
+        with patch("aiohttp.web.json_response") as mock_json_response:
+            await post_handler(request)
+
+        mock_json_response.assert_called_once_with(
+            {"error": "model_id is required"},
+            status=400,
+        )
+
+    async def test_civitai_search_route_rejects_missing_filename(self):
+        post_handler = routes_registered[("POST", "/model_resolver/civitai-search")]
+        request = AsyncMock()
+        request.json.return_value = {}
+
+        with patch("aiohttp.web.json_response") as mock_json_response:
+            await post_handler(request)
+
+        mock_json_response.assert_called_once_with(
+            {"error": "Filename is required"},
             status=400,
         )
     
@@ -624,9 +919,11 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
             )
 
             mock_request = MagicMock()
-            with patch.dict(sys.modules, {"folder_paths": mock_folder_paths}):
-                with patch("aiohttp.web.json_response") as mock_json_res:
-                    await get_handler(mock_request)
+            with (
+                patch.dict(sys.modules, {"folder_paths": mock_folder_paths}),
+                patch("aiohttp.web.json_response") as mock_json_res,
+            ):
+                await get_handler(mock_request)
 
             mock_json_res.assert_called_once()
             response_data = mock_json_res.call_args[0][0]
