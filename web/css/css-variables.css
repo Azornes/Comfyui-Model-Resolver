@@ -1,8 +1,8 @@
 :root {
+    /* -------------------------------------------------------------------------- */
+    /* 1. Base Palette & Overlays                                                 */
+    /* -------------------------------------------------------------------------- */
     --mr-color-primary: #5af;
-    --mr-color-primary-light: #7cf;
-    --mr-color-primary-lighter: #7bf;
-    --mr-color-success: #5f5;
     --mr-color-error: #f00;
     --mr-color-error-light: #f55;
     --mr-color-error-lighter: #f77;
@@ -27,16 +27,24 @@
     --mr-overlay-light-10: rgba(255, 255, 255, 0.1);
     --mr-overlay-light-15: rgba(255, 255, 255, 0.15);
     --mr-overlay-light-20: rgba(255, 255, 255, 0.2);
+
+    /* -------------------------------------------------------------------------- */
+    /* 2. Typography, Spacing, Transitions & Z-Index                             */
+    /* -------------------------------------------------------------------------- */
     --mr-line-height-normal: 1.5;
-    --mr-z-dropdown: 9998;
-    --mr-z-dialog: 9999;
-    --mr-z-floating-button: 10000;
-    --mr-z-notification: 100000;
-    --mr-z-context-menu: 100001;
-    --mr-z-context-menu-popup: 100002;
-    --mr-z-info-dialog: 100003;
-    --mr-z-image-preview: 100004;
-    --mr-z-tooltip: 100005;
+    --mr-font-family-sans: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    --mr-font-family-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Consolas", monospace;
+    --mr-font-xs: 10px;
+    --mr-font-sm: 11px;
+    --mr-font-md: 12px;
+    --mr-font-base: 13px;
+    --mr-font-lg: 14px;
+    --mr-font-xl: 16px;
+    --mr-font-2xl: 18px;
+    --mr-font-3xl: 20px;
+    --mr-font-4xl: 24px;
+    --mr-font-30: 30px;
+
     --mr-spacing-1: 1px;
     --mr-spacing-2: 2px;
     --mr-spacing-3: 3px;
@@ -54,23 +62,26 @@
     --mr-spacing-32: 32px;
     --mr-spacing-40: 40px;
     --mr-spacing-48: 48px;
+
     --mr-radius-sm: 2px;
     --mr-radius-md: 4px;
     --mr-radius-lg: 6px;
     --mr-radius-xl: 8px;
     --mr-radius-2xl: 12px;
     --mr-radius-3xl: 16px;
-    --mr-font-xs: 10px;
-    --mr-font-sm: 11px;
-    --mr-font-md: 12px;
-    --mr-font-base: 13px;
-    --mr-font-lg: 14px;
-    --mr-font-xl: 16px;
-    --mr-font-2xl: 18px;
-    --mr-font-3xl: 20px;
-    --mr-font-4xl: 24px;
-    --mr-font-30: 30px;
-    --mr-font-5xl: 48px;
+    --mr-ui-radius-sm: var(--mr-radius-xl);
+    --mr-ui-radius-lg: var(--mr-radius-3xl);
+
+    --mr-z-dropdown: 9998;
+    --mr-z-dialog: 9999;
+    --mr-z-floating-button: 10000;
+    --mr-z-notification: 100000;
+    --mr-z-context-menu: 100001;
+    --mr-z-context-menu-popup: 100002;
+    --mr-z-info-dialog: 100003;
+    --mr-z-image-preview: 100004;
+    --mr-z-tooltip: 100005;
+
     --mr-transition-fast: 0.1s;
     --mr-transition-normal: 0.2s;
     --mr-transition-all-fast: all 0.1s;
@@ -84,8 +95,10 @@
     --mr-transition-transform: transform 0.15s ease;
     --mr-transition-width: width 0.2s ease;
     --mr-transition-popover: opacity 0.15s ease, transform 0.15s ease;
-    --mr-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.8);
 
+    /* -------------------------------------------------------------------------- */
+    /* 3. Theme Semantic Colors & Surfaces                                        */
+    /* -------------------------------------------------------------------------- */
     --mr-bg: #121212;
     --mr-bg-soft: #171717;
     --mr-surface-elevated: #232323;
@@ -93,9 +106,14 @@
     --mr-card-bg-alt: #1d1d1d;
     --mr-panel-bg: #202020;
     --mr-panel-bg-strong: #262626;
+    --mr-surface-glass-02: rgba(255, 255, 255, 0.025);
+    --mr-surface-glass-03: rgba(255, 255, 255, 0.035);
+    --mr-surface-glass-05: rgba(255, 255, 255, 0.052);
+    --mr-surface-slate-dark: rgba(15, 23, 42, 0.20);
     --mr-border: rgba(255, 255, 255, 0.08);
     --mr-border-strong: rgba(255, 255, 255, 0.14);
     --mr-divider: rgba(255, 255, 255, 0.08);
+
     --mr-text: #f3f3f3;
     --mr-text-muted: #b1b1b1;
     --mr-text-dim: #7b7b7b;
@@ -112,29 +130,10 @@
     --mr-color-blue-info: #2196f3;
     --mr-color-code-blue: #90caf9;
     --mr-color-danger-bright: #ff3b3b;
-    --mr-shadow-elevated: 0 18px 42px rgba(0, 0, 0, 0.28);
-    --mr-ui-radius-sm: var(--mr-radius-xl);
-    --mr-ui-radius-lg: var(--mr-radius-3xl);
-    --mr-missing-control-bg: rgba(255, 255, 255, 0.035);
-    --mr-missing-control-bg-hover: rgba(255, 255, 255, 0.06);
-    --mr-missing-control-border: rgba(255, 255, 255, 0.105);
-    --mr-missing-control-border-hover: rgba(255, 255, 255, 0.17);
-    --mr-missing-control-focus-border: rgba(114, 211, 138, 0.30);
-    --mr-missing-control-focus-ring: rgba(114, 211, 138, 0.08);
-    --mr-missing-control-radius: 7px;
-    --mr-missing-control-shadow: none;
-    --mr-missing-control-transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-    --mr-missing-icon-button-size: 28px;
-    --mr-missing-icon-size: 13px;
-    --mr-missing-field-height: 38px;
-    --mr-missing-search-button-height: 34px;
-    --mr-missing-chip-bg: rgba(255, 255, 255, 0.045);
-    --mr-missing-chip-bg-hover: rgba(255, 255, 255, 0.06);
-    --mr-missing-chip-border: rgba(255, 255, 255, 0.08);
-    --mr-missing-chip-border-hover: rgba(255, 255, 255, 0.18);
-    --mr-missing-chip-radius: 999px;
-    --mr-missing-chip-height: 20px;
-    --mr-missing-chip-icon-size: var(--mr-spacing-12);
+
+    /* -------------------------------------------------------------------------- */
+    /* 4. Model & Node Type Badges                                                */
+    /* -------------------------------------------------------------------------- */
     --mr-type-chip-bg-alpha-strong: 0.155;
     --mr-type-chip-bg-alpha: 0.12;
     --mr-type-chip-border-alpha: 0.26;
@@ -176,6 +175,30 @@
     --mr-type-taesd-rgb: 220, 194, 116;
     --mr-type-taesd-text: #efd991;
 
+    /* -------------------------------------------------------------------------- */
+    /* 5. Component Tokens, Badges, Shadows & Layout Dimensions                   */
+    /* -------------------------------------------------------------------------- */
+    --mr-missing-control-bg: rgba(255, 255, 255, 0.035);
+    --mr-missing-control-bg-hover: rgba(255, 255, 255, 0.06);
+    --mr-missing-control-border: rgba(255, 255, 255, 0.105);
+    --mr-missing-control-border-hover: rgba(255, 255, 255, 0.17);
+    --mr-missing-control-focus-border: rgba(114, 211, 138, 0.30);
+    --mr-missing-control-focus-ring: rgba(114, 211, 138, 0.08);
+    --mr-missing-control-radius: 7px;
+    --mr-missing-control-shadow: none;
+    --mr-missing-control-transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    --mr-missing-icon-button-size: 28px;
+    --mr-missing-icon-size: 13px;
+    --mr-missing-field-height: 38px;
+    --mr-missing-search-button-height: 34px;
+    --mr-missing-chip-bg: rgba(255, 255, 255, 0.045);
+    --mr-missing-chip-bg-hover: rgba(255, 255, 255, 0.06);
+    --mr-missing-chip-border: rgba(255, 255, 255, 0.08);
+    --mr-missing-chip-border-hover: rgba(255, 255, 255, 0.18);
+    --mr-missing-chip-radius: 999px;
+    --mr-missing-chip-height: 20px;
+    --mr-missing-chip-icon-size: var(--mr-spacing-12);
+
     --mr-badge-success-bg: rgba(34, 197, 94, 0.1);
     --mr-badge-success-border: rgba(34, 197, 94, 0.24);
     --mr-badge-success-text: #43d184;
@@ -183,20 +206,18 @@
     --mr-badge-error-border: rgba(239, 68, 68, 0.34);
     --mr-badge-info-bg: rgba(96, 165, 250, 0.1);
     --mr-badge-info-border: rgba(78, 161, 255, 0.3);
+
     --mr-gradient-blue-primary: linear-gradient(180deg, rgba(37, 99, 190, 0.88) 0%, rgba(25, 72, 144, 0.92) 100%);
     --mr-gradient-blue-hover: linear-gradient(180deg, rgba(47, 117, 218, 0.96) 0%, rgba(30, 85, 166, 0.98) 100%);
     --mr-gradient-dock-preview: linear-gradient(180deg, rgba(38, 77, 50, 0.82), rgba(18, 35, 24, 0.88));
-    --mr-surface-glass-02: rgba(255, 255, 255, 0.025);
-    --mr-surface-glass-03: rgba(255, 255, 255, 0.035);
-    --mr-surface-glass-05: rgba(255, 255, 255, 0.052);
-    --mr-surface-slate-dark: rgba(15, 23, 42, 0.20);
 
-    --mr-font-family-sans: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-    --mr-font-family-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Consolas", monospace;
+    --mr-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.8);
+    --mr-shadow-elevated: 0 18px 42px rgba(0, 0, 0, 0.28);
     --mr-shadow-dialog: 0 18px 46px rgba(0, 0, 0, 0.42);
     --mr-shadow-card: 0 14px 42px rgba(0, 0, 0, 0.45);
     --mr-shadow-floating: 0 4px 12px rgba(0, 0, 0, 0.3);
     --mr-shadow-focus-ring: 0 0 0 3px rgba(114, 211, 138, 0.12);
+
     --mr-button-height-sm: 26px;
     --mr-button-height-md: 30px;
     --mr-scrollbar-thumb: rgba(255, 255, 255, 0.18);
@@ -205,5 +226,3 @@
     --mr-queue-drawer-width: 320px;
     --mr-splitter-width: 10px;
 }
-
-
