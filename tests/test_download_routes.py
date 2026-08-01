@@ -202,6 +202,113 @@ async def test_download_route_rejects_missing_unsafe_and_unsupported_inputs():
 
 
 @pytest.mark.asyncio
+async def test_download_route_supports_huggingface_headers_and_optional_inputs():
+    handlers, values = _build_download_routes()
+    handler = handlers[("POST", "/model_resolver/download")]
+
+    response = await handler(
+        _request(
+            {
+                "url": "https://huggingface.co/org/repo/resolve/main/model.safetensors",
+                "path_metadata": ["invalid"],
+                "metadata": ["invalid"],
+                "base_directory": r"C:\custom",
+                "hf_token": "hf-token",
+            }
+        )
+    )
+
+    body = json.loads(response.text)
+    assert response.status == 200
+    assert body["filename"] == "model.safetensors"
+    assert body["directory"] == r"C:\models"
+    download_call = values["start_background_download"].call_args.kwargs
+    assert download_call["headers"] == {"Authorization": "Bearer hf-token"}
+    assert download_call["metadata"]["source"] == "huggingface"
+    values["get_default_root_for_category"].assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_download_route_handles_existing_civitai_token_and_path_errors():
+    handlers, values = _build_download_routes()
+    handler = handlers[("POST", "/model_resolver/download")]
+    values["get_civitai_model_details"].return_value = None
+    values["get_download_directory"].side_effect = RuntimeError("path failure")
+
+    response = await handler(
+        _request(
+            {
+                "url": "https://civitai.com/api/download/models/123?token=existing",
+                "filename": "model.safetensors",
+                "path_metadata": {"source": "civitai", "model_id": 123},
+                "civitai_key": "unused-key",
+            }
+        )
+    )
+
+    body = json.loads(response.text)
+    assert response.status == 200
+    assert body["directory"] == ""
+    assert body["path"] == ""
+    download_call = values["start_background_download"].call_args.kwargs
+    assert download_call["url"].endswith("token=existing")
+    assert download_call["headers"] is None
+    values["get_civitai_model_details"].assert_called_once_with(
+        123,
+        None,
+        "unused-key",
+    )
+
+
+@pytest.mark.asyncio
+async def test_download_route_handles_civarchive_metadata_and_lookup_failures():
+    handlers, values = _build_download_routes()
+    handler = handlers[("POST", "/model_resolver/download")]
+    payload = {
+        "url": "https://example.com/model.safetensors",
+        "filename": "model.safetensors",
+        "download_metadata": {
+            "details_source": "civarchive",
+            "model_id": 321,
+            "version_id": 654,
+        },
+    }
+
+    response = await handler(_request(payload))
+    body = json.loads(response.text)
+    assert response.status == 200
+    assert body["success"] is True
+    assert values["get_civarchive_model_details"].call_args.args == (321, 654)
+    first_call_metadata = values["start_background_download"].call_args.kwargs[
+        "metadata"
+    ]
+    assert first_call_metadata["civitai_details"] == {"name": "Archive model"}
+
+    values["get_civarchive_model_details"].side_effect = RuntimeError(
+        "archive unavailable"
+    )
+    response = await handler(_request(payload))
+    assert response.status == 200
+    assert values["self"].logger.warning.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_aria2_install_handles_invalid_and_non_mapping_payloads():
+    handlers, values = _build_download_routes()
+    handler = handlers[("POST", "/model_resolver/aria2/install")]
+
+    invalid_json_request = _request()
+    invalid_json_request.json = AsyncMock(side_effect=ValueError("invalid json"))
+    response = await handler(invalid_json_request)
+    assert response.status == 200
+
+    response = await handler(_request(["not", "a", "mapping"]))
+    assert response.status == 200
+    assert values["install_aria2_engine"].call_args_list[-2].args == (False,)
+    assert values["install_aria2_engine"].call_args_list[-1].args == (False,)
+
+
+@pytest.mark.asyncio
 async def test_download_control_routes_preserve_progress_and_status_codes():
     handlers, values = _build_download_routes()
     values["get_progress"].return_value = {"status": "downloading", "progress": 50}
