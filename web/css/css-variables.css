@@ -222,5 +222,17 @@
     --mr-surface-glass-03: rgba(255, 255, 255, 0.035);
     --mr-surface-glass-05: rgba(255, 255, 255, 0.052);
     --mr-surface-slate-dark: rgba(15, 23, 42, 0.20);
+
+    --mr-font-family-sans: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    --mr-font-family-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Consolas", monospace;
+    --mr-shadow-dialog: 0 18px 46px rgba(0, 0, 0, 0.42);
+    --mr-shadow-card: 0 14px 42px rgba(0, 0, 0, 0.45);
+    --mr-shadow-floating: 0 4px 12px rgba(0, 0, 0, 0.3);
+    --mr-shadow-focus-ring: 0 0 0 3px rgba(114, 211, 138, 0.12);
+    --mr-button-height-sm: 26px;
+    --mr-button-height-md: 30px;
+    --mr-scrollbar-thumb: rgba(255, 255, 255, 0.18);
+    --mr-scrollbar-thumb-hover: rgba(255, 255, 255, 0.34);
 }
+
 

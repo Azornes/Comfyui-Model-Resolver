@@ -3,7 +3,7 @@
 #model-resolver-modal input,
 #model-resolver-modal textarea,
 #model-resolver-modal select {
-    font-family: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif !important;
+    font-family: var(--mr-font-family-sans);
 }
 
 #model-resolver-modal {
@@ -112,8 +112,8 @@
     align-items: center;
     justify-content: center;
     gap: var(--mr-spacing-5);
-    min-height: 30px;
-    height: 30px;
+    min-height: var(--mr-button-height-md);
+    height: var(--mr-button-height-md);
     padding: 0 var(--mr-spacing-12);
     color: var(--mr-text);
     background: var(--mr-missing-control-bg, rgba(255, 255, 255, 0.035));
@@ -370,7 +370,7 @@
     padding: var(--mr-spacing-8) var(--mr-spacing-12);
     background: var(--mr-card-bg);
     border-radius: var(--mr-radius-md);
-    font-family: "SF Mono", "Consolas", monospace;
+    font-family: var(--mr-font-family-mono);
     font-size: var(--mr-font-sm);
     line-height: 1.45;
     color: var(--mr-color-code-blue);
@@ -581,7 +581,7 @@
 .mr-missing-browser-splitter:focus-visible::before,
 .mr-missing-browser-splitter.is-resizing::before {
     background: rgba(114, 211, 138, 0.78);
-    box-shadow: 0 0 0 3px rgba(114, 211, 138, 0.12);
+    box-shadow: var(--mr-shadow-focus-ring);
     transition: none;
 }
 
@@ -628,7 +628,7 @@
     align-items: center;
     justify-content: center;
     gap: var(--mr-spacing-6);
-    min-height: 26px;
+    min-height: var(--mr-button-height-sm);
     padding: 0 var(--mr-spacing-8);
     color: var(--mr-text-muted);
     background: var(--mr-missing-control-bg, rgba(255, 255, 255, 0.035));
@@ -671,7 +671,7 @@
 
 .mr-missing-refresh-btn,
 #model-resolver-modal .mr-missing-refresh-btn {
-    min-height: 26px;
+    min-height: var(--mr-button-height-sm);
     padding: 0 var(--mr-spacing-8);
     gap: var(--mr-spacing-5);
     font-size: var(--mr-font-sm);
@@ -1198,7 +1198,7 @@
     margin-bottom: var(--mr-spacing-4);
     transition: background 0.18s ease, box-shadow 0.18s ease;
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.018);
-    font-family: "Segoe UI Variable", "Segoe UI", sans-serif;
+    font-family: var(--mr-font-family-sans);
 }
 
 .mr-card:nth-child(even) {
@@ -1245,7 +1245,7 @@
 
 .mr-card-title-eyebrow {
     display: block;
-    font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+    font-family: var(--mr-font-family-mono);
     font-size: var(--mr-font-xs);
     line-height: 1.35;
     color: var(--mr-text-dim);
@@ -1734,7 +1734,7 @@
     background: rgba(255, 255, 255, 0.07);
     border: 1px solid var(--mr-border);
     border-radius: var(--mr-missing-chip-radius);
-    font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+    font-family: var(--mr-font-family-mono);
     font-size: var(--mr-font-md);
     color: var(--mr-text);
     max-width: 100%;
@@ -1859,7 +1859,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+    font-family: var(--mr-font-family-mono);
     font-size: var(--mr-font-sm);
     color: var(--mr-text-soft);
 }
@@ -2287,8 +2287,8 @@
     flex: 0 0 30px;
     width: 30px;
     min-width: 30px;
-    height: 30px;
-    min-height: 30px;
+    height: var(--mr-button-height-md);
+    min-height: var(--mr-button-height-md);
     padding: 0;
 }
 
@@ -2557,7 +2557,7 @@
 .mr-search-base-select:focus,
 .mr-custom-url-input:focus {
     border-color: rgba(114, 211, 138, 0.4);
-    box-shadow: 0 0 0 3px rgba(114, 211, 138, 0.12);
+    box-shadow: var(--mr-shadow-focus-ring);
 }
 
 @media (max-width: 720px) {
@@ -3074,7 +3074,7 @@
 .mr-combo-input {
     flex: 1;
     min-width: 0;
-    min-height: 30px;
+    min-height: var(--mr-button-height-md);
     padding: var(--mr-spacing-5) var(--mr-spacing-10);
     background: rgba(255, 255, 255, 0.04);
     color: var(--mr-text);
@@ -3094,7 +3094,7 @@
 
 .mr-combo-input:focus {
     border-color: rgba(114, 211, 138, 0.4);
-    box-shadow: 0 0 0 3px rgba(114, 211, 138, 0.12);
+    box-shadow: var(--mr-shadow-focus-ring);
 }
 
 .mr-combo-list {
@@ -3190,7 +3190,7 @@
 }
 
 .mr-local-model-row {
-    min-height: 30px;
+    min-height: var(--mr-button-height-md);
 }
 
 .mr-local-model-file-icon {
@@ -3468,7 +3468,7 @@
 }
 
 .mr-footer-menu-item {
-    min-height: 30px;
+    min-height: var(--mr-button-height-md);
     padding: 0 var(--mr-spacing-10);
     border: 0;
     border-radius: var(--mr-radius-lg);
@@ -3482,7 +3482,7 @@
 
 #model-resolver-modal .mr-footer-menu .mr-footer-menu-item {
     width: 100%;
-    min-height: 30px;
+    min-height: var(--mr-button-height-md);
     margin: 0;
     padding: 0 var(--mr-spacing-10);
     appearance: none;
@@ -3869,7 +3869,7 @@
     padding: var(--mr-spacing-5) var(--mr-spacing-10);
     background: #3a3a3a;
     border-radius: var(--mr-radius-lg);
-    font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+    font-family: var(--mr-font-family-mono);
     font-size: var(--mr-font-md);
     color: var(--mr-text);
 }
@@ -4044,7 +4044,7 @@
     cursor: pointer;
     padding: 0;
     width: 30px;
-    height: 30px;
+    height: var(--mr-button-height-md);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -4120,7 +4120,7 @@
     justify-content: flex-end;
     flex-wrap: wrap;
     gap: var(--mr-spacing-8);
-    min-height: 30px;
+    min-height: var(--mr-button-height-md);
 }
 
 .mr-info-link {
@@ -4128,7 +4128,7 @@
     align-items: center;
     justify-content: center;
     gap: var(--mr-spacing-7);
-    min-height: 30px;
+    min-height: var(--mr-button-height-md);
     padding: var(--mr-spacing-5) var(--mr-spacing-10);
     border: 1px solid rgba(255, 255, 255, 0.22);
     background: rgba(255, 255, 255, 0.055);
@@ -4381,7 +4381,7 @@ button.mr-info-link:disabled {
 
 .mr-info-hash-calculate {
     flex: 0 0 auto;
-    min-height: 26px;
+    min-height: var(--mr-button-height-sm);
     padding: var(--mr-spacing-4) 9px;
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: var(--mr-radius-lg);
@@ -4469,7 +4469,7 @@ button.mr-info-link:disabled {
 }
 
 .mr-info-location {
-    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-family: var(--mr-font-family-mono);
     font-size: var(--mr-font-md);
     font-weight: 500;
     line-height: 1.45;
@@ -4681,7 +4681,7 @@ button.mr-info-link:disabled {
 
 .mr-info-description code {
     padding: var(--mr-spacing-1) var(--mr-spacing-5);
-    font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+    font-family: var(--mr-font-family-mono);
     font-size: var(--mr-font-md);
 }
 
@@ -4968,7 +4968,7 @@ button.mr-info-link:disabled {
     display: flex;
     align-items: stretch;
     justify-content: center;
-    font-family: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: var(--mr-font-family-sans);
 }
 
 .mr-image-preview-shell {
@@ -5034,7 +5034,7 @@ button.mr-info-link:disabled {
     display: inline-flex;
     align-items: center;
     gap: var(--mr-spacing-6);
-    min-height: 30px;
+    min-height: var(--mr-button-height-md);
     padding: var(--mr-spacing-6) 9px;
     border-radius: var(--mr-missing-control-radius);
     border: 1px solid rgba(255, 255, 255, 0.12);
@@ -5082,7 +5082,7 @@ button.mr-info-link:disabled {
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
-    box-shadow: 0 14px 42px rgba(0, 0, 0, 0.45);
+    box-shadow: var(--mr-shadow-card);
 }
 
 .mr-image-preview-nav {
@@ -5309,7 +5309,7 @@ a.mr-image-preview-resource-name:hover {
     z-index: var(--mr-z-image-preview);
     background: #151619;
     color: var(--mr-text, #f3f3f3);
-    font-family: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: var(--mr-font-family-sans);
 }
 
 .mr-model-details-shell {
@@ -5756,7 +5756,7 @@ a.mr-image-preview-resource-name:hover {
 }
 
 .mr-model-details-file-table-header {
-    min-height: 30px;
+    min-height: var(--mr-button-height-md);
     padding: 0 var(--mr-spacing-10);
     background: rgba(255, 255, 255, 0.055);
     color: rgba(255, 255, 255, 0.48);
@@ -7126,7 +7126,7 @@ a.mr-image-preview-resource-name:hover {
 
 .mr-options-build-current code {
     color: var(--mr-text-muted);
-    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    font-family: var(--mr-font-family-mono);
     font-size: var(--mr-font-sm);
 }
 
@@ -7185,7 +7185,7 @@ a.mr-image-preview-resource-name:hover {
     min-width: 0;
     overflow: hidden;
     color: var(--mr-text-muted);
-    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    font-family: var(--mr-font-family-mono);
     font-size: var(--mr-font-sm);
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -7333,7 +7333,7 @@ a.mr-image-preview-resource-name:hover {
     align-items: center;
     justify-content: space-between;
     gap: var(--mr-spacing-10);
-    min-height: 26px;
+    min-height: var(--mr-button-height-sm);
     padding: var(--mr-spacing-5) var(--mr-spacing-7);
     border: 0 !important;
     border-radius: var(--mr-radius-md);
@@ -7620,7 +7620,7 @@ a.mr-image-preview-resource-name:hover {
 
 .mr-options-audit-errors code {
     color: var(--mr-text-muted);
-    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    font-family: var(--mr-font-family-mono);
     font-size: var(--mr-font-sm);
     overflow-wrap: anywhere;
 }
@@ -7998,7 +7998,7 @@ a.mr-image-preview-resource-name:hover {
     border-radius: var(--mr-radius-md);
     background: rgba(0, 122, 204, 0.9);
     color: var(--mr-text);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-family: var(--mr-font-family-mono);
     font-size: var(--mr-font-sm);
     font-weight: 700;
     line-height: 1;
@@ -8044,7 +8044,7 @@ a.mr-image-preview-resource-name:hover {
 
 .mr-options-template-preview code {
     color: #00a8ff;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-family: var(--mr-font-family-mono);
     font-size: var(--mr-font-md);
     white-space: normal;
     word-break: break-word;
@@ -8212,7 +8212,7 @@ a.mr-image-preview-resource-name:hover {
 .mr-options-switch {
     position: relative;
     width: 46px;
-    height: 26px;
+    height: var(--mr-button-height-sm);
     border-radius: var(--mr-missing-chip-radius);
     background: var(--mr-color-gray-700);
     border: 1px solid var(--mr-missing-control-bg-hover);
@@ -8567,7 +8567,7 @@ a.mr-image-preview-resource-name:hover {
 .mr-download-target-input:focus,
 .mr-download-target-select:focus {
     border-color: rgba(114, 211, 138, 0.4);
-    box-shadow: 0 0 0 3px rgba(114, 211, 138, 0.12);
+    box-shadow: var(--mr-shadow-focus-ring);
 }
 
 .mr-download-target-wrap {
@@ -8755,7 +8755,7 @@ a.mr-image-preview-resource-name:hover {
     display: flex;
     align-items: center;
     gap: var(--mr-spacing-7);
-    min-height: 30px;
+    min-height: var(--mr-button-height-md);
     padding: var(--mr-spacing-6) var(--mr-spacing-8);
 }
 
@@ -8909,7 +8909,7 @@ a.mr-image-preview-resource-name:hover {
     border-radius: var(--mr-radius-lg);
     background: rgba(114, 211, 138, 0.08);
     color: var(--mr-text);
-    font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+    font-family: var(--mr-font-family-mono);
     font-size: var(--mr-font-xs);
     overflow-wrap: anywhere;
     word-break: break-word;
@@ -9017,7 +9017,7 @@ a.mr-image-preview-resource-name:hover {
 }
 
 #model-resolver-modal .mr-missing-detail-pane .mr-match-filename {
-    font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+    font-family: var(--mr-font-family-sans);
     font-size: var(--mr-font-sm);
     font-weight: 650;
     color: var(--mr-text-soft);
@@ -9340,7 +9340,7 @@ a.mr-image-preview-resource-name:hover {
     overflow: hidden;
     background: transparent;
     color: var(--mr-text);
-    font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+    font-family: var(--mr-font-family-sans);
     font-size: var(--mr-font-lg);
     font-weight: 700;
     line-height: 1.25;

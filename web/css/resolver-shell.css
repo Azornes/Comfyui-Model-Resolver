@@ -81,7 +81,7 @@
 .mr-dock-drop-preview-icon svg {
     display: block;
     width: 26px;
-    height: 26px;
+    height: var(--mr-button-height-sm);
     color: var(--mr-accent, #72d38a);
 }
 
@@ -116,8 +116,8 @@
     background: linear-gradient(180deg, var(--mr-bg-soft) 0%, var(--mr-bg) 100%);
     border: 1px solid var(--mr-border-strong);
     border-radius: var(--mr-missing-control-radius);
-    font-family: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-    box-shadow: 0 18px 46px rgba(0, 0, 0, 0.42);
+    font-family: var(--mr-font-family-sans);
+    box-shadow: var(--mr-shadow-dialog);
 }
 
 .mr-context-menu {
@@ -183,7 +183,7 @@
     align-items: center;
     justify-content: center;
     width: 30px;
-    height: 30px;
+    height: var(--mr-button-height-md);
     margin-top: var(--mr-spacing-1);
     padding: 0;
     opacity: 0.82;
@@ -327,7 +327,7 @@
 #model-resolver-splitter.is-resizing::before,
 #model-resolver-body.mr-queue-preview-collapsed #model-resolver-splitter::before {
     background: rgba(114, 211, 138, 0.78);
-    box-shadow: 0 0 0 3px rgba(114, 211, 138, 0.12);
+    box-shadow: var(--mr-shadow-focus-ring);
 }
 
 .p-splitter.is-resizing::after,
@@ -393,7 +393,7 @@
 #queue-toggle-icon:focus-visible::before,
 #queue-toggle-icon.is-collapsed::before {
     background: rgba(114, 211, 138, 0.82);
-    box-shadow: 0 0 0 3px rgba(114, 211, 138, 0.12);
+    box-shadow: var(--mr-shadow-focus-ring);
 }
 
 .mr-queue-panel,
@@ -584,7 +584,7 @@
     min-width: 0;
     overflow: hidden;
     color: #dedede;
-    font-family: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
+    font-family: var(--mr-font-family-mono);
     font-size: var(--mr-font-sm);
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -772,7 +772,7 @@
     background: var(--mr-panel-bg-strong, #262626);
     border: 2px solid var(--mr-accent, #72d38a);
     border-radius: var(--mr-radius-lg);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--mr-shadow-floating);
 }
 
 .model-resolver-floating-button:hover {
