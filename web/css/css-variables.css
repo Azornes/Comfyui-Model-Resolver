@@ -1,4 +1,4 @@
-﻿:root {
+:root {
     --mr-color-primary: #5af;
     --mr-color-primary-light: #7cf;
     --mr-color-primary-lighter: #7bf;
@@ -96,6 +96,7 @@
     --mr-font-2xl: 18px;
     --mr-font-3xl: 20px;
     --mr-font-4xl: 24px;
+    --mr-font-30: 30px;
     --mr-font-5xl: 48px;
     --mr-transition-fast: 0.1s;
     --mr-transition-normal: 0.2s;
@@ -135,6 +136,13 @@
     --mr-confidence-medium: #e1b24d;
     --mr-confidence-low: #e06a6a;
     --mr-link-color: #d8d8d8;
+    --mr-color-civitai: #ff9800;
+    --mr-color-success-action: #4caf50;
+    --mr-color-success-action-hover: #45a049;
+    --mr-color-close-hover: #c42b1c;
+    --mr-color-blue-info: #2196f3;
+    --mr-color-code-blue: #90caf9;
+    --mr-color-danger-bright: #ff3b3b;
     --mr-shadow-elevated: 0 18px 42px rgba(0, 0, 0, 0.28);
     --mr-ui-radius-sm: var(--mr-radius-xl);
     --mr-ui-radius-md: var(--mr-radius-2xl);

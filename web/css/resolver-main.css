@@ -596,7 +596,7 @@
 }
 
 .mr-missing-list-title {
-    font-size: 15px;
+    font-size: var(--mr-font-lg);
     font-weight: 750;
     color: var(--mr-text);
 }
@@ -788,7 +788,7 @@
 }
 
 #model-resolver-modal .mr-missing-list-row:hover {
-    background: rgba(255, 255, 255, 0.032);
+    background: var(--mr-missing-control-bg);
 }
 
 #model-resolver-modal .mr-missing-list-row:focus-visible {
@@ -937,7 +937,7 @@
     border-radius: var(--mr-missing-chip-radius);
     background: var(--mr-missing-surface-raised);
     color: #d4d4d4;
-    font-size: 9px;
+    font-size: var(--mr-font-xs);
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.02em;
@@ -1018,7 +1018,7 @@
     border-radius: 0;
     background: transparent;
     color: rgb(var(--mr-source-rgb));
-    font-size: 9px;
+    font-size: var(--mr-font-xs);
     font-weight: 800;
     filter:
         drop-shadow(0 2px 3px rgba(0, 0, 0, 0.44)) drop-shadow(0 0 4px rgba(var(--mr-source-rgb), var(--mr-source-glow-alpha)));
@@ -1154,7 +1154,7 @@
 
 .mr-missing-detail-pane .mr-card {
     margin: 0;
-    padding: 18px;
+    padding: var(--mr-spacing-20);
     background: transparent;
     box-shadow: none;
 }
@@ -1310,7 +1310,7 @@
 
 .mr-node-chip.is-locatable {
     cursor: pointer;
-    padding-right: 9px;
+    padding-right: var(--mr-spacing-8);
     color: #f1f1f1;
     background: var(--mr-border);
     border-color: rgba(255, 255, 255, 0.12);
@@ -1471,7 +1471,7 @@
     background: rgba(255, 255, 255, 0.045);
     border: 1px solid rgba(255, 255, 255, 0.07);
     border-radius: var(--mr-missing-chip-radius);
-    font-size: 9px;
+    font-size: var(--mr-font-xs);
     color: #d3d3d3;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -1670,11 +1670,11 @@
 }
 
 .mr-missing-browser .mr-column-header {
-    margin-bottom: 9px;
+    margin-bottom: var(--mr-spacing-8);
     padding-bottom: var(--mr-spacing-8);
     border-bottom: 1px solid var(--mr-missing-line, var(--mr-divider));
     color: #bdbdbd;
-    font-size: 15px;
+    font-size: var(--mr-font-lg);
     letter-spacing: 0.08em;
 }
 
@@ -1812,12 +1812,12 @@
 }
 
 .mr-match-row:hover {
-    background: rgba(255, 255, 255, 0.032);
+    background: var(--mr-missing-control-bg);
     box-shadow: inset 0 0 0 1px var(--mr-border);
 }
 
 .mr-missing-browser .mr-match-row:hover {
-    background: rgba(255, 255, 255, 0.032);
+    background: var(--mr-missing-control-bg);
     border-color: var(--mr-missing-line-strong, rgba(255, 255, 255, 0.12));
     box-shadow: none;
 }
@@ -1860,7 +1860,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
-    font-size: 11.5px;
+    font-size: var(--mr-font-sm);
     color: var(--mr-text-soft);
 }
 
@@ -1959,12 +1959,12 @@
 
 .mr-local-alternatives-toggle:hover {
     color: var(--mr-text-soft);
-    background: rgba(255, 255, 255, 0.032);
+    background: var(--mr-missing-control-bg);
     border-color: var(--mr-missing-control-bg-hover);
 }
 
 .mr-local-alternatives-toggle:focus-visible {
-    background: rgba(255, 255, 255, 0.032);
+    background: var(--mr-missing-control-bg);
     box-shadow: none;
 }
 
@@ -2239,7 +2239,7 @@
     min-width: 58px;
     gap: var(--mr-spacing-4);
     padding-inline: 5px;
-    font-size: 8.75px;
+    font-size: var(--mr-font-xs);
 }
 
 .mr-missing-browser .mr-local-link-btn,
@@ -2250,7 +2250,7 @@
     min-width: 46px;
     height: 28px;
     min-height: 28px;
-    padding: 0 9px;
+    padding: 0 var(--mr-spacing-8);
     overflow: hidden;
     gap: 0;
     color: var(--mr-text-muted);
@@ -2437,7 +2437,7 @@
     min-height: var(--mr-download-control-height);
     width: 100%;
     padding: 0 var(--mr-spacing-10);
-    border-radius: 9px;
+    border-radius: var(--mr-radius-xl);
     font-size: var(--mr-font-md);
     line-height: 1;
     display: inline-flex;
@@ -2452,7 +2452,7 @@
     min-height: var(--mr-download-control-height);
     width: 100%;
     padding: 0 var(--mr-spacing-10);
-    border-radius: 9px;
+    border-radius: var(--mr-radius-xl);
     font-size: var(--mr-font-md);
     line-height: 1;
     display: inline-flex;
@@ -2515,7 +2515,7 @@
     width: 14px;
     height: 14px;
     margin-left: var(--mr-spacing-3);
-    font-size: 9px;
+    font-size: var(--mr-font-xs);
     line-height: 1;
     transform: translateY(-1px);
 }
@@ -2526,11 +2526,11 @@
     width: 100%;
     height: var(--mr-download-control-height);
     min-height: var(--mr-download-control-height);
-    padding: 0 11px;
+    padding: 0 var(--mr-spacing-10);
     background: rgba(255, 255, 255, 0.04);
     color: var(--mr-text);
     border: 1px solid var(--mr-border);
-    border-radius: 9px;
+    border-radius: var(--mr-radius-xl);
     font-size: var(--mr-font-md);
     line-height: 1;
     outline: none;
@@ -2660,7 +2660,7 @@
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid var(--mr-border);
     border-radius: var(--mr-missing-chip-radius);
-    font-size: 9px;
+    font-size: var(--mr-font-xs);
     font-weight: 700;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -2684,7 +2684,7 @@
     max-width: 100%;
     overflow: hidden;
     color: var(--mr-text-muted);
-    font-size: 9px;
+    font-size: var(--mr-font-xs);
     font-weight: 600;
     line-height: 1.15;
     text-overflow: ellipsis;
@@ -2987,7 +2987,7 @@
     max-width: 16px;
     max-height: 16px;
     flex: 0 0 16px;
-    border-radius: 5px;
+    border-radius: var(--mr-radius-md);
     border-color: rgba(255, 120, 112, 0.28);
     background: rgba(255, 120, 112, 0.055);
     color: #ff8a80;
@@ -3013,7 +3013,7 @@
     height: 5px;
     overflow: hidden;
     background: var(--mr-border);
-    border-radius: 5px;
+    border-radius: var(--mr-radius-md);
 }
 
 .mr-search-progress-fill {
@@ -3079,7 +3079,7 @@
     background: rgba(255, 255, 255, 0.04);
     color: var(--mr-text);
     border: 1px solid var(--mr-border);
-    border-radius: 10px;
+    border-radius: var(--mr-radius-2xl);
     font-size: var(--mr-font-md);
     outline: none;
     transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
@@ -3220,7 +3220,7 @@
     align-items: flex-start;
     gap: var(--mr-spacing-10);
     padding: var(--mr-spacing-10) 14px;
-    border-radius: 10px;
+    border-radius: var(--mr-radius-2xl);
     font-size: var(--mr-font-base);
     margin-top: var(--mr-spacing-8);
     border: 1px solid var(--mr-missing-control-bg-hover);
@@ -3263,7 +3263,7 @@
 .mr-progress-bar {
     height: 6px;
     background: #333;
-    border-radius: 3px;
+    border-radius: var(--mr-radius-md);
     overflow: hidden;
 }
 
@@ -3326,7 +3326,7 @@
     gap: var(--mr-spacing-10);
     flex-wrap: wrap;
     padding: 0 var(--mr-spacing-16);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.018) 0%, rgba(255, 255, 255, 0.032) 100%);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.018) 0%, var(--mr-missing-control-bg) 100%);
     border-top: 1px solid var(--mr-border);
 }
 
@@ -3413,7 +3413,7 @@
 .mr-footer-btn {
     min-height: 34px;
     min-width: 138px;
-    padding: 0 13px;
+    padding: 0 var(--mr-spacing-12);
     font-size: var(--mr-font-md);
     border-radius: var(--mr-radius-lg);
     line-height: 1;
@@ -3718,7 +3718,7 @@
     margin-bottom: 0;
     color: var(--mr-text, #eef2f7);
     background: var(--mr-tab-active-bg) !important;
-    border-radius: 10px 10px 0 0;
+    border-radius: var(--mr-radius-2xl) var(--mr-radius-2xl) 0 0;
     cursor: default;
     pointer-events: none;
     box-shadow: 0 1px 0 var(--mr-tab-active-bg) !important;
@@ -3830,7 +3830,7 @@
 }
 
 .mr-loaded-models-title {
-    font-size: 15px;
+    font-size: var(--mr-font-lg);
     font-weight: 600;
     color: var(--mr-text);
     margin: 0;
@@ -4236,7 +4236,7 @@ button.mr-info-link:disabled {
     display: flex;
     align-items: flex-start;
     gap: var(--mr-spacing-10);
-    margin: 0 0 18px;
+    margin: 0 0 var(--mr-spacing-20);
 }
 
 .mr-info-tags-label {
@@ -4274,7 +4274,7 @@ button.mr-info-link:disabled {
     display: block;
     border-collapse: separate;
     border-spacing: 0;
-    margin-bottom: 18px;
+    margin-bottom: var(--mr-spacing-20);
     border: 1px solid var(--mr-border);
     border-radius: var(--mr-radius-xl);
     overflow: hidden;
@@ -4485,7 +4485,7 @@ button.mr-info-link:disabled {
     padding: var(--mr-spacing-2) var(--mr-spacing-6);
     margin: -var(--mr-spacing-2) -var(--mr-spacing-6);
     border: 1px solid transparent;
-    border-radius: 5px;
+    border-radius: var(--mr-radius-md);
     background: transparent;
     color: inherit;
     font: inherit;
@@ -4670,7 +4670,7 @@ button.mr-info-link:disabled {
 
 .mr-info-description ul,
 .mr-info-description ol {
-    padding-left: 18px;
+    padding-left: var(--mr-spacing-20);
 }
 
 .mr-info-description code,
@@ -4740,7 +4740,7 @@ button.mr-info-link:disabled {
 
 .mr-info-images-layout {
     column-count: 3;
-    column-gap: 14px;
+    column-gap: var(--mr-spacing-15);
 }
 
 .mr-info-image-item {
@@ -4749,7 +4749,7 @@ button.mr-info-link:disabled {
     background: var(--mr-overlay-dark-20);
     border: 1px solid var(--mr-missing-control-bg-hover);
     break-inside: avoid;
-    margin-bottom: 14px;
+    margin-bottom: var(--mr-spacing-15);
 }
 
 .mr-info-image-item figure {
@@ -5073,7 +5073,7 @@ button.mr-info-link:disabled {
     justify-content: center;
     min-width: 0;
     min-height: 0;
-    padding: 22px;
+    padding: var(--mr-spacing-20);
     background: #0b0c0e;
 }
 
@@ -5091,7 +5091,7 @@ button.mr-info-link:disabled {
     width: 42px;
     height: 42px;
     transform: translateY(-50%);
-    font-size: 30px;
+    font-size: var(--mr-font-30);
     line-height: 1;
 }
 
@@ -5112,7 +5112,7 @@ button.mr-info-link:disabled {
 }
 
 .mr-image-preview-card {
-    padding: 14px;
+    padding: var(--mr-spacing-15);
     margin-bottom: var(--mr-spacing-12);
     border-radius: var(--mr-radius-xl);
     background: #24252b;
@@ -5130,7 +5130,7 @@ button.mr-info-link:disabled {
 .mr-image-preview-card h4 {
     margin: 0;
     color: #d8d8dc;
-    font-size: 15px;
+    font-size: var(--mr-font-lg);
     font-weight: 800;
 }
 
@@ -5145,7 +5145,7 @@ button.mr-info-link:disabled {
     align-items: center;
     min-height: 21px;
     padding: var(--mr-spacing-3) var(--mr-spacing-7);
-    border-radius: 5px;
+    border-radius: var(--mr-radius-md);
     background: rgba(255, 255, 255, 0.09);
     border: 1px solid rgba(255, 255, 255, 0.11);
     color: #f1f1f3;
@@ -5229,7 +5229,7 @@ button.mr-info-link:disabled {
     align-items: center;
     min-height: 19px;
     padding: var(--mr-spacing-2) var(--mr-spacing-7);
-    border-radius: 5px;
+    border-radius: var(--mr-radius-md);
     background: rgba(78, 161, 255, 0.16);
     border: 1px solid rgba(78, 161, 255, 0.18);
     color: #cfe5ff;
@@ -5360,7 +5360,7 @@ a.mr-image-preview-resource-name:hover {
 .mr-model-details-title h2 {
     margin: 0;
     color: #f1f1f3;
-    font-size: 22px;
+    font-size: var(--mr-font-3xl);
     line-height: 1.15;
     font-weight: 800;
     overflow: hidden;
@@ -5389,7 +5389,7 @@ a.mr-image-preview-resource-name:hover {
     align-items: center;
     gap: var(--mr-spacing-7);
     min-height: 34px;
-    padding: 0 11px;
+    padding: 0 var(--mr-spacing-10);
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: var(--mr-missing-control-radius);
     background: rgba(255, 255, 255, 0.07);
@@ -5470,7 +5470,7 @@ a.mr-image-preview-resource-name:hover {
 }
 
 .mr-model-details-side.is-huggingface .mr-model-details-tags {
-    margin-top: 9px;
+    margin-top: var(--mr-spacing-8);
 }
 
 .mr-model-details-side.is-huggingface .mr-model-details-variants-panel {
@@ -5636,7 +5636,7 @@ a.mr-image-preview-resource-name:hover {
     border-radius: var(--mr-missing-chip-radius);
     background: rgba(238, 238, 238, 0.86);
     color: #202124;
-    font-size: 32px;
+    font-size: var(--mr-font-4xl);
     line-height: 1;
     cursor: pointer;
     transform: translateY(-50%);
@@ -5668,7 +5668,7 @@ a.mr-image-preview-resource-name:hover {
 .mr-model-details-panel h3 {
     margin: 0 0 var(--mr-spacing-10);
     color: #f0f0f2;
-    font-size: 15px;
+    font-size: var(--mr-font-lg);
     font-weight: 800;
 }
 
@@ -5723,7 +5723,7 @@ a.mr-image-preview-resource-name:hover {
     align-items: center;
     min-height: 22px;
     padding: var(--mr-spacing-3) var(--mr-spacing-7);
-    border-radius: 5px;
+    border-radius: var(--mr-radius-md);
     background: var(--mr-border);
     color: #ececf0;
     font-size: var(--mr-font-sm);
@@ -5732,7 +5732,7 @@ a.mr-image-preview-resource-name:hover {
 
 .mr-model-details-files {
     display: grid;
-    gap: 9px;
+    gap: var(--mr-spacing-8);
 }
 
 .mr-model-details-files.is-table {
@@ -5750,14 +5750,14 @@ a.mr-image-preview-resource-name:hover {
         minmax(240px, 1.35fr)
         minmax(180px, 0.9fr)
         minmax(132px, 0.55fr);
-    gap: 14px;
+    gap: var(--mr-spacing-15);
     align-items: center;
     min-width: 0;
 }
 
 .mr-model-details-file-table-header {
     min-height: 30px;
-    padding: 0 11px;
+    padding: 0 var(--mr-spacing-10);
     background: rgba(255, 255, 255, 0.055);
     color: rgba(255, 255, 255, 0.48);
     font-size: var(--mr-font-xs);
@@ -5826,7 +5826,7 @@ a.mr-image-preview-resource-name:hover {
     min-height: 20px;
     padding: var(--mr-spacing-2) var(--mr-spacing-6);
     overflow: hidden;
-    border-radius: 5px;
+    border-radius: var(--mr-radius-md);
     background: var(--mr-border);
     color: rgba(255, 255, 255, 0.78);
     font-size: var(--mr-font-xs);
@@ -5956,7 +5956,7 @@ a.mr-image-preview-resource-name:hover {
 
 .mr-model-details-file-body {
     display: grid;
-    gap: 9px;
+    gap: var(--mr-spacing-8);
     padding: 0 var(--mr-spacing-10) var(--mr-spacing-10);
 }
 
@@ -6010,7 +6010,7 @@ a.mr-image-preview-resource-name:hover {
     min-height: 20px;
     max-width: 100%;
     padding: var(--mr-spacing-2) var(--mr-spacing-6);
-    border-radius: 5px;
+    border-radius: var(--mr-radius-md);
     background: rgba(255, 255, 255, 0.075);
     color: rgba(255, 255, 255, 0.78);
     font-size: var(--mr-font-xs);
@@ -6022,7 +6022,7 @@ a.mr-image-preview-resource-name:hover {
     display: grid;
     gap: var(--mr-spacing-10);
     margin-top: 0;
-    padding-top: 9px;
+    padding-top: var(--mr-spacing-8);
     border-top: 1px solid var(--mr-border);
 }
 
@@ -6195,7 +6195,7 @@ a.mr-image-preview-resource-name:hover {
 }
 
 .mr-model-details-empty {
-    padding: 14px;
+    padding: var(--mr-spacing-15);
     border: 1px dashed rgba(255, 255, 255, 0.13);
     border-radius: var(--mr-missing-control-radius);
     color: rgba(255, 255, 255, 0.55);
@@ -6309,7 +6309,7 @@ a.mr-image-preview-resource-name:hover {
     gap: 0;
     height: 100%;
     border: 1px solid var(--mr-border);
-    border-radius: 22px;
+    border-radius: var(--mr-radius-3xl);
     overflow: hidden;
     background: #171717;
 }
@@ -6318,7 +6318,7 @@ a.mr-image-preview-resource-name:hover {
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    gap: 14px;
+    gap: var(--mr-spacing-15);
     height: 100%;
     padding: var(--mr-spacing-16) var(--mr-spacing-8) var(--mr-spacing-12);
     background: #252525;
@@ -6482,7 +6482,7 @@ a.mr-image-preview-resource-name:hover {
     height: 100%;
     align-content: start;
     align-items: start;
-    padding: 18px 26px 0px 26px;
+    padding: var(--mr-spacing-20) var(--mr-spacing-24) 0px var(--mr-spacing-24);
     background: #171717;
     overflow-y: auto;
     overflow-x: hidden;
@@ -6528,7 +6528,7 @@ a.mr-image-preview-resource-name:hover {
 
 .mr-options-title {
     margin: 0;
-    font-size: 17px;
+    font-size: var(--mr-font-xl);
     font-weight: 700;
     color: var(--mr-text);
 }
@@ -6963,7 +6963,7 @@ a.mr-image-preview-resource-name:hover {
     height: 36px;
     min-height: 36px;
     margin-top: var(--mr-spacing-12);
-    margin-left: 14px;
+    margin-left: var(--mr-spacing-15);
     overflow: visible;
     --mr-tab-active-bg: var(--mr-options-build-surface);
 }
@@ -6975,16 +6975,16 @@ a.mr-image-preview-resource-name:hover {
 .mr-options-build-tabs .mr-options-build-tab {
     gap: var(--mr-spacing-5);
     min-width: 94px;
-    padding-right: 18px;
-    padding-left: 18px;
+    padding-right: var(--mr-spacing-20);
+    padding-left: var(--mr-spacing-20);
 }
 
 .mr-options-build-tabs .mr-options-build-tab:not(.mr-tab-active):hover,
 .mr-options-build-tabs .mr-options-build-tab:not(.mr-tab-active):focus,
 .mr-options-build-tabs .mr-options-build-tab:not(.mr-tab-active):active,
 .mr-options-build-tabs .mr-options-build-tab.mr-tab-active {
-    padding-right: 18px !important;
-    padding-left: 18px !important;
+    padding-right: var(--mr-spacing-20) !important;
+    padding-left: var(--mr-spacing-20) !important;
 }
 
 .mr-options-build-tab-count {
@@ -7186,7 +7186,7 @@ a.mr-image-preview-resource-name:hover {
     overflow: hidden;
     color: var(--mr-text-muted);
     font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
-    font-size: 10.5px;
+    font-size: var(--mr-font-sm);
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -7302,7 +7302,7 @@ a.mr-image-preview-resource-name:hover {
     border-radius: 0;
     color: var(--mr-text-muted);
     background: transparent;
-    font-size: 10.5px;
+    font-size: var(--mr-font-sm);
     font-weight: 700;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -7635,7 +7635,7 @@ a.mr-image-preview-resource-name:hover {
     flex-direction: column;
     gap: 0;
     align-items: stretch;
-    padding-bottom: 14px;
+    padding-bottom: var(--mr-spacing-15);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -7770,8 +7770,8 @@ a.mr-image-preview-resource-name:hover {
     position: fixed;
     min-width: 220px;
     max-width: min(320px, calc(100vw - 24px));
-    padding: 9px 11px;
-    border-radius: 10px;
+    padding: var(--mr-spacing-8) var(--mr-spacing-10);
+    border-radius: var(--mr-radius-2xl);
     background: rgba(34, 34, 38, 0.98);
     border: 1px solid var(--mr-border);
     color: var(--mr-text);
@@ -7818,7 +7818,7 @@ a.mr-image-preview-resource-name:hover {
     grid-template-columns: minmax(150px, 1fr) minmax(0, 380px) 42px;
     align-items: center;
     gap: var(--mr-spacing-10);
-    padding: 14px 0 0;
+    padding: var(--mr-spacing-15) 0 0;
     min-width: 0;
 }
 
@@ -7832,7 +7832,7 @@ a.mr-image-preview-resource-name:hover {
     width: 100%;
     min-width: 0;
     min-height: 42px;
-    padding: 11px 14px;
+    padding: var(--mr-spacing-10) var(--mr-spacing-15);
     background: #0f1013;
     color: var(--mr-text);
     border: 1px solid rgba(255, 255, 255, 0.16);
@@ -7888,7 +7888,7 @@ a.mr-image-preview-resource-name:hover {
 .mr-options-subsection-title {
     margin: 0;
     color: var(--mr-text);
-    font-size: 17px;
+    font-size: var(--mr-font-xl);
     font-weight: 700;
     line-height: 1.2;
 }
@@ -7976,7 +7976,7 @@ a.mr-image-preview-resource-name:hover {
     align-items: center;
     justify-content: center;
     border: 1px solid rgba(255, 0, 0, 0.82);
-    border-radius: 5px;
+    border-radius: var(--mr-radius-md);
     background: rgba(255, 0, 0, 0.08);
     color: #ff3b3b;
     cursor: pointer;
@@ -8502,7 +8502,7 @@ a.mr-image-preview-resource-name:hover {
     width: 14px;
     height: 14px;
     margin-left: var(--mr-spacing-3);
-    font-size: 9px;
+    font-size: var(--mr-font-xs);
     line-height: 1;
     transform: translateY(-1px);
 }
@@ -8535,11 +8535,11 @@ a.mr-image-preview-resource-name:hover {
     height: var(--mr-download-control-height, 36px);
     min-height: var(--mr-download-control-height, 36px);
     margin: 0;
-    padding: 0 11px;
+    padding: 0 var(--mr-spacing-10);
     background: rgba(255, 255, 255, 0.04);
     color: var(--mr-text);
     border: 1px solid var(--mr-border);
-    border-radius: 9px;
+    border-radius: var(--mr-radius-xl);
     font-size: var(--mr-font-md);
     line-height: 1;
     outline: none;
@@ -8794,7 +8794,7 @@ a.mr-image-preview-resource-name:hover {
 }
 
 .mr-folder-browser-children {
-    margin-left: 18px;
+    margin-left: var(--mr-spacing-20);
 }
 
 .mr-folder-browser-row {
@@ -8927,7 +8927,7 @@ a.mr-image-preview-resource-name:hover {
 }
 
 #model-resolver-modal .mr-missing-detail-pane .mr-card {
-    padding: 18px 0;
+    padding: var(--mr-spacing-20) 0;
 }
 
 #model-resolver-modal .mr-missing-detail-pane .mr-card-header {
@@ -8935,7 +8935,7 @@ a.mr-image-preview-resource-name:hover {
 }
 
 #model-resolver-modal .mr-missing-detail-pane .mr-card-title {
-    font-size: 17px;
+    font-size: var(--mr-font-xl);
     font-weight: 750;
 }
 
@@ -8965,7 +8965,7 @@ a.mr-image-preview-resource-name:hover {
 }
 
 #model-resolver-modal .mr-missing-detail-pane .mr-column {
-    padding: 14px;
+    padding: var(--mr-spacing-15);
     background: transparent;
     border-color: transparent;
     border-radius: 0;
@@ -8976,7 +8976,7 @@ a.mr-image-preview-resource-name:hover {
     padding-bottom: var(--mr-spacing-10);
     color: #c3c3c3;
     border-bottom-color: rgba(255, 255, 255, 0.075);
-    font-size: 15px;
+    font-size: var(--mr-font-lg);
     letter-spacing: 0.075em;
 }
 
@@ -8984,7 +8984,7 @@ a.mr-image-preview-resource-name:hover {
     min-height: 42px;
     margin-bottom: var(--mr-spacing-8);
     padding: var(--mr-spacing-7) var(--mr-spacing-10);
-    background: rgba(255, 255, 255, 0.032);
+    background: var(--mr-missing-control-bg);
     border-color: rgba(255, 255, 255, 0.065);
     border-radius: var(--mr-missing-control-radius);
 }
@@ -9018,7 +9018,7 @@ a.mr-image-preview-resource-name:hover {
 
 #model-resolver-modal .mr-missing-detail-pane .mr-match-filename {
     font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
-    font-size: 11.5px;
+    font-size: var(--mr-font-sm);
     font-weight: 650;
     color: #e7e7e7;
 }
@@ -9087,7 +9087,7 @@ a.mr-image-preview-resource-name:hover {
 #model-resolver-modal .mr-missing-detail-pane .mr-local-alternatives-toggle {
     min-height: 28px;
     margin: var(--mr-spacing-6) 0;
-    padding: 0 9px;
+    padding: 0 var(--mr-spacing-8);
     background: rgba(255, 255, 255, 0.027);
     border: 1px solid rgba(255, 255, 255, 0.065) !important;
     border-radius: var(--mr-missing-control-radius);
@@ -9297,7 +9297,7 @@ a.mr-image-preview-resource-name:hover {
     min-height: 0;
     box-sizing: border-box;
     padding: 9px var(--mr-spacing-12);
-    gap: 14px;
+    gap: var(--mr-spacing-15);
 }
 
 #model-resolver-modal .mr-missing-detail-pane .mr-selected-summary {
@@ -9359,7 +9359,7 @@ a.mr-image-preview-resource-name:hover {
 #model-resolver-modal .mr-missing-detail-pane .model-resolver-selected .mr-btn {
     min-height: 40px;
     height: 40px;
-    padding: 0 17px;
+    padding: 0 var(--mr-spacing-16);
     margin-left: 0;
     background: var(--mr-missing-control-bg, rgba(255, 255, 255, 0.035));
     border-color: var(--mr-missing-control-border, rgba(255, 255, 255, 0.105));

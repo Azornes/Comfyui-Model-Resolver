@@ -62,7 +62,7 @@
 }
 
 .mr-undock-drop-preview strong {
-    font-size: 15px;
+    font-size: var(--mr-font-lg);
 }
 
 .mr-undock-drop-preview>span:last-child {
@@ -86,7 +86,7 @@
 }
 
 .mr-dock-drop-preview strong {
-    font-size: 15px;
+    font-size: var(--mr-font-lg);
 }
 
 .mr-dock-drop-preview>span:last-child {
@@ -489,7 +489,7 @@
 
 #model-resolver-modal #model-resolver-queue .mr-queue-tabs:not(.mr-downloads-subtabs) > .mr-queue-tab.mr-tab[data-tab="downloads"].mr-tab-active,
 #model-resolver-modal #model-resolver-queue .mr-queue-tabs:not(.mr-downloads-subtabs) > .mr-queue-tab.mr-tab-active:last-child {
-    border-radius: 10px !important;
+    border-radius: var(--mr-radius-2xl) !important;
     box-shadow: none !important;
 }
 
@@ -555,7 +555,7 @@
 }
 
 .mr-queue-item:hover {
-    background: rgba(255, 255, 255, 0.032);
+    background: var(--mr-missing-control-bg);
 }
 
 .mr-queue-item-title,
