@@ -59,8 +59,145 @@ node_mod.extension.setup_routes()
 extension = node_mod.extension
 
 
+def _find_bound_extension(handler):
+    pending = [handler]
+    visited = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in visited:
+            continue
+        visited.add(id(current))
+        for cell in getattr(current, "__closure__", ()) or ():
+            value = cell.cell_contents
+            if hasattr(value, "search_tracker"):
+                return value
+            if callable(value):
+                pending.append(value)
+    return None
+
+
 
 class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
+
+    def test_all_api_routes_are_registered(self):
+        expected_routes = {
+            ("GET", "/model_resolver/base-models"),
+            ("GET", "/model_resolver/base-models/status"),
+            ("POST", "/model_resolver/base-models/update"),
+            ("POST", "/model_resolver/analyze"),
+            ("GET", "/model_resolver/analyze-progress/{analysis_id}"),
+            ("POST", "/model_resolver/resolve"),
+            ("POST", "/model_resolver/local-matches"),
+            ("POST", "/model_resolver/local-model-hashes"),
+            ("GET", "/model_resolver/model-preview"),
+            ("POST", "/model_resolver/workflow-model-hashes"),
+            ("POST", "/model_resolver/local-matches-by-hash"),
+            ("POST", "/model_resolver/open-containing-folder"),
+            ("POST", "/model_resolver/calculate-file-hash"),
+            ("POST", "/model_resolver/calculate-file-hash/start"),
+            ("GET", "/model_resolver/calculate-file-hash/progress/{progress_id}"),
+            ("POST", "/model_resolver/calculate-file-hash/cancel/{progress_id}"),
+            ("GET", "/model_resolver/models"),
+            ("POST", "/model_resolver/metadata-size-audit"),
+            ("GET", "/model_resolver/metadata-build/capabilities"),
+            ("POST", "/model_resolver/metadata-build/start"),
+            ("GET", "/model_resolver/metadata-build/progress/{progress_id}"),
+            ("POST", "/model_resolver/metadata-build/cancel/{progress_id}"),
+            ("POST", "/model_resolver/loaded"),
+            ("GET", "/model_resolver/loaded-progress/{loaded_id}"),
+            ("POST", "/model_resolver/civitai-search"),
+            ("POST", "/model_resolver/custom-url"),
+            ("POST", "/model_resolver/model-details"),
+            ("GET", "/model_resolver/search-progress/{progress_id}"),
+            ("POST", "/model_resolver/search-cancel/{progress_id}"),
+            ("POST", "/model_resolver/search"),
+            ("POST", "/model_resolver/clear-search-cache"),
+            ("POST", "/model_resolver/civitai/session-token/check"),
+            ("POST", "/model_resolver/civitai/api-key/check"),
+            ("POST", "/model_resolver/huggingface/token/check"),
+            ("POST", "/model_resolver/brave/api-key/check"),
+            ("GET", "/model_resolver/huggingface/author-index/status"),
+            ("POST", "/model_resolver/huggingface/author-index/refresh"),
+            ("GET", "/model_resolver/model-list/status"),
+            ("POST", "/model_resolver/model-list/update"),
+            ("POST", "/model_resolver/download"),
+            ("GET", "/model_resolver/progress/{download_id}"),
+            ("GET", "/model_resolver/progress"),
+            ("POST", "/model_resolver/cancel/{download_id}"),
+            ("POST", "/model_resolver/pause/{download_id}"),
+            ("POST", "/model_resolver/resume/{download_id}"),
+            ("POST", "/model_resolver/clear_completed_downloads"),
+            ("GET", "/model_resolver/aria2/status"),
+            ("POST", "/model_resolver/aria2/status"),
+            ("POST", "/model_resolver/aria2/start"),
+            ("GET", "/model_resolver/aria2/stop"),
+            ("POST", "/model_resolver/aria2/stop"),
+            ("POST", "/model_resolver/aria2/install"),
+            ("GET", "/model_resolver/directories"),
+            ("GET", "/model_resolver/root-directories"),
+            ("GET", "/model_resolver/path-template-suggestions"),
+            ("GET", "/model_resolver/capabilities"),
+            ("GET", "/model_resolver/version"),
+            ("GET", "/model_resolver/subfolders/{category}"),
+            ("GET", "/model_resolver/logs/backend/export"),
+            ("GET", "/model_resolver/settings"),
+            ("POST", "/model_resolver/settings"),
+        }
+        self.assertEqual(expected_routes, set(routes_registered))
+
+    def test_project_version_helpers_preserve_version_comparison_behavior(self):
+        self.assertEqual(
+            node_mod._extract_project_version('version = "1.2.3"'),
+            "1.2.3",
+        )
+        self.assertEqual(node_mod._extract_project_version("name = 'resolver'"), "")
+        self.assertEqual(node_mod._version_sort_key("v1.10.2-beta"), (1, 10, 2))
+        self.assertEqual(node_mod._version_sort_key("unknown"), ())
+
+    def test_project_version_info_reports_remote_update(self):
+        version_module = importlib.import_module("comfyui-model-resolver.core.version")
+        network_module = importlib.import_module("comfyui-model-resolver.core.network_utils")
+        response = MagicMock(status_code=200, text='version = "2.0.0"')
+        with (
+            patch.object(version_module, "_get_local_project_version", return_value="1.0.0"),
+            patch.object(network_module, "request_source_response", return_value=response),
+        ):
+            version_module._project_version_cache.update(
+                {"checked_at": 0.0, "latest_version": None}
+            )
+            result = version_module._get_project_version_info()
+
+        self.assertEqual(result["current_version"], "1.0.0")
+        self.assertEqual(result["latest_version"], "2.0.0")
+        self.assertEqual(result["status"], "update_available")
+        self.assertEqual(result["github_url"], node_mod.PROJECT_GITHUB_URL)
+
+    async def test_version_route_returns_version_payload(self):
+        get_handler = routes_registered[("GET", "/model_resolver/version")]
+        request = MagicMock()
+        expected = {
+            "current_version": "1.0.0",
+            "latest_version": "1.1.0",
+            "status": "update_available",
+        }
+        version_module = importlib.import_module("comfyui-model-resolver.core.version")
+        with (
+            patch.object(version_module, "_get_project_version_info", return_value=expected),
+            patch("aiohttp.web.json_response") as mock_json_response,
+        ):
+            await get_handler(request)
+
+        mock_json_response.assert_called_once_with(expected)
+
+    async def test_settings_route_returns_settings_and_schema(self):
+        get_handler = routes_registered[("GET", "/model_resolver/settings")]
+        with patch("aiohttp.web.json_response") as mock_json_response:
+            await get_handler(MagicMock())
+
+        mock_json_response.assert_called_once()
+        payload = mock_json_response.call_args.args[0]
+        self.assertIn("settings", payload)
+        self.assertIn("schema", payload)
     
     @classmethod
     def tearDownClass(cls):
@@ -188,15 +325,7 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
         get_handler = routes_registered.get(("GET", "/model_resolver/search-progress/{progress_id}"))
         self.assertIsNotNone(get_handler)
         
-        bound_extension = None
-        if hasattr(get_handler, "__closure__") and get_handler.__closure__:
-            for cell in get_handler.__closure__:
-                val = cell.cell_contents
-                if hasattr(val, "search_tracker"):
-                    bound_extension = val
-                    break
-                    
-        target_extension = bound_extension or extension
+        target_extension = _find_bound_extension(get_handler) or extension
         target_extension.search_tracker.update(progress_id, status="running", stage="civitai", message="Searching Civitai", percent=50)
         
         mock_request = MagicMock()
@@ -210,21 +339,26 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(response_data.get("status"), "running")
             self.assertEqual(response_data.get("percent"), 50.0)
 
+    async def test_search_progress_route_rejects_missing_id(self):
+        get_handler = routes_registered[("GET", "/model_resolver/search-progress/{progress_id}")]
+        request = MagicMock()
+        request.match_info = {"progress_id": ""}
+
+        with patch("aiohttp.web.json_response") as mock_json_res:
+            await get_handler(request)
+
+        mock_json_res.assert_called_once_with(
+            {"error": "progress_id is required"},
+            status=400,
+        )
+
     async def test_search_cancel_route(self):
         progress_id = "test_cancel_job"
         
         cancel_handler = routes_registered.get(("POST", "/model_resolver/search-cancel/{progress_id}"))
         self.assertIsNotNone(cancel_handler)
         
-        bound_extension = None
-        if hasattr(cancel_handler, "__closure__") and cancel_handler.__closure__:
-            for cell in cancel_handler.__closure__:
-                val = cell.cell_contents
-                if hasattr(val, "search_tracker"):
-                    bound_extension = val
-                    break
-                    
-        target_extension = bound_extension or extension
+        target_extension = _find_bound_extension(cancel_handler) or extension
         target_extension.search_tracker.update(progress_id, status="running")
         
         mock_request = MagicMock()
