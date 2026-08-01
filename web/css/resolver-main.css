@@ -3948,7 +3948,8 @@
     display: none !important;
 }
 
-.mr-context-menu-item:hover {
+.mr-context-menu-item:hover,
+.mr-context-menu-item:focus-visible {
     background: rgba(255, 255, 255, 0.1);
 }
 
@@ -3972,7 +3973,7 @@
 .mr-context-menu-divider {
     height: 1px;
     background: var(--mr-border-strong, rgba(255, 255, 255, 0.14));
-    margin: var(--mr-spacing-4) 0;
+    margin: 0;
 }
 
 .mr-download-folder-context {
