@@ -1,10 +1,14 @@
 """CivitAI model search service."""
 
-from .model_utils import ModelServiceDependencies
+from ..routes.context import RouteContext
+from .model_utils import CivitAISearchDependencies, ModelServiceDependencies
 
 
 class CivitAISearchService(ModelServiceDependencies):
     """Execute exact-match CivitAI and model metadata searches."""
+
+    def __init__(self, context: RouteContext):
+        super().__init__(CivitAISearchDependencies.from_context(context))
 
     async def civitai_search(self, request):
         """Fetch model metadata from trusted exact-match sources."""
@@ -894,4 +898,3 @@ class CivitAISearchService(ModelServiceDependencies):
                     f"Remote metadata no-match sidecar save failed: {metadata_error}"
                 )
         return web.json_response(response)
-

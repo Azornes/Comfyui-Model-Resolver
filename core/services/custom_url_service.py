@@ -1,10 +1,14 @@
 """Custom model URL service."""
 
-from .model_utils import ModelServiceDependencies
+from ..routes.context import RouteContext
+from .model_utils import CustomUrlDependencies, ModelServiceDependencies
 
 
 class CustomUrlService(ModelServiceDependencies):
     """Resolve provider URLs into normalized model results."""
+
+    def __init__(self, context: RouteContext):
+        super().__init__(CustomUrlDependencies.from_context(context))
 
     async def custom_url(self, request):
         """Resolve a user-provided provider URL into a normal search result."""
@@ -286,4 +290,3 @@ class CustomUrlService(ModelServiceDependencies):
         }
         response[source] = result
         return web.json_response(response)
-

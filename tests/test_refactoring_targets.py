@@ -1020,6 +1020,8 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
         service_class="ModelService",
         **dependencies,
     ):
+        from dataclasses import fields
+
         from aiohttp import web
 
         RouteContext = importlib.import_module(
@@ -1031,6 +1033,21 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
             ),
             service_class,
         )
+        dependency_class_name = {
+            "civitai_search_service": "CivitAISearchDependencies",
+            "custom_url_service": "CustomUrlDependencies",
+            "model_details_service": "ModelDetailsDependencies",
+        }.get(service_module)
+        if dependency_class_name:
+            dependency_type = getattr(
+                importlib.import_module(
+                    "comfyui-model-resolver.core.services.model_utils"
+                ),
+                dependency_class_name,
+            )
+            for field in fields(dependency_type):
+                if field.name not in {"logger", "web"}:
+                    dependencies.setdefault(field.name, MagicMock())
 
         extension = MagicMock()
         extension.logger = MagicMock()
@@ -1088,3 +1105,95 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
             json.loads(response.text)["error"],
             "Unsupported model details source",
         )
+
+    def test_model_service_dependencies_are_minimal_dataclasses(self):
+        from dataclasses import fields, is_dataclass
+
+        dependencies_module = importlib.import_module(
+            "comfyui-model-resolver.core.services.model_utils"
+        )
+        expected_fields = {
+            "CivitAISearchDependencies": {
+                "logger",
+                "download_available",
+                "extract_sha256_from_metadata",
+                "find_external_metadata_sidecar_path",
+                "find_local_file_path",
+                "get_existing_model_preview_path",
+                "get_filename_from_path",
+                "get_model_resolver_sidecar_path",
+                "is_path_in_configured_model_roots",
+                "looks_like_model_file",
+                "normalize_category_to_model_type",
+                "normalize_sha256",
+                "read_json_safe",
+                "request_public_url",
+                "resolve_civarchive_by_hash",
+                "search_huggingface_for_file",
+                "to_bool",
+                "web",
+                "write_model_resolver_metadata",
+            },
+            "CustomUrlDependencies": {
+                "logger",
+                "UnsafeUrlError",
+                "asyncio",
+                "build_civarchive_custom_result",
+                "build_civitai_custom_result",
+                "build_huggingface_custom_result",
+                "extract_sha256_from_metadata",
+                "get_civarchive_model_details",
+                "get_civitai_download_url",
+                "get_civitai_model_details",
+                "get_filename_from_path",
+                "host_matches_domain",
+                "looks_like_model_file",
+                "normalize_category_to_model_type",
+                "normalize_sha256",
+                "parse_civarchive_url",
+                "parse_civitai_url",
+                "resolve_civarchive_by_hash",
+                "resolve_civarchive_model_version",
+                "resolve_civitai_version_custom_result",
+                "search_local_matches_by_hash",
+                "time",
+                "validate_public_http_url",
+                "web",
+            },
+            "ModelDetailsDependencies": {
+                "logger",
+                "asyncio",
+                "download_available",
+                "get_civarchive_model_details",
+                "get_civitai_model_details",
+                "get_huggingface_model_details",
+                "web",
+            },
+        }
+
+        for class_name, expected in expected_fields.items():
+            dependency_type = getattr(dependencies_module, class_name)
+            self.assertTrue(is_dataclass(dependency_type))
+            self.assertEqual(
+                {field.name for field in fields(dependency_type)},
+                expected,
+            )
+
+    def test_model_service_dependencies_require_route_context_values(self):
+        dependencies_module = importlib.import_module(
+            "comfyui-model-resolver.core.services.model_utils"
+        )
+        RouteContext = importlib.import_module(
+            "comfyui-model-resolver.core.routes.context"
+        ).RouteContext
+        extension = MagicMock()
+        extension.logger = MagicMock()
+
+        for class_name in (
+            "CivitAISearchDependencies",
+            "CustomUrlDependencies",
+            "ModelDetailsDependencies",
+        ):
+            dependency_type = getattr(dependencies_module, class_name)
+            with self.assertRaises(KeyError):
+                dependency_type.from_context(RouteContext({"self": extension}))

@@ -1,10 +1,14 @@
 """Model details service."""
 
-from .model_utils import ModelServiceDependencies
+from ..routes.context import RouteContext
+from .model_utils import ModelDetailsDependencies, ModelServiceDependencies
 
 
 class ModelDetailsService(ModelServiceDependencies):
     """Load normalized details for supported model providers."""
+
+    def __init__(self, context: RouteContext):
+        super().__init__(ModelDetailsDependencies.from_context(context))
 
     async def model_details(self, request):
         """Return normalized full model details for sources that expose model pages."""
@@ -92,4 +96,3 @@ class ModelDetailsService(ModelServiceDependencies):
             )
 
         return web.json_response(details)
-
