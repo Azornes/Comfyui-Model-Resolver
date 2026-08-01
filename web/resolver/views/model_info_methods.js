@@ -1281,9 +1281,9 @@ export const modelInfoMethods = {
                                     <td>${this.renderInfoFieldLabel('fileText', 'Description', 'Model description from CivitAI or local metadata. Long descriptions are shortened until you click Show more.')}</td>
                                     <td>
                                         <div class="mr-info-description-wrap">
-                                            <div class="mr-info-description"></div>
+                                            <div class="mr-info-description mr-info-model-description"></div>
                                             <div class="mr-info-description-actions mr-hidden-initial">
-                                                <button type="button" class="mr-info-description-toggle" data-description-target=".mr-info-description">Show more</button>
+                                                <button type="button" class="mr-info-description-toggle" data-description-target=".mr-info-model-description">Show more</button>
                                             </div>
                                         </div>
                                     </td>
@@ -2332,7 +2332,7 @@ export const modelInfoMethods = {
             || '';
         this.updateInfoDialogDescriptionSection(dialog, {
             value: modelDescription,
-            contentSelector: '.mr-info-description:not(.mr-info-version-description)',
+            contentSelector: '.mr-info-model-description',
             actionsSelector: '.mr-info-description-actions:not(.mr-info-version-description-actions)',
             toggleSelector: '.mr-info-description-toggle:not(.mr-info-version-description-toggle)'
         });

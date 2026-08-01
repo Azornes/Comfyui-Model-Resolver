@@ -14,6 +14,14 @@ test('Show info keeps model description separate from version notes', () => {
     source,
     /class="mr-info-description-row mr-info-version-description-row mr-hidden-initial"/
   );
+  assert.match(
+    source,
+    /class="mr-info-description mr-info-model-description"/
+  );
+  assert.match(
+    source,
+    /data-description-target="\.mr-info-model-description">Show more/
+  );
   assert.ok(
     source.indexOf("'Version notes'") < source.indexOf("'Description'"),
     'Version notes should be rendered above Description'
