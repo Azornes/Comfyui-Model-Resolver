@@ -122,18 +122,20 @@ def register_routes(self):
                 get_workflow_model_inventory,
             )
             from .base_models import register_base_model_routes
+            from .civitai_search import register_civitai_search_routes
+            from .custom_url import register_custom_url_routes
             from .directories import register_directory_routes
             from .downloads import register_download_routes
+            from .hashes import register_hash_routes
             from .helpers import create_route_helpers
+            from .loaded_models import register_loaded_model_routes
             from .metadata import register_metadata_routes
-            from .model_info import register_model_info_routes
-            from .search import register_search_routes
+            from .model_details import register_model_details_routes
+            from .search_support import register_search_support_routes
             from .settings import register_settings_routes
+            from .source_search import register_source_search_routes
             from .version import register_version_routes
-            from .workflow import (
-                register_loaded_model_routes,
-                register_workflow_routes,
-            )
+            from .workflow_analysis import register_workflow_analysis_routes
         except ImportError as e:
             self.logger.error(f"Model Resolver: Could not import core modules: {e}")
             return False
@@ -242,13 +244,17 @@ def register_routes(self):
 
         register_base_model_routes(routes, web, json_api_endpoint)
         route_context = RouteContext.from_namespaces(globals(), locals())
-        register_workflow_routes(route_context)
+        register_workflow_analysis_routes(route_context)
+        register_hash_routes(route_context)
         register_metadata_routes(route_context)
         register_loaded_model_routes(route_context)
-        register_model_info_routes(route_context)
+        register_civitai_search_routes(route_context)
+        register_custom_url_routes(route_context)
+        register_model_details_routes(route_context)
 
         if download_available:
-            register_search_routes(route_context)
+            register_source_search_routes(route_context)
+            register_search_support_routes(route_context)
             register_download_routes(route_context)
             register_directory_routes(route_context)
 

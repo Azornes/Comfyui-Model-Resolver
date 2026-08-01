@@ -150,6 +150,55 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
         },
     }
 
+    ROUTE_SUBGROUPS = {
+        "workflow_analysis": {
+            ("POST", "/model_resolver/analyze"),
+            ("GET", "/model_resolver/analyze-progress/{analysis_id}"),
+            ("POST", "/model_resolver/resolve"),
+            ("POST", "/model_resolver/local-matches"),
+        },
+        "workflow_hashes": {
+            ("POST", "/model_resolver/local-model-hashes"),
+            ("GET", "/model_resolver/model-preview"),
+            ("POST", "/model_resolver/workflow-model-hashes"),
+            ("POST", "/model_resolver/local-matches-by-hash"),
+            ("POST", "/model_resolver/open-containing-folder"),
+            ("POST", "/model_resolver/calculate-file-hash"),
+            ("POST", "/model_resolver/calculate-file-hash/start"),
+            ("GET", "/model_resolver/calculate-file-hash/progress/{progress_id}"),
+            ("POST", "/model_resolver/calculate-file-hash/cancel/{progress_id}"),
+        },
+        "loaded_models": {
+            ("POST", "/model_resolver/loaded"),
+            ("GET", "/model_resolver/loaded-progress/{loaded_id}"),
+        },
+        "civitai_search": {
+            ("POST", "/model_resolver/civitai-search"),
+        },
+        "custom_url": {
+            ("POST", "/model_resolver/custom-url"),
+        },
+        "model_details": {
+            ("POST", "/model_resolver/model-details"),
+        },
+        "source_search": {
+            ("GET", "/model_resolver/search-progress/{progress_id}"),
+            ("POST", "/model_resolver/search-cancel/{progress_id}"),
+            ("POST", "/model_resolver/search"),
+        },
+        "search_support": {
+            ("POST", "/model_resolver/clear-search-cache"),
+            ("POST", "/model_resolver/civitai/session-token/check"),
+            ("POST", "/model_resolver/civitai/api-key/check"),
+            ("POST", "/model_resolver/huggingface/token/check"),
+            ("POST", "/model_resolver/brave/api-key/check"),
+            ("GET", "/model_resolver/huggingface/author-index/status"),
+            ("POST", "/model_resolver/huggingface/author-index/refresh"),
+            ("GET", "/model_resolver/model-list/status"),
+            ("POST", "/model_resolver/model-list/update"),
+        },
+    }
+
     def test_all_api_routes_are_registered(self):
         expected_routes = {
             ("GET", "/model_resolver/base-models"),
@@ -234,6 +283,20 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             sum(len(routes) for routes in self.ROUTE_GROUPS.values()),
             len(grouped_routes),
+        )
+
+    def test_large_route_groups_are_partitioned_without_gaps_or_overlaps(self):
+        partitioned_routes = set().union(*self.ROUTE_SUBGROUPS.values())
+        expected_routes = (
+            self.ROUTE_GROUPS["workflow"]
+            | self.ROUTE_GROUPS["loaded"]
+            | self.ROUTE_GROUPS["model_info"]
+            | self.ROUTE_GROUPS["search"]
+        )
+        self.assertEqual(partitioned_routes, expected_routes)
+        self.assertEqual(
+            sum(len(routes) for routes in self.ROUTE_SUBGROUPS.values()),
+            len(partitioned_routes),
         )
 
     def test_project_version_helpers_preserve_version_comparison_behavior(self):
@@ -330,6 +393,32 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
 
         mock_json_response.assert_called_once_with(
             {"error": "URL is required"},
+            status=400,
+        )
+
+    async def test_local_model_hashes_route_rejects_missing_path(self):
+        post_handler = routes_registered[("POST", "/model_resolver/local-model-hashes")]
+        request = AsyncMock()
+        request.json.return_value = {}
+
+        with patch("aiohttp.web.json_response") as mock_json_response:
+            await post_handler(request)
+
+        mock_json_response.assert_called_once_with(
+            {"error": "path is required"},
+            status=400,
+        )
+
+    async def test_model_details_route_rejects_unsupported_source(self):
+        post_handler = routes_registered[("POST", "/model_resolver/model-details")]
+        request = AsyncMock()
+        request.json.return_value = {"source": "unknown", "model_id": 1}
+
+        with patch("aiohttp.web.json_response") as mock_json_response:
+            await post_handler(request)
+
+        mock_json_response.assert_called_once_with(
+            {"error": "Unsupported model details source"},
             status=400,
         )
     
