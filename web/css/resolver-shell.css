@@ -28,7 +28,7 @@
     border-radius: var(--mr-radius-xl);
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
     transform: translateX(-12px) scale(0.985);
-    transition: opacity 100ms ease, transform 100ms ease, visibility 0s linear 100ms;
+    transition: var(--mr-transition-popover);
     contain: layout paint style;
 }
 
@@ -51,7 +51,7 @@
     border: 2px solid rgba(114, 211, 138, 0.72);
     border-radius: var(--mr-radius-xl);
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
-    transition: opacity 100ms ease, visibility 0s linear 100ms;
+    transition: var(--mr-transition-opacity), visibility 0s linear 100ms;
     contain: layout paint style;
 }
 
@@ -319,7 +319,7 @@
     border-radius: var(--mr-missing-chip-radius);
     background: rgba(255, 255, 255, 0.13);
     transform: translateX(-50%);
-    transition: background 0.15s ease, box-shadow 0.15s ease;
+    transition: var(--mr-transition-smooth);
 }
 
 #model-resolver-splitter:hover::before,
@@ -380,7 +380,7 @@
     border-radius: var(--mr-missing-chip-radius);
     background: rgba(255, 255, 255, 0.34);
     transform: translateX(-50%);
-    transition: background 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+    transition: var(--mr-transition-smooth);
 }
 
 #queue-toggle-icon:hover,
@@ -547,7 +547,7 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.052);
     border-radius: 0;
     color: var(--mr-text, #f3f3f3);
-    transition: background 0.14s ease, box-shadow 0.14s ease;
+    transition: var(--mr-transition-smooth);
 }
 
 .mr-queue-item:last-child {
@@ -711,7 +711,7 @@
 .model-resolver-floating-button {
     cursor: pointer;
     font-weight: 600;
-    transition: all 0.2s ease;
+    transition: var(--mr-transition-all);
     white-space: nowrap;
 }
 
@@ -744,7 +744,7 @@
 }
 
 .mr-resolved-entry {
-    transition: all 0.3s ease;
+    transition: var(--mr-transition-all);
     background: rgba(76, 175, 80, 0.2);
     border: 1px solid var(--mr-color-success-action);
     border-radius: var(--mr-radius-lg);

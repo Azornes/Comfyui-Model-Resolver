@@ -107,6 +107,10 @@
     --mr-transition-color: color 0.2s;
     --mr-transition-border: border-color 0.2s;
     --mr-transition-opacity: opacity 0.2s;
+    --mr-transition-smooth: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    --mr-transition-transform: transform 0.15s ease;
+    --mr-transition-width: width 0.2s ease;
+    --mr-transition-popover: opacity 0.15s ease, transform 0.15s ease;
     --mr-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.8);
     --mr-gradient-dark: linear-gradient(135deg, var(--mr-color-bg-dark-1) 0%, var(--mr-color-bg-dark-2) 100%);
     --mr-drag-color-reorder: var(--mr-color-primary);

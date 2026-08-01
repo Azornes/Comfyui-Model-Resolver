@@ -574,7 +574,7 @@
     border-radius: var(--mr-missing-chip-radius);
     background: rgba(255, 255, 255, 0.13);
     transform: translateX(-50%);
-    transition: background 0.15s ease, box-shadow 0.15s ease;
+    transition: var(--mr-transition-smooth);
 }
 
 .mr-missing-browser-splitter:hover::before,
@@ -784,7 +784,7 @@
     font-size: var(--mr-font-sm);
     text-align: left;
     contain: layout paint style;
-    transition: background 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease;
+    transition: var(--mr-transition-smooth);
 }
 
 #model-resolver-modal .mr-missing-list-row:hover {
@@ -1196,7 +1196,7 @@
     border-radius: 0;
     padding: var(--mr-spacing-10) var(--mr-spacing-12);
     margin-bottom: var(--mr-spacing-4);
-    transition: background 0.18s ease, box-shadow 0.18s ease;
+    transition: var(--mr-transition-smooth);
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.018);
     font-family: var(--mr-font-family-sans);
 }
@@ -1314,7 +1314,7 @@
     color: #f1f1f1;
     background: var(--mr-border);
     border-color: rgba(255, 255, 255, 0.12);
-    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+    transition: var(--mr-missing-control-transition);
 }
 
 .mr-missing-browser .mr-node-chip.is-locatable {
@@ -1718,7 +1718,7 @@
 }
 
 .mr-inline-note-action {
-    transition: color 0.15s ease, background 0.15s ease;
+    transition: var(--mr-transition-bg);
 }
 
 .mr-inline-note-action:hover {
@@ -1795,7 +1795,7 @@
     margin-bottom: var(--mr-spacing-4);
     background: rgba(255, 255, 255, 0.016);
     border: 1px solid transparent;
-    transition: background 0.15s ease, box-shadow 0.15s ease;
+    transition: var(--mr-transition-smooth);
 }
 
 .mr-missing-browser .mr-match-row {
@@ -1954,7 +1954,7 @@
     cursor: pointer;
     outline: none;
     box-sizing: border-box;
-    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    transition: var(--mr-missing-control-transition);
 }
 
 .mr-local-alternatives-toggle:hover {
@@ -1989,7 +1989,7 @@
     border-right: 1px solid currentColor;
     border-bottom: 1px solid currentColor;
     transform: rotate(45deg) translateY(-1px);
-    transition: transform 0.15s ease;
+    transition: var(--mr-transition-transform);
 }
 
 .mr-local-alternatives-toggle[aria-expanded="true"] .mr-local-alternatives-chevron {
@@ -3020,7 +3020,7 @@
     height: 100%;
     background: var(--mr-accent);
     border-radius: inherit;
-    transition: width 0.42s ease, background 0.2s ease;
+    transition: var(--mr-transition-bg);
 }
 
 .mr-search-progress-running .mr-search-progress-fill {
@@ -3082,7 +3082,7 @@
     border-radius: var(--mr-radius-2xl);
     font-size: var(--mr-font-md);
     outline: none;
-    transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+    transition: var(--mr-transition-smooth);
 }
 
 .mr-missing-browser .mr-combo-input {
@@ -3127,7 +3127,7 @@
     font-size: var(--mr-font-md);
     color: var(--mr-text);
     background: transparent;
-    transition: background 0.14s ease, color 0.14s ease;
+    transition: var(--mr-transition-smooth);
 }
 
 .mr-combo-option:last-child {
@@ -3270,7 +3270,7 @@
 .mr-progress-fill {
     height: 100%;
     background: var(--mr-accent);
-    transition: width 0.3s ease;
+    transition: var(--mr-transition-width);
 }
 
 .mr-progress-text {
@@ -3438,7 +3438,7 @@
     clip-path: polygon(50% 0, 100% 100%, 0 100%);
     opacity: 0.78;
     transform: rotate(0deg);
-    transition: transform 0.15s ease, opacity 0.15s ease;
+    transition: var(--mr-transition-popover);
 }
 
 .mr-footer-menu-button[aria-expanded="true"]::after {
@@ -3940,7 +3940,7 @@
     font-size: var(--mr-font-md);
     color: var(--mr-text, #e0e0e0);
     cursor: pointer;
-    transition: background 0.15s ease;
+    transition: var(--mr-transition-bg);
 }
 
 .mr-context-menu-hidden,
@@ -4429,7 +4429,7 @@ button.mr-info-link:disabled {
     height: 100%;
     border-radius: inherit;
     background: linear-gradient(90deg, rgba(114,211,138,0.74), rgba(100,181,246,0.82));
-    transition: width 150ms ease;
+    transition: var(--mr-transition-width);
 }
 
 .mr-info-hash-progress small {
@@ -4564,7 +4564,7 @@ button.mr-info-link:disabled {
     padding: var(--mr-spacing-2) var(--mr-spacing-10);
     font-size: var(--mr-font-sm);
     cursor: pointer;
-    transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+    transition: var(--mr-missing-control-transition);
 }
 
 .mr-info-copy-trained-words:hover:not(:disabled) {
@@ -4595,7 +4595,7 @@ button.mr-info-link:disabled {
     font-size: var(--mr-font-md);
     line-height: 1.2;
     cursor: pointer;
-    transition: transform 0.14s ease, background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+    transition: var(--mr-transition-smooth);
 }
 
 .mr-info-trained-word:hover {
@@ -4713,7 +4713,7 @@ button.mr-info-link:disabled {
     padding: var(--mr-spacing-4) var(--mr-spacing-12);
     font-size: var(--mr-font-sm);
     cursor: pointer;
-    transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+    transition: var(--mr-missing-control-transition);
 }
 
 .mr-info-description-toggle:hover {
@@ -4776,7 +4776,7 @@ button.mr-info-link:disabled {
     height: auto;
     display: block;
     object-fit: contain;
-    transition: transform 0.24s ease, filter 0.24s ease;
+    transition: var(--mr-transition-transform);
 }
 
 .mr-info-image-preview-label {
@@ -4795,7 +4795,7 @@ button.mr-info-link:disabled {
     font-weight: 700;
     opacity: 0;
     transform: translateY(-4px);
-    transition: opacity 0.18s ease, transform 0.18s ease;
+    transition: var(--mr-transition-opacity);
     pointer-events: none;
 }
 
@@ -4817,7 +4817,7 @@ button.mr-info-link:disabled {
     text-decoration: none;
     opacity: 0;
     transform: translateY(-4px);
-    transition: opacity 0.18s ease, transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+    transition: var(--mr-transition-opacity);
 }
 
 .mr-info-image-civitai-badge:hover,
@@ -4848,7 +4848,7 @@ button.mr-info-link:disabled {
     background: linear-gradient(180deg, rgba(7, 10, 14, 0) 0%, rgba(7, 10, 14, 0.82) 16%, rgba(7, 10, 14, 0.94) 100%);
     opacity: 0;
     transform: translateY(10px);
-    transition: opacity 0.2s ease, transform 0.2s ease;
+    transition: var(--mr-transition-opacity);
     pointer-events: none;
 }
 
@@ -4999,7 +4999,7 @@ button.mr-info-link:disabled {
     background: rgba(255, 255, 255, 0.12);
     color: #f4f4f4;
     cursor: pointer;
-    transition: background 0.16s ease, transform 0.16s ease;
+    transition: var(--mr-transition-bg);
 }
 
 .mr-image-preview-icon-btn {
@@ -5912,7 +5912,7 @@ a.mr-image-preview-resource-name:hover {
     border-right: 2px solid currentColor;
     border-bottom: 2px solid currentColor;
     transform: rotate(-45deg);
-    transition: transform 120ms ease;
+    transition: var(--mr-transition-transform);
 }
 
 .mr-model-details-file[open] .mr-model-details-file-chevron::before {
@@ -6086,7 +6086,7 @@ a.mr-image-preview-resource-name:hover {
     cursor: pointer;
     appearance: none;
     -webkit-appearance: none;
-    transition: background 120ms ease, border-color 120ms ease;
+    transition: var(--mr-transition-smooth);
 }
 
 .mr-model-details-mirror:hover {
@@ -6605,7 +6605,7 @@ a.mr-image-preview-resource-name:hover {
     color: var(--mr-text-secondary);
     background: transparent;
     box-shadow: none;
-    transition: transform 0.15s ease, color 0.15s ease;
+    transition: var(--mr-transition-color);
 }
 
 .mr-options-collapse-chevron svg {
@@ -7107,7 +7107,7 @@ a.mr-image-preview-resource-name:hover {
     height: 100%;
     border-radius: inherit;
     background: var(--mr-accent);
-    transition: width 0.2s ease;
+    transition: var(--mr-transition-width);
 }
 
 .mr-options-build-current {
@@ -7204,7 +7204,7 @@ a.mr-image-preview-resource-name:hover {
     height: 100%;
     border-radius: inherit;
     background: var(--mr-color-success);
-    transition: width 0.2s ease;
+    transition: var(--mr-transition-width);
 }
 
 .mr-options-history-action {
@@ -7839,7 +7839,7 @@ a.mr-image-preview-resource-name:hover {
     border-radius: var(--mr-radius-xl);
     font-size: var(--mr-font-base);
     outline: none;
-    transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+    transition: var(--mr-transition-bg);
 }
 
 .mr-options-input:focus,
@@ -8149,7 +8149,7 @@ a.mr-image-preview-resource-name:hover {
     border-right: none;
     background: transparent;
     cursor: pointer;
-    transition: background 0.16s ease;
+    transition: var(--mr-transition-bg);
     min-width: 0;
 }
 
@@ -8216,7 +8216,7 @@ a.mr-image-preview-resource-name:hover {
     border-radius: var(--mr-missing-chip-radius);
     background: var(--mr-color-gray-700);
     border: 1px solid var(--mr-missing-control-bg-hover);
-    transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+    transition: var(--mr-transition-smooth);
 }
 
 .mr-options-switch::after {
@@ -8229,7 +8229,7 @@ a.mr-image-preview-resource-name:hover {
     border-radius: var(--mr-missing-chip-radius);
     background: #f2f6fb;
     box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
-    transition: transform 0.16s ease;
+    transition: var(--mr-transition-transform);
 }
 
 .mr-options-switch-input:checked+.mr-options-switch {
@@ -8853,7 +8853,7 @@ a.mr-image-preview-resource-name:hover {
     border-top: 4px solid transparent;
     border-bottom: 4px solid transparent;
     border-left: 5px solid currentColor;
-    transition: transform 140ms ease;
+    transition: var(--mr-transition-transform);
 }
 
 .mr-folder-browser-toggle.is-expanded .mr-folder-browser-chevron,
