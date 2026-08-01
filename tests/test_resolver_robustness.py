@@ -1,3 +1,4 @@
+import hashlib
 import unittest
 import os
 import json
@@ -281,6 +282,89 @@ class ModelResolverRobustnessTests(unittest.TestCase):
             progress = get_progress(download_id)
             self.assertEqual(progress["status"], "completed")
 
+    def test_streaming_sha256_verification_publishes_only_after_match(self):
+        payload = b"streamed model contents"
+        expected_sha256 = hashlib.sha256(payload).hexdigest()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            response = MagicMock()
+            response.headers = {"content-length": str(len(payload))}
+            response.iter_content.return_value = [payload[:8], payload[8:]]
+
+            with (
+                patch("core.downloader.get_download_directory", return_value=tmpdir),
+                patch("core.downloader._download_backend_from_settings", return_value="python"),
+                patch(
+                    "core.downloader.request_public_url",
+                    return_value=(
+                        response,
+                        "https://example.com/streamed.safetensors",
+                        {},
+                    ),
+                ),
+                patch("core.downloader.write_model_resolver_metadata", return_value=""),
+            ):
+                result = download_model(
+                    "https://example.com/streamed.safetensors",
+                    "streamed.safetensors",
+                    "checkpoints",
+                    download_id="streaming-sha256-match",
+                    metadata={"sha256": expected_sha256},
+                )
+
+            model_path = os.path.join(tmpdir, "streamed.safetensors")
+            self.assertTrue(result["success"])
+            self.assertTrue(result["sha256_verified"])
+            self.assertEqual(expected_sha256, result["sha256"])
+            with open(model_path, "rb") as model_handle:
+                self.assertEqual(payload, model_handle.read())
+            self.assertFalse(os.path.exists(f"{model_path}.part"))
+            self.assertFalse(os.path.exists(f"{model_path}.badsha"))
+            response.close.assert_called_once_with()
+
+    def test_streaming_sha256_mismatch_keeps_bad_file_out_of_model_folder(self):
+        payload = b"wrong model contents"
+        expected_sha256 = "0" * 64
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            response = MagicMock()
+            response.headers = {"content-length": str(len(payload))}
+            response.iter_content.return_value = [payload]
+
+            with (
+                patch("core.downloader.get_download_directory", return_value=tmpdir),
+                patch("core.downloader._download_backend_from_settings", return_value="python"),
+                patch(
+                    "core.downloader.request_public_url",
+                    return_value=(
+                        response,
+                        "https://example.com/mismatched.safetensors",
+                        {},
+                    ),
+                ),
+                patch("core.downloader.write_model_resolver_metadata") as write_metadata,
+            ):
+                result = download_model(
+                    "https://example.com/mismatched.safetensors",
+                    "mismatched.safetensors",
+                    "checkpoints",
+                    download_id="streaming-sha256-mismatch",
+                    metadata={"sha256": expected_sha256},
+                )
+
+            model_path = os.path.join(tmpdir, "mismatched.safetensors")
+            bad_path = f"{model_path}.badsha"
+            self.assertFalse(result["success"])
+            self.assertFalse(result["sha256_verified"])
+            self.assertIn("SHA256 mismatch", result["error"])
+            self.assertFalse(os.path.exists(model_path))
+            self.assertFalse(os.path.exists(f"{model_path}.part"))
+            self.assertTrue(os.path.isfile(bad_path))
+            with open(bad_path, "rb") as bad_handle:
+                self.assertEqual(payload, bad_handle.read())
+            write_metadata.assert_not_called()
+            response.close.assert_called_once_with()
+
     def test_base_model_mapping_fuzzy_resolution(self):
         """
         Covers Requirement: Custom Base Model mappings and path templating.
@@ -432,6 +516,7 @@ class ModelResolverRobustnessTests(unittest.TestCase):
             # Assert
             self.assertFalse(result["success"])
             self.assertFalse(os.path.exists(model_path))
+            self.assertFalse(os.path.exists(f"{model_path}.part"))
 
     def test_metadata_incomplete_hash_recalculation(self):
         """

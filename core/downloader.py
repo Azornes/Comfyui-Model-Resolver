@@ -4,6 +4,7 @@ Model Downloader Module
 Handles downloading models from various sources with progress tracking.
 """
 
+import hashlib
 import os
 import re
 import secrets
@@ -1696,6 +1697,17 @@ def _delete_partial_download_files(dest_path: str) -> None:
             log.warning(f"Could not delete incomplete download file {path}: {exc}")
 
 
+def _delete_python_partial_download_file(partial_path: str) -> None:
+    """Remove a partial Python download without touching the final model path."""
+    try:
+        if partial_path and os.path.exists(partial_path):
+            os.remove(partial_path)
+    except Exception as exc:
+        log.warning(
+            f"Could not delete incomplete Python download file {partial_path}: {exc}"
+        )
+
+
 def _delete_xet_partial_file(partial_path: str, attempts: int = 5) -> bool:
     """Delete a stopped Xet partial file, retrying while Windows releases it."""
     attempts = max(1, int(attempts or 1))
@@ -2143,6 +2155,7 @@ def download_file_with_aria2(
     }
     start_time = time.time()
     filename = get_filename_from_path(dest_path)
+    expected_sha256 = _extract_expected_sha256(metadata)
 
     with download_lock:
         download_progress[download_id] = {
@@ -2180,6 +2193,11 @@ def download_file_with_aria2(
             # disabled prevents sensitive headers from reaching another host.
             "max-redirect": "0",
         }
+        if expected_sha256:
+            # Let aria2 verify the file as part of the transfer instead of
+            # requiring a second Python pass over a multi-gigabyte model.
+            options["checksum"] = f"sha-256={expected_sha256}"
+            options["check-integrity"] = "true"
         user_agent = _get_header_value(request_headers, "User-Agent")
         referer = _get_header_value(request_headers, "Referer")
         if user_agent:
@@ -2371,6 +2389,8 @@ def download_file(
     """
     global download_progress, cancelled_downloads
 
+    expected_sha256 = _extract_expected_sha256(metadata)
+
     download_backend = _download_backend_from_settings()
     if download_backend != "aria2":
         xet_result = _download_huggingface_xet(
@@ -2405,6 +2425,9 @@ def download_file(
         "error": None,
         "size": 0,
     }
+    partial_path = f"{dest_path}.part"
+    response = None
+    published = False
 
     # Initialize progress tracking with speed calculation
     start_time = time.time()
@@ -2431,7 +2454,13 @@ def download_file(
 
     try:
         # Ensure destination directory exists
-        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+        destination_directory = os.path.dirname(dest_path)
+        if destination_directory:
+            os.makedirs(destination_directory, exist_ok=True)
+        # Python downloads are not resumable, so never mix a stale partial
+        # file with a new response. The partial file is not a model path that
+        # ComfyUI can load.
+        _delete_python_partial_download_file(partial_path)
 
         # Verbose logging - what model and from where
         filename = get_filename_from_path(dest_path)
@@ -2470,10 +2499,11 @@ def download_file(
             download_progress[download_id]["status"] = "downloading"
 
         downloaded = 0
+        sha256_hasher = hashlib.sha256() if expected_sha256 else None
 
         # Download with progress and speed calculation
         cancelled = False
-        with open(dest_path, "wb") as f:
+        with open(partial_path, "wb") as f:
             for chunk in response.iter_content(chunk_size=chunk_size):
                 # Check for cancellation
                 if download_id in cancelled_downloads:
@@ -2482,6 +2512,8 @@ def download_file(
 
                 if chunk:
                     f.write(chunk)
+                    if sha256_hasher is not None:
+                        sha256_hasher.update(chunk)
                     downloaded += len(chunk)
 
                     # Calculate speed with smoothing
@@ -2551,36 +2583,74 @@ def download_file(
             with download_lock:
                 download_progress[download_id]["status"] = "cancelled"
             # Clean up partial/incomplete file
-            try:
-                if os.path.exists(dest_path):
-                    os.remove(dest_path)
-                    log.info(f"Cancelled: {filename} - incomplete file deleted")
-                else:
-                    log.info(f"Cancelled: {filename} - no file to delete")
-            except Exception as e:
-                log.warning(f"Could not delete incomplete file {dest_path}: {e}")
-                # Try harder on Windows - sometimes the file handle takes a moment to release
-                try:
-                    time.sleep(0.5)  # time is already imported at module level
-                    if os.path.exists(dest_path):
-                        os.remove(dest_path)
-                        log.info(
-                            f"Cancelled: {filename} - incomplete file deleted (delayed)"
-                        )
-                except Exception:
-                    pass
+            _delete_python_partial_download_file(partial_path)
+            log.info(f"Cancelled: {filename} - incomplete file deleted")
             result["error"] = "Download cancelled"
             cancelled_downloads.discard(download_id)
             return result
+
+        actual_sha256 = sha256_hasher.hexdigest() if sha256_hasher is not None else ""
+        if expected_sha256:
+            with download_lock:
+                download_progress[download_id]["status"] = "verifying"
+                download_progress[download_id]["sha256"] = actual_sha256
+                download_progress[download_id]["expected_sha256"] = expected_sha256
+
+            if actual_sha256 != expected_sha256:
+                bad_path = f"{dest_path}.badsha"
+                try:
+                    os.replace(partial_path, bad_path)
+                except OSError as exc:
+                    log.warning(
+                        f"Could not preserve SHA256-mismatched download at {bad_path}: {exc}"
+                    )
+                    bad_path = ""
+                error_msg = (
+                    "SHA256 mismatch: "
+                    f"expected {expected_sha256}, got {actual_sha256}"
+                )
+                if bad_path:
+                    error_msg += f"; file kept at {bad_path}"
+                with download_lock:
+                    download_progress[download_id]["status"] = "error"
+                    download_progress[download_id]["error"] = error_msg
+                    download_progress[download_id]["sha256_verified"] = False
+                result.update(
+                    {
+                        "error": error_msg,
+                        "sha256": actual_sha256,
+                        "expected_sha256": expected_sha256,
+                        "sha256_verified": False,
+                    }
+                )
+                log.error(f"✗ Download rejected: {filename} - {error_msg}")
+                return result
+
+        # Publish only after the complete response has been written and, when
+        # available, its SHA-256 has matched the source metadata.
+        os.replace(partial_path, dest_path)
+        published = True
 
         # Success
         with download_lock:
             download_progress[download_id]["status"] = "completed"
             download_progress[download_id]["progress"] = 100
             download_progress[download_id]["speed"] = 0  # Reset speed on completion
+            if expected_sha256:
+                download_progress[download_id]["sha256"] = actual_sha256
+                download_progress[download_id]["expected_sha256"] = expected_sha256
+                download_progress[download_id]["sha256_verified"] = True
 
         result["success"] = True
         result["size"] = downloaded
+        if expected_sha256:
+            result.update(
+                {
+                    "sha256": actual_sha256,
+                    "expected_sha256": expected_sha256,
+                    "sha256_verified": True,
+                }
+            )
         metadata_path = write_model_resolver_metadata(
             dest_path,
             metadata or {},
@@ -2630,12 +2700,8 @@ def download_file(
         log.error(f"✗ Download failed: {get_filename_from_path(dest_path)}")
         log.error(f"Error: {error_msg}")
 
-        # Clean up partial file
-        try:
-            if os.path.exists(dest_path):
-                os.remove(dest_path)
-        except Exception:
-            pass
+        if not published:
+            _delete_python_partial_download_file(partial_path)
 
     except Exception as e:
         error_msg = _sanitize_download_error(e)
@@ -2648,6 +2714,16 @@ def download_file(
         log.error(f"✗ Download failed: {get_filename_from_path(dest_path)}")
         log.error(f"Error: {error_msg}")
         log.error(f"Download error: {e}", exc_info=True)
+
+        if not published:
+            _delete_python_partial_download_file(partial_path)
+
+    finally:
+        if response is not None:
+            try:
+                response.close()
+            except Exception as exc:
+                log.debug(f"Could not close download response: {exc}")
 
     return result
 
