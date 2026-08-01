@@ -1,6 +1,9 @@
 """Downloads route registration."""
 
-def register_download_routes(context):
+from .context import RouteContext
+
+
+def register_download_routes(context: RouteContext):
     Aria2InstallError = context.get('Aria2InstallError')
     UnsafeUrlError = context.get('UnsafeUrlError')
     asyncio = context.get('asyncio')

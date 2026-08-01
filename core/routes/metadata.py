@@ -1,6 +1,9 @@
 """Metadata route registration."""
 
-def register_metadata_routes(context):
+from .context import RouteContext
+
+
+def register_metadata_routes(context: RouteContext):
     asyncio = context.get('asyncio')
     audit_metadata_sizes = context.get('audit_metadata_sizes')
     build_missing_local_metadata = context.get('build_missing_local_metadata')

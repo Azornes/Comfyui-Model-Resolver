@@ -245,6 +245,27 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(node_mod._version_sort_key("v1.10.2-beta"), (1, 10, 2))
         self.assertEqual(node_mod._version_sort_key("unknown"), ())
 
+    def test_route_context_merges_namespaces_and_validates_required_values(self):
+        context_module = importlib.import_module(
+            "comfyui-model-resolver.core.routes.context"
+        )
+        values = {"shared": "first", "left": 1}
+        context = context_module.RouteContext.from_namespaces(
+            values,
+            {"shared": "second", "right": 2},
+        )
+        values["left"] = 99
+
+        self.assertEqual(context.get("shared"), "second")
+        self.assertEqual(context.get("left"), 1)
+        self.assertEqual(context.get("missing"), None)
+        self.assertEqual(context.get("missing", "fallback"), "fallback")
+        self.assertEqual(context.require("right"), 2)
+        self.assertIn("right", context)
+        self.assertEqual(len(context), 3)
+        with self.assertRaisesRegex(KeyError, "Missing route dependency: missing"):
+            context.require("missing")
+
     def test_project_version_info_reports_remote_update(self):
         version_module = importlib.import_module("comfyui-model-resolver.core.version")
         network_module = importlib.import_module("comfyui-model-resolver.core.network_utils")

@@ -1,6 +1,9 @@
 """Model Info route registration."""
 
-def register_model_info_routes(context):
+from .context import RouteContext
+
+
+def register_model_info_routes(context: RouteContext):
     UnsafeUrlError = context.get('UnsafeUrlError')
     asyncio = context.get('asyncio')
     build_civarchive_custom_result = context.get('build_civarchive_custom_result')

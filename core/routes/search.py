@@ -1,6 +1,9 @@
 """Search route registration."""
 
-def register_search_routes(context):
+from .context import RouteContext
+
+
+def register_search_routes(context: RouteContext):
     CivArchiveSearchError = context.get('CivArchiveSearchError')
     asyncio = context.get('asyncio')
     build_search_result = context.get('build_search_result')

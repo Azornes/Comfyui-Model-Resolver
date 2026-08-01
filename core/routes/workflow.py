@@ -1,6 +1,9 @@
 """Workflow and loaded-model route registration."""
 
-def register_workflow_routes(context):
+from .context import RouteContext
+
+
+def register_workflow_routes(context: RouteContext):
     FileManagerError = context.get('FileManagerError')
     FileManagerUnavailableError = context.get('FileManagerUnavailableError')
     MODEL_RESOLVER_METADATA_SCHEMA = context.get('MODEL_RESOLVER_METADATA_SCHEMA')
@@ -914,7 +917,7 @@ def register_workflow_routes(context):
             cancel_message="Stopping hash calculation..."
         )
 
-def register_loaded_model_routes(context):
+def register_loaded_model_routes(context: RouteContext):
     adapt_custom_node_loaded_model = context.get('adapt_custom_node_loaded_model')
     asyncio = context.get('asyncio')
     get_filename_from_path = context.get('get_filename_from_path')

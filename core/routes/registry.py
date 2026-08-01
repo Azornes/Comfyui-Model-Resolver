@@ -20,6 +20,7 @@ from ..path_utils import (
     get_model_resolver_sidecar_path,
     get_safe_model_resolver_sidecar_path,
 )
+from .context import RouteContext
 
 
 def register_routes(self):
@@ -240,7 +241,7 @@ def register_routes(self):
         )
 
         register_base_model_routes(routes, web, json_api_endpoint)
-        route_context = {**globals(), **locals()}
+        route_context = RouteContext.from_namespaces(globals(), locals())
         register_workflow_routes(route_context)
         register_metadata_routes(route_context)
         register_loaded_model_routes(route_context)

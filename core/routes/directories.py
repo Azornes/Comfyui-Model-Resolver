@@ -1,6 +1,9 @@
 """Directories route registration."""
 
-def register_directory_routes(context):
+from .context import RouteContext
+
+
+def register_directory_routes(context: RouteContext):
     TEMPLATE_KEY_ALIASES = context.get('TEMPLATE_KEY_ALIASES')
     asyncio = context.get('asyncio')
     dedupe_local_base_directories = context.get('dedupe_local_base_directories')
