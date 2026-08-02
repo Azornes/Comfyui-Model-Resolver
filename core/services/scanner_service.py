@@ -7,16 +7,16 @@ class ScannerService:
     """Coordinate local model listing and path-template discovery."""
 
     def __init__(self, context: RouteContext):
-        self.asyncio = context.get("asyncio")
-        self.get_model_files = context.get("get_model_files")
-        self.infer_download_path_templates = context.get(
+        self.asyncio = context.require("asyncio")
+        self.get_model_files = context.require("get_model_files")
+        self.infer_download_path_templates = context.require(
             "infer_download_path_templates"
         )
-        self.invalidate_local_hash_match_cache = context.get(
+        self.invalidate_local_hash_match_cache = context.require(
             "invalidate_local_hash_match_cache"
         )
-        self.to_bool = context.get("to_bool")
-        self.web = context.get("web")
+        self.to_bool = context.require("to_bool")
+        self.web = context.require("web")
 
     async def get_models(self, request):
         """Return the locally available models, optionally forcing a rescan."""

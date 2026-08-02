@@ -46,6 +46,7 @@ def _build_metadata_routes():
         "get_model_files": MagicMock(
             return_value=[{"filename": "model.safetensors"}]
         ),
+        "infer_download_path_templates": MagicMock(return_value=[]),
         "get_progress_response": MagicMock(),
         "invalidate_local_hash_match_cache": MagicMock(),
         "json_api_endpoint": _json_api_endpoint,
@@ -86,6 +87,7 @@ def _build_directory_routes():
         "infer_download_path_templates": MagicMock(
             return_value=[{"category": "checkpoints"}]
         ),
+        "invalidate_local_hash_match_cache": MagicMock(),
         "is_civarchive_available": MagicMock(return_value=False),
         "is_lora_manager_archive_available": MagicMock(return_value=False),
         "json_api_endpoint": _json_api_endpoint,
@@ -98,6 +100,7 @@ def _build_directory_routes():
         "routes": routes,
         "self": SimpleNamespace(logger=MagicMock()),
         "split_path_segments": MagicMock(return_value=[]),
+        "to_bool": to_bool,
         "web": web,
     }
     register_directory_routes(RouteContext(values))

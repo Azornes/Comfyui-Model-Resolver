@@ -11,6 +11,7 @@ from aiohttp import web
 
 from core.routes.context import RouteContext
 from core.routes.directories import register_directory_routes
+from core.type_utils import to_bool
 
 
 class _Routes:
@@ -58,6 +59,7 @@ def _build_routes(**overrides):
         ),
         "get_model_files": MagicMock(return_value=[]),
         "infer_download_path_templates": MagicMock(return_value=[]),
+        "invalidate_local_hash_match_cache": MagicMock(),
         "is_civarchive_available": MagicMock(return_value=False),
         "is_lora_manager_archive_available": MagicMock(return_value=False),
         "json_api_endpoint": _json_api_endpoint,
@@ -70,6 +72,7 @@ def _build_routes(**overrides):
         "split_path_segments": lambda value: [
             part for part in str(value).replace("\\", "/").split("/") if part
         ],
+        "to_bool": to_bool,
         "web": web,
     }
     values.update(overrides)
