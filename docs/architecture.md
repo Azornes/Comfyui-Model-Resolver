@@ -64,6 +64,23 @@ current statement, branch, and function coverage. It is an inspection report,
 not a hard threshold, because runtime-only ComfyUI adapters cannot be fully
 exercised outside the host application.
 
+## Pull request checks
+
+The repository workflow lives in `.github/workflows/ci.yml`. It runs the
+frontend and backend checks for pull requests whose source repository is
+outside this repository, which keeps automated validation focused on external
+contributions. It does not run for direct pushes to `main`; local changes by
+the maintainer should use the verification commands above before committing.
+
+The workflow uses the tracked `package-lock.json` with `npm ci`, has read-only
+repository permissions, and does not require secrets. Its two jobs run:
+
+1. `npm test` and `npm run lint` for the frontend.
+2. `pytest`, Ruff, and `compileall` for the backend.
+
+The workflow uses `pull_request`, not `pull_request_target`, so code from an
+external fork is tested with the restricted pull-request token context.
+
 Run these commands with the same Python interpreter used by ComfyUI:
 
 ```powershell
