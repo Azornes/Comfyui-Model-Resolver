@@ -143,7 +143,7 @@ def register_routes(self):
         # Import download modules
         try:
             from ..aria2_installer import Aria2InstallError, install_aria2_engine
-            from ..downloader import (
+            from ..download.api import (
                 cancel_download,
                 clear_completed_downloads,
                 get_all_progress,
