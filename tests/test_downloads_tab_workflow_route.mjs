@@ -45,6 +45,10 @@ const resolveDownloadMethodsSource = fs.readFileSync(
   path.join(projectRoot, 'web/resolver/actions/resolve_download_methods.js'),
   'utf8'
 );
+const downloadProgressMethodsSource = fs.readFileSync(
+  path.join(projectRoot, 'web/resolver/actions/download_progress_methods.js'),
+  'utf8'
+);
 const downloadTargetMethodsSource = fs.readFileSync(
   path.join(projectRoot, 'web/resolver/search/download_target_methods.js'),
   'utf8'
@@ -4472,7 +4476,7 @@ test('Missing Models download progress preserves hovered controls between pollin
 });
 
 test('native Xet progress polling refreshes every 200 milliseconds', () => {
-  const getDownloadProgressPollDelay = eval(`(${extractMethod(resolveDownloadMethodsSource, 'getDownloadProgressPollDelay')})`);
+  const getDownloadProgressPollDelay = eval(`(${extractMethod(downloadProgressMethodsSource, 'getDownloadProgressPollDelay')})`);
 
   assert.equal(getDownloadProgressPollDelay({ status: 'downloading', download_backend: 'huggingface_xet' }), 200);
   assert.equal(getDownloadProgressPollDelay({ status: 'downloading', download_backend: 'aria2' }), 1000);
