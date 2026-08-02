@@ -1,64 +1,8 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { modelHashCompareMethods } from '../web/resolver/views/model_hash_compare_methods.js';
 
-const projectRoot = path.resolve(import.meta.dirname, '..');
-const modelInfoMethodsSource = fs.readFileSync(
-  path.join(projectRoot, 'web/resolver/views/model_info_methods.js'),
-  'utf8'
-);
-
-function extractMethod(source, methodName) {
-  const signatureRegex = new RegExp(`\\n\\s+(async\\s+)?${methodName}\\s*\\(`);
-  const match = signatureRegex.exec(source);
-  assert.ok(match, `Could not find ${methodName}`);
-  const isAsync = Boolean(match[1]);
-
-  const parenStart = source.indexOf('(', match.index);
-  let parenDepth = 0;
-  let parenEnd = -1;
-  for (let i = parenStart; i < source.length; i += 1) {
-    if (source[i] === '(') parenDepth += 1;
-    if (source[i] === ')') parenDepth -= 1;
-    if (parenDepth === 0) {
-      parenEnd = i;
-      break;
-    }
-  }
-  assert.notEqual(parenEnd, -1, `Could not parse parameters for ${methodName}`);
-  const params = source.slice(parenStart + 1, parenEnd);
-  const braceStart = source.indexOf('{', parenEnd);
-  let depth = 0;
-  for (let i = braceStart; i < source.length; i += 1) {
-    const char = source[i];
-    if (char === '{') depth += 1;
-    if (char === '}') depth -= 1;
-    if (depth === 0) {
-      return `${isAsync ? 'async ' : ''}function ${methodName}(${params}) ${source.slice(braceStart, i + 1)}`;
-    }
-  }
-  throw new Error(`Could not parse ${methodName}`);
-}
-
-const methodNames = [
-  'normalizeSha256ForCompare',
-  'formatSha256Short',
-  'collectHashCandidatesForCompare',
-  'getLocalHashCandidatesForCompare',
-  'getLocalHashComparePath',
-  'getHashCompareFilename',
-  'getHashCompareSourceLabel',
-  'getHashCompareResultName',
-  'getHashCompareResultUrl',
-  'dedupeHashCompareMatches',
-  'getHashCompareLocalMatchIdentity',
-  'updateHashCompareModelMetadata',
-];
-const methods = Object.fromEntries(methodNames.map(methodName => [
-  methodName,
-  eval(`(${extractMethod(modelInfoMethodsSource, methodName)})`),
-]));
+const methods = modelHashCompareMethods;
 
 function createDialog() {
   return {
