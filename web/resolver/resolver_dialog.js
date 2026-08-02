@@ -16,6 +16,7 @@ import { queueMethods } from "./actions/queue_methods.js";
 import { resolveDownloadMethods } from "./actions/resolve_download_methods.js";
 import { selectionMethods } from "./actions/selection_methods.js";
 import { renderFormatMethods } from "./utils/render_format_methods.js";
+import { fetchJson as fetchJsonRequest } from "./utils/api_client.js";
 import { getSvgIcon } from "../utils/icon_utils.js";
 export class ResolverManagerDialog extends ComfyDialog {
     constructor() {
@@ -284,41 +285,12 @@ export class ResolverManagerDialog extends ComfyDialog {
     }
 
     async fetchJson(endpoint, options = {}, errorContext = 'API Request') {
-        try {
-            const fetchOptions = {
-                ...options,
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(options.headers || {})
-                }
-            };
-            const response = await api.fetchApi(endpoint, fetchOptions);
-            if (!response.ok) {
-                let errorMsg = `Server returned ${response.status}: ${response.statusText}`;
-                try {
-                    const errData = await response.json();
-                    if (errData && errData.error) {
-                        errorMsg = errData.error;
-                    }
-                } catch (_) {}
-                const error = new Error(errorMsg);
-                error.status = response.status;
-                throw error;
-            }
-            if (response.status === 204) {
-                return null;
-            }
-            if (options.raw) {
-                return response;
-            }
-            return await response.json();
-        } catch (error) {
-            console.error(`Model Resolver: ${errorContext} failed:`, error);
-            if (!options.silent && typeof this.showNotification === 'function') {
-                this.showNotification(error.message || 'API request failed', 'error');
-            }
-            throw error;
-        }
+        return fetchJsonRequest(endpoint, options, errorContext, {
+            apiClient: api,
+            notify: typeof this.showNotification === 'function'
+                ? this.showNotification.bind(this)
+                : null,
+        });
     }
 
     showNotification(message, type = 'success', options = {}) {
