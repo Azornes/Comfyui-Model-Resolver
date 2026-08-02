@@ -569,3 +569,94 @@ def download_model(
         metadata=metadata,
         category=category,
     )
+
+
+def start_background_download(
+    url: str,
+    filename: str,
+    category: str,
+    headers: Optional[Dict[str, str]] = None,
+    subfolder: str = "",
+    base_directory: str = "",
+    metadata: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Start model validation and download in a background thread."""
+    facade = _downloader_module()
+    os = facade.os
+    time = facade.time
+    download_progress = facade.download_progress
+    download_lock = facade.download_lock
+
+    download_id = facade.generate_download_id()
+    filename = facade.sanitize_download_filename(filename)
+    subfolder = facade.normalize_relative_subfolder(subfolder)
+    initial_directory = facade.get_download_directory(category, base_directory) or ""
+    if initial_directory and subfolder:
+        initial_directory = os.path.join(initial_directory, *subfolder.split("/"))
+    initial_path = (
+        os.path.join(initial_directory, filename)
+        if initial_directory and filename
+        else ""
+    )
+
+    with download_lock:
+        download_progress[download_id] = {
+            "status": "starting",
+            "progress": 0,
+            "total_size": 0,
+            "downloaded": 0,
+            "filename": filename,
+            "path": initial_path,
+            "directory": initial_directory,
+            "url": url,
+            "error": None,
+            "speed": 0,
+            "start_time": time.time(),
+            "download_backend": facade._download_backend_from_settings(),
+        }
+
+    def run_download() -> None:
+        try:
+            result = facade.download_model(
+                url,
+                filename,
+                category,
+                download_id,
+                headers,
+                subfolder,
+                base_directory,
+                metadata,
+            )
+            if not result.get("success"):
+                with download_lock:
+                    if download_id in download_progress:
+                        download_progress[download_id]["status"] = "error"
+                        download_progress[download_id]["error"] = result.get(
+                            "error",
+                            "Download failed",
+                        )
+                        if result.get("path"):
+                            result_path = result["path"]
+                            download_progress[download_id]["path"] = result_path
+                            download_progress[download_id]["directory"] = os.path.dirname(
+                                result_path
+                            )
+        except Exception as exc:
+            with download_lock:
+                download_progress[download_id] = {
+                    "status": "error",
+                    "progress": 0,
+                    "total_size": 0,
+                    "downloaded": 0,
+                    "filename": filename,
+                    "path": "",
+                    "directory": "",
+                    "url": url,
+                    "error": str(exc),
+                    "speed": 0,
+                    "start_time": time.time(),
+                    "download_backend": facade._download_backend_from_settings(),
+                }
+
+    facade.threading.Thread(target=run_download, daemon=True).start()
+    return download_id

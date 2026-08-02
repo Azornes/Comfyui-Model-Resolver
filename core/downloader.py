@@ -10,7 +10,7 @@ import secrets  # noqa: F401
 import shutil  # noqa: F401
 import subprocess
 import threading
-import time
+import time  # noqa: F401
 from collections import deque  # noqa: F401
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional  # noqa: F401
@@ -104,7 +104,8 @@ from .download.huggingface_xet import (
 )
 from .download.orchestrator import (
     download_file,  # noqa: F401
-    download_model,
+    download_model,  # noqa: F401
+    start_background_download,  # noqa: F401
 )
 from .download.previews import (
     MODEL_PREVIEW_EXTENSIONS,  # noqa: F401
@@ -205,12 +206,12 @@ from .download.validation import (
     _strip_sensitive_url_params,  # noqa: F401
     build_download_headers,
     is_allowed_model_download_filename,  # noqa: F401
-    sanitize_download_filename,
+    sanitize_download_filename,  # noqa: F401
 )
 from .settings import (
     load_settings,
     normalize_download_backend,
-    normalize_relative_subfolder,
+    normalize_relative_subfolder,  # noqa: F401
 )
 
 
@@ -444,93 +445,3 @@ def clear_completed_downloads():
         for did in to_remove:
             del download_progress[did]
             cancelled_downloads.discard(did)
-
-
-def start_background_download(
-    url: str,
-    filename: str,
-    category: str,
-    headers: Optional[Dict[str, str]] = None,
-    subfolder: str = "",
-    base_directory: str = "",
-    metadata: Optional[Dict[str, Any]] = None,
-) -> str:
-    """
-    Start a download in a background thread.
-
-    Returns:
-        download_id for tracking progress
-    """
-    download_id = generate_download_id()
-    filename = sanitize_download_filename(filename)
-    subfolder = normalize_relative_subfolder(subfolder)
-    initial_directory = get_download_directory(category, base_directory) or ""
-    if initial_directory and subfolder:
-        initial_directory = os.path.join(initial_directory, *subfolder.split("/"))
-    initial_path = os.path.join(initial_directory, filename) if initial_directory and filename else ""
-
-    # Pre-initialize progress dict so it's always available for polling
-    # even if download fails before download_file is called
-    with download_lock:
-        download_progress[download_id] = {
-            "status": "starting",
-            "progress": 0,
-            "total_size": 0,
-            "downloaded": 0,
-            "filename": filename,
-            "path": initial_path,
-            "directory": initial_directory,
-            "url": url,
-            "error": None,
-            "speed": 0,
-            "start_time": time.time(),
-            "download_backend": _download_backend_from_settings(),
-        }
-
-    def run_download():
-        try:
-            result = download_model(
-                url,
-                filename,
-                category,
-                download_id,
-                headers,
-                subfolder,
-                base_directory,
-                metadata,
-            )
-            if not result.get("success"):
-                # Mark as error if download failed
-                with download_lock:
-                    if download_id in download_progress:
-                        download_progress[download_id]["status"] = "error"
-                        download_progress[download_id]["error"] = result.get(
-                            "error", "Download failed"
-                        )
-                        if result.get("path"):
-                            download_progress[download_id]["path"] = result["path"]
-                            download_progress[download_id]["directory"] = os.path.dirname(
-                                result["path"]
-                            )
-        except Exception as e:
-            # Ensure any exception is captured and logged
-            with download_lock:
-                download_progress[download_id] = {
-                    "status": "error",
-                    "progress": 0,
-                    "total_size": 0,
-                    "downloaded": 0,
-                    "filename": filename,
-                    "path": "",
-                    "directory": "",
-                    "url": url,
-                    "error": str(e),
-                    "speed": 0,
-                    "start_time": time.time(),
-                    "download_backend": _download_backend_from_settings(),
-                }
-
-    thread = threading.Thread(target=run_download, daemon=True)
-    thread.start()
-
-    return download_id
