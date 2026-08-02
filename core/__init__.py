@@ -10,14 +10,3 @@ Modules:
 - downloader: Model downloading with progress tracking
 - sources: Search integrations (HuggingFace, CivitAI, popular models)
 """
-
-from .matcher import find_matches
-from .resolver import analyze_and_find_matches, apply_resolution
-from .scanner import get_model_files
-
-__all__ = [
-    "analyze_and_find_matches",
-    "apply_resolution",
-    "find_matches",
-    "get_model_files",
-]

@@ -6,12 +6,11 @@ import tempfile
 import socket
 import threading
 from unittest.mock import patch, MagicMock, AsyncMock
-import importlib
 import requests
 
 # Ensure we import core modules correctly
 from core.downloader import (
-    write_lora_manager_metadata,
+    write_model_resolver_metadata,
     download_model,
     get_progress,
     _resolve_download_url_for_aria2,
@@ -32,9 +31,7 @@ from core.settings import (
     _resolve_base_model_mapping,
 )
 
-# Dynamically import hyphenated root package name to access root class JobProgressTracker
-node_mod = importlib.import_module("comfyui-model-resolver")
-JobProgressTracker = node_mod.JobProgressTracker
+from core.progress import JobProgressTracker
 
 
 class ModelResolverRobustnessTests(unittest.TestCase):
@@ -42,7 +39,7 @@ class ModelResolverRobustnessTests(unittest.TestCase):
     def test_metadata_sidecar_credentials_scrubbing(self):
         """
         Covers Requirement: API Token and credential leakage to local JSON metadata files.
-        Verifies that write_lora_manager_metadata filters authorization headers, 
+        Verifies that write_model_resolver_metadata filters authorization headers,
         tokens, cookies, and sensitive query keys from URLs and sub-objects,
         and completely removes the 'headers' wrapper object.
         """
@@ -66,7 +63,7 @@ class ModelResolverRobustnessTests(unittest.TestCase):
             }
 
             # Act
-            metadata_path = write_lora_manager_metadata(
+            metadata_path = write_model_resolver_metadata(
                 model_path,
                 sensitive_metadata,
                 category="loras",

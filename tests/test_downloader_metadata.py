@@ -11,10 +11,10 @@ from PIL import Image
 from core import downloader
 from core.downloader import (
     _extract_expected_sha256,
-    build_lora_manager_metadata,
+    build_model_resolver_metadata,
     download_model,
     get_progress,
-    write_lora_manager_metadata,
+    write_model_resolver_metadata,
 )
 from core.path_utils import get_model_resolver_sidecar_path
 
@@ -54,7 +54,7 @@ class DownloaderMetadataSidecarTests(unittest.TestCase):
             with open(model_path, "wb") as handle:
                 handle.write(b"abc")
 
-            payload = build_lora_manager_metadata(
+            payload = build_model_resolver_metadata(
                 model_path,
                 {
                     "source": "civitai",
@@ -86,7 +86,7 @@ class DownloaderMetadataSidecarTests(unittest.TestCase):
             with open(model_path, "wb") as handle:
                 handle.write(b"abc")
 
-            payload = build_lora_manager_metadata(
+            payload = build_model_resolver_metadata(
                 model_path,
                 {
                     "source": "civarchive",
@@ -119,7 +119,7 @@ class DownloaderMetadataSidecarTests(unittest.TestCase):
             with open(model_path, "wb") as handle:
                 handle.write(b"abc")
 
-            payload = build_lora_manager_metadata(
+            payload = build_model_resolver_metadata(
                 model_path,
                 {
                     "details_source": "huggingface",
@@ -154,7 +154,7 @@ class DownloaderMetadataSidecarTests(unittest.TestCase):
             with open(external_metadata_path, "w", encoding="utf-8") as handle:
                 json.dump(external_payload, handle)
 
-            metadata_path = write_lora_manager_metadata(
+            metadata_path = write_model_resolver_metadata(
                 model_path,
                 {
                     "details_source": "civitai",
@@ -217,7 +217,7 @@ class DownloaderMetadataSidecarTests(unittest.TestCase):
             with open(model_path, "wb") as handle:
                 handle.write(b"abc")
 
-            payload = build_lora_manager_metadata(
+            payload = build_model_resolver_metadata(
                 model_path,
                 {
                     "source": "civitai",
@@ -294,7 +294,7 @@ class DownloaderMetadataSidecarTests(unittest.TestCase):
                     {},
                 ),
             ):
-                metadata_path = write_lora_manager_metadata(
+                metadata_path = write_model_resolver_metadata(
                     model_path,
                     {
                         "source": "civitai",
@@ -369,7 +369,7 @@ class DownloaderMetadataSidecarTests(unittest.TestCase):
                     {},
                 ),
             ) as request_preview:
-                metadata_path = write_lora_manager_metadata(
+                metadata_path = write_model_resolver_metadata(
                     model_path,
                     {
                         "images": [

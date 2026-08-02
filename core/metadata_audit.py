@@ -11,7 +11,6 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from .log_system import create_module_logger
 from .path_utils import (
-    _metadata_sidecar_paths,  # noqa: F401
     find_metadata_sidecar_path,
     get_filename_from_path,
     get_path_identity,

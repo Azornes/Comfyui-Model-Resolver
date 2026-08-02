@@ -700,10 +700,10 @@ class UnifiedHelpersTests(unittest.TestCase):
     def test_metadata_sidecar_strict_credential_scrubbing(self):
         """
         Covers Security Risk: API keys, cookies, or authorization tokens leaking into local JSON metadata sidecar files.
-        Verifies that build_lora_manager_metadata scrubs sensitive query parameters and headers from payloads.
+        Verifies that build_model_resolver_metadata scrubs sensitive query parameters and headers from payloads.
         """
         import json
-        from core.downloader import build_lora_manager_metadata
+        from core.downloader import build_model_resolver_metadata
         dest_path = "dummy_model.safetensors"
         metadata = {
             "download_url": "https://civitai.com/api/download/models/123?token=sensitivetoken123&session=cookie_val",
@@ -712,7 +712,7 @@ class UnifiedHelpersTests(unittest.TestCase):
             "hf_token": "hf_abc123secret",
         }
         
-        payload = build_lora_manager_metadata(
+        payload = build_model_resolver_metadata(
             dest_path=dest_path,
             metadata=metadata,
             category="loras",

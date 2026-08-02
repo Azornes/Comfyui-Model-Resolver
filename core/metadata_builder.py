@@ -17,7 +17,6 @@ from .path_utils import (
     MODEL_RESOLVER_METADATA_SCHEMA,
     MODEL_RESOLVER_METADATA_SCHEMA_VERSION,
     HashCalculationCancelled,
-    _metadata_sidecar_paths,  # noqa: F401
     calculate_file_sha256,
     extract_safetensors_header_metadata,
     find_external_metadata_sidecar_path,

@@ -762,16 +762,6 @@ def build_model_resolver_metadata(
     return payload
 
 
-def build_lora_manager_metadata(
-    dest_path: str,
-    metadata: Optional[Dict[str, Any]] = None,
-    category: str = "",
-    source_url: str = "",
-) -> Dict[str, Any]:
-    """Compatibility alias for the Model Resolver metadata payload builder."""
-    return build_model_resolver_metadata(dest_path, metadata, category, source_url)
-
-
 def get_existing_model_preview_path(dest_path: str) -> str:
     """Return the first adjacent preview media file available for a model."""
     model_base_path, _model_ext = os.path.splitext(dest_path)
@@ -828,11 +818,6 @@ def _first_model_preview_asset(metadata: Dict[str, Any]) -> Tuple[str, str]:
         if url.startswith(("http://", "https://")):
             return url, _preview_media_type(url, declared_type)
     return "", ""
-
-
-def _first_model_preview_url(metadata: Dict[str, Any]) -> str:
-    """Return the first preview URL, retained for compatibility with callers."""
-    return _first_model_preview_asset(metadata)[0]
 
 
 def _rewrite_civitai_preview_url(url: str, media_type: str) -> str:
@@ -1156,25 +1141,6 @@ def write_model_resolver_metadata(
     except Exception as e:
         log.warning(f"Could not save metadata sidecar for {dest_path}: {e}")
         return None
-
-
-def write_lora_manager_metadata(
-    dest_path: str,
-    metadata: Optional[Dict[str, Any]] = None,
-    category: str = "",
-    source_url: str = "",
-    create_preview: bool = False,
-) -> Optional[str]:
-    """Compatibility alias that writes only Model Resolver-owned metadata."""
-    return write_model_resolver_metadata(
-        dest_path,
-        metadata,
-        category,
-        source_url,
-        create_preview,
-    )
-
-
 
 
 # Imported from .settings

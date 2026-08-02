@@ -302,13 +302,14 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
         )
 
     def test_project_version_helpers_preserve_version_comparison_behavior(self):
+        version_module = importlib.import_module("comfyui-model-resolver.core.version")
         self.assertEqual(
-            node_mod._extract_project_version('version = "1.2.3"'),
+            version_module._extract_project_version('version = "1.2.3"'),
             "1.2.3",
         )
-        self.assertEqual(node_mod._extract_project_version("name = 'resolver'"), "")
-        self.assertEqual(node_mod._version_sort_key("v1.10.2-beta"), (1, 10, 2))
-        self.assertEqual(node_mod._version_sort_key("unknown"), ())
+        self.assertEqual(version_module._extract_project_version("name = 'resolver'"), "")
+        self.assertEqual(version_module._version_sort_key("v1.10.2-beta"), (1, 10, 2))
+        self.assertEqual(version_module._version_sort_key("unknown"), ())
 
     def test_route_context_merges_namespaces_and_validates_required_values(self):
         context_module = importlib.import_module(
@@ -347,7 +348,7 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["current_version"], "1.0.0")
         self.assertEqual(result["latest_version"], "2.0.0")
         self.assertEqual(result["status"], "update_available")
-        self.assertEqual(result["github_url"], node_mod.PROJECT_GITHUB_URL)
+        self.assertEqual(result["github_url"], version_module.PROJECT_GITHUB_URL)
 
     async def test_version_route_returns_version_payload(self):
         get_handler = routes_registered[("GET", "/model_resolver/version")]
@@ -960,9 +961,8 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("unet", categories)
 
     def test_metadata_sidecar_paths_behavior(self):
-        from core.metadata_audit import _metadata_sidecar_paths as ma_sidecars
-        from core.metadata_builder import _metadata_sidecar_paths as mb_sidecars
         from core.path_utils import (
+            _metadata_sidecar_paths,
             get_metadata_sidecar_path,
             get_model_resolver_sidecar_path,
             get_safe_metadata_sidecar_path,
@@ -991,10 +991,8 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
         )
         
         # Test MB and MA sidecar candidates
-        mb_candidates = mb_sidecars(model_path)
-        ma_candidates = ma_sidecars(model_path)
-        self.assertEqual(mb_candidates, ma_candidates)
-        self.assertIn(expected_sidecar, mb_candidates)
+        candidates = _metadata_sidecar_paths(model_path)
+        self.assertIn(expected_sidecar, candidates)
 
     def test_select_primary_model_file_extended(self):
         from core.type_utils import select_primary_model_file

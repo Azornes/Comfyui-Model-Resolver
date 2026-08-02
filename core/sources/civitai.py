@@ -50,7 +50,6 @@ from ..type_utils import (
     normalize_model_file_info,
     normalize_model_image,
     parse_size_to_bytes,
-    prepare_remote_size_probe_url,
     resolve_model_category,
     select_primary_model_file,
 )
@@ -60,14 +59,6 @@ log = create_module_logger(__name__)
 
 CIVITAI_API_URL = "https://civitai.com/api/v1"
 
-
-def _fetch_civitai_remote_file_size(url: str, timeout: int = 15) -> Optional[int]:
-    """Probe file size for Civitai remote URLs."""
-    from ..type_utils import fetch_remote_file_size_cached
-    probe_url = prepare_remote_size_probe_url(url, ["civitai.com", "civitai.red"])
-    if not probe_url:
-        return None
-    return fetch_remote_file_size_cached(probe_url, timeout=timeout)
 
 # Cache for search results and URN resolutions
 _search_cache: Dict[str, Any] = {}

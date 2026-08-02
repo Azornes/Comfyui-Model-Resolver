@@ -175,9 +175,7 @@ class TestRefactoringUnification(unittest.TestCase):
 
 
     def test_tracker_progress_updates(self):
-        import importlib
-        node_mod = importlib.import_module("comfyui-model-resolver")
-        JobProgressTracker = node_mod.JobProgressTracker
+        from core.progress import JobProgressTracker
         
         tracker = JobProgressTracker("Test Tracker")
         tracker.update("job123", status="running", percent=50)
@@ -258,9 +256,7 @@ class TestRefactoringUnification(unittest.TestCase):
         self.assertEqual(res["hashes"]["sha256"], valid_sha.lower())
 
     def test_job_progress_tracker_update_from_payload(self):
-        import importlib
-        node_mod = importlib.import_module("comfyui-model-resolver")
-        JobProgressTracker = node_mod.JobProgressTracker
+        from core.progress import JobProgressTracker
 
         tracker = JobProgressTracker("Test Job")
         tracker.update_from_payload("job99", {"stage": "processing", "current": 5, "total": 10, "message": "Working..."})
@@ -325,7 +321,6 @@ class TestRefactoringUnification(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
 
 
 
