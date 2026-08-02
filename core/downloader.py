@@ -7,8 +7,7 @@ Handles downloading models from various sources with progress tracking.
 import hashlib
 import os
 import secrets
-import shutil
-import socket
+import shutil  # noqa: F401
 import subprocess
 import threading
 import time
@@ -23,6 +22,36 @@ from .log_system import create_module_logger
 
 log = create_module_logger(__name__)
 
+from .download.aria2_backend import (
+    Aria2Error,
+)
+from .download.aria2_backend import (
+    aria2_action_error_is_ok as _aria2_action_error_is_ok,
+)
+from .download.aria2_backend import (
+    delete_partial_download_files as _delete_partial_download_files,
+)
+from .download.aria2_backend import (
+    delete_python_partial_download_file as _delete_python_partial_download_file,
+)
+from .download.aria2_backend import (
+    delete_xet_partial_file as _delete_xet_partial_file,
+)
+from .download.aria2_backend import (
+    find_free_port as _find_free_port,
+)
+from .download.aria2_backend import (
+    parse_aria2_int as _parse_aria2_int,
+)
+from .download.aria2_backend import (
+    resolve_aria2_completed_path as _resolve_aria2_completed_path,
+)
+from .download.aria2_backend import (
+    resolve_aria2c_executable as _resolve_aria2c_executable,
+)
+from .download.aria2_backend import (
+    try_certifi_ca_path as _try_certifi_ca_path,
+)
 from .download.previews import (
     MODEL_PREVIEW_EXTENSIONS,  # noqa: F401
     MODEL_PREVIEW_MAX_DOWNLOAD_BYTES,  # noqa: F401
@@ -307,58 +336,9 @@ def generate_download_id() -> str:
     return str(uuid.uuid4())[:8]
 
 
-class Aria2Error(RuntimeError):
-    """Raised when the aria2 backend cannot start or process a request."""
-
-
 def _download_backend_from_settings(settings: Optional[Dict[str, Any]] = None) -> str:
     active_settings = settings if isinstance(settings, dict) else load_settings()
     return normalize_download_backend(active_settings.get("download_backend"))
-
-
-def _try_certifi_ca_path() -> str:
-    try:
-        import certifi  # type: ignore
-
-        path = certifi.where()
-        return path if path and os.path.isfile(path) else ""
-    except Exception:
-        return ""
-
-
-def _resolve_aria2c_executable(settings: Optional[Dict[str, Any]] = None) -> str:
-    active_settings = settings if isinstance(settings, dict) else load_settings()
-    configured = str(active_settings.get("aria2c_path") or "").strip()
-    candidate = os.path.expandvars(os.path.expanduser(configured or "aria2c"))
-    expected_names = {"aria2c", "aria2c.exe"}
-    candidate_name = get_filename_from_path(candidate).lower()
-    has_path_component = bool(
-        os.path.isabs(candidate)
-        or os.path.dirname(candidate)
-        or "/" in candidate
-        or "\\" in candidate
-    )
-
-    if has_path_component:
-        if (
-            candidate_name in expected_names
-            and os.path.isfile(candidate)
-            and is_path_within(candidate, MANAGED_ARIA2_ROOT)
-        ):
-            return os.path.realpath(os.path.abspath(candidate))
-        raise Aria2Error(
-            "Custom aria2c paths are restricted to the managed Model Resolver install. "
-            "Use the built-in aria2 installer or place aria2c on PATH."
-        )
-
-    if candidate_name in expected_names:
-        resolved = shutil.which(candidate)
-        if resolved and get_filename_from_path(resolved).lower() in expected_names:
-            return os.path.realpath(os.path.abspath(resolved))
-
-    raise Aria2Error(
-        "aria2c executable was not found. Use the built-in installer or place aria2c on PATH."
-    )
 
 
 def _read_aria2_version(executable: str) -> str:
@@ -433,13 +413,6 @@ def get_aria2_status(settings: Optional[Dict[str, Any]] = None) -> Dict[str, Any
         "idle_stop_seconds": ARIA2_IDLE_STOP_SECONDS,
         "error": error,
     }
-
-
-def _find_free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 0))
-        sock.listen(1)
-        return int(sock.getsockname()[1])
 
 
 def _aria2_rpc(method: str, params: Optional[List[Any]] = None) -> Any:
@@ -706,63 +679,6 @@ def _aria2_tell_status(gid: str) -> Dict[str, Any]:
             time.sleep(ARIA2_STATUS_RPC_RETRY_DELAY * (attempt + 1))
 
     return {}
-
-
-def _parse_aria2_int(value: Any) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return 0
-
-
-def _resolve_aria2_completed_path(status: Dict[str, Any], default_path: str) -> str:
-    files = status.get("files")
-    if isinstance(files, list) and files:
-        first = files[0]
-        if isinstance(first, dict):
-            candidate = first.get("path")
-            if isinstance(candidate, str) and candidate:
-                return candidate
-    return default_path
-
-
-def _delete_partial_download_files(dest_path: str) -> None:
-    for path in (dest_path, f"{dest_path}.aria2"):
-        try:
-            if path and os.path.exists(path):
-                os.remove(path)
-        except Exception as exc:
-            log.warning(f"Could not delete incomplete download file {path}: {exc}")
-
-
-def _delete_python_partial_download_file(partial_path: str) -> None:
-    """Remove a partial Python download without touching the final model path."""
-    try:
-        if partial_path and os.path.exists(partial_path):
-            os.remove(partial_path)
-    except Exception as exc:
-        log.warning(
-            f"Could not delete incomplete Python download file {partial_path}: {exc}"
-        )
-
-
-def _delete_xet_partial_file(partial_path: str, attempts: int = 5) -> bool:
-    """Delete a stopped Xet partial file, retrying while Windows releases it."""
-    attempts = max(1, int(attempts or 1))
-    last_error: Optional[Exception] = None
-    for attempt in range(attempts):
-        try:
-            if not os.path.exists(partial_path):
-                return True
-            os.remove(partial_path)
-            return True
-        except Exception as exc:
-            last_error = exc
-            if attempt + 1 < attempts:
-                time.sleep(0.25)
-
-    log.warning(f"Could not delete incomplete Xet file {partial_path}: {last_error}")
-    return False
 
 
 class _HuggingFaceXetDownloadCancelled(Exception):
@@ -1998,15 +1914,6 @@ def _set_download_progress_status(download_id: str, status: str, **updates: Any)
         if download_id in download_progress:
             download_progress[download_id]["status"] = status
             download_progress[download_id].update(updates)
-
-
-def _aria2_action_error_is_ok(status: str, message: str) -> bool:
-    lowered = str(message or "").lower()
-    if status == "paused":
-        return "already paused" in lowered or "is paused" in lowered
-    if status == "downloading":
-        return "not paused" in lowered or "has not been paused" in lowered
-    return False
 
 
 def _run_aria2_desired_state_worker(download_id: str) -> None:
