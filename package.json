@@ -1,0 +1,15 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "Dev tooling for comfyui-model-resolver (ESLint only, not published to npm)",
+  "scripts": {
+    "test": "node --test tests/*.mjs",
+    "lint": "eslint web/",
+    "lint:fix": "eslint web/ --fix"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.7.0",
+    "globals": "^17.7.0"
+  }
+}
