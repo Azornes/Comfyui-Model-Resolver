@@ -13,7 +13,7 @@ import threading
 import time  # noqa: F401
 from collections import deque  # noqa: F401
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional  # noqa: F401
+from typing import Any, Dict, Optional
 from urllib.parse import urlparse  # noqa: F401
 
 import requests  # noqa: F401
@@ -206,7 +206,6 @@ from .download.metadata import (
     _coerce_int_or_value,  # noqa: F401
     _coerce_size,  # noqa: F401
     _extract_expected_sha256,  # noqa: F401
-    _find_metadata_file_info,  # noqa: F401
     _json_safe_metadata,  # noqa: F401
     _metadata_source_value,  # noqa: F401
     _normalise_metadata_file_path,  # noqa: F401
@@ -218,7 +217,6 @@ from .download.metadata import (
 from .download.validation import (
     DOWNLOAD_USER_AGENT,  # noqa: F401
     _get_header_value,  # noqa: F401
-    _is_sensitive_metadata_key,  # noqa: F401
     _sanitize_download_error,  # noqa: F401
     _strip_sensitive_url_params,  # noqa: F401
     build_download_headers,  # noqa: F401
