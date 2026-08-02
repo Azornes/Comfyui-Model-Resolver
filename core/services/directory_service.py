@@ -9,34 +9,34 @@ class DirectoryService:
     """Coordinate configured model directory and subfolder discovery."""
 
     def __init__(self, context: RouteContext):
-        self.template_key_aliases = context.get("TEMPLATE_KEY_ALIASES")
-        self.dedupe_local_base_directories = context.get(
+        self.template_key_aliases = context.require("TEMPLATE_KEY_ALIASES")
+        self.dedupe_local_base_directories = context.require(
             "dedupe_local_base_directories"
         )
-        self.get_category_folder_keys = context.get("get_category_folder_keys")
-        self.get_comfy_root_path = context.get("get_comfy_root_path")
-        self.get_default_root_for_category = context.get(
+        self.get_category_folder_keys = context.require("get_category_folder_keys")
+        self.get_comfy_root_path = context.require("get_comfy_root_path")
+        self.get_default_root_for_category = context.require(
             "get_default_root_for_category"
         )
-        self.get_download_directory = context.get("get_download_directory")
-        self.get_enabled_download_categories = context.get(
+        self.get_download_directory = context.require("get_download_directory")
+        self.get_enabled_download_categories = context.require(
             "get_enabled_download_categories"
         )
-        self.get_local_path_identity = context.get("get_local_path_identity")
-        self.is_civarchive_available = context.get("is_civarchive_available")
-        self.is_lora_manager_archive_available = context.get(
+        self.get_local_path_identity = context.require("get_local_path_identity")
+        self.is_civarchive_available = context.require("is_civarchive_available")
+        self.is_lora_manager_archive_available = context.require(
             "is_lora_manager_archive_available"
         )
-        self.load_resolver_settings = context.get("load_resolver_settings")
-        self.normalize_download_category = context.get(
+        self.load_resolver_settings = context.require("load_resolver_settings")
+        self.normalize_download_category = context.require(
             "normalize_download_category"
         )
-        self.prefer_local_base_directory = context.get(
+        self.prefer_local_base_directory = context.require(
             "prefer_local_base_directory"
         )
-        self.extension = context.get("self")
-        self.split_path_segments = context.get("split_path_segments")
-        self.web = context.get("web")
+        self.extension = context.require("self")
+        self.split_path_segments = context.require("split_path_segments")
+        self.web = context.require("web")
 
     async def get_directories(self, request):
         """Get available model directories."""
