@@ -10,55 +10,55 @@ class DownloadService:
     """Coordinate download requests without embedding business logic in routes."""
 
     def __init__(self, context: RouteContext):
-        self.aria2_install_error = context.get("Aria2InstallError")
-        self.unsafe_url_error = context.get("UnsafeUrlError")
-        self.asyncio = context.get("asyncio")
-        self.cancel_download_fn = context.get("cancel_download")
-        self.clear_completed_downloads_fn = context.get(
+        self.aria2_install_error = context.require("Aria2InstallError")
+        self.unsafe_url_error = context.require("UnsafeUrlError")
+        self.asyncio = context.require("asyncio")
+        self.cancel_download_fn = context.require("cancel_download")
+        self.clear_completed_downloads_fn = context.require(
             "clear_completed_downloads"
         )
-        self.first_non_empty = context.get("first_non_empty")
-        self.get_all_progress_fn = context.get("get_all_progress")
-        self.get_aria2_status_fn = context.get("get_aria2_status")
-        self.get_civarchive_model_details = context.get(
+        self.first_non_empty = context.require("first_non_empty")
+        self.get_all_progress_fn = context.require("get_all_progress")
+        self.get_aria2_status_fn = context.require("get_aria2_status")
+        self.get_civarchive_model_details = context.require(
             "get_civarchive_model_details"
         )
-        self.get_civitai_model_details = context.get("get_civitai_model_details")
-        self.get_default_root_for_category = context.get(
+        self.get_civitai_model_details = context.require("get_civitai_model_details")
+        self.get_default_root_for_category = context.require(
             "get_default_root_for_category"
         )
-        self.get_download_directory = context.get("get_download_directory")
-        self.get_override_settings_from_request = context.get(
+        self.get_download_directory = context.require("get_download_directory")
+        self.get_override_settings_from_request = context.require(
             "get_override_settings_from_request"
         )
-        self.get_progress_fn = context.get("get_progress")
-        self.host_matches_domain = context.get("host_matches_domain")
-        self.install_aria2_engine = context.get("install_aria2_engine")
-        self.is_allowed_model_download_filename = context.get(
+        self.get_progress_fn = context.require("get_progress")
+        self.host_matches_domain = context.require("host_matches_domain")
+        self.install_aria2_engine = context.require("install_aria2_engine")
+        self.is_allowed_model_download_filename = context.require(
             "is_allowed_model_download_filename"
         )
-        self.load_resolver_settings = context.get("load_resolver_settings")
-        self.normalize_download_category = context.get(
+        self.load_resolver_settings = context.require("load_resolver_settings")
+        self.normalize_download_category = context.require(
             "normalize_download_category"
         )
-        self.pause_download_fn = context.get("pause_download")
-        self.resolve_download_subfolder = context.get(
+        self.pause_download_fn = context.require("pause_download")
+        self.resolve_download_subfolder = context.require(
             "resolve_download_subfolder"
         )
-        self.resume_download_fn = context.get("resume_download")
-        self.save_resolver_settings = context.get("save_resolver_settings")
-        self.sanitize_download_filename = context.get(
+        self.resume_download_fn = context.require("resume_download")
+        self.save_resolver_settings = context.require("save_resolver_settings")
+        self.sanitize_download_filename = context.require(
             "sanitize_download_filename"
         )
-        self.extension = context.get("self")
-        self.split_path_segments = context.get("split_path_segments")
-        self.start_aria2_daemon = context.get("start_aria2_daemon")
-        self.start_background_download = context.get("start_background_download")
-        self.stop_aria2_daemon = context.get("stop_aria2_daemon")
-        self.to_bool = context.get("to_bool")
-        self.to_int = context.get("to_int")
-        self.validate_public_http_url = context.get("validate_public_http_url")
-        self.web = context.get("web")
+        self.extension = context.require("self")
+        self.split_path_segments = context.require("split_path_segments")
+        self.start_aria2_daemon = context.require("start_aria2_daemon")
+        self.start_background_download = context.require("start_background_download")
+        self.stop_aria2_daemon = context.require("stop_aria2_daemon")
+        self.to_bool = context.require("to_bool")
+        self.to_int = context.require("to_int")
+        self.validate_public_http_url = context.require("validate_public_http_url")
+        self.web = context.require("web")
 
     @property
     def logger(self):

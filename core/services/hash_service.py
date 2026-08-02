@@ -12,55 +12,55 @@ class HashService:
     """Implement local model hash operations used by HTTP routes."""
 
     def __init__(self, context: RouteContext):
-        self.file_manager_error = context.get("FileManagerError")
-        self.file_manager_unavailable_error = context.get(
+        self.file_manager_error = context.require("FileManagerError")
+        self.file_manager_unavailable_error = context.require(
             "FileManagerUnavailableError"
         )
-        self.metadata_schema = context.get("MODEL_RESOLVER_METADATA_SCHEMA")
-        self.metadata_schema_version = context.get(
+        self.metadata_schema = context.require("MODEL_RESOLVER_METADATA_SCHEMA")
+        self.metadata_schema_version = context.require(
             "MODEL_RESOLVER_METADATA_SCHEMA_VERSION"
         )
-        self.unsupported_file_manager_error = context.get(
+        self.unsupported_file_manager_error = context.require(
             "UnsupportedFileManagerPlatformError"
         )
-        self.asyncio = context.get("asyncio")
-        self.cancel_progress_response = context.get("cancel_progress_response")
+        self.asyncio = context.require("asyncio")
+        self.cancel_progress_response = context.require("cancel_progress_response")
         self.get_existing_model_preview_path = context.get(
             "get_existing_model_preview_path"
         )
-        self.get_filename_from_path = context.get("get_filename_from_path")
-        self.get_local_model_hash_metadata = context.get(
+        self.get_filename_from_path = context.require("get_filename_from_path")
+        self.get_local_model_hash_metadata = context.require(
             "get_local_model_hash_metadata"
         )
-        self.get_progress_response = context.get("get_progress_response")
-        self.get_safe_model_resolver_sidecar_path = context.get(
+        self.get_progress_response = context.require("get_progress_response")
+        self.get_safe_model_resolver_sidecar_path = context.require(
             "get_safe_model_resolver_sidecar_path"
         )
-        self.get_workflow_model_inventory = context.get(
+        self.get_workflow_model_inventory = context.require(
             "get_workflow_model_inventory"
         )
-        self.is_path_in_configured_model_roots = context.get(
+        self.is_path_in_configured_model_roots = context.require(
             "is_path_in_configured_model_roots"
         )
-        self.load_resolver_settings = context.get("load_resolver_settings")
-        self.normalize_file_manager_path = context.get(
+        self.load_resolver_settings = context.require("load_resolver_settings")
+        self.normalize_file_manager_path = context.require(
             "normalize_file_manager_path"
         )
-        self.normalize_sha256 = context.get("normalize_sha256")
-        self.open_in_file_manager = context.get("open_in_file_manager")
+        self.normalize_sha256 = context.require("normalize_sha256")
+        self.open_in_file_manager = context.require("open_in_file_manager")
         self.os = context.get("os") or os
-        self.read_json_safe = context.get("read_json_safe")
-        self.resolver_bool_setting = context.get("resolver_bool_setting")
-        self.run_in_background_thread = context.get("run_in_background_thread")
-        self.search_local_matches_by_hash = context.get(
+        self.read_json_safe = context.require("read_json_safe")
+        self.resolver_bool_setting = context.require("resolver_bool_setting")
+        self.run_in_background_thread = context.require("run_in_background_thread")
+        self.search_local_matches_by_hash = context.require(
             "search_local_matches_by_hash"
         )
-        self.extension = context.get("self")
+        self.extension = context.require("self")
         self.time = context.get("time") or time
-        self.to_bool = context.get("to_bool")
-        self.to_int = context.get("to_int")
-        self.web = context.get("web")
-        self.write_json_atomic = context.get("write_json_atomic")
+        self.to_bool = context.require("to_bool")
+        self.to_int = context.require("to_int")
+        self.web = context.require("web")
+        self.write_json_atomic = context.require("write_json_atomic")
 
     @property
     def hash_tracker(self):
