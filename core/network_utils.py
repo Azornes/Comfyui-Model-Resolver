@@ -208,8 +208,9 @@ def request_source_response(
     timeout: int = 20,
     max_attempts: int = 2,
     log_name: str = "Source API",
+    raise_on_error: bool = False,
 ) -> Optional[requests.Response]:
-    """Perform a GET/POST request with retry logic for rate limit status (HTTP 429)."""
+    """Perform a source request with optional transport-error propagation."""
     import time
 
     from .log_system import create_module_logger
@@ -226,6 +227,8 @@ def request_source_response(
                 response = requests.get(url, params=request_params, headers=headers, timeout=timeout)
         except Exception as e:
             log.warning(f"{log_name} request failed: url={url}, error={e}")
+            if raise_on_error:
+                raise
             return None
 
         if response.status_code != 429 or attempt == max_attempts - 1:

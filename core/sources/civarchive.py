@@ -11,6 +11,8 @@ import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import urljoin, urlparse
 
+import requests
+
 from ..log_system import create_module_logger
 from ..matcher import (
     base_model_matches as _base_model_matches,
@@ -95,6 +97,37 @@ REQUEST_HEADERS = {
 
 class CivArchiveSearchError(Exception):
     """Raised when CivArchive cannot complete a search request."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "provider_unavailable",
+        http_status: Optional[int] = None,
+        retryable: bool = True,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.http_status = http_status
+        self.retryable = retryable
+
+
+def _classify_civarchive_http_status(status_code: int) -> Dict[str, Any]:
+    """Classify an HTTP response for user-facing provider status handling."""
+    try:
+        normalized_status = int(status_code)
+    except (TypeError, ValueError):
+        return {"code": "provider_unavailable", "retryable": True}
+
+    if normalized_status == 408:
+        return {"code": "timeout", "retryable": True}
+    if normalized_status == 429:
+        return {"code": "rate_limited", "retryable": True}
+    if normalized_status == 404:
+        return {"code": "not_found", "retryable": False}
+    if 400 <= normalized_status < 500:
+        return {"code": "provider_rejected", "retryable": False}
+    return {"code": "provider_unavailable", "retryable": True}
 
 
 def clear_search_cache():
@@ -433,22 +466,47 @@ def _search_page(
     # (especially VAEs) are frequently misclassified (e.g. as Checkpoint or null type) in their database.
     # We rely on name confidence sorting instead.
 
-    response = request_source_response(
-        f"{CIVARCHIVE_BASE_URL}/search",
-        method="GET",
-        headers=REQUEST_HEADERS,
-        params=params,
-        timeout=timeout,
-        log_name="CivArchive search",
-    )
+    try:
+        response = request_source_response(
+            f"{CIVARCHIVE_BASE_URL}/search",
+            method="GET",
+            headers=REQUEST_HEADERS,
+            params=params,
+            timeout=timeout,
+            log_name="CivArchive search",
+            raise_on_error=True,
+        )
+    except requests.Timeout as error:
+        raise CivArchiveSearchError(
+            "CivArchive search request timed out",
+            code="timeout",
+            retryable=True,
+        ) from error
+    except requests.RequestException as error:
+        raise CivArchiveSearchError(
+            "CivArchive search request failed (network error)",
+            code="network_error",
+            retryable=True,
+        ) from error
+
     if response is None:
-        raise CivArchiveSearchError("CivArchive search request failed (network error or timeout)")
+        raise CivArchiveSearchError(
+            "CivArchive search request failed (network error or timeout)",
+            code="network_error",
+            retryable=True,
+        )
 
     if response.status_code != 200:
+        failure = _classify_civarchive_http_status(response.status_code)
         log.warning(
             f"CivArchive search returned {response.status_code}: query={query}"
         )
-        raise CivArchiveSearchError(f"HTTP {response.status_code}")
+        raise CivArchiveSearchError(
+            f"HTTP {response.status_code}",
+            code=failure["code"],
+            http_status=response.status_code,
+            retryable=failure["retryable"],
+        )
 
     next_data = _extract_next_data(response.text)
     results = (
