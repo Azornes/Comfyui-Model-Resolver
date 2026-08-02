@@ -3010,6 +3010,21 @@
     color: var(--mr-color-error-lighter);
 }
 
+#model-resolver-modal .mr-search-result-action-btn.mr-search-progress-retry,
+#model-resolver-modal .mr-missing-detail-pane .mr-search-result-action-btn.mr-search-progress-retry {
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    min-height: 16px;
+    max-width: 16px;
+    max-height: 16px;
+    flex: 0 0 16px;
+    border-radius: var(--mr-radius-md);
+    border-color: rgba(255, 190, 90, 0.32);
+    background: rgba(255, 190, 90, 0.07);
+    color: #ffd38a;
+}
+
 #model-resolver-modal .mr-search-result-action-btn.mr-search-progress-cancel:hover:not(:disabled),
 #model-resolver-modal .mr-missing-detail-pane .mr-search-result-action-btn.mr-search-progress-cancel:hover:not(:disabled) {
     background: rgba(255, 120, 112, 0.12);
@@ -3017,8 +3032,24 @@
     color: #ffd2ce;
 }
 
+#model-resolver-modal .mr-search-result-action-btn.mr-search-progress-retry:hover:not(:disabled),
+#model-resolver-modal .mr-missing-detail-pane .mr-search-result-action-btn.mr-search-progress-retry:hover:not(:disabled) {
+    background: rgba(255, 190, 90, 0.14);
+    border-color: rgba(255, 190, 90, 0.55);
+    color: #ffe5b5;
+}
+
 #model-resolver-modal .mr-search-result-action-btn.mr-search-progress-cancel svg,
 #model-resolver-modal .mr-missing-detail-pane .mr-search-result-action-btn.mr-search-progress-cancel svg {
+    width: 9px;
+    height: 9px;
+    flex: 0 0 9px;
+    color: currentColor;
+    stroke: currentColor;
+}
+
+#model-resolver-modal .mr-search-result-action-btn.mr-search-progress-retry svg,
+#model-resolver-modal .mr-missing-detail-pane .mr-search-result-action-btn.mr-search-progress-retry svg {
     width: 9px;
     height: 9px;
     flex: 0 0 9px;

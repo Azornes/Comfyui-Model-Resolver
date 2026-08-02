@@ -2269,7 +2269,7 @@ export const resolveDownloadMethods = {
     /**
      * Search online for a model
      */
-    async searchOnline(missing, { workflowKey = this.getWorkflowScopedQueueKey(), forceSearch = false } = {}) {
+    async searchOnline(missing, { workflowKey = this.getWorkflowScopedQueueKey(), forceSearch = false, source = null } = {}) {
         let filename = this.getFilenameFromPath(missing.original_path);
         let category = missing.category || this.getNodeTypeDownloadCategory?.(missing.node_type) || '';
         const state = this.getSearchStateForWorkflow(workflowKey, missing);
@@ -2280,14 +2280,17 @@ export const resolveDownloadMethods = {
             this.refreshSearchUiForMissing(missing, state, { workflowKey });
             return activeJob.promise;
         }
-        let selectedSource = state.selectedSource || 'all';
-        if (selectedSource !== 'all' && !this.isSearchSourceUsable(selectedSource)) {
+        const requestedSource = String(source || '').trim();
+        let selectedSource = requestedSource || state.selectedSource || 'all';
+        if (!requestedSource && selectedSource !== 'all' && !this.isSearchSourceUsable(selectedSource)) {
             selectedSource = 'all';
             state.selectedSource = 'all';
             this.persistSearchStateForWorkflow(workflowKey, missing, state);
         }
         const selectedSourceLabel = this.getSearchSourceLabel(selectedSource);
-        const sourceIds = this.getSearchSourcesForSelection(selectedSource, missing);
+        const sourceIds = requestedSource
+            ? (selectedSource === 'all' ? [] : [selectedSource])
+            : this.getSearchSourcesForSelection(selectedSource, missing);
         const baseModelContext = this.getSearchBaseModelContext(missing);
         const selectedBaseModelAtStart = state.selectedBaseModel || this.getDefaultSearchBaseModel?.() || 'auto';
 
@@ -2582,6 +2585,7 @@ export const resolveDownloadMethods = {
                         || 'Error';
                     const sourceErrorTooltip = this.getSearchSourceErrorTooltip?.(source, error.message)
                         || sourceErrorMessage;
+                    const retryable = Boolean(this.isSearchSourceRetryable?.(source, error.message));
                     sourceErrorMessages.add(sourceErrorMessage);
                     if (!notifiedSourceErrors.has(source)) {
                         this.showNotification?.(sourceErrorMessage, 'error');
@@ -2595,7 +2599,8 @@ export const resolveDownloadMethods = {
                         status: 'error',
                         percent: 100,
                         message: sourceErrorMessage,
-                        error: sourceErrorTooltip
+                        error: sourceErrorTooltip,
+                        retryable
                     }, missing, { workflowKey });
                     this.persistSearchStateForWorkflow(workflowKey, missing, state);
                     this.refreshSearchUiForMissing(missing, state, { workflowKey });
@@ -3024,12 +3029,14 @@ export const resolveDownloadMethods = {
         if (!hasResults) {
             if (hasActiveProgress) {
                 container.innerHTML = progressHtml;
+                this.wireSearchProgressRetryButtons?.(container, missing, state);
                 this.wireSearchProgressCancelButtons?.(container, missing, state);
                 return;
             }
 
             if (state?.lastAttemptError) {
                 container.innerHTML = `${progressHtml}${this.renderStatusMessage(state.lastAttemptError, 'error')}`;
+                this.wireSearchProgressRetryButtons?.(container, missing, state);
                 this.wireSearchProgressCancelButtons?.(container, missing, state);
                 return;
             }
@@ -3038,6 +3045,7 @@ export const resolveDownloadMethods = {
                 'No matches found online for this model.',
                 'warning'
             );
+            this.wireSearchProgressRetryButtons?.(container, missing, state);
             this.wireSearchProgressCancelButtons?.(container, missing, state);
             return;
         }
@@ -3292,6 +3300,7 @@ export const resolveDownloadMethods = {
         container.innerHTML = html;
 
         this.wireSearchProgressCancelButtons?.(container, missing, state);
+        this.wireSearchProgressRetryButtons?.(container, missing, state);
         this.wireSearchDownloadButtons(container, missing);
     },
 

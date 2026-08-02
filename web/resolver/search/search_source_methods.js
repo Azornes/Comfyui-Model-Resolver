@@ -118,6 +118,13 @@ export const searchSourceMethods = {
         return `${displayMessage} Details: ${details}`;
     },
 
+    isSearchSourceRetryable(source, error = '', status = null) {
+        if (typeof status?.retryable === 'boolean') return status.retryable;
+        const normalizedSource = String(source || '').trim().toLowerCase().replace(/-/g, '_');
+        if (normalizedSource !== 'civarchive') return false;
+        return /network error|timeout|timed out|connection (?:error|reset|refused)|temporarily unavailable|\bHTTP\s+(?:408|429|5\d{2})\b/i.test(String(error || ''));
+    },
+
     getSearchSourceDefinitions() {
         return [
             {

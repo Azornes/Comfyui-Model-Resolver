@@ -1029,10 +1029,14 @@ export const searchPanelMethods = {
                 const label = this.getSearchSourceLabel(source);
                 const statusLabel = progress?.message || statusLabels[status] || status;
                 const title = `${label}: ${progress?.error || statusLabel}`;
+                const retryButton = status === 'error' && progress?.retryable
+                    ? `<button type="button" class="mr-search-result-action-btn mr-search-progress-retry" data-source="${this.escapeHtml(source)}" data-tooltip="Retry ${this.escapeHtml(label)} search" aria-label="Retry ${this.escapeHtml(label)} search">${getSvgIcon('refreshCw')}</button>`
+                    : '';
                 html += `
                     <div class="mr-search-progress-item mr-search-progress-${statusClass}" data-tooltip="${this.escapeHtml(title)}">
                         <span class="mr-search-progress-source">${this.escapeHtml(label)}</span>
                         <span class="mr-search-progress-status">${this.escapeHtml(statusLabel)}</span>
+                        ${retryButton}
                     </div>
                 `;
             }
@@ -1058,12 +1062,16 @@ export const searchPanelMethods = {
             const cancelButton = canCancel
                 ? `<button type="button" class="mr-search-result-action-btn mr-search-progress-cancel" data-source="${this.escapeHtml(source)}" data-run-id="${this.escapeHtml(state.activeSearchRunId)}" data-tooltip="Cancel ${this.escapeHtml(label)} search" aria-label="Cancel ${this.escapeHtml(label)} search">${getSvgIcon('x')}</button>`
                 : '';
+            const retryButton = status === 'error' && progress?.retryable
+                ? `<button type="button" class="mr-search-result-action-btn mr-search-progress-retry" data-source="${this.escapeHtml(source)}" data-tooltip="Retry ${this.escapeHtml(label)} search" aria-label="Retry ${this.escapeHtml(label)} search">${getSvgIcon('refreshCw')}</button>`
+                : '';
             html += `
                 <div class="mr-search-progress-item mr-search-progress-${statusClass}"${title}>
                     <div class="mr-search-progress-head">
                         <span class="mr-search-progress-source">${this.escapeHtml(label)}</span>
                         <span class="mr-search-progress-status">${this.escapeHtml(statusLabel)}</span>
                         ${cancelButton}
+                        ${retryButton}
                     </div>
                     <div class="mr-search-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${safePercent}">
                         <div class="mr-search-progress-fill" style="width: ${safePercent}%;"></div>
@@ -1073,6 +1081,28 @@ export const searchPanelMethods = {
         }
         html += '</div>';
         return html;
+    },
+
+    wireSearchProgressRetryButtons(container, missing, state = null, options = {}) {
+        if (!container || !missing) return;
+        const workflowKey = options.workflowKey || this.getWorkflowScopedQueueKey();
+        container.querySelectorAll?.('.mr-search-progress-retry').forEach(button => {
+            if (button.dataset.mlRetrySearchBound === '1') return;
+            button.dataset.mlRetrySearchBound = '1';
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const source = button.dataset.source || '';
+                const progress = state?.sourceProgress?.[source];
+                if (!source || !progress?.retryable || state?.activeSearchRunId) return;
+                button.disabled = true;
+                this.searchOnline(missing, {
+                    workflowKey,
+                    source,
+                    forceSearch: true
+                });
+            });
+        });
     },
 
     wireSearchProgressCancelButtons(container, missing, state = null, { workflowKey = this.getWorkflowScopedQueueKey() } = {}) {

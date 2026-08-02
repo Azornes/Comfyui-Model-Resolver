@@ -6,6 +6,7 @@ const {
   getSearchSourceLabel,
   getSearchSourceErrorMessage,
   getSearchSourceErrorTooltip,
+  isSearchSourceRetryable,
   getSearchSourceDefinitions,
   getSearchResultKeysForSources,
   getHashLookupSourcesForSearchSources,
@@ -110,6 +111,13 @@ test('structured CivArchive status uses safe messages and HTTP details', () => {
     }),
     'CivArchive rate limit was reached. Please try again later.'
   );
+});
+
+test('CivArchive transport failures are marked retryable without broadening other sources', () => {
+  assert.equal(isSearchSourceRetryable('civarchive', 'CivArchive search failed: HTTP 522'), true);
+  assert.equal(isSearchSourceRetryable('civarchive', 'CivArchive search failed: HTTP 400'), false);
+  assert.equal(isSearchSourceRetryable('civitai', 'request timed out'), false);
+  assert.equal(isSearchSourceRetryable('civarchive', '', { retryable: false }), false);
 });
 
 test('search source selection maps source ids to result and hash keys', () => {
