@@ -75,6 +75,26 @@ def test_civarchive_search_classifies_transport_failures(
     assert raised.value.retryable is True
 
 
+def test_civarchive_failure_exposes_safe_status_payload():
+    error = civarchive.CivArchiveSearchError(
+        "HTTP 522",
+        code="provider_unavailable",
+        http_status=522,
+        retryable=True,
+    )
+
+    assert error.as_status() == {
+        "state": "unavailable",
+        "code": "provider_unavailable",
+        "retryable": True,
+        "http_status": 522,
+        "message": (
+            "CivArchive may be overloaded or temporarily unavailable. "
+            "Please try again."
+        ),
+    }
+
+
 def test_request_source_response_can_propagate_transport_errors():
     with patch.object(network_utils.requests, "get", side_effect=requests.Timeout("timeout")), pytest.raises(
         requests.Timeout, match="timeout"

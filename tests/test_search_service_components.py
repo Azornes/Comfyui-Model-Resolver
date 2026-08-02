@@ -298,6 +298,43 @@ def test_search_provider_runner_handles_civarchive_error():
     )
 
 
+def test_search_provider_runner_exposes_civarchive_status_metadata():
+    from core.sources.civarchive import CivArchiveSearchError
+
+    owner = SimpleNamespace(
+        CivArchiveSearchError=CivArchiveSearchError,
+        logger=MagicMock(),
+        search_tracker=MagicMock(),
+        format_log_fields=MagicMock(return_value="file=model.safetensors"),
+        log_search_result=MagicMock(),
+        search_civarchive_for_file=MagicMock(
+            side_effect=CivArchiveSearchError(
+                "HTTP 522",
+                code="provider_unavailable",
+                http_status=522,
+                retryable=True,
+            )
+        ),
+    )
+    owner.search_tracker.is_cancelled.return_value = False
+    runner = SearchProviderRunner(owner)
+
+    result = runner.search_civarchive_source_task(
+        _request(is_urn=False, data={}, civarchive_candidate_limit=5)
+    )
+
+    assert result[0]["source_status"]["civarchive"] == {
+        "state": "unavailable",
+        "code": "provider_unavailable",
+        "retryable": True,
+        "http_status": 522,
+        "message": (
+            "CivArchive may be overloaded or temporarily unavailable. "
+            "Please try again."
+        ),
+    }
+
+
 def test_search_provider_runner_resolves_civitai_urn():
     owner = SimpleNamespace(
         CivArchiveSearchError=Exception,
@@ -607,6 +644,7 @@ async def test_search_orchestrator_deduplicates_local_hash_matches_and_keeps_err
     assert response.payload["source_errors"] == {
         "civarchive": "provider unavailable"
     }
+    assert response.payload["source_status"] == {}
     assert len(response.payload["local_hash_matches"]) == 1
     assert response.payload["local_hash_matches"][0]["hash_lookup_sha256"] == (
         first_hash

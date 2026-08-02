@@ -523,6 +523,20 @@ class SearchProviderRunner:
 
         def handle_civarchive_error(error):
             error_message = f"CivArchive search failed: {error}"
+            status_factory = getattr(error, "as_status", None)
+            if callable(status_factory):
+                source_status = status_factory()
+            else:
+                source_status = {
+                    "state": "unavailable",
+                    "code": "provider_unavailable",
+                    "retryable": True,
+                    "http_status": None,
+                    "message": (
+                        "CivArchive may be overloaded or temporarily unavailable. "
+                        "Please try again."
+                    ),
+                }
             self.owner.logger.warning(error_message)
             self.owner.search_tracker.update(
                 request.progress_id,
@@ -536,6 +550,7 @@ class SearchProviderRunner:
                 {
                     "civarchive": None,
                     "source_errors": {"civarchive": error_message},
+                    "source_status": {"civarchive": source_status},
                 },
                 False,
             )

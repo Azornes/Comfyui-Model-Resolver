@@ -66,6 +66,23 @@ DEFAULT_CIVARCHIVE_CANDIDATE_LIMIT = 10
 MAX_CIVARCHIVE_CANDIDATE_LIMIT = 30
 SEARCH_RESULT_DETAIL_LIMIT = 5
 HASH_PAGE_MODEL_LINK_LIMIT = 5
+CIVARCHIVE_FAILURE_MESSAGES = {
+    "timeout": (
+        "CivArchive did not respond in time. It may be temporarily overloaded. "
+        "Please try again."
+    ),
+    "network_error": (
+        "CivArchive could not be reached. It may be temporarily unavailable. "
+        "Please try again."
+    ),
+    "provider_unavailable": (
+        "CivArchive may be overloaded or temporarily unavailable. "
+        "Please try again."
+    ),
+    "rate_limited": "CivArchive rate limit was reached. Please try again later.",
+    "not_found": "CivArchive did not find a matching page.",
+    "provider_rejected": "CivArchive rejected the search request.",
+}
 CIVARCHIVE_SIZE_PROBE_DOMAINS = (
     "huggingface.co",
     "civarchive.com",
@@ -110,6 +127,28 @@ class CivArchiveSearchError(Exception):
         self.code = code
         self.http_status = http_status
         self.retryable = retryable
+
+    def as_status(self) -> Dict[str, Any]:
+        """Return a safe provider status payload for search responses."""
+        if self.code == "rate_limited":
+            state = "rate_limited"
+        elif self.code == "not_found":
+            state = "not_found"
+        elif self.retryable:
+            state = "unavailable"
+        else:
+            state = "error"
+
+        return {
+            "state": state,
+            "code": self.code,
+            "retryable": self.retryable,
+            "http_status": self.http_status,
+            "message": CIVARCHIVE_FAILURE_MESSAGES.get(
+                self.code,
+                "CivArchive search failed. Please try again later.",
+            ),
+        }
 
 
 def _classify_civarchive_http_status(status_code: int) -> Dict[str, Any]:

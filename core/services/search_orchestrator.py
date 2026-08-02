@@ -318,6 +318,7 @@ class SearchOrchestrator:
                 "found": False,
                 "searched_sources": sorted(normalized_sources),
                 "source_errors": {},
+                "source_status": {},
             }
 
             def iter_result_items(result):
@@ -423,6 +424,8 @@ class SearchOrchestrator:
                 for source_key, source_result in source_results.items():
                     if source_key == "source_errors":
                         results["source_errors"].update(source_result or {})
+                    elif source_key == "source_status":
+                        results["source_status"].update(source_result or {})
                     elif source_result:
                         results[source_key] = source_result
                 if source_found:
@@ -483,6 +486,7 @@ class SearchOrchestrator:
                         else []
                     ),
                     "source_errors": {},
+                    "source_status": {},
                 }
             )
 
