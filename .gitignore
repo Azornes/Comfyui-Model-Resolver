@@ -45,5 +45,4 @@ model_resolver_settings.json
 
 node_modules/*
 eslint.config.mjs
-package-lock.json
 package.json
