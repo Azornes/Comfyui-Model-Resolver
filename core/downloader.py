@@ -252,6 +252,15 @@ def _bind_aria2_dependencies(function):
     return bound
 
 
+def _bind_download_dependencies(function):
+    """Bind the downloader facade as explicit download-module dependencies."""
+    def bound(*args: Any, **kwargs: Any):
+        kwargs.setdefault("dependencies", sys.modules[__name__])
+        return function(*args, **kwargs)
+
+    return bound
+
+
 for _aria2_dependency_name in (
     "download_file_with_aria2",
     "get_aria2_status",
@@ -281,6 +290,12 @@ for _aria2_dependency_name in (
 ):
     globals()[_aria2_dependency_name] = _bind_aria2_dependencies(
         globals()[_aria2_dependency_name]
+    )
+
+
+for _download_dependency_name in ("get_download_directory",):
+    globals()[_download_dependency_name] = _bind_download_dependencies(
+        globals()[_download_dependency_name]
     )
 
 

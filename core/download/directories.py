@@ -1,21 +1,24 @@
 """Download directory resolution used by the downloader facade."""
 
-import importlib
 import os
-from typing import List, Optional
+from typing import Any, List, Optional
 
 
-def _downloader_module():
-    """Return the facade so runtime patches remain effective."""
-    return importlib.import_module("core.downloader")
+def _require_dependencies(dependencies: Any) -> Any:
+    """Return explicitly supplied services for directory resolution."""
+    if dependencies is None:
+        raise RuntimeError("download directory dependencies were not provided")
+    return dependencies
 
 
 def get_download_directory(
     category: str,
     preferred_base_directory: str = "",
+    *,
+    dependencies: Any = None,
 ) -> Optional[str]:
     """Get the appropriate download directory for a model category."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     folder_paths = facade.folder_paths
 
     if folder_paths is None:
