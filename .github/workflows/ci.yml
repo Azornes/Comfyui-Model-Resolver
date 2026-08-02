@@ -3,8 +3,6 @@ name: CI
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-  push:
-    branches: [main]
 
 permissions:
   contents: read
@@ -16,6 +14,7 @@ concurrency:
 jobs:
   frontend:
     name: Frontend tests and lint
+    if: github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
 
     steps:
@@ -39,6 +38,7 @@ jobs:
 
   backend:
     name: Python tests and static checks
+    if: github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
 
     steps:
