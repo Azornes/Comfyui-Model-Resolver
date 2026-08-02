@@ -7,17 +7,17 @@ class LoadedModelsService:
     """Build the list of models loaded by a workflow and expose its progress."""
 
     def __init__(self, context: RouteContext):
-        self.adapt_custom_node_loaded_model = context.get(
+        self.adapt_custom_node_loaded_model = context.require(
             "adapt_custom_node_loaded_model"
         )
-        self.asyncio = context.get("asyncio")
-        self.get_filename_from_path = context.get("get_filename_from_path")
-        self.get_progress_response = context.get("get_progress_response")
-        self.get_workflow_model_inventory = context.get(
+        self.asyncio = context.require("asyncio")
+        self.get_filename_from_path = context.require("get_filename_from_path")
+        self.get_progress_response = context.require("get_progress_response")
+        self.get_workflow_model_inventory = context.require(
             "get_workflow_model_inventory"
         )
-        self.extension = context.get("self")
-        self.web = context.get("web")
+        self.extension = context.require("self")
+        self.web = context.require("web")
 
     async def get_loaded_models(self, request):
         """Get all currently loaded models in the workflow."""
