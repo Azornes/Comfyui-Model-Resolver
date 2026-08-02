@@ -1,11 +1,11 @@
 """Directories route registration."""
 
+from ..services.scanner_service import ScannerService
 from .context import RouteContext
 
 
 def register_directory_routes(context: RouteContext):
     TEMPLATE_KEY_ALIASES = context.get('TEMPLATE_KEY_ALIASES')
-    asyncio = context.get('asyncio')
     dedupe_local_base_directories = context.get('dedupe_local_base_directories')
     get_category_folder_keys = context.get('get_category_folder_keys')
     get_comfy_root_path = context.get('get_comfy_root_path')
@@ -13,8 +13,6 @@ def register_directory_routes(context: RouteContext):
     get_download_directory = context.get('get_download_directory')
     get_enabled_download_categories = context.get('get_enabled_download_categories')
     get_local_path_identity = context.get('get_local_path_identity')
-    get_model_files = context.get('get_model_files')
-    infer_download_path_templates = context.get('infer_download_path_templates')
     is_civarchive_available = context.get('is_civarchive_available')
     is_lora_manager_archive_available = context.get('is_lora_manager_archive_available')
     json_api_endpoint = context.get('json_api_endpoint')
@@ -26,6 +24,7 @@ def register_directory_routes(context: RouteContext):
     self = context.get('self')
     split_path_segments = context.get('split_path_segments')
     web = context.get('web')
+    scanner_service = ScannerService(context)
 
     @routes.get("/model_resolver/directories")
     @json_api_endpoint("directories")
@@ -135,17 +134,7 @@ def register_directory_routes(context: RouteContext):
     @json_api_endpoint("path template suggestions")
     async def get_path_template_suggestions(request):
         """Infer path template presets from existing local model folders."""
-        from ..sources.popular import get_base_models_config
-
-        force_rescan = request.query.get("force") == "1"
-        models = await asyncio.to_thread(get_model_files, force_rescan)
-        base_models_config = get_base_models_config()
-        suggestions = await asyncio.to_thread(
-            infer_download_path_templates,
-            models,
-            base_models_config,
-        )
-        return web.json_response(suggestions)
+        return await scanner_service.get_path_template_suggestions(request)
 
     @routes.get("/model_resolver/capabilities")
     @json_api_endpoint("capabilities")

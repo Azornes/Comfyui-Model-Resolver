@@ -1,5 +1,6 @@
 """Metadata route registration."""
 
+from ..services.scanner_service import ScannerService
 from .context import RouteContext
 
 
@@ -9,9 +10,7 @@ def register_metadata_routes(context: RouteContext):
     build_missing_local_metadata = context.get('build_missing_local_metadata')
     cancel_progress_response = context.get('cancel_progress_response')
     get_metadata_build_capabilities = context.get('get_metadata_build_capabilities')
-    get_model_files = context.get('get_model_files')
     get_progress_response = context.get('get_progress_response')
-    invalidate_local_hash_match_cache = context.get('invalidate_local_hash_match_cache')
     json_api_endpoint = context.get('json_api_endpoint')
     normalize_metadata_build_mode = context.get('normalize_metadata_build_mode')
     routes = context.get('routes')
@@ -20,19 +19,13 @@ def register_metadata_routes(context: RouteContext):
     to_bool = context.get('to_bool')
     to_int = context.get('to_int')
     web = context.get('web')
+    scanner_service = ScannerService(context)
 
     @routes.get("/model_resolver/models")
     @json_api_endpoint("get_models")
     async def get_models(request):
         """Get list of all available models."""
-        force_rescan = to_bool(
-            request.query.get("force") or request.query.get("force_rescan"),
-            False
-        )
-        if force_rescan:
-            invalidate_local_hash_match_cache()
-        models = get_model_files(force_rescan=force_rescan)
-        return web.json_response(models)
+        return await scanner_service.get_models(request)
 
     @routes.post("/model_resolver/metadata-size-audit")
     @json_api_endpoint("metadata-size-audit")
