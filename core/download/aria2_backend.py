@@ -150,3 +150,387 @@ def aria2_action_error_is_ok(status: str, message: str) -> bool:
     if status == "downloading":
         return "not paused" in lowered or "has not been paused" in lowered
     return False
+
+
+def read_aria2_version(executable: str) -> str:
+    """Read the installed aria2 version without raising process errors."""
+    facade = _downloader_module()
+    if not executable:
+        return ""
+    try:
+        kwargs: Dict[str, Any] = {}
+        if facade.os.name == "nt":
+            kwargs["creationflags"] = getattr(
+                facade.subprocess,
+                "CREATE_NO_WINDOW",
+                0,
+            )
+        result = facade.subprocess.run(
+            [executable, "--version"],
+            stdout=facade.subprocess.PIPE,
+            stderr=facade.subprocess.STDOUT,
+            text=True,
+            timeout=5,
+            check=False,
+            **kwargs,
+        )
+    except Exception:
+        return ""
+
+    first_line = ""
+    for line in str(result.stdout or "").splitlines():
+        text = line.strip()
+        if text:
+            first_line = text
+            break
+    if not first_line:
+        return ""
+
+    for token in first_line.replace(",", " ").split():
+        if token and token[0].isdigit():
+            return token
+    return first_line
+
+
+def get_aria2_status(settings: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Return aria2 availability, daemon and active-transfer information."""
+    facade = _downloader_module()
+    active_settings = (
+        settings if isinstance(settings, dict) else facade.load_settings()
+    )
+    configured_path = str(active_settings.get("aria2c_path") or "").strip()
+    try:
+        resolved_path = facade._resolve_aria2c_executable(active_settings)
+        available = True
+        version = facade._read_aria2_version(resolved_path)
+        error = ""
+    except Exception as exc:
+        resolved_path = ""
+        available = False
+        version = ""
+        error = str(exc)
+
+    with facade.aria2_lock:
+        process = facade.aria2_process
+        running = process is not None and process.poll() is None
+        if not running and process is not None:
+            facade.aria2_process = None
+            facade.aria2_process_started_by_resolver = False
+        managed = bool(running and facade.aria2_process_started_by_resolver)
+        active_transfers = len(facade.aria2_transfers)
+
+    return {
+        "backend": facade._download_backend_from_settings(active_settings),
+        "configured_path": configured_path,
+        "resolved_path": resolved_path,
+        "available": available,
+        "version": version,
+        "running": running,
+        "managed": managed,
+        "can_stop": bool(managed and active_transfers == 0),
+        "active_transfers": active_transfers,
+        "auto_stop_enabled": bool(active_settings.get("aria2_auto_stop_daemon", True)),
+        "idle_stop_seconds": facade.ARIA2_IDLE_STOP_SECONDS,
+        "error": error,
+    }
+
+
+def aria2_rpc(method: str, params: Optional[list[Any]] = None) -> Any:
+    """Call the local aria2 JSON-RPC endpoint."""
+    facade = _downloader_module()
+    if not facade.aria2_rpc_url:
+        raise Aria2Error("aria2 RPC endpoint is not initialized")
+
+    payload = {
+        "jsonrpc": "2.0",
+        "id": facade.secrets.token_hex(8),
+        "method": method,
+        "params": [f"token:{facade.aria2_rpc_secret}", *(params or [])],
+    }
+    with facade.aria2_rpc_lock:
+        response = facade.requests.post(
+            facade.aria2_rpc_url,
+            json=payload,
+            timeout=facade.ARIA2_RPC_TIMEOUT,
+        )
+        text = response.text
+        try:
+            body = response.json()
+        except ValueError as exc:
+            raise Aria2Error(
+                f"aria2 RPC returned non-JSON response ({response.status_code}): {text[:300]}"
+            ) from exc
+
+        if "error" in body:
+            error = body.get("error") or {}
+            message = error.get("message") if isinstance(error, dict) else str(error)
+            raise Aria2Error(message or f"aria2 RPC {method} failed")
+
+        if response.status_code != 200:
+            raise Aria2Error(
+                f"aria2 RPC {method} returned HTTP {response.status_code}: {text[:300]}"
+            )
+
+        return body.get("result")
+
+
+def aria2_ping() -> bool:
+    """Check whether the local aria2 RPC endpoint responds."""
+    facade = _downloader_module()
+    try:
+        result = facade._aria2_rpc("aria2.getVersion", [])
+        return isinstance(result, dict)
+    except Exception:
+        return False
+
+
+def cancel_aria2_idle_timer_locked() -> None:
+    """Cancel the pending idle timer while holding the aria2 lock."""
+    facade = _downloader_module()
+    if facade.aria2_idle_timer is not None:
+        facade.aria2_idle_timer.cancel()
+        facade.aria2_idle_timer = None
+
+
+def aria2_has_active_transfers_locked() -> bool:
+    """Return whether aria2 has active resolver-owned transfers."""
+    return bool(_downloader_module().aria2_transfers)
+
+
+def stop_aria2_daemon(reason: str = "manual") -> Dict[str, Any]:
+    """Stop the aria2 RPC process started by Model Resolver."""
+    facade = _downloader_module()
+    with facade.aria2_lock:
+        facade._cancel_aria2_idle_timer_locked()
+        process = facade.aria2_process
+        running = process is not None and process.poll() is None
+        if not running:
+            facade.aria2_process = None
+            facade.aria2_rpc_url = ""
+            facade.aria2_rpc_secret = ""
+            facade.aria2_process_started_by_resolver = False
+            return {
+                "success": True,
+                "stopped": False,
+                "message": "aria2 daemon is not running",
+            }
+
+        if not facade.aria2_process_started_by_resolver:
+            return {
+                "success": False,
+                "stopped": False,
+                "error": "This aria2 daemon was not started by Model Resolver.",
+            }
+
+        if facade._aria2_has_active_transfers_locked():
+            return {
+                "success": False,
+                "stopped": False,
+                "error": "aria2 daemon has active downloads.",
+            }
+
+        try:
+            process.terminate()
+            process.wait(timeout=5)
+        except Exception:
+            try:
+                process.kill()
+                process.wait(timeout=2)
+            except Exception:
+                pass
+
+        facade.aria2_process = None
+        facade.aria2_rpc_url = ""
+        facade.aria2_rpc_secret = ""
+        facade.aria2_process_started_by_resolver = False
+
+    log.info(f"aria2 RPC daemon stopped ({reason})")
+    return {"success": True, "stopped": True, "message": "aria2 daemon stopped"}
+
+
+def start_aria2_daemon(settings: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Start the aria2 RPC process without creating a download."""
+    facade = _downloader_module()
+    active_settings = (
+        settings if isinstance(settings, dict) else facade.load_settings()
+    )
+    try:
+        facade._ensure_aria2_daemon(active_settings)
+        status = facade.get_aria2_status(active_settings)
+        return {
+            **status,
+            "success": True,
+            "started": bool(status.get("running")),
+            "message": "aria2 daemon is running",
+        }
+    except Exception as exc:
+        try:
+            status = facade.get_aria2_status(active_settings)
+        except Exception:
+            status = {}
+        return {
+            **status,
+            "success": False,
+            "started": False,
+            "error": str(exc),
+        }
+
+
+def aria2_idle_stop_worker() -> None:
+    """Stop a resolver-owned daemon after its idle timeout."""
+    facade = _downloader_module()
+    with facade.aria2_lock:
+        facade.aria2_idle_timer = None
+
+    settings = facade.load_settings()
+    if not settings.get("aria2_auto_stop_daemon", True):
+        return
+    with facade.aria2_lock:
+        process = facade.aria2_process
+        running = process is not None and process.poll() is None
+        if (
+            not running
+            or not facade.aria2_process_started_by_resolver
+            or facade._aria2_has_active_transfers_locked()
+        ):
+            return
+    facade.stop_aria2_daemon(reason="idle")
+
+
+def schedule_aria2_idle_stop() -> None:
+    """Schedule daemon shutdown when no resolver transfer remains active."""
+    facade = _downloader_module()
+    settings = facade.load_settings()
+    if not settings.get("aria2_auto_stop_daemon", True):
+        return
+    with facade.aria2_lock:
+        facade._cancel_aria2_idle_timer_locked()
+        process = facade.aria2_process
+        running = process is not None and process.poll() is None
+        if (
+            not running
+            or not facade.aria2_process_started_by_resolver
+            or facade._aria2_has_active_transfers_locked()
+        ):
+            return
+        facade.aria2_idle_timer = facade.threading.Timer(
+            facade.ARIA2_IDLE_STOP_SECONDS,
+            facade._aria2_idle_stop_worker,
+        )
+        facade.aria2_idle_timer.daemon = True
+        facade.aria2_idle_timer.start()
+
+
+def ensure_aria2_daemon(settings: Optional[Dict[str, Any]] = None) -> None:
+    """Start or reuse the resolver-owned aria2 daemon."""
+    facade = _downloader_module()
+    active_settings = (
+        settings if isinstance(settings, dict) else facade.load_settings()
+    )
+    with facade.aria2_lock:
+        facade._cancel_aria2_idle_timer_locked()
+        process = facade.aria2_process
+        if process is not None and process.poll() is None and facade._aria2_ping():
+            return
+
+        if process is not None and process.poll() is None:
+            try:
+                process.terminate()
+            except Exception:
+                pass
+        facade.aria2_process = None
+        facade.aria2_process_started_by_resolver = False
+
+        executable = facade._resolve_aria2c_executable(active_settings)
+        port = facade._find_free_port()
+        facade.aria2_rpc_secret = facade.secrets.token_hex(16)
+        facade.aria2_rpc_url = f"http://127.0.0.1:{port}/jsonrpc"
+
+        command = [
+            executable,
+            "--enable-rpc=true",
+            "--rpc-listen-all=false",
+            f"--rpc-listen-port={port}",
+            f"--rpc-secret={facade.aria2_rpc_secret}",
+            "--check-certificate=true",
+            "--allow-overwrite=true",
+            "--auto-file-renaming=false",
+            "--file-allocation=none",
+            "--max-concurrent-downloads=5",
+            "--continue=true",
+            "--daemon=false",
+            "--quiet=true",
+            f"--stop-with-process={facade.os.getpid()}",
+        ]
+        ca_cert = facade._try_certifi_ca_path()
+        if ca_cert:
+            command.insert(5, f"--ca-certificate={ca_cert}")
+
+        creationflags = 0
+        if facade.os.name == "nt":
+            creationflags = getattr(facade.subprocess, "CREATE_NO_WINDOW", 0)
+
+        log.info(f"Starting aria2 RPC daemon from {executable}")
+        facade.aria2_process = facade.subprocess.Popen(
+            command,
+            stdout=facade.subprocess.DEVNULL,
+            stderr=facade.subprocess.PIPE,
+            creationflags=creationflags,
+        )
+        facade.aria2_process_started_by_resolver = True
+
+        start_time = facade.time.time()
+        last_error = ""
+        while facade.time.time() - start_time < 10:
+            process = facade.aria2_process
+            if process.poll() is not None:
+                stderr = ""
+                try:
+                    stderr = (
+                        process.stderr.read() if process.stderr else b""
+                    ).decode("utf-8", errors="replace")
+                except Exception:
+                    stderr = ""
+                raise Aria2Error(
+                    "aria2 RPC process exited early with code "
+                    f"{process.returncode}: {stderr.strip()}"
+                )
+            try:
+                if facade._aria2_ping():
+                    return
+            except Exception as exc:
+                last_error = str(exc)
+            facade.time.sleep(0.2)
+
+        raise Aria2Error(
+            "Timed out waiting for aria2 RPC to become ready"
+            f"{': ' + last_error if last_error else ''}"
+        )
+
+
+def aria2_tell_status(gid: str) -> Dict[str, Any]:
+    """Read an aria2 transfer status with retries for transient resets."""
+    facade = _downloader_module()
+    keys = [
+        "gid",
+        "status",
+        "totalLength",
+        "completedLength",
+        "downloadSpeed",
+        "errorMessage",
+        "files",
+    ]
+    for attempt in range(facade.ARIA2_STATUS_RPC_RETRIES):
+        try:
+            result = facade._aria2_rpc("aria2.tellStatus", [gid, keys])
+            return result if isinstance(result, dict) else {}
+        except (facade.requests.exceptions.ConnectionError, facade.requests.exceptions.Timeout):
+            if attempt + 1 >= facade.ARIA2_STATUS_RPC_RETRIES:
+                raise
+            log.debug(
+                f"Retrying aria2 status RPC for {gid} "
+                f"({attempt + 2}/{facade.ARIA2_STATUS_RPC_RETRIES})"
+            )
+            facade.time.sleep(facade.ARIA2_STATUS_RPC_RETRY_DELAY * (attempt + 1))
+
+    return {}

@@ -6,7 +6,7 @@ Handles downloading models from various sources with progress tracking.
 
 import hashlib
 import os
-import secrets
+import secrets  # noqa: F401
 import shutil  # noqa: F401
 import subprocess
 import threading
@@ -24,9 +24,24 @@ log = create_module_logger(__name__)
 
 from .download.aria2_backend import (
     Aria2Error,
+    get_aria2_status,  # noqa: F401
+    start_aria2_daemon,  # noqa: F401
+    stop_aria2_daemon,  # noqa: F401
 )
 from .download.aria2_backend import (
     aria2_action_error_is_ok as _aria2_action_error_is_ok,
+)
+from .download.aria2_backend import (
+    aria2_has_active_transfers_locked as _aria2_has_active_transfers_locked,  # noqa: F401
+)
+from .download.aria2_backend import (
+    aria2_idle_stop_worker as _aria2_idle_stop_worker,  # noqa: F401
+)
+from .download.aria2_backend import aria2_ping as _aria2_ping  # noqa: F401
+from .download.aria2_backend import aria2_rpc as _aria2_rpc
+from .download.aria2_backend import aria2_tell_status as _aria2_tell_status
+from .download.aria2_backend import (
+    cancel_aria2_idle_timer_locked as _cancel_aria2_idle_timer_locked,  # noqa: F401
 )
 from .download.aria2_backend import (
     delete_partial_download_files as _delete_partial_download_files,
@@ -37,20 +52,25 @@ from .download.aria2_backend import (
 from .download.aria2_backend import (
     delete_xet_partial_file as _delete_xet_partial_file,
 )
+from .download.aria2_backend import ensure_aria2_daemon as _ensure_aria2_daemon
 from .download.aria2_backend import (
-    find_free_port as _find_free_port,
+    find_free_port as _find_free_port,  # noqa: F401
 )
 from .download.aria2_backend import (
     parse_aria2_int as _parse_aria2_int,
 )
+from .download.aria2_backend import read_aria2_version as _read_aria2_version  # noqa: F401
 from .download.aria2_backend import (
     resolve_aria2_completed_path as _resolve_aria2_completed_path,
 )
 from .download.aria2_backend import (
-    resolve_aria2c_executable as _resolve_aria2c_executable,
+    resolve_aria2c_executable as _resolve_aria2c_executable,  # noqa: F401
 )
 from .download.aria2_backend import (
-    try_certifi_ca_path as _try_certifi_ca_path,
+    schedule_aria2_idle_stop as _schedule_aria2_idle_stop,
+)
+from .download.aria2_backend import (
+    try_certifi_ca_path as _try_certifi_ca_path,  # noqa: F401
 )
 from .download.previews import (
     MODEL_PREVIEW_EXTENSIONS,  # noqa: F401
@@ -339,346 +359,6 @@ def generate_download_id() -> str:
 def _download_backend_from_settings(settings: Optional[Dict[str, Any]] = None) -> str:
     active_settings = settings if isinstance(settings, dict) else load_settings()
     return normalize_download_backend(active_settings.get("download_backend"))
-
-
-def _read_aria2_version(executable: str) -> str:
-    if not executable:
-        return ""
-    try:
-        kwargs: Dict[str, Any] = {}
-        if os.name == "nt":
-            kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        result = subprocess.run(
-            [executable, "--version"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            timeout=5,
-            check=False,
-            **kwargs,
-        )
-    except Exception:
-        return ""
-
-    first_line = ""
-    for line in str(result.stdout or "").splitlines():
-        text = line.strip()
-        if text:
-            first_line = text
-            break
-    if not first_line:
-        return ""
-
-    for token in first_line.replace(",", " ").split():
-        if token and token[0].isdigit():
-            return token
-    return first_line
-
-
-def get_aria2_status(settings: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    global aria2_process, aria2_process_started_by_resolver
-
-    active_settings = settings if isinstance(settings, dict) else load_settings()
-    configured_path = str(active_settings.get("aria2c_path") or "").strip()
-    try:
-        resolved_path = _resolve_aria2c_executable(active_settings)
-        available = True
-        version = _read_aria2_version(resolved_path)
-        error = ""
-    except Exception as exc:
-        resolved_path = ""
-        available = False
-        version = ""
-        error = str(exc)
-
-    with aria2_lock:
-        running = aria2_process is not None and aria2_process.poll() is None
-        if not running and aria2_process is not None:
-            aria2_process = None
-            aria2_process_started_by_resolver = False
-        managed = bool(running and aria2_process_started_by_resolver)
-        active_transfers = len(aria2_transfers)
-
-    return {
-        "backend": _download_backend_from_settings(active_settings),
-        "configured_path": configured_path,
-        "resolved_path": resolved_path,
-        "available": available,
-        "version": version,
-        "running": running,
-        "managed": managed,
-        "can_stop": bool(managed and active_transfers == 0),
-        "active_transfers": active_transfers,
-        "auto_stop_enabled": bool(active_settings.get("aria2_auto_stop_daemon", True)),
-        "idle_stop_seconds": ARIA2_IDLE_STOP_SECONDS,
-        "error": error,
-    }
-
-
-def _aria2_rpc(method: str, params: Optional[List[Any]] = None) -> Any:
-    if not aria2_rpc_url:
-        raise Aria2Error("aria2 RPC endpoint is not initialized")
-
-    payload = {
-        "jsonrpc": "2.0",
-        "id": secrets.token_hex(8),
-        "method": method,
-        "params": [f"token:{aria2_rpc_secret}", *(params or [])],
-    }
-    # aria2's Windows RPC server can reset one connection when status polling
-    # overlaps a pause/resume command. Keep local RPC requests serialized.
-    with aria2_rpc_lock:
-        response = requests.post(aria2_rpc_url, json=payload, timeout=ARIA2_RPC_TIMEOUT)
-        text = response.text
-        try:
-            body = response.json()
-        except ValueError as exc:
-            raise Aria2Error(
-                f"aria2 RPC returned non-JSON response ({response.status_code}): {text[:300]}"
-            ) from exc
-
-        if "error" in body:
-            error = body.get("error") or {}
-            message = error.get("message") if isinstance(error, dict) else str(error)
-            raise Aria2Error(message or f"aria2 RPC {method} failed")
-
-        if response.status_code != 200:
-            raise Aria2Error(
-                f"aria2 RPC {method} returned HTTP {response.status_code}: {text[:300]}"
-            )
-
-        return body.get("result")
-
-
-def _aria2_ping() -> bool:
-    try:
-        result = _aria2_rpc("aria2.getVersion", [])
-        return isinstance(result, dict)
-    except Exception:
-        return False
-
-
-def _cancel_aria2_idle_timer_locked() -> None:
-    global aria2_idle_timer
-    if aria2_idle_timer is not None:
-        aria2_idle_timer.cancel()
-        aria2_idle_timer = None
-
-
-def _aria2_has_active_transfers_locked() -> bool:
-    return bool(aria2_transfers)
-
-
-def stop_aria2_daemon(reason: str = "manual") -> Dict[str, Any]:
-    """Stop the aria2 RPC process started by Model Resolver."""
-    global aria2_process, aria2_rpc_url, aria2_rpc_secret, aria2_process_started_by_resolver
-
-    with aria2_lock:
-        _cancel_aria2_idle_timer_locked()
-        running = aria2_process is not None and aria2_process.poll() is None
-        if not running:
-            aria2_process = None
-            aria2_rpc_url = ""
-            aria2_rpc_secret = ""
-            aria2_process_started_by_resolver = False
-            return {"success": True, "stopped": False, "message": "aria2 daemon is not running"}
-
-        if not aria2_process_started_by_resolver:
-            return {
-                "success": False,
-                "stopped": False,
-                "error": "This aria2 daemon was not started by Model Resolver.",
-            }
-
-        if _aria2_has_active_transfers_locked():
-            return {
-                "success": False,
-                "stopped": False,
-                "error": "aria2 daemon has active downloads.",
-            }
-
-        process = aria2_process
-        try:
-            process.terminate()
-            process.wait(timeout=5)
-        except Exception:
-            try:
-                process.kill()
-                process.wait(timeout=2)
-            except Exception:
-                pass
-
-        aria2_process = None
-        aria2_rpc_url = ""
-        aria2_rpc_secret = ""
-        aria2_process_started_by_resolver = False
-
-    log.info(f"aria2 RPC daemon stopped ({reason})")
-    return {"success": True, "stopped": True, "message": "aria2 daemon stopped"}
-
-
-def start_aria2_daemon(settings: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Start the aria2 RPC process without creating a download."""
-    active_settings = settings if isinstance(settings, dict) else load_settings()
-    try:
-        _ensure_aria2_daemon(active_settings)
-        status = get_aria2_status(active_settings)
-        return {
-            **status,
-            "success": True,
-            "started": bool(status.get("running")),
-            "message": "aria2 daemon is running",
-        }
-    except Exception as exc:
-        try:
-            status = get_aria2_status(active_settings)
-        except Exception:
-            status = {}
-        return {
-            **status,
-            "success": False,
-            "started": False,
-            "error": str(exc),
-        }
-
-
-def _aria2_idle_stop_worker() -> None:
-    global aria2_idle_timer
-
-    with aria2_lock:
-        aria2_idle_timer = None
-
-    settings = load_settings()
-    if not settings.get("aria2_auto_stop_daemon", True):
-        return
-    with aria2_lock:
-        running = aria2_process is not None and aria2_process.poll() is None
-        if not running or not aria2_process_started_by_resolver or _aria2_has_active_transfers_locked():
-            return
-    stop_aria2_daemon(reason="idle")
-
-
-def _schedule_aria2_idle_stop() -> None:
-    global aria2_idle_timer
-    settings = load_settings()
-    if not settings.get("aria2_auto_stop_daemon", True):
-        return
-    with aria2_lock:
-        _cancel_aria2_idle_timer_locked()
-        running = aria2_process is not None and aria2_process.poll() is None
-        if not running or not aria2_process_started_by_resolver or _aria2_has_active_transfers_locked():
-            return
-        aria2_idle_timer = threading.Timer(ARIA2_IDLE_STOP_SECONDS, _aria2_idle_stop_worker)
-        aria2_idle_timer.daemon = True
-        aria2_idle_timer.start()
-
-
-def _ensure_aria2_daemon(settings: Optional[Dict[str, Any]] = None) -> None:
-    global aria2_process, aria2_rpc_url, aria2_rpc_secret, aria2_process_started_by_resolver
-
-    active_settings = settings if isinstance(settings, dict) else load_settings()
-    with aria2_lock:
-        _cancel_aria2_idle_timer_locked()
-        if aria2_process is not None and aria2_process.poll() is None and _aria2_ping():
-            return
-
-        if aria2_process is not None and aria2_process.poll() is None:
-            try:
-                aria2_process.terminate()
-            except Exception:
-                pass
-        aria2_process = None
-        aria2_process_started_by_resolver = False
-
-        executable = _resolve_aria2c_executable(active_settings)
-        port = _find_free_port()
-        aria2_rpc_secret = secrets.token_hex(16)
-        aria2_rpc_url = f"http://127.0.0.1:{port}/jsonrpc"
-
-        command = [
-            executable,
-            "--enable-rpc=true",
-            "--rpc-listen-all=false",
-            f"--rpc-listen-port={port}",
-            f"--rpc-secret={aria2_rpc_secret}",
-            "--check-certificate=true",
-            "--allow-overwrite=true",
-            "--auto-file-renaming=false",
-            "--file-allocation=none",
-            "--max-concurrent-downloads=5",
-            "--continue=true",
-            "--daemon=false",
-            "--quiet=true",
-            f"--stop-with-process={os.getpid()}",
-        ]
-        ca_cert = _try_certifi_ca_path()
-        if ca_cert:
-            command.insert(5, f"--ca-certificate={ca_cert}")
-
-        creationflags = 0
-        if os.name == "nt":
-            creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-
-        log.info(f"Starting aria2 RPC daemon from {executable}")
-        aria2_process = subprocess.Popen(
-            command,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            creationflags=creationflags,
-        )
-        aria2_process_started_by_resolver = True
-
-        start_time = time.time()
-        last_error = ""
-        while time.time() - start_time < 10:
-            if aria2_process.poll() is not None:
-                stderr = ""
-                try:
-                    stderr = (aria2_process.stderr.read() if aria2_process.stderr else b"").decode(
-                        "utf-8",
-                        errors="replace",
-                    )
-                except Exception:
-                    stderr = ""
-                raise Aria2Error(
-                    f"aria2 RPC process exited early with code {aria2_process.returncode}: {stderr.strip()}"
-                )
-            try:
-                if _aria2_ping():
-                    return
-            except Exception as exc:
-                last_error = str(exc)
-            time.sleep(0.2)
-
-        raise Aria2Error(
-            f"Timed out waiting for aria2 RPC to become ready{': ' + last_error if last_error else ''}"
-        )
-
-
-def _aria2_tell_status(gid: str) -> Dict[str, Any]:
-    keys = [
-        "gid",
-        "status",
-        "totalLength",
-        "completedLength",
-        "downloadSpeed",
-        "errorMessage",
-        "files",
-    ]
-    for attempt in range(ARIA2_STATUS_RPC_RETRIES):
-        try:
-            result = _aria2_rpc("aria2.tellStatus", [gid, keys])
-            return result if isinstance(result, dict) else {}
-        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
-            if attempt + 1 >= ARIA2_STATUS_RPC_RETRIES:
-                raise
-            log.debug(
-                f"Retrying aria2 status RPC for {gid} "
-                f"({attempt + 2}/{ARIA2_STATUS_RPC_RETRIES})"
-            )
-            time.sleep(ARIA2_STATUS_RPC_RETRY_DELAY * (attempt + 1))
-
-    return {}
 
 
 class _HuggingFaceXetDownloadCancelled(Exception):
