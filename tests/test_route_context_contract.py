@@ -3,6 +3,7 @@ import pytest
 from core.routes.context import RouteContext
 from core.services.directory_service import DirectoryService
 from core.services.loaded_models_service import LoadedModelsService
+from core.services.metadata_service import MetadataService
 from core.services.scanner_service import ScannerService
 from core.services.workflow_service import WorkflowService
 
@@ -54,3 +55,8 @@ def test_loaded_models_service_requires_mandatory_route_dependencies():
         match="Missing route dependency: adapt_custom_node_loaded_model",
     ):
         LoadedModelsService(RouteContext({}))
+
+
+def test_metadata_service_requires_mandatory_route_dependencies():
+    with pytest.raises(KeyError, match="Missing route dependency: asyncio"):
+        MetadataService(RouteContext({}))

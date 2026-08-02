@@ -9,26 +9,26 @@ class MetadataService:
     """Coordinate local metadata audit and background build operations."""
 
     def __init__(self, context: RouteContext):
-        self.asyncio = context.get("asyncio")
-        self.audit_metadata_sizes_fn = context.get("audit_metadata_sizes")
-        self.build_missing_local_metadata_fn = context.get(
+        self.asyncio = context.require("asyncio")
+        self.audit_metadata_sizes_fn = context.require("audit_metadata_sizes")
+        self.build_missing_local_metadata_fn = context.require(
             "build_missing_local_metadata"
         )
-        self.cancel_progress_response_fn = context.get(
+        self.cancel_progress_response_fn = context.require(
             "cancel_progress_response"
         )
-        self.get_metadata_build_capabilities_fn = context.get(
+        self.get_metadata_build_capabilities_fn = context.require(
             "get_metadata_build_capabilities"
         )
-        self.get_progress_response_fn = context.get("get_progress_response")
-        self.normalize_metadata_build_mode = context.get(
+        self.get_progress_response_fn = context.require("get_progress_response")
+        self.normalize_metadata_build_mode = context.require(
             "normalize_metadata_build_mode"
         )
-        self.run_in_background_thread = context.get("run_in_background_thread")
-        self.extension = context.get("self")
-        self.to_bool = context.get("to_bool")
-        self.to_int = context.get("to_int")
-        self.web = context.get("web")
+        self.run_in_background_thread = context.require("run_in_background_thread")
+        self.extension = context.require("self")
+        self.to_bool = context.require("to_bool")
+        self.to_int = context.require("to_int")
+        self.web = context.require("web")
 
     @property
     def metadata_builder_progress(self):
