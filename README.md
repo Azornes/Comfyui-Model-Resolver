@@ -15,9 +15,9 @@
     <img src="https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white" alt="Ko-Fi"></a>
 </p>
 <p align="center">
-  <strong>🔹 <a href="#-installation">Quick Start</a></strong>
+  <strong>🔹 <a href="#installation">Quick Start</a></strong>
   &nbsp; | &nbsp;
-  <strong>⚙️ <a href="#%EF%B8%8F-configuration--settings">Configuration</a></strong>
+  <strong>⚙️ <a href="#configuration--settings">Configuration</a></strong>
 </p>
 
 https://github.com/user-attachments/assets/f5d83ce9-3ea8-4532-9b96-4ca4cd6cfb75
