@@ -4,19 +4,19 @@ Model Downloader Module
 Handles downloading models from various sources with progress tracking.
 """
 
-import hashlib
+import hashlib  # noqa: F401
 import os
 import secrets  # noqa: F401
 import shutil  # noqa: F401
 import subprocess
 import threading
 import time
-from collections import deque
+from collections import deque  # noqa: F401
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional  # noqa: F401
 from urllib.parse import urlparse
 
-import requests
+import requests  # noqa: F401
 
 from .log_system import create_module_logger
 
@@ -24,7 +24,7 @@ log = create_module_logger(__name__)
 
 from .download.aria2_backend import (
     Aria2Error,  # noqa: F401
-    download_file_with_aria2,
+    download_file_with_aria2,  # noqa: F401
     get_aria2_status,  # noqa: F401
     pause_download,  # noqa: F401
     resume_download,  # noqa: F401
@@ -50,7 +50,7 @@ from .download.aria2_backend import (
     delete_partial_download_files as _delete_partial_download_files,  # noqa: F401
 )
 from .download.aria2_backend import (
-    delete_python_partial_download_file as _delete_python_partial_download_file,
+    delete_python_partial_download_file as _delete_python_partial_download_file,  # noqa: F401
 )
 from .download.aria2_backend import (
     delete_xet_partial_file as _delete_xet_partial_file,  # noqa: F401
@@ -97,11 +97,12 @@ from .download.huggingface_xet import (
     HuggingFaceXetProgressAdapter as _HuggingFaceXetProgressAdapter,  # noqa: F401
 )
 from .download.huggingface_xet import (
-    download_huggingface_xet as _download_huggingface_xet,
+    download_huggingface_xet as _download_huggingface_xet,  # noqa: F401
 )
 from .download.huggingface_xet import (
     run_huggingface_xet_transfer as _run_huggingface_xet_transfer,  # noqa: F401
 )
+from .download.orchestrator import download_file
 from .download.previews import (
     MODEL_PREVIEW_EXTENSIONS,  # noqa: F401
     MODEL_PREVIEW_MAX_DOWNLOAD_BYTES,  # noqa: F401
@@ -135,14 +136,14 @@ from .path_utils import (
     is_path_within,
     write_json_atomic,
 )
-from .resolver import invalidate_local_hash_match_cache
-from .scanner import invalidate_model_files_cache
+from .resolver import invalidate_local_hash_match_cache  # noqa: F401
+from .scanner import invalidate_model_files_cache  # noqa: F401
 from .type_utils import (
-    extract_response_file_size,
+    extract_response_file_size,  # noqa: F401
     get_category_folder_keys,
     normalize_download_category,  # noqa: F401
 )
-from .type_utils import format_size_bytes as format_bytes
+from .type_utils import format_size_bytes as format_bytes  # noqa: F401
 
 try:
     import folder_paths
@@ -197,8 +198,8 @@ from .download.validation import (
     DOWNLOAD_USER_AGENT,  # noqa: F401
     _get_header_value,  # noqa: F401
     _is_sensitive_metadata_key,  # noqa: F401
-    _sanitize_download_error,
-    _strip_sensitive_url_params,
+    _sanitize_download_error,  # noqa: F401
+    _strip_sensitive_url_params,  # noqa: F401
     build_download_headers,
     is_allowed_model_download_filename,
     sanitize_download_filename,
@@ -390,373 +391,6 @@ def generate_download_id() -> str:
 def _download_backend_from_settings(settings: Optional[Dict[str, Any]] = None) -> str:
     active_settings = settings if isinstance(settings, dict) else load_settings()
     return normalize_download_backend(active_settings.get("download_backend"))
-
-
-def download_file(
-    url: str,
-    dest_path: str,
-    download_id: str,
-    headers: Optional[Dict[str, str]] = None,
-    chunk_size: int = None,
-    progress_callback: Optional[Callable[[int, int], None]] = None,
-    metadata: Optional[Dict[str, Any]] = None,
-    category: str = "",
-) -> Dict[str, Any]:
-    """
-    Download a file from URL with progress tracking and speed calculation.
-
-    Args:
-        url: URL to download from
-        dest_path: Destination file path
-        download_id: Unique ID for tracking this download
-        headers: Optional HTTP headers (for auth tokens)
-        chunk_size: Download chunk size in bytes (defaults to 1MB)
-        progress_callback: Optional callback(downloaded_bytes, total_bytes)
-        metadata: Optional sidecar metadata to save next to the model file
-        category: Model category used for LoRA Manager metadata typing
-
-    Returns:
-        Result dictionary with status and info
-    """
-    global download_progress, cancelled_downloads
-
-    expected_sha256 = _extract_expected_sha256(metadata)
-
-    download_backend = _download_backend_from_settings()
-    if download_backend != "aria2":
-        xet_result = _download_huggingface_xet(
-            url,
-            dest_path,
-            download_id,
-            headers=headers,
-            metadata=metadata,
-            category=category,
-        )
-        if xet_result is not None:
-            return xet_result
-
-    if download_backend == "aria2":
-        return download_file_with_aria2(
-            url,
-            dest_path,
-            download_id,
-            headers=headers,
-            metadata=metadata,
-            category=category,
-        )
-
-    # Use default 1MB chunk size if not specified
-    if chunk_size is None:
-        chunk_size = CHUNK_SIZE
-
-    result = {
-        "success": False,
-        "download_id": download_id,
-        "path": dest_path,
-        "error": None,
-        "size": 0,
-    }
-    partial_path = f"{dest_path}.part"
-    response = None
-    published = False
-
-    # Initialize progress tracking with speed calculation
-    start_time = time.time()
-    speed_history: deque = deque(maxlen=SPEED_HISTORY_SIZE)
-    last_speed_update = start_time
-    last_downloaded = 0
-    last_cli_log = start_time  # Track when we last logged to CLI
-
-    with download_lock:
-        download_progress[download_id] = {
-            "status": "starting",
-            "progress": 0,
-            "total_size": 0,
-            "downloaded": 0,
-            "filename": get_filename_from_path(dest_path),
-            "path": dest_path,
-            "directory": os.path.dirname(dest_path),
-            "url": url,
-            "error": None,
-            "speed": 0,  # bytes per second
-            "start_time": start_time,
-            "download_backend": "python",
-        }
-
-    try:
-        # Ensure destination directory exists
-        destination_directory = os.path.dirname(dest_path)
-        if destination_directory:
-            os.makedirs(destination_directory, exist_ok=True)
-        # Python downloads are not resumable, so never mix a stale partial
-        # file with a new response. The partial file is not a model path that
-        # ComfyUI can load.
-        _delete_python_partial_download_file(partial_path)
-
-        # Verbose logging - what model and from where
-        filename = get_filename_from_path(dest_path)
-        source_host = urlparse(url).hostname
-        source = (
-            "HuggingFace"
-            if host_matches_domain(source_host, "huggingface.co")
-            else "CivitAI"
-            if host_matches_domain(source_host, "civitai.com", "civitai.red")
-            else "URL"
-        )
-        log.info(f"Starting download: {filename}")
-        log.info(f"Source: {source}")
-        log.info(f"URL: {_strip_sensitive_url_params(url)}")
-
-        # Start download
-        request_headers = build_download_headers(url, headers)
-        response, final_url, _final_headers = request_public_url(
-            "GET",
-            url,
-            headers=request_headers,
-            stream=True,
-            timeout=30,
-        )
-        response.raise_for_status()
-        if final_url != url:
-            log.debug("Validated download redirect target")
-
-        # Get total size
-        total_size = extract_response_file_size(response) or 0
-        total_size_str = format_bytes(total_size) if total_size > 0 else "unknown"
-        log.info(f"Size: {total_size_str}")
-
-        with download_lock:
-            download_progress[download_id]["total_size"] = total_size
-            download_progress[download_id]["status"] = "downloading"
-
-        downloaded = 0
-        sha256_hasher = hashlib.sha256() if expected_sha256 else None
-
-        # Download with progress and speed calculation
-        cancelled = False
-        with open(partial_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=chunk_size):
-                # Check for cancellation
-                if download_id in cancelled_downloads:
-                    cancelled = True
-                    break
-
-                if chunk:
-                    f.write(chunk)
-                    if sha256_hasher is not None:
-                        sha256_hasher.update(chunk)
-                    downloaded += len(chunk)
-
-                    # Calculate speed with smoothing
-                    current_time = time.time()
-                    time_delta = current_time - last_speed_update
-
-                    # Update speed every 0.5 seconds to avoid too frequent calculations
-                    if time_delta >= 0.5:
-                        bytes_delta = downloaded - last_downloaded
-                        instant_speed = (
-                            bytes_delta / time_delta if time_delta > 0 else 0
-                        )
-                        speed_history.append(instant_speed)
-
-                        # Calculate smoothed speed (average of recent samples)
-                        smoothed_speed = (
-                            sum(speed_history) / len(speed_history)
-                            if speed_history
-                            else 0
-                        )
-
-                        last_speed_update = current_time
-                        last_downloaded = downloaded
-
-                        # Update progress with speed
-                        with download_lock:
-                            download_progress[download_id]["downloaded"] = downloaded
-                            download_progress[download_id]["speed"] = int(
-                                smoothed_speed
-                            )
-                            if total_size > 0:
-                                download_progress[download_id]["progress"] = int(
-                                    (downloaded / total_size) * 100
-                                )
-
-                        # CLI progress logging (every CLI_LOG_INTERVAL seconds)
-                        if current_time - last_cli_log >= CLI_LOG_INTERVAL:
-                            last_cli_log = current_time
-                            progress_pct = (
-                                int((downloaded / total_size) * 100)
-                                if total_size > 0
-                                else 0
-                            )
-                            downloaded_str = format_bytes(downloaded)
-                            total_str = (
-                                format_bytes(total_size) if total_size > 0 else "?"
-                            )
-                            speed_str = format_bytes(int(smoothed_speed)) + "/s"
-                            log.info(
-                                f"Progress: {downloaded_str} / {total_str} ({progress_pct}%) - {speed_str}"
-                            )
-                    else:
-                        # Just update downloaded bytes without recalculating speed
-                        with download_lock:
-                            download_progress[download_id]["downloaded"] = downloaded
-                            if total_size > 0:
-                                download_progress[download_id]["progress"] = int(
-                                    (downloaded / total_size) * 100
-                                )
-
-                    if progress_callback:
-                        progress_callback(downloaded, total_size)
-
-        # Handle cancellation after file is closed (so we can delete it on Windows)
-        # Also check if cancellation was requested while we were finishing up
-        if cancelled or download_id in cancelled_downloads:
-            with download_lock:
-                download_progress[download_id]["status"] = "cancelled"
-            # Clean up partial/incomplete file
-            _delete_python_partial_download_file(partial_path)
-            log.info(f"Cancelled: {filename} - incomplete file deleted")
-            result["error"] = "Download cancelled"
-            cancelled_downloads.discard(download_id)
-            return result
-
-        actual_sha256 = sha256_hasher.hexdigest() if sha256_hasher is not None else ""
-        if expected_sha256:
-            with download_lock:
-                download_progress[download_id]["status"] = "verifying"
-                download_progress[download_id]["sha256"] = actual_sha256
-                download_progress[download_id]["expected_sha256"] = expected_sha256
-
-            if actual_sha256 != expected_sha256:
-                bad_path = f"{dest_path}.badsha"
-                try:
-                    os.replace(partial_path, bad_path)
-                except OSError as exc:
-                    log.warning(
-                        f"Could not preserve SHA256-mismatched download at {bad_path}: {exc}"
-                    )
-                    bad_path = ""
-                error_msg = (
-                    "SHA256 mismatch: "
-                    f"expected {expected_sha256}, got {actual_sha256}"
-                )
-                if bad_path:
-                    error_msg += f"; file kept at {bad_path}"
-                with download_lock:
-                    download_progress[download_id]["status"] = "error"
-                    download_progress[download_id]["error"] = error_msg
-                    download_progress[download_id]["sha256_verified"] = False
-                result.update(
-                    {
-                        "error": error_msg,
-                        "sha256": actual_sha256,
-                        "expected_sha256": expected_sha256,
-                        "sha256_verified": False,
-                    }
-                )
-                log.error(f"✗ Download rejected: {filename} - {error_msg}")
-                return result
-
-        # Publish only after the complete response has been written and, when
-        # available, its SHA-256 has matched the source metadata.
-        os.replace(partial_path, dest_path)
-        published = True
-
-        # Success
-        with download_lock:
-            download_progress[download_id]["status"] = "completed"
-            download_progress[download_id]["progress"] = 100
-            download_progress[download_id]["speed"] = 0  # Reset speed on completion
-            if expected_sha256:
-                download_progress[download_id]["sha256"] = actual_sha256
-                download_progress[download_id]["expected_sha256"] = expected_sha256
-                download_progress[download_id]["sha256_verified"] = True
-
-        result["success"] = True
-        result["size"] = downloaded
-        if expected_sha256:
-            result.update(
-                {
-                    "sha256": actual_sha256,
-                    "expected_sha256": expected_sha256,
-                    "sha256_verified": True,
-                }
-            )
-        metadata_path = write_model_resolver_metadata(
-            dest_path,
-            metadata or {},
-            category,
-            url,
-            create_preview=True,
-        )
-        if metadata_path:
-            result["metadata_path"] = metadata_path
-            with download_lock:
-                if download_id in download_progress:
-                    download_progress[download_id]["metadata_path"] = metadata_path
-
-        # CLI completion log
-        elapsed = time.time() - start_time
-        avg_speed = downloaded / elapsed if elapsed > 0 else 0
-        log.info(f"✓ Download complete: {filename}")
-        log.info(
-            f"Size: {format_bytes(downloaded)}, Time: {elapsed:.1f}s, Avg speed: {format_bytes(int(avg_speed))}/s"
-        )
-        invalidate_model_files_cache()
-        invalidate_local_hash_match_cache()
-
-    except requests.exceptions.RequestException as e:
-        error_msg = _sanitize_download_error(e)
-        # Check for specific HTTP errors
-        if hasattr(e, "response") and e.response is not None:
-            status_code = e.response.status_code
-            if status_code in [401, 403]:
-                if "huggingface.co" in url:
-                    error_msg = f"Unauthorized (HTTP {status_code}): HuggingFace token may be required."
-                elif "civitai.com" in url:
-                    error_msg = f"Unauthorized (HTTP {status_code}): CivitAI API key may be required."
-                else:
-                    error_msg = (
-                        f"Unauthorized (HTTP {status_code}): Authentication required."
-                    )
-            elif status_code == 404:
-                error_msg = "Model not found (HTTP 404): The file may have been moved or deleted."
-
-        with download_lock:
-            download_progress[download_id]["status"] = "error"
-            download_progress[download_id]["error"] = error_msg
-        result["error"] = error_msg
-
-        # CLI error log
-        log.error(f"✗ Download failed: {get_filename_from_path(dest_path)}")
-        log.error(f"Error: {error_msg}")
-
-        if not published:
-            _delete_python_partial_download_file(partial_path)
-
-    except Exception as e:
-        error_msg = _sanitize_download_error(e)
-        with download_lock:
-            download_progress[download_id]["status"] = "error"
-            download_progress[download_id]["error"] = error_msg
-        result["error"] = error_msg
-
-        # CLI error log
-        log.error(f"✗ Download failed: {get_filename_from_path(dest_path)}")
-        log.error(f"Error: {error_msg}")
-        log.error(f"Download error: {e}", exc_info=True)
-
-        if not published:
-            _delete_python_partial_download_file(partial_path)
-
-    finally:
-        if response is not None:
-            try:
-                response.close()
-            except Exception as exc:
-                log.debug(f"Could not close download response: {exc}")
-
-    return result
 
 
 def download_model(
