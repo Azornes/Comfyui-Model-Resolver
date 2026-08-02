@@ -13,7 +13,7 @@ import threading
 import time  # noqa: F401
 from collections import deque  # noqa: F401
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 from urllib.parse import urlparse  # noqa: F401
 
 import requests  # noqa: F401
@@ -60,7 +60,7 @@ from .download.aria2_backend import (
     find_free_port as _find_free_port,  # noqa: F401
 )
 from .download.aria2_backend import (
-    force_remove_aria2_transfer as _force_remove_aria2_transfer,  # noqa: F401
+    force_remove_aria2_transfer as _force_remove_aria2_transfer,
 )
 from .download.aria2_backend import (
     get_aria2_action_lock as _get_aria2_action_lock,  # noqa: F401
@@ -88,7 +88,7 @@ from .download.aria2_backend import (
     schedule_aria2_idle_stop as _schedule_aria2_idle_stop,  # noqa: F401
 )
 from .download.aria2_backend import (
-    set_download_progress_status as _set_download_progress_status,  # noqa: F401
+    set_download_progress_status as _set_download_progress_status,
 )
 from .download.aria2_backend import (
     try_certifi_ca_path as _try_certifi_ca_path,  # noqa: F401
@@ -137,19 +137,28 @@ from .download.previews import (
     get_existing_model_preview_path,  # noqa: F401
 )
 from .download.state import (
+    DownloadStateDependencies,
     aria2_action_locks,  # noqa: F401
-    aria2_desired_states,  # noqa: F401
-    aria2_lock,  # noqa: F401
-    aria2_transfers,  # noqa: F401
-    cancel_download,
-    cancelled_downloads,  # noqa: F401
-    clear_completed_downloads,
-    download_lock,  # noqa: F401
-    download_progress,  # noqa: F401
-    get_all_progress,
-    get_progress,
-    xet_transfers,  # noqa: F401
-    xet_transfers_lock,  # noqa: F401
+    aria2_desired_states,
+    aria2_lock,
+    aria2_transfers,
+    cancelled_downloads,
+    download_lock,
+    download_progress,
+    xet_transfers,
+    xet_transfers_lock,
+)
+from .download.state import (
+    cancel_download as _cancel_download,
+)
+from .download.state import (
+    clear_completed_downloads as _clear_completed_downloads,
+)
+from .download.state import (
+    get_all_progress as _get_all_progress,
+)
+from .download.state import (
+    get_progress as _get_progress,
 )
 from .network_utils import (
     host_matches_domain,  # noqa: F401
@@ -227,6 +236,41 @@ from .settings import (
     normalize_download_backend,  # noqa: F401
     normalize_relative_subfolder,  # noqa: F401
 )
+
+
+def _state_dependencies() -> DownloadStateDependencies:
+    """Build state dependencies from the current facade patchpoints."""
+    return DownloadStateDependencies(
+        download_progress=download_progress,
+        download_lock=download_lock,
+        cancelled_downloads=cancelled_downloads,
+        aria2_lock=aria2_lock,
+        aria2_transfers=aria2_transfers,
+        aria2_desired_states=aria2_desired_states,
+        xet_transfers=xet_transfers,
+        xet_transfers_lock=xet_transfers_lock,
+        set_download_progress_status=_set_download_progress_status,
+        force_remove_aria2_transfer=_force_remove_aria2_transfer,
+        thread_factory=threading.Thread,
+        log=log,
+    )
+
+
+def get_progress(download_id: str) -> Optional[Dict[str, Any]]:
+    return _get_progress(download_id, _state_dependencies())
+
+
+def get_all_progress() -> Dict[str, Dict[str, Any]]:
+    return _get_all_progress(_state_dependencies())
+
+
+def cancel_download(download_id: str) -> bool:
+    return _cancel_download(download_id, _state_dependencies())
+
+
+def clear_completed_downloads():
+    return _clear_completed_downloads(_state_dependencies())
+
 
 __all__ = [
     "cancel_download",
