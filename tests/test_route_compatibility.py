@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from aiohttp import web
 
-from core.routes import base_models, model_info, search, workflow
+from core.routes import base_models
 
 
 class _Routes:
@@ -31,44 +31,6 @@ class _Routes:
 
 def _identity_endpoint(_name, **_kwargs):
     return lambda handler: handler
-
-
-def test_model_info_compatibility_registers_all_model_routes():
-    context = object()
-    with (
-        patch.object(model_info, "register_civitai_search_routes") as civitai,
-        patch.object(model_info, "register_custom_url_routes") as custom_url,
-        patch.object(model_info, "register_model_details_routes") as details,
-    ):
-        model_info.register_model_info_routes(context)
-
-    civitai.assert_called_once_with(context)
-    custom_url.assert_called_once_with(context)
-    details.assert_called_once_with(context)
-
-
-def test_search_compatibility_registers_source_and_support_routes():
-    context = object()
-    with (
-        patch.object(search, "register_source_search_routes") as sources,
-        patch.object(search, "register_search_support_routes") as support,
-    ):
-        search.register_search_routes(context)
-
-    sources.assert_called_once_with(context)
-    support.assert_called_once_with(context)
-
-
-def test_workflow_compatibility_registers_analysis_and_hash_routes():
-    context = object()
-    with (
-        patch.object(workflow, "register_workflow_analysis_routes") as analysis,
-        patch.object(workflow, "register_hash_routes") as hashes,
-    ):
-        workflow.register_workflow_routes(context)
-
-    analysis.assert_called_once_with(context)
-    hashes.assert_called_once_with(context)
 
 
 @pytest.mark.asyncio

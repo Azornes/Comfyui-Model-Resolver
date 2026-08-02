@@ -15,9 +15,9 @@ the feature logic that powers each route.
 5. Services in `core/services/` contain feature behavior and receive their
    dependencies through `RouteContext`.
 
-The grouping modules `core/routes/model_info.py`, `core/routes/search.py`, and
-`core/routes/workflow.py` remain compatibility entry points for related route
-families. The actual handlers live in focused route adapters and services.
+Route registration imports the concrete route modules directly. The actual
+handlers live in focused route adapters and services; no compatibility grouping
+layer is kept for this application-only package.
 
 ## Adding a route
 
