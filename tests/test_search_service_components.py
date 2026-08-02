@@ -556,6 +556,53 @@ async def test_search_orchestrator_force_search_refreshes_selected_caches():
 
 
 @pytest.mark.asyncio
+async def test_search_orchestrator_preserves_provider_status_metadata():
+    orchestrator, _dependencies = _build_search_orchestrator()
+    orchestrator.provider_runner = _StaticSearchRunner(
+        {
+            "civarchive": None,
+            "source_errors": {
+                "civarchive": "CivArchive search failed: HTTP 522"
+            },
+            "source_status": {
+                "civarchive": {
+                    "state": "unavailable",
+                    "code": "provider_unavailable",
+                    "retryable": True,
+                    "http_status": 522,
+                    "message": (
+                        "CivArchive may be overloaded or temporarily unavailable. "
+                        "Please try again."
+                    ),
+                }
+            },
+        },
+        False,
+    )
+    request = SimpleNamespace(
+        json=AsyncMock(
+            return_value={
+                "filename": "model.safetensors",
+                "sources": ["civarchive"],
+                "progress_id": "provider-status-search",
+            }
+        )
+    )
+
+    response = await orchestrator.search_sources(request)
+
+    assert response.status == 200
+    assert response.payload["found"] is False
+    assert response.payload["source_errors"] == {
+        "civarchive": "CivArchive search failed: HTTP 522"
+    }
+    assert response.payload["source_status"]["civarchive"]["code"] == (
+        "provider_unavailable"
+    )
+    assert response.payload["source_status"]["civarchive"]["retryable"] is True
+
+
+@pytest.mark.asyncio
 async def test_search_orchestrator_returns_cancelled_response():
     orchestrator, dependencies = _build_search_orchestrator()
     dependencies["self"].search_tracker.is_cancelled.return_value = True
