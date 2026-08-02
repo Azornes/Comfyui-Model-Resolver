@@ -1,6 +1,3 @@
-import { app } from "../../../../../scripts/app.js";
-import { api } from "../../../../../scripts/api.js";
-import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
 import { createFloatingTreePicker } from "../utils/tree_picker.js";
 import { startSplitterDrag } from "../utils/splitter_drag.js";
@@ -2437,11 +2434,9 @@ export const missingBrowserMethods = {
 
         // Filter out matches below 70% confidence threshold
         const filteredMatches = allMatches.filter(m => m.confidence >= 70);
-        const hasMatches = filteredMatches.length > 0;
 
         // Calculate 100% matches upfront (needed for download section)
         const perfectMatches = filteredMatches.filter(m => m.confidence === 100);
-        const otherMatches = filteredMatches.filter(m => m.confidence < 100 && m.confidence >= 70);
 
         const missingFilename = this.getMissingFilename(missing);
 
@@ -2549,7 +2544,6 @@ export const missingBrowserMethods = {
         html += `<div class="mr-column">`;
         html += `<div class="mr-column-header">Download</div>`;
 
-        const filename = this.getFilenameFromPath(missing.original_path);
         const downloadSource = missing.download_source;
         const urnDownloadId = `urn-download-${missing.node_id}-${missing.widget_index}`;
 

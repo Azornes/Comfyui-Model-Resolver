@@ -1,6 +1,3 @@
-import { app } from "../../../../../scripts/app.js";
-import { api } from "../../../../../scripts/api.js";
-import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
 import { getModelCardUrl, parseHuggingFaceFileUrl } from "../utils/url_utils.js";
 import { getCivitaiModelUrl } from "../globals.js";
@@ -1137,7 +1134,7 @@ export const searchPanelMethods = {
         }, {});
     },
 
-    getSearchSourcesForSelection(selectedSource, missing = {}) {
+    getSearchSourcesForSelection(selectedSource, _missing = {}) {
         if (selectedSource !== 'all') {
             return this.isSearchSourceUsable(selectedSource) ? [selectedSource] : [];
         }

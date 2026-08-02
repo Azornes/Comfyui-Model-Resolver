@@ -1,5 +1,4 @@
 import { app } from "../../../../../scripts/app.js";
-import { api } from "../../../../../scripts/api.js";
 import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
 import { startSplitterDrag } from "../utils/splitter_drag.js";
@@ -1531,12 +1530,10 @@ export const queueMethods = {
 
         // Find selection for this slot
         let selection = null;
-        let selectionIdx = -1;
         if (this.pendingIndex.has(key)) {
             const idx = this.pendingIndex.get(key);
             if (idx >= 0 && idx < this.pendingResolutions.length) {
                 selection = this.pendingResolutions[idx];
-                selectionIdx = idx;
             }
         }
 

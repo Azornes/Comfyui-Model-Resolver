@@ -9,8 +9,7 @@ log_funcs - Centralization of logger initialization
 Eliminates repetitive logger initialization code in each module
 */
 
-import { logger, LogLevel } from "./logger.js";
-import { LOG_LEVEL } from './config.js';
+import { logger } from "./logger.js";
 /**
  * Creates a logger object for a module with predefined methods
  * @param {string} moduleName - Module name

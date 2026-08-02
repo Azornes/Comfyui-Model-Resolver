@@ -1,6 +1,4 @@
-import { app } from "../../../../../scripts/app.js";
 import { api } from "../../../../../scripts/api.js";
-import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
 import { escapeHtml, escapeJsString, getFilenameFromPath, sanitizeDescriptionHtml, pollBackgroundTask, safeStorage, copyTextWithFeedback } from "../utils/html_utils.js";
 import { getModelCardUrl } from "../utils/url_utils.js";
@@ -1186,7 +1184,7 @@ export const modelInfoMethods = {
         `;
     },
 
-    createInfoDialog(loraName, modelData) {
+    createInfoDialog(loraName, _modelData) {
         const loraDisplayName = this.stripModelExtension(loraName);
 
         const dialog = document.createElement('div');
@@ -1654,7 +1652,7 @@ export const modelInfoMethods = {
                     checkAbort: () => {
                         return !dialog.isConnected || (dialog._hashCalculation && dialog._hashCalculation.cancelRequested);
                     },
-                    onAbort: async (progressId) => {
+                    onAbort: async (_progressId) => {
                         await this.cancelInfoDialogHashCalculation(dialog, button);
                     }
                 }

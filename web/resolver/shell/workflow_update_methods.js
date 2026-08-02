@@ -1,7 +1,4 @@
 import { app } from "../../../../../scripts/app.js";
-import { api } from "../../../../../scripts/api.js";
-import { $el } from "../../../../../scripts/ui.js";
-import { getSvgIcon } from "../../utils/icon_utils.js";
 import { getModelCardUrl } from "../utils/url_utils.js";
 export const workflowUpdateMethods = {
     isWorkflowRefreshSuppressed() {

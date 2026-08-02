@@ -1,8 +1,4 @@
-import { app } from "../../../../../scripts/app.js";
-import { api } from "../../../../../scripts/api.js";
-import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
-import { LOG_LEVEL as DEFAULT_FRONTEND_LOG_LEVEL } from "../../log_system/config.js";
 import { logger as frontendLogger } from "../../log_system/logger.js";
 import { escapeHtml, pollBackgroundTask, safeStorage } from "../utils/html_utils.js";
 const SETTINGS_MAP = [];
@@ -1778,7 +1774,7 @@ export const optionsMethods = {
             updateMetadataBuildActionFilterControl(filter);
             return counts;
         };
-        const renderMetadataBuildActionFilterHeader = (counts = {}, filter = 'all', filteredCount = 0, totalCount = 0) => {
+        const renderMetadataBuildActionFilterHeader = (counts = {}, filter = 'all', _filteredCount = 0, _totalCount = 0) => {
             const activeLabel = metadataBuildHistoryFilterLabels[filter] || metadataBuildHistoryFilterLabels.all;
             const menuOpen = Boolean(this.metadataBuildHistoryFilterMenuOpen);
             const options = metadataBuildHistoryFilterValues.map((value) => {
