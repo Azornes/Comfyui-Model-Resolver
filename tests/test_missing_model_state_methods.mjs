@@ -49,6 +49,29 @@ test('source statuses distinguish exact, partial, found, and idle results', () =
   assert.equal(dialog.hasMissingSourceSearchAttempt(missing, 'huggingface'), false);
 });
 
+test('provider failures expose unavailable and rate-limited source statuses', () => {
+  const dialog = createDialog();
+  const missing = { key: 'missing-key' };
+  dialog.searchResultCache.set('missing-key', {
+    sourceProgress: {
+      civarchive: {
+        status: 'error',
+        providerState: 'unavailable',
+        providerMessage: 'CivArchive may be overloaded or temporarily unavailable.'
+      },
+      civitai: {
+        status: 'error',
+        providerState: 'rate_limited',
+        providerMessage: 'Rate limit reached.'
+      }
+    },
+    results: {}
+  });
+
+  assert.equal(dialog.getMissingSourceStatus(missing, 'civarchive'), 'unavailable');
+  assert.equal(dialog.getMissingSourceStatus(missing, 'civitai'), 'rate_limited');
+});
+
 test('known local download sources are hidden until local search was attempted', () => {
   const dialog = createDialog();
   const source = { source: 'model_list', url: 'https://example.test/model' };

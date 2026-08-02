@@ -64,7 +64,7 @@ test('CivArchive availability failures receive a user-facing retry message', () 
 
   assert.equal(
     temporaryFailure,
-    'CivArchive may be overloaded or temporarily unavailable. Please try again later.'
+    'CivArchive may be overloaded or temporarily unavailable. Please try again.'
   );
   assert.equal(
     getSearchSourceErrorMessage.call(dialog, 'civarchive', 'CivArchive search failed: HTTP 502'),
@@ -80,7 +80,35 @@ test('CivArchive availability failures receive a user-facing retry message', () 
   );
   assert.equal(
     getSearchSourceErrorTooltip.call(dialog, 'civarchive', 'CivArchive search failed: HTTP 522'),
-    'CivArchive may be overloaded or temporarily unavailable. Please try again later. Details: CivArchive search failed: HTTP 522'
+    'CivArchive may be overloaded or temporarily unavailable. Please try again. Details: CivArchive search failed: HTTP 522'
+  );
+});
+
+test('structured CivArchive status uses safe messages and HTTP details', () => {
+  const dialog = { getSearchSourceLabel, getSearchSourceErrorMessage, getSearchSourceErrorTooltip };
+  const status = {
+    state: 'unavailable',
+    code: 'provider_unavailable',
+    retryable: true,
+    http_status: 522,
+    message: 'CivArchive may be overloaded or temporarily unavailable. Please try again.'
+  };
+
+  assert.equal(
+    getSearchSourceErrorMessage.call(dialog, 'civarchive', 'CivArchive search failed: HTTP 522', status),
+    status.message
+  );
+  assert.equal(
+    getSearchSourceErrorTooltip.call(dialog, 'civarchive', '', status),
+    `${status.message} Details: HTTP 522`
+  );
+  assert.equal(
+    getSearchSourceErrorMessage.call(dialog, 'civarchive', '', {
+      state: 'rate_limited',
+      code: 'rate_limited',
+      retryable: true
+    }),
+    'CivArchive rate limit was reached. Please try again later.'
   );
 });
 

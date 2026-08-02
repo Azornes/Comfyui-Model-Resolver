@@ -25,6 +25,9 @@ export const missingModelStateMethods = {
         const progress = state?.sourceProgress?.[source];
         const resultStatus = this.getMissingSourceResultStatus(missing, source, state);
         if (progress?.status === 'found') return resultStatus || 'found';
+        if (progress?.status === 'error' && progress.providerState) {
+            return progress.providerState;
+        }
         if (progress?.status) return progress.status;
 
         if (resultStatus) return resultStatus;

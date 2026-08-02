@@ -73,30 +73,49 @@ export const searchSourceMethods = {
         return labels[source] || source;
     },
 
-    getSearchSourceErrorMessage(source, error) {
+    getSearchSourceErrorMessage(source, error, status = null) {
+        if (status && typeof status.message === 'string' && status.message.trim()) {
+            return status.message.trim();
+        }
+
         const message = String(error || '').trim();
+        const normalizedSource = String(source || '').trim().toLowerCase().replace(/-/g, '_');
+        const statusCode = String(status?.code || '').trim().toLowerCase();
+        if (normalizedSource === 'civarchive') {
+            const messagesByCode = {
+                timeout: 'CivArchive did not respond in time. It may be temporarily overloaded. Please try again.',
+                network_error: 'CivArchive could not be reached. It may be temporarily unavailable. Please try again.',
+                provider_unavailable: 'CivArchive may be overloaded or temporarily unavailable. Please try again.',
+                rate_limited: 'CivArchive rate limit was reached. Please try again later.',
+                not_found: 'CivArchive did not find a matching page.',
+                provider_rejected: 'CivArchive rejected the search request.'
+            };
+            if (messagesByCode[statusCode]) return messagesByCode[statusCode];
+        }
+
         if (!message) {
             return `${this.getSearchSourceLabel(source)} search failed.`;
         }
 
-        const normalizedSource = String(source || '').trim().toLowerCase().replace(/-/g, '_');
         const indicatesTemporaryUnavailable = (
             /network error|timeout|timed out|connection (?:error|reset|refused)|temporarily unavailable/i.test(message)
             || /\bHTTP\s+(?:429|5\d{2})\b/i.test(message)
         );
 
         if (normalizedSource === 'civarchive' && indicatesTemporaryUnavailable) {
-            return 'CivArchive may be overloaded or temporarily unavailable. Please try again later.';
+            return 'CivArchive may be overloaded or temporarily unavailable. Please try again.';
         }
 
         return message;
     },
 
-    getSearchSourceErrorTooltip(source, error) {
+    getSearchSourceErrorTooltip(source, error, status = null) {
         const technicalMessage = String(error || '').trim();
-        const displayMessage = this.getSearchSourceErrorMessage(source, technicalMessage);
-        if (!technicalMessage || technicalMessage === displayMessage) return displayMessage;
-        return `${displayMessage} Details: ${technicalMessage}`;
+        const displayMessage = this.getSearchSourceErrorMessage(source, technicalMessage, status);
+        const statusDetails = status?.http_status ? `HTTP ${status.http_status}` : '';
+        const details = statusDetails || technicalMessage;
+        if (!details || details === displayMessage) return displayMessage;
+        return `${displayMessage} Details: ${details}`;
     },
 
     getSearchSourceDefinitions() {

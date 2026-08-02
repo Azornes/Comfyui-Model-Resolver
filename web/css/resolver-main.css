@@ -1137,6 +1137,23 @@
     --mr-source-glow-alpha: 0.22;
 }
 
+.mr-missing-source-unavailable,
+.mr-missing-source-rate_limited {
+    --mr-source-rgb: 255, 190, 92;
+    --mr-source-fill-alpha: 0.16;
+    --mr-source-border-hi-alpha: 0.82;
+    --mr-source-border-alpha: 0.62;
+    --mr-source-glow-alpha: 0.22;
+}
+
+.mr-missing-source-not_found {
+    --mr-source-rgb: 150, 155, 162;
+    --mr-source-fill-alpha: 0.08;
+    --mr-source-border-hi-alpha: 0.42;
+    --mr-source-border-alpha: 0.28;
+    --mr-source-glow-alpha: 0.04;
+}
+
 .mr-missing-detail-pane {
     flex: 0 0 var(--mr-missing-detail-track, 42%);
     overflow-y: auto;

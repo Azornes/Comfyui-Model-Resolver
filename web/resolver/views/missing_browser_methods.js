@@ -285,11 +285,14 @@ export const missingBrowserMethods = {
                 partial: 'Partial match',
                 found: 'Found',
                 none: 'No match',
+                unavailable: 'Temporarily unavailable',
+                rate_limited: 'Rate limited',
+                not_found: 'Provider page not found',
                 error: 'Error',
                 idle: 'Not searched'
             };
-            const statusMessage = sourceProgress?.status === 'error' && sourceProgress.message
-                ? sourceProgress.message
+            const statusMessage = sourceProgress?.status === 'error' && (sourceProgress.providerMessage || sourceProgress.message)
+                ? (sourceProgress.providerMessage || sourceProgress.message)
                 : (statusLabels[status] || status);
             const title = `${label}: ${statusMessage}`;
             const iconName = this.getSearchSourceIconName(item.source);

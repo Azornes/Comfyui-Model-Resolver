@@ -2422,6 +2422,7 @@ export const resolveDownloadMethods = {
 
             const attemptedSources = new Set();
             const sourceErrorMessages = new Set();
+            const notifiedSourceErrors = new Set();
             let anyFound = false;
             let hadError = false;
 
@@ -2480,22 +2481,40 @@ export const resolveDownloadMethods = {
                     const sourceErrors = data.source_errors && typeof data.source_errors === 'object'
                         ? data.source_errors
                         : {};
+                    const sourceStatuses = data.source_status && typeof data.source_status === 'object'
+                        ? data.source_status
+                        : {};
                     const sourceError = sourceErrors[source]
                         || responseSources.map(responseSource => sourceErrors[responseSource]).find(Boolean)
                         || null;
+                    const sourceStatus = sourceStatuses[source]
+                        || responseSources.map(responseSource => sourceStatuses[responseSource]).find(Boolean)
+                        || null;
+                    const hasSourceError = Boolean(sourceError || sourceStatus?.state);
                     const sourceErrorMessage = sourceError
-                        ? (this.getSearchSourceErrorMessage?.(source, sourceError) || sourceError)
-                        : null;
+                        ? (this.getSearchSourceErrorMessage?.(source, sourceError, sourceStatus) || sourceError)
+                        : (sourceStatus
+                            ? (this.getSearchSourceErrorMessage?.(source, '', sourceStatus) || sourceStatus.message)
+                            : null);
                     const sourceErrorTooltip = sourceError
-                        ? (this.getSearchSourceErrorTooltip?.(source, sourceError) || sourceErrorMessage)
-                        : null;
+                        ? (this.getSearchSourceErrorTooltip?.(source, sourceError, sourceStatus) || sourceErrorMessage)
+                        : (sourceStatus
+                            ? (this.getSearchSourceErrorTooltip?.(source, '', sourceStatus) || sourceErrorMessage)
+                            : null);
                     if (sourceErrorMessage) sourceErrorMessages.add(sourceErrorMessage);
+                    if (sourceErrorMessage && !notifiedSourceErrors.has(source)) {
+                        this.showNotification?.(
+                            sourceErrorMessage,
+                            sourceStatus?.retryable ? 'warning' : 'error'
+                        );
+                        notifiedSourceErrors.add(source);
+                    }
 
                     const found = this.hasSearchResults(data);
                     const foundViaAnyModel = this.isAnyModelSearchResult?.(data[source]);
                     const foundMessage = foundViaAnyModel ? 'Found (Any Model)' : 'Found';
                     anyFound = anyFound || found;
-                    hadError = hadError || Boolean(sourceErrorMessage);
+                    hadError = hadError || hasSourceError;
                     state.results = this.mergeSearchResults(state.results, data, {
                         searchedAt: new Date().toISOString(),
                         forceRefresh: Boolean(forceSearch)
@@ -2506,10 +2525,15 @@ export const resolveDownloadMethods = {
                     this.clearSearchProgressTimer(searchRunId, source);
                     this.clearBackendSearchProgressTimer?.(searchRunId, source);
                     this.setSourceProgress(state, source, {
-                        status: sourceError ? 'error' : (found ? 'found' : 'none'),
+                        status: hasSourceError ? 'error' : (found ? 'found' : 'none'),
                         percent: 100,
                         message: sourceErrorMessage || (found ? foundMessage : 'No match'),
-                        error: sourceErrorTooltip
+                        error: sourceErrorTooltip,
+                        providerState: sourceStatus?.state || null,
+                        providerCode: sourceStatus?.code || null,
+                        providerMessage: sourceStatus?.message || null,
+                        providerHttpStatus: sourceStatus?.http_status || null,
+                        retryable: Boolean(sourceStatus?.retryable)
                     }, missing, { workflowKey });
 
                     if (data.civitai) {
@@ -2559,6 +2583,10 @@ export const resolveDownloadMethods = {
                     const sourceErrorTooltip = this.getSearchSourceErrorTooltip?.(source, error.message)
                         || sourceErrorMessage;
                     sourceErrorMessages.add(sourceErrorMessage);
+                    if (!notifiedSourceErrors.has(source)) {
+                        this.showNotification?.(sourceErrorMessage, 'error');
+                        notifiedSourceErrors.add(source);
+                    }
                     state.lastAttemptSources = Array.from(attemptedSources);
                     state.lastAttemptFound = anyFound;
                     this.clearSearchProgressTimer(searchRunId, source);
