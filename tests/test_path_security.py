@@ -12,16 +12,13 @@ import requests
 from core.download.api import context as downloader_module
 from core.aria2_installer import Aria2InstallError, _safe_extract_tar
 from core.download.api import (
-    Aria2Error,
-    _download_huggingface_xet,
-    _resolve_aria2c_executable,
-    _sanitize_download_error,
     download_file,
-    download_file_with_aria2,
     download_model,
     is_allowed_model_download_filename,
     sanitize_download_filename,
 )
+from core.download.aria2_backend import Aria2Error
+from core.download.validation import _sanitize_download_error
 from core.network_utils import (
     UnsafeUrlError,
     host_matches_domain,
@@ -283,7 +280,7 @@ class PathSecurityTests(unittest.TestCase):
             ), patch(
                 "core.download.api.context._schedule_aria2_idle_stop",
             ):
-                result = download_file_with_aria2(
+                    result = downloader_module.download_file_with_aria2(
                     "https://huggingface.co/example/resolve/main/model.safetensors",
                     destination,
                     "aria-no-redirect",
@@ -388,7 +385,9 @@ class PathSecurityTests(unittest.TestCase):
 
             with patch("core.download.api.context.shutil.which", return_value=None):
                 with self.assertRaises(Aria2Error):
-                    _resolve_aria2c_executable({"aria2c_path": executable})
+                    downloader_module._resolve_aria2c_executable(
+                        {"aria2c_path": executable}
+                    )
 
     def test_managed_aria2_executable_path_is_allowed(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -397,7 +396,9 @@ class PathSecurityTests(unittest.TestCase):
                 handle.write(b"managed executable")
 
             with patch("core.download.api.context.MANAGED_ARIA2_ROOT", Path(temp_dir)):
-                resolved = _resolve_aria2c_executable({"aria2c_path": executable})
+                resolved = downloader_module._resolve_aria2c_executable(
+                    {"aria2c_path": executable}
+                )
             self.assertEqual(os.path.realpath(executable), resolved)
 
     def test_huggingface_xet_download_bypasses_signed_http_bridge(self):
@@ -463,7 +464,7 @@ class PathSecurityTests(unittest.TestCase):
                     "model.safetensors.modelresolver.json",
                 ),
             ):
-                result = _download_huggingface_xet(
+                result = downloader_module._download_huggingface_xet(
                     "https://huggingface.co/example/model/resolve/main/model.safetensors",
                     destination,
                     "xet-test",

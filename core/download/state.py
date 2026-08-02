@@ -4,8 +4,7 @@ import threading
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional
 
-# Shared mutable download state.  The facade re-exports these same objects
-# during the migration, so there is only one owner and no duplicated state.
+# Shared mutable download state has a single owner in this module.
 download_progress: Dict[str, Dict[str, Any]] = {}
 download_lock = threading.Lock()
 cancelled_downloads: set = set()
@@ -19,7 +18,7 @@ xet_transfers_lock = threading.Lock()
 
 @dataclass(frozen=True)
 class DownloadStateDependencies:
-    """State and side-effect dependencies supplied by the public facade."""
+    """State and side-effect dependencies supplied by the composition layer."""
 
     download_progress: Dict[str, Dict[str, Any]]
     download_lock: Any

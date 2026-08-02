@@ -178,7 +178,7 @@ def _download_preview_image(
     *,
     dependencies: Any = None,
 ) -> bytes:
-    """Download an image preview, retained for compatibility with callers."""
+    """Download an image preview."""
     return _download_preview_asset(
         url,
         media_type="image",

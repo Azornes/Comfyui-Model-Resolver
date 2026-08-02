@@ -12,12 +12,12 @@ from ..settings import save_settings as save_resolver_settings
 
 
 def _apply_backend_logging_settings(settings: dict) -> None:
-    """Keep the legacy helper available while delegating to the service."""
+    """Apply backend logging settings through the logging service."""
     apply_backend_logging_settings(backend_log_controller, settings)
 
 
 def _build_backend_log_export():
-    """Keep the legacy helper available while delegating to the service."""
+    """Build the backend log export through the logging service."""
     return build_backend_log_export(backend_log_controller)
 
 

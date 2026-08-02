@@ -13,13 +13,11 @@ from core.download.api import (
     write_model_resolver_metadata,
     download_model,
     get_progress,
-    _resolve_download_url_for_aria2,
     start_aria2_daemon,
-    _delete_partial_download_files,
-    download_progress,
-    download_lock,
-    read_completed_metadata_sha256,
 )
+from core.download.api import context as downloader_context
+from core.download.metadata import read_completed_metadata_sha256
+from core.download.state import download_lock, download_progress
 from core.path_utils import get_metadata_sidecar_path
 from core.workflow_updater import (
     convert_to_relative_path,
@@ -234,7 +232,7 @@ class ModelResolverRobustnessTests(unittest.TestCase):
             self.assertTrue(os.path.exists(temp_aria2_path))
 
             # Act
-            _delete_partial_download_files(temp_model_path)
+            downloader_context._delete_partial_download_files(temp_model_path)
 
             # Assert
             self.assertFalse(os.path.exists(temp_model_path))
@@ -407,7 +405,7 @@ class ModelResolverRobustnessTests(unittest.TestCase):
             "core.network_utils.validate_public_http_url",
             side_effect=lambda value: value,
         ):
-            resolved, _ = _resolve_download_url_for_aria2(api_url)
+            resolved, _ = downloader_context._resolve_download_url_for_aria2(api_url)
             self.assertEqual(resolved, redirect_url)
             self.assertEqual(mock_get.call_count, 2)
 

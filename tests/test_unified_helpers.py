@@ -703,7 +703,7 @@ class UnifiedHelpersTests(unittest.TestCase):
         Verifies that build_model_resolver_metadata scrubs sensitive query parameters and headers from payloads.
         """
         import json
-        from core.download.api import build_model_resolver_metadata
+        from core.download.metadata import build_model_resolver_metadata
         dest_path = "dummy_model.safetensors"
         metadata = {
             "download_url": "https://civitai.com/api/download/models/123?token=sensitivetoken123&session=cookie_val",
