@@ -376,3 +376,196 @@ def download_file(
                 log.debug(f"Could not close download response: {exc}")
 
     return result
+
+
+def download_model(
+    url: str,
+    filename: str,
+    category: str,
+    download_id: Optional[str] = None,
+    headers: Optional[Dict[str, str]] = None,
+    subfolder: str = "",
+    base_directory: str = "",
+    metadata: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Validate a model target and delegate the actual transfer."""
+    facade = _downloader_module()
+    os = facade.os
+    download_lock = facade.download_lock
+    download_progress = facade.download_progress
+    log = facade.log
+
+    if download_id is None:
+        download_id = facade.generate_download_id()
+
+    filename = facade.sanitize_download_filename(filename)
+    if not filename:
+        return {
+            "success": False,
+            "download_id": download_id,
+            "error": "Invalid filename",
+        }
+    if not facade.is_allowed_model_download_filename(filename):
+        return {
+            "success": False,
+            "download_id": download_id,
+            "error": "Unsupported model file extension",
+        }
+    subfolder = facade.normalize_relative_subfolder(subfolder)
+
+    dest_dir = facade.get_download_directory(category, base_directory)
+    if not dest_dir:
+        return {
+            "success": False,
+            "download_id": download_id,
+            "error": f"Could not find directory for category: {category}",
+        }
+
+    if subfolder:
+        dest_dir = os.path.join(dest_dir, *subfolder.split("/"))
+
+    dest_dir = os.path.abspath(os.path.normpath(dest_dir))
+    dest_path = os.path.abspath(os.path.normpath(os.path.join(dest_dir, filename)))
+    if not facade.is_path_within(dest_path, dest_dir):
+        return {
+            "success": False,
+            "download_id": download_id,
+            "error": "Download target is outside the selected model directory",
+        }
+
+    resume_aria2_partial = bool(
+        facade._download_backend_from_settings() == "aria2"
+        and os.path.isfile(dest_path)
+        and os.path.isfile(f"{dest_path}.aria2")
+    )
+    if resume_aria2_partial:
+        log.info(f"Resuming partial aria2 download: {dest_path}")
+
+    if os.path.exists(dest_path) and not resume_aria2_partial:
+        expected_sha256 = facade._extract_expected_sha256(metadata)
+        if expected_sha256:
+            metadata_sha256 = facade.read_completed_metadata_sha256(dest_path)
+            sha256_source = "metadata"
+            existing_sha256 = metadata_sha256
+            if metadata_sha256:
+                if metadata_sha256 == expected_sha256:
+                    log.info(f"File exists, metadata SHA256 matches: {dest_path}")
+                else:
+                    log.info(
+                        "File exists, metadata SHA256 differs from source; "
+                        f"verifying file content: {dest_path}"
+                    )
+                    existing_sha256 = ""
+
+            try:
+                if not existing_sha256:
+                    sha256_source = "file"
+                    log.info(f"File exists, verifying SHA256: {dest_path}")
+                    detected_sha256_source = ["file"]
+
+                    def set_detected_sha256_source(source: str) -> None:
+                        if source:
+                            detected_sha256_source[0] = source
+
+                    existing_sha256 = (
+                        facade.calculate_file_sha256(
+                            dest_path,
+                            on_hash_source=set_detected_sha256_source,
+                        )
+                        or ""
+                    )
+                    sha256_source = detected_sha256_source[0]
+            except Exception as exc:
+                error_msg = (
+                    "File already exists and its SHA256 could not be verified: "
+                    f"{dest_path}"
+                )
+                log.warning(f"{error_msg} ({exc})")
+                return {
+                    "success": False,
+                    "download_id": download_id,
+                    "error": error_msg,
+                    "path": dest_path,
+                }
+
+            if existing_sha256 == expected_sha256:
+                message = (
+                    "This model is already downloaded and matches the source hash."
+                )
+                metadata_path = (
+                    facade.write_model_resolver_metadata(
+                        dest_path,
+                        metadata or {},
+                        category,
+                        url,
+                        create_preview=True,
+                    )
+                    or ""
+                )
+                size = os.path.getsize(dest_path)
+                with download_lock:
+                    if download_id in download_progress:
+                        download_progress[download_id].update(
+                            {
+                                "status": "completed",
+                                "progress": 100,
+                                "total_size": size,
+                                "downloaded": size,
+                                "speed": 0,
+                                "path": dest_path,
+                                "directory": os.path.dirname(dest_path),
+                                "error": None,
+                                "already_exists": True,
+                                "message": message,
+                                "sha256": existing_sha256,
+                                "expected_sha256": expected_sha256,
+                                "sha256_source": sha256_source,
+                            }
+                        )
+                        if metadata_path:
+                            download_progress[download_id][
+                                "metadata_path"
+                            ] = metadata_path
+                log.info(f"{message} Path: {dest_path}")
+                return {
+                    "success": True,
+                    "download_id": download_id,
+                    "path": dest_path,
+                    "size": size,
+                    "already_exists": True,
+                    "message": message,
+                    "metadata_path": metadata_path,
+                    "sha256_source": sha256_source,
+                }
+
+            error_msg = (
+                "File already exists, but its SHA256 does not match the selected "
+                f"source: {dest_path}"
+            )
+            log.warning(
+                f"{error_msg} (existing={existing_sha256}, expected={expected_sha256})"
+            )
+            return {
+                "success": False,
+                "download_id": download_id,
+                "error": error_msg,
+                "path": dest_path,
+                "existing_sha256": existing_sha256,
+                "expected_sha256": expected_sha256,
+            }
+
+        return {
+            "success": False,
+            "download_id": download_id,
+            "error": f"File already exists: {dest_path}",
+            "path": dest_path,
+        }
+
+    return facade.download_file(
+        url,
+        dest_path,
+        download_id,
+        headers=headers,
+        metadata=metadata,
+        category=category,
+    )

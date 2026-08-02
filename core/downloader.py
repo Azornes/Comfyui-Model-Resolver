@@ -102,7 +102,10 @@ from .download.huggingface_xet import (
 from .download.huggingface_xet import (
     run_huggingface_xet_transfer as _run_huggingface_xet_transfer,  # noqa: F401
 )
-from .download.orchestrator import download_file
+from .download.orchestrator import (
+    download_file,  # noqa: F401
+    download_model,
+)
 from .download.previews import (
     MODEL_PREVIEW_EXTENSIONS,  # noqa: F401
     MODEL_PREVIEW_MAX_DOWNLOAD_BYTES,  # noqa: F401
@@ -128,7 +131,7 @@ from .network_utils import (
     validate_public_http_url,  # noqa: F401
 )
 from .path_utils import (
-    calculate_file_sha256,
+    calculate_file_sha256,  # noqa: F401
     get_comfy_root_path,
     get_filename_from_path,
     get_model_resolver_sidecar_path,
@@ -185,14 +188,14 @@ HF_XET_ARIA2_AUTH_HOSTS = {
 from .download.metadata import (
     _coerce_int_or_value,  # noqa: F401
     _coerce_size,  # noqa: F401
-    _extract_expected_sha256,
+    _extract_expected_sha256,  # noqa: F401
     _find_metadata_file_info,  # noqa: F401
     _json_safe_metadata,  # noqa: F401
     _metadata_source_value,  # noqa: F401
     _normalise_metadata_file_path,
     _resolve_lora_manager_model_type,  # noqa: F401
     build_model_resolver_metadata,
-    read_completed_metadata_sha256,
+    read_completed_metadata_sha256,  # noqa: F401
 )
 from .download.validation import (
     DOWNLOAD_USER_AGENT,  # noqa: F401
@@ -201,7 +204,7 @@ from .download.validation import (
     _sanitize_download_error,  # noqa: F401
     _strip_sensitive_url_params,  # noqa: F401
     build_download_headers,
-    is_allowed_model_download_filename,
+    is_allowed_model_download_filename,  # noqa: F401
     sanitize_download_filename,
 )
 from .settings import (
@@ -391,205 +394,6 @@ def generate_download_id() -> str:
 def _download_backend_from_settings(settings: Optional[Dict[str, Any]] = None) -> str:
     active_settings = settings if isinstance(settings, dict) else load_settings()
     return normalize_download_backend(active_settings.get("download_backend"))
-
-
-def download_model(
-    url: str,
-    filename: str,
-    category: str,
-    download_id: Optional[str] = None,
-    headers: Optional[Dict[str, str]] = None,
-    subfolder: str = "",
-    base_directory: str = "",
-    metadata: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """
-    Download a model to the appropriate directory.
-
-    Args:
-        url: URL to download from
-        filename: Filename to save as
-        category: Model category for directory selection
-        download_id: Optional download ID (generated if not provided)
-        headers: Optional HTTP headers
-        subfolder: Optional subfolder within category directory
-        base_directory: Optional configured base directory to use
-        metadata: Optional sidecar metadata to save next to the model file
-
-    Returns:
-        Result dictionary
-    """
-    if download_id is None:
-        download_id = generate_download_id()
-
-    filename = sanitize_download_filename(filename)
-    if not filename:
-        return {
-            "success": False,
-            "download_id": download_id,
-            "error": "Invalid filename",
-        }
-    if not is_allowed_model_download_filename(filename):
-        return {
-            "success": False,
-            "download_id": download_id,
-            "error": "Unsupported model file extension",
-        }
-    subfolder = normalize_relative_subfolder(subfolder)
-
-    # Get destination directory
-    dest_dir = get_download_directory(category, base_directory)
-    if not dest_dir:
-        return {
-            "success": False,
-            "download_id": download_id,
-            "error": f"Could not find directory for category: {category}",
-        }
-
-    # Add subfolder if specified
-    if subfolder:
-        dest_dir = os.path.join(dest_dir, *subfolder.split("/"))
-
-    dest_dir = os.path.abspath(os.path.normpath(dest_dir))
-    dest_path = os.path.abspath(os.path.normpath(os.path.join(dest_dir, filename)))
-    if not is_path_within(dest_path, dest_dir):
-        return {
-            "success": False,
-            "download_id": download_id,
-            "error": "Download target is outside the selected model directory",
-        }
-
-    # A matching aria2 control file means the destination is incomplete and can
-    # be resumed safely by aria2's continue mode after a restart or RPC failure.
-    resume_aria2_partial = bool(
-        _download_backend_from_settings() == "aria2"
-        and os.path.isfile(dest_path)
-        and os.path.isfile(f"{dest_path}.aria2")
-    )
-    if resume_aria2_partial:
-        log.info(f"Resuming partial aria2 download: {dest_path}")
-
-    # Check if a complete file already exists.
-    if os.path.exists(dest_path) and not resume_aria2_partial:
-        expected_sha256 = _extract_expected_sha256(metadata)
-        if expected_sha256:
-            metadata_sha256 = read_completed_metadata_sha256(dest_path)
-            sha256_source = "metadata"
-            existing_sha256 = metadata_sha256
-            if metadata_sha256:
-                if metadata_sha256 == expected_sha256:
-                    log.info(f"File exists, metadata SHA256 matches: {dest_path}")
-                else:
-                    log.info(
-                        "File exists, metadata SHA256 differs from source; "
-                        f"verifying file content: {dest_path}"
-                    )
-                    existing_sha256 = ""
-
-            try:
-                if not existing_sha256:
-                    sha256_source = "file"
-                    log.info(f"File exists, verifying SHA256: {dest_path}")
-                    detected_sha256_source = ["file"]
-
-                    def set_detected_sha256_source(source: str) -> None:
-                        if source:
-                            detected_sha256_source[0] = source
-
-                    existing_sha256 = calculate_file_sha256(
-                        dest_path,
-                        on_hash_source=set_detected_sha256_source,
-                    ) or ""
-                    sha256_source = detected_sha256_source[0]
-            except Exception as e:
-                error_msg = (
-                    f"File already exists and its SHA256 could not be verified: {dest_path}"
-                )
-                log.warning(f"{error_msg} ({e})")
-                return {
-                    "success": False,
-                    "download_id": download_id,
-                    "error": error_msg,
-                    "path": dest_path,
-                }
-
-            if existing_sha256 == expected_sha256:
-                message = "This model is already downloaded and matches the source hash."
-                # Refresh the sidecar even when it already exists. The selected
-                # source may be more authoritative than metadata left by an
-                # earlier fuzzy search or manual download attempt.
-                metadata_path = write_model_resolver_metadata(
-                    dest_path,
-                    metadata or {},
-                    category,
-                    url,
-                    create_preview=True,
-                ) or ""
-                size = os.path.getsize(dest_path)
-                with download_lock:
-                    if download_id in download_progress:
-                        download_progress[download_id].update(
-                            {
-                                "status": "completed",
-                                "progress": 100,
-                                "total_size": size,
-                                "downloaded": size,
-                                "speed": 0,
-                                "path": dest_path,
-                                "directory": os.path.dirname(dest_path),
-                                "error": None,
-                                "already_exists": True,
-                                "message": message,
-                                "sha256": existing_sha256,
-                                "expected_sha256": expected_sha256,
-                                "sha256_source": sha256_source,
-                            }
-                        )
-                        if metadata_path:
-                            download_progress[download_id]["metadata_path"] = metadata_path
-                log.info(f"{message} Path: {dest_path}")
-                return {
-                    "success": True,
-                    "download_id": download_id,
-                    "path": dest_path,
-                    "size": size,
-                    "already_exists": True,
-                    "message": message,
-                    "metadata_path": metadata_path,
-                    "sha256_source": sha256_source,
-                }
-
-            error_msg = (
-                "File already exists, but its SHA256 does not match the selected "
-                f"source: {dest_path}"
-            )
-            log.warning(
-                f"{error_msg} (existing={existing_sha256}, expected={expected_sha256})"
-            )
-            return {
-                "success": False,
-                "download_id": download_id,
-                "error": error_msg,
-                "path": dest_path,
-                "existing_sha256": existing_sha256,
-                "expected_sha256": expected_sha256,
-            }
-
-        return {
-            "success": False,
-            "download_id": download_id,
-            "error": f"File already exists: {dest_path}",
-            "path": dest_path,
-        }
-
-    return download_file(
-        url,
-        dest_path,
-        download_id,
-        headers=headers,
-        metadata=metadata,
-        category=category,
-    )
 
 
 def get_progress(download_id: str) -> Optional[Dict[str, Any]]:
