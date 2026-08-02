@@ -537,12 +537,22 @@ class SearchProviderRunner:
                         "Please try again."
                     ),
                 }
-            self.owner.logger.warning(error_message)
+            http_status = source_status.get("http_status") or "none"
+            retryable = "yes" if source_status.get("retryable") else "no"
+            error_type = type(error).__name__
+            self.owner.logger.warning(
+                "CivArchive search failed: "
+                f"code={source_status.get('code', 'provider_unavailable')} "
+                f"http_status={http_status} "
+                f"retryable={retryable} "
+                f"error_type={error_type} "
+                f"message={source_status.get('message', 'CivArchive search failed.')}"
+            )
             self.owner.search_tracker.update(
                 request.progress_id,
                 "civarchive",
                 "error",
-                error_message,
+                source_status.get("message", error_message),
                 100,
                 status="error",
             )

@@ -333,6 +333,13 @@ def test_search_provider_runner_exposes_civarchive_status_metadata():
             "Please try again."
         ),
     }
+    warning_message = owner.logger.warning.call_args.args[0]
+    assert warning_message == (
+        "CivArchive search failed: code=provider_unavailable "
+        "http_status=522 retryable=yes error_type=CivArchiveSearchError "
+        "message=CivArchive may be overloaded or temporarily unavailable. "
+        "Please try again."
+    )
 
 
 def test_search_provider_runner_resolves_civitai_urn():
