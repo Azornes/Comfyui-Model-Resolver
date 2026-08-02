@@ -14,7 +14,7 @@ import time  # noqa: F401
 from collections import deque  # noqa: F401
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional  # noqa: F401
-from urllib.parse import urlparse
+from urllib.parse import urlparse  # noqa: F401
 
 import requests  # noqa: F401
 
@@ -79,6 +79,9 @@ from .download.aria2_backend import (
     resolve_aria2c_executable as _resolve_aria2c_executable,  # noqa: F401
 )
 from .download.aria2_backend import (
+    resolve_download_url_for_aria2 as _resolve_download_url_for_aria2,  # noqa: F401
+)
+from .download.aria2_backend import (
     run_aria2_desired_state_worker as _run_aria2_desired_state_worker,  # noqa: F401
 )
 from .download.aria2_backend import (
@@ -127,8 +130,8 @@ from .download.previews import (
     get_existing_model_preview_path,  # noqa: F401
 )
 from .network_utils import (
-    host_matches_domain,
-    request_public_url,
+    host_matches_domain,  # noqa: F401
+    request_public_url,  # noqa: F401
     validate_public_http_url,  # noqa: F401
 )
 from .path_utils import (
@@ -204,7 +207,7 @@ from .download.validation import (
     _is_sensitive_metadata_key,  # noqa: F401
     _sanitize_download_error,  # noqa: F401
     _strip_sensitive_url_params,  # noqa: F401
-    build_download_headers,
+    build_download_headers,  # noqa: F401
     is_allowed_model_download_filename,  # noqa: F401
     sanitize_download_filename,  # noqa: F401
 )
@@ -213,36 +216,6 @@ from .settings import (
     normalize_download_backend,
     normalize_relative_subfolder,  # noqa: F401
 )
-
-
-def _resolve_download_url_for_aria2(
-    url: str,
-    headers: Optional[Dict[str, str]] = None,
-) -> tuple[str, Dict[str, str]]:
-    """Preflight an aria2 URL and validate every redirect before RPC handoff."""
-    request_headers = build_download_headers(url, headers)
-    source_host = urlparse(str(url or "")).hostname
-    is_huggingface_source = host_matches_domain(source_host, "huggingface.co")
-    response = None
-    try:
-        response, resolved_url, resolved_headers = request_public_url(
-            "GET",
-            url,
-            headers=request_headers,
-            timeout=20,
-            stream=True,
-            trusted_sensitive_redirect_hosts=(
-                HF_XET_ARIA2_AUTH_HOSTS if is_huggingface_source else None
-            ),
-            trusted_sensitive_redirect_headers=(
-                {"authorization"} if is_huggingface_source else None
-            ),
-        )
-        response.raise_for_status()
-        return resolved_url, resolved_headers
-    finally:
-        if response is not None:
-            response.close()
 
 
 def write_model_resolver_metadata(

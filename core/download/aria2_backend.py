@@ -152,6 +152,42 @@ def aria2_action_error_is_ok(status: str, message: str) -> bool:
     return False
 
 
+def resolve_download_url_for_aria2(
+    url: str,
+    headers: Optional[Dict[str, str]] = None,
+) -> tuple[str, Dict[str, str]]:
+    """Preflight an aria2 URL and validate every redirect before RPC handoff."""
+    facade = _downloader_module()
+    request_headers = facade.build_download_headers(url, headers)
+    source_host = facade.urlparse(str(url or "")).hostname
+    is_huggingface_source = facade.host_matches_domain(
+        source_host,
+        "huggingface.co",
+    )
+    response = None
+    try:
+        response, resolved_url, resolved_headers = facade.request_public_url(
+            "GET",
+            url,
+            headers=request_headers,
+            timeout=20,
+            stream=True,
+            trusted_sensitive_redirect_hosts=(
+                facade.HF_XET_ARIA2_AUTH_HOSTS
+                if is_huggingface_source
+                else None
+            ),
+            trusted_sensitive_redirect_headers=(
+                {"authorization"} if is_huggingface_source else None
+            ),
+        )
+        response.raise_for_status()
+        return resolved_url, resolved_headers
+    finally:
+        if response is not None:
+            response.close()
+
+
 def read_aria2_version(executable: str) -> str:
     """Read the installed aria2 version without raising process errors."""
     facade = _downloader_module()
