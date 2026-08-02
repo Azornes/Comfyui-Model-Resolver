@@ -7,14 +7,14 @@ from unittest.mock import patch
 from core import resolver as resolver_core
 from core import workflow_analyzer
 from core.scanner import invalidate_model_files_cache, scan_directory
-from core.workflow import dynamic_widgets
+from core.workflow import dynamic_widgets, references
+from core.workflow.dynamic_widgets import get_lora_model_strength
 from core.workflow_analyzer import (
     analyze_workflow_models,
     get_workflow_model_inventory,
     identify_missing_models,
     invalidate_workflow_model_inventory_cache,
 )
-from core.workflow.dynamic_widgets import get_lora_model_strength
 
 
 def _workflow_with_model(model_path):
@@ -992,7 +992,7 @@ class WorkflowCategoryHintsTests(unittest.TestCase):
         self.assertEqual("checkpoints", refs[0]["category"])
 
     def test_node_type_to_category_hints_is_populated(self):
-        from core.workflow_analyzer import NODE_TYPE_TO_CATEGORY_HINTS
+        from core.workflow.widgets import NODE_TYPE_TO_CATEGORY_HINTS
         # Verify standard loader mappings are correctly generated
         self.assertEqual("checkpoints", NODE_TYPE_TO_CATEGORY_HINTS.get("CheckpointLoaderSimple"))
         self.assertEqual("checkpoints", NODE_TYPE_TO_CATEGORY_HINTS.get("CheckpointLoader"))
@@ -1417,9 +1417,9 @@ class WorkflowModelInventoryCacheTests(unittest.TestCase):
                 return_value=[],
             ),
             patch.object(
-                workflow_analyzer,
+                references,
                 "get_node_model_info",
-                wraps=workflow_analyzer.get_node_model_info,
+                wraps=references.get_node_model_info,
             ) as get_node_info,
         ):
             get_workflow_model_inventory(first_workflow)
@@ -1465,9 +1465,9 @@ class WorkflowModelInventoryCacheTests(unittest.TestCase):
                 return_value=[],
             ),
             patch.object(
-                workflow_analyzer,
+                references,
                 "get_node_model_info",
-                wraps=workflow_analyzer.get_node_model_info,
+                wraps=references.get_node_model_info,
             ) as get_node_info,
         ):
             get_workflow_model_inventory(first_workflow)
@@ -1501,9 +1501,9 @@ class WorkflowModelInventoryCacheTests(unittest.TestCase):
                 return_value=[],
             ),
             patch.object(
-                workflow_analyzer,
+                references,
                 "get_node_model_info",
-                wraps=workflow_analyzer.get_node_model_info,
+                wraps=references.get_node_model_info,
             ) as get_node_info,
         ):
             get_workflow_model_inventory(first_workflow)
@@ -1564,9 +1564,9 @@ class WorkflowModelInventoryCacheTests(unittest.TestCase):
                 return_value=[],
             ),
             patch.object(
-                workflow_analyzer,
+                references,
                 "get_node_model_info",
-                wraps=workflow_analyzer.get_node_model_info,
+                wraps=references.get_node_model_info,
             ) as get_node_info,
         ):
             get_workflow_model_inventory(
