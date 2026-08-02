@@ -350,6 +350,71 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["status"], "update_available")
         self.assertEqual(result["github_url"], version_module.PROJECT_GITHUB_URL)
 
+    def test_project_version_info_retries_github_and_uses_registry_fallback(self):
+        version_module = importlib.import_module("comfyui-model-resolver.core.version")
+        network_module = importlib.import_module("comfyui-model-resolver.core.network_utils")
+        github_failures = [MagicMock(status_code=503) for _ in range(3)]
+        registry_response = MagicMock(status_code=200)
+        registry_response.json.return_value = {"version": "1.1.0"}
+        request_source_response = MagicMock(
+            side_effect=[*github_failures, registry_response]
+        )
+        with (
+            patch.object(version_module, "_get_local_project_version", return_value="1.0.0"),
+            patch.object(
+                network_module,
+                "request_source_response",
+                request_source_response,
+            ),
+            patch.object(version_module.log, "debug") as debug_log,
+        ):
+            version_module._project_version_cache.update(
+                {"checked_at": 0.0, "latest_version": None}
+            )
+            result = version_module._get_project_version_info()
+
+        self.assertEqual(request_source_response.call_count, 4)
+        self.assertEqual(
+            [call.args[0] for call in request_source_response.call_args_list[:3]],
+            [version_module.PROJECT_GITHUB_PYPROJECT_URL] * 3,
+        )
+        self.assertEqual(
+            request_source_response.call_args_list[3].args[0],
+            version_module.PROJECT_REGISTRY_INSTALL_URL,
+        )
+        self.assertEqual(result["latest_version"], "1.1.0")
+        self.assertEqual(result["status"], "update_available")
+        self.assertGreater(version_module._project_version_cache["checked_at"], 0.0)
+        debug_log.assert_any_call("Comfy Registry install version check succeeded: v1.1.0")
+
+    def test_project_version_info_does_not_cache_failed_checks(self):
+        version_module = importlib.import_module("comfyui-model-resolver.core.version")
+        network_module = importlib.import_module("comfyui-model-resolver.core.network_utils")
+        request_source_response = MagicMock(return_value=None)
+        with (
+            patch.object(version_module, "_get_local_project_version", return_value="1.0.0"),
+            patch.object(
+                network_module,
+                "request_source_response",
+                request_source_response,
+            ),
+        ):
+            version_module._project_version_cache.update(
+                {"checked_at": 0.0, "latest_version": None}
+            )
+            first_result = version_module._get_project_version_info()
+            first_call_count = request_source_response.call_count
+            second_result = version_module._get_project_version_info()
+
+        self.assertEqual(first_call_count, 4)
+        self.assertEqual(request_source_response.call_count, 8)
+        self.assertEqual(first_result["status"], "unavailable")
+        self.assertEqual(second_result["status"], "unavailable")
+        self.assertEqual(
+            version_module._project_version_cache,
+            {"checked_at": 0.0, "latest_version": None},
+        )
+
     async def test_version_route_returns_version_payload(self):
         get_handler = routes_registered[("GET", "/model_resolver/version")]
         request = MagicMock()
