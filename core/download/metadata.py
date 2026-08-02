@@ -1,5 +1,6 @@
 """Metadata normalization and sidecar payload helpers for downloads."""
 
+import importlib
 import os
 import time
 from typing import Any, Dict, Optional
@@ -29,6 +30,47 @@ log = create_module_logger("core.downloader")
 _as_dict = as_dict
 _as_list = as_list
 _first_present = first_non_empty
+
+
+def _downloader_module():
+    """Return the facade so runtime patches remain effective."""
+    return importlib.import_module("core.downloader")
+
+
+def write_model_resolver_metadata(
+    dest_path: str,
+    metadata: Optional[Dict[str, Any]] = None,
+    category: str = "",
+    source_url: str = "",
+    create_preview: bool = False,
+) -> Optional[str]:
+    """Write metadata only to the sidecar owned by Model Resolver."""
+    facade = _downloader_module()
+    metadata_path = facade.get_model_resolver_sidecar_path(dest_path)
+
+    try:
+        payload = facade.build_model_resolver_metadata(
+            dest_path,
+            metadata,
+            category,
+            source_url,
+        )
+        if create_preview:
+            preview_source = {
+                **payload,
+                **(metadata if isinstance(metadata, dict) else {}),
+            }
+            preview_path = facade.create_model_preview(dest_path, preview_source)
+            if preview_path:
+                payload["preview_url"] = facade._normalise_metadata_file_path(
+                    preview_path
+                )
+        facade.write_json_atomic(metadata_path, payload, indent=2)
+        facade.log.info(f"Metadata saved: {metadata_path}")
+        return metadata_path
+    except Exception as e:
+        facade.log.warning(f"Could not save metadata sidecar for {dest_path}: {e}")
+        return None
 
 
 def _json_safe_metadata(value: Any, depth: int = 0) -> Any:

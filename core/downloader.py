@@ -126,7 +126,7 @@ from .download.previews import (
     _rewrite_civitai_preview_url,  # noqa: F401
     _save_optimized_jpeg,  # noqa: F401
     _save_preview_video,  # noqa: F401
-    create_model_preview,
+    create_model_preview,  # noqa: F401
     get_existing_model_preview_path,  # noqa: F401
 )
 from .network_utils import (
@@ -138,10 +138,10 @@ from .path_utils import (
     calculate_file_sha256,  # noqa: F401
     get_comfy_root_path,
     get_filename_from_path,
-    get_model_resolver_sidecar_path,
+    get_model_resolver_sidecar_path,  # noqa: F401
     get_path_identity,
     is_path_within,
-    write_json_atomic,
+    write_json_atomic,  # noqa: F401
 )
 from .resolver import invalidate_local_hash_match_cache  # noqa: F401
 from .scanner import invalidate_model_files_cache  # noqa: F401
@@ -189,17 +189,18 @@ HF_XET_ARIA2_AUTH_HOSTS = {
     "cas-bridge-direct.xethub-eu.hf.co",
 }
 
-from .download.metadata import (
+from .download.metadata import (  # noqa: I001
     _coerce_int_or_value,  # noqa: F401
     _coerce_size,  # noqa: F401
     _extract_expected_sha256,  # noqa: F401
     _find_metadata_file_info,  # noqa: F401
     _json_safe_metadata,  # noqa: F401
     _metadata_source_value,  # noqa: F401
-    _normalise_metadata_file_path,
+    _normalise_metadata_file_path,  # noqa: F401
     _resolve_lora_manager_model_type,  # noqa: F401
-    build_model_resolver_metadata,
+    build_model_resolver_metadata,  # noqa: F401
     read_completed_metadata_sha256,  # noqa: F401
+    write_model_resolver_metadata,  # noqa: F401
 )
 from .download.validation import (
     DOWNLOAD_USER_AGENT,  # noqa: F401
@@ -216,34 +217,6 @@ from .settings import (
     normalize_download_backend,
     normalize_relative_subfolder,  # noqa: F401
 )
-
-
-def write_model_resolver_metadata(
-    dest_path: str,
-    metadata: Optional[Dict[str, Any]] = None,
-    category: str = "",
-    source_url: str = "",
-    create_preview: bool = False,
-) -> Optional[str]:
-    """Write metadata only to the sidecar owned by Model Resolver."""
-    metadata_path = get_model_resolver_sidecar_path(dest_path)
-
-    try:
-        payload = build_model_resolver_metadata(dest_path, metadata, category, source_url)
-        if create_preview:
-            preview_source = {
-                **payload,
-                **(metadata if isinstance(metadata, dict) else {}),
-            }
-            preview_path = create_model_preview(dest_path, preview_source)
-            if preview_path:
-                payload["preview_url"] = _normalise_metadata_file_path(preview_path)
-        write_json_atomic(metadata_path, payload, indent=2)
-        log.info(f"Metadata saved: {metadata_path}")
-        return metadata_path
-    except Exception as e:
-        log.warning(f"Could not save metadata sidecar for {dest_path}: {e}")
-        return None
 
 
 # Imported from .settings
