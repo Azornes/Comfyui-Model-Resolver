@@ -186,6 +186,15 @@ Configure credentials and API keys in the Settings panel to authenticate gated d
 * Libraries: `requests`, `aiohttp`, `rapidfuzz`, `huggingface-hub`
 * Modern web browser with JS support (Chrome, Edge, Firefox, Brave)
 
+## 🧱 Backend Architecture
+
+The ComfyUI entry point is intentionally thin. Runtime state lives in
+`core/extension.py`, route registration is centralized in
+`core/routes/registry.py`, HTTP adapters live in `core/routes/`, and reusable
+feature behavior lives in `core/services/`. See
+[`docs/architecture.md`](docs/architecture.md) for the dependency flow and
+local verification commands.
+
 ---
 
 ## 📜 License

@@ -106,9 +106,9 @@ test('Missing Models rows use fixed-size virtualization for smooth stable scroll
 
   assert.ok(rowRule, 'Expected the Missing Models row style');
   assert.match(rowRule[1], /content-visibility\s*:\s*auto/);
-  assert.match(rowRule[1], /contain-intrinsic-size\s*:\s*70px/);
-  assert.match(rowRule[1], /height\s*:\s*70px/);
-  assert.match(rowRule[1], /min-height\s*:\s*70px/);
+  assert.match(rowRule[1], /contain-intrinsic-size\s*:\s*var\(--mr-missing-row-height\)/);
+  assert.match(rowRule[1], /height\s*:\s*var\(--mr-missing-row-height\)/);
+  assert.match(rowRule[1], /min-height\s*:\s*var\(--mr-missing-row-height\)/);
   assert.match(rowRule[1], /box-sizing\s*:\s*border-box/);
   assert.match(rowRule[1], /contain\s*:\s*layout paint style/);
 });
@@ -138,7 +138,7 @@ test('manual model selection uses the two-line status card layout', () => {
   );
   assert.match(
     resolverMainCssSource,
-    /\.mr-missing-detail-pane \.model-resolver-selected\s*\{[^}]*height:\s*70px[^}]*border-radius:\s*0/s
+    /\.mr-missing-detail-pane \.model-resolver-selected\s*\{[^}]*height:\s*var\(--mr-missing-row-height\)[^}]*border-radius:\s*0/s
   );
   assert.match(
     resolverMainCssSource,
@@ -148,7 +148,10 @@ test('manual model selection uses the two-line status card layout', () => {
     resolverMainCssSource,
     /\.mr-missing-detail-pane \.mr-selected-bar-inner\s*\{[^}]*flex-direction:\s*column/s
   );
-  assert.match(resolverMainCssSource, /\.mr-btn-danger\s*\{[^}]*rgba\(239,\s*68,\s*68/s);
+  assert.match(
+    resolverMainCssSource,
+    /\.mr-missing-detail-pane \.model-resolver-selected \.mr-btn-danger:hover[^}]*background:\s*rgba\(239,\s*68,\s*68/s
+  );
 });
 
 test('floating dialog drag stays on the compositor without forced style reads', () => {
