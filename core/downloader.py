@@ -60,7 +60,7 @@ from .download.aria2_backend import (
     find_free_port as _find_free_port,  # noqa: F401
 )
 from .download.aria2_backend import (
-    force_remove_aria2_transfer as _force_remove_aria2_transfer,
+    force_remove_aria2_transfer as _force_remove_aria2_transfer,  # noqa: F401
 )
 from .download.aria2_backend import (
     get_aria2_action_lock as _get_aria2_action_lock,  # noqa: F401
@@ -88,7 +88,7 @@ from .download.aria2_backend import (
     schedule_aria2_idle_stop as _schedule_aria2_idle_stop,  # noqa: F401
 )
 from .download.aria2_backend import (
-    set_download_progress_status as _set_download_progress_status,
+    set_download_progress_status as _set_download_progress_status,  # noqa: F401
 )
 from .download.aria2_backend import (
     try_certifi_ca_path as _try_certifi_ca_path,  # noqa: F401
@@ -129,6 +129,12 @@ from .download.previews import (
     _save_preview_video,  # noqa: F401
     create_model_preview,  # noqa: F401
     get_existing_model_preview_path,  # noqa: F401
+)
+from .download.state import (
+    cancel_download,  # noqa: F401
+    clear_completed_downloads,  # noqa: F401
+    get_all_progress,  # noqa: F401
+    get_progress,  # noqa: F401
 )
 from .network_utils import (
     host_matches_domain,  # noqa: F401
@@ -230,53 +236,3 @@ def generate_download_id() -> str:
 def _download_backend_from_settings(settings: Optional[Dict[str, Any]] = None) -> str:
     active_settings = settings if isinstance(settings, dict) else load_settings()
     return normalize_download_backend(active_settings.get("download_backend"))
-
-
-def get_progress(download_id: str) -> Optional[Dict[str, Any]]:
-    """Get progress for a specific download."""
-    with download_lock:
-        return download_progress.get(download_id, {}).copy()
-
-
-def get_all_progress() -> Dict[str, Dict[str, Any]]:
-    """Get progress for all downloads."""
-    with download_lock:
-        return {k: v.copy() for k, v in download_progress.items()}
-
-
-def cancel_download(download_id: str) -> bool:
-    """Cancel a download in progress."""
-    cancelled_downloads.add(download_id)
-    with aria2_lock:
-        aria2_desired_states.pop(download_id, None)
-    _set_download_progress_status(download_id, "cancelling", speed=0)
-    transfer = aria2_transfers.get(download_id)
-    if transfer and transfer.get("gid"):
-        threading.Thread(
-            target=_force_remove_aria2_transfer,
-            args=(download_id, transfer["gid"]),
-            daemon=True,
-        ).start()
-    with xet_transfers_lock:
-        xet_transfer = dict(xet_transfers.get(download_id) or {})
-    xet_handle = xet_transfer.get("handle")
-    xet_cancel = getattr(xet_handle, "cancel", None)
-    if callable(xet_cancel):
-        try:
-            xet_cancel()
-        except Exception as exc:
-            log.warning(f"Could not cancel Hugging Face Xet transfer {download_id}: {exc}")
-    return True
-
-
-def clear_completed_downloads():
-    """Clear completed/failed downloads from progress tracking."""
-    with download_lock:
-        to_remove = [
-            did
-            for did, info in download_progress.items()
-            if info.get("status") in ("completed", "error", "cancelled")
-        ]
-        for did in to_remove:
-            del download_progress[did]
-            cancelled_downloads.discard(did)
