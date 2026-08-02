@@ -956,7 +956,7 @@ export const lifecycleGraphMethods = {
         const key = this.getMissingModelKey(missing);
         try {
             return btoa(key).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-        } catch (e) {
+        } catch (_e) {
             return key.replace(/[^A-Za-z0-9_-]/g, char => `_${char.charCodeAt(0).toString(16)}_`);
         }
     }

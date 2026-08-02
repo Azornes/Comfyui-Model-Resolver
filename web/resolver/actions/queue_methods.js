@@ -44,13 +44,13 @@ export const queueMethods = {
                     this.queueElement.style.flexShrink = '0';
                 }
             }
-        } catch (e) { }
+        } catch (_e) { }
 
         try {
             const onSplitMouseDown = (e) => this.startSplitDrag(e);
             this.splitterElement.addEventListener(typeof PointerEvent === 'function' ? 'pointerdown' : 'mousedown', onSplitMouseDown);
             this._splitterMouseDown = onSplitMouseDown;
-        } catch (e) { }
+        } catch (_e) { }
 
         // Toggle icon always visible
         try {
@@ -66,13 +66,13 @@ export const queueMethods = {
             );
             body.appendChild(this.queueToggleIcon);
             this.updateQueueToggleIcon();
-        } catch (e) { }
+        } catch (_e) { }
 
         // Restore queue collapsed state
         try {
             const col = localStorage.getItem('model_resolver_queue_collapsed');
             if (col === '1') this.setQueueCollapsed(true, { persist: false, updatePanel: false });
-        } catch (e) { }
+        } catch (_e) { }
 
         return body;
     },
@@ -213,7 +213,7 @@ export const queueMethods = {
             this._queueCollapsedPersistTimer = null;
             try {
                 localStorage.setItem('model_resolver_queue_collapsed', collapsed ? '1' : '0');
-            } catch (e) { }
+            } catch (_e) { }
         };
         const delay = Math.max(0, Number(delayMs) || 0);
         if (delay > 0) {
@@ -234,7 +234,7 @@ export const queueMethods = {
             this._queueSplitPersistTimer = null;
             try {
                 localStorage.setItem('model_resolver_split_w', String(nextWidth));
-            } catch (e) { }
+            } catch (_e) { }
         };
         const delay = Math.max(0, Number(delayMs) || 0);
         if (delay > 0) {
@@ -306,7 +306,7 @@ export const queueMethods = {
         const decodeLabel = (value = '') => {
             try {
                 return decodeURIComponent(String(value || '').replace(/\+/g, ' '));
-            } catch (error) {
+            } catch (_error) {
                 return String(value || '');
             }
         };
@@ -329,7 +329,7 @@ export const queueMethods = {
             ];
             const found = candidates.map(cleanRoutePart).find(Boolean);
             if (found) return found;
-        } catch (error) { /* fall through to manual route parsing */ }
+        } catch (_error) { /* fall through to manual route parsing */ }
 
         try {
             const hash = rawRoute.startsWith('#') ? rawRoute.slice(1) : rawRoute;
@@ -349,7 +349,7 @@ export const queueMethods = {
             ];
             const found = candidates.map(cleanRoutePart).find(Boolean);
             if (found) return found;
-        } catch (error) { /* fall through to readable route */ }
+        } catch (_error) { /* fall through to readable route */ }
 
         const withoutQuery = rawRoute.split('?')[0].split('&')[0];
         const parts = withoutQuery
@@ -499,7 +499,7 @@ export const queueMethods = {
             let elements;
             try {
                 elements = Array.from(document.querySelectorAll(selector));
-            } catch (error) {
+            } catch (_error) {
                 continue;
             }
 
@@ -552,7 +552,7 @@ export const queueMethods = {
                 activeWorkflow?.workflow?.name,
                 activeWorkflow?.workflow?.title
             );
-        } catch (error) { /* ignore unavailable Comfy internals */ }
+        } catch (_error) { /* ignore unavailable Comfy internals */ }
 
         for (const candidate of candidates) {
             const label = this.cleanWorkflowLabel(candidate);
@@ -600,7 +600,7 @@ export const queueMethods = {
                 || app?.ui?.workflow?.activeWorkflow
                 || app?.canvas?.workflow;
             return this.getWorkflowIdFromWorkflow?.(activeWorkflow) || '';
-        } catch (error) {
+        } catch (_error) {
             return '';
         }
     },
@@ -662,7 +662,7 @@ export const queueMethods = {
                 const url = new URL(String(routeKey || ''), base);
                 const routeWorkflowId = url.searchParams.get('workflowId') || url.searchParams.get('workflow_id') || url.searchParams.get('id');
                 if (routeWorkflowId) return routeWorkflowId.trim();
-            } catch (error) { /* fall through to uuid extraction */ }
+            } catch (_error) { /* fall through to uuid extraction */ }
 
             const routeUuid = String(routeKey || '').match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)?.[0] || '';
             if (routeUuid) return routeUuid;
@@ -843,7 +843,7 @@ export const queueMethods = {
             context_scope: 'download_queue',
             download_id: downloadId,
             open_folder_label: folderContext ? 'Open Download Folder' : '',
-            name: folderContext?.name || progress?.filename || info?.filename || missing?.original_path?.split(/[\/\\]/).pop() || 'Download',
+            name: folderContext?.name || progress?.filename || info?.filename || missing?.original_path?.split(/[/\\]/).pop() || 'Download',
             workflow_id: info.workflowId || info.workflow_id || this.getWorkflowContextId(info) || '',
             workflow_label: label,
             workflow_route_key: info.workflowRouteKey || this.getWorkflowContextRouteKey(info) || '',
@@ -904,7 +904,7 @@ export const queueMethods = {
             let elements;
             try {
                 elements = Array.from(document.querySelectorAll(selector));
-            } catch (error) {
+            } catch (_error) {
                 continue;
             }
 
@@ -1074,7 +1074,7 @@ export const queueMethods = {
         const filename = progress.filename
             || info.filename
             || missing.download_source?.filename
-            || missing.original_path?.split(/[\/\\]/).pop()
+            || missing.original_path?.split(/[/\\]/).pop()
             || '';
         if (!filename) return null;
 
@@ -1123,7 +1123,7 @@ export const queueMethods = {
                 hour: '2-digit',
                 minute: '2-digit'
             });
-        } catch (error) {
+        } catch (_error) {
             return '';
         }
     },
@@ -1342,7 +1342,7 @@ export const queueMethods = {
             const filename = progress.filename
                 || info.filename
                 || info.missing?.download_source?.filename
-                || info.missing?.original_path?.split(/[\/\\]/).pop()
+                || info.missing?.original_path?.split(/[/\\]/).pop()
                 || 'model';
             const category = this.getCategoryDisplayName?.(info.category || info.missing?.category || '') || info.category || '';
             const nodeLabel = info.missing?.subgraph_name || info.missing?.node_type || (info.missing?.subgraph_id ? 'Subgraph' : 'Node');
@@ -1363,7 +1363,7 @@ export const queueMethods = {
                 ? `Finalizing file: ${logicalDownloaded} / ${logicalTotal}`
                 : (total ? `${downloaded} / ${total}` : downloaded);
             const targetPath = progress.directory || info.downloadDirectory || info.downloadPath || '';
-            const targetLabel = targetPath ? targetPath.split(/[\/\\]/).filter(Boolean).pop() || targetPath : '';
+            const targetLabel = targetPath ? targetPath.split(/[/\\]/).filter(Boolean).pop() || targetPath : '';
             const workflowLabel = this.getDownloadWorkflowLabel?.(info) || 'Unknown workflow';
             const contextModel = this.getDownloadQueueContext?.(progress, info, workflowLabel, downloadId);
             const hasFolderAction = Boolean(contextModel?.folder_path || contextModel?.download_directory || contextModel?.directory || contextModel?.path || contextModel?.resolved_path);
@@ -1424,7 +1424,7 @@ export const queueMethods = {
                 ? `${entry.nodeLabel || 'Node'} #${entry.nodeId}`
                 : (entry.nodeLabel || '');
             const targetPath = entry.directory || entry.path || '';
-            const targetLabel = targetPath ? targetPath.split(/[\/\\]/).filter(Boolean).pop() || targetPath : '';
+            const targetLabel = targetPath ? targetPath.split(/[/\\]/).filter(Boolean).pop() || targetPath : '';
             const timeLabel = this.formatDownloadHistoryTime(entry.completedAt);
             const sizeLabel = entry.totalSize ? this.formatBytes(entry.totalSize) : '';
             const statusLabel = entry.statusLabel || (entry.status === 'already_exists' ? 'Already downloaded' : 'Downloaded');
@@ -1516,7 +1516,7 @@ export const queueMethods = {
         this.refreshMissingModelsBrowserFromCache?.();
         try {
             document.querySelectorAll('.model-resolver-selected').forEach(el => { el.style.display = 'none'; el.innerHTML = ''; });
-        } catch (e) { /* ignore */ }
+        } catch (_e) { /* ignore */ }
     },
 
     // Update selected bar for a specific missing model slot
@@ -1837,7 +1837,7 @@ export const queueMethods = {
 
         this._queueSplitFallbackContainerWidth = Number(window.innerWidth || 720);
         if (this._queueSplitResizeObserver) {
-            try { this._queueSplitResizeObserver.disconnect(); } catch (e) { }
+            try { this._queueSplitResizeObserver.disconnect(); } catch (_e) { }
             this._queueSplitResizeObserver = null;
         }
 
@@ -2093,7 +2093,7 @@ export const queueMethods = {
                             this.queueElement.style.display = '';
                             if (this.splitterElement) this.splitterElement.style.display = '';
                             this.persistQueueSplitWidth(restoreWidth, 500);
-                        } catch (err) { }
+                        } catch (_err) { }
                         this.queueCollapsed = false;
                         this.persistQueueCollapsedState(false, 500);
                         this.updateQueueVisibility();
@@ -2119,7 +2119,7 @@ export const queueMethods = {
                             });
                             this.queueElement.style.display = '';
                             this.persistQueueSplitWidth(restoreWidth);
-                        } catch (err) { }
+                        } catch (_err) { }
                         this._pendingSplitWidth = null;
                         this._appliedSplitWidth = null;
                         this._splitPreviewCollapsed = false;
@@ -2138,7 +2138,7 @@ export const queueMethods = {
                             || Number.parseInt(String(this.queueElement.style.width || ''), 10)
                             || this.getQueuePaneWidth(this.queueElement);
                         this.persistQueueSplitWidth(width);
-                    } catch (err) { }
+                    } catch (_err) { }
                     this._pendingSplitWidth = null;
                     this._appliedSplitWidth = null;
                     this._splitPreviewCollapsed = false;
@@ -2149,7 +2149,7 @@ export const queueMethods = {
                     this._splitInteraction = null;
                 }
             });
-        } catch (err) { /* ignore */ }
+        } catch (_err) { /* ignore */ }
     },
 
 

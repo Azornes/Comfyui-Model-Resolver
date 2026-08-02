@@ -31,7 +31,7 @@ export function createModuleLogger(moduleName) {
  */
 export function createAutoLogger() {
     const stack = new Error().stack;
-    const match = stack?.match(/\/([^\/]+)\.js/);
+    const match = stack?.match(/\/([^/]+)\.js/);
     const moduleName = match ? match[1] : 'Unknown';
     return createModuleLogger(moduleName);
 }

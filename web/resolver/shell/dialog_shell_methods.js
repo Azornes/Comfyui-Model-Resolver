@@ -468,7 +468,7 @@ export const dialogShellMethods = {
         try {
             if (!(property in target)) return false;
             return Reflect.set(target, property, value);
-        } catch (error) {
+        } catch (_error) {
             return false;
         }
     },
@@ -504,7 +504,7 @@ export const dialogShellMethods = {
                 if (this.trySetSidebarStateProperty(candidate, 'activeSidebarTabId', this.sidebarTabId)) {
                     opened = true;
                 }
-            } catch (error) {
+            } catch (_error) {
                 // Sidebar internals differ between ComfyUI versions; unsupported state APIs are ignored.
             }
         }
@@ -602,7 +602,7 @@ export const dialogShellMethods = {
                 ) {
                     closed = true;
                 }
-            } catch (error) {
+            } catch (_error) {
                 // Sidebar internals differ between ComfyUI versions; unsupported state APIs are ignored.
             }
         }
@@ -656,7 +656,7 @@ export const dialogShellMethods = {
             el.style.resize = 'both';
             // Restore saved pre-FS size if available
             let wh = null;
-            try { wh = JSON.parse(safeStorage.getItem('model_resolver_modal_size_before_fs') || 'null'); } catch (e) {}
+            try { wh = JSON.parse(safeStorage.getItem('model_resolver_modal_size_before_fs') || 'null'); } catch (_e) {}
             if (wh && wh.w && wh.h) {
                 el.style.width = `${wh.w}px`;
                 el.style.height = `${wh.h}px`;
@@ -1023,7 +1023,7 @@ export const dialogShellMethods = {
             this._onMouseUp = () => this.endDrag();
             document.addEventListener('mousemove', this._onMouseMove);
             document.addEventListener('mouseup', this._onMouseUp, { once: true });
-        } catch (err) { /* ignore */ }
+        } catch (_err) { /* ignore */ }
     },
 
     onDrag(e) {

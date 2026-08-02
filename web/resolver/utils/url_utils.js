@@ -59,7 +59,7 @@ export function getModelCardUrl(downloadUrl) {
                 return `https://huggingface.co/${file.repo}/blob/${encodedRevision}/${encodedPath}`;
             }
 
-            const match = downloadUrl.match(/huggingface\.co\/([^\/]+\/[^\/]+)/);
+            const match = downloadUrl.match(/huggingface\.co\/([^/]+\/[^/]+)/);
             if (match) {
                 return `https://huggingface.co/${match[1]}`;
             }

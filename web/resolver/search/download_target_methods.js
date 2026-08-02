@@ -95,7 +95,7 @@ export const downloadTargetMethods = {
         const token = String(category || '')
             .trim()
             .toLowerCase()
-            .replace(/[\/\\\s-]+/g, '_')
+            .replace(/[/\\\s-]+/g, '_')
             .replace(/_+/g, '_')
             .replace(/^_|_$/g, '');
         const categoryMap = {
@@ -1006,16 +1006,16 @@ export const downloadTargetMethods = {
 
     joinLocalPath(basePath = '', relativePath = '') {
         const rawBase = String(basePath || '');
-        const relative = String(relativePath || '').replace(/^[\/\\]+/, '');
+        const relative = String(relativePath || '').replace(/^[/\\]+/, '');
         const usesBackslash = /^[A-Za-z]:\\/.test(rawBase)
             || /^\\\\/.test(rawBase)
             || (!rawBase.includes('/') && rawBase.includes('\\'));
         const separator = usesBackslash ? '\\' : '/';
-        const base = rawBase.replace(usesBackslash ? /[\/\\]+$/ : /\/+$/, '')
+        const base = rawBase.replace(usesBackslash ? /[/\\]+$/ : /\/+$/, '')
             || (usesBackslash ? (/^\\+$/.test(rawBase) ? '\\' : '') : (/^\/+$/.test(rawBase) ? '/' : ''));
         if (!base) return this.normalizePathToForward(relative);
         if (!relative) return base;
-        const normalizedRelative = relative.replace(/[\/\\]+/g, separator);
+        const normalizedRelative = relative.replace(/[/\\]+/g, separator);
         const joiner = base.endsWith(separator) ? '' : separator;
         return `${base}${joiner}${normalizedRelative}`;
     },
@@ -1776,14 +1776,14 @@ export const downloadTargetMethods = {
     normalizeFolderToken(value = '') {
         return String(value || '')
             .toLowerCase()
-            .replace(/[\/\\]+/g, ' ')
+            .replace(/[/\\]+/g, ' ')
             .replace(/[^a-z0-9]+/g, '');
     },
 
     getFolderSuggestionEntries(folders = []) {
         return folders.map(folder => {
             const value = this.getSubfolderOptionValue(folder);
-            const segments = value.split(/[\/\\]/).filter(Boolean);
+            const segments = value.split(/[/\\]/).filter(Boolean);
             return {
                 value,
                 label: this.getSubfolderOptionLabel(folder),
@@ -1939,7 +1939,7 @@ export const downloadTargetMethods = {
         for (const value of rawValues) {
             const text = String(value || '').trim();
             if (!text) continue;
-            const pathParts = text.split(/[\/\\]/).filter(Boolean);
+            const pathParts = text.split(/[/\\]/).filter(Boolean);
             if (pathParts.length > 1) {
                 pathParts.slice(0, -1).forEach(addCandidate);
                 addCandidate(pathParts.slice(0, -1).join('/'));
@@ -3103,7 +3103,7 @@ export const downloadTargetMethods = {
             for (const controller of job.sourceControllers?.values?.() || []) {
                 try {
                     controller.abort();
-                } catch (error) { /* ignore abort cleanup failures */ }
+                } catch (_error) { /* ignore abort cleanup failures */ }
             }
         }
         this.backgroundSearchJobs?.clear();

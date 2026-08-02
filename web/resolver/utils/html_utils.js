@@ -291,7 +291,7 @@ export async function copyTextWithFeedback(text, button, options = {}) {
  */
 export function getFilenameFromPath(path) {
     if (!path) return '';
-    return path.split(/[\/\\]/).pop() || path;
+    return path.split(/[/\\]/).pop() || path;
 }
 
 

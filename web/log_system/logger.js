@@ -303,7 +303,7 @@ class Logger {
                 try {
                     return JSON.stringify(arg);
                 }
-                catch (e) {
+                catch (_e) {
                     return String(arg);
                 }
             }
@@ -526,7 +526,7 @@ class Logger {
         try {
             return JSON.parse(trimmed);
         }
-        catch (e) {
+        catch (_e) {
             return null;
         }
     }
@@ -551,7 +551,7 @@ class Logger {
                     try {
                         return JSON.parse(JSON.stringify(arg));
                     }
-                    catch (e) {
+                    catch (_e) {
                         return String(arg);
                     }
                 }

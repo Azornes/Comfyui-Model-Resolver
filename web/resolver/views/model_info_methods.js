@@ -216,7 +216,7 @@ export const modelInfoMethods = {
             if (host === 'huggingface.co' || host.endsWith('.huggingface.co')) return 'huggingface';
             if (host === 'civarchive.com' || host.endsWith('.civarchive.com')) return 'civarchive';
             if (host === 'civitai.com' || host.endsWith('.civitai.com') || host === 'civitai.red' || host.endsWith('.civitai.red')) return 'civitai';
-        } catch (error) {
+        } catch (_error) {
             return this.getContextMenuSourceKeyFromText(url);
         }
 
@@ -1098,7 +1098,7 @@ export const modelInfoMethods = {
                 method: 'POST',
                 body: JSON.stringify({ path })
             }, 'Open containing folder');
-        } catch (error) {
+        } catch (_error) {
             // Already logged and notified inside fetchJson
         }
     },
@@ -1601,7 +1601,7 @@ export const modelInfoMethods = {
                     { method: 'POST', silent: true },
                     'Cancel model hash calculation'
                 );
-            } catch (error) {
+            } catch (_error) {
                 // Keep the UI in stopping state; polling will surface the final state if possible.
             }
         }
@@ -1931,7 +1931,7 @@ export const modelInfoMethods = {
             const localData = { ...fallbackData, ...data, civitai_checked: false };
             this.rememberContextMenuSourceMetadata(localData);
             this.updateInfoDialogWithData(dialog, localData);
-        } catch (e) {
+        } catch (_e) {
             if (dialog._localInfoRequestId !== requestId || dialog._infoDialogCivitaiFetchStarted) {
                 return;
             }
@@ -3002,7 +3002,7 @@ export const modelInfoMethods = {
             if (host !== 'civitai.com' && host !== 'civitai.red') return '';
             url.hostname = 'civitai.com';
             return url.toString();
-        } catch (error) {
+        } catch (_error) {
             return /civitai\.(?:com|red)\//i.test(value)
                 ? value.replace('civitai.red', 'civitai.com')
                 : '';
@@ -3367,7 +3367,7 @@ export const modelInfoMethods = {
     getSourceModelMirrorHost(url = '') {
         try {
             return new URL(url).hostname.replace(/^www\./, '');
-        } catch (error) {
+        } catch (_error) {
             return '';
         }
     },

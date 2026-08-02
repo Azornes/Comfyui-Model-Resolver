@@ -369,9 +369,9 @@ export const renderFormatMethods = {
     },
 
     getBaseDirectoryLabel(baseDirectory = '') {
-        const clean = String(baseDirectory || '').replace(/[\\\/]+$/, '');
+        const clean = String(baseDirectory || '').replace(/[\\/]+$/, '');
         if (!clean) return 'Default root';
-        return clean.split(/[\\\/]+/).filter(Boolean).pop() || clean;
+        return clean.split(/[\\/]+/).filter(Boolean).pop() || clean;
     },
 
     estimateTextWidth(value, charPx = 6, minPx = 40, maxPx = 180) {

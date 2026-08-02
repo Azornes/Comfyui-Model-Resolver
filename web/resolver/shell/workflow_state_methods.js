@@ -358,7 +358,7 @@ export const workflowStateMethods = {
     getActiveWorkflowRouteKey() {
         try {
             return window.location?.hash || '';
-        } catch (error) {
+        } catch (_error) {
             return '';
         }
     },

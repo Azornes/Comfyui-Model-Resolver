@@ -964,7 +964,7 @@ export const missingBrowserMethods = {
                 this.showResolvedModels = Boolean(showResolvedToggle.checked);
                 try {
                     safeStorage.setItem(this.showResolvedModelsStorageKey, this.showResolvedModels ? '1' : '0');
-                } catch (e) {}
+                } catch (_e) {}
                 this.displayMissingModels(container, data, { preserveBrowser: true });
             });
         }
@@ -976,7 +976,7 @@ export const missingBrowserMethods = {
                 this.showAutoDownloadModels = Boolean(showAutoDownloadToggle.checked);
                 try {
                     safeStorage.setItem(this.showAutoDownloadModelsStorageKey, this.showAutoDownloadModels ? '1' : '0');
-                } catch (e) {}
+                } catch (_e) {}
                 this.displayMissingModels(container, data, { preserveBrowser: true });
             });
         }
@@ -1108,7 +1108,7 @@ export const missingBrowserMethods = {
             this.cancelMissingBrowserSplitWidthPersist();
             try {
                 safeStorage.removeItem(this.missingBrowserSplitStorageKey);
-            } catch (e) {}
+            } catch (_e) {}
         });
 
         splitter.addEventListener('keydown', (event) => {
@@ -1214,7 +1214,7 @@ export const missingBrowserMethods = {
         try {
             const storedWidth = parseInt(safeStorage.getItem(this.missingBrowserSplitStorageKey) || '', 10);
             savedWidth = Number.isFinite(storedWidth) && storedWidth > 0 ? storedWidth : null;
-        } catch (e) {}
+        } catch (_e) {}
 
         this._missingBrowserStoredSplitWidth = savedWidth;
         this._missingBrowserStoredSplitWidthLoaded = true;
@@ -1532,7 +1532,7 @@ export const missingBrowserMethods = {
         if (this._missingBrowserSplitPersistIdle && typeof cancelIdleCallback === 'function') {
             try {
                 cancelIdleCallback(this._missingBrowserSplitPersistIdle);
-            } catch (e) {}
+            } catch (_e) {}
         }
         if (this._missingBrowserSplitPersistTimer) {
             clearTimeout(this._missingBrowserSplitPersistTimer);
@@ -1555,7 +1555,7 @@ export const missingBrowserMethods = {
             this._missingBrowserSplitPersistTimer = null;
             try {
                 safeStorage.setItem(this.missingBrowserSplitStorageKey, String(nextWidth));
-            } catch (e) {}
+            } catch (_e) {}
         };
 
         const writeDelay = Math.max(0, Number(delay) || 0);
@@ -1722,17 +1722,17 @@ export const missingBrowserMethods = {
                 return this.joinLocalPath(basePath, relativePath);
             }
             const rawBase = String(basePath || '');
-            const relative = String(relativePath || '').replace(/^[\/\\]+/, '');
+            const relative = String(relativePath || '').replace(/^[/\\]+/, '');
             const usesBackslash = /^[A-Za-z]:\\/.test(rawBase)
                 || /^\\\\/.test(rawBase)
                 || (!rawBase.includes('/') && rawBase.includes('\\'));
             const separator = usesBackslash ? '\\' : '/';
-            const base = rawBase.replace(usesBackslash ? /[\/\\]+$/ : /\/+$/, '')
+            const base = rawBase.replace(usesBackslash ? /[/\\]+$/ : /\/+$/, '')
                 || (usesBackslash ? (/^\\+$/.test(rawBase) ? '\\' : '') : (/^\/+$/.test(rawBase) ? '/' : ''));
             if (!base) return relative;
             if (!relative) return base;
             const joiner = base.endsWith(separator) ? '' : separator;
-            return `${base}${joiner}${relative.replace(/[\/\\]+/g, separator)}`;
+            return `${base}${joiner}${relative.replace(/[/\\]+/g, separator)}`;
         };
         const buildLocalFolderContext = (folderPath = '', name = 'Folder', category = '') => {
             const path = String(folderPath || '').trim();

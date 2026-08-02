@@ -47,7 +47,7 @@ function getKeybindingSetting(id) {
     try {
         const value = app.ui?.settings?.getSettingValue?.(id);
         return Array.isArray(value) ? value : [];
-    } catch (error) {
+    } catch (_error) {
         return [];
     }
 }
@@ -786,7 +786,7 @@ export class ModelResolver {
 
             // Insert before settings group in the menu
             app.menu?.settingsGroup.element.before(this.buttonGroup.element);
-        } catch (e) {
+        } catch (_e) {
             // Fallback for older ComfyUI versions without the new button system
             log.debug('Model Resolver: New button system not available, using floating button fallback.');
             this.createFloatingButton();

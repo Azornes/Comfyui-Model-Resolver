@@ -1318,7 +1318,7 @@ export const searchPanelMethods = {
                 }, missing, { workflowKey });
                 this.persistSearchStateForWorkflow(workflowKey, missing, state);
                 this.refreshSearchUiForMissing(missing, state, { workflowKey });
-            } catch (error) {
+            } catch (_error) {
                 this.clearBackendSearchProgressTimer(runId, source);
             } finally {
                 timerRecord.inFlight = false;
@@ -2475,7 +2475,7 @@ export const searchPanelMethods = {
             ...(extra && typeof extra === 'object' ? extra : {})
         };
         const resolvedPath = merged.path || merged.resolved_path || '';
-        const filename = merged.filename || fallbackName || resolvedPath.split(/[\/\\]/).pop() || '';
+        const filename = merged.filename || fallbackName || resolvedPath.split(/[/\\]/).pop() || '';
         return {
             ...merged,
             name: merged.name || filename,
@@ -2552,7 +2552,7 @@ export const searchPanelMethods = {
         ];
         for (const candidate of candidates) {
             const raw = String(candidate || '').trim();
-            if (!raw || /[\/\\]/.test(raw) || /^[a-z]:/i.test(raw)) continue;
+            if (!raw || /[/\\]/.test(raw) || /^[a-z]:/i.test(raw)) continue;
             const normalized = this.normalizeDownloadCategory?.(raw) || raw;
             if (normalized && normalized !== 'unknown') return normalized;
         }
@@ -2775,7 +2775,7 @@ export const searchPanelMethods = {
 
         try {
             this.localMatchAlternativesCollapsed = localStorage.getItem(this.localMatchAlternativesCollapsedStorageKey) === '1';
-        } catch (e) {
+        } catch (_e) {
             this.localMatchAlternativesCollapsed = false;
         }
 
@@ -2789,7 +2789,7 @@ export const searchPanelMethods = {
                 this.localMatchAlternativesCollapsedStorageKey,
                 this.localMatchAlternativesCollapsed ? '1' : '0'
             );
-        } catch (e) {}
+        } catch (_e) {}
     },
 
     renderLocalMatchesContent(missing, missingIndex = 0) {

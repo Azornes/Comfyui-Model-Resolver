@@ -1088,7 +1088,7 @@ export const optionsMethods = {
             if (utf8Match?.[1]) {
                 try {
                     return decodeURIComponent(utf8Match[1].trim().replace(/^"|"$/g, ''));
-                } catch (error) {
+                } catch (_error) {
                     return utf8Match[1].trim().replace(/^"|"$/g, '') || fallback;
                 }
             }
@@ -1238,7 +1238,7 @@ export const optionsMethods = {
         if (typeof this.metadataSizeControlsCollapsed !== 'boolean') {
             try {
                 this.metadataSizeControlsCollapsed = safeStorage.getItem(this.metadataSizeControlsCollapsedStorageKey) === '1';
-            } catch (error) {
+            } catch (_error) {
                 this.metadataSizeControlsCollapsed = false;
             }
         }
@@ -1447,7 +1447,7 @@ export const optionsMethods = {
         if (typeof this.metadataBuildControlsCollapsed !== 'boolean') {
             try {
                 this.metadataBuildControlsCollapsed = safeStorage.getItem(this.metadataBuildControlsCollapsedStorageKey) === '1';
-            } catch (error) {
+            } catch (_error) {
                 this.metadataBuildControlsCollapsed = false;
             }
         }
@@ -1460,7 +1460,7 @@ export const optionsMethods = {
             panel.setAttribute('aria-hidden', hidden ? 'true' : 'false');
             try {
                 panel.inert = hidden;
-            } catch (error) {
+            } catch (_error) {
                 panel.toggleAttribute('inert', hidden);
             }
         };
@@ -1575,7 +1575,7 @@ export const optionsMethods = {
                     'Load metadata build capabilities'
                 );
                 renderMetadataBuildCapabilities(data);
-            } catch (error) {
+            } catch (_error) {
                 renderMetadataBuildCapabilities({
                     cpu_count: navigator.hardwareConcurrency || 1,
                     default_worker_count: Math.min(navigator.hardwareConcurrency || 1, 4),
@@ -3585,7 +3585,7 @@ export const optionsMethods = {
             } else if (opt.type === 'json') {
                 try {
                     tokens[opt.serverKey] = raw ? JSON.parse(raw) : opt.default;
-                } catch (e) {
+                } catch (_e) {
                     tokens[opt.serverKey] = opt.default;
                 }
             } else if (opt.type === 'backend') {
