@@ -76,7 +76,13 @@ The workflow uses the tracked `package-lock.json` with `npm ci`, has read-only
 repository permissions, and does not require secrets. Its two jobs run:
 
 1. `npm test` and `npm run lint` for the frontend.
-2. `pytest`, Ruff, and `compileall` for the backend.
+2. The Python suite with branch coverage for `core.workflow`, Ruff, and
+   `compileall` for the backend.
+
+The backend job requires at least 75% coverage for `core.workflow` and uploads
+the XML report as the `workflow-coverage` artifact. The threshold is scoped to
+the refactored workflow package while the remaining legacy backends are being
+covered incrementally.
 
 The workflow uses `pull_request`, not `pull_request_target`, so code from an
 external fork is tested with the restricted pull-request token context.
