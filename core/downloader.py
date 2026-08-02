@@ -293,7 +293,10 @@ for _aria2_dependency_name in (
     )
 
 
-for _download_dependency_name in ("get_download_directory",):
+for _download_dependency_name in (
+    "get_download_directory",
+    "write_model_resolver_metadata",
+):
     globals()[_download_dependency_name] = _bind_download_dependencies(
         globals()[_download_dependency_name]
     )

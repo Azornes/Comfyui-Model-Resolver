@@ -1,6 +1,5 @@
 """Metadata normalization and sidecar payload helpers for downloads."""
 
-import importlib
 import os
 import time
 from typing import Any, Dict, Optional
@@ -32,9 +31,11 @@ _as_list = as_list
 _first_present = first_non_empty
 
 
-def _downloader_module():
-    """Return the facade so runtime patches remain effective."""
-    return importlib.import_module("core.downloader")
+def _require_dependencies(dependencies: Any) -> Any:
+    """Return explicitly supplied services for metadata sidecars."""
+    if dependencies is None:
+        raise RuntimeError("metadata sidecar dependencies were not provided")
+    return dependencies
 
 
 def write_model_resolver_metadata(
@@ -43,9 +44,11 @@ def write_model_resolver_metadata(
     category: str = "",
     source_url: str = "",
     create_preview: bool = False,
+    *,
+    dependencies: Any = None,
 ) -> Optional[str]:
     """Write metadata only to the sidecar owned by Model Resolver."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     metadata_path = facade.get_model_resolver_sidecar_path(dest_path)
 
     try:
