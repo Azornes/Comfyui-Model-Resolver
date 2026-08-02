@@ -19,10 +19,15 @@ def create_route_helpers(web, logger, load_settings, hash_calculation_cancelled)
                         f"Model Resolver {error_prefix} error: {exc}",
                         exc_info=True,
                     )
-                    response_data = {"error": str(exc)}
+                    status = 500
+                    error_message = str(exc)
+                    if isinstance(exc, web.HTTPException):
+                        status = exc.status
+                        error_message = exc.reason or error_message
+                    response_data = {"error": error_message}
                     if return_success_on_error:
                         response_data["success"] = False
-                    return web.json_response(response_data, status=500)
+                    return web.json_response(response_data, status=status)
 
             return wrapper
 
