@@ -7,10 +7,10 @@ from unittest.mock import patch
 from core import resolver as resolver_core
 from core import workflow_analyzer
 from core.scanner import invalidate_model_files_cache, scan_directory
-from core.workflow import dynamic_widgets, references
+from core.workflow import analysis, dynamic_widgets, references
+from core.workflow.analysis import analyze_workflow_models
 from core.workflow.dynamic_widgets import get_lora_model_strength
 from core.workflow_analyzer import (
-    analyze_workflow_models,
     get_workflow_model_inventory,
     identify_missing_models,
     invalidate_workflow_model_inventory_cache,
@@ -1307,7 +1307,7 @@ class WorkflowModelInventoryCacheTests(unittest.TestCase):
                 return_value=available_models,
             ) as get_models,
             patch.object(
-                workflow_analyzer,
+                analysis,
                 "analyze_workflow_models",
                 return_value=model_refs,
             ) as analyze_models,
@@ -1333,7 +1333,7 @@ class WorkflowModelInventoryCacheTests(unittest.TestCase):
                 return_value=[],
             ) as get_models,
             patch.object(
-                workflow_analyzer,
+                analysis,
                 "analyze_workflow_models",
                 return_value=[],
             ) as analyze_models,
@@ -1361,7 +1361,7 @@ class WorkflowModelInventoryCacheTests(unittest.TestCase):
                 return_value=[],
             ),
             patch.object(
-                workflow_analyzer,
+                analysis,
                 "analyze_workflow_models",
                 return_value=[],
             ) as analyze_models,
@@ -1381,7 +1381,7 @@ class WorkflowModelInventoryCacheTests(unittest.TestCase):
                 return_value=[],
             ),
             patch.object(
-                workflow_analyzer,
+                analysis,
                 "analyze_workflow_models",
                 return_value=[],
             ) as analyze_models,
@@ -1587,7 +1587,7 @@ class WorkflowModelInventoryCacheTests(unittest.TestCase):
                 return_value=[],
             ),
             patch.object(
-                workflow_analyzer,
+                analysis,
                 "analyze_workflow_models",
                 return_value=[],
             ) as analyze_models,
