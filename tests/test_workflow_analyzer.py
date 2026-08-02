@@ -5,16 +5,14 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from core import resolver as resolver_core
-from core import workflow_analyzer
 from core.scanner import invalidate_model_files_cache, scan_directory
 from core.workflow import analysis, dynamic_widgets, references
-from core.workflow.analysis import analyze_workflow_models
+from core.workflow.analysis import analyze_workflow_models, identify_missing_models
 from core.workflow.dynamic_widgets import get_lora_model_strength
 from core.workflow.inventory import (
     get_workflow_model_inventory,
     invalidate_workflow_model_inventory_cache,
 )
-from core.workflow_analyzer import identify_missing_models
 
 
 def _workflow_with_model(model_path):
