@@ -3,6 +3,7 @@ import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
 import { startSplitterDrag } from "../utils/splitter_drag.js";
 const FOOTER_VERSION_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const FOOTER_VERSION_FAILURE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 export const queueMethods = {
     createContent() {
@@ -2883,10 +2884,18 @@ export const queueMethods = {
         if (!this.footerVersionCurrent || !this.footerVersionLatest) return;
 
         const now = Date.now();
+        const refreshInterval = this._footerVersionCheckFailed
+            ? FOOTER_VERSION_FAILURE_REFRESH_INTERVAL_MS
+            : FOOTER_VERSION_REFRESH_INTERVAL_MS;
         if (
             this._footerVersionLastCheckedAt
-            && now - this._footerVersionLastCheckedAt < FOOTER_VERSION_REFRESH_INTERVAL_MS
+            && now - this._footerVersionLastCheckedAt < refreshInterval
         ) {
+            if (this._footerVersionCheckFailed) {
+                this.scheduleFooterVersionRetry(
+                    refreshInterval - (now - this._footerVersionLastCheckedAt)
+                );
+            }
             return;
         }
         this._footerVersionLastCheckedAt = now;
@@ -2903,6 +2912,12 @@ export const queueMethods = {
             };
             const currentVersion = formatVersion(data?.current_version);
             const latestVersion = formatVersion(data?.latest_version);
+            const versionCheckFailed = !latestVersion || data?.status === 'unavailable';
+            this._footerVersionCheckFailed = versionCheckFailed;
+            if (!versionCheckFailed && this._footerVersionRetryTimer) {
+                clearTimeout(this._footerVersionRetryTimer);
+                this._footerVersionRetryTimer = null;
+            }
 
             this.footerVersionCurrent.textContent = currentVersion || 'v—';
             this.footerVersionLatest.textContent = latestVersion
@@ -2926,7 +2941,9 @@ export const queueMethods = {
                     : `Model Resolver ${currentVersion}; latest GitHub version unavailable`
             );
             this.updateFooterStarLayout();
+            if (versionCheckFailed) this.scheduleFooterVersionRetry();
         } catch (_) {
+            this._footerVersionCheckFailed = true;
             this.footerVersionLatest.textContent = '(latest: unavailable)';
             this.footerVersionElement?.classList.remove(
                 'mr-footer-version-up-to-date',
@@ -2934,7 +2951,19 @@ export const queueMethods = {
             );
             this.footerVersionLatest.classList.remove('mr-footer-version-update');
             this.updateFooterStarLayout();
+            this.scheduleFooterVersionRetry();
         }
+    },
+
+    scheduleFooterVersionRetry(delayMs = FOOTER_VERSION_FAILURE_REFRESH_INTERVAL_MS) {
+        if (this._footerVersionRetryTimer) return;
+
+        const delay = Math.max(0, Number(delayMs) || FOOTER_VERSION_FAILURE_REFRESH_INTERVAL_MS);
+        this._footerVersionRetryTimer = setTimeout(() => {
+            this._footerVersionRetryTimer = null;
+            if (this.element?.style?.display === 'none') return;
+            void this.loadFooterVersion();
+        }, delay);
     },
 
     createFooter() {
