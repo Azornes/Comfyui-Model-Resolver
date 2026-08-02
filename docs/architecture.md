@@ -43,6 +43,48 @@ the responsibility and add a focused test in `tests/test_workflow_components.py`
 or `tests/test_workflow_analyzer.py`. Keep imports within the documented layer
 direction; `tests/test_workflow_boundaries.py` enforces this contract.
 
+## Search provider availability
+
+Search responses distinguish an unavailable provider from a successful search
+with no matching model. Provider-specific failures are exposed in
+`source_status` while the older `source_errors` field remains available for
+diagnostics and compatibility:
+
+```json
+{
+  "source_errors": {
+    "civarchive": "CivArchive search failed: HTTP 522"
+  },
+  "source_status": {
+    "civarchive": {
+      "state": "unavailable",
+      "code": "provider_unavailable",
+      "retryable": true,
+      "http_status": 522,
+      "message": "CivArchive may be overloaded or temporarily unavailable. Please try again."
+    }
+  }
+}
+```
+
+The frontend uses `source_status` for user-facing labels and notifications:
+
+- `state: unavailable` means the provider or its network path is temporarily
+  unavailable; it is not a confirmed no-match result.
+- `state: rate_limited` means the provider asked the client to slow down.
+- `state: not_found` means the provider did not expose a matching page.
+- `state: error` represents a non-retryable provider rejection or another
+  provider-specific failure.
+
+When `retryable` is true, the source status row shows a retry action. A retry
+repeats only that provider with a forced refresh and does not rerun the other
+search sources. Automatic retry is intentionally not performed, so a slow or
+overloaded provider cannot delay every search attempt.
+
+The backend log uses structured fields such as `code`, `http_status`,
+`retryable`, and `error_type`; user-facing messages should come from the safe
+`message` field rather than the raw exception text.
+
 ## Frontend architecture
 
 The frontend keeps ComfyUI-specific integration at the extension boundary in
