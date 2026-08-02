@@ -13,6 +13,7 @@ import { tabsLoadedMethods } from "./views/tabs_loaded_methods.js";
 import { downloadTargetMethods } from "./search/download_target_methods.js";
 import { searchPanelMethods } from "./search/search_panel.js";
 import { queueMethods } from "./actions/queue_methods.js";
+import { queueStorageMethods } from "./actions/queue_storage_methods.js";
 import { resolveDownloadMethods } from "./actions/resolve_download_methods.js";
 import { selectionMethods } from "./actions/selection_methods.js";
 import { renderFormatMethods } from "./utils/render_format_methods.js";
@@ -341,6 +342,7 @@ applyDialogMethods(
     optionsMethods,
     tabsLoadedMethods,
     queueMethods,
+    queueStorageMethods,
     lifecycleGraphMethods,
     missingBrowserMethods,
     resolveDownloadMethods,
