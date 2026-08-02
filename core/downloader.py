@@ -5,7 +5,7 @@ Handles downloading models from various sources with progress tracking.
 """
 
 import hashlib  # noqa: F401
-import os
+import os  # noqa: F401
 import secrets  # noqa: F401
 import shutil  # noqa: F401
 import subprocess
@@ -93,6 +93,7 @@ from .download.aria2_backend import (
 from .download.aria2_backend import (
     try_certifi_ca_path as _try_certifi_ca_path,  # noqa: F401
 )
+from .download.directories import get_download_directory  # noqa: F401
 from .download.huggingface_xet import (
     HuggingFaceXetDownloadCancelled as _HuggingFaceXetDownloadCancelled,  # noqa: F401
 )
@@ -136,18 +137,18 @@ from .network_utils import (
 )
 from .path_utils import (
     calculate_file_sha256,  # noqa: F401
-    get_comfy_root_path,
-    get_filename_from_path,
+    get_comfy_root_path,  # noqa: F401
+    get_filename_from_path,  # noqa: F401
     get_model_resolver_sidecar_path,  # noqa: F401
-    get_path_identity,
-    is_path_within,
+    get_path_identity,  # noqa: F401
+    is_path_within,  # noqa: F401
     write_json_atomic,  # noqa: F401
 )
 from .resolver import invalidate_local_hash_match_cache  # noqa: F401
 from .scanner import invalidate_model_files_cache  # noqa: F401
 from .type_utils import (
     extract_response_file_size,  # noqa: F401
-    get_category_folder_keys,
+    get_category_folder_keys,  # noqa: F401
     normalize_download_category,  # noqa: F401
 )
 from .type_utils import format_size_bytes as format_bytes  # noqa: F401
@@ -189,7 +190,7 @@ HF_XET_ARIA2_AUTH_HOSTS = {
     "cas-bridge-direct.xethub-eu.hf.co",
 }
 
-from .download.metadata import (  # noqa: I001
+from .download.metadata import (
     _coerce_int_or_value,  # noqa: F401
     _coerce_size,  # noqa: F401
     _extract_expected_sha256,  # noqa: F401
@@ -217,118 +218,6 @@ from .settings import (
     normalize_download_backend,
     normalize_relative_subfolder,  # noqa: F401
 )
-
-
-# Imported from .settings
-
-
-def get_download_directory(category: str, preferred_base_directory: str = "") -> Optional[str]:
-    """
-    Get the appropriate download directory for a model category.
-
-    Args:
-        category: Model category (e.g., 'checkpoints', 'loras', 'vae')
-        preferred_base_directory: Optional configured base directory to use
-
-    Returns:
-        Absolute path to the download directory, or None if not found
-    """
-    global folder_paths
-
-    if folder_paths is None:
-        # Try to import again - ComfyUI might have initialized since last check
-        try:
-            import folder_paths as fp
-
-            folder_paths = fp
-        except ImportError:
-            return None
-
-    folder_keys = get_category_folder_keys(category)
-    folder_key = folder_keys[0]
-
-    def _normalize(path_value: str) -> str:
-        return get_path_identity(path_value)
-
-    def _is_within(path_value: str, root_value: str) -> bool:
-        return is_path_within(path_value, root_value)
-
-    def _choose_preferred_path(paths: List[str], preferred_key: str = "") -> Optional[str]:
-        if not paths:
-            return None
-
-        comfy_root = get_comfy_root_path(folder_paths)
-
-        def _basename(path_value: str) -> str:
-            return get_filename_from_path(os.path.normpath(path_value)).lower()
-
-        def _prefer_redirected(candidate_paths: List[str]) -> Optional[str]:
-            if not candidate_paths:
-                return None
-            if comfy_root:
-                redirected_paths = [path for path in candidate_paths if not _is_within(path, comfy_root)]
-                if redirected_paths:
-                    return redirected_paths[0]
-            return candidate_paths[0]
-
-        if preferred_key == "diffusion_models":
-            canonical_paths = [path for path in paths if _basename(path) == "diffusion_models"]
-            preferred_path = _prefer_redirected(canonical_paths)
-            if preferred_path:
-                return preferred_path
-
-            non_legacy_paths = [path for path in paths if _basename(path) != "unet"]
-            preferred_path = _prefer_redirected(non_legacy_paths)
-            if preferred_path:
-                return preferred_path
-
-        if preferred_key == "text_encoders":
-            canonical_paths = [path for path in paths if _basename(path) == "text_encoders"]
-            preferred_path = _prefer_redirected(canonical_paths)
-            if preferred_path:
-                return preferred_path
-
-            non_legacy_paths = [path for path in paths if _basename(path) != "clip"]
-            preferred_path = _prefer_redirected(non_legacy_paths)
-            if preferred_path:
-                return preferred_path
-
-        if comfy_root:
-            redirected_paths = [path for path in paths if not _is_within(path, comfy_root)]
-            if redirected_paths:
-                return redirected_paths[0]
-
-        return paths[0]
-
-    try:
-        paths = []
-        seen_paths = set()
-        for candidate_key in folder_keys:
-            for path in folder_paths.get_folder_paths(candidate_key) or []:
-                path_key = _normalize(path)
-                if path_key in seen_paths:
-                    continue
-                seen_paths.add(path_key)
-                paths.append(path)
-        if paths:
-            if preferred_base_directory:
-                preferred_normalized = _normalize(preferred_base_directory)
-                for path in paths:
-                    if _normalize(path) == preferred_normalized:
-                        return path
-            return _choose_preferred_path(paths, folder_key)
-
-        # If category not found, try to get any models directory as fallback
-        all_names = folder_paths.get_folder_names()
-        if all_names:
-            # Fall back to first available directory
-            fallback_paths = folder_paths.get_folder_paths(all_names[0])
-            if fallback_paths:
-                return _choose_preferred_path(fallback_paths, all_names[0])
-    except Exception as e:
-        log.debug(f"Could not get folder path for {folder_key}: {e}")
-
-    return None
 
 
 def generate_download_id() -> str:
