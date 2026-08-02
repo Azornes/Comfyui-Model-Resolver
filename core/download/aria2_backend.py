@@ -534,3 +534,251 @@ def aria2_tell_status(gid: str) -> Dict[str, Any]:
             facade.time.sleep(facade.ARIA2_STATUS_RPC_RETRY_DELAY * (attempt + 1))
 
     return {}
+
+
+def download_file_with_aria2(
+    url: str,
+    dest_path: str,
+    download_id: str,
+    headers: Optional[Dict[str, str]] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+    category: str = "",
+) -> Dict[str, Any]:
+    """Download a file with an aria2c JSON-RPC process."""
+    facade = _downloader_module()
+    settings = facade.load_settings()
+    result = {
+        "success": False,
+        "download_id": download_id,
+        "path": dest_path,
+        "error": None,
+        "size": 0,
+    }
+    start_time = facade.time.time()
+    filename = facade.get_filename_from_path(dest_path)
+    expected_sha256 = facade._extract_expected_sha256(metadata)
+
+    with facade.download_lock:
+        facade.download_progress[download_id] = {
+            "status": "starting",
+            "progress": 0,
+            "total_size": 0,
+            "downloaded": 0,
+            "filename": filename,
+            "path": dest_path,
+            "directory": facade.os.path.dirname(dest_path),
+            "url": url,
+            "error": None,
+            "speed": 0,
+            "start_time": start_time,
+            "download_backend": "aria2",
+        }
+
+    try:
+        facade.os.makedirs(facade.os.path.dirname(dest_path), exist_ok=True)
+        facade._ensure_aria2_daemon(settings)
+        aria2_url, request_headers = facade._resolve_download_url_for_aria2(
+            url,
+            headers,
+        )
+
+        options: Dict[str, Any] = {
+            "dir": facade.os.path.dirname(dest_path),
+            "out": filename,
+            "continue": "true",
+            "max-connection-per-server": "4",
+            "split": "4",
+            "min-split-size": "1M",
+            "allow-overwrite": "true",
+            "auto-file-renaming": "false",
+            "file-allocation": "none",
+            "no-want-digest-header": "true",
+            # Redirects were already resolved and validated above. Keeping them
+            # disabled prevents sensitive headers from reaching another host.
+            "max-redirect": "0",
+        }
+        if expected_sha256:
+            # Let aria2 verify the file as part of the transfer instead of
+            # requiring a second Python pass over a multi-gigabyte model.
+            options["checksum"] = f"sha-256={expected_sha256}"
+            options["check-integrity"] = "true"
+        user_agent = facade._get_header_value(request_headers, "User-Agent")
+        referer = facade._get_header_value(request_headers, "Referer")
+        if user_agent:
+            options["user-agent"] = user_agent
+        if referer:
+            options["referer"] = referer
+
+        header_values = [
+            f"{key}: {value}"
+            for key, value in request_headers.items()
+            if str(key).lower() not in {"user-agent", "referer"}
+        ]
+        if header_values:
+            options["header"] = header_values
+
+        gid = facade._aria2_rpc("aria2.addUri", [[aria2_url], options])
+        if not isinstance(gid, str) or not gid:
+            raise Aria2Error("aria2 did not return a download gid")
+
+        with facade.aria2_lock:
+            facade.aria2_transfers[download_id] = {
+                "gid": gid,
+                "path": dest_path,
+            }
+        with facade.download_lock:
+            facade.download_progress[download_id]["aria2_gid"] = gid
+            facade.download_progress[download_id]["status"] = "downloading"
+
+        log.info(f"Starting aria2 download: {filename}")
+        last_cli_log = start_time
+
+        while True:
+            if download_id in facade.cancelled_downloads:
+                try:
+                    facade._aria2_rpc("aria2.forceRemove", [gid])
+                except Exception:
+                    pass
+                with facade.download_lock:
+                    if download_id in facade.download_progress:
+                        facade.download_progress[download_id]["status"] = "cancelled"
+                        facade.download_progress[download_id]["speed"] = 0
+                facade._delete_partial_download_files(dest_path)
+                facade.cancelled_downloads.discard(download_id)
+                result["error"] = "Download cancelled"
+                return result
+
+            status = facade._aria2_tell_status(gid)
+            state = str(status.get("status") or "")
+            total_size = facade._parse_aria2_int(status.get("totalLength"))
+            downloaded = facade._parse_aria2_int(status.get("completedLength"))
+            speed = facade._parse_aria2_int(status.get("downloadSpeed"))
+            progress = int((downloaded / total_size) * 100) if total_size > 0 else 0
+            mapped_status = {
+                "active": "downloading",
+                "waiting": "downloading",
+                "paused": "paused",
+                "complete": "completed",
+                "error": "error",
+                "removed": "cancelled",
+            }.get(state, state or "downloading")
+
+            with facade.download_lock:
+                if download_id in facade.download_progress:
+                    facade.download_progress[download_id].update(
+                        {
+                            "status": mapped_status,
+                            "progress": max(0, min(progress, 100)),
+                            "total_size": total_size,
+                            "downloaded": downloaded,
+                            "speed": (
+                                0
+                                if mapped_status in {"paused", "completed"}
+                                else speed
+                            ),
+                            "download_backend": "aria2",
+                            "aria2_gid": gid,
+                        }
+                    )
+
+            now = facade.time.time()
+            if (
+                now - last_cli_log >= facade.CLI_LOG_INTERVAL
+                and mapped_status == "downloading"
+            ):
+                last_cli_log = now
+                total_str = facade.format_bytes(total_size) if total_size else "?"
+                log.info(
+                    "aria2 progress: "
+                    f"{facade.format_bytes(downloaded)} / {total_str} "
+                    f"({progress}%) - {facade.format_bytes(speed)}/s"
+                )
+
+            if state == "complete":
+                completed_path = facade._resolve_aria2_completed_path(
+                    status,
+                    dest_path,
+                )
+                size = (
+                    facade.os.path.getsize(completed_path)
+                    if facade.os.path.exists(completed_path)
+                    else downloaded
+                )
+                metadata_path = facade.write_model_resolver_metadata(
+                    completed_path,
+                    metadata or {},
+                    category,
+                    url,
+                    create_preview=True,
+                )
+                with facade.download_lock:
+                    facade.download_progress[download_id].update(
+                        {
+                            "status": "completed",
+                            "progress": 100,
+                            "downloaded": size,
+                            "total_size": total_size or size,
+                            "speed": 0,
+                            "path": completed_path,
+                            "directory": facade.os.path.dirname(completed_path),
+                        }
+                    )
+                    if metadata_path:
+                        facade.download_progress[download_id][
+                            "metadata_path"
+                        ] = metadata_path
+                result.update(
+                    {
+                        "success": True,
+                        "path": completed_path,
+                        "size": size,
+                        "metadata_path": metadata_path,
+                    }
+                )
+                elapsed = facade.time.time() - start_time
+                avg_speed = size / elapsed if elapsed > 0 else 0
+                log.info(f"✓ aria2 download complete: {filename}")
+                log.info(
+                    f"Size: {facade.format_bytes(size)}, Time: {elapsed:.1f}s, "
+                    f"Avg speed: {facade.format_bytes(int(avg_speed))}/s"
+                )
+                facade.invalidate_model_files_cache()
+                facade.invalidate_local_hash_match_cache()
+                return result
+
+            if state == "error":
+                error_msg = status.get("errorMessage") or "aria2 download failed"
+                with facade.download_lock:
+                    facade.download_progress[download_id]["status"] = "error"
+                    facade.download_progress[download_id]["error"] = error_msg
+                result["error"] = error_msg
+                return result
+
+            if state == "removed":
+                with facade.download_lock:
+                    facade.download_progress[download_id]["status"] = "cancelled"
+                    facade.download_progress[download_id]["speed"] = 0
+                facade._delete_partial_download_files(dest_path)
+                facade.cancelled_downloads.discard(download_id)
+                result["error"] = "Download cancelled"
+                return result
+
+            facade.time.sleep(0.5)
+
+    except Exception as exc:
+        error_msg = facade._sanitize_download_error(exc)
+        with facade.download_lock:
+            if download_id in facade.download_progress:
+                facade.download_progress[download_id]["status"] = "error"
+                facade.download_progress[download_id]["error"] = error_msg
+                facade.download_progress[download_id]["speed"] = 0
+        result["error"] = error_msg
+        log.error(f"✗ aria2 download failed: {filename}")
+        log.error(f"Error: {error_msg}")
+        return result
+    finally:
+        with facade.aria2_lock:
+            facade.aria2_transfers.pop(download_id, None)
+            facade.aria2_action_locks.pop(download_id, None)
+            facade.aria2_desired_states.pop(download_id, None)
+        facade._schedule_aria2_idle_stop()
