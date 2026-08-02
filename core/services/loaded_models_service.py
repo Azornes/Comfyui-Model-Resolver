@@ -70,10 +70,8 @@ class LoadedModelsService:
             return start + ((end - start) * ratio)
 
         def build_loaded_models_response():
-            from ..workflow_analyzer import (
-                URN_TYPE_MAP,
-                get_lora_model_strength,
-            )
+            from ..type_utils import URN_TYPE_MAP
+            from ..workflow.dynamic_widgets import get_lora_model_strength
 
             update_loaded_progress(
                 "scanning",

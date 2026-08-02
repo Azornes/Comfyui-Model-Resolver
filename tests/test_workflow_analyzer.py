@@ -7,13 +7,14 @@ from unittest.mock import patch
 from core import resolver as resolver_core
 from core import workflow_analyzer
 from core.scanner import invalidate_model_files_cache, scan_directory
+from core.workflow import dynamic_widgets
 from core.workflow_analyzer import (
     analyze_workflow_models,
-    get_lora_model_strength,
     get_workflow_model_inventory,
     identify_missing_models,
     invalidate_workflow_model_inventory_cache,
 )
+from core.workflow.dynamic_widgets import get_lora_model_strength
 
 
 def _workflow_with_model(model_path):
@@ -142,7 +143,7 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
                 }
 
                 with patch(
-                    "core.workflow_analyzer.get_dynamic_node_widget_category_hints",
+                    "core.workflow.dynamic_widgets.get_dynamic_node_widget_category_hints",
                     return_value=dynamic_hints,
                 ):
                     refs = analyze_workflow_models(workflow, available_models=[])
@@ -178,17 +179,17 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
 
         with (
             patch.object(
-                workflow_analyzer,
+                dynamic_widgets,
                 "_get_comfy_node_class",
                 return_value=FilteredMultiCategoryLoader,
             ),
             patch.object(
-                workflow_analyzer,
+                dynamic_widgets,
                 "_get_folder_paths_module",
                 return_value=fake_folder_paths,
             ),
         ):
-            hints = workflow_analyzer._build_dynamic_node_widget_category_hints(
+            hints = dynamic_widgets._build_dynamic_node_widget_category_hints(
                 "FilteredMultiCategoryLoader"
             )
 
@@ -224,17 +225,17 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
 
         with (
             patch.object(
-                workflow_analyzer,
+                dynamic_widgets,
                 "_get_comfy_node_class",
                 return_value=ControlledIndexLoader,
             ),
             patch.object(
-                workflow_analyzer,
+                dynamic_widgets,
                 "_get_folder_paths_module",
                 return_value=fake_folder_paths,
             ),
         ):
-            hints = workflow_analyzer._build_dynamic_node_widget_category_hints(
+            hints = dynamic_widgets._build_dynamic_node_widget_category_hints(
                 "ControlledIndexLoader"
             )
 
@@ -322,7 +323,7 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
         }
 
         with patch(
-            "core.workflow_analyzer.get_dynamic_node_widget_category_hints",
+            "core.workflow.dynamic_widgets.get_dynamic_node_widget_category_hints",
             return_value=dynamic_hints,
         ):
             refs = analyze_workflow_models(workflow, available_models=[])
@@ -389,7 +390,7 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
         }
 
         with patch(
-            "core.workflow_analyzer.get_dynamic_node_widget_category_hints",
+            "core.workflow.dynamic_widgets.get_dynamic_node_widget_category_hints",
             return_value=dynamic_hints,
         ):
             refs = analyze_workflow_models(workflow, available_models=[])
@@ -444,7 +445,7 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
                 }
 
                 with patch(
-                    "core.workflow_analyzer.get_dynamic_node_widget_category_hints",
+                    "core.workflow.dynamic_widgets.get_dynamic_node_widget_category_hints",
                     return_value=dynamic_hints,
                 ):
                     refs = analyze_workflow_models(workflow, available_models=[])
@@ -496,7 +497,7 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
         }
 
         with patch(
-            "core.workflow_analyzer.get_dynamic_widget_category_hints",
+            "core.workflow.dynamic_widgets.get_dynamic_widget_category_hints",
             side_effect=lambda _node, index: category_by_index[index],
         ):
             refs = analyze_workflow_models(workflow, available_models=[])
@@ -520,7 +521,7 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
         }
 
         with patch(
-            "core.workflow_analyzer.get_dynamic_widget_category_hints",
+            "core.workflow.dynamic_widgets.get_dynamic_widget_category_hints",
             return_value=[],
         ):
             refs = analyze_workflow_models(workflow, available_models=[])
@@ -869,7 +870,7 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
         ):
             with self.subTest(node_type=node_type):
                 with patch(
-                    "core.workflow_analyzer.get_dynamic_widget_category_hints",
+                    "core.workflow.dynamic_widgets.get_dynamic_widget_category_hints",
                     return_value=["model_gguf"],
                 ):
                     refs = analyze_workflow_models(
@@ -924,7 +925,7 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
             }
 
             with patch(
-                "core.workflow_analyzer.get_dynamic_widget_category_hints",
+                "core.workflow.dynamic_widgets.get_dynamic_widget_category_hints",
                 return_value=["model_gguf"],
             ):
                 refs = analyze_workflow_models(
@@ -981,7 +982,7 @@ class WorkflowCategoryHintsTests(unittest.TestCase):
             return ["checkpoints"]
 
         with patch(
-            "core.workflow_analyzer.get_dynamic_widget_category_hints",
+            "core.workflow.dynamic_widgets.get_dynamic_widget_category_hints",
             side_effect=dynamic_category_hints,
         ):
             refs = analyze_workflow_models(workflow, available_models=[])
@@ -1043,7 +1044,7 @@ class WorkflowLoraStrengthTests(unittest.TestCase):
         }
 
         with patch(
-            "core.workflow_analyzer.get_dynamic_node_widget_category_hints",
+            "core.workflow.dynamic_widgets.get_dynamic_node_widget_category_hints",
             return_value=hints,
         ):
             strength = get_lora_model_strength(node, 0)
@@ -1069,7 +1070,7 @@ class WorkflowLoraStrengthTests(unittest.TestCase):
         }
 
         with patch(
-            "core.workflow_analyzer.get_dynamic_node_widget_category_hints",
+            "core.workflow.dynamic_widgets.get_dynamic_node_widget_category_hints",
             return_value={},
         ):
             strength = get_lora_model_strength(node, 0)
@@ -1083,7 +1084,7 @@ class WorkflowLoraStrengthTests(unittest.TestCase):
         }
 
         with patch(
-            "core.workflow_analyzer.get_dynamic_node_widget_category_hints",
+            "core.workflow.dynamic_widgets.get_dynamic_node_widget_category_hints",
             return_value={},
         ):
             strength = get_lora_model_strength(node, 0)
@@ -1109,7 +1110,7 @@ class WorkflowLoraStrengthTests(unittest.TestCase):
         }
 
         with patch(
-            "core.workflow_analyzer.get_dynamic_node_widget_category_hints",
+            "core.workflow.dynamic_widgets.get_dynamic_node_widget_category_hints",
             return_value=self._easy_lora_stack_hints(),
         ):
             first_strength = get_lora_model_strength(node, 3)
@@ -1133,7 +1134,7 @@ class WorkflowLoraStrengthTests(unittest.TestCase):
         }
 
         with patch(
-            "core.workflow_analyzer.get_dynamic_node_widget_category_hints",
+            "core.workflow.dynamic_widgets.get_dynamic_node_widget_category_hints",
             return_value=self._easy_lora_stack_hints(),
         ):
             strength = get_lora_model_strength(node, 3)

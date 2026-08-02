@@ -333,7 +333,7 @@ async def test_loaded_models_route_matches_top_level_and_subgraph_lora_refs():
     with (
         patch.dict(sys.modules, {"folder_paths": None}),
         patch(
-            "core.workflow_analyzer.get_lora_model_strength",
+            "core.workflow.dynamic_widgets.get_lora_model_strength",
             return_value=0.7,
         ) as get_strength,
     ):
