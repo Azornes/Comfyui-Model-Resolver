@@ -2421,6 +2421,7 @@ export const resolveDownloadMethods = {
             }
 
             const attemptedSources = new Set();
+            const sourceErrorMessages = new Set();
             let anyFound = false;
             let hadError = false;
 
@@ -2482,12 +2483,16 @@ export const resolveDownloadMethods = {
                     const sourceError = sourceErrors[source]
                         || responseSources.map(responseSource => sourceErrors[responseSource]).find(Boolean)
                         || null;
+                    const sourceErrorMessage = sourceError
+                        ? (this.getSearchSourceErrorMessage?.(source, sourceError) || sourceError)
+                        : null;
+                    if (sourceErrorMessage) sourceErrorMessages.add(sourceErrorMessage);
 
                     const found = this.hasSearchResults(data);
                     const foundViaAnyModel = this.isAnyModelSearchResult?.(data[source]);
                     const foundMessage = foundViaAnyModel ? 'Found (Any Model)' : 'Found';
                     anyFound = anyFound || found;
-                    hadError = hadError || Boolean(sourceError);
+                    hadError = hadError || Boolean(sourceErrorMessage);
                     state.results = this.mergeSearchResults(state.results, data, {
                         searchedAt: new Date().toISOString(),
                         forceRefresh: Boolean(forceSearch)
@@ -2500,7 +2505,7 @@ export const resolveDownloadMethods = {
                     this.setSourceProgress(state, source, {
                         status: sourceError ? 'error' : (found ? 'found' : 'none'),
                         percent: 100,
-                        message: sourceError ? 'Error' : (found ? foundMessage : 'No match'),
+                        message: sourceErrorMessage || (found ? foundMessage : 'No match'),
                         error: sourceError || null
                     }, missing, { workflowKey });
 
@@ -2545,6 +2550,10 @@ export const resolveDownloadMethods = {
 
                     hadError = true;
                     attemptedSources.add(source);
+                    const sourceErrorMessage = this.getSearchSourceErrorMessage?.(source, error.message)
+                        || error.message
+                        || 'Error';
+                    sourceErrorMessages.add(sourceErrorMessage);
                     state.lastAttemptSources = Array.from(attemptedSources);
                     state.lastAttemptFound = anyFound;
                     this.clearSearchProgressTimer(searchRunId, source);
@@ -2552,7 +2561,8 @@ export const resolveDownloadMethods = {
                     this.setSourceProgress(state, source, {
                         status: 'error',
                         percent: 100,
-                        message: error.message || 'Error'
+                        message: sourceErrorMessage,
+                        error: error.message || null
                     }, missing, { workflowKey });
                     this.persistSearchStateForWorkflow(workflowKey, missing, state);
                     this.refreshSearchUiForMissing(missing, state, { workflowKey });
@@ -2590,7 +2600,9 @@ export const resolveDownloadMethods = {
                 state.lastAttemptSources = attemptedSources.size ? Array.from(attemptedSources) : sourceIds;
                 state.lastAttemptFound = anyFound;
                 state.lastAttemptError = hadError && !anyFound
-                    ? 'Search finished with errors. Check source statuses above.'
+                    ? (sourceErrorMessages.size === 1
+                        ? Array.from(sourceErrorMessages)[0]
+                        : 'Search finished with errors. Check source statuses above.')
                     : null;
                 this.persistSearchStateForWorkflow(workflowKey, missing, state);
                 this.refreshSearchUiForMissing(missing, state, { workflowKey });

@@ -273,6 +273,9 @@ export const missingBrowserMethods = {
 
         return sourceItems.map(item => {
             const status = this.getMissingSourceStatus(missing, item.source);
+            const sourceProgress = this.searchResultCache
+                ?.get(this.getMissingSearchKey(missing))
+                ?.sourceProgress?.[item.source];
             const statusClass = String(status || 'idle').replace(/[^a-z0-9_-]/gi, '');
             const label = this.getSearchSourceLabel(item.source);
             const statusLabels = {
@@ -285,7 +288,10 @@ export const missingBrowserMethods = {
                 error: 'Error',
                 idle: 'Not searched'
             };
-            const title = `${label}: ${statusLabels[status] || status}`;
+            const statusMessage = sourceProgress?.status === 'error' && sourceProgress.message
+                ? sourceProgress.message
+                : (statusLabels[status] || status);
+            const title = `${label}: ${statusMessage}`;
             const iconName = this.getSearchSourceIconName(item.source);
             const iconHtml = getSvgIcon(iconName, 'currentColor', 'mr-missing-source-icon');
             return `<span class="mr-missing-source-dot mr-missing-source-${statusClass}" data-tooltip="${this.escapeHtml(title)}" aria-label="${this.escapeHtml(title)}">${iconHtml}</span>`;

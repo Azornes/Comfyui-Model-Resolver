@@ -4,6 +4,7 @@ import { searchSourceMethods } from '../web/resolver/search/search_source_method
 
 const {
   getSearchSourceLabel,
+  getSearchSourceErrorMessage,
   getSearchSourceDefinitions,
   getSearchResultKeysForSources,
   getHashLookupSourcesForSearchSources,
@@ -49,6 +50,32 @@ test('search source labels and definitions remain stable', () => {
       { source: 'civarchive', storageKey: 'ModelResolver.searchSource.civArchiveEnabled' },
       { source: 'lora_manager_archive', storageKey: 'ModelResolver.searchSource.loraManagerArchiveEnabled' },
     ]
+  );
+});
+
+test('CivArchive availability failures receive a user-facing retry message', () => {
+  const dialog = { getSearchSourceLabel };
+  const temporaryFailure = getSearchSourceErrorMessage.call(
+    dialog,
+    'civarchive',
+    'CivArchive search failed: CivArchive search request failed (network error or timeout)'
+  );
+
+  assert.equal(
+    temporaryFailure,
+    'CivArchive may be overloaded or temporarily unavailable. Please try again later.'
+  );
+  assert.equal(
+    getSearchSourceErrorMessage.call(dialog, 'civarchive', 'CivArchive search failed: HTTP 502'),
+    temporaryFailure
+  );
+  assert.equal(
+    getSearchSourceErrorMessage.call(dialog, 'civarchive', 'CivArchive search failed: HTTP 400'),
+    'CivArchive search failed: HTTP 400'
+  );
+  assert.equal(
+    getSearchSourceErrorMessage.call(dialog, 'civitai', 'CivAI request timed out'),
+    'CivAI request timed out'
   );
 });
 

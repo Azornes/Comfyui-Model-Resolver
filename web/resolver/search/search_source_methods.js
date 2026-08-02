@@ -73,6 +73,25 @@ export const searchSourceMethods = {
         return labels[source] || source;
     },
 
+    getSearchSourceErrorMessage(source, error) {
+        const message = String(error || '').trim();
+        if (!message) {
+            return `${this.getSearchSourceLabel(source)} search failed.`;
+        }
+
+        const normalizedSource = String(source || '').trim().toLowerCase().replace(/-/g, '_');
+        const indicatesTemporaryUnavailable = (
+            /network error|timeout|timed out|connection (?:error|reset|refused)|temporarily unavailable/i.test(message)
+            || /\bHTTP\s+(?:429|5\d{2})\b/i.test(message)
+        );
+
+        if (normalizedSource === 'civarchive' && indicatesTemporaryUnavailable) {
+            return 'CivArchive may be overloaded or temporarily unavailable. Please try again later.';
+        }
+
+        return message;
+    },
+
     getSearchSourceDefinitions() {
         return [
             {
