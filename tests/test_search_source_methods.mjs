@@ -1,46 +1,19 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { searchSourceMethods } from '../web/resolver/search/search_source_methods.js';
 
-const projectRoot = path.resolve(import.meta.dirname, '..');
-const searchPanelMethodsSource = fs.readFileSync(
-  path.join(projectRoot, 'web/resolver/search/search_panel.js'),
-  'utf8'
-);
-
-function extractMethod(source, methodName, paramsPattern = '[^)]*') {
-  const signatureRegex = new RegExp(`\\n\\s+(async\\s+)?${methodName}\\s*\\(${paramsPattern}\\)\\s*\\{`);
-  const match = signatureRegex.exec(source);
-  assert.ok(match, `Could not find ${methodName}`);
-  const isAsync = Boolean(match[1]);
-
-  const parenStart = source.indexOf('(', match.index);
-  const parenEnd = source.indexOf(')', parenStart);
-  const params = source.slice(parenStart + 1, parenEnd);
-  const braceStart = source.indexOf('{', parenEnd);
-  let depth = 0;
-  for (let i = braceStart; i < source.length; i += 1) {
-    const char = source[i];
-    if (char === '{') depth += 1;
-    if (char === '}') depth -= 1;
-    if (depth === 0) {
-      return `${isAsync ? 'async ' : ''}function ${methodName}(${params}) ${source.slice(braceStart, i + 1)}`;
-    }
-  }
-  throw new Error(`Could not parse ${methodName}`);
-}
-
-const getSearchSourceLabel = eval(`(${extractMethod(searchPanelMethodsSource, 'getSearchSourceLabel')})`);
-const getSearchSourceDefinitions = eval(`(${extractMethod(searchPanelMethodsSource, 'getSearchSourceDefinitions')})`);
-const getSearchResultKeysForSources = eval(`(${extractMethod(searchPanelMethodsSource, 'getSearchResultKeysForSources')})`);
-const getHashLookupSourcesForSearchSources = eval(`(${extractMethod(searchPanelMethodsSource, 'getHashLookupSourcesForSearchSources')})`);
-const clearSearchResultsForSources = eval(`(${extractMethod(searchPanelMethodsSource, 'clearSearchResultsForSources')})`);
-const isSearchSourceEnabled = eval(`(${extractMethod(searchPanelMethodsSource, 'isSearchSourceEnabled')})`);
-const getSearchSourceDefinition = eval(`(${extractMethod(searchPanelMethodsSource, 'getSearchSourceDefinition')})`);
-const getSearchSourceEnabledMap = eval(`(${extractMethod(searchPanelMethodsSource, 'getSearchSourceEnabledMap')})`);
-const getEnabledSearchSources = eval(`(${extractMethod(searchPanelMethodsSource, 'getEnabledSearchSources')})`);
-const getSearchSourcesForSelection = eval(`(${extractMethod(searchPanelMethodsSource, 'getSearchSourcesForSelection')})`);
+const {
+  getSearchSourceLabel,
+  getSearchSourceDefinitions,
+  getSearchResultKeysForSources,
+  getHashLookupSourcesForSearchSources,
+  clearSearchResultsForSources,
+  isSearchSourceEnabled,
+  getSearchSourceDefinition,
+  getSearchSourceEnabledMap,
+  getEnabledSearchSources,
+  getSearchSourcesForSelection,
+} = searchSourceMethods;
 
 function installStorage(values = {}) {
   const previous = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');

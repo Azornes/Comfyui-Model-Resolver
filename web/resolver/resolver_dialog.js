@@ -12,6 +12,7 @@ import { optionsMethods } from "./views/options_methods.js";
 import { tabsLoadedMethods } from "./views/tabs_loaded_methods.js";
 import { downloadTargetMethods } from "./search/download_target_methods.js";
 import { searchPanelMethods } from "./search/search_panel.js";
+import { searchSourceMethods } from "./search/search_source_methods.js";
 import { queueMethods } from "./actions/queue_methods.js";
 import { queueStorageMethods } from "./actions/queue_storage_methods.js";
 import { downloadProgressMethods } from "./actions/download_progress_methods.js";
@@ -333,6 +334,7 @@ function applyDialogMethods(...sources) {
 }
 
 applyDialogMethods(
+    searchSourceMethods,
     searchPanelMethods,
     modelInfoMethods,
     renderFormatMethods,
