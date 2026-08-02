@@ -113,9 +113,9 @@ from .download.huggingface_xet import (
     run_huggingface_xet_transfer as _run_huggingface_xet_transfer,  # noqa: F401
 )
 from .download.orchestrator import (
-    download_file,  # noqa: F401
-    download_model,  # noqa: F401
-    start_background_download,  # noqa: F401
+    download_file,
+    download_model,
+    start_background_download,
 )
 from .download.previews import (
     MODEL_PREVIEW_EXTENSIONS,  # noqa: F401
@@ -137,10 +137,10 @@ from .download.previews import (
     get_existing_model_preview_path,  # noqa: F401
 )
 from .download.state import (
-    cancel_download,  # noqa: F401
-    clear_completed_downloads,  # noqa: F401
-    get_all_progress,  # noqa: F401
-    get_progress,  # noqa: F401
+    cancel_download,
+    clear_completed_downloads,
+    get_all_progress,
+    get_progress,
 )
 from .network_utils import (
     host_matches_domain,  # noqa: F401
@@ -228,5 +228,15 @@ from .settings import (
     normalize_download_backend,  # noqa: F401
     normalize_relative_subfolder,  # noqa: F401
 )
+
+__all__ = [
+    "cancel_download",
+    "clear_completed_downloads",
+    "download_file",
+    "download_model",
+    "get_all_progress",
+    "get_progress",
+    "start_background_download",
+]
 
 # End of downloader facade.
