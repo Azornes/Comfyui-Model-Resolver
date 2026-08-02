@@ -4,7 +4,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from core import downloader
+from core.download.api import context as downloader
 
 
 class DownloaderBoundaryTests(unittest.TestCase):
@@ -80,7 +80,10 @@ class DownloaderBoundaryTests(unittest.TestCase):
 
         with patch.object(downloader, "aria2_rpc_url", "http://127.0.0.1:6800/jsonrpc"), patch.object(
             downloader, "aria2_rpc_secret", "rpc-secret"
-        ), patch("core.downloader.requests.post", return_value=response) as mock_post:
+        ), patch(
+            "core.download.api.context.requests.post",
+            return_value=response,
+        ) as mock_post:
             result = downloader._aria2_rpc("aria2.getVersion")
 
         self.assertEqual({"version": "1.36"}, result)
@@ -98,7 +101,10 @@ class DownloaderBoundaryTests(unittest.TestCase):
         response.json.side_effect = ValueError("invalid json")
         with patch.object(
             downloader, "aria2_rpc_url", "http://127.0.0.1:6800/jsonrpc"
-        ), patch("core.downloader.requests.post", return_value=response), self.assertRaisesRegex(
+        ), patch(
+            "core.download.api.context.requests.post",
+            return_value=response,
+        ), self.assertRaisesRegex(
             downloader.Aria2Error, "non-JSON"
         ):
             downloader._aria2_rpc("aria2.getVersion")

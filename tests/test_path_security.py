@@ -9,9 +9,9 @@ from unittest.mock import MagicMock, patch
 
 import requests
 
-import core.downloader as downloader_module
+from core.download.api import context as downloader_module
 from core.aria2_installer import Aria2InstallError, _safe_extract_tar
-from core.downloader import (
+from core.download.api import (
     Aria2Error,
     _download_huggingface_xet,
     _resolve_aria2c_executable,
@@ -83,8 +83,8 @@ class PathSecurityTests(unittest.TestCase):
 
     def test_download_target_stays_inside_model_directory(self):
         with tempfile.TemporaryDirectory() as model_root:
-            with patch("core.downloader.get_download_directory", return_value=model_root):
-                with patch("core.downloader.download_file") as mock_download_file:
+            with patch("core.download.api.context.get_download_directory", return_value=model_root):
+                with patch("core.download.api.context.download_file") as mock_download_file:
                     expected_path = os.path.join(model_root, "evil.safetensors")
                     mock_download_file.return_value = {
                         "success": True,
@@ -107,8 +107,8 @@ class PathSecurityTests(unittest.TestCase):
 
     def test_download_subfolder_accepts_both_separator_styles(self):
         with tempfile.TemporaryDirectory() as model_root, patch(
-            "core.downloader.get_download_directory", return_value=model_root
-        ), patch("core.downloader.download_file") as mock_download_file:
+            "core.download.api.context.get_download_directory", return_value=model_root
+        ), patch("core.download.api.context.download_file") as mock_download_file:
             expected_path = os.path.join(
                 model_root,
                 "Pony",
@@ -233,12 +233,12 @@ class PathSecurityTests(unittest.TestCase):
     def test_aria2_backend_does_not_get_replaced_by_hf_xet(self):
         expected = {"success": True, "download_id": "aria-xet"}
         with patch(
-            "core.downloader._download_backend_from_settings",
+            "core.download.api.context._download_backend_from_settings",
             return_value="aria2",
         ), patch(
-            "core.downloader._download_huggingface_xet",
+            "core.download.api.context._download_huggingface_xet",
         ) as mock_xet, patch(
-            "core.downloader.download_file_with_aria2",
+            "core.download.api.context.download_file_with_aria2",
             return_value=expected,
         ) as mock_aria2:
             result = download_file(
@@ -257,31 +257,31 @@ class PathSecurityTests(unittest.TestCase):
             destination = os.path.join(temp_dir, "model.safetensors")
             Path(destination).write_bytes(b"model")
             with patch(
-                "core.downloader.load_settings",
+                "core.download.api.context.load_settings",
                 return_value={"download_backend": "aria2"},
             ), patch(
-                "core.downloader._ensure_aria2_daemon",
+                "core.download.api.context._ensure_aria2_daemon",
             ), patch(
-                "core.downloader._resolve_download_url_for_aria2",
+                "core.download.api.context._resolve_download_url_for_aria2",
                 return_value=(
                     "https://cas-bridge.xethub.hf.co/object?signature=test",
                     {"Authorization": "Bearer secret"},
                 ),
             ), patch(
-                "core.downloader._aria2_rpc",
+                "core.download.api.context._aria2_rpc",
                 return_value="test-gid",
             ) as mock_rpc, patch(
-                "core.downloader._aria2_tell_status",
+                "core.download.api.context._aria2_tell_status",
                 return_value={
                     "status": "complete",
                     "completedLength": "5",
                     "totalLength": "5",
                 },
             ), patch(
-                "core.downloader.write_model_resolver_metadata",
+                "core.download.api.context.write_model_resolver_metadata",
                 return_value="",
             ), patch(
-                "core.downloader._schedule_aria2_idle_stop",
+                "core.download.api.context._schedule_aria2_idle_stop",
             ):
                 result = download_file_with_aria2(
                     "https://huggingface.co/example/resolve/main/model.safetensors",
@@ -317,9 +317,9 @@ class PathSecurityTests(unittest.TestCase):
             {"resume-xet": {"status": "paused", "speed": 0}},
             clear=True,
         ), patch(
-            "core.downloader._resolve_download_url_for_aria2",
+            "core.download.api.context._resolve_download_url_for_aria2",
         ) as mock_resolve, patch(
-            "core.downloader._aria2_rpc",
+            "core.download.api.context._aria2_rpc",
             side_effect=fake_rpc,
         ):
             downloader_module._run_aria2_desired_state_worker("resume-xet")
@@ -338,9 +338,9 @@ class PathSecurityTests(unittest.TestCase):
         )
 
         with patch(
-            "core.downloader._aria2_rpc",
+            "core.download.api.context._aria2_rpc",
             side_effect=[transient_error, expected_status],
-        ) as mock_rpc, patch("core.downloader.time.sleep") as mock_sleep:
+        ) as mock_rpc, patch("core.download.api.context.time.sleep") as mock_sleep:
             status = downloader_module._aria2_tell_status("test-gid")
 
         self.assertEqual(expected_status, status)
@@ -361,13 +361,13 @@ class PathSecurityTests(unittest.TestCase):
             }
 
             with patch(
-                "core.downloader.get_download_directory",
+                "core.download.api.context.get_download_directory",
                 return_value=model_root,
             ), patch(
-                "core.downloader._download_backend_from_settings",
+                "core.download.api.context._download_backend_from_settings",
                 return_value="aria2",
             ), patch(
-                "core.downloader.download_file",
+                "core.download.api.context.download_file",
                 return_value=expected,
             ) as mock_download:
                 result = download_model(
@@ -386,7 +386,7 @@ class PathSecurityTests(unittest.TestCase):
             with open(executable, "wb") as handle:
                 handle.write(b"not an executable")
 
-            with patch("core.downloader.shutil.which", return_value=None):
+            with patch("core.download.api.context.shutil.which", return_value=None):
                 with self.assertRaises(Aria2Error):
                     _resolve_aria2c_executable({"aria2c_path": executable})
 
@@ -396,7 +396,7 @@ class PathSecurityTests(unittest.TestCase):
             with open(executable, "wb") as handle:
                 handle.write(b"managed executable")
 
-            with patch("core.downloader.MANAGED_ARIA2_ROOT", Path(temp_dir)):
+            with patch("core.download.api.context.MANAGED_ARIA2_ROOT", Path(temp_dir)):
                 resolved = _resolve_aria2c_executable({"aria2c_path": executable})
             self.assertEqual(os.path.realpath(executable), resolved)
 
@@ -433,7 +433,7 @@ class PathSecurityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             destination = os.path.join(temp_dir, "model.safetensors")
             with patch(
-                "core.downloader.validate_public_http_url",
+            "core.download.api.context.validate_public_http_url",
                 side_effect=lambda url: url,
             ), patch(
                 "huggingface_hub.file_download.get_hf_file_metadata",
@@ -457,7 +457,7 @@ class PathSecurityTests(unittest.TestCase):
                 ),
                 create=True,
             ), patch(
-                "core.downloader.write_model_resolver_metadata",
+                "core.download.api.context.write_model_resolver_metadata",
                 return_value=os.path.join(
                     temp_dir,
                     "model.safetensors.modelresolver.json",
@@ -597,8 +597,8 @@ class PathSecurityTests(unittest.TestCase):
                     raise PermissionError("file is still in use")
                 real_remove(path)
 
-            with patch("core.downloader.os.remove", side_effect=remove_after_lock_released), patch(
-                "core.downloader.time.sleep"
+            with patch("core.download.api.context.os.remove", side_effect=remove_after_lock_released), patch(
+                "core.download.api.context.time.sleep"
             ):
                 removed = downloader_module._delete_xet_partial_file(partial_path)
 

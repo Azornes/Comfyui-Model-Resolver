@@ -172,7 +172,7 @@ def _build_external_metadata_seed(
     if not isinstance(external_raw, dict) or not external_raw:
         return {}, external_path, ""
 
-    from .downloader import build_model_resolver_metadata
+    from .download.metadata import build_model_resolver_metadata
 
     trusted_sha256 = _trusted_external_sha256(external_raw)
     seed = build_model_resolver_metadata(

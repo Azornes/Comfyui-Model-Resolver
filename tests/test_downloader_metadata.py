@@ -8,13 +8,15 @@ from unittest.mock import MagicMock, patch
 
 from PIL import Image
 
-from core import downloader
-from core.downloader import (
-    _extract_expected_sha256,
-    build_model_resolver_metadata,
+from core.download.api import (
+    context as downloader,
     download_model,
     get_progress,
     write_model_resolver_metadata,
+)
+from core.download.metadata import (
+    _extract_expected_sha256,
+    build_model_resolver_metadata,
 )
 from core.path_utils import get_model_resolver_sidecar_path
 
@@ -287,7 +289,7 @@ class DownloaderMetadataSidecarTests(unittest.TestCase):
                 handle.write(b"abc")
 
             with patch(
-                "core.downloader.request_public_url",
+                "core.download.api.context.request_public_url",
                 return_value=(
                     response,
                     "https://image.civitai.com/example.png",
@@ -330,11 +332,11 @@ class DownloaderMetadataSidecarTests(unittest.TestCase):
         ssl_error = downloader.requests.exceptions.SSLError("certificate error")
         with (
             patch(
-                "core.downloader.request_public_url",
+                "core.download.api.context.request_public_url",
                 side_effect=ssl_error,
             ),
             patch(
-                "core.downloader._download_preview_image_with_system_trust",
+                "core.download.api.context._download_preview_image_with_system_trust",
                 return_value=b"preview-data",
             ) as fallback,
         ):
@@ -362,7 +364,7 @@ class DownloaderMetadataSidecarTests(unittest.TestCase):
                 handle.write(b"old-image")
 
             with patch(
-                "core.downloader.request_public_url",
+                "core.download.api.context.request_public_url",
                 return_value=(
                     response,
                     "https://image.civitai.com/example.mp4",
@@ -438,7 +440,10 @@ class DownloaderMetadataSidecarTests(unittest.TestCase):
                     "directory": tmpdir,
                 }
 
-            with patch("core.downloader.get_download_directory", return_value=tmpdir):
+            with patch(
+                "core.download.api.context.get_download_directory",
+                return_value=tmpdir,
+            ):
                 result = download_model(
                     "https://example.com/existing.safetensors",
                     "existing.safetensors",
@@ -478,7 +483,10 @@ class DownloaderMetadataSidecarTests(unittest.TestCase):
                     handle,
                 )
 
-            with patch("core.downloader.get_download_directory", return_value=tmpdir):
+            with patch(
+                "core.download.api.context.get_download_directory",
+                return_value=tmpdir,
+            ):
                 result = download_model(
                     "https://huggingface.co/DreamFast/repo/resolve/main/"
                     "existing.safetensors",
@@ -533,9 +541,12 @@ class DownloaderMetadataSidecarTests(unittest.TestCase):
                     "directory": tmpdir,
                 }
 
-            with patch("core.downloader.get_download_directory", return_value=tmpdir):
+            with patch(
+                "core.download.api.context.get_download_directory",
+                return_value=tmpdir,
+            ):
                 with patch(
-                    "core.downloader.calculate_file_sha256",
+                    "core.download.api.context.calculate_file_sha256",
                     side_effect=AssertionError("file hash should not be calculated"),
                 ):
                     result = download_model(
@@ -579,7 +590,10 @@ class DownloaderMetadataSidecarTests(unittest.TestCase):
                     "directory": tmpdir,
                 }
 
-            with patch("core.downloader.get_download_directory", return_value=tmpdir):
+            with patch(
+                "core.download.api.context.get_download_directory",
+                return_value=tmpdir,
+            ):
                 with patch(
                     "core.path_utils.hashlib.sha256",
                     side_effect=AssertionError("file hash should not be calculated"),
@@ -607,7 +621,10 @@ class DownloaderMetadataSidecarTests(unittest.TestCase):
             with open(model_path, "wb") as handle:
                 handle.write(b"local model")
 
-            with patch("core.downloader.get_download_directory", return_value=tmpdir):
+            with patch(
+                "core.download.api.context.get_download_directory",
+                return_value=tmpdir,
+            ):
                 result = download_model(
                     "https://example.com/existing.safetensors",
                     "existing.safetensors",

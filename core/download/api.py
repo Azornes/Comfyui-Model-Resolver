@@ -116,7 +116,6 @@ context.xet_transfers_lock = state.xet_transfers_lock
 context.load_settings = load_settings
 context.normalize_download_backend = normalize_download_backend
 context.normalize_relative_subfolder = normalize_relative_subfolder
-context._download_backend_from_settings = config.download_backend_from_settings
 context.generate_download_id = config.generate_download_id
 
 context.host_matches_domain = host_matches_domain
@@ -146,7 +145,13 @@ context.invalidate_local_hash_match_cache = invalidate_local_hash_match_cache
 
 context._extract_expected_sha256 = metadata._extract_expected_sha256
 context._normalise_metadata_file_path = metadata._normalise_metadata_file_path
+context._json_safe_metadata = metadata._json_safe_metadata
+context._coerce_int_or_value = metadata._coerce_int_or_value
+context._coerce_size = metadata._coerce_size
+context._metadata_source_value = metadata._metadata_source_value
+context._resolve_lora_manager_model_type = metadata._resolve_lora_manager_model_type
 context.build_model_resolver_metadata = metadata.build_model_resolver_metadata
+context.read_completed_metadata_sha256 = metadata.read_completed_metadata_sha256
 
 
 def _bind(function):
@@ -158,6 +163,9 @@ def _bind(function):
     return bound
 
 
+context._download_backend_from_settings = _bind(
+    config.download_backend_from_settings
+)
 context.get_download_directory = _bind(directories.get_download_directory)
 context.write_model_resolver_metadata = _bind(
     metadata.write_model_resolver_metadata
@@ -226,6 +234,7 @@ context._queue_aria2_desired_state = _bind(
     aria2_backend.queue_aria2_desired_state
 )
 context._aria2_action_error_is_ok = aria2_backend.aria2_action_error_is_ok
+context.Aria2Error = aria2_backend.Aria2Error
 context._find_free_port = aria2_backend.find_free_port
 context._parse_aria2_int = aria2_backend.parse_aria2_int
 context._resolve_aria2_completed_path = aria2_backend.resolve_aria2_completed_path
@@ -262,6 +271,25 @@ def cancel_download(download_id: str) -> bool:
 
 def clear_completed_downloads():
     return state.clear_completed_downloads(_state_dependencies())
+
+
+context.get_progress = get_progress
+context.get_all_progress = get_all_progress
+context.cancel_download = cancel_download
+context.clear_completed_downloads = clear_completed_downloads
+
+
+class _BoundHuggingFaceXetProgressAdapter(
+    huggingface_xet.HuggingFaceXetProgressAdapter
+):
+    """Bind the composed context for direct progress adapter consumers."""
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        kwargs.setdefault("dependencies", context)
+        super().__init__(*args, **kwargs)
+
+
+context._HuggingFaceXetProgressAdapter = _BoundHuggingFaceXetProgressAdapter
 
 
 def _download_file(*args: Any, **kwargs: Any) -> Dict[str, Any]:
@@ -325,3 +353,50 @@ resume_download = context.resume_download
 start_aria2_daemon = context.start_aria2_daemon
 stop_aria2_daemon = context.stop_aria2_daemon
 write_model_resolver_metadata = context.write_model_resolver_metadata
+
+# Internal test and integration seams remain available from the composed module,
+# while the public facade above exports only supported download operations.
+Aria2Error = context.Aria2Error
+_aria2_action_error_is_ok = context._aria2_action_error_is_ok
+_aria2_rpc = context._aria2_rpc
+_aria2_tell_status = context._aria2_tell_status
+_delete_partial_download_files = context._delete_partial_download_files
+_delete_python_partial_download_file = context._delete_python_partial_download_file
+_delete_xet_partial_file = context._delete_xet_partial_file
+_download_backend_from_settings = context._download_backend_from_settings
+_download_huggingface_xet = context._download_huggingface_xet
+_ensure_aria2_daemon = context._ensure_aria2_daemon
+_read_aria2_version = context._read_aria2_version
+_resolve_aria2c_executable = context._resolve_aria2c_executable
+_resolve_download_url_for_aria2 = context._resolve_download_url_for_aria2
+_run_aria2_desired_state_worker = context._run_aria2_desired_state_worker
+_schedule_aria2_idle_stop = context._schedule_aria2_idle_stop
+_sanitize_download_error = context._sanitize_download_error
+_json_safe_metadata = context._json_safe_metadata
+_coerce_int_or_value = context._coerce_int_or_value
+_coerce_size = context._coerce_size
+_extract_expected_sha256 = context._extract_expected_sha256
+_metadata_source_value = context._metadata_source_value
+_normalise_metadata_file_path = context._normalise_metadata_file_path
+_resolve_lora_manager_model_type = context._resolve_lora_manager_model_type
+build_download_headers = context.build_download_headers
+build_model_resolver_metadata = context.build_model_resolver_metadata
+calculate_file_sha256 = context.calculate_file_sha256
+download_file_with_aria2 = context.download_file_with_aria2
+read_completed_metadata_sha256 = context.read_completed_metadata_sha256
+_parse_aria2_int = context._parse_aria2_int
+_resolve_aria2_completed_path = context._resolve_aria2_completed_path
+
+download_progress = context.download_progress
+download_lock = context.download_lock
+cancelled_downloads = context.cancelled_downloads
+aria2_lock = context.aria2_lock
+aria2_transfers = context.aria2_transfers
+aria2_action_locks = context.aria2_action_locks
+aria2_desired_states = context.aria2_desired_states
+xet_transfers = context.xet_transfers
+xet_transfers_lock = context.xet_transfers_lock
+aria2_rpc_url = context.aria2_rpc_url
+aria2_rpc_secret = context.aria2_rpc_secret
+ARIA2_STATUS_RPC_RETRY_DELAY = context.ARIA2_STATUS_RPC_RETRY_DELAY
+MANAGED_ARIA2_ROOT = context.MANAGED_ARIA2_ROOT

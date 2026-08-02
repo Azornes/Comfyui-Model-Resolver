@@ -9,7 +9,7 @@ from unittest.mock import patch, MagicMock, AsyncMock
 import requests
 
 # Ensure we import core modules correctly
-from core.downloader import (
+from core.download.api import (
     write_model_resolver_metadata,
     download_model,
     get_progress,
@@ -264,7 +264,7 @@ class ModelResolverRobustnessTests(unittest.TestCase):
                 }
 
             # Act
-            with patch("core.downloader.get_download_directory", return_value=tmpdir):
+            with patch("core.download.api.context.get_download_directory", return_value=tmpdir):
                 result = download_model(
                     url="https://example.com/downloaded_model.safetensors",
                     filename=model_file,
@@ -289,17 +289,17 @@ class ModelResolverRobustnessTests(unittest.TestCase):
             response.iter_content.return_value = [payload[:8], payload[8:]]
 
             with (
-                patch("core.downloader.get_download_directory", return_value=tmpdir),
-                patch("core.downloader._download_backend_from_settings", return_value="python"),
+                patch("core.download.api.context.get_download_directory", return_value=tmpdir),
+                patch("core.download.api.context._download_backend_from_settings", return_value="python"),
                 patch(
-                    "core.downloader.request_public_url",
+                    "core.download.api.context.request_public_url",
                     return_value=(
                         response,
                         "https://example.com/streamed.safetensors",
                         {},
                     ),
                 ),
-                patch("core.downloader.write_model_resolver_metadata", return_value=""),
+                patch("core.download.api.context.write_model_resolver_metadata", return_value=""),
             ):
                 result = download_model(
                     "https://example.com/streamed.safetensors",
@@ -329,17 +329,17 @@ class ModelResolverRobustnessTests(unittest.TestCase):
             response.iter_content.return_value = [payload]
 
             with (
-                patch("core.downloader.get_download_directory", return_value=tmpdir),
-                patch("core.downloader._download_backend_from_settings", return_value="python"),
+                patch("core.download.api.context.get_download_directory", return_value=tmpdir),
+                patch("core.download.api.context._download_backend_from_settings", return_value="python"),
                 patch(
-                    "core.downloader.request_public_url",
+                    "core.download.api.context.request_public_url",
                     return_value=(
                         response,
                         "https://example.com/mismatched.safetensors",
                         {},
                     ),
                 ),
-                patch("core.downloader.write_model_resolver_metadata") as write_metadata,
+                patch("core.download.api.context.write_model_resolver_metadata") as write_metadata,
             ):
                 result = download_model(
                     "https://example.com/mismatched.safetensors",
@@ -401,7 +401,7 @@ class ModelResolverRobustnessTests(unittest.TestCase):
         mock_response2.status_code = 200
 
         with patch("requests.get", side_effect=[mock_response1, mock_response2]) as mock_get, patch(
-            "core.downloader.validate_public_http_url",
+            "core.download.api.context.validate_public_http_url",
             side_effect=lambda value: value,
         ), patch(
             "core.network_utils.validate_public_http_url",
@@ -460,7 +460,7 @@ class ModelResolverRobustnessTests(unittest.TestCase):
 
         # Act
         with patch("socket.socket.bind", side_effect=OSError("Address already in use")), \
-             patch("core.downloader._read_aria2_version", return_value="1.36.0"), \
+             patch("core.download.api.context._read_aria2_version", return_value="1.36.0"), \
              patch("subprocess.Popen") as mock_popen:
             result = start_aria2_daemon(settings)
 
@@ -502,7 +502,7 @@ class ModelResolverRobustnessTests(unittest.TestCase):
 
             # Act
             with patch("requests.get", return_value=mock_response), \
-                 patch("core.downloader.get_download_directory", return_value=tmpdir):
+                 patch("core.download.api.context.get_download_directory", return_value=tmpdir):
                 result = download_model(
                     url="https://example.com/failed_download.safetensors",
                     filename=model_file,

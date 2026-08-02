@@ -796,7 +796,7 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
     def test_downloader_calculate_file_sha256(self):
         import tempfile
 
-        from core.downloader import calculate_file_sha256
+        from core.download.api import calculate_file_sha256
         with tempfile.TemporaryDirectory() as tmpdir:
             file_path = os.path.join(tmpdir, "test.txt")
             with open(file_path, "wb") as f:

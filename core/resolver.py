@@ -89,7 +89,7 @@ def _normalize_download_match_path(path: Any) -> str:
 
 def _get_active_downloads_by_path() -> Dict[str, Dict[str, Any]]:
     try:
-        from .downloader import get_all_progress
+        from .download.api import get_all_progress
 
         progress_items = get_all_progress()
     except Exception:
