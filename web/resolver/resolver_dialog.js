@@ -14,6 +14,7 @@ import { downloadTargetMethods } from "./search/download_target_methods.js";
 import { searchPanelMethods } from "./search/search_panel.js";
 import { searchSourceMethods } from "./search/search_source_methods.js";
 import { baseModelAliasMethods } from "./search/base_model_alias_methods.js";
+import { searchHashMethods } from "./search/search_hash_methods.js";
 import { queueMethods } from "./actions/queue_methods.js";
 import { queueStorageMethods } from "./actions/queue_storage_methods.js";
 import { downloadProgressMethods } from "./actions/download_progress_methods.js";
@@ -337,6 +338,7 @@ function applyDialogMethods(...sources) {
 applyDialogMethods(
     searchSourceMethods,
     baseModelAliasMethods,
+    searchHashMethods,
     searchPanelMethods,
     modelInfoMethods,
     renderFormatMethods,

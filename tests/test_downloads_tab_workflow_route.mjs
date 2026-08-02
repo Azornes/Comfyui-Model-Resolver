@@ -19,6 +19,7 @@ import {
 } from '../web/resolver/node_context_menu.js';
 import { startSplitterDrag } from '../web/resolver/utils/splitter_drag.js';
 import { baseModelAliasMethods } from '../web/resolver/search/base_model_alias_methods.js';
+import { searchHashMethods } from '../web/resolver/search/search_hash_methods.js';
 import {
   getCustomNodeModelAdapter,
   getCustomNodeModelCategory,
@@ -5039,10 +5040,12 @@ test('missing model preview shows accepted GGUF format next to its category', ()
 });
 
 test('hash match label map numbers distinct matched hashes', () => {
-  const normalizeSearchResultSha256 = eval(`(${extractMethod(searchPanelMethodsSource, 'normalizeSearchResultSha256')})`);
-  const getLocalMatchHash = eval(`(${extractMethod(searchPanelMethodsSource, 'getLocalMatchHash')})`);
-  const collectHashLabelMapHashes = eval(`(${extractMethod(searchPanelMethodsSource, 'collectHashLabelMapHashes')})`);
-  const getHashMatchLabelMap = eval(`(${extractMethod(searchPanelMethodsSource, 'getHashMatchLabelMap')})`);
+  const {
+    normalizeSearchResultSha256,
+    getLocalMatchHash,
+    collectHashLabelMapHashes,
+    getHashMatchLabelMap,
+  } = searchHashMethods;
   const firstHash = 'a'.repeat(64);
   const secondHash = 'b'.repeat(64);
   const dialog = {
@@ -5068,9 +5071,11 @@ test('hash match label map numbers distinct matched hashes', () => {
 });
 
 test('search result hash labels use linked local hash identity', () => {
-  const normalizeSearchResultSha256 = eval(`(${extractMethod(searchPanelMethodsSource, 'normalizeSearchResultSha256')})`);
-  const getSearchResultSha256 = eval(`(${extractMethod(searchPanelMethodsSource, 'getSearchResultSha256')})`);
-  const getHashMatchLabelForSearchResult = eval(`(${extractMethod(searchPanelMethodsSource, 'getHashMatchLabelForSearchResult')})`);
+  const {
+    normalizeSearchResultSha256,
+    getSearchResultSha256,
+    getHashMatchLabelForSearchResult,
+  } = searchHashMethods;
   const getSearchResultMatchDisplay = eval(`(${extractMethod(searchPanelMethodsSource, 'getSearchResultMatchDisplay')})`);
   const sha256 = 'd'.repeat(64);
   const hashLabelMap = new Map([[sha256, 'Hash 2']]);
@@ -5098,11 +5103,13 @@ test('search result hash labels use linked local hash identity', () => {
 });
 
 test('local hash identities link search results across sources by sha', () => {
-  const normalizeSearchResultSha256 = eval(`(${extractMethod(searchPanelMethodsSource, 'normalizeSearchResultSha256')})`);
-  const getLocalMatchHash = eval(`(${extractMethod(searchPanelMethodsSource, 'getLocalMatchHash')})`);
-  const getSearchResultSha256 = eval(`(${extractMethod(searchPanelMethodsSource, 'getSearchResultSha256')})`);
-  const normalizeHashLookupSourceKey = eval(`(${extractMethod(searchPanelMethodsSource, 'normalizeHashLookupSourceKey')})`);
-  const getLocalHashMatchIdentitiesForResult = eval(`(${extractMethod(searchPanelMethodsSource, 'getLocalHashMatchIdentitiesForResult')})`);
+  const {
+    normalizeSearchResultSha256,
+    getLocalMatchHash,
+    getSearchResultSha256,
+    normalizeHashLookupSourceKey,
+    getLocalHashMatchIdentitiesForResult,
+  } = searchHashMethods;
   const sha256 = 'e'.repeat(64);
   const dialog = {
     normalizeSearchResultSha256,
@@ -5127,8 +5134,7 @@ test('local hash identities link search results across sources by sha', () => {
 });
 
 test('remote hash sync fetches local matches by selected result sha', async () => {
-  const normalizeSearchResultSha256 = eval(`(${extractMethod(searchPanelMethodsSource, 'normalizeSearchResultSha256')})`);
-  const getSearchResultSha256 = eval(`(${extractMethod(searchPanelMethodsSource, 'getSearchResultSha256')})`);
+  const { normalizeSearchResultSha256, getSearchResultSha256 } = searchHashMethods;
   const getExistingLocalHashMatchesForSha = eval(`(${extractMethod(resolveDownloadMethodsSource, 'getExistingLocalHashMatchesForSha')})`);
   const syncRemoteHashMatchesForResult = eval(`(${extractMethod(resolveDownloadMethodsSource, 'syncRemoteHashMatchesForResult')})`);
   const sha256 = 'f'.repeat(64);
