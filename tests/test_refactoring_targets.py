@@ -13,13 +13,17 @@ if parent_dir not in sys.path:
 
 # Import submodules dynamically to patch them before any higher level modules run setup_routes
 settings_mod = importlib.import_module("comfyui-model-resolver.core.settings")
-downloader_mod = importlib.import_module("comfyui-model-resolver.core.downloader")
+download_api_mod = importlib.import_module("comfyui-model-resolver.core.download.api")
 
 mock_load_settings = MagicMock(return_value={"aria2c_path": "default_path"})
 mock_get_aria2_status = MagicMock(return_value={"status": "running"})
 
 patch_load_settings = patch.object(settings_mod, "load_settings", mock_load_settings)
-patch_get_aria2_status = patch.object(downloader_mod, "get_aria2_status", mock_get_aria2_status)
+patch_get_aria2_status = patch.object(
+    download_api_mod,
+    "get_aria2_status",
+    mock_get_aria2_status,
+)
 
 patch_load_settings.start()
 patch_get_aria2_status.start()

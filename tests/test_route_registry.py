@@ -139,8 +139,8 @@ def test_register_routes_skips_optional_download_routes_when_unavailable(
     route_environment,
 ):
     extension, routes = route_environment
-    downloader_module_name = f"{PACKAGE_NAME}.core.downloader"
-    monkeypatch.setitem(sys.modules, downloader_module_name, None)
+    download_api_module_name = f"{PACKAGE_NAME}.core.download.api"
+    monkeypatch.setitem(sys.modules, download_api_module_name, None)
 
     result = registry_module.register_routes(extension)
 
