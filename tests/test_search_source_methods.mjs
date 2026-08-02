@@ -36,8 +36,30 @@ const getSearchSourceDefinitions = eval(`(${extractMethod(searchPanelMethodsSour
 const getSearchResultKeysForSources = eval(`(${extractMethod(searchPanelMethodsSource, 'getSearchResultKeysForSources')})`);
 const getHashLookupSourcesForSearchSources = eval(`(${extractMethod(searchPanelMethodsSource, 'getHashLookupSourcesForSearchSources')})`);
 const clearSearchResultsForSources = eval(`(${extractMethod(searchPanelMethodsSource, 'clearSearchResultsForSources')})`);
+const isSearchSourceEnabled = eval(`(${extractMethod(searchPanelMethodsSource, 'isSearchSourceEnabled')})`);
+const getSearchSourceDefinition = eval(`(${extractMethod(searchPanelMethodsSource, 'getSearchSourceDefinition')})`);
+const getSearchSourceEnabledMap = eval(`(${extractMethod(searchPanelMethodsSource, 'getSearchSourceEnabledMap')})`);
 const getEnabledSearchSources = eval(`(${extractMethod(searchPanelMethodsSource, 'getEnabledSearchSources')})`);
 const getSearchSourcesForSelection = eval(`(${extractMethod(searchPanelMethodsSource, 'getSearchSourcesForSelection')})`);
+
+function installStorage(values = {}) {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  const storage = {
+    getItem(key) {
+      return Object.prototype.hasOwnProperty.call(values, key) ? values[key] : null;
+    },
+    setItem() {},
+    removeItem() {},
+  };
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: storage,
+  });
+  return () => {
+    if (previous) Object.defineProperty(globalThis, 'localStorage', previous);
+    else delete globalThis.localStorage;
+  };
+}
 
 test('search source labels and definitions remain stable', () => {
   const dialog = {};
@@ -104,6 +126,31 @@ test('clearing selected search sources preserves unrelated results and hash matc
     custom: results.custom,
     local_hash_matches: [{ hash_lookup_source: 'civarchive', id: 'keep' }],
   });
+});
+
+test('source enablement defaults to enabled and honors persisted false flags', () => {
+  const restoreStorage = installStorage({
+    'ModelResolver.searchSource.civitaiEnabled': 'false',
+  });
+  try {
+    const dialog = {
+      getSearchSourceDefinitions,
+      getSearchSourceDefinition,
+      isSearchSourceEnabled,
+    };
+    assert.equal(isSearchSourceEnabled.call(dialog, 'civitai'), false);
+    assert.equal(isSearchSourceEnabled.call(dialog, 'huggingface'), true);
+    assert.equal(isSearchSourceEnabled.call(dialog, 'all'), true);
+    assert.deepEqual(getSearchSourceEnabledMap.call(dialog), {
+      local: true,
+      huggingface: true,
+      civitai: false,
+      civarchive: true,
+      lora_manager_archive: true,
+    });
+  } finally {
+    restoreStorage();
+  }
 });
 
 test('enabled source selection falls back to local and respects available sources', () => {
