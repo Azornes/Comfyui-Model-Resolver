@@ -13,7 +13,7 @@ import threading
 import time  # noqa: F401
 from collections import deque  # noqa: F401
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Optional
 from urllib.parse import urlparse  # noqa: F401
 
 import requests  # noqa: F401
@@ -137,10 +137,19 @@ from .download.previews import (
     get_existing_model_preview_path,  # noqa: F401
 )
 from .download.state import (
+    aria2_action_locks,  # noqa: F401
+    aria2_desired_states,  # noqa: F401
+    aria2_lock,  # noqa: F401
+    aria2_transfers,  # noqa: F401
     cancel_download,
+    cancelled_downloads,  # noqa: F401
     clear_completed_downloads,
+    download_lock,  # noqa: F401
+    download_progress,  # noqa: F401
     get_all_progress,
     get_progress,
+    xet_transfers,  # noqa: F401
+    xet_transfers_lock,  # noqa: F401
 )
 from .network_utils import (
     host_matches_domain,  # noqa: F401
@@ -170,22 +179,12 @@ try:
 except ImportError:
     folder_paths = None
 
-# Download state tracking
-download_progress: Dict[str, Dict[str, Any]] = {}
-download_lock = threading.Lock()
-cancelled_downloads: set = set()
-aria2_lock = threading.RLock()
 aria2_process: Optional[subprocess.Popen] = None
 aria2_rpc_url = ""
 aria2_rpc_secret = ""
 aria2_rpc_lock = threading.Lock()
-aria2_transfers: Dict[str, Dict[str, Any]] = {}
-aria2_action_locks: Dict[str, threading.Lock] = {}
-aria2_desired_states: Dict[str, Dict[str, Any]] = {}
 aria2_idle_timer: Optional[threading.Timer] = None
 aria2_process_started_by_resolver = False
-xet_transfers: Dict[str, Dict[str, Any]] = {}
-xet_transfers_lock = threading.Lock()
 
 # Speed calculation settings
 SPEED_HISTORY_SIZE = 5  # Number of samples for smoothing

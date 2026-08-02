@@ -1,7 +1,20 @@
 """Download progress and cancellation state operations."""
 
 import importlib
+import threading
 from typing import Any, Dict, Optional
+
+# Shared mutable download state.  The facade re-exports these same objects
+# during the migration, so there is only one owner and no duplicated state.
+download_progress: Dict[str, Dict[str, Any]] = {}
+download_lock = threading.Lock()
+cancelled_downloads: set = set()
+aria2_lock = threading.RLock()
+aria2_transfers: Dict[str, Dict[str, Any]] = {}
+aria2_action_locks: Dict[str, Any] = {}
+aria2_desired_states: Dict[str, Dict[str, Any]] = {}
+xet_transfers: Dict[str, Dict[str, Any]] = {}
+xet_transfers_lock = threading.Lock()
 
 
 def _downloader_module():
@@ -47,9 +60,7 @@ def cancel_download(download_id: str) -> bool:
         try:
             xet_cancel()
         except Exception as exc:
-            facade.log.warning(
-                f"Could not cancel Hugging Face Xet transfer {download_id}: {exc}"
-            )
+            facade.log.warning(f"Could not cancel Hugging Face Xet transfer {download_id}: {exc}")
     return True
 
 
