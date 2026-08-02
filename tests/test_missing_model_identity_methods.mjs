@@ -1,58 +1,6 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-
-const projectRoot = path.resolve(import.meta.dirname, '..');
-const lifecycleGraphMethodsSource = fs.readFileSync(
-  path.join(projectRoot, 'web/resolver/shell/lifecycle_graph_methods.js'),
-  'utf8'
-);
-
-function extractMethod(source, methodName) {
-  const signature = new RegExp(`\\n\\s+${methodName}\\s*\\(`);
-  const match = signature.exec(source);
-  assert.ok(match, `Could not find ${methodName}`);
-  const parenStart = source.indexOf('(', match.index);
-  let parenDepth = 0;
-  let parenEnd = -1;
-  for (let i = parenStart; i < source.length; i += 1) {
-    if (source[i] === '(') parenDepth += 1;
-    if (source[i] === ')') parenDepth -= 1;
-    if (parenDepth === 0) {
-      parenEnd = i;
-      break;
-    }
-  }
-  const params = source.slice(parenStart + 1, parenEnd);
-  const braceStart = source.indexOf('{', parenEnd);
-  let braceDepth = 0;
-  for (let i = braceStart; i < source.length; i += 1) {
-    if (source[i] === '{') braceDepth += 1;
-    if (source[i] === '}') braceDepth -= 1;
-    if (braceDepth === 0) {
-      return `function ${methodName}(${params}) ${source.slice(braceStart, i + 1)}`;
-    }
-  }
-  throw new Error(`Could not parse ${methodName}`);
-}
-
-globalThis.getCustomNodeOriginalIdentity = missing => missing.original_identity || '';
-
-const methodNames = [
-  'encodeMissingModelKeyPart',
-  'getMissingModelIdentityPart',
-  'getMissingModelKey',
-  'getMissingModelWorkflowSlotKeys',
-  'findMissingModelReplacement',
-  'resolvePreservedMissingModelKey',
-  'remapMissingModelKeys',
-  'getMissingModelDomKey',
-];
-const methods = Object.fromEntries(methodNames.map(methodName => [
-  methodName,
-  eval(`(${extractMethod(lifecycleGraphMethodsSource, methodName)})`),
-]));
+import { workflowIdentityMethods as methods } from '../web/resolver/shell/workflow_identity_methods.js';
 
 test('missing model identities and keys encode workflow scope deterministically', () => {
   const dialog = { ...methods, getMissingModelIdentityPart: methods.getMissingModelIdentityPart };
@@ -65,7 +13,7 @@ test('missing model identities and keys encode workflow scope deterministically'
   };
 
   assert.equal(dialog.encodeMissingModelKeyPart('check point'), 'check%20point');
-  assert.equal(dialog.getMissingModelIdentityPart({ original_identity: 'custom-id' }), 'custom-id');
+  assert.equal(dialog.getMissingModelIdentityPart({ custom_node_original_identity: 'custom-id' }), 'custom-id');
   assert.equal(dialog.getMissingModelIdentityPart(missing), missing.original_path);
   assert.equal(
     dialog.getMissingModelKey(missing),

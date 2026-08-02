@@ -21,6 +21,7 @@ import { startSplitterDrag } from '../web/resolver/utils/splitter_drag.js';
 import { baseModelAliasMethods } from '../web/resolver/search/base_model_alias_methods.js';
 import { searchHashMethods } from '../web/resolver/search/search_hash_methods.js';
 import { missingModelStateMethods } from '../web/resolver/views/missing_model_state_methods.js';
+import { workflowIdentityMethods } from '../web/resolver/shell/workflow_identity_methods.js';
 import {
   getCustomNodeModelAdapter,
   getCustomNodeModelCategory,
@@ -1832,13 +1833,15 @@ test('Power Lora Loader strength updates only its Loaded Models chip and cache',
 });
 
 test('changed workflow model keeps the selected row and batch checkbox for the same loader slot', () => {
-  const encodeMissingModelKeyPart = eval(`(${extractMethod(lifecycleGraphMethodsSource, 'encodeMissingModelKeyPart')})`);
-  const getMissingModelIdentityPart = eval(`(${extractMethod(lifecycleGraphMethodsSource, 'getMissingModelIdentityPart')})`);
-  const getMissingModelKey = eval(`(${extractMethod(lifecycleGraphMethodsSource, 'getMissingModelKey')})`);
-  const getMissingModelWorkflowSlotKeys = eval(`(${extractMethod(lifecycleGraphMethodsSource, 'getMissingModelWorkflowSlotKeys')})`);
-  const findMissingModelReplacement = eval(`(${extractMethod(lifecycleGraphMethodsSource, 'findMissingModelReplacement')})`);
-  const resolvePreservedMissingModelKey = eval(`(${extractMethod(lifecycleGraphMethodsSource, 'resolvePreservedMissingModelKey')})`);
-  const remapMissingModelKeys = eval(`(${extractMethod(lifecycleGraphMethodsSource, 'remapMissingModelKeys')})`);
+  const {
+    encodeMissingModelKeyPart,
+    getMissingModelIdentityPart,
+    getMissingModelKey,
+    getMissingModelWorkflowSlotKeys,
+    findMissingModelReplacement,
+    resolvePreservedMissingModelKey,
+    remapMissingModelKeys,
+  } = workflowIdentityMethods;
   const dialog = {
     encodeMissingModelKeyPart,
     getMissingModelIdentityPart,

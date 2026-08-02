@@ -18,6 +18,7 @@ import { searchHashMethods } from "./search/search_hash_methods.js";
 import { searchStateMethods } from "./search/search_state_methods.js";
 import { missingModelStateMethods } from "./views/missing_model_state_methods.js";
 import { modelHashCompareMethods } from "./views/model_hash_compare_methods.js";
+import { workflowIdentityMethods } from "./shell/workflow_identity_methods.js";
 import { queueMethods } from "./actions/queue_methods.js";
 import { queueStorageMethods } from "./actions/queue_storage_methods.js";
 import { downloadProgressMethods } from "./actions/download_progress_methods.js";
@@ -345,6 +346,7 @@ applyDialogMethods(
     searchStateMethods,
     missingModelStateMethods,
     modelHashCompareMethods,
+    workflowIdentityMethods,
     searchPanelMethods,
     modelInfoMethods,
     renderFormatMethods,
