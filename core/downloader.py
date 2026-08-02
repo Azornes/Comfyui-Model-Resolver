@@ -296,6 +296,11 @@ for _aria2_dependency_name in (
 for _download_dependency_name in (
     "get_download_directory",
     "write_model_resolver_metadata",
+    "create_model_preview",
+    "_download_preview_asset",
+    "_download_preview_asset_with_system_trust",
+    "_download_preview_image",
+    "_download_preview_image_with_system_trust",
 ):
     globals()[_download_dependency_name] = _bind_download_dependencies(
         globals()[_download_dependency_name]

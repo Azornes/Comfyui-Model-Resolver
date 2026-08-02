@@ -1,6 +1,5 @@
 """Preview media handling for downloaded models."""
 
-import importlib
 import os
 import tempfile
 from io import BytesIO
@@ -36,9 +35,11 @@ MODEL_PREVIEW_EXTENSIONS = (
 )
 
 
-def _downloader_module():
-    """Return the facade module so existing dependency patches remain effective."""
-    return importlib.import_module("core.downloader")
+def _require_dependencies(dependencies: Any) -> Any:
+    """Return explicitly supplied services for preview downloads."""
+    if dependencies is None:
+        raise RuntimeError("preview download dependencies were not provided")
+    return dependencies
 
 
 def get_existing_model_preview_path(dest_path: str) -> str:
@@ -115,8 +116,13 @@ def _rewrite_civitai_preview_url(url: str, media_type: str) -> str:
     return urlunparse(parsed._replace(path=parsed.path.replace("/original=true", transform, 1)))
 
 
-def _download_preview_asset(url: str, media_type: str = "image") -> bytes:
-    facade = _downloader_module()
+def _download_preview_asset(
+    url: str,
+    media_type: str = "image",
+    *,
+    dependencies: Any = None,
+) -> bytes:
+    facade = _require_dependencies(dependencies)
     max_bytes = (
         MODEL_PREVIEW_VIDEO_MAX_DOWNLOAD_BYTES
         if media_type == "video"
@@ -167,14 +173,24 @@ def _download_preview_asset(url: str, media_type: str = "image") -> bytes:
             response.close()
 
 
-def _download_preview_image(url: str) -> bytes:
+def _download_preview_image(
+    url: str,
+    *,
+    dependencies: Any = None,
+) -> bytes:
     """Download an image preview, retained for compatibility with callers."""
-    return _download_preview_asset(url, media_type="image")
+    return _download_preview_asset(
+        url,
+        media_type="image",
+        dependencies=dependencies,
+    )
 
 
 def _download_preview_asset_with_system_trust(
     url: str,
     media_type: str = "image",
+    *,
+    dependencies: Any = None,
 ) -> bytes:
     import ssl
     from urllib.request import (
@@ -184,7 +200,7 @@ def _download_preview_asset_with_system_trust(
         build_opener,
     )
 
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     max_bytes = (
         MODEL_PREVIEW_VIDEO_MAX_DOWNLOAD_BYTES
         if media_type == "video"
@@ -241,9 +257,17 @@ def _download_preview_asset_with_system_trust(
         return b"".join(chunks)
 
 
-def _download_preview_image_with_system_trust(url: str) -> bytes:
+def _download_preview_image_with_system_trust(
+    url: str,
+    *,
+    dependencies: Any = None,
+) -> bytes:
     """Download an image through the Windows trust store fallback."""
-    return _download_preview_asset_with_system_trust(url, media_type="image")
+    return _download_preview_asset_with_system_trust(
+        url,
+        media_type="image",
+        dependencies=dependencies,
+    )
 
 
 def _save_preview_video(video_data: bytes, preview_path: str) -> None:
@@ -334,8 +358,11 @@ def _save_optimized_jpeg(image_data: bytes, preview_path: str) -> None:
 def create_model_preview(
     dest_path: str,
     metadata: Optional[Dict[str, Any]] = None,
+    *,
+    dependencies: Any = None,
 ) -> str:
     """Create adjacent preview media using LoRA Manager-compatible behavior."""
+    dependencies = _require_dependencies(dependencies)
     existing_path = get_existing_model_preview_path(dest_path)
     source = metadata if isinstance(metadata, dict) else {}
     preview_url, media_type = _first_model_preview_asset(source)
@@ -361,7 +388,11 @@ def create_model_preview(
 
         for candidate in attempts:
             try:
-                video_data = _download_preview_asset(candidate, media_type="video")
+                video_data = _download_preview_asset(
+                    candidate,
+                    media_type="video",
+                    dependencies=dependencies,
+                )
                 _save_preview_video(video_data, preview_path)
                 log.info(f"Video preview saved: {preview_path}")
                 return preview_path
@@ -382,7 +413,10 @@ def create_model_preview(
             attempts.append(candidate)
     for candidate in attempts:
         try:
-            image_data = _download_preview_image(candidate)
+            image_data = _download_preview_image(
+                candidate,
+                dependencies=dependencies,
+            )
             if not image_data:
                 continue
             _save_optimized_jpeg(image_data, preview_path)
