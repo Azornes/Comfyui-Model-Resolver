@@ -1,6 +1,5 @@
 """Low-level aria2 helpers used by the downloader facade."""
 
-import importlib
 import socket
 from typing import Any, Dict, Optional
 
@@ -13,14 +12,16 @@ class Aria2Error(RuntimeError):
     """Raised when the aria2 backend cannot start or process a request."""
 
 
-def _downloader_module():
-    """Return the facade module so existing dependency patches remain effective."""
-    return importlib.import_module("core.downloader")
+def _require_dependencies(dependencies: Any) -> Any:
+    """Return explicitly supplied services for the aria2 backend."""
+    if dependencies is None:
+        raise RuntimeError("aria2 backend dependencies were not provided")
+    return dependencies
 
 
-def try_certifi_ca_path() -> str:
+def try_certifi_ca_path(*, dependencies: Any = None) -> str:
     """Return certifi's CA bundle path when it is available."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     try:
         import certifi  # type: ignore
 
@@ -30,9 +31,13 @@ def try_certifi_ca_path() -> str:
         return ""
 
 
-def resolve_aria2c_executable(settings: Optional[Dict[str, Any]] = None) -> str:
+def resolve_aria2c_executable(
+    settings: Optional[Dict[str, Any]] = None,
+    *,
+    dependencies: Any = None,
+) -> str:
     """Resolve aria2c while restricting explicit paths to the managed install."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     active_settings = (
         settings if isinstance(settings, dict) else facade.load_settings()
     )
@@ -99,9 +104,13 @@ def resolve_aria2_completed_path(status: Dict[str, Any], default_path: str) -> s
     return default_path
 
 
-def delete_partial_download_files(dest_path: str) -> None:
+def delete_partial_download_files(
+    dest_path: str,
+    *,
+    dependencies: Any = None,
+) -> None:
     """Delete an incomplete model and its aria2 control sidecar."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     for path in (dest_path, f"{dest_path}.aria2"):
         try:
             if path and facade.os.path.exists(path):
@@ -110,9 +119,13 @@ def delete_partial_download_files(dest_path: str) -> None:
             log.warning(f"Could not delete incomplete download file {path}: {exc}")
 
 
-def delete_python_partial_download_file(partial_path: str) -> None:
+def delete_python_partial_download_file(
+    partial_path: str,
+    *,
+    dependencies: Any = None,
+) -> None:
     """Remove a partial Python download without touching the final model path."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     try:
         if partial_path and facade.os.path.exists(partial_path):
             facade.os.remove(partial_path)
@@ -122,9 +135,14 @@ def delete_python_partial_download_file(partial_path: str) -> None:
         )
 
 
-def delete_xet_partial_file(partial_path: str, attempts: int = 5) -> bool:
+def delete_xet_partial_file(
+    partial_path: str,
+    attempts: int = 5,
+    *,
+    dependencies: Any = None,
+) -> bool:
     """Delete a stopped Xet partial file, retrying while Windows releases it."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     attempts = max(1, int(attempts or 1))
     last_error: Optional[Exception] = None
     for attempt in range(attempts):
@@ -155,9 +173,11 @@ def aria2_action_error_is_ok(status: str, message: str) -> bool:
 def resolve_download_url_for_aria2(
     url: str,
     headers: Optional[Dict[str, str]] = None,
+    *,
+    dependencies: Any = None,
 ) -> tuple[str, Dict[str, str]]:
     """Preflight an aria2 URL and validate every redirect before RPC handoff."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     request_headers = facade.build_download_headers(url, headers)
     source_host = facade.urlparse(str(url or "")).hostname
     is_huggingface_source = facade.host_matches_domain(
@@ -188,9 +208,9 @@ def resolve_download_url_for_aria2(
             response.close()
 
 
-def read_aria2_version(executable: str) -> str:
+def read_aria2_version(executable: str, *, dependencies: Any = None) -> str:
     """Read the installed aria2 version without raising process errors."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     if not executable:
         return ""
     try:
@@ -228,17 +248,25 @@ def read_aria2_version(executable: str) -> str:
     return first_line
 
 
-def get_aria2_status(settings: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def get_aria2_status(
+    settings: Optional[Dict[str, Any]] = None,
+    *,
+    dependencies: Any = None,
+) -> Dict[str, Any]:
     """Return aria2 availability, daemon and active-transfer information."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     active_settings = (
         settings if isinstance(settings, dict) else facade.load_settings()
     )
     configured_path = str(active_settings.get("aria2c_path") or "").strip()
     try:
-        resolved_path = facade._resolve_aria2c_executable(active_settings)
+        resolved_path = facade._resolve_aria2c_executable(
+            active_settings,
+        )
         available = True
-        version = facade._read_aria2_version(resolved_path)
+        version = facade._read_aria2_version(
+            resolved_path,
+        )
         error = ""
     except Exception as exc:
         resolved_path = ""
@@ -271,9 +299,14 @@ def get_aria2_status(settings: Optional[Dict[str, Any]] = None) -> Dict[str, Any
     }
 
 
-def aria2_rpc(method: str, params: Optional[list[Any]] = None) -> Any:
+def aria2_rpc(
+    method: str,
+    params: Optional[list[Any]] = None,
+    *,
+    dependencies: Any = None,
+) -> Any:
     """Call the local aria2 JSON-RPC endpoint."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     if not facade.aria2_rpc_url:
         raise Aria2Error("aria2 RPC endpoint is not initialized")
 
@@ -310,32 +343,40 @@ def aria2_rpc(method: str, params: Optional[list[Any]] = None) -> Any:
         return body.get("result")
 
 
-def aria2_ping() -> bool:
+def aria2_ping(*, dependencies: Any = None) -> bool:
     """Check whether the local aria2 RPC endpoint responds."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     try:
-        result = facade._aria2_rpc("aria2.getVersion", [])
+        result = facade._aria2_rpc(
+            "aria2.getVersion",
+            [],
+        )
         return isinstance(result, dict)
     except Exception:
         return False
 
 
-def cancel_aria2_idle_timer_locked() -> None:
+def cancel_aria2_idle_timer_locked(*, dependencies: Any = None) -> None:
     """Cancel the pending idle timer while holding the aria2 lock."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     if facade.aria2_idle_timer is not None:
         facade.aria2_idle_timer.cancel()
         facade.aria2_idle_timer = None
 
 
-def aria2_has_active_transfers_locked() -> bool:
+def aria2_has_active_transfers_locked(*, dependencies: Any = None) -> bool:
     """Return whether aria2 has active resolver-owned transfers."""
-    return bool(_downloader_module().aria2_transfers)
+    facade = _require_dependencies(dependencies)
+    return bool(facade.aria2_transfers)
 
 
-def stop_aria2_daemon(reason: str = "manual") -> Dict[str, Any]:
+def stop_aria2_daemon(
+    reason: str = "manual",
+    *,
+    dependencies: Any = None,
+) -> Dict[str, Any]:
     """Stop the aria2 RPC process started by Model Resolver."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     with facade.aria2_lock:
         facade._cancel_aria2_idle_timer_locked()
         process = facade.aria2_process
@@ -384,15 +425,23 @@ def stop_aria2_daemon(reason: str = "manual") -> Dict[str, Any]:
     return {"success": True, "stopped": True, "message": "aria2 daemon stopped"}
 
 
-def start_aria2_daemon(settings: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def start_aria2_daemon(
+    settings: Optional[Dict[str, Any]] = None,
+    *,
+    dependencies: Any = None,
+) -> Dict[str, Any]:
     """Start the aria2 RPC process without creating a download."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     active_settings = (
         settings if isinstance(settings, dict) else facade.load_settings()
     )
     try:
-        facade._ensure_aria2_daemon(active_settings)
-        status = facade.get_aria2_status(active_settings)
+        facade._ensure_aria2_daemon(
+            active_settings,
+        )
+        status = facade.get_aria2_status(
+            active_settings,
+        )
         return {
             **status,
             "success": True,
@@ -401,7 +450,9 @@ def start_aria2_daemon(settings: Optional[Dict[str, Any]] = None) -> Dict[str, A
         }
     except Exception as exc:
         try:
-            status = facade.get_aria2_status(active_settings)
+            status = facade.get_aria2_status(
+                active_settings,
+            )
         except Exception:
             status = {}
         return {
@@ -412,9 +463,9 @@ def start_aria2_daemon(settings: Optional[Dict[str, Any]] = None) -> Dict[str, A
         }
 
 
-def aria2_idle_stop_worker() -> None:
+def aria2_idle_stop_worker(*, dependencies: Any = None) -> None:
     """Stop a resolver-owned daemon after its idle timeout."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     with facade.aria2_lock:
         facade.aria2_idle_timer = None
 
@@ -433,9 +484,9 @@ def aria2_idle_stop_worker() -> None:
     facade.stop_aria2_daemon(reason="idle")
 
 
-def schedule_aria2_idle_stop() -> None:
+def schedule_aria2_idle_stop(*, dependencies: Any = None) -> None:
     """Schedule daemon shutdown when no resolver transfer remains active."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     settings = facade.load_settings()
     if not settings.get("aria2_auto_stop_daemon", True):
         return
@@ -457,16 +508,24 @@ def schedule_aria2_idle_stop() -> None:
         facade.aria2_idle_timer.start()
 
 
-def ensure_aria2_daemon(settings: Optional[Dict[str, Any]] = None) -> None:
+def ensure_aria2_daemon(
+    settings: Optional[Dict[str, Any]] = None,
+    *,
+    dependencies: Any = None,
+) -> None:
     """Start or reuse the resolver-owned aria2 daemon."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     active_settings = (
         settings if isinstance(settings, dict) else facade.load_settings()
     )
     with facade.aria2_lock:
         facade._cancel_aria2_idle_timer_locked()
         process = facade.aria2_process
-        if process is not None and process.poll() is None and facade._aria2_ping():
+        if (
+            process is not None
+            and process.poll() is None
+            and facade._aria2_ping()
+        ):
             return
 
         if process is not None and process.poll() is None:
@@ -477,7 +536,9 @@ def ensure_aria2_daemon(settings: Optional[Dict[str, Any]] = None) -> None:
         facade.aria2_process = None
         facade.aria2_process_started_by_resolver = False
 
-        executable = facade._resolve_aria2c_executable(active_settings)
+        executable = facade._resolve_aria2c_executable(
+            active_settings,
+        )
         port = facade._find_free_port()
         facade.aria2_rpc_secret = facade.secrets.token_hex(16)
         facade.aria2_rpc_url = f"http://127.0.0.1:{port}/jsonrpc"
@@ -544,9 +605,9 @@ def ensure_aria2_daemon(settings: Optional[Dict[str, Any]] = None) -> None:
         )
 
 
-def aria2_tell_status(gid: str) -> Dict[str, Any]:
+def aria2_tell_status(gid: str, *, dependencies: Any = None) -> Dict[str, Any]:
     """Read an aria2 transfer status with retries for transient resets."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     keys = [
         "gid",
         "status",
@@ -558,7 +619,10 @@ def aria2_tell_status(gid: str) -> Dict[str, Any]:
     ]
     for attempt in range(facade.ARIA2_STATUS_RPC_RETRIES):
         try:
-            result = facade._aria2_rpc("aria2.tellStatus", [gid, keys])
+            result = facade._aria2_rpc(
+                "aria2.tellStatus",
+                [gid, keys],
+            )
             return result if isinstance(result, dict) else {}
         except (facade.requests.exceptions.ConnectionError, facade.requests.exceptions.Timeout):
             if attempt + 1 >= facade.ARIA2_STATUS_RPC_RETRIES:
@@ -579,9 +643,11 @@ def download_file_with_aria2(
     headers: Optional[Dict[str, str]] = None,
     metadata: Optional[Dict[str, Any]] = None,
     category: str = "",
+    *,
+    dependencies: Any = None,
 ) -> Dict[str, Any]:
     """Download a file with an aria2c JSON-RPC process."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     settings = facade.load_settings()
     result = {
         "success": False,
@@ -612,7 +678,9 @@ def download_file_with_aria2(
 
     try:
         facade.os.makedirs(facade.os.path.dirname(dest_path), exist_ok=True)
-        facade._ensure_aria2_daemon(settings)
+        facade._ensure_aria2_daemon(
+            settings,
+        )
         aria2_url, request_headers = facade._resolve_download_url_for_aria2(
             url,
             headers,
@@ -653,7 +721,10 @@ def download_file_with_aria2(
         if header_values:
             options["header"] = header_values
 
-        gid = facade._aria2_rpc("aria2.addUri", [[aria2_url], options])
+        gid = facade._aria2_rpc(
+            "aria2.addUri",
+            [[aria2_url], options],
+        )
         if not isinstance(gid, str) or not gid:
             raise Aria2Error("aria2 did not return a download gid")
 
@@ -672,19 +743,26 @@ def download_file_with_aria2(
         while True:
             if download_id in facade.cancelled_downloads:
                 try:
-                    facade._aria2_rpc("aria2.forceRemove", [gid])
+                    facade._aria2_rpc(
+                        "aria2.forceRemove",
+                        [gid],
+                    )
                 except Exception:
                     pass
                 with facade.download_lock:
                     if download_id in facade.download_progress:
                         facade.download_progress[download_id]["status"] = "cancelled"
                         facade.download_progress[download_id]["speed"] = 0
-                facade._delete_partial_download_files(dest_path)
+                facade._delete_partial_download_files(
+                    dest_path,
+                )
                 facade.cancelled_downloads.discard(download_id)
                 result["error"] = "Download cancelled"
                 return result
 
-            status = facade._aria2_tell_status(gid)
+            status = facade._aria2_tell_status(
+                gid,
+            )
             state = str(status.get("status") or "")
             total_size = facade._parse_aria2_int(status.get("totalLength"))
             downloaded = facade._parse_aria2_int(status.get("completedLength"))
@@ -794,7 +872,9 @@ def download_file_with_aria2(
                 with facade.download_lock:
                     facade.download_progress[download_id]["status"] = "cancelled"
                     facade.download_progress[download_id]["speed"] = 0
-                facade._delete_partial_download_files(dest_path)
+                facade._delete_partial_download_files(
+                    dest_path,
+                )
                 facade.cancelled_downloads.discard(download_id)
                 result["error"] = "Download cancelled"
                 return result
@@ -820,18 +900,30 @@ def download_file_with_aria2(
         facade._schedule_aria2_idle_stop()
 
 
-def force_remove_aria2_transfer(download_id: str, gid: str) -> None:
+def force_remove_aria2_transfer(
+    download_id: str,
+    gid: str,
+    *,
+    dependencies: Any = None,
+) -> None:
     """Request removal of an active aria2 transfer."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     try:
-        facade._aria2_rpc("aria2.forceRemove", [gid])
+        facade._aria2_rpc(
+            "aria2.forceRemove",
+            [gid],
+        )
     except Exception as exc:
         log.warning(f"Could not cancel aria2 download {download_id}: {exc}")
 
 
-def get_aria2_action_lock(download_id: str) -> Any:
+def get_aria2_action_lock(
+    download_id: str,
+    *,
+    dependencies: Any = None,
+) -> Any:
     """Return the per-download lock used to serialize aria2 actions."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     with facade.aria2_lock:
         lock = facade.aria2_action_locks.get(download_id)
         if lock is None:
@@ -843,19 +935,25 @@ def get_aria2_action_lock(download_id: str) -> Any:
 def set_download_progress_status(
     download_id: str,
     status: str,
+    *,
+    dependencies: Any = None,
     **updates: Any,
 ) -> None:
     """Update a download status while holding the progress lock."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     with facade.download_lock:
         if download_id in facade.download_progress:
             facade.download_progress[download_id]["status"] = status
             facade.download_progress[download_id].update(updates)
 
 
-def run_aria2_desired_state_worker(download_id: str) -> None:
+def run_aria2_desired_state_worker(
+    download_id: str,
+    *,
+    dependencies: Any = None,
+) -> None:
     """Apply the latest queued pause/resume request for a transfer."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     while True:
         with facade.aria2_lock:
             desired = dict(facade.aria2_desired_states.get(download_id) or {})
@@ -877,8 +975,13 @@ def run_aria2_desired_state_worker(download_id: str) -> None:
 
         method = "aria2.forcePause" if desired_status == "paused" else "aria2.unpause"
         try:
-            with facade._get_aria2_action_lock(download_id):
-                facade._aria2_rpc(method, [gid])
+            with facade._get_aria2_action_lock(
+                download_id,
+            ):
+                facade._aria2_rpc(
+                    method,
+                    [gid],
+                )
             current_speed = facade.download_progress.get(download_id, {}).get(
                 "speed",
                 0,
@@ -889,7 +992,10 @@ def run_aria2_desired_state_worker(download_id: str) -> None:
                 speed=0 if desired_status == "paused" else current_speed,
             )
         except Exception as exc:
-            if facade._aria2_action_error_is_ok(desired_status, str(exc)):
+            if facade._aria2_action_error_is_ok(
+                desired_status,
+                str(exc),
+            ):
                 current_speed = facade.download_progress.get(download_id, {}).get(
                     "speed",
                     0,
@@ -921,9 +1027,14 @@ def run_aria2_desired_state_worker(download_id: str) -> None:
                 return
 
 
-def queue_aria2_desired_state(download_id: str, status: str) -> Dict[str, Any]:
+def queue_aria2_desired_state(
+    download_id: str,
+    status: str,
+    *,
+    dependencies: Any = None,
+) -> Dict[str, Any]:
     """Queue an aria2 pause/resume state change and start its worker."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     transfer = facade.aria2_transfers.get(download_id)
     if not transfer or not transfer.get("gid"):
         return {"success": False, "error": "Download action is not available yet"}
@@ -958,17 +1069,23 @@ def queue_aria2_desired_state(download_id: str, status: str) -> Dict[str, Any]:
     return {"success": True, "message": message}
 
 
-def pause_download(download_id: str) -> Dict[str, Any]:
+def pause_download(download_id: str, *, dependencies: Any = None) -> Dict[str, Any]:
     """Pause an aria2 download. Built-in Python downloads cannot be paused."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     if download_id in facade.cancelled_downloads:
         return {"success": False, "error": "Download is being cancelled"}
-    return facade._queue_aria2_desired_state(download_id, "paused")
+    return facade._queue_aria2_desired_state(
+        download_id,
+        "paused",
+    )
 
 
-def resume_download(download_id: str) -> Dict[str, Any]:
+def resume_download(download_id: str, *, dependencies: Any = None) -> Dict[str, Any]:
     """Resume a paused aria2 download."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     if download_id in facade.cancelled_downloads:
         return {"success": False, "error": "Download is being cancelled"}
-    return facade._queue_aria2_desired_state(download_id, "downloading")
+    return facade._queue_aria2_desired_state(
+        download_id,
+        "downloading",
+    )

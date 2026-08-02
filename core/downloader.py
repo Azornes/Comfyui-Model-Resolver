@@ -243,6 +243,47 @@ from .settings import (
 )
 
 
+def _bind_aria2_dependencies(function):
+    """Bind the downloader facade as explicit aria2 backend dependencies."""
+    def bound(*args: Any, **kwargs: Any):
+        kwargs.setdefault("dependencies", sys.modules[__name__])
+        return function(*args, **kwargs)
+
+    return bound
+
+
+for _aria2_dependency_name in (
+    "download_file_with_aria2",
+    "get_aria2_status",
+    "pause_download",
+    "resume_download",
+    "start_aria2_daemon",
+    "stop_aria2_daemon",
+    "_aria2_ping",
+    "_aria2_rpc",
+    "_aria2_tell_status",
+    "_cancel_aria2_idle_timer_locked",
+    "_delete_partial_download_files",
+    "_delete_python_partial_download_file",
+    "_delete_xet_partial_file",
+    "_ensure_aria2_daemon",
+    "_force_remove_aria2_transfer",
+    "_get_aria2_action_lock",
+    "_read_aria2_version",
+    "_resolve_aria2c_executable",
+    "_resolve_download_url_for_aria2",
+    "_run_aria2_desired_state_worker",
+    "_schedule_aria2_idle_stop",
+    "_set_download_progress_status",
+    "_try_certifi_ca_path",
+    "_aria2_has_active_transfers_locked",
+    "_queue_aria2_desired_state",
+):
+    globals()[_aria2_dependency_name] = _bind_aria2_dependencies(
+        globals()[_aria2_dependency_name]
+    )
+
+
 def _state_dependencies() -> DownloadStateDependencies:
     """Build state dependencies from the current facade patchpoints."""
     return DownloadStateDependencies(
