@@ -9,6 +9,7 @@ import os  # noqa: F401
 import secrets  # noqa: F401
 import shutil  # noqa: F401
 import subprocess
+import sys
 import threading
 import time  # noqa: F401
 from collections import deque  # noqa: F401
@@ -113,9 +114,13 @@ from .download.huggingface_xet import (
     run_huggingface_xet_transfer as _run_huggingface_xet_transfer,  # noqa: F401
 )
 from .download.orchestrator import (
-    download_file,
-    download_model,
-    start_background_download,
+    download_file as _download_file,
+)
+from .download.orchestrator import (
+    download_model as _download_model,
+)
+from .download.orchestrator import (
+    start_background_download as _start_background_download,
 )
 from .download.previews import (
     MODEL_PREVIEW_EXTENSIONS,  # noqa: F401
@@ -270,6 +275,21 @@ def cancel_download(download_id: str) -> bool:
 
 def clear_completed_downloads():
     return _clear_completed_downloads(_state_dependencies())
+
+
+def download_file(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    kwargs["dependencies"] = sys.modules[__name__]
+    return _download_file(*args, **kwargs)
+
+
+def download_model(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    kwargs["dependencies"] = sys.modules[__name__]
+    return _download_model(*args, **kwargs)
+
+
+def start_background_download(*args: Any, **kwargs: Any) -> str:
+    kwargs["dependencies"] = sys.modules[__name__]
+    return _start_background_download(*args, **kwargs)
 
 
 __all__ = [

@@ -1,12 +1,6 @@
 """High-level download orchestration used by the downloader facade."""
 
-import importlib
 from typing import Any, Callable, Dict, Optional
-
-
-def _downloader_module():
-    """Return the facade so runtime patches and settings remain effective."""
-    return importlib.import_module("core.downloader")
 
 
 def download_file(
@@ -18,15 +12,16 @@ def download_file(
     progress_callback: Optional[Callable[[int, int], None]] = None,
     metadata: Optional[Dict[str, Any]] = None,
     category: str = "",
+    dependencies: Any = None,
 ) -> Dict[str, Any]:
     """
     Download a file from URL with progress tracking and speed calculation.
 
-    The facade provides the mutable state and backend helpers. Resolving those
-    dependencies at call time preserves the existing patch points used by the
-    ComfyUI routes and tests.
+    The caller supplies mutable state and backend helpers explicitly.
     """
-    facade = _downloader_module()
+    if dependencies is None:
+        raise RuntimeError("Download orchestration dependencies were not provided")
+    facade = dependencies
     hashlib = facade.hashlib
     os = facade.os
     requests = facade.requests
@@ -138,9 +133,7 @@ def download_file(
             log.debug("Validated download redirect target")
 
         total_size = facade.extract_response_file_size(response) or 0
-        total_size_str = (
-            facade.format_bytes(total_size) if total_size > 0 else "unknown"
-        )
+        total_size_str = facade.format_bytes(total_size) if total_size > 0 else "unknown"
         log.info(f"Size: {total_size_str}")
 
         with download_lock:
@@ -166,59 +159,30 @@ def download_file(
                     time_delta = current_time - last_speed_update
                     if time_delta >= 0.5:
                         bytes_delta = downloaded - last_downloaded
-                        instant_speed = (
-                            bytes_delta / time_delta if time_delta > 0 else 0
-                        )
+                        instant_speed = bytes_delta / time_delta if time_delta > 0 else 0
                         speed_history.append(instant_speed)
-                        smoothed_speed = (
-                            sum(speed_history) / len(speed_history)
-                            if speed_history
-                            else 0
-                        )
+                        smoothed_speed = sum(speed_history) / len(speed_history) if speed_history else 0
                         last_speed_update = current_time
                         last_downloaded = downloaded
 
                         with download_lock:
-                            download_progress[download_id][
-                                "downloaded"
-                            ] = downloaded
-                            download_progress[download_id]["speed"] = int(
-                                smoothed_speed
-                            )
+                            download_progress[download_id]["downloaded"] = downloaded
+                            download_progress[download_id]["speed"] = int(smoothed_speed)
                             if total_size > 0:
-                                download_progress[download_id]["progress"] = int(
-                                    (downloaded / total_size) * 100
-                                )
+                                download_progress[download_id]["progress"] = int((downloaded / total_size) * 100)
 
                         if current_time - last_cli_log >= cli_log_interval:
                             last_cli_log = current_time
-                            progress_pct = (
-                                int((downloaded / total_size) * 100)
-                                if total_size > 0
-                                else 0
-                            )
+                            progress_pct = int((downloaded / total_size) * 100) if total_size > 0 else 0
                             downloaded_str = facade.format_bytes(downloaded)
-                            total_str = (
-                                facade.format_bytes(total_size)
-                                if total_size > 0
-                                else "?"
-                            )
-                            speed_str = (
-                                facade.format_bytes(int(smoothed_speed)) + "/s"
-                            )
-                            log.info(
-                                f"Progress: {downloaded_str} / {total_str} "
-                                f"({progress_pct}%) - {speed_str}"
-                            )
+                            total_str = facade.format_bytes(total_size) if total_size > 0 else "?"
+                            speed_str = facade.format_bytes(int(smoothed_speed)) + "/s"
+                            log.info(f"Progress: {downloaded_str} / {total_str} ({progress_pct}%) - {speed_str}")
                     else:
                         with download_lock:
-                            download_progress[download_id][
-                                "downloaded"
-                            ] = downloaded
+                            download_progress[download_id]["downloaded"] = downloaded
                             if total_size > 0:
-                                download_progress[download_id]["progress"] = int(
-                                    (downloaded / total_size) * 100
-                                )
+                                download_progress[download_id]["progress"] = int((downloaded / total_size) * 100)
 
                     if progress_callback:
                         progress_callback(downloaded, total_size)
@@ -244,15 +208,9 @@ def download_file(
                 try:
                     os.replace(partial_path, bad_path)
                 except OSError as exc:
-                    log.warning(
-                        "Could not preserve SHA256-mismatched download at "
-                        f"{bad_path}: {exc}"
-                    )
+                    log.warning(f"Could not preserve SHA256-mismatched download at {bad_path}: {exc}")
                     bad_path = ""
-                error_msg = (
-                    f"SHA256 mismatch: expected {expected_sha256}, "
-                    f"got {actual_sha256}"
-                )
+                error_msg = f"SHA256 mismatch: expected {expected_sha256}, got {actual_sha256}"
                 if bad_path:
                     error_msg += f"; file kept at {bad_path}"
                 with download_lock:
@@ -321,33 +279,19 @@ def download_file(
             status_code = exc.response.status_code
             if status_code in [401, 403]:
                 if "huggingface.co" in url:
-                    error_msg = (
-                        f"Unauthorized (HTTP {status_code}): "
-                        "HuggingFace token may be required."
-                    )
+                    error_msg = f"Unauthorized (HTTP {status_code}): HuggingFace token may be required."
                 elif "civitai.com" in url:
-                    error_msg = (
-                        f"Unauthorized (HTTP {status_code}): "
-                        "CivitAI API key may be required."
-                    )
+                    error_msg = f"Unauthorized (HTTP {status_code}): CivitAI API key may be required."
                 else:
-                    error_msg = (
-                        f"Unauthorized (HTTP {status_code}): "
-                        "Authentication required."
-                    )
+                    error_msg = f"Unauthorized (HTTP {status_code}): Authentication required."
             elif status_code == 404:
-                error_msg = (
-                    "Model not found (HTTP 404): "
-                    "The file may have been moved or deleted."
-                )
+                error_msg = "Model not found (HTTP 404): The file may have been moved or deleted."
 
         with download_lock:
             download_progress[download_id]["status"] = "error"
             download_progress[download_id]["error"] = error_msg
         result["error"] = error_msg
-        log.error(
-            f"✗ Download failed: {facade.get_filename_from_path(dest_path)}"
-        )
+        log.error(f"✗ Download failed: {facade.get_filename_from_path(dest_path)}")
         log.error(f"Error: {error_msg}")
 
         if not published:
@@ -359,9 +303,7 @@ def download_file(
             download_progress[download_id]["status"] = "error"
             download_progress[download_id]["error"] = error_msg
         result["error"] = error_msg
-        log.error(
-            f"✗ Download failed: {facade.get_filename_from_path(dest_path)}"
-        )
+        log.error(f"✗ Download failed: {facade.get_filename_from_path(dest_path)}")
         log.error(f"Error: {error_msg}")
         log.error(f"Download error: {exc}", exc_info=True)
 
@@ -387,9 +329,12 @@ def download_model(
     subfolder: str = "",
     base_directory: str = "",
     metadata: Optional[Dict[str, Any]] = None,
+    dependencies: Any = None,
 ) -> Dict[str, Any]:
     """Validate a model target and delegate the actual transfer."""
-    facade = _downloader_module()
+    if dependencies is None:
+        raise RuntimeError("Download orchestration dependencies were not provided")
+    facade = dependencies
     os = facade.os
     download_lock = facade.download_lock
     download_progress = facade.download_progress
@@ -451,10 +396,7 @@ def download_model(
                 if metadata_sha256 == expected_sha256:
                     log.info(f"File exists, metadata SHA256 matches: {dest_path}")
                 else:
-                    log.info(
-                        "File exists, metadata SHA256 differs from source; "
-                        f"verifying file content: {dest_path}"
-                    )
+                    log.info(f"File exists, metadata SHA256 differs from source; verifying file content: {dest_path}")
                     existing_sha256 = ""
 
             try:
@@ -476,10 +418,7 @@ def download_model(
                     )
                     sha256_source = detected_sha256_source[0]
             except Exception as exc:
-                error_msg = (
-                    "File already exists and its SHA256 could not be verified: "
-                    f"{dest_path}"
-                )
+                error_msg = f"File already exists and its SHA256 could not be verified: {dest_path}"
                 log.warning(f"{error_msg} ({exc})")
                 return {
                     "success": False,
@@ -489,9 +428,7 @@ def download_model(
                 }
 
             if existing_sha256 == expected_sha256:
-                message = (
-                    "This model is already downloaded and matches the source hash."
-                )
+                message = "This model is already downloaded and matches the source hash."
                 metadata_path = (
                     facade.write_model_resolver_metadata(
                         dest_path,
@@ -523,9 +460,7 @@ def download_model(
                             }
                         )
                         if metadata_path:
-                            download_progress[download_id][
-                                "metadata_path"
-                            ] = metadata_path
+                            download_progress[download_id]["metadata_path"] = metadata_path
                 log.info(f"{message} Path: {dest_path}")
                 return {
                     "success": True,
@@ -538,13 +473,8 @@ def download_model(
                     "sha256_source": sha256_source,
                 }
 
-            error_msg = (
-                "File already exists, but its SHA256 does not match the selected "
-                f"source: {dest_path}"
-            )
-            log.warning(
-                f"{error_msg} (existing={existing_sha256}, expected={expected_sha256})"
-            )
+            error_msg = f"File already exists, but its SHA256 does not match the selected source: {dest_path}"
+            log.warning(f"{error_msg} (existing={existing_sha256}, expected={expected_sha256})")
             return {
                 "success": False,
                 "download_id": download_id,
@@ -579,9 +509,12 @@ def start_background_download(
     subfolder: str = "",
     base_directory: str = "",
     metadata: Optional[Dict[str, Any]] = None,
+    dependencies: Any = None,
 ) -> str:
     """Start model validation and download in a background thread."""
-    facade = _downloader_module()
+    if dependencies is None:
+        raise RuntimeError("Download orchestration dependencies were not provided")
+    facade = dependencies
     os = facade.os
     time = facade.time
     download_progress = facade.download_progress
@@ -593,11 +526,7 @@ def start_background_download(
     initial_directory = facade.get_download_directory(category, base_directory) or ""
     if initial_directory and subfolder:
         initial_directory = os.path.join(initial_directory, *subfolder.split("/"))
-    initial_path = (
-        os.path.join(initial_directory, filename)
-        if initial_directory and filename
-        else ""
-    )
+    initial_path = os.path.join(initial_directory, filename) if initial_directory and filename else ""
 
     with download_lock:
         download_progress[download_id] = {
@@ -638,9 +567,7 @@ def start_background_download(
                         if result.get("path"):
                             result_path = result["path"]
                             download_progress[download_id]["path"] = result_path
-                            download_progress[download_id]["directory"] = os.path.dirname(
-                                result_path
-                            )
+                            download_progress[download_id]["directory"] = os.path.dirname(result_path)
         except Exception as exc:
             with download_lock:
                 download_progress[download_id] = {
