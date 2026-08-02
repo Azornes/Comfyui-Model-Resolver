@@ -18,6 +18,7 @@ import {
   toResolverContextModel,
 } from '../web/resolver/node_context_menu.js';
 import { startSplitterDrag } from '../web/resolver/utils/splitter_drag.js';
+import { baseModelAliasMethods } from '../web/resolver/search/base_model_alias_methods.js';
 import {
   getCustomNodeModelAdapter,
   getCustomNodeModelCategory,
@@ -3007,10 +3008,12 @@ test('native Xet progress bar uses live network bytes against the known final fi
 });
 
 test('base model alias resolves FLUX KREA as Flux.1 Krea', () => {
-  const normalizeBaseModelToken = eval(`(${extractMethod(searchPanelMethodsSource, 'normalizeBaseModelToken')})`);
-  const getBaseModelTokenVariants = eval(`(${extractMethod(searchPanelMethodsSource, 'getBaseModelTokenVariants')})`);
-  const resolveBaseModelAliasExact = eval(`(${extractMethod(searchPanelMethodsSource, 'resolveBaseModelAliasExact')})`);
-  const resolveBaseModelAlias = eval(`(${extractMethod(searchPanelMethodsSource, 'resolveBaseModelAlias')})`);
+  const {
+    normalizeBaseModelToken,
+    getBaseModelTokenVariants,
+    resolveBaseModelAliasExact,
+    resolveBaseModelAlias,
+  } = baseModelAliasMethods;
   const dialog = {
     baseModels: {
       base_models: [
@@ -3126,10 +3129,12 @@ test('auto base model keeps workflow path context when a delayed search result d
 });
 
 test('base model path mapping ignores conflicting full-path base model', () => {
-  const normalizeBaseModelToken = eval(`(${extractMethod(searchPanelMethodsSource, 'normalizeBaseModelToken')})`);
-  const getBaseModelTokenVariants = eval(`(${extractMethod(searchPanelMethodsSource, 'getBaseModelTokenVariants')})`);
-  const resolveBaseModelAliasExact = eval(`(${extractMethod(searchPanelMethodsSource, 'resolveBaseModelAliasExact')})`);
-  const resolveBaseModelAlias = eval(`(${extractMethod(searchPanelMethodsSource, 'resolveBaseModelAlias')})`);
+  const {
+    normalizeBaseModelToken,
+    getBaseModelTokenVariants,
+    resolveBaseModelAliasExact,
+    resolveBaseModelAlias,
+  } = baseModelAliasMethods;
   const isBaseModelPathMappingCompatible = eval(`(${extractMethod(downloadTargetMethodsSource, 'isBaseModelPathMappingCompatible')})`);
   const resolveBaseModelPathMapping = eval(`(${extractMethod(downloadTargetMethodsSource, 'resolveBaseModelPathMapping')})`);
   const dialog = {
