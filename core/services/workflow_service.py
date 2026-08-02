@@ -7,23 +7,25 @@ class WorkflowService:
     """Execute workflow analysis and local-resolution operations."""
 
     def __init__(self, context: RouteContext):
-        extension = context.get("self")
+        extension = context.require("self")
         self.analysis_progress = extension.analysis_progress
         self._update_analysis_progress = extension._update_analysis_progress
         self.logger = extension.logger
-        self.analyze_and_find_matches = context.get("analyze_and_find_matches")
-        self.apply_resolution = context.get("apply_resolution")
-        self.asyncio = context.get("asyncio")
-        self.download_available = context.get("download_available")
-        self.fetch_remote_file_size_cached = context.get("fetch_remote_file_size_cached")
-        self.get_filename_from_path = context.get("get_filename_from_path")
+        self.analyze_and_find_matches = context.require("analyze_and_find_matches")
+        self.apply_resolution = context.require("apply_resolution")
+        self.asyncio = context.require("asyncio")
+        self.download_available = context.require("download_available")
+        self.fetch_remote_file_size_cached = context.require("fetch_remote_file_size_cached")
+        self.get_filename_from_path = context.require("get_filename_from_path")
         self.get_popular_model_url = context.get("get_popular_model_url")
-        self.invalidate_local_hash_match_cache = context.get("invalidate_local_hash_match_cache")
-        self.search_local_matches = context.get("search_local_matches")
+        self.invalidate_local_hash_match_cache = context.require("invalidate_local_hash_match_cache")
+        self.search_local_matches = context.require("search_local_matches")
         self.search_model_list = context.get("search_model_list")
-        self.should_skip_existing_custom_node_reference = context.get("should_skip_existing_custom_node_reference")
-        self.to_bool = context.get("to_bool")
-        self.web = context.get("web")
+        self.should_skip_existing_custom_node_reference = context.require(
+            "should_skip_existing_custom_node_reference"
+        )
+        self.to_bool = context.require("to_bool")
+        self.web = context.require("web")
 
     async def analyze_workflow(self, request):
         """Analyze workflow and return missing models with matches."""
@@ -265,4 +267,3 @@ class WorkflowService:
             force_rescan=force_rescan,
         )
         return web.json_response({"matches": matches})
-
