@@ -19,6 +19,30 @@ Route registration imports the concrete route modules directly. The actual
 handlers live in focused route adapters and services; no compatibility grouping
 layer is kept for this application-only package.
 
+## Workflow analysis package
+
+Workflow inspection is grouped under `core/workflow/` and is deliberately kept
+separate from HTTP routes and workflow mutation:
+
+- `widgets.py` contains static node-type and widget-position knowledge.
+- `dynamic_widgets.py` discovers runtime widget metadata from ComfyUI nodes.
+- `references.py` extracts model references and resolves local paths.
+- `subgraphs.py` handles subgraph indexes and promoted inputs.
+- `analysis.py` traverses workflows and aggregates missing-model results.
+- `inventory.py` builds the cached inventory used by repeated analyses.
+
+The dependency direction is layered: widget definitions are the base, dynamic
+widget discovery builds on them, references consume both, subgraph handling
+consumes references and widget definitions, analysis composes references and
+subgraphs, and inventory consumes analysis. The package does not depend on
+route adapters or services. `core/workflow_updater.py` remains a separate
+writer used after resolution; it is not part of read-only workflow analysis.
+
+When adding workflow behavior, place it in the narrowest component that owns
+the responsibility and add a focused test in `tests/test_workflow_components.py`
+or `tests/test_workflow_analyzer.py`. Keep imports within the documented layer
+direction; `tests/test_workflow_boundaries.py` enforces this contract.
+
 ## Frontend architecture
 
 The frontend keeps ComfyUI-specific integration at the extension boundary in
