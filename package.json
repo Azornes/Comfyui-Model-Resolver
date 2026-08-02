@@ -4,6 +4,7 @@
   "description": "Dev tooling for comfyui-model-resolver (ESLint only, not published to npm)",
   "scripts": {
     "test": "node --test tests/*.mjs",
+    "test:coverage": "node --experimental-test-coverage --test tests/*.mjs",
     "lint": "eslint web/",
     "lint:fix": "eslint web/ --fix"
   },

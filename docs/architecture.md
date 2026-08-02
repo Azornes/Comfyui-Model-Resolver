@@ -19,6 +19,25 @@ Route registration imports the concrete route modules directly. The actual
 handlers live in focused route adapters and services; no compatibility grouping
 layer is kept for this application-only package.
 
+## Frontend architecture
+
+The frontend keeps ComfyUI-specific integration at the extension boundary in
+`web/model_resolver.js` and composes the dialog behavior in
+`web/resolver/resolver_dialog.js`. The dialog is assembled from focused method
+groups:
+
+1. `web/resolver/shell/` owns lifecycle, workflow identity, and tab state.
+2. `web/resolver/search/` owns source selection, search state, aliases, and hash
+   matching.
+3. `web/resolver/views/` owns view-specific state such as missing models and
+   model information.
+4. `web/resolver/downloads/` owns queue storage and download progress policy.
+5. `web/resolver/utils/` owns shared API, keybinding, and browser helpers.
+
+Pure policies and state transitions are exported as small ES modules so they
+can be tested without booting ComfyUI. The extension entry point and the dialog
+composition are covered separately as integration contracts.
+
 ## Adding a route
 
 When adding a feature, keep the request parsing, status codes, and JSON response
@@ -31,6 +50,19 @@ Add a focused route/service test before changing behavior. For changes that touc
 route registration or shared backend code, run the complete Python suite as well.
 
 ## Local verification
+
+For frontend changes, run these commands from the project directory:
+
+```powershell
+npm test
+npm run test:coverage
+npm run lint
+```
+
+`test:coverage` uses Node's built-in test coverage reporter and prints the
+current statement, branch, and function coverage. It is an inspection report,
+not a hard threshold, because runtime-only ComfyUI adapters cannot be fully
+exercised outside the host application.
 
 Run these commands with the same Python interpreter used by ComfyUI:
 
