@@ -26,11 +26,13 @@ from .download.aria2_backend import (
     Aria2Error,  # noqa: F401
     download_file_with_aria2,
     get_aria2_status,  # noqa: F401
+    pause_download,  # noqa: F401
+    resume_download,  # noqa: F401
     start_aria2_daemon,  # noqa: F401
     stop_aria2_daemon,  # noqa: F401
 )
 from .download.aria2_backend import (
-    aria2_action_error_is_ok as _aria2_action_error_is_ok,
+    aria2_action_error_is_ok as _aria2_action_error_is_ok,  # noqa: F401
 )
 from .download.aria2_backend import (
     aria2_has_active_transfers_locked as _aria2_has_active_transfers_locked,  # noqa: F401
@@ -39,7 +41,7 @@ from .download.aria2_backend import (
     aria2_idle_stop_worker as _aria2_idle_stop_worker,  # noqa: F401
 )
 from .download.aria2_backend import aria2_ping as _aria2_ping  # noqa: F401
-from .download.aria2_backend import aria2_rpc as _aria2_rpc
+from .download.aria2_backend import aria2_rpc as _aria2_rpc  # noqa: F401
 from .download.aria2_backend import aria2_tell_status as _aria2_tell_status  # noqa: F401
 from .download.aria2_backend import (
     cancel_aria2_idle_timer_locked as _cancel_aria2_idle_timer_locked,  # noqa: F401
@@ -58,7 +60,16 @@ from .download.aria2_backend import (
     find_free_port as _find_free_port,  # noqa: F401
 )
 from .download.aria2_backend import (
+    force_remove_aria2_transfer as _force_remove_aria2_transfer,
+)
+from .download.aria2_backend import (
+    get_aria2_action_lock as _get_aria2_action_lock,  # noqa: F401
+)
+from .download.aria2_backend import (
     parse_aria2_int as _parse_aria2_int,  # noqa: F401
+)
+from .download.aria2_backend import (
+    queue_aria2_desired_state as _queue_aria2_desired_state,  # noqa: F401
 )
 from .download.aria2_backend import read_aria2_version as _read_aria2_version  # noqa: F401
 from .download.aria2_backend import (
@@ -68,7 +79,13 @@ from .download.aria2_backend import (
     resolve_aria2c_executable as _resolve_aria2c_executable,  # noqa: F401
 )
 from .download.aria2_backend import (
+    run_aria2_desired_state_worker as _run_aria2_desired_state_worker,  # noqa: F401
+)
+from .download.aria2_backend import (
     schedule_aria2_idle_stop as _schedule_aria2_idle_stop,  # noqa: F401
+)
+from .download.aria2_backend import (
+    set_download_progress_status as _set_download_progress_status,
 )
 from .download.aria2_backend import (
     try_certifi_ca_path as _try_certifi_ca_path,  # noqa: F401
@@ -953,109 +970,6 @@ def get_all_progress() -> Dict[str, Dict[str, Any]]:
         return {k: v.copy() for k, v in download_progress.items()}
 
 
-def _force_remove_aria2_transfer(download_id: str, gid: str) -> None:
-    try:
-        _aria2_rpc("aria2.forceRemove", [gid])
-    except Exception as exc:
-        log.warning(f"Could not cancel aria2 download {download_id}: {exc}")
-
-
-def _get_aria2_action_lock(download_id: str) -> threading.Lock:
-    with aria2_lock:
-        lock = aria2_action_locks.get(download_id)
-        if lock is None:
-            lock = threading.Lock()
-            aria2_action_locks[download_id] = lock
-        return lock
-
-
-def _set_download_progress_status(download_id: str, status: str, **updates: Any) -> None:
-    with download_lock:
-        if download_id in download_progress:
-            download_progress[download_id]["status"] = status
-            download_progress[download_id].update(updates)
-
-
-def _run_aria2_desired_state_worker(download_id: str) -> None:
-    while True:
-        with aria2_lock:
-            desired = dict(aria2_desired_states.get(download_id) or {})
-        if not desired or download_id in cancelled_downloads:
-            with aria2_lock:
-                state = aria2_desired_states.get(download_id)
-                if state:
-                    state["running"] = False
-            return
-
-        desired_status = str(desired.get("status") or "")
-        desired_seq = int(desired.get("seq") or 0)
-        transfer = aria2_transfers.get(download_id)
-        gid = transfer.get("gid") if isinstance(transfer, dict) else ""
-        if not gid:
-            with aria2_lock:
-                aria2_desired_states.pop(download_id, None)
-            return
-
-        method = "aria2.forcePause" if desired_status == "paused" else "aria2.unpause"
-        try:
-            with _get_aria2_action_lock(download_id):
-                _aria2_rpc(method, [gid])
-            _set_download_progress_status(
-                download_id,
-                desired_status,
-                speed=0 if desired_status == "paused" else download_progress.get(download_id, {}).get("speed", 0),
-            )
-        except Exception as exc:
-            if _aria2_action_error_is_ok(desired_status, str(exc)):
-                _set_download_progress_status(download_id, desired_status, speed=0 if desired_status == "paused" else download_progress.get(download_id, {}).get("speed", 0))
-            else:
-                if desired_status == "downloading":
-                    _set_download_progress_status(download_id, "paused", speed=0)
-                safe_error = _sanitize_download_error(exc)
-                log.warning(f"aria2 {desired_status} action failed for {download_id}: {safe_error}")
-
-        with aria2_lock:
-            latest = aria2_desired_states.get(download_id)
-            if not latest:
-                return
-            if int(latest.get("seq") or 0) == desired_seq:
-                aria2_desired_states.pop(download_id, None)
-                return
-
-
-def _queue_aria2_desired_state(download_id: str, status: str) -> Dict[str, Any]:
-    transfer = aria2_transfers.get(download_id)
-    if not transfer or not transfer.get("gid"):
-        return {"success": False, "error": "Download action is not available yet"}
-
-    start_worker = False
-    with aria2_lock:
-        previous = aria2_desired_states.get(download_id) or {}
-        seq = int(previous.get("seq") or 0) + 1
-        running = bool(previous.get("running"))
-        aria2_desired_states[download_id] = {
-            "status": status,
-            "seq": seq,
-            "running": True,
-        }
-        start_worker = not running
-
-    _set_download_progress_status(
-        download_id,
-        status,
-        speed=0 if status == "paused" else download_progress.get(download_id, {}).get("speed", 0),
-    )
-
-    if start_worker:
-        threading.Thread(
-            target=_run_aria2_desired_state_worker,
-            args=(download_id,),
-            daemon=True,
-        ).start()
-
-    return {"success": True, "message": "Download paused" if status == "paused" else "Download resumed"}
-
-
 def cancel_download(download_id: str) -> bool:
     """Cancel a download in progress."""
     cancelled_downloads.add(download_id)
@@ -1079,20 +993,6 @@ def cancel_download(download_id: str) -> bool:
         except Exception as exc:
             log.warning(f"Could not cancel Hugging Face Xet transfer {download_id}: {exc}")
     return True
-
-
-def pause_download(download_id: str) -> Dict[str, Any]:
-    """Pause an aria2 download. Built-in Python downloads cannot be paused."""
-    if download_id in cancelled_downloads:
-        return {"success": False, "error": "Download is being cancelled"}
-    return _queue_aria2_desired_state(download_id, "paused")
-
-
-def resume_download(download_id: str) -> Dict[str, Any]:
-    """Resume a paused aria2 download."""
-    if download_id in cancelled_downloads:
-        return {"success": False, "error": "Download is being cancelled"}
-    return _queue_aria2_desired_state(download_id, "downloading")
 
 
 def clear_completed_downloads():

@@ -782,3 +782,157 @@ def download_file_with_aria2(
             facade.aria2_action_locks.pop(download_id, None)
             facade.aria2_desired_states.pop(download_id, None)
         facade._schedule_aria2_idle_stop()
+
+
+def force_remove_aria2_transfer(download_id: str, gid: str) -> None:
+    """Request removal of an active aria2 transfer."""
+    facade = _downloader_module()
+    try:
+        facade._aria2_rpc("aria2.forceRemove", [gid])
+    except Exception as exc:
+        log.warning(f"Could not cancel aria2 download {download_id}: {exc}")
+
+
+def get_aria2_action_lock(download_id: str) -> Any:
+    """Return the per-download lock used to serialize aria2 actions."""
+    facade = _downloader_module()
+    with facade.aria2_lock:
+        lock = facade.aria2_action_locks.get(download_id)
+        if lock is None:
+            lock = facade.threading.Lock()
+            facade.aria2_action_locks[download_id] = lock
+        return lock
+
+
+def set_download_progress_status(
+    download_id: str,
+    status: str,
+    **updates: Any,
+) -> None:
+    """Update a download status while holding the progress lock."""
+    facade = _downloader_module()
+    with facade.download_lock:
+        if download_id in facade.download_progress:
+            facade.download_progress[download_id]["status"] = status
+            facade.download_progress[download_id].update(updates)
+
+
+def run_aria2_desired_state_worker(download_id: str) -> None:
+    """Apply the latest queued pause/resume request for a transfer."""
+    facade = _downloader_module()
+    while True:
+        with facade.aria2_lock:
+            desired = dict(facade.aria2_desired_states.get(download_id) or {})
+        if not desired or download_id in facade.cancelled_downloads:
+            with facade.aria2_lock:
+                state = facade.aria2_desired_states.get(download_id)
+                if state:
+                    state["running"] = False
+            return
+
+        desired_status = str(desired.get("status") or "")
+        desired_seq = int(desired.get("seq") or 0)
+        transfer = facade.aria2_transfers.get(download_id)
+        gid = transfer.get("gid") if isinstance(transfer, dict) else ""
+        if not gid:
+            with facade.aria2_lock:
+                facade.aria2_desired_states.pop(download_id, None)
+            return
+
+        method = "aria2.forcePause" if desired_status == "paused" else "aria2.unpause"
+        try:
+            with facade._get_aria2_action_lock(download_id):
+                facade._aria2_rpc(method, [gid])
+            current_speed = facade.download_progress.get(download_id, {}).get(
+                "speed",
+                0,
+            )
+            facade._set_download_progress_status(
+                download_id,
+                desired_status,
+                speed=0 if desired_status == "paused" else current_speed,
+            )
+        except Exception as exc:
+            if facade._aria2_action_error_is_ok(desired_status, str(exc)):
+                current_speed = facade.download_progress.get(download_id, {}).get(
+                    "speed",
+                    0,
+                )
+                facade._set_download_progress_status(
+                    download_id,
+                    desired_status,
+                    speed=0 if desired_status == "paused" else current_speed,
+                )
+            else:
+                if desired_status == "downloading":
+                    facade._set_download_progress_status(
+                        download_id,
+                        "paused",
+                        speed=0,
+                    )
+                safe_error = facade._sanitize_download_error(exc)
+                log.warning(
+                    f"aria2 {desired_status} action failed for "
+                    f"{download_id}: {safe_error}"
+                )
+
+        with facade.aria2_lock:
+            latest = facade.aria2_desired_states.get(download_id)
+            if not latest:
+                return
+            if int(latest.get("seq") or 0) == desired_seq:
+                facade.aria2_desired_states.pop(download_id, None)
+                return
+
+
+def queue_aria2_desired_state(download_id: str, status: str) -> Dict[str, Any]:
+    """Queue an aria2 pause/resume state change and start its worker."""
+    facade = _downloader_module()
+    transfer = facade.aria2_transfers.get(download_id)
+    if not transfer or not transfer.get("gid"):
+        return {"success": False, "error": "Download action is not available yet"}
+
+    start_worker = False
+    with facade.aria2_lock:
+        previous = facade.aria2_desired_states.get(download_id) or {}
+        seq = int(previous.get("seq") or 0) + 1
+        running = bool(previous.get("running"))
+        facade.aria2_desired_states[download_id] = {
+            "status": status,
+            "seq": seq,
+            "running": True,
+        }
+        start_worker = not running
+
+    current_speed = facade.download_progress.get(download_id, {}).get("speed", 0)
+    facade._set_download_progress_status(
+        download_id,
+        status,
+        speed=0 if status == "paused" else current_speed,
+    )
+
+    if start_worker:
+        facade.threading.Thread(
+            target=facade._run_aria2_desired_state_worker,
+            args=(download_id,),
+            daemon=True,
+        ).start()
+
+    message = "Download paused" if status == "paused" else "Download resumed"
+    return {"success": True, "message": message}
+
+
+def pause_download(download_id: str) -> Dict[str, Any]:
+    """Pause an aria2 download. Built-in Python downloads cannot be paused."""
+    facade = _downloader_module()
+    if download_id in facade.cancelled_downloads:
+        return {"success": False, "error": "Download is being cancelled"}
+    return facade._queue_aria2_desired_state(download_id, "paused")
+
+
+def resume_download(download_id: str) -> Dict[str, Any]:
+    """Resume a paused aria2 download."""
+    facade = _downloader_module()
+    if download_id in facade.cancelled_downloads:
+        return {"success": False, "error": "Download is being cancelled"}
+    return facade._queue_aria2_desired_state(download_id, "downloading")
