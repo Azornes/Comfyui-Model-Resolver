@@ -1,6 +1,5 @@
 """Hugging Face Xet transport and progress integration."""
 
-import importlib
 from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
@@ -10,9 +9,11 @@ from ..log_system import create_module_logger
 log = create_module_logger("core.downloader")
 
 
-def _downloader_module():
-    """Return the facade module so existing dependency patches remain effective."""
-    return importlib.import_module("core.downloader")
+def _require_dependencies(dependencies: Any) -> Any:
+    """Return explicitly supplied services for Hugging Face Xet."""
+    if dependencies is None:
+        raise RuntimeError("Hugging Face Xet dependencies were not provided")
+    return dependencies
 
 
 class HuggingFaceXetDownloadCancelled(Exception):
@@ -22,7 +23,15 @@ class HuggingFaceXetDownloadCancelled(Exception):
 class HuggingFaceXetProgressAdapter:
     """Forward hf_xet byte progress to the resolver's download state."""
 
-    def __init__(self, download_id: str, total_size: int, start_time: float) -> None:
+    def __init__(
+        self,
+        download_id: str,
+        total_size: int,
+        start_time: float,
+        *,
+        dependencies: Any = None,
+    ) -> None:
+        self.dependencies = _require_dependencies(dependencies)
         self.download_id = download_id
         self.total_size = max(0, int(total_size or 0))
         self.downloaded = 0
@@ -38,7 +47,7 @@ class HuggingFaceXetProgressAdapter:
         transfer_downloaded: int = 0,
         transfer_total_size: int = 0,
     ) -> None:
-        facade = _downloader_module()
+        facade = self.dependencies
         downloaded = max(0, int(downloaded or 0))
         if self.total_size > 0:
             downloaded = min(downloaded, self.total_size)
@@ -88,7 +97,7 @@ class HuggingFaceXetProgressAdapter:
                 )
 
     def update(self, byte_delta: Any) -> None:
-        if self.download_id in _downloader_module().cancelled_downloads:
+        if self.download_id in self.dependencies.cancelled_downloads:
             raise HuggingFaceXetDownloadCancelled("Download cancelled")
 
         try:
@@ -104,7 +113,7 @@ class HuggingFaceXetProgressAdapter:
 
     def __call__(self, total_update: Any, item_updates: Any) -> None:
         """Receive hf_xet's detailed 200 ms progress snapshots when available."""
-        if self.download_id in _downloader_module().cancelled_downloads:
+        if self.download_id in self.dependencies.cancelled_downloads:
             raise HuggingFaceXetDownloadCancelled("Download cancelled")
 
         downloaded = int(getattr(total_update, "total_bytes_completed", 0) or 0)
@@ -135,7 +144,7 @@ class HuggingFaceXetProgressAdapter:
             speed = max(0, int(float(transfer_rate or 0)))
         except (TypeError, ValueError):
             speed = 0
-        self.last_update = _downloader_module().time.time()
+        self.last_update = self.dependencies.time.time()
         self._publish(
             downloaded,
             speed,
@@ -151,9 +160,11 @@ def run_huggingface_xet_transfer(
     expected_size: int,
     filename: str,
     progress_adapter: HuggingFaceXetProgressAdapter,
+    *,
+    dependencies: Any = None,
 ) -> None:
     """Use detailed native Xet progress when supported, with legacy fallback."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     import hf_xet
     from huggingface_hub.file_download import xet_get
     try:
@@ -263,9 +274,11 @@ def download_huggingface_xet(
     headers: Optional[Dict[str, str]] = None,
     metadata: Optional[Dict[str, Any]] = None,
     category: str = "",
+    *,
+    dependencies: Any = None,
 ) -> Optional[Dict[str, Any]]:
     """Download Hugging Face Xet files with the official hf_xet transport."""
-    facade = _downloader_module()
+    facade = _require_dependencies(dependencies)
     validated_url = facade.validate_public_http_url(url)
     parsed_url = urlparse(validated_url)
     if not (
@@ -317,6 +330,7 @@ def download_huggingface_xet(
         download_id,
         expected_size,
         start_time,
+        dependencies=dependencies,
     )
 
     with facade.download_lock:
@@ -349,6 +363,7 @@ def download_huggingface_xet(
             expected_size,
             filename,
             progress_adapter,
+            dependencies=dependencies,
         )
 
         if download_id in facade.cancelled_downloads:

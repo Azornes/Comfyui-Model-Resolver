@@ -105,7 +105,7 @@ from .download.huggingface_xet import (
     HuggingFaceXetDownloadCancelled as _HuggingFaceXetDownloadCancelled,  # noqa: F401
 )
 from .download.huggingface_xet import (
-    HuggingFaceXetProgressAdapter as _HuggingFaceXetProgressAdapter,  # noqa: F401
+    HuggingFaceXetProgressAdapter as _HuggingFaceXetProgressAdapter,
 )
 from .download.huggingface_xet import (
     download_huggingface_xet as _download_huggingface_xet,  # noqa: F401
@@ -301,10 +301,23 @@ for _download_dependency_name in (
     "_download_preview_asset_with_system_trust",
     "_download_preview_image",
     "_download_preview_image_with_system_trust",
+    "_download_huggingface_xet",
+    "_run_huggingface_xet_transfer",
 ):
     globals()[_download_dependency_name] = _bind_download_dependencies(
         globals()[_download_dependency_name]
     )
+
+
+class _BoundHuggingFaceXetProgressAdapter(_HuggingFaceXetProgressAdapter):
+    """Keep the local test/import surface bound to downloader dependencies."""
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        kwargs.setdefault("dependencies", sys.modules[__name__])
+        super().__init__(*args, **kwargs)
+
+
+_HuggingFaceXetProgressAdapter = _BoundHuggingFaceXetProgressAdapter
 
 
 def _state_dependencies() -> DownloadStateDependencies:
