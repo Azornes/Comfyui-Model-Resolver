@@ -93,6 +93,12 @@ from .download.aria2_backend import (
 from .download.aria2_backend import (
     try_certifi_ca_path as _try_certifi_ca_path,  # noqa: F401
 )
+from .download.config import (
+    download_backend_from_settings as _download_backend_from_settings,  # noqa: F401
+)
+from .download.config import (
+    generate_download_id,  # noqa: F401
+)
 from .download.directories import get_download_directory  # noqa: F401
 from .download.huggingface_xet import (
     HuggingFaceXetDownloadCancelled as _HuggingFaceXetDownloadCancelled,  # noqa: F401
@@ -220,19 +226,9 @@ from .download.validation import (
     sanitize_download_filename,  # noqa: F401
 )
 from .settings import (
-    load_settings,
-    normalize_download_backend,
+    load_settings,  # noqa: F401
+    normalize_download_backend,  # noqa: F401
     normalize_relative_subfolder,  # noqa: F401
 )
 
-
-def generate_download_id() -> str:
-    """Generate a unique download ID."""
-    import uuid
-
-    return str(uuid.uuid4())[:8]
-
-
-def _download_backend_from_settings(settings: Optional[Dict[str, Any]] = None) -> str:
-    active_settings = settings if isinstance(settings, dict) else load_settings()
-    return normalize_download_backend(active_settings.get("download_backend"))
+# End of downloader facade.
