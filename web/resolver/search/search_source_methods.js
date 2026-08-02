@@ -92,6 +92,13 @@ export const searchSourceMethods = {
         return message;
     },
 
+    getSearchSourceErrorTooltip(source, error) {
+        const technicalMessage = String(error || '').trim();
+        const displayMessage = this.getSearchSourceErrorMessage(source, technicalMessage);
+        if (!technicalMessage || technicalMessage === displayMessage) return displayMessage;
+        return `${displayMessage} Details: ${technicalMessage}`;
+    },
+
     getSearchSourceDefinitions() {
         return [
             {

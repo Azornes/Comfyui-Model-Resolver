@@ -2486,6 +2486,9 @@ export const resolveDownloadMethods = {
                     const sourceErrorMessage = sourceError
                         ? (this.getSearchSourceErrorMessage?.(source, sourceError) || sourceError)
                         : null;
+                    const sourceErrorTooltip = sourceError
+                        ? (this.getSearchSourceErrorTooltip?.(source, sourceError) || sourceErrorMessage)
+                        : null;
                     if (sourceErrorMessage) sourceErrorMessages.add(sourceErrorMessage);
 
                     const found = this.hasSearchResults(data);
@@ -2506,7 +2509,7 @@ export const resolveDownloadMethods = {
                         status: sourceError ? 'error' : (found ? 'found' : 'none'),
                         percent: 100,
                         message: sourceErrorMessage || (found ? foundMessage : 'No match'),
-                        error: sourceError || null
+                        error: sourceErrorTooltip
                     }, missing, { workflowKey });
 
                     if (data.civitai) {
@@ -2553,6 +2556,8 @@ export const resolveDownloadMethods = {
                     const sourceErrorMessage = this.getSearchSourceErrorMessage?.(source, error.message)
                         || error.message
                         || 'Error';
+                    const sourceErrorTooltip = this.getSearchSourceErrorTooltip?.(source, error.message)
+                        || sourceErrorMessage;
                     sourceErrorMessages.add(sourceErrorMessage);
                     state.lastAttemptSources = Array.from(attemptedSources);
                     state.lastAttemptFound = anyFound;
@@ -2562,7 +2567,7 @@ export const resolveDownloadMethods = {
                         status: 'error',
                         percent: 100,
                         message: sourceErrorMessage,
-                        error: error.message || null
+                        error: sourceErrorTooltip
                     }, missing, { workflowKey });
                     this.persistSearchStateForWorkflow(workflowKey, missing, state);
                     this.refreshSearchUiForMissing(missing, state, { workflowKey });

@@ -5,6 +5,7 @@ import { searchSourceMethods } from '../web/resolver/search/search_source_method
 const {
   getSearchSourceLabel,
   getSearchSourceErrorMessage,
+  getSearchSourceErrorTooltip,
   getSearchSourceDefinitions,
   getSearchResultKeysForSources,
   getHashLookupSourcesForSearchSources,
@@ -54,7 +55,7 @@ test('search source labels and definitions remain stable', () => {
 });
 
 test('CivArchive availability failures receive a user-facing retry message', () => {
-  const dialog = { getSearchSourceLabel };
+  const dialog = { getSearchSourceLabel, getSearchSourceErrorMessage };
   const temporaryFailure = getSearchSourceErrorMessage.call(
     dialog,
     'civarchive',
@@ -76,6 +77,10 @@ test('CivArchive availability failures receive a user-facing retry message', () 
   assert.equal(
     getSearchSourceErrorMessage.call(dialog, 'civitai', 'CivAI request timed out'),
     'CivAI request timed out'
+  );
+  assert.equal(
+    getSearchSourceErrorTooltip.call(dialog, 'civarchive', 'CivArchive search failed: HTTP 522'),
+    'CivArchive may be overloaded or temporarily unavailable. Please try again later. Details: CivArchive search failed: HTTP 522'
   );
 });
 
