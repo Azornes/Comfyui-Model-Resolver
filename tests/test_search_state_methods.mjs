@@ -1,57 +1,7 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { searchSourceMethods } from '../web/resolver/search/search_source_methods.js';
-
-const projectRoot = path.resolve(import.meta.dirname, '..');
-const searchPanelMethodsSource = fs.readFileSync(
-  path.join(projectRoot, 'web/resolver/search/search_panel.js'),
-  'utf8'
-);
-
-function extractMethod(source, methodName, paramsPattern = '[^)]*') {
-  const signatureRegex = new RegExp(`\\n\\s+(async\\s+)?${methodName}\\s*\\(${paramsPattern}\\)\\s*\\{`);
-  const match = signatureRegex.exec(source);
-  assert.ok(match, `Could not find ${methodName}`);
-  const isAsync = Boolean(match[1]);
-
-  const parenStart = source.indexOf('(', match.index);
-  const parenEnd = source.indexOf(')', parenStart);
-  const params = source.slice(parenStart + 1, parenEnd);
-  const braceStart = source.indexOf('{', parenEnd);
-  let depth = 0;
-  for (let i = braceStart; i < source.length; i += 1) {
-    const char = source[i];
-    if (char === '{') depth += 1;
-    if (char === '}') depth -= 1;
-    if (depth === 0) {
-      return `${isAsync ? 'async ' : ''}function ${methodName}(${params}) ${source.slice(braceStart, i + 1)}`;
-    }
-  }
-  throw new Error(`Could not parse ${methodName}`);
-}
-
-const searchStateMethods = Object.fromEntries([
-  'getMissingSearchKey',
-  'getSearchState',
-  'createEmptySearchState',
-  'getBackgroundSearchJobKey',
-  'getBackgroundSearchJob',
-  'hasBackgroundSearchJob',
-  'isBackgroundSearchRunActive',
-  'isSearchSourceCancelled',
-  'getWorkflowSearchCache',
-  'getSearchStateForWorkflow',
-  'persistSearchStateForWorkflow',
-  'mergeSearchResults',
-  'getSearchResultSignature',
-  'areSearchResultsSame',
-  'withSearchResultTimestamp',
-].map(methodName => [
-  methodName,
-  eval(`(${extractMethod(searchPanelMethodsSource, methodName)})`),
-]));
+import { searchStateMethods } from '../web/resolver/search/search_state_methods.js';
 
 function createDialog() {
   return {
