@@ -12,6 +12,7 @@ This directory contains the core stylesheets and token system for the `comfyui-m
   5. *Component Tokens, Badges, Shadows & Layout Dimensions* (buttons, inputs, status badges, shadows, gradients, scrollbars, and drawer widths)
 - **`resolver-main.css`**: Styles for the main dialog, missing models browser, tab contents, lists, search tables, and model details views.
 - **`resolver-shell.css`**: Styles for the outer modal shell, sidebar docking panel, window controls, and queue drawer.
+- **`missing-type-filter.css`**: Styles for the Missing Models type filter control and menu.
 
 ## Usage Guidelines
 
