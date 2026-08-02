@@ -143,7 +143,7 @@ class DirectoryService:
 
     async def get_capabilities(self, request):
         """Get optional source capabilities available in this install."""
-        from ..workflow_analyzer import NODE_TYPE_MODEL_WIDGET_CATEGORIES
+        from ..workflow.widgets import NODE_TYPE_MODEL_WIDGET_CATEGORIES
 
         return self.web.json_response(
             {

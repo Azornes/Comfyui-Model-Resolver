@@ -9,7 +9,7 @@ if parent_dir not in sys.path:
 
 from core.metadata_audit import extract_metadata_size
 from core.settings import load_settings, get_settings_schema
-from core.workflow_analyzer import NODE_TYPE_MODEL_WIDGET_CATEGORIES
+from core.workflow.widgets import NODE_TYPE_MODEL_WIDGET_CATEGORIES
 
 
 class TestUnificationRefactoring(unittest.TestCase):

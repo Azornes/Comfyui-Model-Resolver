@@ -191,7 +191,7 @@ async def test_capabilities_route_returns_optional_sources_and_node_rules():
     handlers, values = _build_routes()
 
     with patch(
-        "core.workflow_analyzer.NODE_TYPE_MODEL_WIDGET_CATEGORIES",
+        "core.workflow.widgets.NODE_TYPE_MODEL_WIDGET_CATEGORIES",
         {"CheckpointLoaderSimple": ["checkpoints"]},
     ):
         response = await handlers[("GET", "/model_resolver/capabilities")](
