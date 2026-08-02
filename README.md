@@ -1,6 +1,6 @@
-<h1 align="center">ModelResolver – Relink missing models and download from HuggingFace/CivitAI</h1>
+<h1 align="center">Model-Resolver</h1>
 
-<p align="center"><i>ModelResolver is a powerful ComfyUI extension for automatically resolving missing models in loaded workflows. It features intelligent local fuzzy matching, direct cloud downloads, background download tracking, and automated in-place workflow updating.</i></p>
+<p align="center"><i>Find missing models in ComfyUI, download them from supported sources, and update workflow paths.</i></p>
 
 <p align="center">
   <a href='https://registry.comfy.org/publishers/azornes/nodes/comfyui-model-resolver'><img alt='ComfyUI' src='https://img.shields.io/badge/ComfyUI-1a1a1a?style=for-the-badge&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABwAAAAcCAMAAABF0y+mAAAASFBMVEVHcEwYLtsYLtkXLtkXLdkYLtkWLdcFIdoAD95uerfI1XLR3mq3xIP8/yj0/zvw/0FSYMP5/zKMmKQtPNOuuozj8FOhrZW7x4FMWFFbAAAABnRSTlMAUrPX87KxijklAAAA00lEQVR4AX3SBw6DMAxA0UzbrIzO+9+02GkEpoWP9hPZZs06Hw75aI3k4W/+wkQtnGZNhF1I34BzalQcxkmasY0b9raklNcvLYU1GNiiOeVWauOa/XS526gRyzpV/7HeUOG9Jp6vcsvUrCPeKg/3KBKBQhoTD1dQggPWzPVfFOIgo85/kR4y6oB/8SlIEh7wvmTuKd3wgLVW1sTfRBoR7oWVqy/U2NcrWDYMINE7NUuJuoV+2fhaWmnbjzcOWnRv7XbiLh/Y9dNUqk2y0QcNwTu7wgf+/BhsPUhf4QAAAABJRU5ErkJggg=='><img alt='Downloads' src='https://img.shields.io/badge/dynamic/json?color=%230D2A4A&label=&query=downloads&url=https://gist.githubusercontent.com/Azornes/741c965c0e0504ac65935dcc105a4ad8/raw/top_modelresolver.json&style=for-the-badge'></a>  
@@ -24,19 +24,19 @@ https://github.com/user-attachments/assets/f5d83ce9-3ea8-4532-9b96-4ca4cd6cfb75
 
 ---
 
-## 🚀 Key Features
+## Key Features
 
-* **🔍 Intelligent Fuzzy Matching**: Scans local ComfyUI model directories and looks for similar files (ignoring case, extensions, or minor naming differences) with similarity confidence scores.
-* **☁️ Multi-Source Cloud Downloader**: Searches for and downloads missing files from **CivitAI**, **HuggingFace**, **CivArchive**, **Lora Manager Archive**, and the **ComfyUI-Manager** model database.
-* **🔄 In-Place Workflow Updater**: Safely replaces model names and paths in your current workflow (supporting nested subgraphs and custom nodes like *rgthree's Power Lora Loader* or *LoraManager*).
-* **📥 Background Download Manager**: Downloads models asynchronously directly to the correct directories (`checkpoints`, `loras`, `vae`, etc.) with speed tracking, file size display, progress bars, and cancellation/pause support.
-* **🕵️ Loaded Models Inspector**: A dedicated tab displaying all models used in the active workflow, including their strength, physical paths, and disk availability status.
-* **📂 Open Containing Folder**: Opens the host system's file manager and selects/highlights the model file where the platform supports it.
-* **🔗 Custom URL Downloads**: Directly paste any custom URL link to download files into target folders with customized names.
+- **Find local matches.** ModelResolver scans ComfyUI model directories and compares missing filenames with files on disk. It ignores case, extensions, and small naming changes, then shows a similarity score.
+- **Search supported sources.** Find files on CivitAI, Hugging Face, CivArchive, Lora Manager Archive, and the ComfyUI-Manager model database.
+- **Update workflows.** Replace model names and paths in the active workflow, including nested subgraphs and loaders from rgthree's Power Lora Loader and LoraManager.
+- **Manage downloads.** Send files to their model folders, track speed and progress, and cancel or pause downloads when the selected backend supports it.
+- **Inspect loaded models.** Review the models used by the active workflow, their physical paths, strength values, and disk status.
+- **Open model folders.** Reveal a model file in the host file manager when the platform supports that action.
+- **Use custom URLs.** Download a file from any direct URL and choose its target folder and filename.
 
 ---
 
-## 🛠️ How It Works (Step-by-Step)
+## How It Works (Step-by-Step)
 
 1. **Load Workflow**: Load any workflow JSON or image into ComfyUI.
 2. **Open Model Resolver**: Open the Model Resolver interface using one of these options:
@@ -55,7 +55,7 @@ https://github.com/user-attachments/assets/f5d83ce9-3ea8-4532-9b96-4ca4cd6cfb75
 
 ---
 
-## 📂 Supported Nodes & Model Types
+## Supported Nodes & Model Types
 
 Model Resolver supports standard ComfyUI mechanisms as well as custom implementations of popular loader nodes:
 * **Standard loaders**: CheckpointLoader, LoraLoader, VAELoader, ControlNetLoader, UpscaleModelLoader, etc.
@@ -64,7 +64,7 @@ Model Resolver supports standard ComfyUI mechanisms as well as custom implementa
 
 ---
 
-## ⚡ Downloader Backends
+## Downloader Backends
 
 Model Resolver provides two download engines in the Settings panel and an automatic Hugging Face Xet transport for eligible files:
 
@@ -95,49 +95,53 @@ Model Resolver provides two download engines in the Settings panel and an automa
 * May briefly show **Finalizing** after the network transfer while Xet reconstructs and writes the final model file.
 
 > [!NOTE]
-> Xet transfers compressed and deduplicated data, so the number of bytes received over the network can be lower than the final model file size. In that case the download can enter **Finalizing** before the displayed network byte counter reaches the final file size.
+> Xet transfers compressed, deduplicated data. The received byte count can stay below the final model size, so a download can reach **Finalizing** before the network counter reaches the final size.
 
 > [!TIP]
-> **One-Click Aria2 Setup:** You do not need to install `aria2c` manually. The extension features a built-in installer that downloads, extracts, and configures the latest official release matching your OS architecture (Windows, macOS, Linux) with a single click in the Settings panel.
->
-> The extension also manages the lifecycle of the `aria2` background daemon, automatically starting it when a download starts and stopping it when it remains idle to preserve system resources.
+> Install and configure Aria2 from the Settings panel. ModelResolver downloads the official release for your operating system and architecture, extracts it, and manages the background daemon. The daemon starts when a download needs it and stops after it stays idle.
 
 ---
 
-## 📂 Dynamic Path Templates
+## Dynamic path templates
 
-When downloading a new model, you can let Model Resolver organize your files automatically based on metadata using templates. The extension offers three **Download Path Modes**:
-* `suggested`: Guesses the best subfolder category automatically.
-* `manual`: Standard custom path mapping.
-* `template`: Dynamically generates the relative path inside your model category using variables.
+Use model metadata to build download paths. The **Download Path Mode** setting provides three options:
 
-### Available Template Variables
-* `{base_model}`: The base model architecture (e.g., `SD 1.5`, `SDXL`, `Flux`). The value can be translated to customized names via **Base Model Path Mappings** (e.g., mapping `sd1.5` to `SD1.5` and `flux1` to `Flux`).
-* `{author}`: Creator/author username or HuggingFace repo publisher.
-* `{first_tag}`: Primary tag from the model database (mapped via priority hierarchy such as `style`, `concept`, `character`, etc.).
-* `{model_name}`: Clean model name or file stem.
-* `{version_name}`: Model release version name (e.g., `v1.0`).
+- `suggested`: choose a subfolder category from the available metadata.
+- `manual`: use your custom path mapping.
+- `template`: build a relative path with template variables.
 
-### Default Path Templates
-* **Loras**: `{base_model}/{first_tag}` (e.g., `Loras/SDXL/style/my_lora_v1.safetensors`)
-* **Checkpoints**: `{base_model}` (e.g., `Checkpoints/Flux/my_flux_model.safetensors`)
-* **Embeddings**: `{base_model}`
+### Template variables
 
----
+- `{base_model}`: base architecture such as `SD 1.5`, `SDXL`, or `Flux`. **Base Model Path Mappings** can rename values such as `sd1.5` and `flux1`.
+- `{author}`: creator name or Hugging Face repository publisher.
+- `{first_tag}`: primary model tag, selected from categories such as `style`, `concept`, and `character`.
+- `{model_name}`: cleaned model name or file stem.
+- `{version_name}`: release version such as `v1.0`.
 
-## ⚙️ Configuration & Settings
+### Default templates
 
-Configure credentials and API keys in the Settings panel to authenticate gated downloads:
-* **CivitAI API Key & Session Token**: Required to download NSFW models or those requiring accepted terms of service.
-* **HuggingFace Access Token**: Required for gated, private repositories.
-* **Brave Search API Key**: Fallback search query key to locate public/gated HuggingFace download links.
+- **Loras:** `{base_model}/{first_tag}`
+- **Checkpoints:** `{base_model}`
+- **Embeddings:** `{base_model}`
 
-> [!IMPORTANT]
-> **Built-in Connection Testers:** The options panel contains instant `Check` buttons for CivitAI keys, CivitAI Session Tokens, HuggingFace tokens, and Brave Search keys. You can verify if credentials are valid and active without leaving the interface.
+For example, a Lora can use `Loras/SDXL/style/my_lora_v1.safetensors`, while a checkpoint can use `Checkpoints/Flux/my_flux_model.safetensors`.
+
 
 ---
 
-## 🕵️ Loaded Models Inspector & Local Hashing
+## Configuration & Settings
+
+Open Settings to add credentials for downloads and searches:
+
+- **CivitAI API key and session token:** download NSFW models and files that require accepted terms.
+- **Hugging Face access token:** download files from gated or private repositories.
+- **Brave Search API key:** find public or gated Hugging Face download links through fallback search.
+
+The Settings panel includes **Check** buttons for each credential type. Use them to verify a key or token before starting a download.
+
+---
+
+## Loaded Models Inspector & Local Hashing
 
 * **Loaded Models Tab**: Check what models are loaded in the current active python session. It lists paths, model categories, byte sizes, physical existence checks, and confidence levels.
 * **Open Containing Folder**: Select a model in the Loaded Models tab and click the folder icon to reveal it in the host system's file manager.
@@ -147,7 +151,7 @@ Configure credentials and API keys in the Settings panel to authenticate gated d
 
 ---
 
-## ⚡ Installation
+## Installation
 
 ### Install via ComfyUI-Manager
 1. Search `ComfyUI Model Resolver` in ComfyUI-Manager and click the `Install` button.
@@ -180,32 +184,28 @@ Configure credentials and API keys in the Settings panel to authenticate gated d
 
 ---
 
-## 📝 Requirements
+## Requirements
 
 * Python 3.10 or newer
 * Libraries: `requests`, `aiohttp`, `rapidfuzz`, `huggingface-hub`
 * Modern web browser with JS support (Chrome, Edge, Firefox, Brave)
 
-## 🧱 Backend Architecture
+## Backend Architecture
 
-The ComfyUI entry point is intentionally thin. Runtime state lives in
-`core/extension.py`, route registration is centralized in
-`core/routes/registry.py`, HTTP adapters live in `core/routes/`, and reusable
-feature behavior lives in `core/services/`. See
-[`docs/architecture.md`](docs/architecture.md) for the dependency flow and
-local verification commands.
+The ComfyUI entry point stays small. Runtime state lives in `core/extension.py`, route registration lives in `core/routes/registry.py`, HTTP adapters live in `core/routes/`, and shared feature logic lives in `core/services/`.
+
+See [`docs/architecture.md`](docs/architecture.md) for the dependency flow and local verification commands.
 
 ---
 
-## 📜 License
+## License
 
 This project is licensed under the MIT License. Feel free to use, modify, and distribute.
 
 ---
 
-## 💖 Support / Sponsorship
+## Support / Sponsorship
 
-* ⭐ **Give a star** — it means a lot to me!
-* 🐛 **Report a bug** or suggest a feature.
-* 💖 **Support my work**:
-  👉 [GitHub Sponsors](https://github.com/sponsors/Azornes)
+- Star the repository if ModelResolver helps your workflows.
+- [Report a bug](https://github.com/Azornes/Comfyui-Model-Resolver/issues) or suggest a feature.
+- Support the project through [GitHub Sponsors](https://github.com/sponsors/Azornes) or [Ko-fi](https://ko-fi.com/azornes).
