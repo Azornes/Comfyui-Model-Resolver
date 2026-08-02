@@ -31,13 +31,13 @@ from .type_utils import (
     prepare_remote_size_probe_url,
     unique_ordered_strings,
 )
+from .workflow.inventory import get_workflow_model_inventory
 from .workflow.references import (
     get_model_widget_category_hint,
     should_scan_as_model_reference,
 )
 from .workflow.widgets import NESTED_MODEL_KEYS, NODE_TYPE_TO_CATEGORY_HINTS
 from .workflow_analyzer import (
-    get_workflow_model_inventory,
     identify_missing_models,
 )
 from .workflow_updater import update_workflow_nodes

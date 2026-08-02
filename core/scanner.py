@@ -275,7 +275,7 @@ def invalidate_model_files_cache() -> None:
     _MODEL_FILES_CACHE = None
     _MODEL_FILES_CACHE_AT = 0.0
     try:
-        from .workflow_analyzer import invalidate_workflow_model_inventory_cache
+        from .workflow.inventory import invalidate_workflow_model_inventory_cache
 
         invalidate_workflow_model_inventory_cache()
     except ImportError:

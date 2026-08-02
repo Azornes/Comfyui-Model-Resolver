@@ -10,11 +10,11 @@ from core.scanner import invalidate_model_files_cache, scan_directory
 from core.workflow import analysis, dynamic_widgets, references
 from core.workflow.analysis import analyze_workflow_models
 from core.workflow.dynamic_widgets import get_lora_model_strength
-from core.workflow_analyzer import (
+from core.workflow.inventory import (
     get_workflow_model_inventory,
-    identify_missing_models,
     invalidate_workflow_model_inventory_cache,
 )
+from core.workflow_analyzer import identify_missing_models
 
 
 def _workflow_with_model(model_path):

@@ -118,7 +118,7 @@ def register_routes(self):
                 to_bool,
                 to_int,
             )
-            from ..workflow_analyzer import (
+            from ..workflow.inventory import (
                 get_workflow_model_inventory,
             )
             from .base_models import register_base_model_routes
