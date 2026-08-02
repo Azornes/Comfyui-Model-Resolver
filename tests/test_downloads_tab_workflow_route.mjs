@@ -20,6 +20,7 @@ import {
 import { startSplitterDrag } from '../web/resolver/utils/splitter_drag.js';
 import { baseModelAliasMethods } from '../web/resolver/search/base_model_alias_methods.js';
 import { searchHashMethods } from '../web/resolver/search/search_hash_methods.js';
+import { missingModelStateMethods } from '../web/resolver/views/missing_model_state_methods.js';
 import {
   getCustomNodeModelAdapter,
   getCustomNodeModelCategory,
@@ -2576,8 +2577,7 @@ test('workflow model selection patches the existing browser and centers its row'
 });
 
 test('Local Database source ignores installed local model matches before search', () => {
-  const hasMissingSourceSearchAttempt = eval(`(${extractMethod(missingBrowserMethodsSource, 'hasMissingSourceSearchAttempt')})`);
-  const getMissingSourceResultStatus = eval(`(${extractMethod(missingBrowserMethodsSource, 'getMissingSourceResultStatus')})`);
+  const { hasMissingSourceSearchAttempt, getMissingSourceResultStatus } = missingModelStateMethods;
   const dialog = {
     hasMissingSourceSearchAttempt,
     getSearchResultStatusLevel: () => 'exact'
@@ -2602,9 +2602,11 @@ test('Local Database source ignores installed local model matches before search'
 });
 
 test('Local Database source reports its result after Local Database or Everything search', () => {
-  const hasMissingSourceSearchAttempt = eval(`(${extractMethod(missingBrowserMethodsSource, 'hasMissingSourceSearchAttempt')})`);
-  const getMissingSourceResultStatus = eval(`(${extractMethod(missingBrowserMethodsSource, 'getMissingSourceResultStatus')})`);
-  const getSearchResultStatusLevel = eval(`(${extractMethod(missingBrowserMethodsSource, 'getSearchResultStatusLevel')})`);
+  const {
+    hasMissingSourceSearchAttempt,
+    getMissingSourceResultStatus,
+    getSearchResultStatusLevel,
+  } = missingModelStateMethods;
   const dialog = { hasMissingSourceSearchAttempt, getSearchResultStatusLevel };
 
   for (const attemptedSource of ['local', 'all']) {
@@ -2624,9 +2626,11 @@ test('Local Database source reports its result after Local Database or Everythin
 });
 
 test('automatic Local Database download source stays hidden until that source is searched', () => {
-  const hasMissingSourceSearchAttempt = eval(`(${extractMethod(missingBrowserMethodsSource, 'hasMissingSourceSearchAttempt')})`);
-  const isLocalDatabaseDownloadSource = eval(`(${extractMethod(missingBrowserMethodsSource, 'isLocalDatabaseDownloadSource')})`);
-  const shouldDisplayKnownDownloadSource = eval(`(${extractMethod(missingBrowserMethodsSource, 'shouldDisplayKnownDownloadSource')})`);
+  const {
+    hasMissingSourceSearchAttempt,
+    isLocalDatabaseDownloadSource,
+    shouldDisplayKnownDownloadSource,
+  } = missingModelStateMethods;
   const state = {
     selectedSource: 'all',
     explicitSearchSources: [],
