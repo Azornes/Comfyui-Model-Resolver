@@ -12,6 +12,7 @@ from ..path_utils import (
     MODEL_RESOLVER_METADATA_SCHEMA_VERSION,
     find_metadata_sidecar_path,
     get_filename_from_path,
+    normalize_metadata_file_path,
     read_merged_model_metadata,
 )
 from ..resolver import normalize_sha256
@@ -116,8 +117,7 @@ def _coerce_size(value: Any) -> int:
         return 0
 
 
-def _normalise_metadata_file_path(path_value: str) -> str:
-    return str(path_value or "").replace(os.sep, "/")
+_normalise_metadata_file_path = normalize_metadata_file_path
 
 
 def _resolve_lora_manager_model_type(category: str, source_type: Any = "") -> str:

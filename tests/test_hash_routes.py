@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from aiohttp import web
 
-from core.path_utils import HashCalculationCancelled
+from core.path_utils import HashCalculationCancelled, normalize_absolute_path
 from core.routes.context import RouteContext
 from core.routes.hashes import register_hash_routes
 from core.services.hash_service import HashService
@@ -132,6 +132,21 @@ async def test_local_model_hashes_uses_model_path_and_returns_metadata():
         os.path.realpath(os.path.abspath(os.path.normpath(model_path))),
         model={"path": model_path},
     )
+
+
+def test_hash_service_path_normalization_uses_shared_helper_and_injected_path_module():
+    _, values = _build_hash_routes()
+    service = HashService(RouteContext(values))
+    model_path = "models/checkpoints/../loras/model.safetensors"
+
+    with patch(
+        "core.path_utils.normalize_absolute_path",
+        wraps=normalize_absolute_path,
+    ) as normalize_path:
+        result = service._normalize_path(model_path)
+
+    assert result == normalize_absolute_path(model_path)
+    normalize_path.assert_called_once_with(model_path, path_module=os.path)
 
 
 @pytest.mark.asyncio

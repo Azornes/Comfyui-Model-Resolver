@@ -71,8 +71,9 @@ class HashService:
         return self.extension.logger
 
     def _normalize_path(self, path):
-        return self.os.path.realpath(
-            self.os.path.abspath(self.os.path.normpath(str(path)))
+        return path_utils.normalize_absolute_path(
+            path,
+            path_module=self.os.path,
         )
 
     async def local_model_hashes(self, request):

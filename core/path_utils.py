@@ -55,6 +55,18 @@ def get_path_identity(path: str) -> str:
         return os.path.normcase(os.path.abspath(path))
 
 
+def normalize_absolute_path(path_value: Any, path_module=os.path) -> str:
+    """Return an absolute, normalized and symlink-resolved path."""
+    return path_module.realpath(
+        path_module.abspath(path_module.normpath(str(path_value)))
+    )
+
+
+def normalize_metadata_file_path(path_value: Any) -> str:
+    """Normalize metadata paths to portable forward-slash separators."""
+    return str(path_value or "").replace(os.sep, "/")
+
+
 def get_path_abs(path_value: Any) -> str:
     """Return absolute path safely, handling OSError/ValueError."""
     try:

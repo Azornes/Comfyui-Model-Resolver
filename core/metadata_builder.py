@@ -31,6 +31,7 @@ from .path_utils import (
     find_external_metadata_sidecar_path,
     get_filename_from_path,
     get_model_resolver_sidecar_path,
+    normalize_metadata_file_path,
     read_json_safe,
     read_safetensors_header,
     write_json_atomic,
@@ -255,8 +256,7 @@ def _merge_unique_strings(*values: Any) -> List[str]:
     return result
 
 
-def _normalise_metadata_file_path(path_value: str) -> str:
-    return str(path_value or "").replace(os.sep, "/")
+_normalise_metadata_file_path = normalize_metadata_file_path
 
 
 def _model_type_for_category(category: str) -> str:

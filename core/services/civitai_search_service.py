@@ -1,5 +1,6 @@
 """CivitAI model search service."""
 
+from .. import path_utils
 from ..routes.context import RouteContext
 from ..sources.common import is_remote_link_marked_dead
 from .model_utils import CivitAISearchDependencies, ModelServiceDependencies
@@ -99,8 +100,9 @@ class CivitAISearchService(ModelServiceDependencies):
             file_path = find_local_file_path(filename, category)
 
         if file_path:
-            file_path = _os.path.realpath(
-                _os.path.abspath(_os.path.normpath(str(file_path)))
+            file_path = path_utils.normalize_absolute_path(
+                file_path,
+                path_module=_os.path,
             )
             if not is_path_in_configured_model_roots(file_path):
                 if resolved_path:

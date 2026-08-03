@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from core.download.api import context as downloader
+from core.path_utils import normalize_metadata_file_path
 
 
 class DownloaderBoundaryTests(unittest.TestCase):
@@ -60,6 +61,7 @@ class DownloaderBoundaryTests(unittest.TestCase):
         self.assertEqual(12, downloader._coerce_size("12.9"))
         self.assertEqual(0, downloader._coerce_size("not-a-size"))
         self.assertEqual("models/subfolder", downloader._normalise_metadata_file_path("models\\subfolder"))
+        self.assertEqual("models/subfolder", normalize_metadata_file_path("models\\subfolder"))
 
     def test_metadata_source_and_model_type_helpers_cover_provider_variants(self):
         self.assertEqual(
