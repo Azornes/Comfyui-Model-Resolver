@@ -823,8 +823,13 @@ export const workflowStateMethods = {
         const missingSignatureChanged = missingSignature
             && missingSignature !== this.activeMissingWorkflowSignature;
         const graphStillLooksOld = routeChanged && previousSignature && signature === previousSignature;
+        const workflowChangeStillPending = (
+            reason === 'node-widget-change'
+            && !routeChanged
+            && !signatureChanged
+        );
 
-        if ((!signature || graphStillLooksOld) && attempt < 8) {
+        if ((!signature || graphStillLooksOld || workflowChangeStillPending) && attempt < 8) {
             this._workflowRefreshRetryTimer = setTimeout(() => {
                 if (generation !== this._workflowRefreshGeneration) return;
                 this._workflowRefreshRetryTimer = null;

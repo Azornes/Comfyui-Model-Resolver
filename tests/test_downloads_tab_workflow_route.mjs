@@ -1393,6 +1393,52 @@ test('rgthree Power Lora Loader updates strength without reloading workflow anal
   ]);
 });
 
+test('rgthree Power Lora Loader detects removals made through its context menu', async () => {
+  const configureCustomNodeModelAdapter = eval(
+    `(${extractMethod(modelResolverSource, 'configureCustomNodeModelAdapter')})`
+  );
+  const getCustomNodeModelListSignature = eval(
+    `(${extractMethod(modelResolverSource, 'getCustomNodeModelListSignature')})`
+  );
+  const getCustomNodeModelStrengthSignature = eval(
+    `(${extractMethod(modelResolverSource, 'getCustomNodeModelStrengthSignature')})`
+  );
+  const calls = [];
+  const node = {
+    comfyClass: 'Power Lora Loader (rgthree)',
+    widgets: [
+      {
+        name: 'lora_1',
+        value: { on: true, lora: 'first.safetensors', strength: 1 },
+      },
+      {
+        name: 'lora_2',
+        value: { on: true, lora: 'second.safetensors', strength: 1 },
+      },
+    ],
+    setDirtyCanvas() {},
+  };
+  const resolver = {
+    customNodeModelAdapterStates: new WeakMap(),
+    getCustomNodeModelListSignature,
+    getCustomNodeModelStrengthSignature,
+    scheduleNodeContextMenuAnalysis: () => calls.push('context-analysis'),
+    dialog: {
+      isWorkflowRefreshSuppressed: () => false,
+      scheduleActiveWorkflowRefresh: reason => calls.push(`dialog-refresh:${reason}`),
+    },
+  };
+
+  configureCustomNodeModelAdapter.call(resolver, node);
+  node.widgets.splice(1, 1);
+  await Promise.resolve();
+
+  assert.deepEqual(calls, [
+    'context-analysis',
+    'dialog-refresh:node-widget-change',
+  ]);
+});
+
 test('rgthree dynamic lora widgets bypass the generic full workflow refresh', () => {
   const configureNodeContextMenu = eval(
     `(${extractMethod(modelResolverSource, 'configureNodeContextMenu')})`
@@ -2110,6 +2156,84 @@ test('node widget changes request a content-preserving Missing Models refresh', 
   assert.equal(loadArguments[0], workflow);
   assert.deepEqual(loadArguments[1], { preserveContent: true });
   assert.equal(preserveSearchCacheAtSync, true);
+});
+
+test('node widget refresh retries while ComfyUI still serializes the previous workflow', async () => {
+  const log = { debug() {} };
+  const refreshForActiveWorkflowChange = eval(
+    `(${extractMethod(workflowStateMethodsSource, 'refreshForActiveWorkflowChange')})`
+  );
+  const workflow = { version: 'old' };
+  let loadArguments = null;
+  let retryCallback = null;
+  const originalSetTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = callback => {
+    retryCallback = callback;
+    return 1;
+  };
+
+  const dialog = {
+    _workflowRefreshGeneration: 1,
+    activeWorkflowRouteKey: 'workflow-a',
+    activeWorkflowSignature: 'old-signature',
+    activeMissingWorkflowSignature: 'old-missing-signature',
+    activeTab: 'missing',
+    contentElement: { style: {} },
+    isVisible: () => true,
+    getActiveWorkflowRouteKey: () => 'workflow-a',
+    getCurrentWorkflow: () => workflow,
+    getWorkflowSignature: currentWorkflow => `${currentWorkflow.version}-signature`,
+    getMissingWorkflowSignature: currentWorkflow => `${currentWorkflow.version}-missing-signature`,
+    refreshForActiveWorkflowChange,
+    syncWorkflowScopedQueue() {},
+    async loadWorkflowData(...args) {
+      loadArguments = args;
+    },
+  };
+
+  try {
+    await refreshForActiveWorkflowChange.call(dialog, {
+      reason: 'node-widget-change',
+      expectedRoute: 'workflow-a',
+      previousSignature: 'old-signature',
+      attempt: 0,
+      generation: 1,
+      candidateRoute: 'workflow-a',
+      candidateSignature: 'new-signature',
+    });
+
+    assert.equal(loadArguments, null);
+    assert.equal(typeof retryCallback, 'function');
+
+    workflow.version = 'new';
+    retryCallback();
+    await Promise.resolve();
+
+    assert.equal(loadArguments[0], workflow);
+    assert.deepEqual(loadArguments[1], { preserveContent: true });
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+  }
+});
+
+test('node context analysis waits for a visible workflow refresh to finish', async () => {
+  const refreshNodeContextMenuAnalysis = eval(
+    `(${extractMethod(modelResolverSource, 'refreshNodeContextMenuAnalysis')})`
+  );
+  const calls = [];
+  const dialog = {
+    isVisible: () => true,
+    _workflowRefreshRetryTimer: 1,
+  };
+  const resolver = {
+    dialog,
+    scheduleNodeContextMenuAnalysis: delay => calls.push(delay),
+  };
+
+  const result = await refreshNodeContextMenuAnalysis.call(resolver);
+
+  assert.equal(result, null);
+  assert.deepEqual(calls, [180]);
 });
 
 test('strength-only widget changes synchronize workflow state without refreshing Missing Models', async () => {

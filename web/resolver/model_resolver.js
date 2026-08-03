@@ -353,6 +353,15 @@ export class ModelResolver {
     async refreshNodeContextMenuAnalysis({ force = false } = {}) {
         if (!this.dialog) return null;
 
+        const workflowRefreshPending = (
+            this.dialog.isVisible?.()
+            && (this.dialog._workflowRefreshTimer || this.dialog._workflowRefreshRetryTimer)
+        );
+        if (!force && workflowRefreshPending) {
+            this.scheduleNodeContextMenuAnalysis(180);
+            return null;
+        }
+
         const { workflow, signature } = this.getNodeContextWorkflowState();
         if (!workflow || !signature) return null;
 

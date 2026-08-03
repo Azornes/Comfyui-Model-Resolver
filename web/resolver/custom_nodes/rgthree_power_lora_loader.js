@@ -16,28 +16,47 @@ function getPowerLoraEntries(node) {
 }
 
 function observePowerLoraLoader(node, notify) {
-    if (
-        typeof node.setDirtyCanvas !== 'function'
-        || node.setDirtyCanvas.__modelResolverCustomNodeAdapter
-    ) {
-        return;
-    }
-
-    const originalSetDirtyCanvas = node.setDirtyCanvas;
-    let inspectionQueued = false;
-    const wrappedSetDirtyCanvas = function() {
-        const result = originalSetDirtyCanvas.apply(this, arguments);
-        if (!inspectionQueued) {
+    const queueInspection = (() => {
+        let inspectionQueued = false;
+        return () => {
+            if (inspectionQueued) return;
             inspectionQueued = true;
             queueMicrotask(() => {
                 inspectionQueued = false;
                 notify();
             });
-        }
-        return result;
-    };
-    wrappedSetDirtyCanvas.__modelResolverCustomNodeAdapter = true;
-    node.setDirtyCanvas = wrappedSetDirtyCanvas;
+        };
+    })();
+
+    if (
+        typeof node.setDirtyCanvas !== 'function'
+        || node.setDirtyCanvas.__modelResolverCustomNodeAdapter
+    ) {
+        if (!Array.isArray(node.widgets)) return;
+    } else {
+        const originalSetDirtyCanvas = node.setDirtyCanvas;
+        const wrappedSetDirtyCanvas = function() {
+            const result = originalSetDirtyCanvas.apply(this, arguments);
+            queueInspection();
+            return result;
+        };
+        wrappedSetDirtyCanvas.__modelResolverCustomNodeAdapter = true;
+        node.setDirtyCanvas = wrappedSetDirtyCanvas;
+    }
+
+    if (
+        typeof node.widgets.splice === 'function'
+        && !node.widgets.splice.__modelResolverCustomNodeAdapter
+    ) {
+        const originalSplice = node.widgets.splice;
+        const wrappedSplice = function() {
+            const result = originalSplice.apply(this, arguments);
+            queueInspection();
+            return result;
+        };
+        wrappedSplice.__modelResolverCustomNodeAdapter = true;
+        node.widgets.splice = wrappedSplice;
+    }
 }
 
 export const rgthreePowerLoraLoaderAdapter = Object.freeze({
