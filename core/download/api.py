@@ -212,6 +212,9 @@ context._delete_python_partial_download_file = _bind(
 )
 context._delete_xet_partial_file = _bind(aria2_backend.delete_xet_partial_file)
 context._ensure_aria2_daemon = _bind(aria2_backend.ensure_aria2_daemon)
+context._recover_aria2_missing_control_file = _bind(
+    aria2_backend.recover_aria2_missing_control_file
+)
 context._force_remove_aria2_transfer = _bind(
     aria2_backend.force_remove_aria2_transfer
 )
@@ -226,6 +229,7 @@ context._resolve_download_url_for_aria2 = _bind(
 context._run_aria2_desired_state_worker = _bind(
     aria2_backend.run_aria2_desired_state_worker
 )
+context._aria2_idle_stop_worker = _bind(aria2_backend.aria2_idle_stop_worker)
 context._schedule_aria2_idle_stop = _bind(aria2_backend.schedule_aria2_idle_stop)
 context._set_download_progress_status = _bind(
     aria2_backend.set_download_progress_status
@@ -238,6 +242,9 @@ context._queue_aria2_desired_state = _bind(
     aria2_backend.queue_aria2_desired_state
 )
 context._aria2_action_error_is_ok = aria2_backend.aria2_action_error_is_ok
+context._is_aria2_missing_control_file_error = (
+    aria2_backend.is_aria2_missing_control_file_error
+)
 context.Aria2Error = aria2_backend.Aria2Error
 context._find_free_port = aria2_backend.find_free_port
 context._parse_aria2_int = aria2_backend.parse_aria2_int

@@ -738,8 +738,8 @@
 #model-resolver-modal .mr-download-queue-actions {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
-    padding: 3px 5px;
+    gap: 2px;
+    padding: 2px 4px;
     background: var(--mr-surface-glass-02);
     border: 1px solid var(--mr-border-strong);
     border-radius: var(--mr-missing-chip-radius);
@@ -749,8 +749,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
     padding: 0;
     cursor: pointer;
     color: var(--mr-text-muted);
@@ -776,8 +776,8 @@
 }
 
 .mr-download-queue-action-icon {
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
 }
 
 #model-resolver-modal .mr-download-queue-pause {

@@ -92,6 +92,16 @@ def parse_aria2_int(value: Any) -> int:
         return 0
 
 
+def is_aria2_missing_control_file_error(error: Any) -> bool:
+    """Identify aria2's stale-output error caused by a missing .aria2 file."""
+    message = str(error or "").lower()
+    return (
+        "control file" in message
+        and "does not exist" in message
+        and "allow-overwrite" in message
+    )
+
+
 def resolve_aria2_completed_path(status: Dict[str, Any], default_path: str) -> str:
     """Use aria2's completed file path when it reports one."""
     files = status.get("files")
@@ -605,6 +615,58 @@ def ensure_aria2_daemon(
         )
 
 
+def recover_aria2_missing_control_file(
+    download_id: str,
+    gid: str,
+    settings: Optional[Dict[str, Any]] = None,
+    *,
+    dependencies: Any = None,
+) -> bool:
+    """Restart a stale resolver daemon when a download loses its control file."""
+    facade = _require_dependencies(dependencies)
+    with facade.aria2_lock:
+        other_transfers = [
+            active_id
+            for active_id in facade.aria2_transfers
+            if active_id != download_id
+        ]
+        if other_transfers:
+            log.warning(
+                "Skipping automatic aria2 recovery because other downloads are active: "
+                f"{', '.join(other_transfers)}"
+            )
+            return False
+        facade.aria2_transfers.pop(download_id, None)
+
+    try:
+        if gid:
+            try:
+                facade._aria2_rpc(
+                    "aria2.removeDownloadResult",
+                    [gid],
+                )
+            except Exception as exc:
+                log.debug(f"Could not remove stale aria2 result {gid}: {exc}")
+
+        stopped = facade.stop_aria2_daemon(reason="stale-control-file")
+        if not stopped.get("success"):
+            log.warning(
+                "Could not restart aria2 for stale control-file recovery: "
+                f"{stopped.get('error') or stopped.get('message') or 'unknown error'}"
+            )
+            return False
+
+        facade._ensure_aria2_daemon(settings)
+        log.info(
+            "Restarted aria2 after detecting a missing control file; "
+            f"retrying download {download_id}"
+        )
+        return True
+    except Exception as exc:
+        log.warning(f"Automatic aria2 recovery failed for {download_id}: {exc}")
+        return False
+
+
 def aria2_tell_status(gid: str, *, dependencies: Any = None) -> Dict[str, Any]:
     """Read an aria2 transfer status with retries for transient resets."""
     facade = _require_dependencies(dependencies)
@@ -614,6 +676,7 @@ def aria2_tell_status(gid: str, *, dependencies: Any = None) -> Dict[str, Any]:
         "totalLength",
         "completedLength",
         "downloadSpeed",
+        "connections",
         "errorMessage",
         "files",
     ]
@@ -721,21 +784,59 @@ def download_file_with_aria2(
         if header_values:
             options["header"] = header_values
 
-        gid = facade._aria2_rpc(
-            "aria2.addUri",
-            [[aria2_url], options],
-        )
-        if not isinstance(gid, str) or not gid:
-            raise Aria2Error("aria2 did not return a download gid")
+        def add_aria2_transfer() -> str:
+            new_gid = facade._aria2_rpc(
+                "aria2.addUri",
+                [[aria2_url], options],
+            )
+            if not isinstance(new_gid, str) or not new_gid:
+                raise Aria2Error("aria2 did not return a download gid")
 
-        with facade.aria2_lock:
-            facade.aria2_transfers[download_id] = {
-                "gid": gid,
-                "path": dest_path,
-            }
-        with facade.download_lock:
-            facade.download_progress[download_id]["aria2_gid"] = gid
-            facade.download_progress[download_id]["status"] = "downloading"
+            with facade.aria2_lock:
+                facade.aria2_transfers[download_id] = {
+                    "gid": new_gid,
+                    "path": dest_path,
+                }
+            with facade.download_lock:
+                facade.download_progress[download_id].update(
+                    {
+                        "aria2_gid": new_gid,
+                        "status": "downloading",
+                        "error": None,
+                        "progress": 0,
+                        "downloaded": 0,
+                        "total_size": 0,
+                        "speed": 0,
+                    }
+                )
+            return new_gid
+
+        recovery_attempted = False
+        try:
+            gid = add_aria2_transfer()
+        except Exception as exc:
+            if (
+                not recovery_attempted
+                and download_id not in facade.cancelled_downloads
+                and facade._is_aria2_missing_control_file_error(exc)
+            ):
+                recovery_attempted = True
+                facade._set_download_progress_status(
+                    download_id,
+                    "starting",
+                    error=None,
+                    speed=0,
+                )
+                if facade._recover_aria2_missing_control_file(
+                    download_id,
+                    "",
+                    settings,
+                ):
+                    gid = add_aria2_transfer()
+                else:
+                    raise
+            else:
+                raise
 
         log.info(f"Starting aria2 download: {filename}")
         last_cli_log = start_time
@@ -767,6 +868,7 @@ def download_file_with_aria2(
             total_size = facade._parse_aria2_int(status.get("totalLength"))
             downloaded = facade._parse_aria2_int(status.get("completedLength"))
             speed = facade._parse_aria2_int(status.get("downloadSpeed"))
+            connections = facade._parse_aria2_int(status.get("connections"))
             progress = int((downloaded / total_size) * 100) if total_size > 0 else 0
             mapped_status = {
                 "active": "downloading",
@@ -790,6 +892,7 @@ def download_file_with_aria2(
                                 if mapped_status in {"paused", "completed"}
                                 else speed
                             ),
+                            "connections": connections,
                             "download_backend": "aria2",
                             "aria2_gid": gid,
                         }
@@ -862,6 +965,26 @@ def download_file_with_aria2(
 
             if state == "error":
                 error_msg = status.get("errorMessage") or "aria2 download failed"
+                if (
+                    not recovery_attempted
+                    and download_id not in facade.cancelled_downloads
+                    and facade._is_aria2_missing_control_file_error(error_msg)
+                ):
+                    recovery_attempted = True
+                    facade._set_download_progress_status(
+                        download_id,
+                        "starting",
+                        error=None,
+                        speed=0,
+                    )
+                    recovered = facade._recover_aria2_missing_control_file(
+                        download_id,
+                        gid,
+                        settings,
+                    )
+                    if recovered:
+                        gid = add_aria2_transfer()
+                        continue
                 with facade.download_lock:
                     facade.download_progress[download_id]["status"] = "error"
                     facade.download_progress[download_id]["error"] = error_msg

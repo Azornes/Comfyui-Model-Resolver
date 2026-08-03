@@ -1204,14 +1204,16 @@ export const queueMethods = {
             const isAria2 = backend === 'aria2';
             const isPaused = status === 'paused';
             const statusLabel = status === 'downloading'
-                ? (presentation.isFinalizing ? 'Finalizing' : `${percentLabel}%`)
+                ? (presentation.isFinalizing ? 'Finalizing' : '')
                 : (status === 'starting' ? 'Starting' : (isPaused ? 'Paused' : status.replace(/_/g, ' ')));
-            const sizeText = presentation.isFinalizing && logicalTotal
+            const sizeTextBase = presentation.isFinalizing && logicalTotal
                 ? `Finalizing file: ${logicalDownloaded} / ${logicalTotal}`
                 : (presentation.totalSize ? `${downloaded} / ${total}` : downloaded);
+            const sizeText = presentation.totalSize ? `${sizeTextBase} (${percentLabel}%)` : sizeTextBase;
             const speed = Number(progress.speed) || 0;
             const speedText = speed > 0 ? `${this.formatBytes(speed)}/s` : '';
             const etaText = this.getDownloadEtaText?.(progress)?.replace(/^ETA\s+/i, 'Remaining ') || '';
+            const connections = Number(progress.connections) || 0;
             const targetPath = progress.directory || info.downloadDirectory || info.downloadPath || '';
             const workflowLabel = this.getDownloadWorkflowLabel?.(info) || 'Unknown workflow';
             const contextModel = this.getDownloadQueueContext?.(progress, info, workflowLabel, downloadId);
@@ -1236,7 +1238,9 @@ export const queueMethods = {
             html += `<div class="mr-download-queue-header">`;
             html += `<div class="mr-download-queue-heading">`;
             html += `<span class="mr-download-queue-filename" data-tooltip="${this.escapeHtml(filename)}">${this.escapeHtml(filename)}</span>`;
-            html += `<span class="mr-download-queue-status">${this.escapeHtml(statusLabel)}</span>`;
+            if (statusLabel) {
+                html += `<span class="mr-download-queue-status">${this.escapeHtml(statusLabel)}</span>`;
+            }
             html += `</div>`;
             html += `<div class="mr-download-queue-actions" role="group" aria-label="Download actions">`;
             html += actionButton(
@@ -1261,6 +1265,9 @@ export const queueMethods = {
             }
             if (etaText) {
                 html += `<span class="mr-download-queue-stat"><span>${this.escapeHtml(etaText)}</span></span>`;
+            }
+            if (connections > 0) {
+                html += `<span class="mr-download-queue-stat" data-tooltip="Active download connections">${renderIcon('network', 'mr-download-queue-stat-icon')}<span>${connections}</span></span>`;
             }
             if (!speedText && !etaText) {
                 html += `<span class="mr-download-queue-stat mr-download-queue-stat-muted">${this.escapeHtml(statusLabel)}</span>`;

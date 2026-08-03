@@ -3,6 +3,36 @@
 from typing import Any, Callable, Dict, Optional
 
 
+def find_active_download_for_path(
+    download_progress: Dict[str, Dict[str, Any]],
+    target_path: str,
+    os_module: Any,
+    *,
+    exclude_id: str = "",
+) -> Optional[str]:
+    """Return the active download using the same normalized destination path."""
+    if not target_path:
+        return None
+    normalized_target = os_module.path.normcase(
+        os_module.path.abspath(target_path)
+    )
+    terminal_statuses = {"completed", "error", "cancelled"}
+    for download_id, progress in download_progress.items():
+        if download_id == exclude_id or not isinstance(progress, dict):
+            continue
+        if str(progress.get("status") or "").lower() in terminal_statuses:
+            continue
+        existing_path = progress.get("path")
+        if not existing_path:
+            continue
+        normalized_existing = os_module.path.normcase(
+            os_module.path.abspath(str(existing_path))
+        )
+        if normalized_existing == normalized_target:
+            return download_id
+    return None
+
+
 def download_file(
     url: str,
     dest_path: str,
@@ -378,11 +408,36 @@ def download_model(
             "error": "Download target is outside the selected model directory",
         }
 
+    with download_lock:
+        active_download_id = find_active_download_for_path(
+            download_progress,
+            dest_path,
+            os,
+            exclude_id=download_id,
+        )
+    if active_download_id:
+        message = f"A download is already active for this file: {dest_path}"
+        log.info(f"{message} (download_id={active_download_id})")
+        return {
+            "success": False,
+            "download_id": download_id,
+            "active_download_id": active_download_id,
+            "error": message,
+            "path": dest_path,
+        }
+
     resume_aria2_partial = bool(
         facade._download_backend_from_settings() == "aria2"
         and os.path.isfile(dest_path)
         and os.path.isfile(f"{dest_path}.aria2")
     )
+    if (
+        facade._download_backend_from_settings() == "aria2"
+        and os.path.isfile(f"{dest_path}.aria2")
+        and not os.path.isfile(dest_path)
+    ):
+        log.warning(f"Removing orphaned aria2 control file: {dest_path}.aria2")
+        facade._delete_partial_download_files(dest_path)
     if resume_aria2_partial:
         log.info(f"Resuming partial aria2 download: {dest_path}")
 
@@ -519,6 +574,7 @@ def start_background_download(
     time = facade.time
     download_progress = facade.download_progress
     download_lock = facade.download_lock
+    log = facade.log
 
     download_id = facade.generate_download_id()
     filename = facade.sanitize_download_filename(filename)
@@ -529,6 +585,17 @@ def start_background_download(
     initial_path = os.path.join(initial_directory, filename) if initial_directory and filename else ""
 
     with download_lock:
+        active_download_id = find_active_download_for_path(
+            download_progress,
+            initial_path,
+            os,
+        )
+        if active_download_id:
+            log.info(
+                f"Reusing active download for {initial_path} "
+                f"(download_id={active_download_id})"
+            )
+            return active_download_id
         download_progress[download_id] = {
             "status": "starting",
             "progress": 0,

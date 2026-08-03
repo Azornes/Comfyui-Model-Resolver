@@ -1,10 +1,13 @@
 import os
 import tempfile
+import threading
 import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from core.download.api import context as downloader
+from core.download.aria2_backend import recover_aria2_missing_control_file
+from core.download.orchestrator import find_active_download_for_path
 from core.path_utils import normalize_metadata_file_path
 
 
@@ -131,6 +134,76 @@ class DownloaderBoundaryTests(unittest.TestCase):
         self.assertTrue(downloader._aria2_action_error_is_ok("downloading", "not paused"))
         self.assertFalse(downloader._aria2_action_error_is_ok("paused", "permission denied"))
         self.assertFalse(downloader._aria2_action_error_is_ok("completed", "already paused"))
+
+    def test_aria2_missing_control_file_error_is_detected(self):
+        self.assertTrue(
+            downloader._is_aria2_missing_control_file_error(
+                "File exists, but a control file(*.aria2) does not exist. "
+                "Download was canceled; add --allow-overwrite=true."
+            )
+        )
+        self.assertFalse(
+            downloader._is_aria2_missing_control_file_error(
+                "TLS handshake failed"
+            )
+        )
+
+    def test_aria2_missing_control_file_recovery_restarts_only_when_alone(self):
+        facade = SimpleNamespace(
+            aria2_lock=threading.Lock(),
+            aria2_transfers={"download-1": {"gid": "gid-1"}},
+            _aria2_rpc=MagicMock(),
+            stop_aria2_daemon=MagicMock(return_value={"success": True}),
+            _ensure_aria2_daemon=MagicMock(),
+        )
+
+        self.assertTrue(
+            recover_aria2_missing_control_file(
+                "download-1",
+                "gid-1",
+                {"download_backend": "aria2"},
+                dependencies=facade,
+            )
+        )
+        facade.stop_aria2_daemon.assert_called_once_with(
+            reason="stale-control-file"
+        )
+        facade._ensure_aria2_daemon.assert_called_once()
+        self.assertNotIn("download-1", facade.aria2_transfers)
+
+        facade.aria2_transfers.update(
+            {
+                "download-1": {"gid": "gid-1"},
+                "download-2": {"gid": "gid-2"},
+            }
+        )
+        facade.stop_aria2_daemon.reset_mock()
+        self.assertFalse(
+            recover_aria2_missing_control_file(
+                "download-1",
+                "gid-1",
+                dependencies=facade,
+            )
+        )
+        facade.stop_aria2_daemon.assert_not_called()
+
+    def test_active_download_path_is_reused_case_insensitively(self):
+        active_id = find_active_download_for_path(
+            {
+                "active": {
+                    "status": "downloading",
+                    "path": r"C:\Models\Qwen.safetensors",
+                },
+                "finished": {
+                    "status": "completed",
+                    "path": r"C:\Models\Other.safetensors",
+                },
+            },
+            r"c:\models\qwen.safetensors",
+            os,
+        )
+
+        self.assertEqual("active", active_id)
 
     def test_progress_snapshot_is_copied_and_completed_entries_can_be_cleared(self):
         with patch.dict(
