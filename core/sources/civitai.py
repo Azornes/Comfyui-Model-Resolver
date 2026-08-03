@@ -142,7 +142,7 @@ def check_civitai_api_key(api_key: Optional[str]) -> Dict[str, Any]:
     )
 
 
-from .common import build_unified_search_result
+from .common import build_custom_url_result, build_unified_search_result
 
 
 def _build_civitai_result_from_version(
@@ -2272,32 +2272,28 @@ def build_civitai_custom_result(
             else details.get("url")
         )
     )
-    return {
-        "source": "civitai",
-        "details_source": "civitai",
-        "model_id": model_id,
-        "version_id": version_id,
-        "name": details.get("name") or filename,
-        "version_name": selected_version.get("name") or "",
-        "type": details.get("type") or file_info.get("type") or "",
-        "filename": filename,
-        "url": version_url or details.get("url"),
-        "version_url": version_url or details.get("url"),
-        "download_url": download_url,
-        "size": file_info.get("size"),
-        "base_model": selected_version.get("base_model"),
-        "tags": details.get("tags") or [],
-        "trained_words": selected_version.get("trained_words") or [],
-        "images": details.get("images") or selected_version.get("images") or [],
-        "description": selected_version.get("description")
+    return build_custom_url_result(
+        source="civitai",
+        model_id=model_id,
+        version_id=version_id,
+        name=details.get("name") or filename,
+        version_name=selected_version.get("name") or "",
+        type=details.get("type") or file_info.get("type") or "",
+        filename=filename,
+        url=version_url or details.get("url"),
+        download_url=download_url,
+        size=file_info.get("size"),
+        base_model=selected_version.get("base_model"),
+        tags=details.get("tags") or [],
+        trained_words=selected_version.get("trained_words") or [],
+        images=details.get("images") or selected_version.get("images") or [],
+        description=selected_version.get("description")
         or details.get("description")
         or "",
-        "model_description": details.get("description") or "",
-        "sha256": sha256,
-        "hashes": hashes,
-        "match_type": "custom_url",
-        "custom_url": True,
-    }
+        sha256=sha256,
+        hashes=hashes,
+        model_description=details.get("description") or "",
+    )
 
 
 def resolve_civitai_version_custom_result(

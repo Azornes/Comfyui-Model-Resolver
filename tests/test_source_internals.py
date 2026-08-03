@@ -27,6 +27,7 @@ from core.sources.civarchive import (
     _normalize_archive_version,
     _normalize_download_url,
     _resolve_file_size_bytes,
+    build_civarchive_custom_result,
     parse_civarchive_url,
 )
 
@@ -44,6 +45,7 @@ from core.sources.civitai import (
     _search_civitai_public_api_candidates,
     _search_civitai_red_candidates,
     _search_civitai_trpc_candidates,
+    build_civitai_custom_result,
     build_civitai_session_cookie,
     clear_search_cache,
     get_civitai_model_details,
@@ -97,6 +99,124 @@ class CivitaiResultBuilderTests(unittest.TestCase):
         self.assertEqual("Anima", result["base_model"])
         self.assertEqual("abc123", result["sha256"])
         self.assertEqual(10 * 1024, result["size"])
+
+
+class CustomUrlResultBuilderTests(unittest.TestCase):
+    def test_civitai_custom_result_preserves_all_result_fields(self):
+        result = build_civitai_custom_result({
+            "model_id": 123,
+            "version_id": 456,
+            "name": "Example model",
+            "type": "LORA",
+            "tags": ["style"],
+            "images": [{"url": "https://example.test/image"}],
+            "description": "Model description",
+            "version_url": "https://civitai.com/models/123?modelVersionId=456",
+            "selected_version": {
+                "id": 456,
+                "name": "v1",
+                "base_model": "SD 1.5",
+                "trained_words": ["example"],
+                "description": "Version notes",
+                "files": [{
+                    "name": "example.safetensors",
+                    "type": "Model",
+                    "download_url": "https://civitai.com/api/download/models/456",
+                    "size": 123,
+                    "sha256": "abc123",
+                    "hashes": {"SHA256": "abc123"},
+                }],
+            },
+        })
+
+        self.assertEqual({
+            "source": "civitai",
+            "details_source": "civitai",
+            "model_id": 123,
+            "version_id": 456,
+            "name": "Example model",
+            "version_name": "v1",
+            "type": "LORA",
+            "filename": "example.safetensors",
+            "url": "https://civitai.com/models/123?modelVersionId=456",
+            "version_url": "https://civitai.com/models/123?modelVersionId=456",
+            "download_url": "https://civitai.com/api/download/models/456",
+            "size": 123,
+            "base_model": "SD 1.5",
+            "tags": ["style"],
+            "trained_words": ["example"],
+            "images": [{"url": "https://example.test/image"}],
+            "description": "Version notes",
+            "model_description": "Model description",
+            "sha256": "abc123",
+            "hashes": {"SHA256": "abc123"},
+            "match_type": "custom_url",
+            "custom_url": True,
+        }, result)
+
+    def test_civarchive_custom_result_preserves_provider_fields(self):
+        result = build_civarchive_custom_result({
+            "model_id": 789,
+            "version_id": 987,
+            "name": "Archived model",
+            "type": "Checkpoint",
+            "tags": ["archive"],
+            "platform": "civitai",
+            "platform_url": "https://civitai.com/models/789",
+            "description": "Archive description",
+            "version_url": "https://civarchive.com/models/789?modelVersionId=987",
+            "selected_version": {
+                "id": 987,
+                "name": "archive-v1",
+                "base_model": "SDXL",
+                "trained_words": ["archived"],
+                "description": "Archive notes",
+                "platform_url": "https://civitai.com/models/789?modelVersionId=987",
+                "files": [{
+                    "name": "archived.safetensors",
+                    "type": "Model",
+                    "download_url": "https://civarchive.com/download/987",
+                    "download_urls": [
+                        "https://civarchive.com/download/987",
+                        "https://mirror.example.test/987",
+                    ],
+                    "size": 456,
+                    "sha256": "def456",
+                    "hashes": {"SHA256": "def456"},
+                }],
+            },
+        })
+
+        self.assertEqual({
+            "source": "civarchive",
+            "details_source": "civarchive",
+            "model_id": 789,
+            "version_id": 987,
+            "name": "Archived model",
+            "version_name": "archive-v1",
+            "type": "Checkpoint",
+            "filename": "archived.safetensors",
+            "url": "https://civarchive.com/models/789?modelVersionId=987",
+            "version_url": "https://civarchive.com/models/789?modelVersionId=987",
+            "platform_url": "https://civitai.com/models/789",
+            "download_url": "https://civarchive.com/download/987",
+            "download_urls": [
+                "https://civarchive.com/download/987",
+                "https://mirror.example.test/987",
+            ],
+            "size": 456,
+            "base_model": "SDXL",
+            "tags": ["archive"],
+            "trained_words": ["archived"],
+            "images": [],
+            "description": "Archive notes",
+            "sha256": "def456",
+            "hash": "def456",
+            "hashes": {"SHA256": "def456"},
+            "platform": "civitai",
+            "match_type": "custom_url",
+            "custom_url": True,
+        }, result)
 
 
 class CivitaiModelDetailsTests(unittest.TestCase):

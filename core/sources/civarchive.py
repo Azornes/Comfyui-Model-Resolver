@@ -48,7 +48,11 @@ from ..type_utils import (
     select_primary_model_file,
     to_int,
 )
-from .common import build_unified_search_result, is_remote_link_marked_dead
+from .common import (
+    build_custom_url_result,
+    build_unified_search_result,
+    is_remote_link_marked_dead,
+)
 
 log = create_module_logger(__name__)
 
@@ -2419,34 +2423,30 @@ def build_civarchive_custom_result(
             else details.get("url")
         )
     )
-    return {
-        "source": "civarchive",
-        "details_source": "civarchive",
-        "model_id": model_id,
-        "version_id": version_id,
-        "name": details.get("name") or filename,
-        "version_name": selected_version.get("name") or "",
-        "type": details.get("type") or file_info.get("type") or "",
-        "filename": filename,
-        "url": version_url or details.get("url"),
-        "version_url": version_url or details.get("url"),
-        "platform_url": details.get("platform_url")
-        or selected_version.get("platform_url"),
-        "download_url": download_url,
-        "download_urls": [url for url in download_urls if url],
-        "size": file_info.get("size"),
-        "base_model": selected_version.get("base_model"),
-        "tags": details.get("tags") or [],
-        "trained_words": selected_version.get("trained_words") or [],
-        "images": details.get("images") or selected_version.get("images") or [],
-        "description": selected_version.get("description")
+    return build_custom_url_result(
+        source="civarchive",
+        model_id=model_id,
+        version_id=version_id,
+        name=details.get("name") or filename,
+        version_name=selected_version.get("name") or "",
+        type=details.get("type") or file_info.get("type") or "",
+        filename=filename,
+        url=version_url or details.get("url"),
+        download_url=download_url,
+        size=file_info.get("size"),
+        base_model=selected_version.get("base_model"),
+        tags=details.get("tags") or [],
+        trained_words=selected_version.get("trained_words") or [],
+        images=details.get("images") or selected_version.get("images") or [],
+        description=selected_version.get("description")
         or details.get("description")
         or "",
-        "sha256": sha256,
-        "hash": sha256,
-        "hashes": hashes,
-        "platform": details.get("platform"),
-        "match_type": "custom_url",
-        "custom_url": True,
-    }
+        sha256=sha256,
+        hashes=hashes,
+        platform_url=details.get("platform_url")
+        or selected_version.get("platform_url"),
+        download_urls=[url for url in download_urls if url],
+        hash=sha256,
+        platform=details.get("platform"),
+    )
 
