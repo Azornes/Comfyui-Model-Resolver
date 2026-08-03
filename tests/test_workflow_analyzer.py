@@ -1626,6 +1626,58 @@ class WorkflowModelInventoryCacheTests(unittest.TestCase):
 
         self.assertEqual(6, get_node_info.call_count)
 
+    def test_inner_subgraph_model_change_reuses_unchanged_nodes(self):
+        def build_workflow(inner_value):
+            return {
+                "nodes": [
+                    {
+                        "id": 1,
+                        "type": "subgraph-1",
+                        "widgets_values": [],
+                        "properties": {},
+                        "inputs": [],
+                        "outputs": [],
+                    }
+                ],
+                "definitions": {
+                    "subgraphs": [
+                        {
+                            "id": "subgraph-1",
+                            "name": "Model subgraph",
+                            "inputs": [],
+                            "nodes": [
+                                {
+                                    **_workflow_with_model(inner_value)["nodes"][0],
+                                    "id": 10,
+                                },
+                                {
+                                    **_workflow_with_model(
+                                        "unchanged.safetensors"
+                                    )["nodes"][0],
+                                    "id": 11,
+                                },
+                            ],
+                        }
+                    ]
+                },
+            }
+
+        with (
+            patch(
+                "core.scanner.get_model_files",
+                return_value=[],
+            ),
+            patch.object(
+                references,
+                "get_node_model_info",
+                wraps=references.get_node_model_info,
+            ) as get_node_info,
+        ):
+            get_workflow_model_inventory(build_workflow("first.safetensors"))
+            get_workflow_model_inventory(build_workflow("second.safetensors"))
+
+        self.assertEqual(4, get_node_info.call_count)
+
     def test_scanner_invalidation_clears_shared_inventory(self):
         workflow = _workflow_with_model("invalidated.safetensors")
 

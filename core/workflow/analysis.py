@@ -159,14 +159,14 @@ def _get_promoted_widget_context_cache_key(
             for node in nodes:
                 if not isinstance(node, dict):
                     continue
-                widgets_values = node.get("widgets_values", [])
                 context_node = {
-                    **node,
-                    "widgets_values": (
-                        list(widgets_values)
-                        if isinstance(widgets_values, list)
-                        else []
-                    ),
+                    # Inner widget values are part of each node fingerprint
+                    # and must not invalidate the whole promoted-context
+                    # snapshot. The current node is reanalyzed when its value
+                    # changes, while promotion topology is rebuilt below.
+                    key: value
+                    for key, value in node.items()
+                    if key != "widgets_values"
                 }
                 context_nodes.append(
                     _normalize_workflow_analysis_value(context_node)
