@@ -1215,22 +1215,7 @@ export const resolveDownloadMethods = {
     },
 
     renderDownloadProgressGroupItem(downloadId, snapshot) {
-        const progress = snapshot.progress || {};
-        const status = snapshot.status || progress.status || '';
-        const displayProgress = this.getDownloadDisplayProgress(progress);
-        const percent = displayProgress.percent;
-        const filename = progress.filename || snapshot.filename || 'Download';
-        const statusLabel = this.getDownloadProgressStatusLabel(status, percent, displayProgress.isFinalizing);
-        const itemIdAttr = downloadId ? ` data-download-id="${this.escapeHtml(String(downloadId))}"` : '';
-        return `
-            <div class="mr-download-progress-item"${itemIdAttr}>
-                <div class="mr-download-progress-item-head">
-                    <span data-tooltip="${this.escapeHtml(filename)}">${this.escapeHtml(filename)}</span>
-                    <span>${this.escapeHtml(statusLabel)}</span>
-                </div>
-                ${this.renderDownloadSnapshotMarkup(downloadId, snapshot)}
-            </div>
-        `;
+        return this.renderDownloadSnapshotMarkup(downloadId, snapshot);
     },
 
     patchDownloadProgressContent(progressDiv, html) {

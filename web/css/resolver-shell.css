@@ -682,6 +682,10 @@
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
 }
 
+.mr-download-queue-items > .mr-download-queue-item:not(:last-child) {
+    margin-bottom: 0;
+}
+
 /* The Missing Models preview already provides the panel's horizontal padding. */
 #model-resolver-modal .mr-missing-detail-pane .mr-download-progress-slot .mr-download-queue-item {
     margin: 0;

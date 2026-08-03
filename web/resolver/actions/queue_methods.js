@@ -1053,8 +1053,11 @@ export const queueMethods = {
                 }
 
                 if (!currentChild) {
-                    current.appendChild(nextChild.cloneNode(true));
-                    cursor = null;
+                    // Insert at the current position so the cleanup pass can
+                    // remove an obsolete single-card/group root after a mode switch.
+                    const insertedChild = nextChild.cloneNode(true);
+                    current.insertBefore(insertedChild, cursor);
+                    cursor = insertedChild.nextSibling;
                     continue;
                 }
 
