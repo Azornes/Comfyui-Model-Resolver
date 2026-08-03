@@ -81,6 +81,44 @@ def _get_subgraph_input_link_ids(subgraph: Dict[str, Any], input_name: str) -> s
     return link_ids
 
 
+def _get_node_input_by_name(
+    node: Dict[str, Any], input_name: str
+) -> Optional[Dict[str, Any]]:
+    target_name = normalize_widget_name(input_name)
+    if not target_name:
+        return None
+
+    for item in node.get("inputs", []):
+        candidates = _widget_item_name_candidates(item)
+        if any(
+            normalize_widget_name(candidate) == target_name for candidate in candidates
+        ):
+            return item
+    return None
+
+
+def _get_node_widget_value(node: Dict[str, Any], widget_index: Any) -> Any:
+    try:
+        widget_index = int(widget_index)
+    except (TypeError, ValueError):
+        return None
+
+    widgets_values = node.get("widgets_values", [])
+    if not isinstance(widgets_values, list) or widget_index < 0:
+        return None
+    if widget_index >= len(widgets_values):
+        return None
+    return widgets_values[widget_index]
+
+
+def _has_promoted_value(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    return True
+
+
 def _promoted_widget_target_info(
     node: Dict[str, Any], widget_index: int, proxy_widget_name: str = ""
 ) -> Dict[str, Any]:
@@ -92,6 +130,7 @@ def _promoted_widget_target_info(
         "widget_index": widget_index,
         "widget_name": widget_name,
         "category": references.get_effective_model_category_hint(node, widget_index),
+        "value": _get_node_widget_value(node, widget_index),
     }
 
 
@@ -163,26 +202,33 @@ def _build_promoted_widget_contexts(
 
         proxy_widgets = instance_node.get("properties", {}).get("proxyWidgets", [])
         if not isinstance(proxy_widgets, list):
-            continue
+            proxy_widgets = []
 
-        widgets_values = instance_node.get("widgets_values", [])
-        for proxy_index, proxy_entry in enumerate(proxy_widgets):
-            proxy_widget_name = _proxy_widget_name(proxy_entry)
-            if not proxy_widget_name:
-                continue
+        seen_proxy_indexes = set()
+        seen_proxy_names = set()
 
-            targets = _find_promoted_widget_targets(
-                subgraph,
-                _proxy_widget_node_id(proxy_entry),
-                proxy_widget_name,
+        def add_instance_context(
+            proxy_index: Optional[int],
+            proxy_widget_name: str,
+            targets: List[Dict[str, Any]],
+        ) -> None:
+            if proxy_index is None or not proxy_widget_name or not targets:
+                return
+            if proxy_index in seen_proxy_indexes:
+                return
+
+            instance_input = _get_node_input_by_name(
+                instance_node, proxy_widget_name
             )
-            if not targets:
-                continue
-
+            input_connected = bool(
+                instance_input and instance_input.get("link") is not None
+            )
+            instance_value = _get_node_widget_value(instance_node, proxy_index)
+            target_value = targets[0].get("value")
             promoted_value = (
-                widgets_values[proxy_index]
-                if isinstance(widgets_values, list) and proxy_index < len(widgets_values)
-                else None
+                instance_value
+                if _has_promoted_value(instance_value)
+                else target_value
             )
             instance_context = {
                 **targets[0],
@@ -191,10 +237,11 @@ def _build_promoted_widget_contexts(
                 "proxy_widget_index": proxy_index,
                 "proxy_widget_name": proxy_widget_name,
                 "promoted_value": promoted_value,
+                "input_connected": input_connected,
             }
-            contexts["instance_widgets"][(str(instance_node.get("id")), proxy_index)] = (
-                instance_context
-            )
+            contexts["instance_widgets"][
+                (str(instance_node.get("id")), proxy_index)
+            ] = instance_context
 
             locator = {
                 "node_id": instance_node.get("id"),
@@ -206,8 +253,11 @@ def _build_promoted_widget_contexts(
                 "proxy_widget_index": proxy_index,
                 "proxy_widget_name": proxy_widget_name,
                 "promoted_value": promoted_value,
+                "input_connected": input_connected,
             }
 
+            seen_proxy_indexes.add(proxy_index)
+            seen_proxy_names.add(normalize_widget_name(proxy_widget_name))
             for target in targets:
                 exact_key = (
                     subgraph_id,
@@ -226,6 +276,55 @@ def _build_promoted_widget_contexts(
                     contexts["inner_widget_names"].setdefault(name_key, []).append(
                         locator
                     )
+
+        for proxy_index, proxy_entry in enumerate(proxy_widgets):
+            proxy_widget_name = _proxy_widget_name(proxy_entry)
+            if not proxy_widget_name:
+                continue
+
+            targets = _find_promoted_widget_targets(
+                subgraph,
+                _proxy_widget_node_id(proxy_entry),
+                proxy_widget_name,
+            )
+            add_instance_context(proxy_index, proxy_widget_name, targets)
+
+        # Some serialized workflows omit proxyWidgets even though a subgraph
+        # input is connected to a widget inside the definition. Reconstruct the
+        # same promotion from the subgraph input/link metadata in that case.
+        instance_inputs = instance_node.get("inputs", [])
+        if not isinstance(instance_inputs, list):
+            instance_inputs = []
+        for subgraph_input in subgraph.get("inputs", []):
+            input_names = _widget_item_name_candidates(subgraph_input)
+            proxy_widget_name = next(
+                (name for name in input_names if str(name or "").strip()),
+                "",
+            )
+            if not proxy_widget_name:
+                continue
+            if normalize_widget_name(proxy_widget_name) in seen_proxy_names:
+                continue
+
+            instance_input_index = next(
+                (
+                    index
+                    for index, item in enumerate(instance_inputs)
+                    if _get_node_input_by_name(
+                        {"inputs": [item]}, proxy_widget_name
+                    )
+                ),
+                None,
+            )
+            if instance_input_index is None:
+                continue
+            proxy_index = _get_widget_index_for_input_index(
+                instance_node, instance_input_index
+            )
+            targets = _find_promoted_widget_targets(
+                subgraph, "-1", proxy_widget_name
+            )
+            add_instance_context(proxy_index, proxy_widget_name, targets)
 
     return contexts
 
@@ -277,12 +376,12 @@ def _select_promoted_locator(
     return locators[0]
 
 
-def _apply_promoted_widget_locator(
+def _get_promoted_widget_locators(
     ref: Dict[str, Any], contexts: Dict[str, Dict[Any, Any]]
-) -> None:
+) -> List[Dict[str, Any]]:
     subgraph_id = str(ref.get("subgraph_id") or "")
     if not subgraph_id:
-        return
+        return []
 
     exact_key = (subgraph_id, str(ref.get("node_id")), ref.get("widget_index"))
     locators = contexts.get("inner_widgets", {}).get(exact_key, [])
@@ -293,7 +392,97 @@ def _apply_promoted_widget_locator(
             normalize_widget_name(ref.get("widget_name")),
         )
         locators = contexts.get("inner_widget_names", {}).get(name_key, [])
+    return locators
 
+
+def _promote_model_reference_to_instances(
+    ref: Dict[str, Any],
+    contexts: Dict[str, Dict[Any, Any]],
+    available_models: Optional[List[Dict[str, Any]]] = None,
+    existing_instance_slots: Optional[set] = None,
+) -> Optional[List[Dict[str, Any]]]:
+    locators = _get_promoted_widget_locators(ref, contexts)
+    if not locators:
+        return None
+
+    if existing_instance_slots is None:
+        existing_instance_slots = set()
+    promoted_refs = []
+    for locator in locators:
+        instance_slot = (
+            str(locator.get("node_id")),
+            locator.get("proxy_widget_index"),
+        )
+        if instance_slot in existing_instance_slots:
+            continue
+        if locator.get("input_connected"):
+            continue
+
+        value = locator.get("promoted_value")
+        nested_key = ref.get("nested_key")
+        if nested_key and isinstance(value, dict):
+            value = value.get(nested_key)
+        if not _has_promoted_value(value):
+            continue
+
+        value_str = str(value).strip()
+        promoted = dict(ref)
+        promoted.update(
+            {
+                "node_id": locator.get("node_id"),
+                "node_type": locator.get("node_type", ""),
+                "node_title": locator.get("node_title", ""),
+                "widget_index": locator.get("proxy_widget_index"),
+                "widget_name": locator.get("proxy_widget_name", ""),
+                "original_path": value_str,
+                "subgraph_id": locator.get("subgraph_id", ""),
+                "subgraph_name": locator.get("subgraph_name", ""),
+                "subgraph_path": None,
+                "is_top_level": True,
+                "promoted_widget_name": locator.get("proxy_widget_name", ""),
+                "promoted_inner_node_id": ref.get("node_id"),
+                "promoted_inner_node_type": ref.get("node_type", ""),
+                "promoted_inner_node_title": ref.get("node_title", ""),
+                "promoted_inner_widget_index": ref.get("widget_index"),
+                "promoted_inner_widget_name": ref.get("widget_name", ""),
+                "locate_node_id": locator.get("node_id"),
+                "locate_node_type": locator.get("node_type", ""),
+                "locate_node_title": locator.get("node_title", ""),
+                "locate_subgraph_id": "",
+                "locate_subgraph_name": locator.get("subgraph_name", ""),
+                "locate_is_top_level": True,
+                "locate_via_promoted_widget": True,
+                "is_urn": bool(references.URN_REGEX.match(value_str)),
+            }
+        )
+
+        category_hints = promoted.get("category_hints") or []
+        if not category_hints and promoted.get("category"):
+            category_hints = [promoted["category"]]
+        resolved = references.try_resolve_model_path(
+            value_str,
+            category_hints or None,
+            available_models=available_models,
+        )
+        if resolved:
+            category, full_path = resolved
+            promoted["category"] = category
+            promoted["full_path"] = full_path
+            promoted["exists"] = os.path.exists(full_path)
+        else:
+            promoted["full_path"] = None
+            promoted["exists"] = False
+
+        promoted_refs.append(promoted)
+        existing_instance_slots.add(instance_slot)
+
+    return promoted_refs
+
+
+def _apply_promoted_widget_locator(
+    ref: Dict[str, Any], contexts: Dict[str, Dict[Any, Any]]
+) -> None:
+    locators = _get_promoted_widget_locators(ref, contexts)
     locator = _select_promoted_locator(locators, ref.get("original_path", ""))
     if not locator:
         return

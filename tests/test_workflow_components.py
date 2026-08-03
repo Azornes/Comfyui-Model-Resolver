@@ -1,7 +1,8 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from core.workflow import references, subgraphs
+from core.workflow import analysis, references, subgraphs
+from core.workflow_updater import update_workflow_nodes
 
 
 def _loader_node(node_id=10, value="model.safetensors", link=None):
@@ -159,6 +160,105 @@ def test_apply_promoted_locator_supports_name_fallback_and_value_selection():
     assert reference["locate_subgraph_name"] == "Two"
     assert reference["locate_is_top_level"] is True
     assert reference["locate_via_promoted_widget"] is True
+
+
+def test_subgraph_input_reference_targets_instance_for_update_and_location():
+    workflow = {
+        "nodes": [
+            {
+                "id": 1,
+                "type": "subgraph-1",
+                "title": "Model subgraph",
+                "inputs": [
+                    {
+                        "name": "ckpt_name",
+                        "type": "COMBO",
+                        "widget": {"name": "ckpt_name"},
+                        "link": None,
+                    }
+                ],
+                "outputs": [{"links": [20]}],
+                "properties": {"proxyWidgets": [["10", "ckpt_name"]]},
+                # Some serialized subgraph instances have no values here;
+                # the connected inner widget still contains the old value.
+                "widgets_values": [],
+            }
+        ],
+        "definitions": {
+            "subgraphs": [
+                {
+                    "id": "subgraph-1",
+                    "name": "Model subgraph",
+                    "inputs": [
+                        {"name": "ckpt_name", "type": "COMBO", "linkIds": [7]}
+                    ],
+                    "nodes": [
+                        {
+                            "id": 10,
+                            "type": "CheckpointLoaderSimple",
+                            "inputs": [
+                                {
+                                    "name": "ckpt_name",
+                                    "type": "COMBO",
+                                    "widget": {"name": "ckpt_name"},
+                                    "link": 7,
+                                }
+                            ],
+                            "outputs": [{"type": "MODEL", "links": [20]}],
+                            "widgets_values": ["inner-stale.safetensors"],
+                        }
+                    ],
+                }
+            ]
+        },
+    }
+
+    refs = analysis.analyze_workflow_models(workflow, available_models=[])
+
+    assert len(refs) == 1
+    assert refs[0]["node_id"] == 1
+    assert refs[0]["widget_index"] == 0
+    assert refs[0]["subgraph_id"] == "subgraph-1"
+    assert refs[0]["is_top_level"] is True
+    assert refs[0]["subgraph_path"] is None
+    assert refs[0]["locate_node_id"] == 1
+    assert refs[0]["locate_subgraph_id"] == ""
+    assert refs[0]["promoted_inner_node_id"] == 10
+
+    no_proxy_workflow = {
+        **workflow,
+        "nodes": [
+            {
+                **workflow["nodes"][0],
+                "properties": {},
+            }
+        ],
+    }
+    no_proxy_refs = analysis.analyze_workflow_models(
+        no_proxy_workflow, available_models=[]
+    )
+    assert no_proxy_refs[0]["node_id"] == 1
+    assert no_proxy_refs[0]["promoted_inner_node_id"] == 10
+
+    update_workflow_nodes(
+        workflow,
+        [
+            {
+                "node_id": refs[0]["node_id"],
+                "widget_index": refs[0]["widget_index"],
+                "resolved_path": "replacement.safetensors",
+                "category": "checkpoints",
+                "subgraph_id": refs[0]["subgraph_id"],
+                "is_top_level": refs[0]["is_top_level"],
+                "promoted_widget_name": refs[0]["promoted_widget_name"],
+            }
+        ],
+    )
+
+    assert workflow["nodes"][0]["widgets_values"] == ["replacement.safetensors"]
+    assert workflow["definitions"]["subgraphs"][0]["nodes"][0]["widgets_values"] == [
+        "inner-stale.safetensors"
+    ]
 
 
 def test_reference_matching_handles_placeholders_paths_and_scanner_records(tmp_path):

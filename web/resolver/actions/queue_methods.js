@@ -1458,7 +1458,8 @@ export const queueMethods = {
                 || ref.name
                 || ref.original_path
             ),
-            nested_key: ref.nested_key
+            nested_key: ref.nested_key,
+            promoted_widget_name: ref.promoted_widget_name
         }));
     },
 
@@ -1493,6 +1494,10 @@ export const queueMethods = {
                         || baseResolution.original_path
                     ),
                     nested_key: ref.nested_key ?? baseResolution.nested_key,
+                    promoted_widget_name: (
+                        ref.promoted_widget_name
+                        || baseResolution.promoted_widget_name
+                    ),
                     original_path: ref.original_path || baseResolution.original_path,
                     node_type: ref.node_type || baseResolution.node_type,
                     node_label: ref.subgraph_name || ref.node_type || baseResolution.node_label
@@ -1957,6 +1962,7 @@ export const queueMethods = {
                 || missing.original_path
             ),
             nested_key: missing.nested_key,
+            promoted_widget_name: missing.promoted_widget_name,
             node_refs: this.getResolutionNodeRefs(missing),
             node_type: missing.node_type,
             node_label: missing.subgraph_name || missing.node_type

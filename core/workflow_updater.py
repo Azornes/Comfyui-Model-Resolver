@@ -204,8 +204,23 @@ def update_model_path(
         return False
 
     widgets_values = node.get("widgets_values", [])
+    if not isinstance(widgets_values, list):
+        widgets_values = []
+        node["widgets_values"] = widgets_values
 
     if widget_index >= len(widgets_values):
+        can_extend_promoted_input = bool(
+            is_top_level is True
+            and mapping
+            and mapping.get("promoted_widget_name")
+        )
+        if can_extend_promoted_input:
+            widgets_values.extend([None] * (widget_index + 1 - len(widgets_values)))
+        else:
+            log.warning(f"Widget index {widget_index} out of range for node {node_id}")
+            return False
+
+    if widget_index < 0:
         log.warning(f"Widget index {widget_index} out of range for node {node_id}")
         return False
 

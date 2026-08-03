@@ -1253,6 +1253,7 @@ def apply_resolution(
             "nested_key": resolution.get(
                 "nested_key"
             ),  # For dict-type widget values
+            "promoted_widget_name": resolution.get("promoted_widget_name"),
             **get_custom_node_resolution_metadata(resolution),
         }
 
