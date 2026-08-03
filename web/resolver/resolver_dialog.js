@@ -146,7 +146,7 @@ export class ResolverManagerDialog extends ComfyDialog {
             parent: document.body,
             ariaHidden: "true",
             innerHTML: `
-                <span class="mr-dock-drop-preview-icon">${getSvgIcon('internalLink')}</span>
+                <span class="mr-dock-drop-preview-icon">${getSvgIcon('dock')}</span>
                 <strong>Dock to sidebar</strong>
                 <span>Release to dock Model Resolver</span>
             `
@@ -156,7 +156,7 @@ export class ResolverManagerDialog extends ComfyDialog {
             parent: document.body,
             ariaHidden: "true",
             innerHTML: `
-                <span class="mr-dock-drop-preview-icon">${getSvgIcon('externalLink')}</span>
+                <span class="mr-dock-drop-preview-icon">${getSvgIcon('undock')}</span>
                 <strong>Undock to floating window</strong>
                 <span>Release to undock Model Resolver</span>
             `

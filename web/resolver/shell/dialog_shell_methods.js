@@ -40,7 +40,7 @@ export const dialogShellMethods = {
         this.dockButton = $el("button", {
             id: "model-resolver-dock-toggle",
             className: "mr-window-btn mr-window-btn--dock",
-            innerHTML: getSvgIcon('internalLink', 'currentColor', 'mr-window-btn-icon'),
+            innerHTML: getSvgIcon('dock', 'currentColor', 'mr-window-btn-icon'),
             ariaLabel: "Dock Model Resolver to sidebar",
             onclick: () => this.dockToSidebar()
         });
@@ -49,7 +49,7 @@ export const dialogShellMethods = {
         this.undockButton = $el("button", {
             id: "model-resolver-undock-toggle",
             className: "mr-window-btn mr-window-btn--undock",
-            innerHTML: getSvgIcon('externalLink', 'currentColor', 'mr-window-btn-icon'),
+            innerHTML: getSvgIcon('undock', 'currentColor', 'mr-window-btn-icon'),
             ariaLabel: "Undock Model Resolver",
             onclick: () => this.undockToFloating()
         });
