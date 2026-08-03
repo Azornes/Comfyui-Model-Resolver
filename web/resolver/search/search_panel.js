@@ -403,6 +403,77 @@ export const searchPanelMethods = {
         return `<span class="mr-btn-icon" aria-hidden="true">${getSvgIcon('link')}</span><span>${this.escapeHtml(text)}</span>`;
     },
 
+    getLinkNameInputMode(state = {}) {
+        return state?.inputMode === 'name' ? 'name' : 'link';
+    },
+
+    renderLinkNameActionContent(mode = 'link', buttonText = 'Search Online') {
+        const label = mode === 'name'
+            ? this.getSearchButtonLabelLines(buttonText).join(' ')
+            : String(buttonText || 'Add');
+        const icon = mode === 'name' ? getSvgIcon('search') : getSvgIcon('link');
+        return `<span class="mr-link-name-action-text">${this.escapeHtml(label)}</span><span class="mr-link-name-action-icon" aria-hidden="true">${icon}</span>`;
+    },
+
+    renderLinkNameSwitchIcon(mode = 'link') {
+        const iconName = mode === 'name' ? 'search' : 'link';
+        const svg = getSvgIcon(iconName, '#ffffff');
+        const dataUri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+        return `<img src="${dataUri}" alt="" style="width: 20px; height: 20px;">`;
+    },
+
+    syncLinkNameActionUi(missing, container = null, state = null) {
+        if (!missing) return;
+
+        const root = container || this.contentElement;
+        const controlId = `link-name-control-${missing.node_id}-${missing.widget_index}`;
+        const actionId = `link-name-action-${missing.node_id}-${missing.widget_index}`;
+        const inputId = `custom-url-${missing.node_id}-${missing.widget_index}`;
+        const currentState = state || this.getSearchState?.(missing) || {};
+        const mode = this.getLinkNameInputMode(currentState);
+        const control = root?.querySelector?.(`#${controlId}`);
+        const actionButton = root?.querySelector?.(`#${actionId}`);
+        const input = root?.querySelector?.(`#${inputId}`);
+
+        if (!control) return;
+        control.dataset.mode = mode;
+        const modeSwitch = control.querySelector('.mr-link-name-switch');
+        const modeInput = modeSwitch?.querySelector('.mr-link-name-toggle-input');
+        if (modeSwitch && modeInput) {
+            modeInput.checked = mode === 'link';
+            modeInput.setAttribute('aria-label', mode === 'link' ? 'Use URL link' : 'Use model name search');
+            modeSwitch.setAttribute('aria-label', mode === 'link' ? 'Input mode: Link' : 'Input mode: Name');
+            const icon = modeSwitch.querySelector('.mr-switch-icon');
+            if (icon) {
+                icon.innerHTML = this.renderLinkNameSwitchIcon(mode);
+            }
+        }
+
+        const label = control.querySelector('.mr-link-name-input-label');
+        if (label) label.textContent = mode === 'name' ? 'Name' : 'URL';
+        const actionHeading = control.querySelector('.mr-link-name-action-heading');
+        if (actionHeading) actionHeading.textContent = mode === 'name' ? 'Search' : 'Link';
+        if (input) {
+            input.placeholder = mode === 'name' ? 'Search by model name...' : 'https://...';
+            if (mode === 'name' && document.activeElement !== input) {
+                input.value = String(currentState.manualSearchQuery || '');
+            }
+            input.setAttribute('aria-label', mode === 'name' ? 'Model name' : 'Model URL');
+        }
+        if (actionButton) {
+            const buttonText = mode === 'link'
+                ? 'Add'
+                : (currentState.activeSearchRunId
+                    ? 'Searching...'
+                    : (this.hasRenderableSearchState?.(currentState) ? 'Search Again' : 'Search Online'));
+            actionButton.innerHTML = this.renderLinkNameActionContent(mode, buttonText);
+            actionButton.disabled = mode === 'name' && Boolean(currentState.activeSearchRunId);
+            actionButton.title = mode === 'name'
+                ? 'Search online for the model name'
+                : 'Add a model URL';
+        }
+    },
+
     refreshSearchUiForMissing(missing, state = null, { workflowKey = this.getWorkflowScopedQueueKey() } = {}) {
         if (!missing) return;
         const activeWorkflowKey = this.getWorkflowScopedQueueKey();
@@ -443,6 +514,11 @@ export const searchPanelMethods = {
             searchBtn.innerHTML = isRunning
                 ? this.renderSearchButtonContent('Searching...')
                 : this.renderSearchButtonContent(hasSearchAttempt ? 'Search Again' : 'Search Online');
+        }
+
+        const linkNameAction = this.contentElement.querySelector(`#link-name-action-${missing.node_id}-${missing.widget_index}`);
+        if (linkNameAction && currentState) {
+            this.syncLinkNameActionUi(missing, this.contentElement, currentState);
         }
     },
 
@@ -1806,19 +1882,21 @@ export const searchPanelMethods = {
         const searchSourceListId = `search-source-list-${missing.node_id}-${missing.widget_index}`;
         const searchBaseSelectId = `search-base-select-${missing.node_id}-${missing.widget_index}`;
         const searchBaseListId = `search-base-list-${missing.node_id}-${missing.widget_index}`;
-        const customUrlAddId = `custom-url-add-${missing.node_id}-${missing.widget_index}`;
         const customUrlInputId = `custom-url-${missing.node_id}-${missing.widget_index}`;
+        const linkNameControlId = `link-name-control-${missing.node_id}-${missing.widget_index}`;
         const state = this.getSearchState(missing);
         const selectedSource = state.selectedSource || 'all';
         const selectedBaseModel = state.selectedBaseModel || this.getDefaultSearchBaseModel();
         const baseModelTooltip = this.getSearchBaseModelTooltip(missing);
         const buttonText = options.buttonText
             || (this.hasRenderableSearchState(state) ? 'Search Again' : 'Search Online');
+        const inputMode = this.getLinkNameInputMode(state);
+        const inputValue = inputMode === 'name' ? String(state.manualSearchQuery || '') : '';
 
         let html = `<div id="${searchSourcesId}" class="mr-search-source-bar">`;
         html += `<div class="mr-search-source-picker mr-search-button-picker">`;
         html += `<label class="mr-search-source-picker-label" for="search-${missing.node_id}-${missing.widget_index}">Search</label>`;
-        html += `<button id="search-${missing.node_id}-${missing.widget_index}" class="mr-btn mr-btn-link">`;
+        html += `<button id="search-${missing.node_id}-${missing.widget_index}" class="mr-btn mr-btn-link" type="button">`;
         html += this.renderSearchButtonContent(buttonText);
         html += `</button>`;
         html += `</div>`;
@@ -1837,16 +1915,24 @@ export const searchPanelMethods = {
         html += `</div>`;
         html += `</div>`;
         html += `</div>`;
-        html += `<div class="mr-custom-url-bar">`;
-        html += `<div class="mr-search-source-picker mr-custom-url-button-picker">`;
-        html += `<label class="mr-search-source-picker-label" for="${customUrlAddId}">Link</label>`;
-        html += `<button id="${customUrlAddId}" class="mr-btn mr-btn-link mr-custom-url-add-btn" type="button">`;
-        html += this.renderCustomUrlButtonContent('Add');
-        html += `</button>`;
+        html += `<div id="${linkNameControlId}" class="mr-link-name-bar" data-mode="${inputMode}">`;
+        html += `<div class="mr-link-name-mode" role="group" aria-label="Input mode">`;
+        html += `<label id="${linkNameControlId}-switch" class="mr-link-name-switch" aria-label="Input mode: ${inputMode === 'name' ? 'Name' : 'Link'}">`;
+        html += `<input class="mr-link-name-toggle-input" type="checkbox" ${inputMode === 'link' ? 'checked' : ''} aria-label="${inputMode === 'link' ? 'Use URL link' : 'Use model name search'}">`;
+        html += `<span class="mr-switch-track"></span>`;
+        html += `<span class="mr-switch-labels"><span class="mr-text-link">Link</span><span class="mr-text-name">Name</span></span>`;
+        html += `<span class="mr-switch-knob"><span class="mr-switch-icon">${this.renderLinkNameSwitchIcon(inputMode)}</span></span>`;
+        html += `</label>`;
         html += `</div>`;
-        html += `<div class="mr-search-source-picker mr-custom-url-input-picker">`;
-        html += `<label class="mr-search-source-picker-label" for="${customUrlInputId}">URL</label>`;
-        html += `<input id="${customUrlInputId}" class="mr-download-target-input mr-custom-url-input" type="text" autocomplete="off" spellcheck="false" placeholder="https://...">`;
+        html += `<div class="mr-search-source-picker mr-link-name-input-picker">`;
+        html += `<label class="mr-search-source-picker-label mr-link-name-input-label" for="${customUrlInputId}">${inputMode === 'name' ? 'Name' : 'URL'}</label>`;
+        html += `<input id="${customUrlInputId}" class="mr-download-target-input mr-custom-url-input mr-link-name-input" type="text" autocomplete="off" spellcheck="false" value="${this.escapeHtml(inputValue)}" placeholder="${inputMode === 'name' ? 'Search by model name...' : 'https://...'}" aria-label="${inputMode === 'name' ? 'Model name' : 'Model URL'}">`;
+        html += `</div>`;
+        html += `<div class="mr-link-name-action-picker">`;
+        html += `<label class="mr-search-source-picker-label mr-link-name-action-heading" for="link-name-action-${missing.node_id}-${missing.widget_index}">${inputMode === 'name' ? 'Search' : 'Link'}</label>`;
+        html += `<button id="link-name-action-${missing.node_id}-${missing.widget_index}" class="mr-btn mr-btn-link mr-link-name-action" type="button" title="${inputMode === 'name' ? 'Search online for the model name' : 'Add a model URL'}">`;
+        html += this.renderLinkNameActionContent(inputMode, inputMode === 'link' ? 'Add' : buttonText);
+        html += `</button>`;
         html += `</div>`;
         html += `</div>`;
         return html;

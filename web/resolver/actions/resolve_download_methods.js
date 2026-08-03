@@ -2166,7 +2166,9 @@ export const resolveDownloadMethods = {
         const originalButtonHtml = addBtn?.innerHTML || '';
         if (addBtn) {
             addBtn.disabled = true;
-            addBtn.innerHTML = this.renderCustomUrlButtonContent?.('Adding') || 'Adding';
+            addBtn.innerHTML = this.renderLinkNameActionContent?.('link', 'Adding')
+                || this.renderCustomUrlButtonContent?.('Adding')
+                || 'Adding';
         }
         if (inputEl) {
             inputEl.disabled = true;
@@ -2247,7 +2249,10 @@ export const resolveDownloadMethods = {
         } finally {
             if (addBtn) {
                 addBtn.disabled = false;
-                addBtn.innerHTML = originalButtonHtml || (this.renderCustomUrlButtonContent?.('Add') || 'Add');
+                addBtn.innerHTML = originalButtonHtml
+                    || this.renderLinkNameActionContent?.('link', 'Add')
+                    || this.renderCustomUrlButtonContent?.('Add')
+                    || 'Add';
             }
             if (inputEl) {
                 inputEl.disabled = false;
@@ -2258,10 +2263,17 @@ export const resolveDownloadMethods = {
     /**
      * Search online for a model
      */
-    async searchOnline(missing, { workflowKey = this.getWorkflowScopedQueueKey(), forceSearch = false, source = null } = {}) {
-        let filename = this.getFilenameFromPath(missing.original_path);
-        let category = missing.category || this.getNodeTypeDownloadCategory?.(missing.node_type) || '';
+    async searchOnline(missing, { workflowKey = this.getWorkflowScopedQueueKey(), forceSearch = false, source = null, searchQuery = '' } = {}) {
+        const providedSearchQuery = String(searchQuery || '').trim();
         const state = this.getSearchStateForWorkflow(workflowKey, missing);
+        const requestedSearchQuery = providedSearchQuery;
+        let filename = requestedSearchQuery || this.getFilenameFromPath(missing.original_path);
+        let category = missing.category || this.getNodeTypeDownloadCategory?.(missing.node_type) || '';
+        if (providedSearchQuery) {
+            state.inputMode = 'name';
+            state.manualSearchQuery = providedSearchQuery;
+            this.persistSearchStateForWorkflow(workflowKey, missing, state);
+        }
         const missingSearchKey = this.getMissingSearchKey(missing);
         const backgroundJobKey = this.getBackgroundSearchJobKey(workflowKey, missingSearchKey);
         const activeJob = this.backgroundSearchJobs?.get(backgroundJobKey);
@@ -2285,7 +2297,7 @@ export const resolveDownloadMethods = {
 
         // For URNs, use the resolved file/model name for searching instead of the URN itself
         // and pass the URN type as category (CivitAI expects specific type names)
-        if (missing.is_urn) {
+        if (missing.is_urn && !requestedSearchQuery) {
             const urnSearchName = missing.civitai_info?.expected_filename
                 || missing.download_source?.filename
                 || missing.civitai_info?.model_name;
@@ -2312,7 +2324,7 @@ export const resolveDownloadMethods = {
             }
         }
 
-        const isUrn = missing.is_urn || false;
+        const isUrn = Boolean(missing.is_urn && !requestedSearchQuery);
         const resultsId = `search-results-${missing.node_id}-${missing.widget_index}`;
         const canUpdateCurrentWorkflow = workflowKey === this.getWorkflowScopedQueueKey();
         const resultsDiv = canUpdateCurrentWorkflow
@@ -2371,6 +2383,7 @@ export const resolveDownloadMethods = {
                 searchBtn.disabled = true;
                 searchBtn.innerHTML = this.renderSearchButtonContent(`Searching ${selectedSourceLabel}...`);
             }
+            this.syncLinkNameActionUi?.(missing, this.contentElement, state);
             if (resultsDiv) {
                 resultsDiv.classList.remove('mr-is-hidden');
                 resultsDiv.classList.add('mr-is-visible');
@@ -2852,16 +2865,84 @@ export const resolveDownloadMethods = {
         }
 
         const customUrlInput = container.querySelector(`#custom-url-${missing.node_id}-${missing.widget_index}`);
-        const customUrlAddBtn = container.querySelector(`#custom-url-add-${missing.node_id}-${missing.widget_index}`);
-        if (customUrlInput && customUrlAddBtn && customUrlAddBtn.dataset.mlCustomUrlBound !== 'true') {
-            customUrlAddBtn.dataset.mlCustomUrlBound = 'true';
-            const submitCustomUrl = () => this.addCustomUrlResult(missing, customUrlInput, customUrlAddBtn);
-            customUrlAddBtn.addEventListener('click', submitCustomUrl);
-            customUrlInput.addEventListener('keydown', (event) => {
-                if (event.key !== 'Enter') return;
-                event.preventDefault();
-                submitCustomUrl();
-            });
+        const linkNameControl = container.querySelector(`#link-name-control-${missing.node_id}-${missing.widget_index}`);
+        const searchActionBtn = container.querySelector(`#link-name-action-${missing.node_id}-${missing.widget_index}`);
+        const workflowKey = this.getWorkflowScopedQueueKey();
+        const state = this.getSearchStateForWorkflow?.(workflowKey, missing) || this.getSearchState?.(missing);
+        const persistInputState = () => {
+            if (!state) return;
+            this.persistSearchStateForWorkflow?.(workflowKey, missing, state);
+        };
+        const syncInputControl = () => this.syncLinkNameActionUi?.(missing, container, state);
+
+        if (customUrlInput && linkNameControl && searchActionBtn) {
+            const modeInput = linkNameControl.querySelector('.mr-link-name-toggle-input');
+            const setInputMode = (mode, { focus = false } = {}) => {
+                const nextMode = mode === 'name' ? 'name' : 'link';
+                const currentMode = linkNameControl.dataset.mode === 'name' ? 'name' : 'link';
+                if (currentMode === 'name' && state) {
+                    state.manualSearchQuery = String(customUrlInput.value || '').trim();
+                }
+                linkNameControl.dataset.mode = nextMode;
+                if (state) state.inputMode = nextMode;
+                customUrlInput.value = nextMode === 'name'
+                    ? String(state?.manualSearchQuery || '')
+                    : '';
+                persistInputState();
+                syncInputControl();
+                if (focus) customUrlInput.focus();
+            };
+
+            if (modeInput && modeInput.dataset.mlInputModeBound !== 'true') {
+                modeInput.dataset.mlInputModeBound = 'true';
+                modeInput.addEventListener('change', () => {
+                    setInputMode(modeInput.checked ? 'link' : 'name', { focus: true });
+                });
+            }
+
+            if (searchActionBtn.dataset.mlLinkNameActionBound !== 'true') {
+                searchActionBtn.dataset.mlLinkNameActionBound = 'true';
+                const submitAction = () => {
+                    const mode = linkNameControl.dataset.mode === 'name' ? 'name' : 'link';
+                    if (mode === 'name') {
+                        const query = String(customUrlInput.value || '').trim();
+                        if (!query) {
+                            this.showNotification?.('Enter a model name first.', 'warning');
+                            customUrlInput.focus();
+                            return;
+                        }
+                        if (state) {
+                            state.inputMode = 'name';
+                            state.manualSearchQuery = query;
+                        }
+                        persistInputState();
+                        this.searchOnline(missing, {
+                            searchQuery: query,
+                            forceSearch: this.hasSearchAttemptForMissing?.(missing) || this.hasSearchResultsForMissing(missing)
+                        });
+                        return;
+                    }
+
+                    if (state) {
+                        state.inputMode = 'link';
+                        state.manualSearchQuery = '';
+                    }
+                    persistInputState();
+                    this.addCustomUrlResult(missing, customUrlInput, searchActionBtn);
+                };
+                searchActionBtn.addEventListener('click', submitAction);
+                customUrlInput.addEventListener('input', () => {
+                    if (state && linkNameControl.dataset.mode === 'name') {
+                        state.manualSearchQuery = String(customUrlInput.value || '');
+                    }
+                });
+                customUrlInput.addEventListener('keydown', (event) => {
+                    if (event.key !== 'Enter') return;
+                    event.preventDefault();
+                    submitAction();
+                });
+            }
+            syncInputControl();
         }
 
         const sourceSelect = container.querySelector(`#search-source-select-${missing.node_id}-${missing.widget_index}`);

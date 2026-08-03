@@ -27,6 +27,8 @@ export const searchStateMethods = {
         return {
             selectedSource: 'all',
             selectedBaseModel: this.getDefaultSearchBaseModel(),
+            inputMode: 'link',
+            manualSearchQuery: '',
             results: {
                 popular: null,
                 model_list: null,
