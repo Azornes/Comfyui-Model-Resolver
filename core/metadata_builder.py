@@ -13,6 +13,15 @@ from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .log_system import create_module_logger
+from .metadata_model_utils import (
+    dedupe_models as _dedupe_models,
+)
+from .metadata_model_utils import (
+    is_model_file_path as _is_model_file_path,
+)
+from .metadata_model_utils import (
+    model_identity_key as _model_identity_key,
+)
 from .path_utils import (
     MODEL_RESOLVER_METADATA_SCHEMA,
     MODEL_RESOLVER_METADATA_SCHEMA_VERSION,
@@ -22,13 +31,11 @@ from .path_utils import (
     find_external_metadata_sidecar_path,
     get_filename_from_path,
     get_model_resolver_sidecar_path,
-    get_path_identity,
     read_json_safe,
     read_safetensors_header,
     write_json_atomic,
 )
 from .type_utils import (
-    MODEL_EXTENSIONS,
     extract_sha256_from_metadata,
     format_size_bytes,
     normalize_category_to_model_type,
@@ -58,44 +65,6 @@ def _select_metadata_path(model_path: str) -> Tuple[str, str, bool]:
     target_path = get_model_resolver_sidecar_path(model_path)
     target_exists = os.path.isfile(target_path)
     return target_path, target_path if target_exists else "", target_exists
-
-
-def _is_model_file_path(path: str) -> bool:
-    if not path or not os.path.isfile(path):
-        return False
-
-    filename = get_filename_from_path(path).lower()
-    if filename.endswith((".metadata.json", ".civitai.info")):
-        return False
-
-    return os.path.splitext(filename)[1].lower() in MODEL_EXTENSIONS
-
-
-def _model_identity_key(model: Dict[str, Any]) -> str:
-    model_path = str(model.get("path") or "").strip()
-    if not model_path:
-        return ""
-    try:
-        return get_path_identity(model_path)
-    except (OSError, ValueError):
-        try:
-            return os.path.normcase(os.path.abspath(model_path))
-        except (OSError, ValueError):
-            return os.path.normcase(model_path)
-
-
-def _dedupe_models(models: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    result: List[Dict[str, Any]] = []
-    seen = set()
-    for model in models or []:
-        if not isinstance(model, dict):
-            continue
-        identity = _model_identity_key(model)
-        if not identity or identity in seen:
-            continue
-        seen.add(identity)
-        result.append(model)
-    return result
 
 
 def _coerce_positive_int(value: Any) -> int:

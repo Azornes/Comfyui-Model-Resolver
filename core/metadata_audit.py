@@ -10,13 +10,22 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from .log_system import create_module_logger
+from .metadata_model_utils import (
+    dedupe_models as _dedupe_models,
+)
+from .metadata_model_utils import (
+    is_model_file_path as _is_model_file_path,
+)
+from .metadata_model_utils import (
+    model_identity_key as _model_identity_key,  # noqa: F401
+)
 from .path_utils import (
     find_metadata_sidecar_path,
     get_filename_from_path,
     get_path_identity,
     read_merged_model_metadata,
 )
-from .type_utils import MODEL_EXTENSIONS, format_size_bytes
+from .type_utils import format_size_bytes
 
 log = create_module_logger(__name__)
 
@@ -158,18 +167,6 @@ def extract_metadata_size(metadata: Dict[str, Any], model_filename: str = "") ->
     return None
 
 
-def _is_model_file_path(path: str) -> bool:
-    if not path or not os.path.isfile(path):
-        return False
-
-    filename = get_filename_from_path(path).lower()
-    if filename.endswith((".metadata.json", ".civitai.info")):
-        return False
-
-    return os.path.splitext(filename)[1].lower() in MODEL_EXTENSIONS
-
-
-
 def _format_signed_size(bytes_value: int) -> str:
     if bytes_value == 0:
         return "0 B"
@@ -187,35 +184,6 @@ def _model_key(model_path: str, metadata_path: str) -> Tuple[str, str]:
     except (OSError, ValueError):
         metadata_identity = os.path.normcase(os.path.abspath(metadata_path))
     return model_identity, metadata_identity
-
-
-def _model_identity_key(model: Dict[str, Any]) -> str:
-    model_path = str(model.get("path") or "").strip()
-    if not model_path:
-        return ""
-    try:
-        return get_path_identity(model_path)
-    except (OSError, ValueError):
-        try:
-            return os.path.normcase(os.path.abspath(model_path))
-        except (OSError, ValueError):
-            return os.path.normcase(model_path)
-
-
-def _dedupe_models(models: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    result: List[Dict[str, Any]] = []
-    seen = set()
-    for model in models or []:
-        if not isinstance(model, dict):
-            continue
-        identity = _model_identity_key(model)
-        if not identity:
-            continue
-        if identity in seen:
-            continue
-        seen.add(identity)
-        result.append(model)
-    return result
 
 
 def _get_worker_count(total_models: int, requested_workers: Optional[int] = None) -> Tuple[int, int]:
