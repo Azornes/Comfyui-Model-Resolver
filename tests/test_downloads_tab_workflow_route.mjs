@@ -2661,6 +2661,19 @@ test('automatic Local Database download source stays hidden until that source is
   assert.equal(shouldDisplayKnownDownloadSource.call(dialog, {}, downloadSource, state), true);
 });
 
+test('inactive missing models require every workflow reference to be inactive', () => {
+  const { isMissingModelInactive } = missingModelStateMethods;
+
+  assert.equal(isMissingModelInactive({ connected: false }), true);
+  assert.equal(isMissingModelInactive({ active: false, connected: true }), true);
+  assert.equal(isMissingModelInactive({
+    all_node_refs: [{ connected: false }, { connected: true }]
+  }), false);
+  assert.equal(isMissingModelInactive({
+    all_node_refs: [{ connected: false }, { active: false }]
+  }), true);
+});
+
 test('html template escapes every item in interpolated arrays', () => {
   const rendered = html`<div>${['<script>', '"quoted"', '&value']}</div>`;
 

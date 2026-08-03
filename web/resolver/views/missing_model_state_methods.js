@@ -148,6 +148,16 @@ export const missingModelStateMethods = {
         return Boolean(missing.__isExistingResolved);
     },
 
+    isMissingModelInactive(missing = {}) {
+        if (!missing) return false;
+        const references = Array.isArray(missing.all_node_refs) && missing.all_node_refs.length
+            ? missing.all_node_refs
+            : [missing];
+        return references.every(reference => (
+            reference?.active === false || reference?.connected === false
+        ));
+    },
+
     isAutoDownloadModel(missing = {}) {
         return Boolean(missing?.auto_download_capable || missing?.auto_download_candidate);
     },

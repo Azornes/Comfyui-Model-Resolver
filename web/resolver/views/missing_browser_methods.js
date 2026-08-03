@@ -505,7 +505,9 @@ export const missingBrowserMethods = {
     renderMissingModelsBrowser(missingModels, selectedKey, totalMissing, activeCount, hasAny100Match, options = {}) {
         const hiddenResolvedCount = Number(options.hiddenResolvedCount || 0);
         const hiddenAutoDownloadCount = Number(options.hiddenAutoDownloadCount || 0);
+        const hiddenInactiveCount = Number(options.hiddenInactiveCount || 0);
         const autoDownloadCount = Number(options.autoDownloadCount || 0);
+        const inactiveCount = Number(options.inactiveCount || 0);
         const resolvedCount = Number(options.resolvedCount || 0);
         const rawMissingCount = Number(options.rawMissingCount ?? totalMissing);
         const missingCount = Number(options.missingCount ?? rawMissingCount);
@@ -516,6 +518,7 @@ export const missingBrowserMethods = {
         const typeFilterMenuOpen = Boolean(this.missingModelsTypeFilterMenuOpen);
         const resolvedToggleCount = this.showResolvedModels ? resolvedCount : hiddenResolvedCount;
         const autoDownloadToggleCount = this.showAutoDownloadModels ? autoDownloadCount : hiddenAutoDownloadCount;
+        const inactiveToggleCount = this.showInactiveModels ? inactiveCount : hiddenInactiveCount;
         const stats = this.getMissingModelSummaryStats(missingModels);
         const detailIndex = missingModels.findIndex(missing => this.getMissingModelKey(missing) === selectedKey);
         const detailMissing = detailIndex >= 0 ? missingModels[detailIndex] : null;
@@ -525,6 +528,8 @@ export const missingBrowserMethods = {
             ? `${hiddenResolvedCount} resolved hidden`
             : hiddenAutoDownloadCount > 0
             ? `${hiddenAutoDownloadCount} auto-download hidden`
+            : hiddenInactiveCount > 0
+            ? `${hiddenInactiveCount} inactive hidden`
             : (hasAny100Match ? 'Auto-link ready for exact matches' : 'Review matches or search online');
         const listLayout = this.getMissingModelsListLayout(missingModels);
         const requestedDetailWidth = Number(options.detailWidth);
@@ -578,6 +583,11 @@ export const missingBrowserMethods = {
                                 <input id="mr-show-auto-download-models" type="checkbox" ${this.showAutoDownloadModels ? 'checked' : ''}>
                                 <span>Show auto-download</span>
                                 ${autoDownloadToggleCount > 0 ? `<em>${autoDownloadToggleCount}</em>` : ''}
+                            </label>
+                            <label class="mr-missing-resolved-toggle" data-tooltip="Show unresolved models from bypassed, disabled, or disconnected workflow nodes.">
+                                <input id="mr-show-inactive-models" type="checkbox" ${this.showInactiveModels ? 'checked' : ''}>
+                                <span>Show inactive</span>
+                                ${inactiveToggleCount > 0 ? `<em>${inactiveToggleCount}</em>` : ''}
                             </label>
                             <button id="mr-refresh-missing-analysis" type="button" class="mr-btn mr-btn-secondary mr-btn-sm mr-missing-refresh-btn" data-tooltip="Re-analyze workflow and refresh local matches">
                                 <span class="mr-refresh-spin-target">${getSvgIcon('refreshCw')}</span> Refresh
@@ -829,6 +839,18 @@ export const missingBrowserMethods = {
                 this.showAutoDownloadModels = Boolean(showAutoDownloadToggle.checked);
                 try {
                     safeStorage.setItem(this.showAutoDownloadModelsStorageKey, this.showAutoDownloadModels ? '1' : '0');
+                } catch (_e) {}
+                this.displayMissingModels(container, data, { preserveBrowser: true });
+            });
+        }
+
+        const showInactiveToggle = container.querySelector('#mr-show-inactive-models');
+        if (showInactiveToggle && showInactiveToggle.dataset.mlInactiveBound !== 'true') {
+            showInactiveToggle.dataset.mlInactiveBound = 'true';
+            showInactiveToggle.addEventListener('change', () => {
+                this.showInactiveModels = Boolean(showInactiveToggle.checked);
+                try {
+                    safeStorage.setItem(this.showInactiveModelsStorageKey, this.showInactiveModels ? '1' : '0');
                 } catch (_e) {}
                 this.displayMissingModels(container, data, { preserveBrowser: true });
             });
@@ -2026,13 +2048,23 @@ export const missingBrowserMethods = {
         const resolvedFilteredModels = this.showResolvedModels
             ? allModelsForDisplay
             : allModelsForDisplay.filter(missing => !this.isMissingModelResolved(missing));
+        const isInactiveUnresolvedModel = missing => (
+            !this.isMissingModelResolved(missing) && this.isMissingModelInactive(missing)
+        );
+        const inactiveCount = resolvedFilteredModels.reduce((count, missing) => (
+            count + (isInactiveUnresolvedModel(missing) ? 1 : 0)
+        ), 0);
+        const hiddenInactiveCount = this.showInactiveModels ? 0 : inactiveCount;
+        const inactiveFilteredModels = this.showInactiveModels
+            ? resolvedFilteredModels
+            : resolvedFilteredModels.filter(missing => !isInactiveUnresolvedModel(missing));
         const autoDownloadCount = resolvedFilteredModels.reduce((count, missing) => (
             count + (this.isAutoDownloadModel(missing) ? 1 : 0)
         ), 0);
         const hiddenAutoDownloadCount = this.showAutoDownloadModels ? 0 : autoDownloadCount;
         const typeFilterSourceModels = this.showAutoDownloadModels
-            ? resolvedFilteredModels
-            : resolvedFilteredModels.filter(missing => !this.isAutoDownloadModel(missing));
+            ? inactiveFilteredModels
+            : inactiveFilteredModels.filter(missing => !this.isAutoDownloadModel(missing));
         const getTypeFilterValue = missing => String(missing?.category || 'unknown').trim().toLowerCase() || 'unknown';
         const typeFilterCounts = new Map();
         const typeFilterLabels = new Map();
@@ -2232,7 +2264,9 @@ export const missingBrowserMethods = {
             {
                 hiddenResolvedCount,
                 hiddenAutoDownloadCount,
+                hiddenInactiveCount,
                 autoDownloadCount,
+                inactiveCount,
                 resolvedCount,
                 rawMissingCount,
                 missingCount: unresolvedMissingCount,

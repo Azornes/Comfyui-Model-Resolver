@@ -89,6 +89,7 @@ export class ResolverManagerDialog extends ComfyDialog {
         this._missingBrowserObservedHostWidth = null;
         this.showResolvedModelsStorageKey = "model_resolver_show_resolved_models";
         this.showAutoDownloadModelsStorageKey = "model_resolver_show_auto_download_models";
+        this.showInactiveModelsStorageKey = "model_resolver_show_inactive_models";
         this.localMatchAlternativesCollapsedStorageKey = "model_resolver_local_match_alternatives_collapsed";
         this.showResolvedModels = safeStorage.getItem(this.showResolvedModelsStorageKey) === '1';
         this.missingModelsTypeFilter = 'all';
@@ -97,6 +98,7 @@ export class ResolverManagerDialog extends ComfyDialog {
         this.showAutoDownloadModels = storedShowAutoDownload === null
             ? true
             : storedShowAutoDownload === '1';
+        this.showInactiveModels = safeStorage.getItem(this.showInactiveModelsStorageKey) === '1';
         this.localMatchAlternativesCollapsed = safeStorage.getItem(this.localMatchAlternativesCollapsedStorageKey) === '1';
         this.dockButton = null;
         this.undockButton = null;
