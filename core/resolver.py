@@ -883,6 +883,7 @@ def analyze_and_find_matches(
     max_matches_per_model: int = 10,
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     force_rescan: bool = False,
+    analysis_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Main entry point: analyze workflow and find matches for missing models.
@@ -892,6 +893,7 @@ def analyze_and_find_matches(
         similarity_threshold: Minimum similarity score (0.0 to 1.0) for matches
         max_matches_per_model: Maximum number of matches to return per missing model
         force_rescan: If True, bypass the short-lived local model scan cache
+        analysis_id: Optional identifier used to correlate logs for one request
 
     Returns:
         Dictionary with analysis results:
@@ -953,10 +955,16 @@ def analyze_and_find_matches(
         }
 
     # Extract URLs from workflow (node.properties.models + regex)
+    analysis_context = f" (analysis_id={analysis_id})" if analysis_id else ""
     workflow_urls = extract_workflow_urls(workflow_json)
-    log.debug(f"Extracted {len(workflow_urls)} URLs from workflow")
+    log.debug(
+        f"Extracted {len(workflow_urls)} URLs from workflow{analysis_context}"
+    )
     workflow_hashes = extract_workflow_hash_metadata(workflow_json)
-    log.debug(f"Extracted {len(workflow_hashes)} workflow hash metadata keys")
+    log.debug(
+        f"Extracted {len(workflow_hashes)} workflow hash metadata keys"
+        f"{analysis_context}"
+    )
 
     if progress_callback:
         progress_callback(
@@ -972,6 +980,7 @@ def analyze_and_find_matches(
         workflow_json,
         force_rescan=force_rescan,
         progress_callback=progress_callback,
+        analysis_id=analysis_id,
     )
     available_models = inventory["available_models"]
     all_model_refs = inventory["model_refs"]

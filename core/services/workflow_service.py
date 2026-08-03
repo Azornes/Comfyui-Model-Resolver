@@ -80,6 +80,7 @@ class WorkflowService:
                 10,
                 update_analysis_progress if analysis_id else None,
                 force_rescan=force_rescan,
+                analysis_id=analysis_id,
             )
 
             missing_models = result.get("missing_models", [])

@@ -57,6 +57,16 @@ def _get_workflow_model_inventory_cache_key(
     return hashlib.sha256(serialized_workflow.encode("utf-8")).hexdigest()
 
 
+def _get_analysis_log_context(
+    cache_key: str,
+    analysis_id: Optional[str],
+) -> str:
+    normalized_analysis_id = str(analysis_id or "").strip()
+    if normalized_analysis_id:
+        return f"analysis_id={normalized_analysis_id}"
+    return f"workflow_signature={cache_key[:12]}"
+
+
 def invalidate_workflow_model_inventory_cache() -> None:
     """Clear shared workflow model analysis snapshots."""
     with _WORKFLOW_MODEL_INVENTORY_CACHE_LOCK:
@@ -68,6 +78,7 @@ def get_workflow_model_inventory(
     *,
     force_rescan: bool = False,
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+    analysis_id: Optional[str] = None,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
     Return the shared base model inventory for a workflow.
@@ -79,6 +90,7 @@ def get_workflow_model_inventory(
     from ..scanner import get_model_files
 
     cache_key = _get_workflow_model_inventory_cache_key(workflow_json)
+    analysis_context = _get_analysis_log_context(cache_key, analysis_id)
     promoted_context_key = analysis._get_promoted_widget_context_cache_key(workflow_json)
     current_node_fingerprints = analysis._get_workflow_node_fingerprints(workflow_json)
     now = time.monotonic()
@@ -131,7 +143,9 @@ def get_workflow_model_inventory(
                     "cached": True,
                 }
             )
-        log.debug("Reusing shared workflow model analysis")
+        log.debug(
+            f"Reusing shared workflow model analysis ({analysis_context})"
+        )
         return {
             "available_models": cached["available_models"],
             "model_refs": model_refs,
@@ -148,6 +162,7 @@ def get_workflow_model_inventory(
             previous_node_cache=previous_inventory.get("node_cache", {}),
             node_cache_out=node_cache,
             analysis_stats=analysis_stats,
+            analysis_context=analysis_context,
         )
     else:
         available_models = get_model_files(force_rescan=force_rescan)
@@ -155,6 +170,7 @@ def get_workflow_model_inventory(
             workflow_json,
             available_models=available_models,
             progress_callback=progress_callback,
+            analysis_context=analysis_context,
         )
         node_cache = _build_workflow_node_cache(workflow_json, model_refs)
         analysis_stats = {

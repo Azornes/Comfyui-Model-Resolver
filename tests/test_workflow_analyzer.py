@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 from core import resolver as resolver_core
 from core.scanner import invalidate_model_files_cache, scan_directory
@@ -1370,6 +1370,12 @@ class WorkflowModelInventoryCacheTests(unittest.TestCase):
             workflow,
             available_models=available_models,
             progress_callback=None,
+            analysis_context=ANY,
+        )
+        self.assertTrue(
+            analyze_models.call_args.kwargs["analysis_context"].startswith(
+                "workflow_signature="
+            )
         )
 
     def test_force_rescan_rebuilds_shared_inventory(self):
@@ -1672,11 +1678,31 @@ class WorkflowModelInventoryCacheTests(unittest.TestCase):
                 "get_node_model_info",
                 wraps=references.get_node_model_info,
             ) as get_node_info,
+            patch.object(analysis.log, "debug") as debug_log,
         ):
-            get_workflow_model_inventory(build_workflow("first.safetensors"))
-            get_workflow_model_inventory(build_workflow("second.safetensors"))
+            get_workflow_model_inventory(
+                build_workflow("first.safetensors"),
+                analysis_id="analysis-1",
+            )
+            get_workflow_model_inventory(
+                build_workflow("second.safetensors"),
+                analysis_id="analysis-2",
+            )
 
         self.assertEqual(4, get_node_info.call_count)
+        debug_messages = [
+            call.args[0]
+            for call in debug_log.call_args_list
+            if call.args
+        ]
+        self.assertTrue(
+            any(
+                "Analyzing subgraph: Model subgraph (ID: subgraph-1) "
+                "with 1 changed nodes, reused 1 nodes (analysis_id=analysis-2)"
+                in message
+                for message in debug_messages
+            )
+        )
 
     def test_scanner_invalidation_clears_shared_inventory(self):
         workflow = _workflow_with_model("invalidated.safetensors")

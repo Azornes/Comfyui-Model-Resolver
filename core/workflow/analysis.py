@@ -219,6 +219,7 @@ def analyze_workflow_models(
         Dict[tuple[str, str, str], Dict[str, Any]]
     ] = None,
     analysis_stats: Optional[Dict[str, int]] = None,
+    analysis_context: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Extract all model references from a workflow, including nested subgraphs.
@@ -235,6 +236,7 @@ def analyze_workflow_models(
     all_model_refs = []
     reused_nodes = 0
     analyzed_nodes = 0
+    log_context = f" ({analysis_context})" if analysis_context else ""
 
     # Get subgraph definitions first to check if node types are subgraph UUIDs
     definitions = workflow_json.get("definitions", {})
@@ -392,6 +394,7 @@ def analyze_workflow_models(
         )
 
         analyzed_subgraph_nodes = 0
+        reused_subgraph_nodes = 0
 
         for node in subgraph_nodes:
             try:
@@ -413,6 +416,7 @@ def analyze_workflow_models(
                 if reused:
                     base_model_refs = cached_node.get("refs", [])
                     reused_nodes += 1
+                    reused_subgraph_nodes += 1
                 else:
                     base_model_refs = references.get_node_model_info(
                         node,
@@ -465,10 +469,11 @@ def analyze_workflow_models(
                 )
                 continue
 
-        if analyzed_subgraph_nodes:
+        if subgraph_nodes:
             log.debug(
                 f"Analyzing subgraph: {subgraph_name} (ID: {subgraph_id}) "
-                f"with {analyzed_subgraph_nodes} changed nodes"
+                f"with {analyzed_subgraph_nodes} changed nodes, "
+                f"reused {reused_subgraph_nodes} nodes{log_context}"
             )
 
     if analysis_stats is not None:
@@ -483,7 +488,7 @@ def analyze_workflow_models(
     if previous_node_cache is not None:
         log.debug(
             f"Incremental workflow analysis: analyzed {analyzed_nodes} nodes, "
-            f"reused {reused_nodes} nodes"
+            f"reused {reused_nodes} nodes{log_context}"
         )
 
     return all_model_refs

@@ -194,6 +194,9 @@ async def test_analyze_route_filters_references_and_uses_local_download_sources(
     assert sources["popular.safetensors"]["size"] == 200
     assert sources["listed.safetensors"]["source"] == "model_list"
     values["invalidate_local_hash_match_cache"].assert_called_once_with()
+    assert values["analyze_and_find_matches"].call_args.kwargs["analysis_id"] == (
+        "analysis-1"
+    )
     values["self"]._update_analysis_progress.assert_any_call(
         "analysis-1",
         {"stage": "matching", "current": 1, "total": 5},
