@@ -5,7 +5,7 @@
 <p align="center">
   <a href='https://registry.comfy.org/publishers/azornes/nodes/comfyui-model-resolver'><img alt='ComfyUI' src='https://img.shields.io/badge/ComfyUI-1a1a1a?style=for-the-badge&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABwAAAAcCAMAAABF0y+mAAAASFBMVEVHcEwYLtsYLtkXLtkXLdkYLtkWLdcFIdoAD95uerfI1XLR3mq3xIP8/yj0/zvw/0FSYMP5/zKMmKQtPNOuuozj8FOhrZW7x4FMWFFbAAAABnRSTlMAUrPX87KxijklAAAA00lEQVR4AX3SBw6DMAxA0UzbrIzO+9+02GkEpoWP9hPZZs06Hw75aI3k4W/+wkQtnGZNhF1I34BzalQcxkmasY0b9raklNcvLYU1GNiiOeVWauOa/XS526gRyzpV/7HeUOG9Jp6vcsvUrCPeKg/3KBKBQhoTD1dQggPWzPVfFOIgo85/kR4y6oB/8SlIEh7wvmTuKd3wgLVW1sTfRBoR7oWVqy/U2NcrWDYMINE7NUuJuoV+2fhaWmnbjzcOWnRv7XbiLh/Y9dNUqk2y0QcNwTu7wgf+/BhsPUhf4QAAAABJRU5ErkJggg=='><img alt='Downloads' src='https://img.shields.io/badge/dynamic/json?color=%230D2A4A&label=&query=downloads&url=https://gist.githubusercontent.com/Azornes/741c965c0e0504ac65935dcc105a4ad8/raw/top_modelresolver.json&style=for-the-badge'></a>  
   <img alt='GitHub Clones' src='https://img.shields.io/badge/dynamic/json?color=2F80ED&label=Clone&query=count&url=https://gist.githubusercontent.com/Azornes/2730ed6bbf240f06efd0c183bddd3d6c/raw/clone.json&logo=github&style=for-the-badge&labelColor=1a1a1a'></a>
-  <a href="https://visitorbadge.io/status?path=https%3A%2F%2Fgithub.com%2FAzornes%2FComfyui-Resolution-Master">
+  <a href="https://visitorbadge.io/status?path=https%3A%2F%2Fgithub.com%2FAzornes%2FComfyui-Model-Resolver">
     <img src="https://api.visitorbadge.io/api/combined?path=https%3A%2F%2Fgithub.com%2FAzornes%2FComfyui-Model-Resolver&countColor=%03ae5f&style=for-the-badge&labelStyle=none&labelColor=1a1a1a" /></a>
   <img alt="Python 3.10+" src="https://img.shields.io/badge/Python-3.10+-2564ae?labelColor=1a1a1a&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMTAiIGhlaWdodD0iMTEwIiB2aWV3Qm94PSIwLjIxIC0wLjA3NyAxMTAgMTEwIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImEiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIiB4MT0iNjMuODE1OSIgeTE9IjU2LjY4MjkiIHgyPSIxMTguNDkzNCIgeTI9IjEuODIyNSIgZ3JhZGllbnRUcmFuc2Zvcm09Im1hdHJpeCgxIDAgMCAtMSAtNTMuMjk3NCA2Ni40MzIxKSI%2BPHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjMzg3RUI4Ii8%2BPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMzY2OTk0Ii8%2BPC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9ImIiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIiB4MT0iOTcuMDQ0NCIgeTE9IjIxLjYzMjEiIHgyPSIxNTUuNjY2NSIgeTI9Ii0zNC41MzA4IiBncmFkaWVudFRyYW5zZm9ybT0ibWF0cml4KDEgMCAwIC0xIC01My4yOTc0IDY2LjQzMjEpIj48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNGRkUwNTIiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNGRkMzMzEiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48cGF0aCBmaWxsPSJ1cmwoI2EpIiBkPSJNNTUuMDIzLTAuMDc3Yy0yNS45NzEsMC0yNi4yNSwxMC4wODEtMjYuMjUsMTIuMTU2djEyLjU5NGgyNi43NXYzLjc4MUgxOC4xNDhjLTcuOTQ5LDAtMTcuOTM4LDQuODMzLTE3LjkzOCwyNi4yNSwwLDE5LjY3Myw3Ljc5MiwyNy4yODEsMTUuNjU2LDI3LjI4MWg5LjM0NFY2OC44NmMwLTUuNDkxLDIuNzIxLTE1LjY1NiwxNS40MDYtMTUuNjU2aDI2LjUzMWMzLjkwMiwwLDE0LjkwNi0xLjY5NiwxNC45MDYtMTQuNDA2VjE0LjU3OWMuMDAxLTMuMTUzLS41MzgtMTQuNjU2LTI3LjAzLTE0LjY1NnpNNDAuMjczLDguMzkyYzIuNjYyLDAsNC44MTMsMi4xNSw0LjgxMyw0LjgxMywwLDIuNjYxLTIuMTUxLDQuODEzLTQuODEzLDQuODEzcy00LjgxMy0yLjE1MS00LjgxMy00LjgxM2MwLTIuNjYzLDIuMTUxLTQuODEzLDQuODEzLTQuODEzeiIvPjxwYXRoIGZpbGw9InVybCgjYikiIGQ9Ik01NS4zOTcsMTA5LjkyM2MyNS45NTksMCwyNi4yODItMTAuMjcxLDI2LjI4Mi0xMi4xNTZWODUuMTczSDU0Ljg5N3YtMy43ODFoMzcuMzc1YzguMDA5LDAsMTcuOTM4LTQuOTU0LDE3LjkzOC0yNi4yNSwwLTIzLjMyMi0xMC41MzgtMjcuMjgxLTE1LjY1Ni0yNy4yODFIODUuMjF2MTMuMTI1YzAsNS40OTEtMi42MzEsMTUuNjU2LTE1LjQwNiwxNS42NTZINDMuMjcyYy0zLjg5MiwwLTE0LjkwNiwxLjg5Ni0xNC45MDYsMTQuNDA2djI0LjIxOWMwLDUuMjMsMy4xOTYsMTQuNjU2LDI3LjAzMSwxNC42NTZ6TTcwLjE0OCwxMDEuNDU0Yy0yLjY2MiwwLTQuODEzLTIuMTUxLTQuODEzLTQuODEzczIuMTUtNC44MTMsNC44MTMtNC44MTNjMi42NjEsMCw0LjgxMywyLjE1MSw0LjgxMyw0LjgxM3MtMi4xNTIsNC44MTMtNC44MTMsNC44MTN6Ii8%2BPC9zdmc%2B&style=for-the-badge">
   <img alt="JavaScript" src="https://img.shields.io/badge/JavaScript-1a1a1a?style=for-the-badge&logo=javascript&logoColor=F7DF1E&labelColor=1a1a1a">
@@ -30,6 +30,7 @@ https://github.com/user-attachments/assets/f5d83ce9-3ea8-4532-9b96-4ca4cd6cfb75
 - **Search supported sources.** Find files on CivitAI, Hugging Face, CivArchive, Lora Manager Archive, and the ComfyUI-Manager model database.
 - **Update workflows.** Replace model names and paths in the active workflow, including nested subgraphs and loaders from rgthree's Power Lora Loader and LoraManager.
 - **Manage downloads.** Send files to their model folders, track speed and progress, and cancel or pause downloads when the selected backend supports it.
+- **Work in batches.** Queue exact local matches, search several missing models, download known sources together, and review active downloads or history.
 - **Inspect loaded models.** Review the models used by the active workflow, their physical paths, strength values, and disk status.
 - **Open model folders.** Reveal a model file in the host file manager when the platform supports that action.
 - **Use custom URLs.** Download a file from any direct URL and choose its target folder and filename.
@@ -51,7 +52,9 @@ https://github.com/user-attachments/assets/f5d83ce9-3ea8-4532-9b96-4ca4cd6cfb75
 5. **Download or Link**:
    * Click **Download** to asynchronously download the model in the background directly into the correct category folder.
    * Or select a local alternative suggested by the Fuzzy Matching algorithm.
-6. **Apply**: Click **Apply** to update the ComfyUI workflow nodes with the new, correct model paths. You're ready to click *Queue Prompt*!
+6. **Apply**: Click **Apply** to update the ComfyUI workflow nodes with the resolved model paths, then queue the prompt.
+
+The dialog has **Missing Models**, **Loaded Models**, and **Options** tabs. Its queue panel keeps pending links separate from downloads, with active progress and download history.
 
 ---
 
@@ -71,7 +74,7 @@ Model Resolver provides two download engines in the Settings panel and an automa
 | Backend / transport | How it is selected | Live progress | Cancel | Pause / resume |
 | --- | --- | --- | --- | --- |
 | **Python** | Selected in Settings; also used as the general fallback | Yes | Yes | No |
-| **Aria2 (Recommended)** | Selected in Settings | Yes | Yes | Yes |
+| **Aria2 (Optional)** | Selected in Settings | Yes | Yes | Yes |
 | **Hugging Face Xet** | Activated automatically for Xet-backed Hugging Face files while the Python engine is selected | Yes, using native Xet updates | Yes | No |
 
 ### Python Engine
@@ -98,7 +101,7 @@ Model Resolver provides two download engines in the Settings panel and an automa
 > Xet transfers compressed, deduplicated data. The received byte count can stay below the final model size, so a download can reach **Finalizing** before the network counter reaches the final size.
 
 > [!TIP]
-> Install and configure Aria2 from the Settings panel. ModelResolver downloads the official release for your operating system and architecture, extracts it, and manages the background daemon. The daemon starts when a download needs it and stops after it stays idle.
+> Install and configure aria2 from the Settings panel when you need pause/resume or segmented transfers. Model Resolver downloads the official release for your operating system and architecture, extracts it, and manages the background daemon.
 
 ---
 
@@ -126,7 +129,6 @@ Use model metadata to build download paths. The **Download Path Mode** setting p
 
 For example, a Lora can use `Loras/SDXL/style/my_lora_v1.safetensors`, while a checkpoint can use `Checkpoints/Flux/my_flux_model.safetensors`.
 
-
 ---
 
 ## Configuration & Settings
@@ -139,12 +141,29 @@ Open Settings to add credentials for downloads and searches:
 
 The Settings panel includes **Check** buttons for each credential type. Use them to verify a key or token before starting a download.
 
+You can also enable or disable search sources, choose CivitAI and Hugging Face fallback methods, set automatic base-model and subfolder suggestions, configure aria2, control workflow metadata, and export logs. The [wiki](https://github.com/Azornes/Comfyui-Model-Resolver/wiki) contains the full settings reference.
+
+## Workflow Metadata and the Opener Node
+
+- **Embed workflow hashes** stores SHA-256 metadata for referenced models in saved workflows and image workflow JSON. Later scans can identify a renamed file by its hash.
+- **Embed opener node** adds a small **Model Resolver Opener** node to saved workflows. Its button opens the resolver, and its dependency metadata helps ComfyUI-Manager identify the extension.
+- **Open when a workflow has missing models** opens the resolver after analysis finds unresolved references. This option is disabled by default.
+
+The opener node only opens Model Resolver. It has no image, model, or prompt outputs. Add it from **Options** or the ComfyUI Command Palette.
+
+## Local Databases and Maintenance
+
+The **Options** tab can update the ComfyUI-Manager model database, refresh the CivitAI base-model list, and refresh the Hugging Face author index. It also includes a metadata-size audit, a local SHA-256 metadata builder, cache controls, and frontend/backend log export.
+
+See the [wiki maintenance guide](https://github.com/Azornes/Comfyui-Model-Resolver/wiki/Options-and-Maintenance) for details.
+
 ---
 
 ## Loaded Models Inspector & Local Hashing
 
-* **Loaded Models Tab**: Check what models are loaded in the current active python session. It lists paths, model categories, byte sizes, physical existence checks, and confidence levels.
+* **Loaded Models Tab**: Check what models are loaded in the current active Python session. It lists paths, model categories, byte sizes, physical existence checks, strength values, and active/inactive state.
 * **Open Containing Folder**: Select a model in the Loaded Models tab and click the folder icon to reveal it in the host system's file manager.
+* **Model details**: Open source information, previews, descriptions, tags, versions, and trained words when the provider exposes them.
 * **Local Hashing (`sha256`)**:
   * You can calculate the exact `sha256` hash of any local model file in the background.
   * Hashing status is updated in real-time, allowing you to use exact hash queries on CivitAI/CivArchive to retrieve model metadata and link files.
@@ -186,15 +205,20 @@ The Settings panel includes **Check** buttons for each credential type. Use them
 
 ## Requirements
 
+* ComfyUI 0.26.0 or newer
 * Python 3.10 or newer
 * Libraries: `requests`, `aiohttp`, `rapidfuzz`, `huggingface-hub`
 * Modern web browser with JS support (Chrome, Edge, Firefox, Brave)
+
+Hugging Face Xet support is optional. When the Xet transport is unavailable, Model Resolver uses the regular Python downloader.
 
 ## Backend Architecture
 
 The ComfyUI entry point stays small. Runtime state lives in `core/extension.py`, route registration lives in `core/routes/registry.py`, HTTP adapters live in `core/routes/`, and shared feature logic lives in `core/services/`.
 
 See [`docs/architecture.md`](docs/architecture.md) for the dependency flow and local verification commands.
+
+For user workflows, provider settings, download paths, metadata, and troubleshooting, see the [Model Resolver wiki](https://github.com/Azornes/Comfyui-Model-Resolver/wiki).
 
 ---
 
