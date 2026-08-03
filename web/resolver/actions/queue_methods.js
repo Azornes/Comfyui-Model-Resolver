@@ -1011,6 +1011,7 @@ export const queueMethods = {
         };
         const getNodeKey = (node) => {
             if (node?.nodeType !== 1) return '';
+            if (!node.classList?.contains('mr-download-queue-item')) return '';
             return node.getAttribute?.('data-download-id') || '';
         };
         const canPatchNode = (current, next) => {
@@ -1092,6 +1093,18 @@ export const queueMethods = {
             button.addEventListener('click', run);
         };
 
+        const getDownloadContext = (button) => {
+            const downloadId = button?.dataset?.downloadId || '';
+            const info = this.activeDownloads?.[downloadId];
+            if (!downloadId || !info) return null;
+
+            const progress = typeof this.applyPendingDownloadStatus === 'function'
+                ? this.applyPendingDownloadStatus(info, info.lastProgress || {})
+                : (info.lastProgress || {});
+            const workflowLabel = this.getDownloadWorkflowLabel?.(info) || 'Unknown workflow';
+            return this.getDownloadQueueContext?.(progress, info, workflowLabel, downloadId) || null;
+        };
+
         this.queueList.querySelectorAll('.mr-downloads-subtab').forEach(button => {
             button.addEventListener('click', () => {
                 this.setQueueDownloadsTab(button.dataset.downloadsTab || 'active');
@@ -1116,6 +1129,32 @@ export const queueMethods = {
             bindInstantAction(button, () => {
                 const downloadId = button.dataset.downloadId;
                 if (downloadId) this.resumeDownload(downloadId);
+            });
+        });
+
+        this.queueList.querySelectorAll('.mr-download-queue-open-folder').forEach(button => {
+            bindInstantAction(button, () => {
+                const context = getDownloadContext(button);
+                if (context) this.openContainingFolder?.(context);
+            });
+        });
+
+        this.queueList.querySelectorAll('.mr-download-queue-switch-workflow').forEach(button => {
+            bindInstantAction(button, () => {
+                const context = getDownloadContext(button);
+                if (context) this.switchToDownloadWorkflow?.(context);
+            });
+        });
+
+        this.queueList.querySelectorAll('.mr-download-queue-more').forEach(button => {
+            if (button._hasListener) return;
+            button._hasListener = true;
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (button.disabled) return;
+                const item = button.closest('.mr-download-queue-item');
+                if (item) window.MLOpenContextMenu?.(event, item);
             });
         });
 
@@ -1149,7 +1188,6 @@ export const queueMethods = {
                 percent,
                 downloadedText: downloaded,
                 totalText: total,
-                progressMeta,
                 percentLabel,
                 logicalDownloadedText: logicalDownloaded,
                 logicalTotalText: logicalTotal,
@@ -1171,46 +1209,66 @@ export const queueMethods = {
             const sizeText = presentation.isFinalizing && logicalTotal
                 ? `Finalizing file: ${logicalDownloaded} / ${logicalTotal}`
                 : (presentation.totalSize ? `${downloaded} / ${total}` : downloaded);
+            const speed = Number(progress.speed) || 0;
+            const speedText = speed > 0 ? `${this.formatBytes(speed)}/s` : '';
+            const etaText = this.getDownloadEtaText?.(progress)?.replace(/^ETA\s+/i, 'Remaining ') || '';
             const targetPath = progress.directory || info.downloadDirectory || info.downloadPath || '';
-            const targetLabel = targetPath ? targetPath.split(/[/\\]/).filter(Boolean).pop() || targetPath : '';
             const workflowLabel = this.getDownloadWorkflowLabel?.(info) || 'Unknown workflow';
             const contextModel = this.getDownloadQueueContext?.(progress, info, workflowLabel, downloadId);
             const hasFolderAction = Boolean(contextModel?.folder_path || contextModel?.download_directory || contextModel?.directory || contextModel?.path || contextModel?.resolved_path);
-            const contextTooltip = hasFolderAction
-                ? 'Right-click for workflow and download folder actions'
-                : 'Right-click to switch to workflow';
+            const hasWorkflowAction = Boolean(contextModel && this.canSwitchToDownloadWorkflow?.(contextModel));
             const contextData = contextModel
-                ? this.getContextMenuAttrs(contextModel, contextTooltip)
+                ? this.getContextMenuAttrs(contextModel)
                 : '';
+            const safeDownloadId = this.escapeHtml(downloadId);
+            const nodeText = `${nodeLabel} #${info.missing?.node_id ?? ''}`;
+            const detailParts = [category, nodeText].filter(Boolean);
+            const renderIcon = (iconName, className) => (
+                typeof getSvgIcon === 'function'
+                    ? getSvgIcon(iconName, 'currentColor', className)
+                    : ''
+            );
+        const actionButton = (className, label, iconName, disabled = false) => (
+            `<button type="button" class="mr-download-queue-action ${className}" data-download-id="${safeDownloadId}" data-tooltip="${label}" aria-label="${label}"${disabled ? ' disabled' : ''}>${renderIcon(iconName, 'mr-download-queue-action-icon')}</button>`
+        );
 
             html += `<div class="mr-queue-item mr-download-queue-item" data-download-id="${this.escapeHtml(downloadId)}"${contextData}>`;
-            html += `<div class="mr-queue-item-title mr-download-queue-title">`;
-            html += `<span data-tooltip="${this.escapeHtml(filename)}">${this.escapeHtml(filename)}</span>`;
+            html += `<div class="mr-download-queue-header">`;
+            html += `<div class="mr-download-queue-heading">`;
+            html += `<span class="mr-download-queue-filename" data-tooltip="${this.escapeHtml(filename)}">${this.escapeHtml(filename)}</span>`;
             html += `<span class="mr-download-queue-status">${this.escapeHtml(statusLabel)}</span>`;
             html += `</div>`;
-            html += `<div class="mr-queue-item-meta"><span>Model</span><code>${this.escapeHtml(nodeLabel)} #${this.escapeHtml(String(info.missing?.node_id ?? ''))}</code></div>`;
-            html += `<div class="mr-queue-item-meta"><span>Workflow</span><code data-tooltip="${this.escapeHtml(workflowLabel)}">${this.escapeHtml(workflowLabel)}</code></div>`;
-            if (category) {
-                html += `<div class="mr-queue-item-meta"><span>Type</span><code>${this.escapeHtml(category)}</code></div>`;
-            }
-            if (backend) {
-                html += `<div class="mr-queue-item-meta"><span>Backend</span><code>${this.escapeHtml(backend)}</code></div>`;
-            }
-            if (targetLabel) {
-                html += `<div class="mr-queue-item-meta"><span>Folder</span><code data-tooltip="${this.escapeHtml(targetPath)}">${this.escapeHtml(targetLabel)}</code></div>`;
-            }
+            html += `<div class="mr-download-queue-actions" role="group" aria-label="Download actions">`;
+            html += actionButton(
+                isPaused ? 'mr-download-queue-resume' : 'mr-download-queue-pause',
+                isPaused ? 'Resume download' : 'Pause download',
+                isPaused ? 'play' : 'pause',
+                !isAria2
+            );
+            html += actionButton('mr-download-queue-cancel', 'Cancel download', 'x');
+            html += actionButton('mr-download-queue-open-folder', 'Open download folder', 'folderOpen', !hasFolderAction);
+            html += actionButton('mr-download-queue-switch-workflow', 'Switch to workflow', 'internalLink', !hasWorkflowAction);
+            html += actionButton('mr-download-queue-more', 'More download actions', 'info', !contextModel);
+            html += `</div>`;
+            html += `</div>`;
             html += `<div class="mr-download-queue-progress">`;
-            html += `<div class="mr-progress-bar"><div class="mr-progress-fill" style="width: ${percent}%;"></div></div>`;
-            html += `<div class="mr-progress-text"><span>${this.escapeHtml(sizeText)}</span><span>${this.escapeHtml(progressMeta)}</span></div>`;
-            html += `</div>`;
-            html += `<div class="mr-queue-item-actions">`;
-            if (isAria2 && isPaused) {
-                html += `<button type="button" class="mr-btn mr-btn-primary mr-btn-sm mr-download-queue-resume" data-download-id="${this.escapeHtml(downloadId)}">Resume</button>`;
-            } else if (isAria2 && status === 'downloading') {
-                html += `<button type="button" class="mr-btn mr-btn-secondary mr-btn-sm mr-download-queue-pause" data-download-id="${this.escapeHtml(downloadId)}">Pause</button>`;
+            html += `<div class="mr-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}" aria-label="Download progress"><div class="mr-progress-fill" style="width: ${percent}%;"></div></div>`;
+            html += `<div class="mr-download-queue-stats">`;
+            html += `<span class="mr-download-queue-size">${this.escapeHtml(sizeText)}</span>`;
+            html += `<span class="mr-download-queue-stat-group">`;
+            if (speedText) {
+                html += `<span class="mr-download-queue-stat">${renderIcon('download', 'mr-download-queue-stat-icon')}<span>${this.escapeHtml(speedText)}</span></span>`;
             }
-            html += `<button type="button" class="mr-btn mr-btn-danger mr-btn-sm mr-download-queue-cancel" data-download-id="${this.escapeHtml(downloadId)}">Cancel</button>`;
+            if (etaText) {
+                html += `<span class="mr-download-queue-stat"><span>${this.escapeHtml(etaText)}</span></span>`;
+            }
+            if (!speedText && !etaText) {
+                html += `<span class="mr-download-queue-stat mr-download-queue-stat-muted">${this.escapeHtml(statusLabel)}</span>`;
+            }
+            html += `</span>`;
             html += `</div>`;
+            html += `</div>`;
+            html += `<div class="mr-download-queue-details" data-tooltip="${this.escapeHtml([targetPath, backend].filter(Boolean).join(' · '))}"><span>Workflow</span><span>${this.escapeHtml([workflowLabel, ...detailParts].filter(Boolean).join(' · '))}</span></div>`;
             html += `</div>`;
         }
         html += '</div>';
