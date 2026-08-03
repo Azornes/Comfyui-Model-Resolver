@@ -261,6 +261,68 @@ def test_subgraph_input_reference_targets_instance_for_update_and_location():
     ]
 
 
+def test_reused_subgraph_instance_refreshes_promoted_model_context():
+    workflow = {
+        "nodes": [
+            {
+                "id": 1,
+                "type": "subgraph-1",
+                "inputs": [
+                    {
+                        "name": "ckpt_name",
+                        "type": "COMBO",
+                        "widget": {"name": "ckpt_name"},
+                        "link": None,
+                    }
+                ],
+                "properties": {"proxyWidgets": [["10", "ckpt_name"]]},
+                "widgets_values": ["old.safetensors"],
+            }
+        ],
+        "definitions": {
+            "subgraphs": [
+                {
+                    "id": "subgraph-1",
+                    "name": "Promoted loader",
+                    "nodes": [_loader_node(value="old.safetensors")],
+                }
+            ]
+        },
+    }
+    previous_node_cache = {}
+    analysis.analyze_workflow_models(
+        workflow,
+        available_models=[],
+        node_cache_out=previous_node_cache,
+    )
+
+    updated_workflow = {
+        **workflow,
+        "nodes": [
+            {
+                **workflow["nodes"][0],
+                "widgets_values": ["new.safetensors"],
+            }
+        ],
+    }
+    # Simulate a serialized proxy widget change whose node cache entry was
+    # retained while the promoted context changed.
+    previous_node_cache[("top", "", "1")]["fingerprint"] = (
+        analysis._get_workflow_node_fingerprint(updated_workflow["nodes"][0])
+    )
+
+    refs = analysis.analyze_workflow_models(
+        updated_workflow,
+        available_models=[],
+        previous_node_cache=previous_node_cache,
+    )
+
+    assert len(refs) == 1
+    assert refs[0]["node_id"] == 1
+    assert refs[0]["original_path"] == "new.safetensors"
+    assert refs[0]["promoted_inner_node_id"] == 10
+
+
 def test_reference_matching_handles_placeholders_paths_and_scanner_records(tmp_path):
     model_path = tmp_path / "folder" / "model.safetensors"
     model_path.parent.mkdir()

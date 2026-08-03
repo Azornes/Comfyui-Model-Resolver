@@ -120,6 +120,7 @@ export class ResolverManagerDialog extends ComfyDialog {
         this._sidebarSplitterMouseDownHandler = null;
         this._sidebarSplitterDragState = null;
         this._analysisProgressToken = null;
+        this._workflowAnalysisRequest = null;
         this._workflowDataLoadToken = null;
         this._loadedModelsLoadToken = null;
         this._loadedModelsProgressToken = null;

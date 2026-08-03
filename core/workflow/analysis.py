@@ -323,14 +323,18 @@ def analyze_workflow_models(
                 and cached_node.get("fingerprint") == node_fingerprint
             )
             if reused:
-                model_refs = cached_node.get("refs", [])
+                base_model_refs = cached_node.get("refs", [])
                 reused_nodes += 1
             else:
-                model_refs = references.get_node_model_info(
+                base_model_refs = references.get_node_model_info(
                     node,
                     available_models=available_models,
                 )
                 analyzed_nodes += 1
+            # Keep cached node references as raw extraction results. Subgraph
+            # instance context is workflow-level state and must be reapplied
+            # when a cached node is reused.
+            model_refs = [dict(ref) for ref in base_model_refs]
             node_type = node.get("type", "")
 
             # Check if node type is a subgraph UUID
@@ -352,20 +356,18 @@ def analyze_workflow_models(
                         promoted_instance_slots.add(
                             (str(node.get("id")), ref.get("widget_index"))
                         )
-                        if not reused:
-                            subgraph_utils._apply_instance_promoted_widget_context(
-                                ref, context, available_models
-                            )
-            if not reused:
-                for ref in model_refs:
-                    ref["subgraph_id"] = subgraph_id
-                    ref["subgraph_name"] = subgraph_name
-                    ref["subgraph_path"] = None
-                    ref["is_top_level"] = True
+                        subgraph_utils._apply_instance_promoted_widget_context(
+                            ref, context, available_models
+                        )
+            for ref in model_refs:
+                ref["subgraph_id"] = subgraph_id
+                ref["subgraph_name"] = subgraph_name
+                ref["subgraph_path"] = None
+                ref["is_top_level"] = True
             if node_cache_out is not None:
                 node_cache_out[node_cache_key] = {
                     "fingerprint": node_fingerprint,
-                    "refs": model_refs,
+                    "refs": base_model_refs,
                 }
             report_node_progress(node, reused=reused)
             all_model_refs.extend(model_refs)

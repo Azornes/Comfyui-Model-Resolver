@@ -360,11 +360,12 @@ export class ModelResolver {
         if (!force && cachedData) return cachedData;
         if (this.nodeContextAnalysisPromise) return this.nodeContextAnalysisPromise;
 
-        const analysisPromise = this.dialog.fetchJson('/model_resolver/analyze', {
-            method: 'POST',
-            body: JSON.stringify({ workflow }),
+        const analysisRequest = this.dialog.getWorkflowAnalysisRequest?.(workflow, {
             silent: true,
-        }, 'Analyze workflow')
+        });
+        if (!analysisRequest?.promise) return null;
+
+        const analysisPromise = analysisRequest.promise
             .then((data) => {
                 const currentState = this.getNodeContextWorkflowState();
                 if (currentState.signature === signature) {

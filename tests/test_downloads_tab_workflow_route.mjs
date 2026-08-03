@@ -1912,6 +1912,10 @@ test('background Missing Models refresh keeps the current view until new data is
     cachedAnalysisData: { missing_models: [], resolved_models: [] },
     syncWorkflowScopedQueue() {},
     getMissingWorkflowSignature: () => 'new-signature',
+    getWorkflowAnalysisRequest: () => ({
+      analysisId: 'shared-analysis',
+      promise: fetchPromise,
+    }),
     workflowHasNodes: () => true,
     renderAnalysisProgress() {
       progressRenderCount += 1;
@@ -1956,6 +1960,42 @@ test('background Missing Models refresh keeps the current view until new data is
   assert.equal(contentElement.innerHTML, '<div>0.75</div>');
   assert.equal(contentElement.scrollTop, 36);
   assert.deepEqual(displayOptions, { preserveBrowser: true });
+});
+
+test('concurrent workflow analysis consumers share one in-flight request', async () => {
+  const getWorkflowAnalysisRequest = eval(
+    `(${extractMethod(workflowStateMethodsSource, 'getWorkflowAnalysisRequest')})`
+  );
+  const workflow = { nodes: [{ id: 1, type: 'CheckpointLoaderSimple', widgets_values: ['model.safetensors'] }] };
+  let resolveFirst;
+  const pending = new Promise(resolve => {
+    resolveFirst = resolve;
+  });
+  const calls = [];
+  const responses = [pending, Promise.resolve({})];
+  const dialog = {
+    getMissingWorkflowSignature: () => 'model-signature',
+    getActiveWorkflowRouteKey: () => 'workflow-a',
+    fetchJson: (...args) => {
+      calls.push(args);
+      return responses.shift();
+    },
+  };
+
+  const first = getWorkflowAnalysisRequest.call(dialog, workflow);
+  const second = getWorkflowAnalysisRequest.call(dialog, workflow);
+
+  assert.equal(first, second);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0][0], /\/model_resolver\/analyze$/);
+
+  resolveFirst({ missing_models: [] });
+  await first.promise;
+  await Promise.resolve();
+
+  const next = getWorkflowAnalysisRequest.call(dialog, workflow);
+  assert.notEqual(next, first);
+  assert.equal(calls.length, 2);
 });
 
 test('content-preserving Missing Models refresh patches the browser instead of clearing it', () => {
@@ -2962,6 +3002,36 @@ test('workflow hash refresh ignores node movement and tracks model dependency ch
   assert.equal(resolver.armCalls, 1);
   assert.equal(resolver.workflowHashMetadataRefreshPending, true);
   assert.notEqual(resolver.workflowHashMetadataPendingSignature, originalSignature);
+});
+
+test('workflow route stays rooted while navigating into a subgraph', () => {
+  const getActiveWorkflowRouteKey = eval(
+    `(${extractMethod(workflowStateMethodsSource, 'getActiveWorkflowRouteKey')})`
+  );
+  const previousApp = globalThis.app;
+  const previousWindow = globalThis.window;
+
+  globalThis.app = {
+    graph: {
+      id: 'root-workflow-id',
+      rootGraph: { id: 'root-workflow-id' },
+    },
+    canvas: {
+      graph: { id: 'nested-subgraph-id' },
+    },
+  };
+  globalThis.window = {
+    location: { hash: '#nested-subgraph-id' },
+  };
+
+  try {
+    assert.equal(getActiveWorkflowRouteKey.call({}), '#root-workflow-id');
+  } finally {
+    if (previousApp === undefined) delete globalThis.app;
+    else globalThis.app = previousApp;
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
 });
 
 test('download percent keeps native Xet progress below one percent visible', () => {

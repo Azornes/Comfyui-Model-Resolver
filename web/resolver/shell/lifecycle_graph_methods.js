@@ -201,8 +201,12 @@ export const lifecycleGraphMethods = {
                 return data;
             }
 
-            const analysisId = `an-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-            this._analysisProgressToken = analysisId;
+            const analysisRequest = this.getWorkflowAnalysisRequest(workflow, {
+                forceRescan: Boolean(forceRescan),
+            });
+            if (!analysisRequest) return null;
+
+            this._analysisProgressToken = analysisRequest.analysisId;
             if (!preserveContent && shouldRenderMissingModels()) {
                 this.contentElement.innerHTML = this.renderAnalysisProgress({
                     status: 'starting',
@@ -215,15 +219,15 @@ export const lifecycleGraphMethods = {
             // Call analyze endpoint
             const progressPromise = preserveContent
                 ? Promise.resolve()
-                : this.pollAnalysisProgress(analysisId, analysisId);
+                : this.pollAnalysisProgress(
+                    analysisRequest.analysisId,
+                    analysisRequest.analysisId
+                );
             let data;
             try {
-                data = await this.fetchJson('/model_resolver/analyze', {
-                    method: 'POST',
-                    body: JSON.stringify({ workflow, analysis_id: analysisId, force_rescan: Boolean(forceRescan) })
-                }, 'Analyze workflow');
+                data = await analysisRequest.promise;
             } finally {
-                if (this._analysisProgressToken === analysisId) {
+                if (this._analysisProgressToken === analysisRequest.analysisId) {
                     this._analysisProgressToken = null;
                 }
                 await progressPromise;

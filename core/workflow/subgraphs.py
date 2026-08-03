@@ -344,6 +344,14 @@ def _apply_instance_promoted_widget_context(
     ref["promoted_inner_widget_index"] = context.get("widget_index")
     ref["promoted_inner_widget_name"] = context.get("widget_name", "")
 
+    promoted_value = context.get("promoted_value")
+    nested_key = ref.get("nested_key")
+    if nested_key and isinstance(promoted_value, dict):
+        promoted_value = promoted_value.get(nested_key)
+    if _has_promoted_value(promoted_value):
+        ref["original_path"] = str(promoted_value).strip()
+        ref["is_urn"] = bool(references.URN_REGEX.match(ref["original_path"]))
+
     category = context.get("category")
     original_path = ref.get("original_path", "")
     if not category or not original_path:

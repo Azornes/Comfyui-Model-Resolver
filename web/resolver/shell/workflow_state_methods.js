@@ -1,3 +1,4 @@
+import { app } from "../../../../../scripts/app.js";
 import { createModuleLogger } from "../../log_system/log_funcs.js";
 
 const log = createModuleLogger('workflow_state_methods');
@@ -15,6 +16,53 @@ export const workflowStateMethods = {
 
     getMissingWorkflowSignature(workflow) {
         return this.getWorkflowSignature(workflow, { includeStrength: false });
+    },
+
+    getWorkflowAnalysisRequest(workflow, { forceRescan = false, silent = false } = {}) {
+        if (!workflow) return null;
+
+        const signature = this.getMissingWorkflowSignature(workflow);
+        const route = this.getActiveWorkflowRouteKey?.() || '';
+        const existing = this._workflowAnalysisRequest;
+        if (
+            !forceRescan
+            && existing?.signature === signature
+            && existing?.route === route
+        ) {
+            return existing;
+        }
+
+        const analysisId = `an-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const requestOptions = {
+            method: 'POST',
+            body: JSON.stringify({
+                workflow,
+                analysis_id: analysisId,
+                force_rescan: Boolean(forceRescan),
+            }),
+        };
+        if (silent) requestOptions.silent = true;
+
+        const request = {
+            analysisId,
+            promise: this.fetchJson('/model_resolver/analyze', requestOptions, 'Analyze workflow'),
+            route,
+            signature,
+        };
+        this._workflowAnalysisRequest = request;
+        request.promise.then(
+            () => {
+                if (this._workflowAnalysisRequest === request) {
+                    this._workflowAnalysisRequest = null;
+                }
+            },
+            () => {
+                if (this._workflowAnalysisRequest === request) {
+                    this._workflowAnalysisRequest = null;
+                }
+            }
+        );
+        return request;
     },
 
     isWorkflowStrengthWidgetName(name = '') {
@@ -357,6 +405,10 @@ export const workflowStateMethods = {
 
     getActiveWorkflowRouteKey() {
         try {
+            const rootGraph = app?.rootGraph || app?.graph?.rootGraph || app?.graph;
+            const rootGraphId = rootGraph?.id || rootGraph?._id || rootGraph?.config?.id;
+            if (rootGraphId) return `#${rootGraphId}`;
+
             return window.location?.hash || '';
         } catch (_error) {
             return '';

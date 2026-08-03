@@ -34,11 +34,13 @@ app.registerExtension({
         modelResolver.configureNodeContextMenu(nodeType);
     },
     nodeCreated(node) {
+        modelResolver.configureNodeContextMenu(node?.constructor);
         modelResolver.configureWorkflowDependencyMarkerNode(node);
         modelResolver.configureCustomNodeModelAdapter(node);
         modelResolver.scheduleNodeContextMenuAnalysis();
     },
     loadedGraphNode(node) {
+        modelResolver.configureNodeContextMenu(node?.constructor);
         modelResolver.configureWorkflowDependencyMarkerNode(node);
         modelResolver.configureCustomNodeModelAdapter(node);
         modelResolver.scheduleNodeContextMenuAnalysis();

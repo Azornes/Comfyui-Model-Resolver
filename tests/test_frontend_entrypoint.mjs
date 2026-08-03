@@ -34,4 +34,10 @@ test('frontend entrypoint registers the ComfyUI extension contract', () => {
       `expected ComfyUI lifecycle hook: ${hook}`
     );
   }
+
+  assert.equal(
+    (resolverSource.match(/modelResolver\.configureNodeContextMenu\(node\?\.constructor\);/g) || []).length,
+    2,
+    'dynamically created and loaded node types must receive the widget-change hook'
+  );
 });
