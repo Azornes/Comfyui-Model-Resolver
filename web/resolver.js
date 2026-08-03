@@ -35,12 +35,16 @@ app.registerExtension({
     },
     nodeCreated(node) {
         modelResolver.configureNodeContextMenu(node?.constructor);
+        modelResolver.configureNodeContextMenu(node);
+        queueMicrotask(() => modelResolver.configureNodeContextMenu(node));
         modelResolver.configureWorkflowDependencyMarkerNode(node);
         modelResolver.configureCustomNodeModelAdapter(node);
         modelResolver.scheduleNodeContextMenuAnalysis();
     },
     loadedGraphNode(node) {
         modelResolver.configureNodeContextMenu(node?.constructor);
+        modelResolver.configureNodeContextMenu(node);
+        queueMicrotask(() => modelResolver.configureNodeContextMenu(node));
         modelResolver.configureWorkflowDependencyMarkerNode(node);
         modelResolver.configureCustomNodeModelAdapter(node);
         modelResolver.scheduleNodeContextMenuAnalysis();

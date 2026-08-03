@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   buildModelResolverNodeMenu,
   getImmediateModelsForNode,
+  getModelsForSubgraphInstance,
   getResolvedModelsForNode,
   isExistingResolvedModel,
   matchesWorkflowModelReference,
@@ -44,6 +45,61 @@ test('node context menu filters existing models by path and workflow scope', () 
     ],
   }, 11, { is_top_level: false, subgraph_id: 'subgraph-a' });
   assert.deepEqual(models.map(item => item.widget_index), [1, 2]);
+});
+
+test('node context menu aggregates inner models for an outer subgraph instance', () => {
+  const models = getModelsForSubgraphInstance({
+    resolved_models: [
+      {
+        node_id: 7,
+        widget_index: 0,
+        original_path: 'promoted.safetensors',
+        full_path: 'C:\\promoted',
+        is_top_level: true,
+        subgraph_id: 'subgraph-a',
+        promoted_inner_node_id: 10,
+        promoted_inner_widget_index: 0,
+        exists: true,
+      },
+      {
+        node_id: 10,
+        widget_index: 0,
+        original_path: 'promoted.safetensors',
+        full_path: 'C:\\promoted',
+        is_top_level: false,
+        subgraph_id: 'subgraph-a',
+        exists: true,
+      },
+      {
+        node_id: 11,
+        widget_index: 1,
+        original_path: 'hidden.safetensors',
+        full_path: 'C:\\hidden',
+        is_top_level: false,
+        subgraph_id: 'subgraph-a',
+        exists: true,
+      },
+      {
+        node_id: 12,
+        widget_index: 0,
+        original_path: 'other.safetensors',
+        full_path: 'C:\\other',
+        is_top_level: false,
+        subgraph_id: 'subgraph-b',
+        exists: true,
+      },
+    ],
+  }, 7, {
+    is_top_level: true,
+    subgraph_id: 'subgraph-a',
+    subgraph_instance_id: 'subgraph-a',
+    is_subgraph_instance: true,
+  });
+
+  assert.deepEqual(
+    models.map(model => model.original_path),
+    ['promoted.safetensors', 'hidden.safetensors'],
+  );
 });
 
 test('node context menu resolves immediate widget selections and ignores invalid references', () => {

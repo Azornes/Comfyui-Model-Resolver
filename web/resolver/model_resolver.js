@@ -304,11 +304,33 @@ export class ModelResolver {
         return { workflow, signature };
     }
 
-    getNodeContextScope(node) {
+    getSubgraphDefinitionIdForNode(node, workflow = null) {
+        const runtimeSubgraphId = node?.subgraph?.id
+            || node?._subgraph?.id
+            || node?.subgraph_id
+            || '';
+        const nodeType = String(node?.type || '').trim();
+        const definitions = workflow?.definitions?.subgraphs;
+        if (Array.isArray(definitions)) {
+            const definition = definitions.find(item => (
+                String(item?.id || '') === nodeType
+            ));
+            if (definition?.id) return String(definition.id);
+        }
+        return runtimeSubgraphId ? String(runtimeSubgraphId) : '';
+    }
+
+    getNodeContextScope(node, workflow = null) {
         const graph = node?.graph;
         const isTopLevel = !graph || graph === app?.graph;
+        const subgraphInstanceId = this.getSubgraphDefinitionIdForNode(node, workflow);
         if (isTopLevel) {
-            return { is_top_level: true };
+            return {
+                is_top_level: true,
+                subgraph_id: subgraphInstanceId || undefined,
+                subgraph_instance_id: subgraphInstanceId || undefined,
+                is_subgraph_instance: Boolean(subgraphInstanceId),
+            };
         }
 
         const subgraphId = graph?._subgraph?.id
@@ -319,6 +341,8 @@ export class ModelResolver {
         return {
             is_top_level: false,
             subgraph_id: subgraphId ? String(subgraphId) : undefined,
+            subgraph_instance_id: subgraphInstanceId || undefined,
+            is_subgraph_instance: Boolean(subgraphInstanceId),
         };
     }
 
@@ -402,7 +426,8 @@ export class ModelResolver {
     }
 
     getResolvedModelsForNodeContextMenu(node) {
-        const { signature } = this.getNodeContextWorkflowState();
+        const { workflow, signature } = this.getNodeContextWorkflowState();
+        const scope = this.getNodeContextScope(node, workflow);
         const data = this.getCurrentNodeContextAnalysis(signature);
         if (!data) {
             this.scheduleNodeContextMenuAnalysis(0);
@@ -411,14 +436,14 @@ export class ModelResolver {
             return getImmediateModelsForNode(
                 previousData || {},
                 node,
-                this.getNodeContextScope(node)
+                scope
             );
         }
 
         return getResolvedModelsForNode(
             data,
             node?.id,
-            this.getNodeContextScope(node)
+            scope
         );
     }
 
@@ -456,16 +481,46 @@ export class ModelResolver {
     }
 
     configureNodeContextMenu(nodeType) {
-        if (!nodeType?.prototype || nodeType.prototype.__modelResolverContextMenuPatched) {
+        const isNodeInstance = Boolean(
+            nodeType
+            && !nodeType.prototype
+            && nodeType.constructor?.prototype
+        );
+        const target = isNodeInstance ? nodeType : nodeType?.prototype;
+        if (!target) {
+            return;
+        }
+
+        if (isNodeInstance) {
+            const hasOwnMenuHook = Object.prototype.hasOwnProperty.call(target, 'getExtraMenuOptions')
+                || Object.prototype.hasOwnProperty.call(target, 'getMenuOptions');
+            if (!hasOwnMenuHook || target.__modelResolverContextMenuInstancePatched) {
+                return;
+            }
+        } else if (target.__modelResolverContextMenuPatched) {
             return;
         }
 
         const owner = this;
-        const originalGetExtraMenuOptions = nodeType.prototype.getExtraMenuOptions;
-        const originalOnWidgetChanged = nodeType.prototype.onWidgetChanged;
-        nodeType.prototype.getExtraMenuOptions = function(_, options) {
-            const result = originalGetExtraMenuOptions?.apply(this, arguments);
-            const models = owner.getResolvedModelsForNodeContextMenu(this);
+        const hasOwnExtraMenuOptions = Object.prototype.hasOwnProperty.call(
+            target,
+            'getExtraMenuOptions'
+        );
+        const hasOwnMenuOptions = Object.prototype.hasOwnProperty.call(
+            target,
+            'getMenuOptions'
+        );
+        const originalGetExtraMenuOptions = target.getExtraMenuOptions;
+        const originalGetMenuOptions = target.getMenuOptions;
+        const addModelResolverMenu = (node, targetOptions) => {
+            if (!Array.isArray(targetOptions)) return;
+            if (targetOptions.some(option => (
+                String(option?.className || '').includes('mr-model-resolver-node-menu')
+            ))) {
+                return;
+            }
+
+            const models = owner.getResolvedModelsForNodeContextMenu(node);
             const menu = buildModelResolverNodeMenu(models, {
                 showInResolver: async model => {
                     const resolvedModel = await owner.resolveNodeContextMenuModel(model);
@@ -489,32 +544,54 @@ export class ModelResolver {
                 formatCategory: category => owner.dialog?.getCategoryDisplayName?.(category),
             });
 
-            const targetOptions = Array.isArray(options)
-                ? options
-                : (Array.isArray(result) ? result : null);
-            if (menu && targetOptions) {
-                targetOptions.unshift(menu);
-            }
-            return result;
+            if (menu) targetOptions.unshift(menu);
         };
-        nodeType.prototype.onWidgetChanged = function() {
-            const result = originalOnWidgetChanged?.apply(this, arguments);
-            const widgetName = arguments[0];
-            const handledByCustomNodeAdapter = owner.isCustomNodeModelWidget?.(
-                this,
-                widgetName
-            );
-            if (handledByCustomNodeAdapter) {
-                owner.customNodeModelAdapterStates?.get(this)?.notify?.();
-            } else if (!owner.dialog?.isWorkflowRefreshSuppressed?.()) {
-                if (!owner.dialog?.isWorkflowStrengthWidgetName?.(widgetName)) {
-                    owner.scheduleNodeContextMenuAnalysis();
+        const originalOnWidgetChanged = target.onWidgetChanged;
+        if (!isNodeInstance || hasOwnExtraMenuOptions) {
+            target.getExtraMenuOptions = function(_, options) {
+                const result = originalGetExtraMenuOptions?.apply(this, arguments);
+                const targetOptions = Array.isArray(options)
+                    ? options
+                    : (Array.isArray(result) ? result : null);
+                addModelResolverMenu(this, targetOptions);
+                return result;
+            };
+        }
+        // ComfyUI treats the presence of getMenuOptions as an alternate menu
+        // provider. Only wrap node types that already implement it; adding an
+        // undefined method makes the native context menu return no options.
+        if (typeof originalGetMenuOptions === 'function' && (!isNodeInstance || hasOwnMenuOptions)) {
+            target.getMenuOptions = function() {
+                const result = originalGetMenuOptions.apply(this, arguments);
+                const targetOptions = Array.isArray(result)
+                    ? result
+                    : (Array.isArray(arguments[1]) ? arguments[1] : null);
+                addModelResolverMenu(this, targetOptions);
+                return result;
+            };
+        }
+        if (!isNodeInstance) {
+            target.onWidgetChanged = function() {
+                const result = originalOnWidgetChanged?.apply(this, arguments);
+                const widgetName = arguments[0];
+                const handledByCustomNodeAdapter = owner.isCustomNodeModelWidget?.(
+                    this,
+                    widgetName
+                );
+                if (handledByCustomNodeAdapter) {
+                    owner.customNodeModelAdapterStates?.get(this)?.notify?.();
+                } else if (!owner.dialog?.isWorkflowRefreshSuppressed?.()) {
+                    if (!owner.dialog?.isWorkflowStrengthWidgetName?.(widgetName)) {
+                        owner.scheduleNodeContextMenuAnalysis();
+                    }
+                    owner.dialog?.scheduleActiveWorkflowRefresh?.('node-widget-change');
                 }
-                owner.dialog?.scheduleActiveWorkflowRefresh?.('node-widget-change');
-            }
-            return result;
-        };
-        nodeType.prototype.__modelResolverContextMenuPatched = true;
+                return result;
+            };
+            target.__modelResolverContextMenuPatched = true;
+        } else {
+            target.__modelResolverContextMenuInstancePatched = true;
+        }
     }
 
     isCustomNodeModelWidget(node, widgetName = '') {

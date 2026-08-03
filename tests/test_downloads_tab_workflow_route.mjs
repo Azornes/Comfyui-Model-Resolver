@@ -1195,6 +1195,107 @@ test('node context integration preserves existing menu hooks and refreshes after
   ]);
 });
 
+test('node context integration injects the menu when a node overrides getMenuOptions', () => {
+  const configureNodeContextMenu = eval(`(${extractMethod(modelResolverSource, 'configureNodeContextMenu')})`);
+  class NodeType {}
+  NodeType.prototype.getMenuOptions = function() {
+    return [{ content: 'Native subgraph action' }];
+  };
+
+  const resolver = {
+    getResolvedModelsForNodeContextMenu: () => [{
+      node_id: 30,
+      widget_index: 0,
+      original_path: 'model.safetensors',
+      full_path: 'E:\\models\\model.safetensors',
+      category: 'checkpoints',
+      exists: true,
+    }],
+    showResolvedNodeModelInResolver: () => {},
+    resolveNodeContextMenuModel: model => model,
+    dialog: {
+      getCategoryDisplayName: () => 'checkpoint',
+      showModelInfo: () => {},
+      openContainingFolder: () => {},
+    },
+  };
+
+  configureNodeContextMenu.call(resolver, NodeType);
+  const options = new NodeType().getMenuOptions(null);
+
+  assert.equal(options[0].title, 'Model Resolver');
+  assert.equal(options[1].content, 'Native subgraph action');
+});
+
+test('node context integration patches instance menu hooks installed by subgraph handlers', () => {
+  const configureNodeContextMenu = eval(`(${extractMethod(modelResolverSource, 'configureNodeContextMenu')})`);
+  class NodeType {}
+  const node = new NodeType();
+  node.getExtraMenuOptions = function(_canvas, options) {
+    options.push({ content: 'Native subgraph action' });
+    return [];
+  };
+
+  const resolver = {
+    getResolvedModelsForNodeContextMenu: () => [{
+      node_id: 31,
+      widget_index: 0,
+      original_path: 'model.safetensors',
+      full_path: 'E:\\models\\model.safetensors',
+      category: 'checkpoints',
+      exists: true,
+    }],
+    showResolvedNodeModelInResolver: () => {},
+    resolveNodeContextMenuModel: model => model,
+    dialog: {
+      getCategoryDisplayName: () => 'checkpoint',
+      showModelInfo: () => {},
+      openContainingFolder: () => {},
+    },
+  };
+
+  configureNodeContextMenu.call(resolver, NodeType);
+  configureNodeContextMenu.call(resolver, node);
+  const options = [];
+  node.getExtraMenuOptions(null, options);
+
+  assert.equal(options[0].title, 'Model Resolver');
+  assert.equal(options[1].content, 'Native subgraph action');
+});
+
+test('node context scope identifies an outer subgraph instance', () => {
+  const getSubgraphDefinitionIdForNode = eval(
+    `(${extractMethod(modelResolverSource, 'getSubgraphDefinitionIdForNode')})`
+  );
+  const getNodeContextScope = eval(
+    `(${extractMethod(modelResolverSource, 'getNodeContextScope')})`
+  );
+  const rootGraph = {};
+  const previousApp = globalThis.app;
+  globalThis.app = { graph: rootGraph };
+
+  try {
+    const scope = getNodeContextScope.call(
+      { getSubgraphDefinitionIdForNode },
+      { type: 'subgraph-a', graph: rootGraph },
+      { definitions: { subgraphs: [{ id: 'subgraph-a' }] } },
+    );
+
+    assert.deepEqual(scope, {
+      is_top_level: true,
+      subgraph_id: 'subgraph-a',
+      subgraph_instance_id: 'subgraph-a',
+      is_subgraph_instance: true,
+    });
+  } finally {
+    if (previousApp === undefined) {
+      delete globalThis.app;
+    } else {
+      globalThis.app = previousApp;
+    }
+  }
+});
+
 test('custom node registry exposes normalized LoRA Manager entries', () => {
   const node = {
     comfyClass: 'Lora Loader (LoraManager)',

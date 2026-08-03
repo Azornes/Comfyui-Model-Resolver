@@ -119,17 +119,25 @@ export function getResolvedModelsForNode(data = {}, nodeId, scope = {}) {
         subgraph_id: scope.subgraph_id,
     };
 
-    return (data.resolved_models || [])
+    const directModels = (data.resolved_models || [])
         .filter(isExistingResolvedModel)
         .filter(model => matchesWorkflowModelReference(model, nodeReference))
-        .sort((left, right) => {
-            const widgetOrder = Number(left.widget_index ?? 0) - Number(right.widget_index ?? 0);
-            if (widgetOrder) return widgetOrder;
-            return getResolvedModelMenuLabel(left).localeCompare(getResolvedModelMenuLabel(right));
-        });
+    if (!scope.is_subgraph_instance) {
+        return sortResolvedModels(directModels);
+    }
+
+    return getModelsForSubgraphInstance(data, nodeId, scope, {
+        directModels,
+    });
 }
 
 export function getImmediateModelsForNode(data = {}, node = {}, scope = {}) {
+    if (scope.is_subgraph_instance) {
+        return getModelsForSubgraphInstance(data, node?.id, scope, {
+            includeMissing: true,
+        });
+    }
+
     const references = [
         ...(data.resolved_models || []),
         ...(data.missing_models || []),
@@ -175,6 +183,111 @@ export function getImmediateModelsForNode(data = {}, node = {}, scope = {}) {
     return [...modelsByWidget.values()].sort((left, right) => (
         Number(left.widget_index ?? 0) - Number(right.widget_index ?? 0)
     ));
+}
+
+function sortResolvedModels(models = []) {
+    return [...models].sort((left, right) => {
+        const widgetOrder = Number(left.widget_index ?? 0) - Number(right.widget_index ?? 0);
+        if (widgetOrder) return widgetOrder;
+        return getResolvedModelMenuLabel(left).localeCompare(getResolvedModelMenuLabel(right));
+    });
+}
+
+function getSubgraphModelReferenceKey(model = {}) {
+    return [
+        model.is_top_level !== false ? 'top' : 'nested',
+        model.subgraph_id || '',
+        model.node_id ?? '',
+        model.widget_index ?? '',
+        normalizeIdentity(model.original_path || model.name || ''),
+    ].join('|');
+}
+
+function getMissingModelReferences(data = {}) {
+    const references = [];
+    for (const missing of data.missing_models || []) {
+        const nodeReferences = Array.isArray(missing?.all_node_refs)
+            && missing.all_node_refs.length
+            ? missing.all_node_refs
+            : [missing];
+        for (const reference of nodeReferences) {
+            references.push({
+                ...missing,
+                ...reference,
+                full_path: '',
+                path: '',
+                resolved_path: '',
+                exists: false,
+                resolution_pending: true,
+            });
+        }
+    }
+    return references;
+}
+
+export function getModelsForSubgraphInstance(
+    data = {},
+    nodeId,
+    scope = {},
+    { directModels = null, includeMissing = false } = {},
+) {
+    const instanceSubgraphId = String(scope.subgraph_instance_id || '').trim();
+    if (!instanceSubgraphId) return [];
+
+    const direct = directModels || (data.resolved_models || [])
+        .filter(isExistingResolvedModel)
+        .filter(model => matchesWorkflowModelReference(model, {
+            node_id: nodeId,
+            is_top_level: scope.is_top_level,
+            subgraph_id: scope.subgraph_id,
+        }));
+    const directPromotedInnerKeys = new Set(
+        direct
+            .filter(model => model.promoted_inner_node_id !== undefined)
+            .map(model => [
+                instanceSubgraphId,
+                model.promoted_inner_node_id,
+                model.promoted_inner_widget_index,
+            ].join('|'))
+    );
+    const nested = (data.resolved_models || [])
+        .filter(isExistingResolvedModel)
+        .filter(model => (
+            model.is_top_level === false
+            && String(model.subgraph_id || '') === instanceSubgraphId
+            && !directPromotedInnerKeys.has([
+                instanceSubgraphId,
+                model.node_id,
+                model.widget_index,
+            ].join('|'))
+        ));
+
+    const models = [...direct, ...nested];
+    if (includeMissing) {
+        const missing = getMissingModelReferences(data).filter(model => {
+            const isDirect = (
+                String(model.node_id ?? '') === String(nodeId ?? '')
+                && Boolean(model.is_top_level !== false) === Boolean(scope.is_top_level)
+                && String(model.subgraph_id || '') === String(scope.subgraph_id || '')
+            );
+            const isNested = (
+                model.is_top_level === false
+                && String(model.subgraph_id || '') === instanceSubgraphId
+            );
+            return isDirect || isNested;
+        });
+        models.push(...missing);
+    }
+
+    const uniqueModels = [];
+    const seen = new Set();
+    for (const model of models) {
+        const key = getSubgraphModelReferenceKey(model);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        uniqueModels.push(model);
+    }
+    return sortResolvedModels(uniqueModels);
 }
 
 export function buildModelResolverNodeMenu(models = [], handlers = {}, options = {}) {
