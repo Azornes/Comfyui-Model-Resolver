@@ -3,6 +3,7 @@ import { getSvgIcon } from "../../utils/icon_utils.js";
 import { escapeHtml, escapeJsString, getFilenameFromPath, sanitizeDescriptionHtml, pollBackgroundTask, safeStorage, copyTextWithFeedback } from "../utils/html_utils.js";
 import { getModelCardUrl } from "../utils/url_utils.js";
 import { extractComfyWorkflow } from "../utils/workflow_metadata.js";
+import { normalizeSha256 } from "../utils/hash_utils.js";
 import { getCivitaiModelUrl } from "../globals.js";
 export const modelInfoMethods = {
     escapeHtml,
@@ -701,7 +702,7 @@ export const modelInfoMethods = {
 
             if (!result) return null;
 
-            const sha256 = this.normalizeSha256ForCompare(result?.sha256 || result?.hash || '');
+            const sha256 = normalizeSha256(result?.sha256 || result?.hash || '');
             if (!sha256) {
                 throw new Error('No hash returned');
             }
@@ -758,7 +759,7 @@ export const modelInfoMethods = {
     },
 
     markSearchResultHashBadgesForMissing(missing = {}, sha256 = '', options = {}) {
-        const hash = this.normalizeSha256ForCompare(sha256);
+        const hash = normalizeSha256(sha256);
         if (!missing || !hash) return [];
 
         const localMatchIdentity = String(options.localMatchIdentity || '').trim();

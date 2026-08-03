@@ -54,8 +54,6 @@ log = create_module_logger(__name__)
 
 
 _coerce_int = to_int
-_archive_link_is_dead = is_remote_link_marked_dead
-
 CIVARCHIVE_BASE_URL = "https://civarchive.com"
 CIVARCHIVE_API_URL = f"{CIVARCHIVE_BASE_URL}/api"
 CIVITAI_DOWNLOAD_URL_PREFIXES = (
@@ -731,7 +729,7 @@ def _transform_file_entry(file_data: Dict[str, Any]) -> Dict[str, Any]:
             transformed_mirrors.append(mirror)
 
     download_url = None
-    if not _archive_link_is_dead(file_data):
+    if not is_remote_link_marked_dead(file_data):
         download_url = _normalize_download_url(
             file_data.get("downloadUrl")
             or file_data.get("download_url")
@@ -741,7 +739,7 @@ def _transform_file_entry(file_data: Dict[str, Any]) -> Dict[str, Any]:
 
     if not download_url:
         for mirror in transformed_mirrors:
-            if not _archive_link_is_dead(mirror) and mirror.get("url"):
+            if not is_remote_link_marked_dead(mirror) and mirror.get("url"):
                 download_url = mirror["url"]
                 break
 
@@ -869,7 +867,7 @@ def _collect_download_urls_unified(
     download_url_keys: Tuple[str, ...] = ("downloadUrl",),
 ) -> List[str]:
     urls: List[str] = []
-    if skip_file_if_dead and _archive_link_is_dead(file_info):
+    if skip_file_if_dead and is_remote_link_marked_dead(file_info):
         return urls
 
     expected_filename = file_info.get("filename") or file_info.get("name") or ""
@@ -881,7 +879,7 @@ def _collect_download_urls_unified(
     for mirror in mirrors:
         if not isinstance(mirror, dict):
             continue
-        if _archive_link_is_dead(mirror):
+        if is_remote_link_marked_dead(mirror):
             dead_url = _normalize_download_url(mirror.get("url"))
             if dead_url:
                 dead_urls.add(dead_url)
@@ -909,7 +907,7 @@ def _collect_download_urls_unified(
             ):
                 urls.append(url)
 
-    if not _archive_link_is_dead(file_info):
+    if not is_remote_link_marked_dead(file_info):
         for key in download_url_keys:
             url = _normalize_download_url(file_info.get(key))
             if (
@@ -958,7 +956,7 @@ def _normalize_archive_mirrors(file_info: Dict[str, Any]) -> List[Dict[str, Any]
         seen_urls.add(url)
         sha256 = mirror.get("sha256") or mirror.get("hash")
         deleted_at = mirror.get("deletedAt") or mirror.get("deleted_at")
-        is_dead = _archive_link_is_dead(mirror)
+        is_dead = is_remote_link_marked_dead(mirror)
         normalized.append(
             {
                 "url": url,
@@ -974,7 +972,7 @@ def _normalize_archive_mirrors(file_info: Dict[str, Any]) -> List[Dict[str, Any]
         )
 
     download_url = None
-    if not _archive_link_is_dead(file_info):
+    if not is_remote_link_marked_dead(file_info):
         download_url = _normalize_download_url(file_info.get("downloadUrl"))
     if download_url and download_url not in seen_urls:
         normalized.append(
@@ -985,7 +983,7 @@ def _normalize_archive_mirrors(file_info: Dict[str, Any]) -> List[Dict[str, Any]
                 "sha256": file_info.get("sha256"),
                 "hash": file_info.get("sha256"),
                 "deleted_at": file_info.get("deletedAt") or file_info.get("deleted_at"),
-                "is_dead": _archive_link_is_dead(file_info),
+                "is_dead": is_remote_link_marked_dead(file_info),
                 "is_gated": file_info.get("is_gated"),
                 "is_paid": file_info.get("is_paid"),
             }
@@ -1460,7 +1458,7 @@ def _select_hash_page_file(
     for file_info in files:
         if not isinstance(file_info, dict):
             continue
-        if _archive_link_is_dead(file_info):
+        if is_remote_link_marked_dead(file_info):
             continue
         if not _collect_normalized_download_urls(file_info):
             continue
@@ -1535,7 +1533,7 @@ def _prefer_query_matching_mirror(
     for mirror in mirrors:
         if not isinstance(mirror, dict):
             continue
-        if _archive_link_is_dead(mirror):
+        if is_remote_link_marked_dead(mirror):
             continue
         url = _normalize_download_url(mirror.get("url"))
         filename = mirror.get("filename") or mirror.get("name") or ""

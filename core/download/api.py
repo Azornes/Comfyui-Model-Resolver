@@ -144,7 +144,7 @@ context.invalidate_model_files_cache = invalidate_model_files_cache
 context.invalidate_local_hash_match_cache = invalidate_local_hash_match_cache
 
 context._extract_expected_sha256 = metadata._extract_expected_sha256
-context._normalise_metadata_file_path = metadata._normalise_metadata_file_path
+context.normalize_metadata_file_path = metadata.normalize_metadata_file_path
 context._json_safe_metadata = metadata._json_safe_metadata
 context._coerce_int_or_value = metadata._coerce_int_or_value
 context._coerce_size = metadata._coerce_size

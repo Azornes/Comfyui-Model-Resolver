@@ -13,15 +13,7 @@ from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .log_system import create_module_logger
-from .metadata_model_utils import (
-    dedupe_models as _dedupe_models,
-)
-from .metadata_model_utils import (
-    is_model_file_path as _is_model_file_path,
-)
-from .metadata_model_utils import (
-    model_identity_key as _model_identity_key,
-)
+from .metadata_model_utils import dedupe_models, is_model_file_path, model_identity_key
 from .path_utils import (
     MODEL_RESOLVER_METADATA_SCHEMA,
     MODEL_RESOLVER_METADATA_SCHEMA_VERSION,
@@ -256,9 +248,6 @@ def _merge_unique_strings(*values: Any) -> List[str]:
     return result
 
 
-_normalise_metadata_file_path = normalize_metadata_file_path
-
-
 def _model_type_for_category(category: str) -> str:
     model_type = normalize_category_to_model_type(category)
     return model_type if model_type and model_type != "unknown" else ""
@@ -304,7 +293,7 @@ def _build_local_metadata_payload(
     mark_set("file_name", stem, force=_is_empty_value(payload.get("file_name")))
     fill("filename", filename)
     fill("model_name", header_metadata.get("model_name") or stem)
-    mark_set("file_path", _normalise_metadata_file_path(model_path), force=True)
+    mark_set("file_path", normalize_metadata_file_path(model_path), force=True)
     mark_set("size", file_size, force=True)
     mark_set("modified", now, force=True)
     mark_set("last_checked_at", now, force=True)
@@ -398,7 +387,7 @@ def _build_local_metadata_payload(
         mark_set("local_metadata_available", True, force=True)
 
     fill("preview_nsfw_level", 0)
-    mark_set("metadata_path", _normalise_metadata_file_path(metadata_path), force=True)
+    mark_set("metadata_path", normalize_metadata_file_path(metadata_path), force=True)
     return payload, sorted(set(changed_fields))
 
 
@@ -590,7 +579,7 @@ def _build_missing_local_metadata_parallel(
     def run_one_model(model: Dict[str, Any]) -> Dict[str, Any]:
         model_path = str(model.get("path") or "").strip()
         filename = get_filename_from_path(model_path)
-        model_key = _model_identity_key(model) or model_path
+        model_key = model_identity_key(model) or model_path
 
         def child_progress(data: Dict[str, Any]) -> None:
             if not isinstance(data, dict):
@@ -643,7 +632,7 @@ def _build_missing_local_metadata_parallel(
             model = futures[future]
             model_path = str(model.get("path") or "").strip()
             filename = get_filename_from_path(model_path)
-            model_key = _model_identity_key(model) or model_path
+            model_key = model_identity_key(model) or model_path
             try:
                 item_result = future.result()
             except CancelledError:
@@ -745,10 +734,10 @@ def build_missing_local_metadata(
 
         models = get_model_files(force_rescan=force_rescan)
 
-    all_models = _dedupe_models(models or [])
+    all_models = dedupe_models(models or [])
     model_items = [
         model for model in all_models
-        if _is_model_file_path(str(model.get("path") or "").strip())
+        if is_model_file_path(str(model.get("path") or "").strip())
     ]
     total = len(model_items)
     resolved_worker_count, cpu_count = _resolve_worker_count(total, worker_count)

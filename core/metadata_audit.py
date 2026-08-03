@@ -10,15 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from .log_system import create_module_logger
-from .metadata_model_utils import (
-    dedupe_models as _dedupe_models,
-)
-from .metadata_model_utils import (
-    is_model_file_path as _is_model_file_path,
-)
-from .metadata_model_utils import (
-    model_identity_key as _model_identity_key,  # noqa: F401
-)
+from .metadata_model_utils import dedupe_models, is_model_file_path
 from .path_utils import (
     find_metadata_sidecar_path,
     get_filename_from_path,
@@ -243,7 +235,7 @@ def _audit_one_model(model: Dict[str, Any]) -> Dict[str, Any]:
         result["skipped_directories"] += 1
         return result
 
-    if not _is_model_file_path(model_path):
+    if not is_model_file_path(model_path):
         result["skipped_non_model_files"] += 1
         return result
 
@@ -362,7 +354,7 @@ def audit_metadata_sizes(
 
         models = get_model_files(force_rescan=force_rescan)
 
-    audit_models = _dedupe_models(models or [])
+    audit_models = dedupe_models(models or [])
     total_models = len(audit_models)
     resolved_worker_count, cpu_count = _get_worker_count(total_models, worker_count)
     resolved_batch_size = _get_batch_size(total_models, resolved_worker_count, batch_size)

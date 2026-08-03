@@ -1,12 +1,8 @@
 import { normalizeSha256 } from '../utils/hash_utils.js';
 
 export const modelHashCompareMethods = {
-    normalizeSha256ForCompare(value = '') {
-        return normalizeSha256(value);
-    },
-
     formatSha256Short(value = '') {
-        const hash = this.normalizeSha256ForCompare(value) || String(value || '').trim();
+        const hash = normalizeSha256(value) || String(value || '').trim();
         if (hash.length <= 18) return hash;
         return `${hash.slice(0, 8)}...${hash.slice(-8)}`;
     },
@@ -16,7 +12,7 @@ export const modelHashCompareMethods = {
         if (value === undefined || value === null || depth > 5) return candidates;
 
         const addHash = (rawValue, hashSource = source) => {
-            const hash = this.normalizeSha256ForCompare(rawValue);
+            const hash = normalizeSha256(rawValue);
             if (!hash || seen.has(hash)) return;
             seen.add(hash);
             candidates.push({ hash, source: hashSource || source || 'metadata' });
@@ -98,7 +94,7 @@ export const modelHashCompareMethods = {
     },
 
     updateHashCompareModelMetadata(model = {}, result = {}) {
-        const sha256 = this.normalizeSha256ForCompare(result?.sha256 || result?.hash || '');
+        const sha256 = normalizeSha256(result?.sha256 || result?.hash || '');
         if (!sha256 || !model || typeof model !== 'object') return;
 
         model.sha256 = sha256;

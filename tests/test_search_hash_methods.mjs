@@ -21,11 +21,11 @@ test('shared SHA-256 normalization preserves the accepted input contract', () =>
 
 test('search hash normalization accepts SHA-256 prefixes and rejects invalid values', () => {
   const dialog = createDialog();
-  assert.equal(dialog.normalizeSearchResultSha256(`sha256:${hashA.toUpperCase()}`), hashA);
-  assert.equal(dialog.normalizeSearchResultSha256(`SHA256=${hashB}`), hashB);
-  assert.equal(dialog.normalizeSearchResultSha256(hashA), hashA);
-  assert.equal(dialog.normalizeSearchResultSha256('short'), '');
-  assert.equal(dialog.normalizeSearchResultSha256(`${hashA}x`), '');
+  assert.equal(normalizeSha256(`sha256:${hashA.toUpperCase()}`), hashA);
+  assert.equal(normalizeSha256(`SHA256=${hashB}`), hashB);
+  assert.equal(normalizeSha256(hashA), hashA);
+  assert.equal(normalizeSha256('short'), '');
+  assert.equal(normalizeSha256(`${hashA}x`), '');
   assert.equal(dialog.getSearchResultSha256(null), '');
   assert.equal(dialog.getSearchResultSha256({}), '');
 });

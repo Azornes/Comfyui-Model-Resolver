@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { modelHashCompareMethods } from '../web/resolver/views/model_hash_compare_methods.js';
+import { normalizeSha256 } from '../web/resolver/utils/hash_utils.js';
 
 const methods = modelHashCompareMethods;
 
@@ -18,8 +19,8 @@ test('hash comparison normalizes and formats SHA-256 values', () => {
   const dialog = createDialog();
   const hash = 'A'.repeat(64);
 
-  assert.equal(dialog.normalizeSha256ForCompare(`sha256:${hash}`), hash.toLowerCase());
-  assert.equal(dialog.normalizeSha256ForCompare('not-a-hash'), '');
+  assert.equal(normalizeSha256(`sha256:${hash}`), hash.toLowerCase());
+  assert.equal(normalizeSha256('not-a-hash'), '');
   assert.equal(dialog.formatSha256Short(hash), 'aaaaaaaa...aaaaaaaa');
 });
 

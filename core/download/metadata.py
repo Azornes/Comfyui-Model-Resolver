@@ -66,7 +66,7 @@ def write_model_resolver_metadata(
             }
             preview_path = facade.create_model_preview(dest_path, preview_source)
             if preview_path:
-                payload["preview_url"] = facade._normalise_metadata_file_path(
+                payload["preview_url"] = facade.normalize_metadata_file_path(
                     preview_path
                 )
         facade.write_json_atomic(metadata_path, payload, indent=2)
@@ -115,9 +115,6 @@ def _coerce_size(value: Any) -> int:
         return int(float(value or 0))
     except (TypeError, ValueError):
         return 0
-
-
-_normalise_metadata_file_path = normalize_metadata_file_path
 
 
 def _resolve_lora_manager_model_type(category: str, source_type: Any = "") -> str:
@@ -502,7 +499,7 @@ def build_model_resolver_metadata(
         "file_name": file_name,
         "filename": basename,
         "model_name": str(model_name or file_name),
-        "file_path": _normalise_metadata_file_path(dest_path),
+        "file_path": normalize_metadata_file_path(dest_path),
         "size": size,
         "modified": time.time(),
         "sha256": sha256,

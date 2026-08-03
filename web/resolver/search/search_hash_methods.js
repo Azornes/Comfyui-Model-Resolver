@@ -1,10 +1,6 @@
 import { normalizeSha256 } from '../utils/hash_utils.js';
 
 export const searchHashMethods = {
-    normalizeSearchResultSha256(value = '') {
-        return normalizeSha256(value);
-    },
-
     getSearchResultSha256(result = {}) {
         if (!result || typeof result !== 'object') return '';
 
@@ -24,7 +20,7 @@ export const searchHashMethods = {
         ];
 
         for (const candidate of candidates) {
-            const hash = this.normalizeSearchResultSha256(candidate);
+            const hash = normalizeSha256(candidate);
             if (hash) return hash;
         }
         return '';
@@ -34,8 +30,7 @@ export const searchHashMethods = {
         const hashes = [];
         const seen = new Set();
         const addHash = (value) => {
-            const hash = this.normalizeSearchResultSha256?.(value)
-                || String(value || '').trim().toLowerCase();
+            const hash = normalizeSha256(value);
             if (!hash || !/^[a-f0-9]{64}$/.test(hash) || seen.has(hash)) return;
             seen.add(hash);
             hashes.push(hash);
@@ -133,7 +128,7 @@ export const searchHashMethods = {
             if (!match || typeof match !== 'object') return;
 
             const matchSource = this.normalizeHashLookupSourceKey(match.hash_lookup_source || '');
-            const matchHash = this.normalizeSearchResultSha256(this.getLocalMatchHash(match));
+            const matchHash = normalizeSha256(this.getLocalMatchHash(match));
             if (sourceHash) {
                 if (matchHash !== sourceHash) return;
             } else if (!matchSource || matchSource !== normalizedSource) {

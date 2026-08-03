@@ -2,6 +2,7 @@ import { createModuleLogger } from "../../log_system/log_funcs.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
 import { getModelCardUrl, parseHuggingFaceFileUrl } from "../utils/url_utils.js";
 import { getCivitaiModelUrl } from "../globals.js";
+import { normalizeSha256 } from "../utils/hash_utils.js";
 import { normalizePathIdentity } from "../utils/html_utils.js";
 const log = createModuleLogger('resolve_download_methods');
 
@@ -664,7 +665,7 @@ export const resolveDownloadMethods = {
     },
 
     getExistingLocalHashMatchesForSha(missing = {}, sha256 = '', state = null) {
-        const hash = this.normalizeSearchResultSha256?.(sha256)
+        const hash = normalizeSha256(sha256)
             || String(sha256 || '').trim().toLowerCase();
         if (!hash) return [];
 
@@ -678,7 +679,7 @@ export const resolveDownloadMethods = {
         matches.forEach(match => {
             if (!match || typeof match !== 'object') return;
             if (!(match.hash_match || match.match_type === 'hash' || match.hash_lookup_source)) return;
-            const matchHash = this.normalizeSearchResultSha256?.(this.getLocalMatchHash?.(match) || match.sha256 || match.hash)
+            const matchHash = normalizeSha256(this.getLocalMatchHash?.(match) || match.sha256 || match.hash)
                 || String(this.getLocalMatchHash?.(match) || match.sha256 || match.hash || '').trim().toLowerCase();
             if (matchHash !== hash) return;
             const identity = this.getLocalMatchIdentity?.(match) || JSON.stringify(match);

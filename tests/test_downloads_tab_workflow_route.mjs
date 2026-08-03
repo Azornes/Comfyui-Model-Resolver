@@ -5069,7 +5069,6 @@ test('missing model preview shows accepted GGUF format next to its category', ()
 
 test('hash match label map numbers distinct matched hashes', () => {
   const {
-    normalizeSearchResultSha256,
     getLocalMatchHash,
     collectHashLabelMapHashes,
     getHashMatchLabelMap,
@@ -5077,7 +5076,6 @@ test('hash match label map numbers distinct matched hashes', () => {
   const firstHash = 'a'.repeat(64);
   const secondHash = 'b'.repeat(64);
   const dialog = {
-    normalizeSearchResultSha256,
     getLocalMatchHash,
     collectHashLabelMapHashes,
   };
@@ -5100,7 +5098,6 @@ test('hash match label map numbers distinct matched hashes', () => {
 
 test('search result hash labels use linked local hash identity', () => {
   const {
-    normalizeSearchResultSha256,
     getSearchResultSha256,
     getHashMatchLabelForSearchResult,
   } = searchHashMethods;
@@ -5108,7 +5105,6 @@ test('search result hash labels use linked local hash identity', () => {
   const sha256 = 'd'.repeat(64);
   const hashLabelMap = new Map([[sha256, 'Hash 2']]);
   const dialog = {
-    normalizeSearchResultSha256,
     getSearchResultSha256,
   };
   const result = {
@@ -5132,7 +5128,6 @@ test('search result hash labels use linked local hash identity', () => {
 
 test('local hash identities link search results across sources by sha', () => {
   const {
-    normalizeSearchResultSha256,
     getLocalMatchHash,
     getSearchResultSha256,
     normalizeHashLookupSourceKey,
@@ -5140,7 +5135,6 @@ test('local hash identities link search results across sources by sha', () => {
   } = searchHashMethods;
   const sha256 = 'e'.repeat(64);
   const dialog = {
-    normalizeSearchResultSha256,
     getLocalMatchHash,
     getSearchResultSha256,
     normalizeHashLookupSourceKey,
@@ -5162,7 +5156,7 @@ test('local hash identities link search results across sources by sha', () => {
 });
 
 test('remote hash sync fetches local matches by selected result sha', async () => {
-  const { normalizeSearchResultSha256, getSearchResultSha256 } = searchHashMethods;
+  const { getSearchResultSha256 } = searchHashMethods;
   const getExistingLocalHashMatchesForSha = eval(`(${extractMethod(resolveDownloadMethodsSource, 'getExistingLocalHashMatchesForSha')})`);
   const syncRemoteHashMatchesForResult = eval(`(${extractMethod(resolveDownloadMethodsSource, 'syncRemoteHashMatchesForResult')})`);
   const sha256 = 'f'.repeat(64);
@@ -5175,7 +5169,6 @@ test('remote hash sync fetches local matches by selected result sha', async () =
   };
   const state = { results: { local_hash_matches: [] } };
   const dialog = {
-    normalizeSearchResultSha256,
     getSearchResultSha256,
     getExistingLocalHashMatchesForSha,
     getWorkflowScopedQueueKey() {

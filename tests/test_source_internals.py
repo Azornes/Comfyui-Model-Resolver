@@ -22,7 +22,6 @@ import requests
 # civarchive internals
 # ---------------------------------------------------------------------------
 from core.sources.civarchive import (
-    _archive_link_is_dead,
     _collect_download_urls,
     _collect_download_urls_unified,
     _collect_normalized_download_urls,
@@ -380,41 +379,41 @@ class NormalizeDownloadUrlTests(unittest.TestCase):
 
 
 # ===========================================================================
-# civarchive - _archive_link_is_dead
+# shared remote link dead marker
 # ===========================================================================
 class ArchiveLinkIsDeadTests(unittest.TestCase):
 
     def test_not_dead_when_no_flags(self):
-        self.assertFalse(_archive_link_is_dead({"url": "https://example.com/m.safetensors"}))
+        self.assertFalse(is_remote_link_marked_dead({"url": "https://example.com/m.safetensors"}))
 
     def test_dead_when_deletedAt_set(self):
-        self.assertTrue(_archive_link_is_dead({"deletedAt": "2024-01-01"}))
+        self.assertTrue(is_remote_link_marked_dead({"deletedAt": "2024-01-01"}))
 
     def test_dead_when_deleted_at_set(self):
-        self.assertTrue(_archive_link_is_dead({"deleted_at": "2024-01-01"}))
+        self.assertTrue(is_remote_link_marked_dead({"deleted_at": "2024-01-01"}))
 
     def test_dead_when_isDead_true(self):
-        self.assertTrue(_archive_link_is_dead({"isDead": True}))
+        self.assertTrue(is_remote_link_marked_dead({"isDead": True}))
 
     def test_dead_when_is_dead_true(self):
-        self.assertTrue(_archive_link_is_dead({"is_dead": True}))
+        self.assertTrue(is_remote_link_marked_dead({"is_dead": True}))
 
     def test_dead_when_likelyDead_true(self):
-        self.assertTrue(_archive_link_is_dead({"likelyDead": True}))
+        self.assertTrue(is_remote_link_marked_dead({"likelyDead": True}))
 
     def test_dead_when_status_dead(self):
-        self.assertTrue(_archive_link_is_dead({"status": "dead"}))
+        self.assertTrue(is_remote_link_marked_dead({"status": "dead"}))
 
     def test_dead_when_status_deleted_case_insensitive(self):
-        self.assertTrue(_archive_link_is_dead({"status": "Deleted"}))
+        self.assertTrue(is_remote_link_marked_dead({"status": "Deleted"}))
 
     def test_dead_when_status_unavailable(self):
-        self.assertTrue(_archive_link_is_dead({"status": "unavailable"}))
+        self.assertTrue(is_remote_link_marked_dead({"status": "unavailable"}))
 
     def test_not_dead_for_non_dict(self):
-        self.assertFalse(_archive_link_is_dead("dead"))
-        self.assertFalse(_archive_link_is_dead(None))
-        self.assertFalse(_archive_link_is_dead([]))
+        self.assertFalse(is_remote_link_marked_dead("dead"))
+        self.assertFalse(is_remote_link_marked_dead(None))
+        self.assertFalse(is_remote_link_marked_dead([]))
 
 
 class RemoteLinkIsDeadTests(unittest.TestCase):
