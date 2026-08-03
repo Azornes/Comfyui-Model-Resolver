@@ -1173,12 +1173,15 @@ export const queueMethods = {
         });
     },
 
-    renderQueueDownloadsHtml(downloads) {
+    renderQueueDownloadsHtml(
+        downloads,
+        { wrap = true, showWorkflowAction = true, showWorkflowDetails = true } = {}
+    ) {
         if (!downloads.length) {
             return '<div class="mr-queue-empty">No active downloads.</div>';
         }
 
-        let html = '<div class="mr-queue-items mr-download-queue-items">';
+        let html = wrap ? '<div class="mr-queue-items mr-download-queue-items">' : '';
         for (const { downloadId, info } of downloads) {
             const progress = typeof this.applyPendingDownloadStatus === 'function'
                 ? this.applyPendingDownloadStatus(info, info.lastProgress || {})
@@ -1251,7 +1254,9 @@ export const queueMethods = {
             );
             html += actionButton('mr-download-queue-cancel', 'Cancel download', 'x');
             html += actionButton('mr-download-queue-open-folder', 'Open download folder', 'folderOpen', !hasFolderAction);
-            html += actionButton('mr-download-queue-switch-workflow', 'Switch to workflow', 'internalLink', !hasWorkflowAction);
+            if (showWorkflowAction) {
+                html += actionButton('mr-download-queue-switch-workflow', 'Switch to workflow', 'workflowBack', !hasWorkflowAction);
+            }
             html += actionButton('mr-download-queue-more', 'More download actions', 'info', !contextModel);
             html += `</div>`;
             html += `</div>`;
@@ -1275,10 +1280,12 @@ export const queueMethods = {
             html += `</span>`;
             html += `</div>`;
             html += `</div>`;
-            html += `<div class="mr-download-queue-details" data-tooltip="${this.escapeHtml([targetPath, backend].filter(Boolean).join(' · '))}"><span>Workflow</span><span>${this.escapeHtml([workflowLabel, ...detailParts].filter(Boolean).join(' · '))}</span></div>`;
+            if (showWorkflowDetails) {
+                html += `<div class="mr-download-queue-details" data-tooltip="${this.escapeHtml([targetPath, backend].filter(Boolean).join(' · '))}"><span>Workflow</span><span>${this.escapeHtml([workflowLabel, ...detailParts].filter(Boolean).join(' · '))}</span></div>`;
+            }
             html += `</div>`;
         }
-        html += '</div>';
+        if (wrap) html += '</div>';
         return html;
     },
 

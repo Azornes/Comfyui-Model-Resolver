@@ -222,7 +222,7 @@ export class ResolverManagerDialog extends ComfyDialog {
                 onclick: () => this.handleContextMenuAction('switchWorkflow')
             }, [
                 $el("span.mr-context-menu-item-icon", {
-                    innerHTML: getSvgIcon('internalLink', 'currentColor', 'mr-context-menu-item-svg')
+                    innerHTML: getSvgIcon('workflowBack', 'currentColor', 'mr-context-menu-item-svg')
                 }),
                 $el("span", { textContent: "Switch to Workflow" })
             ]),

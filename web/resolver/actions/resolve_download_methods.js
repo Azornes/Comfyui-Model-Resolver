@@ -1091,27 +1091,57 @@ export const resolveDownloadMethods = {
                 if (event?.type === 'pointerdown') {
                     button._handledPointerAction = true;
                 }
-                handler();
+                handler(event);
             };
             button.addEventListener('pointerdown', run);
             button.addEventListener('click', run);
         };
-        progressDiv.querySelectorAll('.cancel-download-btn, .cancel-download-btn-pending').forEach(cancelBtn => {
+        progressDiv.querySelectorAll('.cancel-download-btn, .cancel-download-btn-pending, .mr-download-queue-cancel').forEach(cancelBtn => {
             bindInstantAction(cancelBtn, () => {
                 const targetDownloadId = cancelBtn.dataset.downloadId || downloadId;
                 if (targetDownloadId) this.cancelDownload(targetDownloadId);
             });
         });
-        progressDiv.querySelectorAll('.pause-download-btn').forEach(pauseBtn => {
+        progressDiv.querySelectorAll('.pause-download-btn, .mr-download-queue-pause').forEach(pauseBtn => {
             bindInstantAction(pauseBtn, () => {
                 const targetDownloadId = pauseBtn.dataset.downloadId || downloadId;
                 if (targetDownloadId) this.pauseDownload(targetDownloadId);
             });
         });
-        progressDiv.querySelectorAll('.resume-download-btn').forEach(resumeBtn => {
+        progressDiv.querySelectorAll('.resume-download-btn, .mr-download-queue-resume').forEach(resumeBtn => {
             bindInstantAction(resumeBtn, () => {
                 const targetDownloadId = resumeBtn.dataset.downloadId || downloadId;
                 if (targetDownloadId) this.resumeDownload(targetDownloadId);
+            });
+        });
+        const getDownloadContext = (button) => {
+            const targetDownloadId = button?.dataset?.downloadId || downloadId;
+            const info = this.activeDownloads?.[targetDownloadId];
+            if (!targetDownloadId || !info) return null;
+            const progress = typeof this.applyPendingDownloadStatus === 'function'
+                ? this.applyPendingDownloadStatus(info, info.lastProgress || {})
+                : (info.lastProgress || {});
+            const workflowLabel = this.getDownloadWorkflowLabel?.(info) || 'Current workflow';
+            return this.getDownloadQueueContext?.(progress, info, workflowLabel, targetDownloadId)
+                || this.getDownloadFolderContext?.(progress, info)
+                || null;
+        };
+        progressDiv.querySelectorAll('.mr-download-queue-open-folder').forEach(folderBtn => {
+            bindInstantAction(folderBtn, () => {
+                const context = getDownloadContext(folderBtn);
+                if (context) this.openContainingFolder?.(context);
+            });
+        });
+        progressDiv.querySelectorAll('.mr-download-queue-switch-workflow').forEach(workflowBtn => {
+            bindInstantAction(workflowBtn, () => {
+                const context = getDownloadContext(workflowBtn);
+                if (context) this.switchToDownloadWorkflow?.(context);
+            });
+        });
+        progressDiv.querySelectorAll('.mr-download-queue-more').forEach(moreBtn => {
+            bindInstantAction(moreBtn, (event) => {
+                const item = moreBtn.closest('.mr-download-queue-item');
+                if (item) window.MLOpenContextMenu?.(event, item);
             });
         });
     },
@@ -1123,51 +1153,22 @@ export const resolveDownloadMethods = {
         const shouldRenderProgress = this.isDownloadProgressStatus(status, isActive);
 
         if (shouldRenderProgress) {
-            const canCancel = Boolean(downloadId);
-            const backend = String(progress.download_backend || snapshot.downloadBackend || snapshot.download_backend || '').toLowerCase();
-            const isAria2 = backend === 'aria2';
-            const isPaused = status === 'paused';
-            const presentation = this.getDownloadProgressPresentation(progress, { unknownTotal: 'Unknown' });
-            const {
-                percent,
-                downloadedText: downloaded,
-                totalText: total,
-                progressMeta,
-                percentLabel,
-                logicalDownloadedText: logicalDownloaded,
-                logicalTotalText: logicalTotal,
-            } = presentation;
-            const leftText = presentation.isFinalizing
-                ? `Finalizing file: ${logicalDownloaded} / ${logicalTotal}`
-                : (presentation.totalSize
-                    ? `${downloaded} / ${total} (${percentLabel}%)${isPaused ? ' - Paused' : ''}`
-                    : '<span class="mr-info-accent-text">Connecting...</span>');
-            let actionClass = canCancel ? 'cancel-download-btn mr-btn mr-btn-danger mr-btn-sm' : '';
-            let actionText = canCancel ? 'Cancel' : '';
-            let actionsHtml = '';
-            if (canCancel && isAria2 && isPaused) {
-                actionClass = 'resume-download-btn mr-btn mr-btn-primary mr-btn-sm';
-                actionText = 'Resume';
-            } else if (canCancel && isAria2 && status === 'downloading') {
-                actionClass = 'pause-download-btn mr-btn mr-btn-secondary mr-btn-sm';
-                actionText = 'Pause';
-            }
-            if (canCancel && isAria2 && (isPaused || status === 'downloading')) {
-                const safeDownloadId = this.escapeHtml(String(downloadId));
-                const toggleButton = isPaused
-                    ? `<button class="resume-download-btn mr-btn mr-btn-primary mr-btn-sm" data-download-id="${safeDownloadId}">Resume</button>`
-                    : `<button class="pause-download-btn mr-btn mr-btn-secondary mr-btn-sm" data-download-id="${safeDownloadId}">Pause</button>`;
-                actionsHtml = `${toggleButton}<button class="cancel-download-btn mr-btn mr-btn-danger mr-btn-sm" data-download-id="${safeDownloadId}">Cancel</button>`;
-            }
-            return this.renderProgressWithAction({
-                percent,
-                leftText,
-                rightText: progressMeta,
-                actionClass,
-                actionText,
-                actionDataAttr: canCancel ? `data-download-id="${downloadId}"` : '',
-                actionsHtml,
-                contextMenuModel: this.getDownloadFolderContext(progress, snapshot)
+            const info = {
+                ...snapshot,
+                missing: snapshot.missing || {},
+                lastProgress: progress,
+                lastStatus: status,
+                filename: progress.filename || snapshot.filename || 'Download',
+                category: snapshot.category || progress.category || '',
+                downloadBackend: progress.download_backend || snapshot.downloadBackend || snapshot.download_backend || '',
+                downloadDirectory: progress.directory || snapshot.downloadDirectory || '',
+                downloadPath: progress.path || snapshot.downloadPath || '',
+                workflowLabel: snapshot.workflowLabel || snapshot.workflow_label || 'Current workflow'
+            };
+            return this.renderQueueDownloadsHtml([{ downloadId, info }], {
+                wrap: false,
+                showWorkflowAction: false,
+                showWorkflowDetails: false
             });
         }
 
