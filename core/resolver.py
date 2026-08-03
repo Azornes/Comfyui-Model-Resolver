@@ -512,6 +512,31 @@ def workflow_url_points_to_file(url: str, filename: str) -> bool:
     return filename in decoded_url or unquote(filename) in decoded_url
 
 
+def _deduplicate_local_matches(matches: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Keep one highest-confidence match for each local model path."""
+    seen_absolute_paths = {}
+    deduplicated_matches = []
+    for match in matches:
+        model_dict = match["model"]
+        absolute_path = model_dict.get("path", "")
+        path_identity = get_path_identity(absolute_path) if absolute_path else ""
+        dedupe_key = path_identity or os.path.normcase(
+            model_dict.get("relative_path", "") or match.get("filename", "")
+        )
+
+        if dedupe_key not in seen_absolute_paths:
+            seen_absolute_paths[dedupe_key] = match
+            deduplicated_matches.append(match)
+        else:
+            existing_match = seen_absolute_paths[dedupe_key]
+            if match["confidence"] > existing_match["confidence"]:
+                idx = deduplicated_matches.index(existing_match)
+                deduplicated_matches[idx] = match
+                seen_absolute_paths[dedupe_key] = match
+
+    return deduplicated_matches
+
+
 def search_local_matches(
     target_for_matching: str,
     category: Optional[str] = None,
@@ -547,26 +572,7 @@ def search_local_matches(
         max_results=max_matches_per_model,
     )
 
-    seen_absolute_paths = {}
-    deduplicated_matches = []
-    for match in matches:
-        model_dict = match["model"]
-        absolute_path = model_dict.get("path", "")
-        path_identity = get_path_identity(absolute_path) if absolute_path else ""
-        dedupe_key = path_identity or os.path.normcase(
-            model_dict.get("relative_path", "") or match.get("filename", "")
-        )
-
-        if dedupe_key not in seen_absolute_paths:
-            seen_absolute_paths[dedupe_key] = match
-            deduplicated_matches.append(match)
-        else:
-            existing_match = seen_absolute_paths[dedupe_key]
-            if match["confidence"] > existing_match["confidence"]:
-                idx = deduplicated_matches.index(existing_match)
-                deduplicated_matches[idx] = match
-                seen_absolute_paths[dedupe_key] = match
-
+    deduplicated_matches = _deduplicate_local_matches(matches)
     return annotate_local_matches_with_download_state(deduplicated_matches)
 
 
@@ -1089,29 +1095,6 @@ def analyze_and_find_matches(
 
         return candidates
 
-    def deduplicate_matches(matches: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        seen_absolute_paths = {}
-        deduplicated_matches = []
-        for match in matches:
-            model_dict = match["model"]
-            absolute_path = model_dict.get("path", "")
-            path_identity = get_path_identity(absolute_path) if absolute_path else ""
-            dedupe_key = path_identity or os.path.normcase(
-                model_dict.get("relative_path", "") or match.get("filename", "")
-            )
-
-            if dedupe_key not in seen_absolute_paths:
-                seen_absolute_paths[dedupe_key] = match
-                deduplicated_matches.append(match)
-            else:
-                existing_match = seen_absolute_paths[dedupe_key]
-                if match["confidence"] > existing_match["confidence"]:
-                    idx = deduplicated_matches.index(existing_match)
-                    deduplicated_matches[idx] = match
-                    seen_absolute_paths[dedupe_key] = match
-
-        return deduplicated_matches
-
     def find_local_matches_for_ref(model_ref: Dict[str, Any]) -> List[Dict[str, Any]]:
         target_for_matching = get_match_target(model_ref)
         category = get_match_category(model_ref)
@@ -1139,7 +1122,7 @@ def analyze_and_find_matches(
 
         cache_key = (target_for_matching, category)
         if cache_key in local_match_cache:
-            return deduplicate_matches(hash_matches + local_match_cache[cache_key])
+            return _deduplicate_local_matches(hash_matches + local_match_cache[cache_key])
 
         matches = find_matches(
             target_for_matching,
@@ -1148,11 +1131,11 @@ def analyze_and_find_matches(
             max_results=max_matches_per_model,
         )
         deduplicated_matches = annotate_local_matches_with_download_state(
-            deduplicate_matches(matches),
+            _deduplicate_local_matches(matches),
             active_downloads_by_path,
         )
         local_match_cache[cache_key] = deduplicated_matches
-        return deduplicate_matches(hash_matches + deduplicated_matches)
+        return _deduplicate_local_matches(hash_matches + deduplicated_matches)
 
     # Find matches for each missing model
     missing_with_matches = []

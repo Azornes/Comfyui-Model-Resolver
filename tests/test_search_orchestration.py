@@ -1,11 +1,11 @@
-import sys
-import os
-import unittest
 import importlib
 import json
+import os
+import sys
 import tempfile
+import unittest
 from contextlib import contextmanager
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # Set up mock server modules before importing the custom node
 mock_server = MagicMock()
@@ -82,6 +82,54 @@ def without_top_level_core_imports():
     finally:
         sys.path[:] = previous_path
         sys.modules.update(removed_modules)
+
+
+class LocalMatchDeduplicationTests(unittest.TestCase):
+    def test_search_local_matches_keeps_highest_confidence_for_same_path(self):
+        shared_path = os.path.join(os.getcwd(), "models", "shared.safetensors")
+        matches = [
+            {
+                "model": {
+                    "path": shared_path,
+                    "relative_path": "models/shared.safetensors",
+                },
+                "filename": "shared.safetensors",
+                "confidence": 0.42,
+            },
+            {
+                "model": {
+                    "path": shared_path,
+                    "relative_path": "models/shared.safetensors",
+                },
+                "filename": "shared.safetensors",
+                "confidence": 0.91,
+            },
+            {
+                "model": {
+                    "path": os.path.join(os.getcwd(), "models", "other.safetensors"),
+                    "relative_path": "models/other.safetensors",
+                },
+                "filename": "other.safetensors",
+                "confidence": 0.73,
+            },
+        ]
+
+        with (
+            patch.object(resolver_core, "get_model_files", return_value=[]),
+            patch.object(resolver_core, "find_matches", return_value=matches),
+            patch.object(
+                resolver_core,
+                "annotate_local_matches_with_download_state",
+                side_effect=lambda values: values,
+            ),
+        ):
+            result = resolver_core.search_local_matches("shared.safetensors")
+
+        self.assertEqual(
+            [match["confidence"] for match in result],
+            [0.91, 0.73],
+        )
+
 
 class SearchOrchestrationTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):

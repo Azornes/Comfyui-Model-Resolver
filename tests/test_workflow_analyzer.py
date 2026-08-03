@@ -1239,6 +1239,56 @@ class WorkflowMissingReferenceGroupingTests(unittest.TestCase):
 
 
 class WorkflowResolverMatchingTests(unittest.TestCase):
+    def test_missing_model_matches_keep_highest_confidence_for_same_path(self):
+        shared_path = os.path.join(os.getcwd(), "models", "shared.safetensors")
+        matches = [
+            {
+                "model": {
+                    "path": shared_path,
+                    "relative_path": "models/shared.safetensors",
+                },
+                "filename": "shared.safetensors",
+                "confidence": 0.35,
+            },
+            {
+                "model": {
+                    "path": shared_path,
+                    "relative_path": "models/shared.safetensors",
+                },
+                "filename": "shared.safetensors",
+                "confidence": 0.88,
+            },
+        ]
+        workflow_ref = {
+            "node_id": 1,
+            "node_type": "CheckpointLoaderSimple",
+            "widget_index": 0,
+            "original_path": "shared.safetensors",
+            "category": "checkpoints",
+            "exists": False,
+        }
+
+        with (
+            patch.object(
+                resolver_core,
+                "get_workflow_model_inventory",
+                return_value={
+                    "available_models": [],
+                    "model_refs": [workflow_ref],
+                },
+            ),
+            patch.object(resolver_core, "find_matches", return_value=matches),
+            patch.object(resolver_core, "_get_active_downloads_by_path", return_value={}),
+        ):
+            result = resolver_core.analyze_and_find_matches(
+                _workflow_with_model("shared.safetensors")
+            )
+
+        self.assertEqual(
+            [match["confidence"] for match in result["missing_models"][0]["matches"]],
+            [0.88],
+        )
+
     def test_resolved_models_skip_redundant_fuzzy_matching(self):
         workflow = _workflow_with_model("existing.safetensors")
         resolved_ref = {
