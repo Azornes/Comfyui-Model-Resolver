@@ -2427,29 +2427,31 @@
 .mr-link-name-switch {
     position: relative;
     width: 90px;
-    height: 30px;
+    height: var(--mr-missing-field-height, var(--mr-download-control-height, 38px));
+    min-height: var(--mr-missing-field-height, var(--mr-download-control-height, 38px));
     box-sizing: border-box;
-    background: linear-gradient(to right, #5a5a5a 30%, #3a76d6);
-    border-radius: 5px;
-    border: 1px solid #555;
+    background: linear-gradient(to right, var(--mr-missing-control-bg, rgba(255, 255, 255, 0.035)) 30%, rgba(114, 211, 138, 0.12));
+    border-radius: var(--mr-missing-control-radius, 7px);
+    border: 1px solid var(--mr-missing-control-border, rgba(255, 255, 255, 0.105));
     cursor: pointer;
     transition: background 0.3s ease-in-out, border-color 0.3s ease-in-out, opacity 0.3s ease-in-out;
     user-select: none;
     padding: 0;
     font-family: inherit;
     font-size: 12px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--mr-missing-control-shadow, none);
 }
 
 .mr-link-name-switch:hover {
-    background: linear-gradient(to right, #6a6a6a 30%, #4a86e4);
-    border-color: #666;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
-    transform: translateY(-1px);
+    background: linear-gradient(to right, var(--mr-missing-control-bg-hover, rgba(255, 255, 255, 0.06)) 30%, rgba(114, 211, 138, 0.17));
+    border-color: var(--mr-missing-control-border-hover, rgba(255, 255, 255, 0.17));
+    box-shadow: var(--mr-missing-control-shadow, none);
+    transform: none;
 }
 
 .mr-link-name-switch:active {
-    background: linear-gradient(135deg, #3a76d6, #3a3a3a);
+    background: var(--mr-missing-control-bg-hover, rgba(255, 255, 255, 0.06));
+    transform: none;
 }
 
 .mr-link-name-switch .mr-link-name-toggle-input {
@@ -2462,22 +2464,22 @@
 
 .mr-link-name-switch .mr-switch-knob {
     position: absolute;
-    top: 2px;
+    top: calc(50% - 12px);
     left: 2px;
     display: flex;
     align-items: center;
     justify-content: center;
     width: 24px;
     height: 24px;
-    background-color: #5a5a5a;
-    border-radius: 4px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    background-color: var(--mr-missing-control-bg-hover, rgba(255, 255, 255, 0.06));
+    border-radius: var(--mr-missing-control-radius, 7px);
+    box-shadow: var(--mr-missing-control-shadow, none);
     transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
     z-index: 2;
 }
 
 .mr-link-name-switch:hover .mr-switch-knob {
-    background-color: #6a6a6a;
+    background-color: var(--mr-missing-control-border-hover, rgba(255, 255, 255, 0.17));
 }
 
 .mr-link-name-switch .mr-switch-labels {
@@ -2487,11 +2489,11 @@
     align-items: center;
     justify-content: center;
     color: #ffffff;
-    font-weight: 550;
+    font-weight: 700;
     pointer-events: none;
     z-index: 1;
     transition: opacity 0.3s ease-in-out;
-    text-shadow: 0 1px 2px rgb(0, 0, 0);
+    text-shadow: none;
 }
 
 .mr-link-name-switch .mr-switch-labels .mr-text-link,
@@ -2530,13 +2532,13 @@
 }
 
 .mr-link-name-switch:has(.mr-link-name-toggle-input:checked) {
-    background: linear-gradient(to right, #3a76d6, #5a5a5a 70%);
-    border-color: #2a6ac4;
+    background: linear-gradient(to right, rgba(114, 211, 138, 0.12), var(--mr-missing-control-bg, rgba(255, 255, 255, 0.035)) 70%);
+    border-color: rgba(114, 211, 138, 0.25);
 }
 
 .mr-link-name-switch:has(.mr-link-name-toggle-input:checked):hover {
-    background: linear-gradient(to right, #4a86e4, #6a6a6a 70%);
-    border-color: #3a76d6;
+    background: linear-gradient(to right, rgba(114, 211, 138, 0.17), var(--mr-missing-control-bg-hover, rgba(255, 255, 255, 0.06)) 70%);
+    border-color: rgba(114, 211, 138, 0.32);
 }
 
 .mr-link-name-switch .mr-link-name-toggle-input:checked ~ .mr-switch-knob {
@@ -2563,18 +2565,18 @@
 }
 
 .mr-link-name-switch .mr-link-name-toggle-input:disabled ~ .mr-switch-knob {
-    background-color: #4a4a4a;
+    background-color: var(--mr-missing-control-bg, rgba(255, 255, 255, 0.035));
 }
 
 .mr-link-name-switch .mr-link-name-toggle-input:disabled ~ .mr-switch-labels {
-    color: #777;
+    color: var(--mr-text-muted, #999999);
 }
 
 .mr-link-name-switch:has(.mr-link-name-toggle-input:disabled) {
     cursor: not-allowed;
     opacity: 0.6;
-    background: #3a3a3a;
-    border-color: #4a4a4a;
+    background: var(--mr-missing-control-bg, rgba(255, 255, 255, 0.035));
+    border-color: var(--mr-missing-control-border, rgba(255, 255, 255, 0.105));
     transform: none;
     box-shadow: none;
 }
