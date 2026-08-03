@@ -237,6 +237,8 @@ CATEGORY_MAP = {
     "lora": "loras",
     "embeddings": "embeddings",
     "embedding": "embeddings",
+    "textualinversion": "embeddings",
+    "textual_inversion": "embeddings",
     "hypernetworks": "hypernetworks",
     "hypernetwork": "hypernetworks",
     "controlnet": "controlnet",
@@ -396,6 +398,11 @@ def resolve_model_category(
 def normalize_download_category(category: str) -> str:
     """Return the canonical ComfyUI folder_paths key for a download category."""
     return resolve_model_category(category, target_format="folder", default="checkpoints")
+
+
+def get_model_category_aliases() -> Dict[str, str]:
+    """Return a copy of the canonical raw-category-to-folder mapping."""
+    return dict(CATEGORY_MAP)
 
 
 def select_primary_model_file(

@@ -18,6 +18,7 @@ import {
   toResolverContextModel,
 } from '../web/resolver/node_context_menu.js';
 import { startSplitterDrag } from '../web/resolver/utils/splitter_drag.js';
+import { normalizeDownloadCategoryValue } from '../web/resolver/utils/category_utils.js';
 import { baseModelAliasMethods } from '../web/resolver/search/base_model_alias_methods.js';
 import { searchHashMethods } from '../web/resolver/search/search_hash_methods.js';
 import { missingModelStateMethods } from '../web/resolver/views/missing_model_state_methods.js';
@@ -31,6 +32,8 @@ import {
   getCustomNodeOriginalIdentity,
   isCustomNodeModelWidget as matchesCustomNodeModelWidget,
 } from '../web/resolver/custom_nodes/registry.js';
+
+void normalizeDownloadCategoryValue;
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
 const queueMethodsSource = fs.readFileSync(
@@ -4985,6 +4988,22 @@ test('download category normalization maps select safetensors alias to diffusion
 
   assert.equal(normalizeDownloadCategory('select_safetensors'), 'diffusion_models');
   assert.equal(normalizeDownloadCategory('SELECT SAFETENSORS'), 'diffusion_models');
+});
+
+test('download category normalization prefers backend capabilities aliases', () => {
+  const normalizeDownloadCategory = eval(`(${extractMethod(downloadTargetMethodsSource, 'normalizeDownloadCategory')})`);
+  const dialog = {
+    capabilities: {
+      category_aliases: {
+        textual_inversion: 'embeddings',
+        custom_alias: 'checkpoints',
+      },
+    },
+  };
+
+  assert.equal(normalizeDownloadCategory.call(dialog, 'Textual Inversion'), 'embeddings');
+  assert.equal(normalizeDownloadCategory.call(dialog, 'custom-alias'), 'checkpoints');
+  assert.equal(normalizeDownloadCategory.call(dialog, 'unet_gguf'), 'unet_gguf');
 });
 
 test('category display names use exact ComfyUI folder keys', () => {

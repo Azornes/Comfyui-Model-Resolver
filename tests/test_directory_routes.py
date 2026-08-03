@@ -199,13 +199,14 @@ async def test_capabilities_route_returns_optional_sources_and_node_rules():
         )
 
     body = json.loads(response.text)
-    assert body == {
-        "sources": {
-            "civarchive": False,
-            "lora_manager_archive": False,
-        },
-        "node_rules": {"CheckpointLoaderSimple": ["checkpoints"]},
+    assert body["sources"] == {
+        "civarchive": False,
+        "lora_manager_archive": False,
     }
+    assert body["node_rules"] == {"CheckpointLoaderSimple": ["checkpoints"]}
+    from core.type_utils import get_model_category_aliases
+
+    assert body["category_aliases"] == get_model_category_aliases()
     values["is_civarchive_available"].assert_called_once_with()
     values["is_lora_manager_archive_available"].assert_called_once_with()
 

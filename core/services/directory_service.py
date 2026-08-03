@@ -143,10 +143,12 @@ class DirectoryService:
 
     async def get_capabilities(self, request):
         """Get optional source capabilities available in this install."""
+        from ..type_utils import get_model_category_aliases
         from ..workflow.widgets import NODE_TYPE_MODEL_WIDGET_CATEGORIES
 
         return self.web.json_response(
             {
+                "category_aliases": get_model_category_aliases(),
                 "sources": {
                     "civarchive": self.is_civarchive_available(),
                     "lora_manager_archive": self.is_lora_manager_archive_available(),
