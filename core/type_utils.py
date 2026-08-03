@@ -1314,10 +1314,6 @@ def normalize_alphanumeric_key(value: Any) -> str:
     return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
 
 
-normalize_alphanumeric_lower = normalize_alphanumeric_key
-
-
-
 def utc_now_iso() -> str:
     """Return the current UTC timestamp formatted as ISO 8601 string without microseconds."""
     from datetime import datetime, timezone

@@ -1,6 +1,8 @@
+import ast
 import sys
 import os
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -196,6 +198,7 @@ class TestRefactoringUnification(unittest.TestCase):
         from core.path_utils import _normalize_base_model_token
         from core.path_templates import _normalize_token
         from core.settings import _normalize_tag
+        from core.type_utils import normalize_alphanumeric_key
 
         inputs = ["SD 1.5", "sd-xl_1.0!!", "Flux.1-dev", "", None]
         for val in inputs:
@@ -203,16 +206,42 @@ class TestRefactoringUnification(unittest.TestCase):
             res_path = _normalize_base_model_token(val)
             res_temp = _normalize_token(val)
             res_set = _normalize_tag(val)
+            res_key = normalize_alphanumeric_key(val)
 
             # verify they all behave identically
             self.assertEqual(res_matcher, res_path)
             self.assertEqual(res_matcher, res_temp)
             self.assertEqual(res_matcher, res_set)
+            self.assertEqual(res_matcher, res_key)
 
             # verify correct regex behavior
             import re
             expected = re.sub(r"[^a-z0-9]+", "", str(val or "").lower())
             self.assertEqual(res_matcher, expected)
+
+    def test_retired_module_aliases_are_absent(self):
+        project_root = Path(__file__).resolve().parents[1]
+        retired_aliases = {
+            "core/type_utils.py": "normalize_alphanumeric_lower",
+            "core/matcher.py": "MODEL_FILE_EXTENSIONS",
+        }
+
+        for relative_path, alias_name in retired_aliases.items():
+            source = (project_root / relative_path).read_text(encoding="utf-8")
+            tree = ast.parse(source, filename=relative_path)
+            module_aliases = {
+                target.id
+                for statement in tree.body
+                if isinstance(statement, ast.Assign)
+                for target in statement.targets
+                if isinstance(target, ast.Name)
+                and isinstance(statement.value, ast.Name)
+            }
+            self.assertNotIn(
+                alias_name,
+                module_aliases,
+                f"Retired module alias {alias_name} was reintroduced in {relative_path}",
+            )
 
     def test_utc_now_iso(self):
         from core.sources.model_list import _utc_now_iso
@@ -321,7 +350,6 @@ class TestRefactoringUnification(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
 
 
 

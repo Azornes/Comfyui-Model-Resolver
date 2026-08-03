@@ -294,8 +294,6 @@ def base_model_score(candidate: str, preferred: Optional[str]) -> float:
 
 from .type_utils import MODEL_EXTENSIONS, TECHNICAL_MODEL_SUFFIXES, get_version_sort_key
 
-MODEL_FILE_EXTENSIONS = MODEL_EXTENSIONS
-
 _TECHNICAL_VARIANT_TOKENS = {
     *TECHNICAL_MODEL_SUFFIXES,
 }
@@ -328,7 +326,7 @@ def strip_known_model_extension(filename: str) -> str:
         return ""
 
     lowered = filename.lower()
-    for ext in MODEL_FILE_EXTENSIONS:
+    for ext in MODEL_EXTENSIONS:
         if lowered.endswith(ext):
             return filename[: -len(ext)]
     return filename
