@@ -19,6 +19,7 @@ import {
 } from '../web/resolver/node_context_menu.js';
 import { startSplitterDrag } from '../web/resolver/utils/splitter_drag.js';
 import { normalizeDownloadCategoryValue } from '../web/resolver/utils/category_utils.js';
+import { normalizeSha256 } from '../web/resolver/utils/hash_utils.js';
 import { baseModelAliasMethods } from '../web/resolver/search/base_model_alias_methods.js';
 import { searchHashMethods } from '../web/resolver/search/search_hash_methods.js';
 import { missingModelStateMethods } from '../web/resolver/views/missing_model_state_methods.js';
@@ -34,6 +35,7 @@ import {
 } from '../web/resolver/custom_nodes/registry.js';
 
 void normalizeDownloadCategoryValue;
+void normalizeSha256;
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
 const queueMethodsSource = fs.readFileSync(

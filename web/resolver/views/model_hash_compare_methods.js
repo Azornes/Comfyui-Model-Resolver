@@ -1,8 +1,8 @@
+import { normalizeSha256 } from '../utils/hash_utils.js';
+
 export const modelHashCompareMethods = {
     normalizeSha256ForCompare(value = '') {
-        let text = String(value || '').trim();
-        text = text.replace(/^sha256[:=]/i, '').trim().toLowerCase();
-        return /^[a-f0-9]{64}$/.test(text) ? text : '';
+        return normalizeSha256(value);
     },
 
     formatSha256Short(value = '') {

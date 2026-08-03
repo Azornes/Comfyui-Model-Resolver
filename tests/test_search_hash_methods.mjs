@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { searchHashMethods } from '../web/resolver/search/search_hash_methods.js';
+import { normalizeSha256 } from '../web/resolver/utils/hash_utils.js';
 
 function createDialog(overrides = {}) {
   return { ...searchHashMethods, ...overrides };
@@ -9,6 +10,14 @@ function createDialog(overrides = {}) {
 
 const hashA = 'a'.repeat(64);
 const hashB = 'b'.repeat(64);
+
+test('shared SHA-256 normalization preserves the accepted input contract', () => {
+  assert.equal(normalizeSha256(`sha256:${hashA.toUpperCase()}`), hashA);
+  assert.equal(normalizeSha256('SHA256=' + hashB), hashB);
+  assert.equal(normalizeSha256('short'), '');
+  assert.equal(normalizeSha256(hashA + 'x'), '');
+  assert.equal(normalizeSha256(null), '');
+});
 
 test('search hash normalization accepts SHA-256 prefixes and rejects invalid values', () => {
   const dialog = createDialog();

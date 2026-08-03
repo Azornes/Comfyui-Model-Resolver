@@ -1,8 +1,8 @@
+import { normalizeSha256 } from '../utils/hash_utils.js';
+
 export const searchHashMethods = {
     normalizeSearchResultSha256(value = '') {
-        let text = String(value || '').trim();
-        text = text.replace(/^sha256[:=]/i, '').trim().toLowerCase();
-        return /^[a-f0-9]{64}$/.test(text) ? text : '';
+        return normalizeSha256(value);
     },
 
     getSearchResultSha256(result = {}) {
