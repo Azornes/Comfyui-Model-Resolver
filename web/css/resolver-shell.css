@@ -780,14 +780,17 @@
     height: 20px;
 }
 
-#model-resolver-modal .mr-download-queue-pause,
-#model-resolver-modal .mr-download-queue-resume {
+#model-resolver-modal .mr-download-queue-pause {
     color: var(--mr-warning);
 }
 
-#model-resolver-modal .mr-download-queue-pause:hover,
-#model-resolver-modal .mr-download-queue-resume:hover {
+#model-resolver-modal .mr-download-queue-pause:hover {
     color: var(--mr-warning);
+}
+
+#model-resolver-modal .mr-download-queue-resume,
+#model-resolver-modal .mr-download-queue-resume:hover {
+    color: var(--mr-accent);
 }
 
 #model-resolver-modal .mr-download-queue-cancel {
