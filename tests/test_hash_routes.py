@@ -411,6 +411,40 @@ async def test_calculate_file_hash_writes_metadata_and_reports_source():
     assert written["metadata"]["file_name"] == "old"
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "route",
+    [
+        "/model_resolver/calculate-file-hash",
+        "/model_resolver/calculate-file-hash/start",
+    ],
+)
+async def test_hash_calculation_routes_share_file_request_validation(route):
+    handlers, values = _build_hash_routes()
+    handler = handlers[("POST", route)]
+
+    response = await handler(_request({}))
+    assert response.status == 400
+    assert json.loads(response.text) == {"error": "file_path is required"}
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        missing_path = os.path.join(temp_dir, "missing.safetensors")
+        response = await handler(_request({"file_path": missing_path}))
+        assert response.status == 404
+        assert json.loads(response.text) == {"error": "file does not exist"}
+
+        outside_path = os.path.join(temp_dir, "outside.safetensors")
+        with open(outside_path, "wb") as model_file:
+            model_file.write(b"model")
+        values["is_path_in_configured_model_roots"].return_value = False
+        response = await handler(_request({"file_path": outside_path}))
+
+    assert response.status == 403
+    assert json.loads(response.text) == {
+        "error": "file is outside configured model directories"
+    }
+
+
 def test_hash_service_reports_header_source_and_cancellation():
     sha256 = "e" * 64
     _, values = _build_hash_routes()

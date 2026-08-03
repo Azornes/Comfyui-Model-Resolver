@@ -376,6 +376,20 @@ class HashService:
             return "", "file is outside configured model directories"
         return normalized_path, ""
 
+    async def _get_validated_hash_file_request(self, request):
+        """Read and validate the file request shared by hash endpoints."""
+        data = await request.json()
+        normalized_path, error = self.resolve_hash_file_request(data)
+        if not error:
+            return normalized_path, None
+
+        status = 400 if error == "file_path is required" else (
+            403
+            if error == "file is outside configured model directories"
+            else 404
+        )
+        return "", self.web.json_response({"error": error}, status=status)
+
     def write_calculated_hash_metadata(
         self,
         normalized_path,
@@ -545,20 +559,11 @@ class HashService:
 
     async def calculate_file_hash(self, request):
         """Calculate SHA256 for a local model and persist sidecar metadata."""
-        data = await request.json()
-
-        normalized_path, error = self.resolve_hash_file_request(data)
-        if error == "file_path is required":
-            return self.web.json_response(
-                {"error": "file_path is required"}, status=400
-            )
-        if error:
-            status = (
-                403
-                if error == "file is outside configured model directories"
-                else 404
-            )
-            return self.web.json_response({"error": error}, status=status)
+        normalized_path, error_response = await self._get_validated_hash_file_request(
+            request
+        )
+        if error_response:
+            return error_response
 
         sha256, sha256_source = self.calculate_sha256_with_progress(normalized_path)
         if not sha256:
@@ -587,19 +592,11 @@ class HashService:
 
     async def calculate_file_hash_start(self, request):
         """Start SHA256 calculation in a background thread."""
-        data = await request.json()
-        normalized_path, error = self.resolve_hash_file_request(data)
-        if error == "file_path is required":
-            return self.web.json_response(
-                {"error": "file_path is required"}, status=400
-            )
-        if error:
-            status = (
-                403
-                if error == "file is outside configured model directories"
-                else 404
-            )
-            return self.web.json_response({"error": error}, status=status)
+        normalized_path, error_response = await self._get_validated_hash_file_request(
+            request
+        )
+        if error_response:
+            return error_response
 
         self.hash_tracker.cleanup()
         progress_id = f"hash_{uuid.uuid4().hex}"
