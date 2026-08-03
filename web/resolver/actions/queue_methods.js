@@ -1144,8 +1144,16 @@ export const queueMethods = {
             const progress = typeof this.applyPendingDownloadStatus === 'function'
                 ? this.applyPendingDownloadStatus(info, info.lastProgress || {})
                 : (info.lastProgress || {});
-            const displayProgress = this.getDownloadDisplayProgress(progress);
-            const percent = displayProgress.percent;
+            const presentation = this.getDownloadProgressPresentation(progress);
+            const {
+                percent,
+                downloadedText: downloaded,
+                totalText: total,
+                progressMeta,
+                percentLabel,
+                logicalDownloadedText: logicalDownloaded,
+                logicalTotalText: logicalTotal,
+            } = presentation;
             const filename = progress.filename
                 || info.filename
                 || info.missing?.download_source?.filename
@@ -1153,22 +1161,16 @@ export const queueMethods = {
                 || 'model';
             const category = this.getCategoryDisplayName?.(info.category || info.missing?.category || '') || info.category || '';
             const nodeLabel = info.missing?.subgraph_name || info.missing?.node_type || (info.missing?.subgraph_id ? 'Subgraph' : 'Node');
-            const downloaded = this.formatBytes(displayProgress.downloaded);
-            const total = displayProgress.totalSize ? this.formatBytes(displayProgress.totalSize) : '';
-            const progressMeta = this.formatDownloadProgressMeta?.(progress) || '';
             const status = progress.status || info.lastStatus || 'starting';
             const backend = String(progress.download_backend || info.downloadBackend || '').toLowerCase();
             const isAria2 = backend === 'aria2';
             const isPaused = status === 'paused';
-            const percentLabel = this.formatDownloadPercent?.(percent) ?? String(Math.round(percent));
             const statusLabel = status === 'downloading'
-                ? (displayProgress.isFinalizing ? 'Finalizing' : `${percentLabel}%`)
+                ? (presentation.isFinalizing ? 'Finalizing' : `${percentLabel}%`)
                 : (status === 'starting' ? 'Starting' : (isPaused ? 'Paused' : status.replace(/_/g, ' ')));
-            const logicalDownloaded = this.formatBytes(progress.downloaded || 0);
-            const logicalTotal = progress.total_size ? this.formatBytes(progress.total_size) : '';
-            const sizeText = displayProgress.isFinalizing && logicalTotal
+            const sizeText = presentation.isFinalizing && logicalTotal
                 ? `Finalizing file: ${logicalDownloaded} / ${logicalTotal}`
-                : (total ? `${downloaded} / ${total}` : downloaded);
+                : (presentation.totalSize ? `${downloaded} / ${total}` : downloaded);
             const targetPath = progress.directory || info.downloadDirectory || info.downloadPath || '';
             const targetLabel = targetPath ? targetPath.split(/[/\\]/).filter(Boolean).pop() || targetPath : '';
             const workflowLabel = this.getDownloadWorkflowLabel?.(info) || 'Unknown workflow';

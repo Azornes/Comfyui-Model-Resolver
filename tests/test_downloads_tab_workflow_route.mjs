@@ -3020,6 +3020,44 @@ test('native Xet progress bar uses live network bytes against the known final fi
   }).percent, 20);
 });
 
+test('download progress presentation combines display and logical size labels', () => {
+  const getDownloadProgressPresentation = eval(
+    `(${extractMethod(renderFormatMethodsSource, 'getDownloadProgressPresentation')})`
+  );
+  const dialog = {
+    getDownloadDisplayProgress: () => ({
+      percent: 42.5,
+      downloaded: 100,
+      totalSize: 250,
+      isTransfer: true,
+      isFinalizing: false,
+    }),
+    formatBytes: value => `${value} B`,
+    formatDownloadProgressMeta: () => 'meta',
+    formatDownloadPercent: value => `${value}%`,
+  };
+
+  assert.deepEqual(
+    getDownloadProgressPresentation.call(dialog, {
+      downloaded: 80,
+      total_size: 200,
+    }, { unknownTotal: 'Unknown' }),
+    {
+      percent: 42.5,
+      downloaded: 100,
+      totalSize: 250,
+      isTransfer: true,
+      isFinalizing: false,
+      percentLabel: '42.5%',
+      downloadedText: '100 B',
+      totalText: '250 B',
+      progressMeta: 'meta',
+      logicalDownloadedText: '80 B',
+      logicalTotalText: '200 B',
+    }
+  );
+});
+
 test('base model alias resolves FLUX KREA as Flux.1 Krea', () => {
   const {
     normalizeBaseModelToken,
@@ -4025,6 +4063,9 @@ test('downloads tab shows active downloads from all workflow tabs', () => {
 
 test('downloads tab renders workflow label for active downloads', () => {
   const renderQueueDownloadsHtml = eval(`(${extractMethod(queueMethodsSource, 'renderQueueDownloadsHtml')})`);
+  const getDownloadProgressPresentation = eval(
+    `(${extractMethod(renderFormatMethodsSource, 'getDownloadProgressPresentation')})`
+  );
   const dialog = {
     escapeHtml(value) {
       return String(value).replace(/[&<>\"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[char]));
@@ -4048,6 +4089,9 @@ test('downloads tab renders workflow label for active downloads', () => {
         totalSize: progress.total_size || 0,
         isFinalizing: false,
       };
+    },
+    getDownloadProgressPresentation(progress, options) {
+      return getDownloadProgressPresentation.call(this, progress, options);
     },
     formatDownloadProgressMeta() {
       return '';

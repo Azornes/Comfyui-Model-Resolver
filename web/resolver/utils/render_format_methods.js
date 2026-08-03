@@ -340,6 +340,23 @@ export const renderFormatMethods = {
         };
     },
 
+    getDownloadProgressPresentation(progress = {}, { unknownTotal = '' } = {}) {
+        const displayProgress = this.getDownloadDisplayProgress(progress);
+        const percent = displayProgress.percent;
+
+        return {
+            ...displayProgress,
+            percentLabel: this.formatDownloadPercent?.(percent) ?? String(Math.round(percent)),
+            downloadedText: this.formatBytes(displayProgress.downloaded),
+            totalText: this.formatBytes(displayProgress.totalSize),
+            progressMeta: this.formatDownloadProgressMeta(progress),
+            logicalDownloadedText: this.formatBytes(progress.downloaded || 0),
+            logicalTotalText: progress.total_size
+                ? this.formatBytes(progress.total_size)
+                : unknownTotal,
+        };
+    },
+
     getDownloadEtaText(progress = {}) {
         const backend = String(progress.download_backend || '').toLowerCase();
         const totalSize = Number(progress.total_size) || 0;

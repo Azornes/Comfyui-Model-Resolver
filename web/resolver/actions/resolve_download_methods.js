@@ -1127,17 +1127,19 @@ export const resolveDownloadMethods = {
             const backend = String(progress.download_backend || snapshot.downloadBackend || snapshot.download_backend || '').toLowerCase();
             const isAria2 = backend === 'aria2';
             const isPaused = status === 'paused';
-            const displayProgress = this.getDownloadDisplayProgress(progress);
-            const percent = displayProgress.percent;
-            const downloaded = this.formatBytes(displayProgress.downloaded);
-            const total = this.formatBytes(displayProgress.totalSize);
-            const progressMeta = this.formatDownloadProgressMeta(progress);
-            const percentLabel = this.formatDownloadPercent?.(percent) ?? String(Math.round(percent));
-            const logicalDownloaded = this.formatBytes(progress.downloaded || 0);
-            const logicalTotal = progress.total_size ? this.formatBytes(progress.total_size) : 'Unknown';
-            const leftText = displayProgress.isFinalizing
+            const presentation = this.getDownloadProgressPresentation(progress, { unknownTotal: 'Unknown' });
+            const {
+                percent,
+                downloadedText: downloaded,
+                totalText: total,
+                progressMeta,
+                percentLabel,
+                logicalDownloadedText: logicalDownloaded,
+                logicalTotalText: logicalTotal,
+            } = presentation;
+            const leftText = presentation.isFinalizing
                 ? `Finalizing file: ${logicalDownloaded} / ${logicalTotal}`
-                : (displayProgress.totalSize
+                : (presentation.totalSize
                     ? `${downloaded} / ${total} (${percentLabel}%)${isPaused ? ' - Paused' : ''}`
                     : '<span class="mr-info-accent-text">Connecting...</span>');
             let actionClass = canCancel ? 'cancel-download-btn mr-btn mr-btn-danger mr-btn-sm' : '';
