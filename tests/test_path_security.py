@@ -9,8 +9,8 @@ from unittest.mock import MagicMock, patch
 
 import requests
 
+from core.aria2_installer import ARIA2_INSTALL_ROOT, Aria2InstallError, _safe_extract_tar
 from core.download.api import context as downloader_module
-from core.aria2_installer import Aria2InstallError, _safe_extract_tar
 from core.download.api import (
     download_file,
     download_model,
@@ -399,6 +399,32 @@ class PathSecurityTests(unittest.TestCase):
                 resolved = downloader_module._resolve_aria2c_executable(
                     {"aria2c_path": executable}
                 )
+            self.assertEqual(os.path.realpath(executable), resolved)
+
+    def test_default_aria2_root_matches_installer_root(self):
+        self.assertEqual(
+            os.path.realpath(str(downloader_module.MANAGED_ARIA2_ROOT)),
+            os.path.realpath(str(ARIA2_INSTALL_ROOT)),
+        )
+
+    def test_symlinked_managed_aria2_executable_path_is_allowed(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            managed_root = Path(temp_dir) / "managed"
+            alias_root = Path(temp_dir) / "alias"
+            managed_root.mkdir()
+            executable = managed_root / "aria2c.exe"
+            executable.write_bytes(b"managed executable")
+
+            try:
+                os.symlink(managed_root, alias_root, target_is_directory=True)
+            except (OSError, NotImplementedError) as exc:
+                self.skipTest(f"directory symlinks are unavailable: {exc}")
+
+            with patch("core.download.api.context.MANAGED_ARIA2_ROOT", managed_root):
+                resolved = downloader_module._resolve_aria2c_executable(
+                    {"aria2c_path": str(alias_root / executable.name)}
+                )
+
             self.assertEqual(os.path.realpath(executable), resolved)
 
     def test_huggingface_xet_download_bypasses_signed_http_bridge(self):

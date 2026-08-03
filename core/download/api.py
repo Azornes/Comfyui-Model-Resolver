@@ -8,13 +8,13 @@ import subprocess
 import threading
 import time
 from collections import deque
-from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
 import requests
 
+from ..aria2_installer import ARIA2_INSTALL_ROOT
 from ..log_system import create_module_logger
 from ..network_utils import (
     host_matches_domain,
@@ -64,7 +64,11 @@ ARIA2_RPC_TIMEOUT = (2, 5)
 ARIA2_STATUS_RPC_RETRIES = 4
 ARIA2_STATUS_RPC_RETRY_DELAY = 0.15
 ARIA2_IDLE_STOP_SECONDS = 5 * 60
-MANAGED_ARIA2_ROOT = Path(__file__).resolve().parents[1] / "tools" / "aria2"
+# Keep validation aligned with the install location used by the aria2 installer.
+# ARIA2_INSTALL_ROOT resolves the custom node package first, so paths reached
+# through a shared ComfyUI/custom_nodes symlink remain valid while external
+# executables are still rejected.
+MANAGED_ARIA2_ROOT = ARIA2_INSTALL_ROOT
 HF_XET_ARIA2_AUTH_HOSTS = {
     "cas-bridge.xethub.hf.co",
     "cas-bridge-direct.xethub.hf.co",
