@@ -1,6 +1,7 @@
 """CivitAI model search service."""
 
 from ..routes.context import RouteContext
+from ..sources.common import is_remote_link_marked_dead
 from .model_utils import CivitAISearchDependencies, ModelServiceDependencies
 
 
@@ -357,24 +358,9 @@ class CivitAISearchService(ModelServiceDependencies):
                 or result.get("from_metadata")
             )
 
-        def remote_link_is_marked_dead(item):
-            if not isinstance(item, dict):
-                return False
-            status = str(item.get("status") or "").lower()
-            return bool(
-                item.get("deletedAt")
-                or item.get("deleted_at")
-                or item.get("is_dead")
-                or item.get("isDead")
-                or item.get("likelyDead")
-                or item.get("likely_dead")
-                or item.get("dead")
-                or status in {"dead", "deleted", "unavailable", "missing"}
-            )
-
         def collect_result_download_urls(result):
             urls = []
-            if remote_link_is_marked_dead(result):
+            if is_remote_link_marked_dead(result):
                 return urls
             expected_filename = result.get("filename") or filename
             dead_urls = set()
@@ -384,7 +370,7 @@ class CivitAISearchService(ModelServiceDependencies):
             for mirror in mirrors:
                 if not isinstance(mirror, dict):
                     continue
-                if remote_link_is_marked_dead(mirror):
+                if is_remote_link_marked_dead(mirror):
                     dead_url = str(mirror.get("url") or "").strip()
                     if dead_url.startswith(("http://", "https://")):
                         dead_urls.add(dead_url)

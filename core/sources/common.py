@@ -7,6 +7,23 @@ from typing import Any, Dict, List, Optional
 from ..type_utils import build_search_result, normalize_sha256
 
 
+def is_remote_link_marked_dead(item: Any) -> bool:
+    """Return whether remote metadata marks a link as unavailable."""
+    if not isinstance(item, dict):
+        return False
+    status = str(item.get("status") or "").lower()
+    return bool(
+        item.get("deletedAt")
+        or item.get("deleted_at")
+        or item.get("is_dead")
+        or item.get("isDead")
+        or item.get("likelyDead")
+        or item.get("likely_dead")
+        or item.get("dead")
+        or status in {"dead", "deleted", "unavailable", "missing"}
+    )
+
+
 def normalize_hashes_dict(hashes: Optional[Dict[str, Any]]) -> Dict[str, str]:
     """
     Normalize a hashes dictionary (e.g. from CivitAI API or CivArchive) so that

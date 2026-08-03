@@ -48,12 +48,13 @@ from ..type_utils import (
     select_primary_model_file,
     to_int,
 )
-from .common import build_unified_search_result
+from .common import build_unified_search_result, is_remote_link_marked_dead
 
 log = create_module_logger(__name__)
 
 
 _coerce_int = to_int
+_archive_link_is_dead = is_remote_link_marked_dead
 
 CIVARCHIVE_BASE_URL = "https://civarchive.com"
 CIVARCHIVE_API_URL = f"{CIVARCHIVE_BASE_URL}/api"
@@ -630,24 +631,6 @@ def _download_url_looks_like_model_file(
     if not normalized:
         return False
     return looks_like_model_file(normalized, expected_filename)
-
-
-
-def _archive_link_is_dead(item: Dict[str, Any]) -> bool:
-    if not isinstance(item, dict):
-        return False
-    status = str(item.get("status") or "").lower()
-    return bool(
-        item.get("deletedAt")
-        or item.get("deleted_at")
-        or item.get("is_dead")
-        or item.get("isDead")
-        or item.get("likelyDead")
-        or item.get("likely_dead")
-        or item.get("dead")
-        or status in {"dead", "deleted", "unavailable", "missing"}
-    )
-
 
 def _fetch_remote_file_size_bytes(url: Any, timeout: int = 15) -> Optional[int]:
     normalized = _normalize_download_url(url)

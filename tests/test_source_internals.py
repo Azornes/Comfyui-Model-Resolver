@@ -55,6 +55,7 @@ from core.sources.civitai import (
     parse_civitai_url,
     search_civitai_for_file,
 )
+from core.sources.common import is_remote_link_marked_dead
 from core.type_utils import prepare_remote_size_probe_url
 
 # ---------------------------------------------------------------------------
@@ -414,6 +415,31 @@ class ArchiveLinkIsDeadTests(unittest.TestCase):
         self.assertFalse(_archive_link_is_dead("dead"))
         self.assertFalse(_archive_link_is_dead(None))
         self.assertFalse(_archive_link_is_dead([]))
+
+
+class RemoteLinkIsDeadTests(unittest.TestCase):
+    def test_common_predicate_matches_all_supported_dead_link_markers(self):
+        dead_items = (
+            {"deletedAt": "2024-01-01"},
+            {"deleted_at": "2024-01-01"},
+            {"isDead": True},
+            {"is_dead": True},
+            {"likelyDead": True},
+            {"likely_dead": True},
+            {"dead": True},
+            {"status": "dead"},
+            {"status": "Deleted"},
+            {"status": "unavailable"},
+            {"status": "missing"},
+        )
+        for item in dead_items:
+            self.assertTrue(is_remote_link_marked_dead(item))
+
+    def test_common_predicate_keeps_live_and_non_mapping_items_alive(self):
+        self.assertFalse(is_remote_link_marked_dead({"url": "https://example.com/model.safetensors"}))
+        self.assertFalse(is_remote_link_marked_dead("dead"))
+        self.assertFalse(is_remote_link_marked_dead(None))
+        self.assertFalse(is_remote_link_marked_dead([]))
 
 
 # ===========================================================================
