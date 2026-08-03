@@ -53,13 +53,21 @@ from .common import build_unified_search_result, is_remote_link_marked_dead
 log = create_module_logger(__name__)
 
 
-_coerce_int = to_int
 CIVARCHIVE_BASE_URL = "https://civarchive.com"
 CIVARCHIVE_API_URL = f"{CIVARCHIVE_BASE_URL}/api"
 CIVITAI_DOWNLOAD_URL_PREFIXES = (
     "https://civitai.com/api/download/",
     "https://civitai.red/api/download/",
 )
+_ARCHIVE_DOWNLOAD_URL_OPTIONS = {
+    "prioritize_civitai_last": True,
+    "download_url_keys": ("downloadUrl",),
+}
+_NORMALIZED_DOWNLOAD_URL_OPTIONS = {
+    "skip_file_if_dead": True,
+    "check_download_urls_list": True,
+    "download_url_keys": ("download_url", "downloadUrl"),
+}
 
 DEFAULT_CIVARCHIVE_CANDIDATE_LIMIT = 10
 MAX_CIVARCHIVE_CANDIDATE_LIMIT = 30
@@ -281,14 +289,14 @@ def _extract_hash_page_model_cards(next_data: Dict[str, Any]) -> List[Dict[str, 
             continue
 
         version = model.get("version") if isinstance(model.get("version"), dict) else {}
-        model_id = _coerce_int(
+        model_id = to_int(
             model.get("id")
             or model.get("model_id")
             or model.get("modelId")
             or version.get("model_id")
             or version.get("modelId")
         )
-        version_id = _coerce_int(
+        version_id = to_int(
             version.get("id")
             or model.get("model_version_id")
             or model.get("modelVersionId")
@@ -326,8 +334,8 @@ def _extract_model_links_from_html(html_text: str) -> List[Dict[str, Any]]:
     seen = set()
 
     def add_link(model_id: Any, version_id: Any = None, **metadata: Any) -> None:
-        resolved_model_id = _coerce_int(model_id)
-        resolved_version_id = _coerce_int(version_id) if version_id else None
+        resolved_model_id = to_int(model_id)
+        resolved_version_id = to_int(version_id) if version_id else None
         key = (resolved_model_id, resolved_version_id)
         if not resolved_model_id:
             return
@@ -664,7 +672,10 @@ def _resolve_file_size_bytes(
     if size:
         return size
 
-    urls = download_urls if download_urls is not None else _collect_normalized_download_urls(file_info)
+    urls = download_urls if download_urls is not None else _collect_download_urls_unified(
+        file_info,
+        **_NORMALIZED_DOWNLOAD_URL_OPTIONS,
+    )
     for url in sorted(urls, key=_remote_size_probe_priority):
         size = _fetch_remote_file_size_bytes(url)
         if size:
@@ -930,16 +941,6 @@ def _collect_download_urls_unified(
     return urls
 
 
-def _collect_download_urls(file_info: Dict[str, Any]) -> List[str]:
-    return _collect_download_urls_unified(
-        file_info,
-        prioritize_civitai_last=True,
-        skip_file_if_dead=False,
-        check_download_urls_list=False,
-        download_url_keys=("downloadUrl",),
-    )
-
-
 def _normalize_archive_mirrors(file_info: Dict[str, Any]) -> List[Dict[str, Any]]:
     mirrors = file_info.get("mirrors") or []
     if not isinstance(mirrors, list):
@@ -1005,7 +1006,10 @@ def _normalize_archive_mirrors(file_info: Dict[str, Any]) -> List[Dict[str, Any]
 
 def _normalize_archive_file(file_info: Dict[str, Any], model_id: Optional[int], version_id: Optional[int]) -> Dict[str, Any]:
     transformed = _transform_file_entry(file_info)
-    download_urls = _collect_download_urls(transformed)
+    download_urls = _collect_download_urls_unified(
+        transformed,
+        **_ARCHIVE_DOWNLOAD_URL_OPTIONS,
+    )
     mirrors = _normalize_archive_mirrors(transformed)
     normalized = normalize_model_file_info(transformed, model_id=model_id, version_id=version_id)
     # Re-extract size using exact logic and append mirror info
@@ -1021,8 +1025,8 @@ def _normalize_archive_version(
     context: Dict[str, Any],
     top_files: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    model_id = _coerce_int(context.get("id") or version.get("modelId"))
-    version_id = _coerce_int(version.get("id"))
+    model_id = to_int(context.get("id") or version.get("modelId"))
+    version_id = to_int(version.get("id"))
     files = _extract_version_files(version, top_files or [])
     normalized_files = [
         _normalize_archive_file(file_info, model_id, version_id)
@@ -1145,14 +1149,14 @@ def get_civarchive_model_details(
         top_files = [top_files]
 
     active_version = model_block.get("version") if isinstance(model_block.get("version"), dict) else {}
-    active_version_id = _coerce_int(active_version.get("id"))
+    active_version_id = to_int(active_version.get("id"))
     hydrated_versions: List[Dict[str, Any]] = []
 
     for version_summary in raw_versions:
         if not isinstance(version_summary, dict):
             continue
 
-        current_id = _coerce_int(version_summary.get("id"))
+        current_id = to_int(version_summary.get("id"))
         if current_id and active_version_id and current_id == active_version_id:
             hydrated_versions.append({**version_summary, **active_version})
         else:
@@ -1198,22 +1202,15 @@ def get_civarchive_model_details(
 
 
 
-def _collect_normalized_download_urls(file_info: Dict[str, Any]) -> List[str]:
-    return _collect_download_urls_unified(
-        file_info,
-        prioritize_civitai_last=False,
-        skip_file_if_dead=True,
-        check_download_urls_list=True,
-        download_url_keys=("download_url", "downloadUrl"),
-    )
-
-
 def _select_primary_model_file(files: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     valid_files = [
         file_info
         for file_info in files
         if isinstance(file_info, dict)
-        and _collect_normalized_download_urls(file_info)
+        and _collect_download_urls_unified(
+            file_info,
+            **_NORMALIZED_DOWNLOAD_URL_OPTIONS,
+        )
     ]
     return select_primary_model_file(valid_files)
 
@@ -1224,12 +1221,15 @@ def _build_result_from_normalized_version(
     file_info: Dict[str, Any],
     match_type: str,
 ) -> Optional[Dict[str, Any]]:
-    download_urls = _collect_normalized_download_urls(file_info)
+    download_urls = _collect_download_urls_unified(
+        file_info,
+        **_NORMALIZED_DOWNLOAD_URL_OPTIONS,
+    )
     if not download_urls:
         return None
 
-    model_id = _coerce_int(model_details.get("model_id") or file_info.get("model_id"))
-    version_id = _coerce_int(version.get("id") or file_info.get("version_id"))
+    model_id = to_int(model_details.get("model_id") or file_info.get("model_id"))
+    version_id = to_int(version.get("id") or file_info.get("version_id"))
     filename = file_info.get("name") or file_info.get("filename") or ""
     url = version.get("url") or (
         f"{CIVARCHIVE_BASE_URL}/models/{model_id}?modelVersionId={version_id}"
@@ -1277,7 +1277,7 @@ def _hydrate_civarchive_version_with_files(
     if _select_primary_model_file(version.get("files") or []):
         return version
 
-    version_id = _coerce_int(version.get("id"))
+    version_id = to_int(version.get("id"))
     if not model_id or not version_id:
         return version
 
@@ -1286,11 +1286,11 @@ def _hydrate_civarchive_version_with_files(
         return version
 
     selected = details.get("selected_version")
-    if isinstance(selected, dict) and _coerce_int(selected.get("id")) == version_id:
+    if isinstance(selected, dict) and to_int(selected.get("id")) == version_id:
         return selected
 
     for candidate in details.get("versions") or []:
-        if isinstance(candidate, dict) and _coerce_int(candidate.get("id")) == version_id:
+        if isinstance(candidate, dict) and to_int(candidate.get("id")) == version_id:
             return candidate
 
     return version
@@ -1313,8 +1313,8 @@ def _find_model_title_match_in_model_details(
     ]
     selected_version = model_details.get("selected_version")
     if isinstance(selected_version, dict):
-        selected_id = _coerce_int(selected_version.get("id"))
-        if not any(_coerce_int(version.get("id")) == selected_id for version in versions):
+        selected_id = to_int(selected_version.get("id"))
+        if not any(to_int(version.get("id")) == selected_id for version in versions):
             versions.append(selected_version)
 
     def hydrate_version(v):
@@ -1434,15 +1434,15 @@ def _hash_page_file_matches_model(
     if not model_id and not version_id:
         return False
 
-    file_model_id = _coerce_int(file_info.get("model_id") or file_info.get("modelId"))
-    file_version_id = _coerce_int(
+    file_model_id = to_int(file_info.get("model_id") or file_info.get("modelId"))
+    file_version_id = to_int(
         file_info.get("model_version_id")
         or file_info.get("modelVersionId")
         or file_info.get("version_id")
     )
-    if model_id and file_model_id and file_model_id != _coerce_int(model_id):
+    if model_id and file_model_id and file_model_id != to_int(model_id):
         return False
-    if version_id and file_version_id and file_version_id != _coerce_int(version_id):
+    if version_id and file_version_id and file_version_id != to_int(version_id):
         return False
     return bool((model_id and file_model_id) or (version_id and file_version_id))
 
@@ -1460,7 +1460,10 @@ def _select_hash_page_file(
             continue
         if is_remote_link_marked_dead(file_info):
             continue
-        if not _collect_normalized_download_urls(file_info):
+        if not _collect_download_urls_unified(
+            file_info,
+            **_NORMALIZED_DOWNLOAD_URL_OPTIONS,
+        ):
             continue
 
         filename = file_info.get("filename") or file_info.get("name") or ""
@@ -1493,7 +1496,10 @@ def _select_model_details_file(
     for file_info in files:
         if not isinstance(file_info, dict):
             continue
-        if not _collect_normalized_download_urls(file_info):
+        if not _collect_download_urls_unified(
+            file_info,
+            **_NORMALIZED_DOWNLOAD_URL_OPTIONS,
+        ):
             continue
 
         hashes = file_info.get("hashes") if isinstance(file_info.get("hashes"), dict) else {}
@@ -1551,7 +1557,10 @@ def _prefer_query_matching_mirror(
     download_urls = []
     if preferred_url:
         download_urls.append(preferred_url)
-    for url in _collect_normalized_download_urls(file_info):
+    for url in _collect_download_urls_unified(
+        file_info,
+        **_NORMALIZED_DOWNLOAD_URL_OPTIONS,
+    ):
         if url and url not in download_urls:
             download_urls.append(url)
 
@@ -1571,8 +1580,8 @@ def _build_result_from_hash_page_file(
     query: str,
     sha256: str = "",
 ) -> Optional[Dict[str, Any]]:
-    model_id = _coerce_int(model_details.get("model_id") or file_info.get("model_id"))
-    version_id = _coerce_int(version.get("id") or file_info.get("model_version_id"))
+    model_id = to_int(model_details.get("model_id") or file_info.get("model_id"))
+    version_id = to_int(version.get("id") or file_info.get("model_version_id"))
     normalized_file = _normalize_archive_file(file_info, model_id, version_id)
     confidence = calculate_archived_model_confidence(
         query,
@@ -1644,16 +1653,19 @@ def _build_result_from_payload(
     if exact_only and best_confidence < 100.0:
         return None
 
-    download_urls = _collect_download_urls(selected_file)
+    download_urls = _collect_download_urls_unified(
+        selected_file,
+        **_ARCHIVE_DOWNLOAD_URL_OPTIONS,
+    )
     if not download_urls:
         return None
 
-    model_id = _coerce_int(
+    model_id = to_int(
         context.get("id")
         or version.get("modelId")
         or selected_file.get("modelId")
     )
-    version_id = _coerce_int(
+    version_id = to_int(
         version.get("id")
         or selected_file.get("modelVersionId")
     )

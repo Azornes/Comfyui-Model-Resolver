@@ -22,9 +22,7 @@ import requests
 # civarchive internals
 # ---------------------------------------------------------------------------
 from core.sources.civarchive import (
-    _collect_download_urls,
     _collect_download_urls_unified,
-    _collect_normalized_download_urls,
     _fetch_remote_file_size_bytes,
     _normalize_archive_version,
     _normalize_download_url,
@@ -514,25 +512,33 @@ class CollectDownloadUrlsUnifiedTests(unittest.TestCase):
 
 
 # ===========================================================================
-# civarchive - backward-compat: _collect_download_urls delegates correctly
+# civarchive - archive download URL collection strategy
 # ===========================================================================
-class CollectDownloadUrlsLegacyTests(unittest.TestCase):
+class CollectDownloadUrlsStrategyTests(unittest.TestCase):
 
     def test_civitai_url_sorted_last(self):
         civitai = "https://civitai.com/api/download/models/99.safetensors"
         archive = "https://civarchive.com/api/download/models/77.safetensors"
         fi = {"mirrors": [{"url": civitai}, {"url": archive}]}
-        result = _collect_download_urls(fi)
+        result = _collect_download_urls_unified(
+            fi,
+            prioritize_civitai_last=True,
+            download_url_keys=("downloadUrl",),
+        )
         self.assertEqual(result[-1], civitai)
         self.assertEqual(result[0], archive)
 
     def test_returns_list(self):
-        result = _collect_download_urls({})
+        result = _collect_download_urls_unified(
+            {},
+            prioritize_civitai_last=True,
+            download_url_keys=("downloadUrl",),
+        )
         self.assertIsInstance(result, list)
 
 
 # ===========================================================================
-# civarchive - backward-compat: _collect_normalized_download_urls
+# civarchive - normalized download URL collection strategy
 # ===========================================================================
 class CollectNormalizedDownloadUrlsTests(unittest.TestCase):
 
@@ -541,14 +547,27 @@ class CollectNormalizedDownloadUrlsTests(unittest.TestCase):
             "isDead": True,
             "downloadUrl": "https://civarchive.com/api/download/models/1.safetensors",
         }
-        self.assertEqual(_collect_normalized_download_urls(fi), [])
+        self.assertEqual(
+            _collect_download_urls_unified(
+                fi,
+                skip_file_if_dead=True,
+                check_download_urls_list=True,
+                download_url_keys=("download_url", "downloadUrl"),
+            ),
+            [],
+        )
 
     def test_collects_mirror_and_extra_urls(self):
         fi = {
             "mirrors": [{"url": "https://civarchive.com/api/download/models/1.safetensors"}],
             "download_urls": ["https://civarchive.com/api/download/models/2.safetensors"],
         }
-        result = _collect_normalized_download_urls(fi)
+        result = _collect_download_urls_unified(
+            fi,
+            skip_file_if_dead=True,
+            check_download_urls_list=True,
+            download_url_keys=("download_url", "downloadUrl"),
+        )
         self.assertEqual(len(result), 2)
 
     def test_dead_mirror_url_excluded_from_download_urls(self):
@@ -557,7 +576,12 @@ class CollectNormalizedDownloadUrlsTests(unittest.TestCase):
             "mirrors": [{"url": dead_url, "isDead": True}],
             "download_urls": [dead_url],
         }
-        result = _collect_normalized_download_urls(fi)
+        result = _collect_download_urls_unified(
+            fi,
+            skip_file_if_dead=True,
+            check_download_urls_list=True,
+            download_url_keys=("download_url", "downloadUrl"),
+        )
         self.assertNotIn(dead_url, result)
 
 
