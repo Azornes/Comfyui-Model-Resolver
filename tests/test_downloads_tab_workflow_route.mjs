@@ -5863,6 +5863,62 @@ test('CivitAI hash search renders sizeKB when byte size is unavailable', () => {
   );
 });
 
+test('link/name controls place the add or search action before the input switch', () => {
+  const renderSearchControls = eval(`(${extractMethod(searchPanelMethodsSource, 'renderSearchControls')})`);
+  const dialog = {
+    getSearchState() {
+      return {
+        selectedSource: 'all',
+        selectedBaseModel: 'auto',
+        inputMode: 'link',
+        manualSearchQuery: '',
+      };
+    },
+    getDefaultSearchBaseModel() {
+      return 'auto';
+    },
+    getSearchBaseModelTooltip() {
+      return '';
+    },
+    hasRenderableSearchState() {
+      return false;
+    },
+    getLinkNameInputMode(state) {
+      return state.inputMode;
+    },
+    getSearchSourceLabel() {
+      return 'All';
+    },
+    getSearchBaseModelLabel() {
+      return 'Any model';
+    },
+    getMissingSearchKey() {
+      return 'missing-key';
+    },
+    escapeHtml(value) {
+      return String(value);
+    },
+    renderSearchButtonContent() {
+      return 'search';
+    },
+    renderLinkNameActionContent() {
+      return 'action';
+    },
+    renderLinkNameSwitchIcon() {
+      return 'switch';
+    },
+  };
+
+  const html = renderSearchControls.call(dialog, { node_id: 1, widget_index: 2 });
+  const actionIndex = html.indexOf('mr-link-name-action-picker');
+  const inputIndex = html.indexOf('mr-link-name-input-picker');
+  const modeIndex = html.indexOf('mr-link-name-mode');
+
+  assert.ok(actionIndex >= 0);
+  assert.ok(inputIndex > actionIndex);
+  assert.ok(modeIndex > inputIndex);
+});
+
 test('search result refreshes preserve keyed progress and result DOM', () => {
   const displaySearchResults = extractMethod(resolveDownloadMethodsSource, 'displaySearchResults');
   const patchSearchResultsContainer = extractMethod(
