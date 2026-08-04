@@ -1909,6 +1909,8 @@ test('Loaded Models progress patches the stable progress container', () => {
     'pollLoadedModelsProgress'
   );
   const loadLoadedModels = extractMethod(tabsLoadedMethodsSource, 'loadLoadedModels');
+  const patchAnalysisProgress = extractMethod(renderFormatMethodsSource, 'patchAnalysisProgress');
+  const pollAnalysisProgress = extractMethod(renderFormatMethodsSource, 'pollAnalysisProgress');
 
   assert.match(patchLoadedModelsProgress, /mr-download-section/);
   assert.match(patchLoadedModelsProgress, /mr-progress-fill/);
@@ -1916,6 +1918,9 @@ test('Loaded Models progress patches the stable progress container', () => {
   assert.match(pollLoadedModelsProgress, /patchLoadedModelsProgress\(/);
   assert.doesNotMatch(pollLoadedModelsProgress, /contentElement\.innerHTML\s*=/);
   assert.match(loadLoadedModels, /patchLoadedModelsProgress\(/);
+  assert.match(patchAnalysisProgress, /patchLoadedModelsProgress\(/);
+  assert.match(pollAnalysisProgress, /patchAnalysisProgress\(/);
+  assert.doesNotMatch(pollAnalysisProgress, /contentElement\.innerHTML\s*=/);
 });
 
 test('Power Lora Loader strength updates only its Loaded Models chip and cache', () => {
@@ -5225,6 +5230,7 @@ test('local match refreshes preserve keyed rows and button handlers', () => {
     'refreshLocalMatchesUiForMissing'
   );
   const wireLocalMatchButtons = extractMethod(searchPanelMethodsSource, 'wireLocalMatchButtons');
+  const refreshMissingListRow = extractMethod(missingBrowserMethodsSource, 'refreshMissingListRow');
 
   assert.match(renderLocalMatchesContent, /data-local-match-key/);
   assert.match(renderLocalMatchesContent, /encodeURIComponent/);
@@ -5236,6 +5242,8 @@ test('local match refreshes preserve keyed rows and button handlers', () => {
   assert.match(wireLocalMatchButtons, /local-match-actions/);
   assert.doesNotMatch(wireLocalMatchButtons, /\.onclick\s*=/);
   assert.doesNotMatch(wireLocalMatchButtons, /addEventListener\('click'/);
+  assert.match(refreshMissingListRow, /renderedSources/);
+  assert.match(refreshMissingListRow, /innerHTML !== renderedSources/);
 });
 
 test('URN resolution preserves the download panel container', () => {

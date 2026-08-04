@@ -271,13 +271,20 @@ export const renderFormatMethods = {
         });
     },
 
+    patchAnalysisProgress(container, renderedHtml = '') {
+        this.patchLoadedModelsProgress(container, renderedHtml);
+    },
+
     async pollAnalysisProgress(analysisId, token) {
         await pollBackgroundTask({
             endpoint: `/model_resolver/analyze-progress/${analysisId}`,
             tokenCheck: () => this._analysisProgressToken === token,
             onProgress: (progress) => {
                 if (this.contentElement && this.activeTab === 'missing') {
-                    this.contentElement.innerHTML = this.renderAnalysisProgress(progress);
+                    this.patchAnalysisProgress(
+                        this.contentElement,
+                        this.renderAnalysisProgress(progress)
+                    );
                 }
             },
             isTerminal: (progress) => progress.status === 'completed' || progress.status === 'error',

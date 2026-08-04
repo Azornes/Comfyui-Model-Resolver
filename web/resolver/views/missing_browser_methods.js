@@ -2826,7 +2826,10 @@ export const missingBrowserMethods = {
 
         const sourcesEl = row.querySelector('.mr-missing-row-sources');
         if (sourcesEl) {
-            sourcesEl.innerHTML = this.renderMissingSourcesSummary(missing);
+            const renderedSources = this.renderMissingSourcesSummary(missing);
+            if (sourcesEl.innerHTML !== renderedSources) {
+                sourcesEl.innerHTML = renderedSources;
+            }
         }
 
         this.refreshMissingListStats?.();

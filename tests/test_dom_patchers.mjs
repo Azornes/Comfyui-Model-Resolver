@@ -64,6 +64,7 @@ const wireLocalMatchButtons = eval(`(${extractMethod(searchPanelMethodsSource, '
 const patchQueuedSelections = eval(`(${extractMethod(queueMethodsSource, 'patchQueuedSelections')})`);
 const patchDownloadsPanelElement = eval(`(${extractMethod(queueMethodsSource, 'patchDownloadsPanelElement')})`);
 const patchLoadedModelsProgress = eval(`(${extractMethod(renderFormatMethodsSource, 'patchLoadedModelsProgress')})`);
+const patchAnalysisProgress = eval(`(${extractMethod(renderFormatMethodsSource, 'patchAnalysisProgress')})`);
 
 test('shared DOM helpers synchronize attributes, text, and one-time listeners', () => {
   const window = new Window();
@@ -103,6 +104,7 @@ function createDialog(window) {
     patchQueuedSelections,
     patchDownloadsPanelElement,
     patchLoadedModelsProgress,
+    patchAnalysisProgress,
     wireSearchDownloadButtons,
     window,
     wireSearchHashMatchHighlights() {},
@@ -219,6 +221,31 @@ test('loaded progress patcher preserves the progress root and fill element', () 
   assert.strictEqual(container.querySelector('.mr-progress-fill'), fill);
   assert.equal(container.querySelector('.mr-download-info').textContent, 'Loading two');
   assert.equal(fill.style.width, '60%');
+});
+
+test('analysis progress patcher preserves the progress root and fill element', () => {
+  const window = new Window();
+  const dialog = createDialog(window);
+  const container = window.document.createElement('div');
+  const firstHtml = `
+    <div class="mr-download-section">
+      <div class="mr-progress-bar"><div class="mr-progress-fill" style="width: 15%"></div></div>
+      <div class="mr-progress-text"><span>1 / 10</span><span>15%</span></div>
+    </div>`;
+  const secondHtml = `
+    <div class="mr-download-section">
+      <div class="mr-progress-bar"><div class="mr-progress-fill" style="width: 65%"></div></div>
+      <div class="mr-progress-text"><span>6 / 10</span><span>65%</span></div>
+    </div>`;
+  dialog.patchAnalysisProgress(container, firstHtml);
+  const root = container.firstElementChild;
+  dialog.patchAnalysisProgress(container, secondHtml);
+
+  assert.strictEqual(container.firstElementChild, root);
+  assert.equal(container.querySelector('.mr-progress-fill').style.width, '65%');
+  const progressText = container.querySelectorAll('.mr-progress-text span');
+  assert.equal(progressText[0].textContent, '6 / 10');
+  assert.equal(progressText[1].textContent, '65%');
 });
 
 test('download queue patcher preserves keyed cards', () => {
