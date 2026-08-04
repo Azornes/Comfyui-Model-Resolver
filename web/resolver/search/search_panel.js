@@ -2695,7 +2695,11 @@ export const searchPanelMethods = {
 
         Promise.allSettled(refreshTasks).then(() => {
             if (!container.isConnected || this.activeTab !== 'missing') return;
-            this.displayMissingModels(container, data);
+            this.displayMissingModels(
+                container,
+                this.cachedAnalysisData || data,
+                { preserveBrowser: true }
+            );
         });
     }
 };

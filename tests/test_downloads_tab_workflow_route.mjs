@@ -1757,91 +1757,83 @@ test('Apply defers model catalog refresh until after the linking path returns', 
   assert.deepEqual(calls, ['catalog', 'refresh:node-widget-change']);
 });
 
-test('background Apply validation uses the Missing Models workflow signature', async () => {
-  const refreshAnalysisInBackground = eval(
-    `(${extractMethod(queueMethodsSource, 'refreshAnalysisInBackground')})`
+test('Apply does not schedule a duplicate workflow refresh when analysis is already current', async () => {
+  const scheduleComfyModelCatalogRefreshAfterApply = eval(
+    `(${extractMethod(workflowUpdateMethodsSource, 'scheduleComfyModelCatalogRefreshAfterApply')})`
   );
-  const workflow = { nodes: [{ id: 7, widgets_values: ['linked.safetensors', 1.25] }] };
-  const returnedData = { missing_models: [], resolved_models: [{ node_id: 7 }] };
   const calls = [];
+  let finish;
+  const finished = new Promise(resolve => {
+    finish = resolve;
+  });
+  const workflow = { nodes: [{ id: 7, widgets_values: ['linked.safetensors'] }] };
   const dialog = {
-    activeWorkflowSignature: 'different-full-signature',
-    activeMissingWorkflowSignature: 'linked-missing-signature',
-    cachedWorkflowSignature: null,
-    cachedAnalysisData: null,
-    activeTab: 'loaded',
+    runWithWorkflowRefreshSuppressed: async callback => callback(),
+    cachedWorkflowSignature: 'current-signature',
+    cachedAnalysisData: { missing_models: [], resolved_models: [] },
     getMissingWorkflowSignature(value) {
       assert.equal(value, workflow);
-      return 'linked-missing-signature';
+      return 'current-signature';
     },
-    async fetchJson(url) {
-      calls.push(url);
-      return returnedData;
+    async refreshComfyModelCatalogAfterApply() {
+      calls.push('catalog');
+      return true;
     },
-    applyResolvedSelectionAliasesToAnalysisData(data) {
-      calls.push(data);
-    },
-    saveAnalysisCacheForActiveWorkflow() {
-      calls.push('save');
+    scheduleActiveWorkflowRefresh() {
+      calls.push('refresh');
     },
   };
 
-  await refreshAnalysisInBackground.call(dialog, workflow);
-
-  assert.equal(dialog.cachedWorkflowSignature, 'linked-missing-signature');
-  assert.equal(dialog.cachedAnalysisData, returnedData);
-  assert.deepEqual(calls, [
-    '/model_resolver/analyze',
-    returnedData,
-    'save',
-  ]);
+  scheduleComfyModelCatalogRefreshAfterApply.call(dialog, workflow, []);
+  setTimeout(() => finish(), 0);
+  await finished;
+  assert.deepEqual(calls, ['catalog']);
 });
 
-test('Apply selected model preserves Missing Models browser geometry during both refresh stages', async () => {
-  const applyOptimisticAnalysisData = eval(
-    `(${extractMethod(queueMethodsSource, 'applyOptimisticAnalysisData')})`
+test('Apply reuses the content-preserving workflow analysis path', () => {
+  const applyPendingResolutionList = extractMethod(
+    queueMethodsSource,
+    'applyPendingResolutionList'
   );
-  const refreshAnalysisInBackground = eval(
-    `(${extractMethod(queueMethodsSource, 'refreshAnalysisInBackground')})`
+
+  assert.match(
+    applyPendingResolutionList,
+    /loadWorkflowData\?\.\(data\.workflow,\s*\{\s*preserveContent: true/
   );
-  const contentElement = {};
-  const workflow = { nodes: [{ id: 7, widgets_values: ['linked.safetensors'] }] };
-  const optimisticData = { missing_models: [], resolved_models: [{ node_id: 7, optimistic: true }] };
-  const analyzedData = { missing_models: [], resolved_models: [{ node_id: 7, optimistic: false }] };
-  const renderCalls = [];
+  assert.doesNotMatch(applyPendingResolutionList, /applyOptimisticAnalysisData\(/);
+  assert.doesNotMatch(applyPendingResolutionList, /refreshAnalysisInBackground\(/);
+});
+
+test('Apply keeps the workflow slot key when resolved path identity changes', () => {
+  const doesResolvedModelMatchAlias = eval(
+    `(${extractMethod(queueMethodsSource, 'doesResolvedModelMatchAlias')})`
+  );
+  const applyResolvedSelectionAliasesToAnalysisData = eval(
+    `(${extractMethod(queueMethodsSource, 'applyResolvedSelectionAliasesToAnalysisData')})`
+  );
+  const data = {
+    resolved_models: [{
+      node_id: 7,
+      widget_index: 0,
+      category: 'loras',
+      missing_key: 'backend-path-key',
+      original_path: 'different/backend/path.safetensors',
+    }],
+  };
   const dialog = {
-    activeTab: 'missing',
-    contentElement,
-    activeMissingWorkflowSignature: 'linked-missing-signature',
-    cachedWorkflowSignature: null,
-    cachedAnalysisData: null,
-    applyResolvedSelectionAliasesToAnalysisData() {},
-    getMissingWorkflowSignature() {
-      return 'linked-missing-signature';
-    },
-    getCurrentWorkflow() {
-      return workflow;
-    },
-    cloneAnalysisData(data) {
-      return data;
-    },
-    saveAnalysisCacheForActiveWorkflow() {},
-    displayMissingModels(...args) {
-      renderCalls.push(args);
-    },
-    reconnectActiveDownloads() {},
-    async fetchJson() {
-      return analyzedData;
-    },
+    appliedResolvedSelectionAliases: new Map([
+      ['stable-slot-key', {
+        category: 'loras',
+        refs: [{ node_id: 7, widget_index: 0 }],
+      }],
+    ]),
+    doesResolvedModelMatchAlias,
   };
 
-  applyOptimisticAnalysisData.call(dialog, optimisticData, workflow);
-  await refreshAnalysisInBackground.call(dialog, workflow);
+  applyResolvedSelectionAliasesToAnalysisData.call(dialog, data);
 
-  assert.deepEqual(renderCalls, [
-    [contentElement, optimisticData, { preserveBrowser: true }],
-    [contentElement, analyzedData, { preserveBrowser: true }],
-  ]);
+  assert.equal(data.resolved_models[0].missing_key, 'stable-slot-key');
+  assert.equal(dialog.appliedResolvedSelectionAliases.size, 0);
 });
 
 test('background Loaded Models refresh keeps the current view until new data is ready', async () => {
@@ -2150,6 +2142,14 @@ test('content-preserving Missing Models refresh patches the browser instead of c
     missingBrowserMethodsSource,
     'patchMissingModelsBrowserElement'
   );
+  const patchMissingModelRowElement = extractMethod(
+    missingBrowserMethodsSource,
+    'patchMissingModelRowElement'
+  );
+  const setupMissingModelsVirtualizer = extractMethod(
+    missingBrowserMethodsSource,
+    'setupMissingModelsVirtualizer'
+  );
   const displayMissingModels = extractMethod(
     missingBrowserMethodsSource,
     'displayMissingModels'
@@ -2157,7 +2157,23 @@ test('content-preserving Missing Models refresh patches the browser instead of c
 
   assert.match(
     patchMissingModelsBrowserElement,
-    /currentRow\?\.outerHTML === nextRow\.outerHTML/
+    /patchMissingModelRowElement\(currentRow, nextRow\)/
+  );
+  assert.match(
+    patchMissingModelRowElement,
+    /currentRow\.innerHTML = nextRow\.innerHTML/
+  );
+  assert.match(
+    patchMissingModelRowElement,
+    /_wiredMissingModelRows\?\.delete\?\./
+  );
+  assert.match(
+    setupMissingModelsVirtualizer,
+    /patchMissingModelRowElement\(currentRow, nextRow\)/
+  );
+  assert.doesNotMatch(
+    setupMissingModelsVirtualizer,
+    /rowsHost\.innerHTML/
   );
   assert.doesNotMatch(
     patchMissingModelsBrowserElement,

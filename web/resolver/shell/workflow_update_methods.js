@@ -22,7 +22,13 @@ export const workflowUpdateMethods = {
             this.runWithWorkflowRefreshSuppressed(
                 () => this.refreshComfyModelCatalogAfterApply(workflow, resolutions)
             ).then(refreshed => {
-                if (refreshed) {
+                const workflowSignature = this.getMissingWorkflowSignature?.(workflow);
+                const hasCurrentAnalysis = Boolean(
+                    workflowSignature
+                    && this.cachedWorkflowSignature === workflowSignature
+                    && this.cachedAnalysisData
+                );
+                if (refreshed && !hasCurrentAnalysis) {
                     this.scheduleActiveWorkflowRefresh?.('node-widget-change');
                 }
             }).catch(error => {

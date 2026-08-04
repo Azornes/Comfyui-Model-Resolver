@@ -770,8 +770,32 @@ export const workflowStateMethods = {
         this.updateQueueVisibility();
     },
 
+    beginApplyWorkflowRefreshSuppression() {
+        this._applyWorkflowRefreshSuppressionDepth = Number(
+            this._applyWorkflowRefreshSuppressionDepth || 0
+        ) + 1;
+        this._workflowRefreshGeneration = (this._workflowRefreshGeneration || 0) + 1;
+        if (this._workflowRefreshTimer) {
+            clearTimeout(this._workflowRefreshTimer);
+            this._workflowRefreshTimer = null;
+        }
+        if (this._workflowRefreshRetryTimer) {
+            clearTimeout(this._workflowRefreshRetryTimer);
+            this._workflowRefreshRetryTimer = null;
+        }
+        this._workflowDataLoadToken = null;
+        this._analysisProgressToken = null;
+    },
+
+    endApplyWorkflowRefreshSuppression() {
+        this._applyWorkflowRefreshSuppressionDepth = Math.max(
+            0,
+            Number(this._applyWorkflowRefreshSuppressionDepth || 0) - 1
+        );
+    },
+
     scheduleActiveWorkflowRefresh(reason = 'workflow-change') {
-        if (!this.isVisible()) return;
+        if (!this.isVisible() || Number(this._applyWorkflowRefreshSuppressionDepth || 0) > 0) return;
 
         const generation = (this._workflowRefreshGeneration || 0) + 1;
         this._workflowRefreshGeneration = generation;
@@ -808,7 +832,10 @@ export const workflowStateMethods = {
         candidateRoute = null,
         candidateSignature = null
     } = {}) {
-        if (!this.isVisible()) return;
+        if (
+            !this.isVisible()
+            || Number(this._applyWorkflowRefreshSuppressionDepth || 0) > 0
+        ) return;
         if (generation !== this._workflowRefreshGeneration) return;
 
         const currentRoute = this.getActiveWorkflowRouteKey();
