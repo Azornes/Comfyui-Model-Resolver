@@ -6,7 +6,8 @@ WORKFLOW_COMPONENTS = {
     "dynamic_widgets": {"widgets"},
     "references": {"dynamic_widgets", "widgets"},
     "subgraphs": {"references", "widgets"},
-    "analysis": {"references", "subgraphs"},
+    "traversal": set(),
+    "analysis": {"references", "subgraphs", "traversal"},
     "inventory": {"analysis"},
 }
 
