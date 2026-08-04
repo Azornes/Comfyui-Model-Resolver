@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { performance } from 'node:perf_hooks';
 import { Window } from 'happy-dom';
 import {
   bindEventOnce,
@@ -479,4 +480,100 @@ test('search UI refreshes coalesce within one animation frame', () => {
     if (previousCancelAnimationFrame === undefined) delete globalThis.cancelAnimationFrame;
     else globalThis.cancelAnimationFrame = previousCancelAnimationFrame;
   }
+});
+
+test('DOM patchers stay within the local benchmark budget', () => {
+  const window = new Window();
+  const dialog = createDialog(window);
+  const itemCount = 80;
+  const iterations = 30;
+  const elementFromHtml = html => {
+    const wrapper = window.document.createElement('div');
+    wrapper.innerHTML = html;
+    return wrapper.firstElementChild;
+  };
+  const benchmark = (label, operation) => {
+    const start = performance.now();
+    for (let iteration = 0; iteration < iterations; iteration += 1) {
+      operation(iteration);
+    }
+    const elapsedMs = performance.now() - start;
+    assert.ok(elapsedMs < 5000, `${label} exceeded 5000ms: ${elapsedMs.toFixed(1)}ms`);
+    return elapsedMs;
+  };
+
+  const searchHtml = iteration => `
+    <div class="mr-search-progress-list">
+      ${Array.from({ length: itemCount }, (_, index) => `
+        <div class="mr-search-progress-item" data-search-progress-source="source-${index}">
+          <div class="mr-search-progress-head">
+            <span class="mr-search-progress-source">Source ${index}</span>
+            <span class="mr-search-progress-status">${iteration}%</span>
+          </div>
+          <div class="mr-search-progress-bar"><div class="mr-search-progress-fill" style="width:${iteration}%"></div></div>
+        </div>
+      `).join('')}
+    </div>`;
+  const searchCurrent = elementFromHtml(searchHtml(0));
+  const searchNext = elementFromHtml(searchHtml(0));
+  const searchFirstItem = searchCurrent.firstElementChild;
+  const searchMs = benchmark('search progress patcher', iteration => {
+    searchNext.querySelectorAll('.mr-search-progress-status').forEach(status => {
+      status.textContent = `${iteration}%`;
+    });
+    dialog.patchSearchProgressElement(searchCurrent, searchNext);
+  });
+  assert.strictEqual(searchCurrent.firstElementChild, searchFirstItem);
+
+  const localContainer = window.document.createElement('div');
+  const localHtml = iteration => `
+    ${Array.from({ length: itemCount }, (_, index) => `
+      <div class="mr-match-row" data-local-match-key="match-${index}"><span>${iteration}-${index}</span></div>
+    `).join('')}`;
+  dialog.patchLocalMatchesContainer(localContainer, localHtml(0));
+  const localFirstRow = localContainer.firstElementChild;
+  const localMs = benchmark('local match patcher', iteration => {
+    dialog.patchLocalMatchesContainer(localContainer, localHtml(iteration));
+  });
+  assert.strictEqual(localContainer.firstElementChild, localFirstRow);
+
+  const progressContainer = window.document.createElement('div');
+  const progressHtml = iteration => `
+    <div class="mr-download-section">
+      <div class="mr-status-inline"><span class="mr-download-info">Loading ${iteration}</span></div>
+      <div class="mr-progress-bar"><div class="mr-progress-fill" style="width:${iteration}%"></div></div>
+      <div class="mr-progress-text"><span>${iteration} / 100</span><span>${iteration}%</span></div>
+    </div>`;
+  dialog.patchLoadedModelsProgress(progressContainer, progressHtml(0));
+  const progressRoot = progressContainer.firstElementChild;
+  const progressMs = benchmark('loaded progress patcher', iteration => {
+    dialog.patchLoadedModelsProgress(progressContainer, progressHtml(iteration));
+  });
+  assert.strictEqual(progressContainer.firstElementChild, progressRoot);
+
+  const downloadsCurrent = elementFromHtml(`
+    <div class="mr-downloads-panel" data-downloads-view="active">
+      ${Array.from({ length: itemCount }, (_, index) => `
+        <div class="mr-download-queue-item" data-download-id="download-${index}"><span>0%</span></div>
+      `).join('')}
+    </div>`);
+  const downloadsFirstCard = downloadsCurrent.firstElementChild;
+  const downloadsMs = benchmark('downloads panel patcher', iteration => {
+    const downloadsNext = elementFromHtml(`
+      <div class="mr-downloads-panel" data-downloads-view="active">
+        ${Array.from({ length: itemCount }, (_, index) => `
+          <div class="mr-download-queue-item" data-download-id="download-${index}"><span>${iteration}%</span></div>
+        `).join('')}
+      </div>`);
+    dialog.patchDownloadsPanelElement(downloadsCurrent, downloadsNext);
+  });
+  assert.strictEqual(downloadsCurrent.firstElementChild, downloadsFirstCard);
+
+  console.info(
+    `[dom-benchmark] search=${searchMs.toFixed(1)}ms `
+      + `local=${localMs.toFixed(1)}ms `
+      + `progress=${progressMs.toFixed(1)}ms `
+      + `downloads=${downloadsMs.toFixed(1)}ms `
+      + `(${itemCount} items x ${iterations} updates)`
+  );
 });
