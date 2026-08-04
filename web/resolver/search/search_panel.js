@@ -1109,7 +1109,7 @@ export const searchPanelMethods = {
                     ? `<button type="button" class="mr-search-result-action-btn mr-search-progress-retry" data-source="${this.escapeHtml(source)}" data-tooltip="Retry ${this.escapeHtml(label)} search" aria-label="Retry ${this.escapeHtml(label)} search">${getSvgIcon('refreshCw')}</button>`
                     : '';
                 html += `
-                    <div class="mr-search-progress-item mr-search-progress-${statusClass}" data-tooltip="${this.escapeHtml(title)}">
+                    <div class="mr-search-progress-item mr-search-progress-${statusClass}" data-search-progress-source="${this.escapeHtml(source)}" data-tooltip="${this.escapeHtml(title)}">
                         <span class="mr-search-progress-source">${this.escapeHtml(label)}</span>
                         <span class="mr-search-progress-status">${this.escapeHtml(statusLabel)}</span>
                         ${retryButton}
@@ -1142,7 +1142,7 @@ export const searchPanelMethods = {
                 ? `<button type="button" class="mr-search-result-action-btn mr-search-progress-retry" data-source="${this.escapeHtml(source)}" data-tooltip="Retry ${this.escapeHtml(label)} search" aria-label="Retry ${this.escapeHtml(label)} search">${getSvgIcon('refreshCw')}</button>`
                 : '';
             html += `
-                <div class="mr-search-progress-item mr-search-progress-${statusClass}"${title}>
+                <div class="mr-search-progress-item mr-search-progress-${statusClass}" data-search-progress-source="${this.escapeHtml(source)}"${title}>
                     <div class="mr-search-progress-head">
                         <span class="mr-search-progress-source">${this.escapeHtml(label)}</span>
                         <span class="mr-search-progress-status">${this.escapeHtml(statusLabel)}</span>
@@ -1852,8 +1852,9 @@ export const searchPanelMethods = {
                 actions = '<span class="mr-search-result-empty">-</span>';
             }
 
+            const resultKey = row.__searchResultKey || `${row.sourceKey}:${row.downloadUrl || row.openUrl || `${row.model}:${row.filename}`}`;
             html += `
-                <tr>
+                <tr data-search-result-key="${this.escapeHtml(encodeURIComponent(String(resultKey)))}">
                     <td>${sourcePill}</td>
                     <td>
                         <div class="mr-search-result-model" data-tooltip="${modelTitle}"${this.getContextMenuAttrs(detailsContext)}>

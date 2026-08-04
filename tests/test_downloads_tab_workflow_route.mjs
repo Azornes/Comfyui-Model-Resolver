@@ -5728,6 +5728,37 @@ test('search result table exposes linked local hash targets for exact matches', 
   assert.match(html, />Exact<\/span>/);
 });
 
+test('search result refreshes preserve keyed progress and result DOM', () => {
+  const displaySearchResults = extractMethod(resolveDownloadMethodsSource, 'displaySearchResults');
+  const patchSearchResultsContainer = extractMethod(
+    resolveDownloadMethodsSource,
+    'patchSearchResultsContainer'
+  );
+  const patchSearchProgressElement = extractMethod(
+    resolveDownloadMethodsSource,
+    'patchSearchProgressElement'
+  );
+  const patchSearchResultsTable = extractMethod(
+    resolveDownloadMethodsSource,
+    'patchSearchResultsTable'
+  );
+  const wireSearchDownloadButtons = extractMethod(
+    resolveDownloadMethodsSource,
+    'wireSearchDownloadButtons'
+  );
+
+  assert.match(displaySearchResults, /patchSearchResultsContainer\(/);
+  assert.doesNotMatch(displaySearchResults, /container\.innerHTML\s*=/);
+  assert.match(patchSearchProgressElement, /data-search-progress-source|searchProgressSource/);
+  assert.match(patchSearchResultsTable, /data-search-result-key|searchResultKey/);
+  assert.match(wireSearchDownloadButtons, /mlSearchDownloadBound/);
+  assert.match(wireSearchDownloadButtons, /mlSearchOpenPageBound/);
+  assert.match(wireSearchDownloadButtons, /mlSearchDetailsBound/);
+  assert.match(resolveDownloadMethodsSource, /rows\.push\(\{ \.\.\.row, __searchResultKey: rowKey \}\)/);
+  assert.match(searchPanelMethodsSource, /data-search-progress-source=/);
+  assert.match(searchPanelMethodsSource, /data-search-result-key=/);
+});
+
 test('source model details file selection includes selected file hash metadata', () => {
   const renderSourceModelDetailsFiles = eval(`(${extractMethod(modelInfoMethodsSource, 'renderSourceModelDetailsFiles')})`);
   const sha256 = 'a'.repeat(64);

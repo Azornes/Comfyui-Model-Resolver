@@ -2798,6 +2798,8 @@ export const resolveDownloadMethods = {
 
         const downloadBtns = container.querySelectorAll('.search-download-btn');
         downloadBtns.forEach(btn => {
+            if (btn.dataset.mlSearchDownloadBound === 'true') return;
+            btn.dataset.mlSearchDownloadBound = 'true';
             btn.addEventListener('click', () => {
                 const url = btn.dataset.url;
                 const filename = btn.dataset.filename;
@@ -2824,6 +2826,8 @@ export const resolveDownloadMethods = {
 
         const openPageBtns = container.querySelectorAll('.search-open-page-btn');
         openPageBtns.forEach(btn => {
+            if (btn.dataset.mlSearchOpenPageBound === 'true') return;
+            btn.dataset.mlSearchOpenPageBound = 'true';
             btn.addEventListener('click', () => {
                 const url = btn.dataset.url;
                 if (!url) return;
@@ -2837,6 +2841,8 @@ export const resolveDownloadMethods = {
 
         const detailsBtns = container.querySelectorAll('.search-show-details-btn');
         detailsBtns.forEach(btn => {
+            if (btn.dataset.mlSearchDetailsBound === 'true') return;
+            btn.dataset.mlSearchDetailsBound = 'true';
             btn.addEventListener('click', () => {
                 try {
                     const model = JSON.parse(decodeURIComponent(btn.dataset.model || ''));
@@ -3061,6 +3067,268 @@ export const resolveDownloadMethods = {
         this.wireDownloadTargetAutocomplete(container, missing);
     },
 
+    syncSearchElementAttributes(current, next) {
+        if (!current || !next) return;
+
+        for (const attribute of Array.from(current.attributes || [])) {
+            if (!next.hasAttribute(attribute.name)) {
+                current.removeAttribute(attribute.name);
+            }
+        }
+        for (const attribute of Array.from(next.attributes || [])) {
+            if (current.getAttribute(attribute.name) !== attribute.value) {
+                current.setAttribute(attribute.name, attribute.value);
+            }
+        }
+    },
+
+    patchSearchProgressActions(currentItem, nextItem) {
+        const currentHost = currentItem.querySelector('.mr-search-progress-head') || currentItem;
+        const nextHost = nextItem.querySelector('.mr-search-progress-head') || nextItem;
+        const getActionKey = (button) => {
+            if (button.classList.contains('mr-search-progress-cancel')) return 'cancel';
+            if (button.classList.contains('mr-search-progress-retry')) return 'retry';
+            return '';
+        };
+        const currentButtons = Array.from(currentHost.children)
+            .filter(child => child.tagName === 'BUTTON')
+            .reduce((buttons, button) => {
+                const key = getActionKey(button);
+                if (key) buttons.set(key, button);
+                return buttons;
+            }, new Map());
+        const nextButtons = Array.from(nextHost.children)
+            .filter(child => child.tagName === 'BUTTON');
+        const retainedButtons = new Set();
+
+        for (const nextButton of nextButtons) {
+            const key = getActionKey(nextButton);
+            let currentButton = key ? currentButtons.get(key) : null;
+            if (!currentButton) {
+                currentButton = nextButton.cloneNode(true);
+            } else {
+                this.syncSearchElementAttributes(currentButton, nextButton);
+                if (currentButton.innerHTML !== nextButton.innerHTML) {
+                    currentButton.innerHTML = nextButton.innerHTML;
+                }
+            }
+            retainedButtons.add(currentButton);
+            currentHost.appendChild(currentButton);
+        }
+
+        for (const currentButton of currentButtons.values()) {
+            if (!retainedButtons.has(currentButton)) {
+                currentButton.remove();
+            }
+        }
+    },
+
+    patchSearchProgressItem(current, next) {
+        const currentHead = current.querySelector('.mr-search-progress-head');
+        const nextHead = next.querySelector('.mr-search-progress-head');
+        const currentBar = current.querySelector('.mr-search-progress-bar');
+        const nextBar = next.querySelector('.mr-search-progress-bar');
+        if (
+            Boolean(currentHead) !== Boolean(nextHead)
+            || Boolean(currentBar) !== Boolean(nextBar)
+        ) {
+            return next.cloneNode(true);
+        }
+
+        const currentSource = current.querySelector('.mr-search-progress-source');
+        const nextSource = next.querySelector('.mr-search-progress-source');
+        const currentStatus = current.querySelector('.mr-search-progress-status');
+        const nextStatus = next.querySelector('.mr-search-progress-status');
+        if (!currentSource || !nextSource || !currentStatus || !nextStatus) {
+            return next.cloneNode(true);
+        }
+
+        this.syncSearchElementAttributes(current, next);
+        if (currentSource.textContent !== nextSource.textContent) {
+            currentSource.textContent = nextSource.textContent;
+        }
+        if (currentStatus.textContent !== nextStatus.textContent) {
+            currentStatus.textContent = nextStatus.textContent;
+        }
+
+        if (currentBar && nextBar) {
+            this.syncSearchElementAttributes(currentBar, nextBar);
+            const currentFill = currentBar.querySelector('.mr-search-progress-fill');
+            const nextFill = nextBar.querySelector('.mr-search-progress-fill');
+            if (!currentFill || !nextFill) return next.cloneNode(true);
+            this.syncSearchElementAttributes(currentFill, nextFill);
+        }
+
+        this.patchSearchProgressActions(current, next);
+        return current;
+    },
+
+    patchSearchProgressElement(current, next) {
+        const currentIsCompact = current.classList.contains('mr-search-progress-list-compact');
+        const nextIsCompact = next.classList.contains('mr-search-progress-list-compact');
+        if (currentIsCompact !== nextIsCompact) {
+            return next.cloneNode(true);
+        }
+
+        const currentItems = Array.from(current.children)
+            .filter(child => child.classList.contains('mr-search-progress-item'));
+        const nextItems = Array.from(next.children)
+            .filter(child => child.classList.contains('mr-search-progress-item'));
+        if (currentItems.some(item => !item.dataset.searchProgressSource)) {
+            return next.cloneNode(true);
+        }
+
+        const currentBySource = new Map(
+            currentItems.map(item => [item.dataset.searchProgressSource, item])
+        );
+        const retainedItems = new Set();
+        const nextDomItems = [];
+
+        this.syncSearchElementAttributes(current, next);
+        for (const nextItem of nextItems) {
+            const source = nextItem.dataset.searchProgressSource;
+            let currentItem = currentBySource.get(source);
+            if (!currentItem) {
+                currentItem = nextItem.cloneNode(true);
+            } else {
+                currentItem = this.patchSearchProgressItem(currentItem, nextItem);
+            }
+            retainedItems.add(currentItem);
+            nextDomItems.push(currentItem);
+        }
+
+        for (const currentItem of currentItems) {
+            if (!retainedItems.has(currentItem)) {
+                currentItem.remove();
+            }
+        }
+        nextDomItems.forEach(item => current.appendChild(item));
+        return current;
+    },
+
+    patchSearchResultsTable(current, next) {
+        const currentTable = current.querySelector('.mr-search-results-table');
+        const nextTable = next.querySelector('.mr-search-results-table');
+        const currentBody = currentTable?.querySelector('tbody');
+        const nextBody = nextTable?.querySelector('tbody');
+        if (!currentTable || !nextTable || !currentBody || !nextBody) {
+            return next.cloneNode(true);
+        }
+
+        const currentRows = Array.from(currentBody.children)
+            .filter(child => child.tagName === 'TR');
+        const nextRows = Array.from(nextBody.children)
+            .filter(child => child.tagName === 'TR');
+        if (
+            currentRows.some(row => !row.dataset.searchResultKey)
+            || nextRows.some(row => !row.dataset.searchResultKey)
+        ) {
+            return next.cloneNode(true);
+        }
+
+        const currentByKey = new Map(
+            currentRows.map(row => [row.dataset.searchResultKey, row])
+        );
+        const retainedRows = new Set();
+        const nextDomRows = [];
+
+        this.syncSearchElementAttributes(current, next);
+        this.syncSearchElementAttributes(currentTable, nextTable);
+        for (const nextRow of nextRows) {
+            const key = nextRow.dataset.searchResultKey;
+            let currentRow = currentByKey.get(key);
+            if (!currentRow) {
+                currentRow = nextRow.cloneNode(true);
+            } else {
+                this.syncSearchElementAttributes(currentRow, nextRow);
+                if (currentRow.innerHTML !== nextRow.innerHTML) {
+                    currentRow.innerHTML = nextRow.innerHTML;
+                }
+            }
+            retainedRows.add(currentRow);
+            nextDomRows.push(currentRow);
+        }
+
+        for (const currentRow of currentRows) {
+            if (!retainedRows.has(currentRow)) {
+                currentRow.remove();
+            }
+        }
+        nextDomRows.forEach(row => currentBody.appendChild(row));
+        return current;
+    },
+
+    getSearchResultsPatchKind(element) {
+        if (element.classList.contains('mr-search-progress-list')) return 'progress';
+        if (element.classList.contains('mr-search-results-table-wrap')) return 'table';
+        if (element.classList.contains('mr-status')) return 'status';
+        return 'other';
+    },
+
+    patchSearchResultsContainer(container, renderedHtml = '') {
+        if (!container) return;
+        const documentRef = container.ownerDocument || globalThis.document;
+        if (!documentRef?.createElement) {
+            container.innerHTML = renderedHtml;
+            return;
+        }
+
+        const template = documentRef.createElement('template');
+        template.innerHTML = renderedHtml || '';
+        const nextChildren = Array.from(template.content.children);
+        const currentChildren = Array.from(container.children);
+
+        if (!nextChildren.length) {
+            currentChildren.forEach(child => child.remove());
+            Array.from(container.childNodes)
+                .filter(node => node.nodeType === 3)
+                .forEach(node => node.remove());
+            return;
+        }
+        if (!currentChildren.length) {
+            container.innerHTML = renderedHtml;
+            return;
+        }
+
+        Array.from(container.childNodes)
+            .filter(node => node.nodeType === 3 && !node.textContent.trim())
+            .forEach(node => node.remove());
+
+        const currentByKind = new Map();
+        for (const child of currentChildren) {
+            const kind = this.getSearchResultsPatchKind(child);
+            if (!currentByKind.has(kind)) currentByKind.set(kind, child);
+        }
+
+        const retainedChildren = new Set();
+        const nextDomChildren = [];
+        for (const nextChild of nextChildren) {
+            const kind = this.getSearchResultsPatchKind(nextChild);
+            const currentChild = currentByKind.get(kind);
+            let nextDomChild;
+            if (!currentChild) {
+                nextDomChild = nextChild.cloneNode(true);
+            } else if (kind === 'progress') {
+                nextDomChild = this.patchSearchProgressElement(currentChild, nextChild);
+            } else if (kind === 'table') {
+                nextDomChild = this.patchSearchResultsTable(currentChild, nextChild);
+            } else if (kind === 'status') {
+                nextDomChild = currentChild.outerHTML === nextChild.outerHTML
+                    ? currentChild
+                    : nextChild.cloneNode(true);
+            } else {
+                nextDomChild = nextChild.cloneNode(true);
+            }
+            retainedChildren.add(nextDomChild);
+            nextDomChildren.push(nextDomChild);
+        }
+
+        for (const child of currentChildren) {
+            if (!retainedChildren.has(child)) child.remove();
+        }
+        nextDomChildren.forEach(child => container.appendChild(child));
+    },
+
     /**
      * Display search results
      */
@@ -3102,22 +3370,28 @@ export const resolveDownloadMethods = {
 
         if (!hasResults) {
             if (hasActiveProgress) {
-                container.innerHTML = progressHtml;
+                this.patchSearchResultsContainer(container, progressHtml);
                 this.wireSearchProgressRetryButtons?.(container, missing, state);
                 this.wireSearchProgressCancelButtons?.(container, missing, state);
                 return;
             }
 
             if (state?.lastAttemptError) {
-                container.innerHTML = `${progressHtml}${this.renderStatusMessage(state.lastAttemptError, 'error')}`;
+                this.patchSearchResultsContainer(
+                    container,
+                    `${progressHtml}${this.renderStatusMessage(state.lastAttemptError, 'error')}`
+                );
                 this.wireSearchProgressRetryButtons?.(container, missing, state);
                 this.wireSearchProgressCancelButtons?.(container, missing, state);
                 return;
             }
 
-            container.innerHTML = progressHtml || this.renderStatusMessage(
-                'No matches found online for this model.',
-                'warning'
+            this.patchSearchResultsContainer(
+                container,
+                progressHtml || this.renderStatusMessage(
+                    'No matches found online for this model.',
+                    'warning'
+                )
             );
             this.wireSearchProgressRetryButtons?.(container, missing, state);
             this.wireSearchProgressCancelButtons?.(container, missing, state);
@@ -3143,7 +3417,7 @@ export const resolveDownloadMethods = {
             const rowKey = `${row.sourceKey}:${row.downloadUrl || row.openUrl || `${row.model}:${row.filename}`}`;
             if (rowKeys.has(rowKey)) return;
             rowKeys.add(rowKey);
-            rows.push(row);
+            rows.push({ ...row, __searchResultKey: rowKey });
         };
 
         let statusHtml = '';
@@ -3371,7 +3645,7 @@ export const resolveDownloadMethods = {
         });
 
         const html = `${progressHtml}${statusHtml}${this.renderSearchResultsTable(rows)}`;
-        container.innerHTML = html;
+        this.patchSearchResultsContainer(container, html);
 
         this.wireSearchProgressCancelButtons?.(container, missing, state);
         this.wireSearchProgressRetryButtons?.(container, missing, state);
