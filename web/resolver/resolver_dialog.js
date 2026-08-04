@@ -60,6 +60,7 @@ export class ResolverManagerDialog extends ComfyDialog {
         this.urnResolvePromises = new Map();
         this.urnLocalMatchPromises = new Map();
         this.localMatchRefreshTokens = new Map();
+        this.searchUiRefreshFrames = new Map();
         this.cachedAnalysisData = null;
         this.cachedWorkflowSignature = null;
         this.cachedLoadedModelsData = null;

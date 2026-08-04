@@ -763,6 +763,7 @@ export const workflowStateMethods = {
         this.urnResolvePromises.clear();
         this.urnLocalMatchPromises.clear();
         this.localMatchRefreshTokens?.clear();
+        this.searchUiRefreshFrames?.clear();
         this.downloadTargetSelections?.clear();
         this.pendingResolutions = [];
         this.rebuildPendingIndex();

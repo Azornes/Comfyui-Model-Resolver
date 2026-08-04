@@ -474,7 +474,41 @@ export const searchPanelMethods = {
         }
     },
 
+    scheduleSearchUiRefresh(missing, state = null, { workflowKey } = {}) {
+        if (!missing) return;
+        if (!(this.searchUiRefreshFrames instanceof Map)) {
+            this.searchUiRefreshFrames = new Map();
+        }
+
+        const activeWorkflowKey = workflowKey || this.getWorkflowScopedQueueKey();
+        const missingSearchKey = this.getMissingSearchKey(missing);
+        const key = `${activeWorkflowKey || 'workflow'}:${missingSearchKey}`;
+        const previous = this.searchUiRefreshFrames.get(key);
+        if (previous) {
+            previous.cancel(previous.handle);
+        }
+
+        const requestFrame = typeof globalThis.requestAnimationFrame === 'function'
+            ? callback => globalThis.requestAnimationFrame(callback)
+            : callback => setTimeout(callback, 0);
+        const cancelFrame = typeof globalThis.cancelAnimationFrame === 'function'
+            ? handle => globalThis.cancelAnimationFrame(handle)
+            : handle => clearTimeout(handle);
+        let handle = null;
+        handle = requestFrame(() => {
+            const scheduled = this.searchUiRefreshFrames.get(key);
+            if (!scheduled || scheduled.handle !== handle) return;
+            this.searchUiRefreshFrames.delete(key);
+            this.refreshSearchUiForMissingNow(missing, state, { workflowKey: activeWorkflowKey });
+        });
+        this.searchUiRefreshFrames.set(key, { handle, cancel: cancelFrame });
+    },
+
     refreshSearchUiForMissing(missing, state = null, { workflowKey = this.getWorkflowScopedQueueKey() } = {}) {
+        this.scheduleSearchUiRefresh(missing, state, { workflowKey });
+    },
+
+    refreshSearchUiForMissingNow(missing, state = null, { workflowKey = this.getWorkflowScopedQueueKey() } = {}) {
         if (!missing) return;
         const activeWorkflowKey = this.getWorkflowScopedQueueKey();
         const missingSearchKey = this.getMissingSearchKey(missing);

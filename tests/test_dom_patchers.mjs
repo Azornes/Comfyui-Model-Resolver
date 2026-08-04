@@ -54,6 +54,7 @@ const wireSearchDownloadButtons = eval(`(${extractMethod(resolveDownloadMethodsS
 const patchLocalMatchesContainer = eval(`(${extractMethod(resolveDownloadMethodsSource, 'patchLocalMatchesContainer')})`);
 const resolveUrnAsync = eval(`(${extractMethod(resolveDownloadMethodsSource, 'resolveUrnAsync')})`);
 const fetchUrnLocalMatches = eval(`(${extractMethod(searchPanelMethodsSource, 'fetchUrnLocalMatches')})`);
+const scheduleSearchUiRefresh = eval(`(${extractMethod(searchPanelMethodsSource, 'scheduleSearchUiRefresh')})`);
 const patchQueuedSelections = eval(`(${extractMethod(queueMethodsSource, 'patchQueuedSelections')})`);
 const patchDownloadsPanelElement = eval(`(${extractMethod(queueMethodsSource, 'patchDownloadsPanelElement')})`);
 const patchLoadedModelsProgress = eval(`(${extractMethod(renderFormatMethodsSource, 'patchLoadedModelsProgress')})`);
@@ -332,4 +333,53 @@ test('URN local matches use the filename as part of the in-flight request identi
 
   assert.deepEqual(missing.matches, [{ filename: 'new.safetensors' }]);
   assert.equal(missing.__urnLocalMatchesFilename, 'new.safetensors');
+});
+
+test('search UI refreshes coalesce within one animation frame', () => {
+  const previousRequestAnimationFrame = globalThis.requestAnimationFrame;
+  const previousCancelAnimationFrame = globalThis.cancelAnimationFrame;
+  const frames = new Map();
+  let nextFrameId = 0;
+  globalThis.requestAnimationFrame = callback => {
+    const id = ++nextFrameId;
+    frames.set(id, callback);
+    return id;
+  };
+  globalThis.cancelAnimationFrame = id => frames.delete(id);
+
+  try {
+    const refreshCalls = [];
+    const dialog = {
+      searchUiRefreshFrames: new Map(),
+      getWorkflowScopedQueueKey() {
+        return 'workflow-1';
+      },
+      getMissingSearchKey() {
+        return 'missing-1';
+      },
+      refreshSearchUiForMissingNow(missing, state, options) {
+        refreshCalls.push({ missing, state, options });
+      },
+    };
+    const missing = { name: 'model.safetensors' };
+    const firstState = { sourceProgress: { civitai: { percent: 10 } } };
+    const latestState = { sourceProgress: { civitai: { percent: 70 } } };
+
+    scheduleSearchUiRefresh.call(dialog, missing, firstState);
+    scheduleSearchUiRefresh.call(dialog, missing, latestState);
+
+    assert.equal(frames.size, 1);
+    assert.equal(refreshCalls.length, 0);
+    const [frameId] = frames.keys();
+    frames.get(frameId)();
+
+    assert.equal(refreshCalls.length, 1);
+    assert.equal(refreshCalls[0].state, latestState);
+    assert.equal(refreshCalls[0].options.workflowKey, 'workflow-1');
+  } finally {
+    if (previousRequestAnimationFrame === undefined) delete globalThis.requestAnimationFrame;
+    else globalThis.requestAnimationFrame = previousRequestAnimationFrame;
+    if (previousCancelAnimationFrame === undefined) delete globalThis.cancelAnimationFrame;
+    else globalThis.cancelAnimationFrame = previousCancelAnimationFrame;
+  }
 });
