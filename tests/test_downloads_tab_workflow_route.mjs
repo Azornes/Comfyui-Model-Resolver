@@ -2150,6 +2150,10 @@ test('content-preserving Missing Models refresh patches the browser instead of c
     missingBrowserMethodsSource,
     'setupMissingModelsVirtualizer'
   );
+  const destroyMissingModelsVirtualizer = extractMethod(
+    missingBrowserMethodsSource,
+    'destroyMissingModelsVirtualizer'
+  );
   const displayMissingModels = extractMethod(
     missingBrowserMethodsSource,
     'displayMissingModels'
@@ -2175,6 +2179,18 @@ test('content-preserving Missing Models refresh patches the browser instead of c
     setupMissingModelsVirtualizer,
     /rowsHost\.innerHTML/
   );
+  assert.match(
+    destroyMissingModelsVirtualizer,
+    /removeEventListener\('scroll', state\.onScroll\)/
+  );
+  assert.match(
+    destroyMissingModelsVirtualizer,
+    /resizeObserver\?\.disconnect\?\./
+  );
+  assert.match(
+    destroyMissingModelsVirtualizer,
+    /_mrMissingVirtualState = null/
+  );
   assert.doesNotMatch(
     patchMissingModelsBrowserElement,
     /currentBrowser\.replaceWith\(nextBrowser\)/
@@ -2197,7 +2213,7 @@ test('content-preserving Missing Models refresh patches the browser instead of c
   );
   assert.match(
     displayMissingModels,
-    /if \(!browserPatched\) \{\s*container\.innerHTML = browserHtml;/
+    /if \(!browserPatched\) \{\s*this\.destroyMissingModelsVirtualizer\(container\);\s*container\.innerHTML = browserHtml;/
   );
 });
 

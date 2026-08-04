@@ -514,6 +514,26 @@ export const missingBrowserMethods = {
         list?._mrMissingVirtualState?.update?.(force);
     },
 
+    destroyMissingModelsVirtualizer(container) {
+        const list = container?.matches?.('.mr-missing-list')
+            ? container
+            : container?.querySelector?.('.mr-missing-list');
+        const state = list?._mrMissingVirtualState;
+        if (!state) return false;
+
+        if (state.onScroll) {
+            list.removeEventListener('scroll', state.onScroll);
+        }
+        state.resizeObserver?.disconnect?.();
+        if (state.animationFrame) {
+            cancelAnimationFrame(state.animationFrame);
+            state.animationFrame = null;
+        }
+        state.destroyed = true;
+        list._mrMissingVirtualState = null;
+        return true;
+    },
+
     getMissingBrowserVirtualRowHeight(list = null) {
         const target = list instanceof HTMLElement
             ? list
@@ -607,6 +627,9 @@ export const missingBrowserMethods = {
         }
 
         const existingState = list._mrMissingVirtualState;
+        if (existingState && existingState.rowsHost !== rowsHost) {
+            this.destroyMissingModelsVirtualizer(list);
+        }
         const state = existingState && existingState.rowsHost === rowsHost
             ? existingState
             : {
@@ -620,6 +643,8 @@ export const missingBrowserMethods = {
                 end: -1,
                 resizeObserver: null,
                 onScroll: null,
+                animationFrame: null,
+                destroyed: false,
                 update: null
             };
 
@@ -629,7 +654,7 @@ export const missingBrowserMethods = {
         state.virtualScroll.style.height = `${Math.max(0, sortedMissingModels.length * state.rowHeight)}px`;
 
         state.update = (force = false) => {
-            if (!list.isConnected || !rowsHost.isConnected) return;
+            if (state.destroyed || !list.isConnected || !rowsHost.isConnected) return;
 
             const rowHeight = state.rowHeight || MISSING_ROW_FALLBACK_HEIGHT;
             const header = list.querySelector('.mr-missing-list-head');
@@ -2428,12 +2453,14 @@ export const missingBrowserMethods = {
         }
 
         if (!hasAnyModelsToDisplay && activeCount === 0) {
+            this.destroyMissingModelsVirtualizer(container);
             container.innerHTML = this.renderStatusMessage('All models are available! No missing models found.', 'success');
             return;
         }
 
         // If no missing models but downloads are active, show a waiting message
         if (rawMissingCount === 0 && activeCount > 0 && !resolvedModels.length) {
+            this.destroyMissingModelsVirtualizer(container);
             container.innerHTML = this.renderStatusMessage(
                 `${activeCount} download${activeCount > 1 ? 's' : ''} in progress. Local matches will refresh when complete.`,
                 'info'
@@ -2455,6 +2482,7 @@ export const missingBrowserMethods = {
             const keepCurrentBrowser = preserveBrowser
                 && Boolean(container.querySelector('.mr-missing-browser'));
             if (!keepCurrentBrowser) {
+                this.destroyMissingModelsVirtualizer(container);
                 container.innerHTML = this.renderStatusMessage('Loading model folders...', 'info');
             }
 
@@ -2574,6 +2602,7 @@ export const missingBrowserMethods = {
         const browserPatched = options.preserveBrowser
             && this.patchMissingModelsBrowserElement(container, browserHtml);
         if (!browserPatched) {
+            this.destroyMissingModelsVirtualizer(container);
             container.innerHTML = browserHtml;
         }
         this.wireMissingModelsBrowser(container, data, sortedMissingModels);
