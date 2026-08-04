@@ -3,6 +3,11 @@ import path from 'node:path';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Window } from 'happy-dom';
+import {
+  bindEventOnce,
+  setTextIfChanged,
+  syncElementAttributes,
+} from '../web/resolver/utils/dom_patch_utils.js';
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
 const resolveDownloadMethodsSource = fs.readFileSync(
@@ -58,6 +63,31 @@ const scheduleSearchUiRefresh = eval(`(${extractMethod(searchPanelMethodsSource,
 const patchQueuedSelections = eval(`(${extractMethod(queueMethodsSource, 'patchQueuedSelections')})`);
 const patchDownloadsPanelElement = eval(`(${extractMethod(queueMethodsSource, 'patchDownloadsPanelElement')})`);
 const patchLoadedModelsProgress = eval(`(${extractMethod(renderFormatMethodsSource, 'patchLoadedModelsProgress')})`);
+
+test('shared DOM helpers synchronize attributes, text, and one-time listeners', () => {
+  const window = new Window();
+  const current = window.document.createElement('button');
+  const next = window.document.createElement('button');
+  current.setAttribute('class', 'old');
+  current.setAttribute('data-stale', '1');
+  next.setAttribute('class', 'new');
+  next.setAttribute('data-value', '2');
+
+  syncElementAttributes(current, next);
+  assert.equal(current.getAttribute('class'), 'new');
+  assert.equal(current.hasAttribute('data-stale'), false);
+  assert.equal(current.getAttribute('data-value'), '2');
+
+  assert.equal(setTextIfChanged(current, 'Ready'), true);
+  assert.equal(setTextIfChanged(current, 'Ready'), false);
+
+  let clicks = 0;
+  const handler = () => { clicks += 1; };
+  assert.equal(bindEventOnce(current, 'click', handler, 'ready'), true);
+  assert.equal(bindEventOnce(current, 'click', handler, 'ready'), false);
+  current.click();
+  assert.equal(clicks, 1);
+});
 
 function createDialog(window) {
   return {
