@@ -2,6 +2,7 @@ import { app } from "../../../../../scripts/app.js";
 import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
 import { startSplitterDrag } from "../utils/splitter_drag.js";
+import { syncElementAttributes } from "../utils/dom_patch_utils.js";
 const FOOTER_VERSION_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const FOOTER_VERSION_FAILURE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -1047,19 +1048,6 @@ export const queueMethods = {
     },
 
     patchDownloadsPanelElement(currentElement, nextElement) {
-        const syncAttributes = (current, next) => {
-            const nextAttributeNames = new Set(Array.from(next.attributes || [], attribute => attribute.name));
-            for (const attribute of Array.from(next.attributes || [])) {
-                if (current.getAttribute(attribute.name) !== attribute.value) {
-                    current.setAttribute(attribute.name, attribute.value);
-                }
-            }
-            for (const attribute of Array.from(current.attributes || [])) {
-                if (!nextAttributeNames.has(attribute.name)) {
-                    current.removeAttribute(attribute.name);
-                }
-            }
-        };
         const getNodeKey = (node) => {
             if (node?.nodeType !== 1) return '';
             if (!node.classList?.contains('mr-download-queue-item')) return '';
@@ -1085,7 +1073,7 @@ export const queueMethods = {
                 return current;
             }
 
-            syncAttributes(current, next);
+            syncElementAttributes(current, next);
             patchChildren(current, next);
             return current;
         };

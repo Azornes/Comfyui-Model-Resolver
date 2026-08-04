@@ -1,5 +1,6 @@
 import { api } from "../../../../../scripts/api.js";
 import { escapeHtml, escapeJsString, getFilenameFromPath, pollBackgroundTask } from "./html_utils.js";
+import { syncElementAttributes, setTextIfChanged } from "./dom_patch_utils.js";
 
 export const renderFormatMethods = {
     escapeHtml,
@@ -237,16 +238,6 @@ export const renderFormatMethods = {
             return;
         }
 
-        const syncAttributes = (current, next) => {
-            for (const attribute of Array.from(current.attributes || [])) {
-                if (!next.hasAttribute(attribute.name)) current.removeAttribute(attribute.name);
-            }
-            for (const attribute of Array.from(next.attributes || [])) {
-                if (current.getAttribute(attribute.name) !== attribute.value) {
-                    current.setAttribute(attribute.name, attribute.value);
-                }
-            }
-        };
         const currentInfo = Array.from(currentRoot.querySelectorAll('.mr-download-info'));
         const nextInfo = Array.from(nextRoot.querySelectorAll('.mr-download-info'));
         const currentProgressBar = currentRoot.querySelector('.mr-progress-bar');
@@ -265,22 +256,18 @@ export const renderFormatMethods = {
             || currentProgressText.length !== nextProgressText.length
         ) {
             currentRoot.innerHTML = nextRoot.innerHTML;
-            syncAttributes(currentRoot, nextRoot);
+            syncElementAttributes(currentRoot, nextRoot);
             return;
         }
 
-        syncAttributes(currentRoot, nextRoot);
+        syncElementAttributes(currentRoot, nextRoot);
         currentInfo.forEach((element, index) => {
-            if (element.textContent !== nextInfo[index].textContent) {
-                element.textContent = nextInfo[index].textContent;
-            }
+            setTextIfChanged(element, nextInfo[index].textContent);
         });
-        syncAttributes(currentProgressBar, nextProgressBar);
-        syncAttributes(currentProgressFill, nextProgressFill);
+        syncElementAttributes(currentProgressBar, nextProgressBar);
+        syncElementAttributes(currentProgressFill, nextProgressFill);
         currentProgressText.forEach((element, index) => {
-            if (element.textContent !== nextProgressText[index].textContent) {
-                element.textContent = nextProgressText[index].textContent;
-            }
+            setTextIfChanged(element, nextProgressText[index].textContent);
         });
     },
 

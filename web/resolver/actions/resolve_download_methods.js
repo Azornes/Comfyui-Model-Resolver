@@ -4,6 +4,7 @@ import { getModelCardUrl, parseHuggingFaceFileUrl } from "../utils/url_utils.js"
 import { getCivitaiModelUrl } from "../globals.js";
 import { normalizeSha256 } from "../utils/hash_utils.js";
 import { normalizePathIdentity } from "../utils/html_utils.js";
+import { syncElementAttributes } from "../utils/dom_patch_utils.js";
 const log = createModuleLogger('resolve_download_methods');
 
 export const resolveDownloadMethods = {
@@ -3268,18 +3269,7 @@ export const resolveDownloadMethods = {
     },
 
     syncSearchElementAttributes(current, next) {
-        if (!current || !next) return;
-
-        for (const attribute of Array.from(current.attributes || [])) {
-            if (!next.hasAttribute(attribute.name)) {
-                current.removeAttribute(attribute.name);
-            }
-        }
-        for (const attribute of Array.from(next.attributes || [])) {
-            if (current.getAttribute(attribute.name) !== attribute.value) {
-                current.setAttribute(attribute.name, attribute.value);
-            }
-        }
+        return syncElementAttributes(current, next);
     },
 
     patchSearchProgressActions(currentItem, nextItem) {
