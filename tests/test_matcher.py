@@ -1,4 +1,6 @@
 import unittest
+from unittest.mock import patch
+
 from core.matcher import (
     build_filename_search_queries,
     calculate_archived_model_confidence,
@@ -8,8 +10,8 @@ from core.matcher import (
     normalize_filename,
     normalize_model_family_filename,
 )
-from core.sources.model_list import search_model_list, search_model_list_multiple
 from core.progress import report_progress
+from core.sources.model_list import search_model_list, search_model_list_multiple
 from core.type_utils import (
     MODEL_CONTAINER_SUFFIXES,
     MODEL_VARIANT_SUFFIXES,
@@ -21,6 +23,8 @@ from core.type_utils import (
     as_list,
     format_size_bytes,
 )
+
+
 class MatcherTests(unittest.TestCase):
     def test_normalize_filename_removes_extension_and_converts_lowercase(self):
         self.assertEqual("test model", normalize_filename("Test_Model.safetensors"))
@@ -170,6 +174,51 @@ class MatcherTests(unittest.TestCase):
             search_model_list_multiple("nonexistent_model_name_xyz.safetensors")
         except Exception as e:
             self.fail(f"search_model_list failed with exception: {e}")
+
+    def test_model_list_result_fields_preserve_match_mode_contracts(self):
+        models = [
+            {
+                "filename": "exact.safetensors",
+                "url": "https://example.test/exact",
+                "name": "Exact model",
+                "type": "checkpoints",
+                "save_path": "checkpoints",
+                "size": "12 MB",
+            },
+            {
+                "filename": "target-model.safetensors",
+                "url": "https://example.test/target",
+                "name": "Target model",
+                "type": "loras",
+                "save_path": "loras",
+                "size": 24,
+            },
+        ]
+
+        with patch("core.sources.model_list._load_model_list", return_value=models):
+            exact = search_model_list("exact.safetensors", exact_only=True)
+            fuzzy = search_model_list("target-model-extra.safetensors")
+            multiple = search_model_list_multiple("exact", limit=1)
+
+        self.assertEqual(
+            exact,
+            {
+                "source": "model_list",
+                "filename": "exact.safetensors",
+                "url": "https://example.test/exact",
+                "name": "Exact model",
+                "type": "checkpoints",
+                "directory": "checkpoints",
+                "size": "12 MB",
+                "match_type": "exact",
+            },
+        )
+        self.assertEqual(fuzzy["filename"], "target-model.safetensors")
+        self.assertEqual(fuzzy["match_type"], "fuzzy")
+        self.assertIn("confidence", fuzzy)
+        self.assertEqual(multiple[0]["filename"], "exact.safetensors")
+        self.assertIn("confidence", multiple[0])
+        self.assertNotIn("match_type", multiple[0])
 
     def test_build_filename_search_queries(self):
         # Verify that common precisions are extracted correctly

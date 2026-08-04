@@ -177,6 +177,18 @@ def update_model_list_from_remote() -> Dict[str, Any]:
 
 
 
+def _build_model_list_result(model: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "source": "model_list",
+        "filename": model.get("filename", ""),
+        "url": model.get("url", ""),
+        "name": model.get("name", ""),
+        "type": model.get("type", ""),
+        "directory": model.get("save_path", "checkpoints"),
+        "size": model.get("size", ""),
+    }
+
+
 def search_model_list(
     filename: str, exact_only: bool = False
 ) -> Optional[Dict[str, Any]]:
@@ -207,13 +219,7 @@ def search_model_list(
             url = model.get("url", "")
             if url:
                 return {
-                    "source": "model_list",
-                    "filename": model_filename,
-                    "url": url,
-                    "name": model.get("name", ""),
-                    "type": model.get("type", ""),
-                    "directory": model.get("save_path", "checkpoints"),
-                    "size": model.get("size", ""),
+                    **_build_model_list_result(model),
                     "match_type": "exact",
                 }
 
@@ -237,13 +243,7 @@ def search_model_list(
             if url:
                 score = calculate_similarity(filename_norm, normalize_filename(model_filename))
                 return {
-                    "source": "model_list",
-                    "filename": model_filename,
-                    "url": url,
-                    "name": model.get("name", ""),
-                    "type": model.get("type", ""),
-                    "directory": model.get("save_path", "checkpoints"),
-                    "size": model.get("size", ""),
+                    **_build_model_list_result(model),
                     "match_type": "fuzzy",
                     "confidence": round(score * 100, 1),
                 }
@@ -265,13 +265,7 @@ def search_model_list(
             if url:
                 best_score = score
                 best_match = {
-                    "source": "model_list",
-                    "filename": model_filename,
-                    "url": url,
-                    "name": model.get("name", ""),
-                    "type": model.get("type", ""),
-                    "directory": model.get("save_path", "checkpoints"),
-                    "size": model.get("size", ""),
+                    **_build_model_list_result(model),
                     "match_type": "similar",
                     "confidence": round(score * 100, 1),
                 }
@@ -310,13 +304,7 @@ def search_model_list_multiple(filename: str, limit: int = 5) -> List[Dict[str, 
             if url:
                 results.append(
                     {
-                        "source": "model_list",
-                        "filename": model_filename,
-                        "url": url,
-                        "name": model.get("name", ""),
-                        "type": model.get("type", ""),
-                        "directory": model.get("save_path", "checkpoints"),
-                        "size": model.get("size", ""),
+                        **_build_model_list_result(model),
                         "confidence": round(score * 100, 1),
                     }
                 )
