@@ -9,6 +9,7 @@ import posixpath
 import re
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import quote, urlparse
 
@@ -36,7 +37,7 @@ HF_API_URL = "https://huggingface.co/api"
 HF_AUTHOR_FALLBACKS = ["Comfy-Org", "Kijai"]
 BRAVE_SEARCH_API_URL = "https://api.search.brave.com/res/v1/web/search"
 HF_AUTHOR_INDEX_CACHE_TTL_SECONDS = 24 * 60 * 60
-HF_AUTHOR_INDEX_CACHE_VERSION = 1
+HF_AUTHOR_INDEX_CACHE_VERSION = 2
 
 HF_AUTHOR_INDEX_CACHE_PATH = os.path.join(
     METADATA_DIR, "huggingface-author-index.json"
@@ -174,6 +175,7 @@ def _build_author_index_from_models(
 ) -> Dict[str, Any]:
     files = []
     repo_ids = []
+    hash_count = 0
 
     for repo in repos:
         repo_id = repo.get("id", "")
@@ -186,12 +188,17 @@ def _build_author_index_from_models(
             if not file_path:
                 continue
 
+            sha256 = _extract_huggingface_file_sha256(sibling)
+            if sha256:
+                hash_count += 1
+
             files.append(
                 {
                     "repo_id": repo_id,
                     "path": file_path,
                     "filename": get_filename_from_path(file_path),
                     "size": sibling.get("size"),
+                    "sha256": sha256,
                 }
             )
 
@@ -200,9 +207,88 @@ def _build_author_index_from_models(
         "updated_at": time.time(),
         "repo_count": len(repo_ids),
         "file_count": len(files),
+        "hash_count": hash_count,
         "repos": repo_ids,
         "files": files,
     }
+
+
+def _is_huggingface_hash_candidate_path(file_path: str) -> bool:
+    return str(file_path or "").lower().endswith(
+        (
+            ".safetensors",
+            ".ckpt",
+            ".pt",
+            ".pth",
+            ".bin",
+            ".gguf",
+            ".onnx",
+        )
+    )
+
+
+def _enrich_author_index_with_repo_trees(
+    index: Dict[str, Any], headers: Dict[str, str]
+) -> Dict[str, Any]:
+    """Add SHA-256 values from repository tree responses to an author index."""
+    files_by_repo_path = {}
+    for file_info in index.get("files") or []:
+        repo_id = file_info.get("repo_id", "")
+        file_path = file_info.get("path", "")
+        if (
+            repo_id
+            and file_path
+            and _is_huggingface_hash_candidate_path(file_path)
+            and not _extract_huggingface_file_sha256(file_info)
+        ):
+            files_by_repo_path[(repo_id, file_path)] = file_info
+
+    repo_ids = sorted({repo_id for repo_id, _ in files_by_repo_path})
+    if not repo_ids:
+        index["hash_count"] = sum(
+            1
+            for file_info in index.get("files") or []
+            if _extract_huggingface_file_sha256(file_info)
+        )
+        return index
+
+    def fetch_repo_tree(repo_id: str):
+        return repo_id, _get_repo_tree(repo_id, headers=headers)
+
+    max_workers = min(8, len(repo_ids))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(fetch_repo_tree, repo_id): repo_id
+            for repo_id in repo_ids
+        }
+        for future in as_completed(futures):
+            repo_id = futures[future]
+            try:
+                _, tree = future.result()
+            except Exception as e:
+                log.debug(
+                    f"HuggingFace author index tree failed repo={repo_id}: {e}"
+                )
+                continue
+
+            for tree_file in tree or []:
+                file_path = tree_file.get("path", "")
+                file_info = files_by_repo_path.get((repo_id, file_path))
+                if not file_info:
+                    continue
+
+                sha256 = _extract_huggingface_file_sha256(tree_file)
+                if sha256:
+                    file_info["sha256"] = sha256
+                if file_info.get("size") is None:
+                    file_info["size"] = extract_file_size(tree_file)
+
+    index["hash_count"] = sum(
+        1
+        for file_info in index.get("files") or []
+        if _extract_huggingface_file_sha256(file_info)
+    )
+    return index
 
 
 def _fetch_author_index(author: str, headers: Dict[str, str], limit: int = 200):
@@ -218,8 +304,11 @@ def _fetch_author_index(author: str, headers: Dict[str, str], limit: int = 200):
             return None
 
         index = _build_author_index_from_models(author, repos)
+        index = _enrich_author_index_with_repo_trees(index, headers=headers)
         log.info(
-            f"HuggingFace author index refreshed for author={author}: repos={index['repo_count']}, files={index['file_count']}"
+            f"HuggingFace author index refreshed for author={author}: "
+            f"repos={index['repo_count']}, files={index['file_count']}, "
+            f"hashes={index['hash_count']}"
         )
         return index
     except Exception as e:
@@ -281,6 +370,7 @@ def get_author_fallback_index_status(author: str = "Comfy-Org") -> Dict[str, Any
         "stale": bool(index) and not _is_author_index_fresh(index),
         "repo_count": index.get("repo_count", 0) if isinstance(index, dict) else 0,
         "file_count": index.get("file_count", 0) if isinstance(index, dict) else 0,
+        "hash_count": index.get("hash_count", 0) if isinstance(index, dict) else 0,
     }
 
 
@@ -308,6 +398,7 @@ def get_known_author_fallback_indexes_status() -> Dict[str, Any]:
         or any(bool(status["stale"]) for status in author_statuses),
         "repo_count": sum(int(status["repo_count"]) for status in author_statuses),
         "file_count": sum(int(status["file_count"]) for status in author_statuses),
+        "hash_count": sum(int(status.get("hash_count") or 0) for status in author_statuses),
     }
 
 
@@ -733,8 +824,32 @@ def _find_matching_file_in_author_index(
     filename: str,
     exact_only: bool = False,
     headers: Optional[Dict[str, str]] = None,
+    sha256: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     files = index.get("files") or []
+    requested_sha256 = normalize_sha256(sha256)
+
+    if requested_sha256:
+        for file_info in files:
+            repo_id = file_info.get("repo_id", "")
+            file_path = file_info.get("path", "")
+            if (
+                not repo_id
+                or not file_path
+                or _extract_huggingface_file_sha256(file_info) != requested_sha256
+            ):
+                continue
+
+            return _build_huggingface_result(
+                repo_id,
+                file_path,
+                file_info,
+                "hash",
+                headers=headers,
+            )
+
+        return None
+
     filename_lower = filename.lower()
     filename_base = os.path.splitext(filename_lower)[0]
     partial_match = None
@@ -950,6 +1065,52 @@ def search_huggingface_for_file(
 
         log.info(f"HuggingFace start file={filename} exact={exact_only}")
 
+        cached_author_indexes: Dict[str, Optional[Dict[str, Any]]] = {}
+        if requested_sha256 and use_comfy_org_fallback:
+            total_authors = max(1, len(HF_AUTHOR_FALLBACKS))
+            for author_index, author in enumerate(HF_AUTHOR_FALLBACKS, start=1):
+                _report_progress(
+                    progress_callback,
+                    "author_hash_index",
+                    f"Checking HF hash index {author_index}/{total_authors}",
+                    28 + ((author_index - 1) / total_authors) * 6,
+                    author=author,
+                    author_index=author_index,
+                    author_count=total_authors,
+                )
+                index = _get_author_index(
+                    author,
+                    headers={},
+                    force_refresh=force_refresh,
+                )
+                cached_author_indexes[author] = index
+                if not index:
+                    continue
+
+                result = _find_matching_file_in_author_index(
+                    index,
+                    filename,
+                    exact_only=exact_only,
+                    headers={},
+                    sha256=requested_sha256,
+                )
+                if result:
+                    _search_cache[cache_key] = result
+                    _report_progress(
+                        progress_callback,
+                        "found",
+                        "Found HuggingFace SHA-256 match",
+                        92,
+                        repo=result.get("repo_id"),
+                        match_type=result.get("match_type"),
+                    )
+                    log.info(
+                        f"HuggingFace found source=author_index "
+                        f"match=hash file={result['filename']} "
+                        f"repo={result['repo_id']} path={result['path']}"
+                    )
+                    return result
+
         repos_to_check = []
         seen_repos = set()
         search_queries = build_filename_search_queries(filename)
@@ -1056,17 +1217,21 @@ def search_huggingface_for_file(
                     author_index=author_index,
                     author_count=total_authors,
                 )
-                index = _get_author_index(
-                    author,
-                    headers={},
-                    force_refresh=force_refresh,
-                )
+                if author in cached_author_indexes:
+                    index = cached_author_indexes[author]
+                else:
+                    index = _get_author_index(
+                        author,
+                        headers={},
+                        force_refresh=force_refresh,
+                    )
                 if index:
                     result = _find_matching_file_in_author_index(
                         index,
                         filename,
                         exact_only=exact_only,
                         headers={},
+                        sha256=requested_sha256,
                     )
                     author_fallback_repo_count += int(index.get("repo_count") or 0)
                     if result and result_matches_requested_hash(result):

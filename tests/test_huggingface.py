@@ -6,15 +6,19 @@ from pathlib import Path
 from unittest.mock import patch
 from core.sources.huggingface import (
     HF_AUTHOR_FALLBACKS,
+    _build_author_index_from_models,
     _fetch_author_index,
+    _find_matching_file_in_author_index,
     _is_author_index_fresh,
     _read_persistent_author_indexes,
+    clear_search_cache,
     build_huggingface_custom_result,
     get_known_author_fallback_indexes_status,
     get_huggingface_model_details,
     parse_huggingface_url,
     get_huggingface_download_url,
     _normalize_huggingface_size_probe_url,
+    search_huggingface_for_file,
     _write_persistent_author_index,
 )
 from core.matcher import build_filename_search_queries
@@ -31,7 +35,7 @@ class HuggingFaceSourceTests(unittest.TestCase):
             index_path.write_text(
                 json.dumps(
                     {
-                        "version": 1,
+                        "version": 2,
                         "authors": {
                             "Comfy-Org": {
                                 "author": "Comfy-Org",
@@ -68,19 +72,32 @@ class HuggingFaceSourceTests(unittest.TestCase):
         self.assertTrue(status["fully_cached"])
 
     def test_fetch_author_index_builds_index_from_provider_repo_list(self):
-        with patch(
-            "core.sources.huggingface.execute_provider_json_request",
-            return_value=[
-                {
-                    "id": "Comfy-Org/example",
-                    "siblings": [
-                        {
-                            "rfilename": "text_encoders/model.safetensors",
-                            "size": 123,
-                        }
-                    ],
-                }
-            ],
+        sha256 = "a" * 64
+        with (
+            patch(
+                "core.sources.huggingface.execute_provider_json_request",
+                return_value=[
+                    {
+                        "id": "Comfy-Org/example",
+                        "siblings": [
+                            {
+                                "rfilename": "text_encoders/model.safetensors",
+                                "size": 123,
+                            }
+                        ],
+                    }
+                ],
+            ),
+            patch(
+                "core.sources.huggingface._get_repo_tree",
+                return_value=[
+                    {
+                        "path": "text_encoders/model.safetensors",
+                        "size": 123,
+                        "lfs": {"oid": f"sha256:{sha256}", "size": 123},
+                    }
+                ],
+            ),
         ):
             index = _fetch_author_index("Comfy-Org", headers={})
 
@@ -88,10 +105,80 @@ class HuggingFaceSourceTests(unittest.TestCase):
         self.assertEqual("Comfy-Org", index["author"])
         self.assertEqual(1, index["repo_count"])
         self.assertEqual(1, index["file_count"])
+        self.assertEqual(1, index["hash_count"])
         self.assertEqual(
             "text_encoders/model.safetensors",
             index["files"][0]["path"],
         )
+        self.assertEqual(sha256, index["files"][0]["sha256"])
+
+    def test_author_index_matches_sha256_directly(self):
+        sha256 = "b" * 64
+        index = _build_author_index_from_models(
+            "Comfy-Org",
+            [
+                {
+                    "id": "Comfy-Org/example",
+                    "siblings": [
+                        {
+                            "rfilename": "models/example.safetensors",
+                            "size": 456,
+                            "lfs": {"oid": f"sha256:{sha256}", "size": 456},
+                        }
+                    ],
+                }
+            ],
+        )
+
+        result = _find_matching_file_in_author_index(
+            index,
+            "different-name.safetensors",
+            sha256=sha256,
+        )
+
+        self.assertIsNotNone(result)
+        self.assertEqual("hash", result["match_type"])
+        self.assertEqual(sha256, result["sha256"])
+        self.assertEqual("models/example.safetensors", result["path"])
+
+    def test_hash_search_uses_author_index_before_filename_search(self):
+        sha256 = "c" * 64
+        index = _build_author_index_from_models(
+            "Comfy-Org",
+            [
+                {
+                    "id": "Comfy-Org/example",
+                    "siblings": [
+                        {
+                            "rfilename": "models/example.safetensors",
+                            "size": 789,
+                            "lfs": {"oid": f"sha256:{sha256}", "size": 789},
+                        }
+                    ],
+                }
+            ],
+        )
+
+        clear_search_cache()
+        with (
+            patch(
+                "core.sources.huggingface._get_author_index",
+                return_value=index,
+            ) as get_index,
+            patch(
+                "core.sources.huggingface.execute_provider_json_request"
+            ) as request,
+        ):
+            result = search_huggingface_for_file(
+                "different-name.safetensors",
+                sha256=sha256,
+            )
+
+        self.assertIsNotNone(result)
+        self.assertEqual("hash", result["match_type"])
+        self.assertEqual(sha256, result["sha256"])
+        get_index.assert_called_once()
+        request.assert_not_called()
 
     def test_malformed_list_author_index_is_not_treated_as_fresh(self):
         self.assertFalse(_is_author_index_fresh([{"id": "Comfy-Org/example"}]))
@@ -102,7 +189,7 @@ class HuggingFaceSourceTests(unittest.TestCase):
             index_path.write_text(
                 json.dumps(
                     {
-                        "version": 1,
+                        "version": 2,
                         "authors": {
                             "Comfy-Org": [{"id": "Comfy-Org/example"}],
                             "Valid": {
