@@ -127,14 +127,17 @@ export const tabsLoadedMethods = {
             const loadedProgressId = `loaded-progress-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             this._loadedModelsProgressToken = loadedProgressId;
             if (!preserveContent && shouldRenderLoadedModels()) {
-                this.contentElement.innerHTML = this.renderLoadedModelsProgress({
-                    status: 'starting',
-                    stage: 'starting',
-                    message: 'Preparing loaded model scan...',
-                    percent: 0,
-                    current: 0,
-                    total: 0
-                });
+                this.patchLoadedModelsProgress(
+                    this.contentElement,
+                    this.renderLoadedModelsProgress({
+                        status: 'starting',
+                        stage: 'starting',
+                        message: 'Preparing loaded model scan...',
+                        percent: 0,
+                        current: 0,
+                        total: 0
+                    })
+                );
             }
 
             const progressPromise = preserveContent

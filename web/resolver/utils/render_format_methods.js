@@ -213,6 +213,77 @@ export const renderFormatMethods = {
         `;
     },
 
+    patchLoadedModelsProgress(container, renderedHtml = '') {
+        if (!container) return;
+        const documentRef = container.ownerDocument || globalThis.document;
+        if (!documentRef?.createElement) {
+            container.innerHTML = renderedHtml;
+            return;
+        }
+
+        const template = documentRef.createElement('template');
+        template.innerHTML = renderedHtml || '';
+        const nextRoot = template.content.firstElementChild;
+        const currentRoot = container.firstElementChild;
+        if (
+            !nextRoot
+            || !currentRoot
+            || !currentRoot.classList.contains('mr-download-section')
+            || !nextRoot.classList.contains('mr-download-section')
+        ) {
+            if (container.innerHTML !== renderedHtml) {
+                container.innerHTML = renderedHtml;
+            }
+            return;
+        }
+
+        const syncAttributes = (current, next) => {
+            for (const attribute of Array.from(current.attributes || [])) {
+                if (!next.hasAttribute(attribute.name)) current.removeAttribute(attribute.name);
+            }
+            for (const attribute of Array.from(next.attributes || [])) {
+                if (current.getAttribute(attribute.name) !== attribute.value) {
+                    current.setAttribute(attribute.name, attribute.value);
+                }
+            }
+        };
+        const currentInfo = Array.from(currentRoot.querySelectorAll('.mr-download-info'));
+        const nextInfo = Array.from(nextRoot.querySelectorAll('.mr-download-info'));
+        const currentProgressBar = currentRoot.querySelector('.mr-progress-bar');
+        const nextProgressBar = nextRoot.querySelector('.mr-progress-bar');
+        const currentProgressFill = currentRoot.querySelector('.mr-progress-fill');
+        const nextProgressFill = nextRoot.querySelector('.mr-progress-fill');
+        const currentProgressText = Array.from(currentRoot.querySelectorAll('.mr-progress-text span'));
+        const nextProgressText = Array.from(nextRoot.querySelectorAll('.mr-progress-text span'));
+
+        if (
+            currentInfo.length !== nextInfo.length
+            || !currentProgressBar
+            || !nextProgressBar
+            || !currentProgressFill
+            || !nextProgressFill
+            || currentProgressText.length !== nextProgressText.length
+        ) {
+            currentRoot.innerHTML = nextRoot.innerHTML;
+            syncAttributes(currentRoot, nextRoot);
+            return;
+        }
+
+        syncAttributes(currentRoot, nextRoot);
+        currentInfo.forEach((element, index) => {
+            if (element.textContent !== nextInfo[index].textContent) {
+                element.textContent = nextInfo[index].textContent;
+            }
+        });
+        syncAttributes(currentProgressBar, nextProgressBar);
+        syncAttributes(currentProgressFill, nextProgressFill);
+        currentProgressText.forEach((element, index) => {
+            if (element.textContent !== nextProgressText[index].textContent) {
+                element.textContent = nextProgressText[index].textContent;
+            }
+        });
+    },
+
     async pollAnalysisProgress(analysisId, token) {
         await pollBackgroundTask({
             endpoint: `/model_resolver/analyze-progress/${analysisId}`,
@@ -243,7 +314,10 @@ export const renderFormatMethods = {
             filterIgnoredStatus: (progress) => progress?.status === 'unknown',
             onProgress: (progress) => {
                 if (this.contentElement && this.activeTab === 'loaded') {
-                    this.contentElement.innerHTML = this.renderLoadedModelsProgress(progress);
+                    this.patchLoadedModelsProgress(
+                        this.contentElement,
+                        this.renderLoadedModelsProgress(progress)
+                    );
                 }
             },
             isTerminal: (progress) => progress.status === 'completed' || progress.status === 'error',

@@ -1899,6 +1899,25 @@ test('background Loaded Models refresh keeps the current view until new data is 
   assert.equal(contentElement.scrollTop, 48);
 });
 
+test('Loaded Models progress patches the stable progress container', () => {
+  const patchLoadedModelsProgress = extractMethod(
+    renderFormatMethodsSource,
+    'patchLoadedModelsProgress'
+  );
+  const pollLoadedModelsProgress = extractMethod(
+    renderFormatMethodsSource,
+    'pollLoadedModelsProgress'
+  );
+  const loadLoadedModels = extractMethod(tabsLoadedMethodsSource, 'loadLoadedModels');
+
+  assert.match(patchLoadedModelsProgress, /mr-download-section/);
+  assert.match(patchLoadedModelsProgress, /mr-progress-fill/);
+  assert.match(patchLoadedModelsProgress, /currentInfo/);
+  assert.match(pollLoadedModelsProgress, /patchLoadedModelsProgress\(/);
+  assert.doesNotMatch(pollLoadedModelsProgress, /contentElement\.innerHTML\s*=/);
+  assert.match(loadLoadedModels, /patchLoadedModelsProgress\(/);
+});
+
 test('Power Lora Loader strength updates only its Loaded Models chip and cache', () => {
   const updateLoadedModelStrengthsFromNode = eval(
     `(${extractMethod(tabsLoadedMethodsSource, 'updateLoadedModelStrengthsFromNode')})`
