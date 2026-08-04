@@ -110,7 +110,7 @@
     display: none;
     flex-direction: column;
     overflow: hidden;
-    resize: both;
+    resize: none;
     z-index: var(--mr-z-dialog);
     color: var(--mr-text, #f3f3f3);
     background: linear-gradient(180deg, var(--mr-bg-soft) 0%, var(--mr-bg) 100%);
@@ -118,6 +118,41 @@
     border-radius: var(--mr-missing-control-radius);
     font-family: var(--mr-font-family-sans);
     box-shadow: var(--mr-shadow-dialog);
+}
+
+.mr-modal-resize-handle {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    z-index: 2;
+    width: 18px;
+    height: 18px;
+    cursor: nwse-resize;
+    touch-action: none;
+    user-select: none;
+}
+
+.mr-modal-resize-handle::after {
+    content: "";
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    width: 8px;
+    height: 8px;
+    opacity: 0.58;
+    background: linear-gradient(135deg, transparent 42%, var(--mr-text-muted, #b1b1b1) 43% 50%, transparent 51% 64%, var(--mr-text-muted, #b1b1b1) 65% 72%, transparent 73%);
+}
+
+.model-resolver-modal.is-resizing {
+    user-select: none;
+}
+
+.model-resolver-modal.is-resizing .mr-modal-resize-handle::after {
+    opacity: 1;
+}
+
+#model-resolver-modal.mr-is-docked .mr-modal-resize-handle {
+    display: none;
 }
 
 .mr-context-menu {

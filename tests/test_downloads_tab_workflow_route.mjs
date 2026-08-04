@@ -413,7 +413,7 @@ test('missing browser splitter keeps a compositor preview between live layout fr
   }
 
   assert.match(missingBrowserMethodsSource, /dragThreshold:\s*4/);
-  assert.match(missingBrowserMethodsSource, /layoutFrameStride:\s*3/);
+  assert.match(missingBrowserMethodsSource, /layoutFrameStride:\s*1/);
   assert.doesNotMatch(missingBrowserMethodsSource, /translate3d\(/);
   assert.match(
     resolverMainCssSource,
@@ -507,7 +507,7 @@ test('docked ComfyUI splitter coalesces live layout while its gutter stays respo
     globalThis.window = previousWindow;
   }
 
-  assert.match(dialogShellMethodsSource, /minLayoutInterval:\s*40/);
+  assert.match(dialogShellMethodsSource, /minLayoutInterval:\s*16/);
   assert.match(dialogShellMethodsSource, /setPointerCapture\(event\.pointerId\)/);
   assert.match(dialogShellMethodsSource, /translate3d\(/);
   assert.match(dialogShellMethodsSource, /requestAnimationFrame\(/);

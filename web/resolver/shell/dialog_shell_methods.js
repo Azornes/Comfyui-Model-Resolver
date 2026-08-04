@@ -128,7 +128,7 @@ export const dialogShellMethods = {
         el.style.maxHeight = '100vh';
         el.style.minWidth = '640px';
         el.style.minHeight = '420px';
-        el.style.resize = 'both';
+        el.style.resize = 'none';
         el.style.borderRadius = '7px';
 
         const rect = this._floatingRectBeforeDock;
@@ -158,6 +158,125 @@ export const dialogShellMethods = {
         el.style.top = '50%';
         el.style.left = '50%';
         el.style.transform = 'translate(-50%, -50%)';
+    },
+
+    installModalResizeHandle() {
+        if (!this.element || this._modalResizeHandle?.isConnected) return;
+
+        const handle = $el("div.mr-modal-resize-handle", {
+            id: "model-resolver-resize-handle",
+            ariaHidden: "true"
+        });
+        const eventName = typeof PointerEvent === 'function' ? 'pointerdown' : 'mousedown';
+        this._modalResizeStartHandler = (event) => this.startModalResize(event);
+        handle.addEventListener(eventName, this._modalResizeStartHandler, true);
+        this._modalResizeHandle = handle;
+        this._modalResizeStartEventName = eventName;
+        this.element.appendChild(handle);
+    },
+
+    startModalResize(event) {
+        if (!this.element || this.docked || this.fullscreen) return;
+        if (event.button !== undefined && event.button !== 0) return;
+        if (event.isPrimary === false) return;
+
+        this.finishModalResize({ flush: true });
+        event.preventDefault?.();
+        event.stopPropagation?.();
+
+        const rect = this.element.getBoundingClientRect();
+        const viewportWidth = window.innerWidth || document.documentElement.clientWidth || rect.right;
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight || rect.bottom;
+        const computed = typeof getComputedStyle === 'function'
+            ? getComputedStyle(this.element)
+            : null;
+        const minWidth = Math.max(1, Number.parseFloat(computed?.minWidth) || 640);
+        const minHeight = Math.max(1, Number.parseFloat(computed?.minHeight) || 420);
+        const startWidth = Math.max(minWidth, Number(rect.width) || this.element.offsetWidth || minWidth);
+        const startHeight = Math.max(minHeight, Number(rect.height) || this.element.offsetHeight || minHeight);
+        const state = {
+            startX: Number(event.clientX) || 0,
+            startY: Number(event.clientY) || 0,
+            startWidth,
+            startHeight,
+            minWidth,
+            minHeight,
+            maxWidth: Math.max(minWidth, startWidth, viewportWidth - rect.left),
+            maxHeight: Math.max(minHeight, startHeight, viewportHeight - rect.top),
+            pointerId: event.pointerId,
+            moveEventName: typeof PointerEvent === 'function' ? 'pointermove' : 'mousemove',
+            endEventName: typeof PointerEvent === 'function' ? 'pointerup' : 'mouseup',
+            cancelEventName: typeof PointerEvent === 'function' ? 'pointercancel' : null,
+            pendingWidth: Number(rect.width) || minWidth,
+            pendingHeight: Number(rect.height) || minHeight,
+            animationFrame: null,
+            moveHandler: null,
+            endHandler: null,
+            cancelHandler: null,
+            blurHandler: null
+        };
+
+        this.element.style.top = `${Math.round(rect.top)}px`;
+        this.element.style.left = `${Math.round(rect.left)}px`;
+        this.element.style.transform = 'none';
+        this.element.style.resize = 'none';
+        this.element.style.willChange = 'width, height';
+        this.element.classList.add('is-resizing');
+
+        state.moveHandler = (moveEvent) => {
+            if (state.pointerId !== undefined && moveEvent.pointerId !== state.pointerId) return;
+            const nextWidth = state.startWidth + ((Number(moveEvent.clientX) || state.startX) - state.startX);
+            const nextHeight = state.startHeight + ((Number(moveEvent.clientY) || state.startY) - state.startY);
+            state.pendingWidth = Math.min(state.maxWidth, Math.max(state.minWidth, nextWidth));
+            state.pendingHeight = Math.min(state.maxHeight, Math.max(state.minHeight, nextHeight));
+            if (state.animationFrame) return;
+            state.animationFrame = requestAnimationFrame(() => {
+                state.animationFrame = null;
+                this.applyModalResize(state);
+            });
+        };
+        state.endHandler = () => this.finishModalResize({ flush: true });
+        state.cancelHandler = state.endHandler;
+        state.blurHandler = state.endHandler;
+        this._modalResizeState = state;
+
+        document.addEventListener(state.moveEventName, state.moveHandler, true);
+        document.addEventListener(state.endEventName, state.endHandler, true);
+        if (state.cancelEventName) {
+            document.addEventListener(state.cancelEventName, state.cancelHandler, true);
+        }
+        window.addEventListener('blur', state.blurHandler, { once: true });
+    },
+
+    applyModalResize(state) {
+        if (!state || this._modalResizeState !== state || !this.element) return;
+        this.element.style.width = `${Math.round(state.pendingWidth)}px`;
+        this.element.style.height = `${Math.round(state.pendingHeight)}px`;
+    },
+
+    finishModalResize({ flush = false } = {}) {
+        const state = this._modalResizeState;
+        if (!state) return false;
+        if (state.animationFrame) {
+            cancelAnimationFrame(state.animationFrame);
+            state.animationFrame = null;
+        }
+        if (flush) this.applyModalResize(state);
+
+        document.removeEventListener(state.moveEventName, state.moveHandler, true);
+        document.removeEventListener(state.endEventName, state.endHandler, true);
+        if (state.cancelEventName) {
+            document.removeEventListener(state.cancelEventName, state.cancelHandler, true);
+        }
+        window.removeEventListener('blur', state.blurHandler);
+        this._modalResizeState = null;
+        this.element?.classList.remove('is-resizing');
+        if (this.element) {
+            this.element.style.willChange = '';
+            this.captureFloatingRect();
+            this.saveModalPosition?.();
+        }
+        return true;
     },
 
     rememberSidebarOpenMode(mode) {
@@ -301,7 +420,7 @@ export const dialogShellMethods = {
             animationFrame: null,
             delayTimer: null,
             lastLayoutAt: typeof performance === 'object' ? performance.now() : Date.now(),
-            minLayoutInterval: 40,
+            minLayoutInterval: 16,
             appliedPageX: Number(event.pageX ?? event.clientX) || 0,
             appliedPageY: Number(event.pageY ?? event.clientY) || 0,
             vertical: proxy?.horizontal === false,
@@ -641,6 +760,7 @@ export const dialogShellMethods = {
             el.style.maxHeight = '100vh';
             el.style.borderRadius = '0';
             el.style.resize = 'none';
+            this._modalResizeHandle?.style.setProperty('display', 'none');
             if (btn) {
                 btn.innerHTML = getSvgIcon('windowRestore', 'currentColor', 'mr-window-btn-icon');
                 btn.setAttribute('aria-label', 'Exit full screen');
@@ -653,7 +773,8 @@ export const dialogShellMethods = {
             el.style.maxWidth = '100vw';
             el.style.maxHeight = '100vh';
             el.style.borderRadius = '8px';
-            el.style.resize = 'both';
+            el.style.resize = 'none';
+            this._modalResizeHandle?.style.removeProperty('display');
             // Restore saved pre-FS size if available
             let wh = null;
             try { wh = JSON.parse(safeStorage.getItem('model_resolver_modal_size_before_fs') || 'null'); } catch (_e) {}

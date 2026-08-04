@@ -5,6 +5,10 @@ import { getCivitaiModelUrl } from "../globals.js";
 import { safeStorage, normalizePathIdentity } from "../utils/html_utils.js";
 import { matchesWorkflowModelReference } from "../node_context_menu.js";
 
+const MISSING_ROW_FALLBACK_HEIGHT = 70;
+const MISSING_VIRTUAL_INITIAL_ROWS = 24;
+const MISSING_VIRTUAL_OVERSCAN_ROWS = 6;
+
 export const missingBrowserMethods = {
     getMissingFilename(missing = {}) {
         return this.getFilenameFromPath(missing.original_path) || missing.name || 'Missing model';
@@ -434,9 +438,12 @@ export const missingBrowserMethods = {
         }
 
         requestAnimationFrame(() => {
-            const row = Array.from(
+            let row = Array.from(
                 this.contentElement?.querySelectorAll?.('.mr-missing-list-row') || []
             ).find(item => item.dataset.missingKey === this.selectedMissingModelKey);
+            if (!row) {
+                row = this.scrollMissingModelIntoView(this.selectedMissingModelKey);
+            }
             row?.scrollIntoView?.({ block: 'center', inline: 'nearest' });
         });
         return selected;
@@ -500,6 +507,177 @@ export const missingBrowserMethods = {
 
         applyScroll();
         requestAnimationFrame(applyScroll);
+    },
+
+    refreshMissingModelsVirtualizer(container, force = false) {
+        const list = container?.querySelector?.('.mr-missing-list');
+        list?._mrMissingVirtualState?.update?.(force);
+    },
+
+    getMissingBrowserVirtualRowHeight(list = null) {
+        const target = list instanceof HTMLElement
+            ? list
+            : this.contentElement?.querySelector?.('.mr-missing-list');
+        if (target instanceof HTMLElement && typeof getComputedStyle === 'function') {
+            const rawHeight = getComputedStyle(target)
+                .getPropertyValue('--mr-missing-row-height')
+                .trim();
+            const parsedHeight = Number.parseFloat(rawHeight);
+            if (Number.isFinite(parsedHeight) && parsedHeight > 0) return parsedHeight;
+        }
+        return MISSING_ROW_FALLBACK_HEIGHT;
+    },
+
+    renderMissingModelListRow(missing, index, totalCount, selectedKey) {
+        const key = this.getMissingModelKey(missing);
+        const isSelected = key === selectedKey;
+        const isBatchSelected = this.batchSelectedMissingKeys?.has(key);
+        const isResolved = this.isMissingModelResolved(missing);
+        const filename = this.getMissingFilename(missing);
+        const { bestMatch, confidence, matchDisplay, matchClass } = this.getLocalMatchDisplayInfo(missing);
+        const typeLabel = missing.category ? this.getCategoryDisplayName(missing.category) : 'unknown';
+        const typeColorClass = this.getModelTypeColorClass(missing.category || typeLabel);
+        const nodeDisplay = this.getMissingNodeDisplay(missing);
+        const locateTarget = nodeDisplay.locateTarget || this.getMissingLocateTarget(missing);
+        const nodeId = locateTarget.nodeId ?? '';
+        const rowNodeHtml = nodeDisplay.canLocate
+            ? `<button type="button" class="mr-node-chip is-locatable mr-missing-row-node mr-missing-row-locate" data-node-id="${this.escapeHtml(String(nodeId))}" data-subgraph-id="${this.escapeHtml(String(locateTarget.subgraphId || ''))}" data-is-top-level="${locateTarget.isTopLevel ? 'true' : 'false'}" data-tooltip="${this.escapeHtml(nodeDisplay.locateTooltip)}" aria-label="Center ${this.escapeHtml(nodeDisplay.text)} in the ComfyUI graph">${this.getLocateIconHtml()}<span class="mr-missing-row-node-label">${this.escapeHtml(nodeDisplay.text)}</span></button>`
+            : `<span class="mr-missing-row-node">${this.escapeHtml(nodeDisplay.text)}</span>`;
+
+        return `
+            <div role="button" tabindex="0"
+                class="mr-missing-list-row ${isSelected ? 'is-selected' : ''} ${isBatchSelected ? 'is-batch-selected' : ''} ${isResolved ? 'is-resolved' : ''}"
+                data-missing-key="${this.escapeHtml(key)}"
+                data-missing-index="${index}"
+                aria-posinset="${index + 1}"
+                aria-setsize="${totalCount}">
+                <span class="mr-missing-row-select">
+                    <input type="checkbox" class="mr-missing-row-check" data-ml-no-drag="1" aria-label="Select ${this.escapeHtml(filename)}" ${isBatchSelected ? 'checked' : ''}>
+                </span>
+                <span class="mr-missing-row-index">${index + 1}</span>
+                <span class="mr-missing-row-model ${isResolved ? 'is-resolved' : ''}">
+                    ${isResolved ? `<span class="mr-missing-row-resolved-icon" data-tooltip="Model resolved">${getSvgIcon('circleCheckBig')}</span>` : ''}
+                    <span class="mr-missing-row-model-details">
+                        <span class="mr-missing-row-name" data-tooltip="${this.escapeHtml(filename)}">${this.escapeHtml(filename)}</span>
+                        <span class="mr-missing-row-meta-line">
+                            ${rowNodeHtml}
+                            ${this.renderMissingAutoDownloadBadge(missing, { compact: true })}
+                        </span>
+                    </span>
+                </span>
+                <span class="mr-missing-row-type ${typeColorClass}">${this.escapeHtml(typeLabel)}</span>
+                <span class="mr-missing-row-best" data-tooltip="${this.escapeHtml(matchDisplay)}">
+                    ${bestMatch ? this.escapeHtml(matchDisplay) : '<span class="mr-missing-row-none">-- No local match</span>'}
+                </span>
+                <span class="mr-missing-row-match mr-missing-row-match-${matchClass}">
+                    <strong>${bestMatch ? `${confidence.toFixed(confidence % 1 ? 1 : 0)}%` : '--'}</strong>
+                </span>
+                <span class="mr-missing-row-sources">${this.renderMissingSourcesSummary(missing)}</span>
+            </div>
+        `;
+    },
+
+    setupMissingModelsVirtualizer(container, data, sortedMissingModels) {
+        const list = container?.querySelector?.('.mr-missing-list');
+        const virtualScroll = list?.querySelector?.('.mr-missing-list-virtual-scroll');
+        const rowsHost = virtualScroll?.querySelector?.('.mr-missing-list-virtual-rows');
+        if (!(list instanceof HTMLElement) || !(virtualScroll instanceof HTMLElement) || !(rowsHost instanceof HTMLElement)) {
+            return;
+        }
+
+        const existingState = list._mrMissingVirtualState;
+        const state = existingState && existingState.rowsHost === rowsHost
+            ? existingState
+            : {
+                list,
+                virtualScroll,
+                rowsHost,
+                models: sortedMissingModels,
+                data,
+                rowHeight: this.getMissingBrowserVirtualRowHeight(list),
+                start: -1,
+                end: -1,
+                resizeObserver: null,
+                onScroll: null,
+                update: null
+            };
+
+        state.models = sortedMissingModels;
+        state.data = data;
+        state.rowHeight = this.getMissingBrowserVirtualRowHeight(list);
+        state.virtualScroll.style.height = `${Math.max(0, sortedMissingModels.length * state.rowHeight)}px`;
+
+        state.update = (force = false) => {
+            if (!list.isConnected || !rowsHost.isConnected) return;
+
+            const rowHeight = state.rowHeight || MISSING_ROW_FALLBACK_HEIGHT;
+            const header = list.querySelector('.mr-missing-list-head');
+            const headerHeight = Number(header?.offsetHeight) || 0;
+            const viewportHeight = Math.max(
+                rowHeight,
+                Number(list.clientHeight) || MISSING_VIRTUAL_INITIAL_ROWS * rowHeight
+            );
+            const viewportTop = Math.max(0, Number(list.scrollTop) - headerHeight);
+            const viewportBottom = Math.max(viewportTop, Number(list.scrollTop) + viewportHeight - headerHeight);
+            const nextStart = Math.max(
+                0,
+                Math.floor(viewportTop / rowHeight) - MISSING_VIRTUAL_OVERSCAN_ROWS
+            );
+            const nextEnd = Math.min(
+                state.models.length,
+                Math.max(
+                    nextStart,
+                    Math.ceil(viewportBottom / rowHeight) + MISSING_VIRTUAL_OVERSCAN_ROWS
+                )
+            );
+
+            if (!force && nextStart === state.start && nextEnd === state.end) return;
+
+            state.start = nextStart;
+            state.end = nextEnd;
+            rowsHost.style.transform = `translateY(${Math.round(nextStart * rowHeight)}px)`;
+            rowsHost.innerHTML = state.models
+                .slice(nextStart, nextEnd)
+                .map((missing, offset) => this.renderMissingModelListRow(
+                    missing,
+                    nextStart + offset,
+                    state.models.length,
+                    this.selectedMissingModelKey
+                ))
+                .join('');
+            this.wireVisibleMissingModelRows(container, state.data, state.models);
+        };
+
+        if (!existingState) {
+            state.onScroll = () => state.update(false);
+            list.addEventListener('scroll', state.onScroll, { passive: true });
+            if (typeof ResizeObserver === 'function') {
+                state.resizeObserver = new ResizeObserver(() => state.update(false));
+                state.resizeObserver.observe(list);
+            }
+            list._mrMissingVirtualState = state;
+        }
+
+        state.update(true);
+    },
+
+    scrollMissingModelIntoView(missingKey) {
+        const list = this.contentElement?.querySelector?.('.mr-missing-list');
+        const state = list?._mrMissingVirtualState;
+        if (!(list instanceof HTMLElement) || !state) return null;
+
+        const index = state.models.findIndex(missing => this.getMissingModelKey(missing) === missingKey);
+        if (index < 0) return null;
+
+        const header = list.querySelector('.mr-missing-list-head');
+        const headerHeight = Number(header?.offsetHeight) || 0;
+        const rowHeight = state.rowHeight || MISSING_ROW_FALLBACK_HEIGHT;
+        const targetTop = headerHeight + index * rowHeight;
+        const targetScrollTop = targetTop - Math.max(0, (list.clientHeight - rowHeight) / 2);
+        list.scrollTop = Math.max(0, targetScrollTop);
+        state.update(true);
+        return Array.from(list.querySelectorAll('.mr-missing-list-row'))
+            .find(row => row.dataset.missingKey === missingKey) || null;
     },
 
     renderMissingModelsBrowser(missingModels, selectedKey, totalMissing, activeCount, hasAny100Match, options = {}) {
@@ -618,51 +796,23 @@ export const missingBrowserMethods = {
                         </div>
         `;
 
-        missingModels.forEach((missing, index) => {
-            const key = this.getMissingModelKey(missing);
-            const isSelected = key === selectedKey;
-            const isBatchSelected = this.batchSelectedMissingKeys?.has(key);
-            const isResolved = this.isMissingModelResolved(missing);
-            const filename = this.getMissingFilename(missing);
-            const { bestMatch, confidence, matchDisplay, matchClass } = this.getLocalMatchDisplayInfo(missing);
-            const typeLabel = missing.category ? this.getCategoryDisplayName(missing.category) : 'unknown';
-            const typeColorClass = this.getModelTypeColorClass(missing.category || typeLabel);
-            const nodeDisplay = this.getMissingNodeDisplay(missing);
-            const locateTarget = nodeDisplay.locateTarget || this.getMissingLocateTarget(missing);
-            const nodeId = locateTarget.nodeId ?? '';
-            const rowNodeHtml = nodeDisplay.canLocate
-                ? `<button type="button" class="mr-node-chip is-locatable mr-missing-row-node mr-missing-row-locate" data-node-id="${this.escapeHtml(String(nodeId))}" data-subgraph-id="${this.escapeHtml(String(locateTarget.subgraphId || ''))}" data-is-top-level="${locateTarget.isTopLevel ? 'true' : 'false'}" data-tooltip="${this.escapeHtml(nodeDisplay.locateTooltip)}" aria-label="Center ${this.escapeHtml(nodeDisplay.text)} in the ComfyUI graph">${this.getLocateIconHtml()}<span class="mr-missing-row-node-label">${this.escapeHtml(nodeDisplay.text)}</span></button>`
-                : `<span class="mr-missing-row-node">${this.escapeHtml(nodeDisplay.text)}</span>`;
-
-            html += `
-                <div role="button" tabindex="0"
-                    class="mr-missing-list-row ${isSelected ? 'is-selected' : ''} ${isBatchSelected ? 'is-batch-selected' : ''} ${isResolved ? 'is-resolved' : ''}"
-                    data-missing-key="${this.escapeHtml(key)}">
-                    <span class="mr-missing-row-select">
-                        <input type="checkbox" class="mr-missing-row-check" data-ml-no-drag="1" aria-label="Select ${this.escapeHtml(filename)}" ${isBatchSelected ? 'checked' : ''}>
-                    </span>
-                    <span class="mr-missing-row-index">${index + 1}</span>
-                    <span class="mr-missing-row-model ${isResolved ? 'is-resolved' : ''}">
-                        ${isResolved ? `<span class="mr-missing-row-resolved-icon" data-tooltip="Model resolved">${getSvgIcon('circleCheckBig')}</span>` : ''}
-                        <span class="mr-missing-row-model-details">
-                            <span class="mr-missing-row-name" data-tooltip="${this.escapeHtml(filename)}">${this.escapeHtml(filename)}</span>
-                            <span class="mr-missing-row-meta-line">
-                                ${rowNodeHtml}
-                                ${this.renderMissingAutoDownloadBadge(missing, { compact: true })}
-                            </span>
-                        </span>
-                    </span>
-                    <span class="mr-missing-row-type ${typeColorClass}">${this.escapeHtml(typeLabel)}</span>
-                    <span class="mr-missing-row-best" data-tooltip="${this.escapeHtml(matchDisplay)}">
-                        ${bestMatch ? this.escapeHtml(matchDisplay) : '<span class="mr-missing-row-none">-- No local match</span>'}
-                    </span>
-                    <span class="mr-missing-row-match mr-missing-row-match-${matchClass}">
-                        <strong>${bestMatch ? `${confidence.toFixed(confidence % 1 ? 1 : 0)}%` : '--'}</strong>
-                    </span>
-                    <span class="mr-missing-row-sources">${this.renderMissingSourcesSummary(missing)}</span>
-                </div>
-            `;
-        });
+        const initialRowCount = Math.min(missingModels.length, MISSING_VIRTUAL_INITIAL_ROWS);
+        const initialRowsHtml = missingModels
+            .slice(0, initialRowCount)
+            .map((missing, index) => this.renderMissingModelListRow(
+                missing,
+                index,
+                missingModels.length,
+                selectedKey
+            ))
+            .join('');
+        html += `
+                    <div class="mr-missing-list-virtual-scroll" data-mr-missing-virtual-scroll style="height:${Math.max(0, missingModels.length * MISSING_ROW_FALLBACK_HEIGHT)}px">
+                        <div class="mr-missing-list-virtual-rows" data-mr-missing-virtual-rows>
+                            ${initialRowsHtml}
+                        </div>
+                    </div>
+        `;
 
         html += `
                     </div>
@@ -700,19 +850,30 @@ export const missingBrowserMethods = {
             currentHead.replaceWith(nextHead);
         }
 
+        const currentVirtualScroll = currentList.querySelector('.mr-missing-list-virtual-scroll');
+        const nextVirtualScroll = nextList.querySelector('.mr-missing-list-virtual-scroll');
+        if (currentVirtualScroll && nextVirtualScroll) {
+            currentVirtualScroll.style.height = nextVirtualScroll.style.height;
+        }
+        const currentRowsHost = currentVirtualScroll?.querySelector('.mr-missing-list-virtual-rows') || currentList;
+        const nextRowsHost = nextVirtualScroll?.querySelector('.mr-missing-list-virtual-rows') || nextList;
         const currentRows = new Map(
-            Array.from(currentList.querySelectorAll('.mr-missing-list-row'))
+            Array.from(currentRowsHost.querySelectorAll('.mr-missing-list-row'))
                 .map(row => [row.dataset.missingKey || '', row])
                 .filter(([key]) => key)
         );
         const retainedRows = new Set();
-        nextList.querySelectorAll('.mr-missing-list-row').forEach((nextRow) => {
+        nextRowsHost.querySelectorAll('.mr-missing-list-row').forEach((nextRow) => {
             const currentRow = currentRows.get(nextRow.dataset.missingKey || '');
             const row = currentRow?.outerHTML === nextRow.outerHTML
                 ? currentRow
                 : nextRow;
             retainedRows.add(row);
-            currentList.appendChild(row);
+            if (currentRowsHost === currentList) {
+                currentList.appendChild(row);
+            } else {
+                currentRowsHost.appendChild(row);
+            }
         });
         currentRows.forEach((row) => {
             if (!retainedRows.has(row)) row.remove();
@@ -737,16 +898,90 @@ export const missingBrowserMethods = {
         return true;
     },
 
-    wireMissingModelsBrowser(container, data, sortedMissingModels) {
-        this.wireMissingBrowserSplitter(container);
-
-        const browser = container.querySelector('.mr-missing-browser');
+    wireVisibleMissingModelRows(container, data, sortedMissingModels) {
         const getCurrentData = () => this.cachedAnalysisData || data;
         const getCurrentMissingModels = () => (
             Array.isArray(this.missingModels)
                 ? this.missingModels
                 : sortedMissingModels
         );
+        const selectRow = (row) => {
+            const key = row.dataset.missingKey;
+            if (!key || key === this.selectedMissingModelKey) return;
+            this.selectedMissingModelKey = key;
+            this.displayMissingModels(
+                container,
+                getCurrentData(),
+                { selectionOnly: true }
+            );
+        };
+
+        container.querySelectorAll('.mr-missing-list-row').forEach((row) => {
+            if (this._wiredMissingModelRows.has(row)) return;
+            this._wiredMissingModelRows.add(row);
+            const checkbox = row.querySelector('.mr-missing-row-check');
+            if (checkbox) {
+                checkbox.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    checkbox._missingShiftClick = event.shiftKey;
+                });
+                checkbox.addEventListener('change', (event) => {
+                    const key = row.dataset.missingKey;
+                    if (!key) return;
+                    const selected = checkbox.checked;
+                    const isShiftRange = event.shiftKey || checkbox._missingShiftClick === true;
+                    const currentMissingModels = getCurrentMissingModels();
+
+                    if (isShiftRange && this.lastBatchSelectedMissingKey) {
+                        this.applyBatchSelectionRange(
+                            currentMissingModels,
+                            this.lastBatchSelectedMissingKey,
+                            key,
+                            selected
+                        );
+                    } else {
+                        this.setBatchSelectionForKey(key, selected);
+                    }
+
+                    this.lastBatchSelectedMissingKey = key;
+                    this.refreshBatchSelectionUi();
+                    this.updateBatchFooterButtons();
+                });
+            }
+
+            row.addEventListener('click', (event) => {
+                const clickedLocate = event.target instanceof Element && event.target.closest('.mr-missing-row-locate');
+                if (clickedLocate) return;
+                selectRow(row);
+            });
+
+            row.addEventListener('keydown', (event) => {
+                if (event.target !== row || (event.key !== 'Enter' && event.key !== ' ')) return;
+                event.preventDefault();
+                selectRow(row);
+            });
+        });
+
+        container.querySelectorAll('.mr-missing-row-locate').forEach((button) => {
+            if (this._wiredMissingLocateButtons.has(button)) return;
+            this._wiredMissingLocateButtons.add(button);
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const rawNodeId = button.dataset.nodeId;
+                const numericNodeId = Number(rawNodeId);
+                this.locateNodeInGraph(Number.isNaN(numericNodeId) ? rawNodeId : numericNodeId, {
+                    subgraphId: button.dataset.subgraphId || '',
+                    isTopLevel: button.dataset.isTopLevel !== 'false'
+                });
+            });
+        });
+    },
+
+    wireMissingModelsBrowser(container, data, sortedMissingModels) {
+        this.wireMissingBrowserSplitter(container);
+
+        const browser = container.querySelector('.mr-missing-browser');
         if (!(this._wiredMissingModelRows instanceof WeakSet)) {
             this._wiredMissingModelRows = new WeakSet();
         }
@@ -856,19 +1091,14 @@ export const missingBrowserMethods = {
             });
         }
 
-        const selectRow = (row) => {
-            const key = row.dataset.missingKey;
-            if (!key || key === this.selectedMissingModelKey) return;
-            this.selectedMissingModelKey = key;
-            this.displayMissingModels(
-                container,
-                getCurrentData(),
-                { selectionOnly: true }
-            );
-        };
-
+        const getCurrentMissingModels = () => (
+            Array.isArray(this.missingModels)
+                ? this.missingModels
+                : sortedMissingModels
+        );
         const selectAllCheckbox = container.querySelector('.mr-missing-select-all-check');
-        if (selectAllCheckbox) {
+        if (selectAllCheckbox && selectAllCheckbox.dataset.mlSelectAllBound !== 'true') {
+            selectAllCheckbox.dataset.mlSelectAllBound = 'true';
             this.updateBatchSelectAllCheckbox();
             selectAllCheckbox.addEventListener('click', (event) => {
                 event.stopPropagation();
@@ -884,66 +1114,8 @@ export const missingBrowserMethods = {
             });
         }
 
-        container.querySelectorAll('.mr-missing-list-row').forEach(row => {
-            if (this._wiredMissingModelRows.has(row)) return;
-            this._wiredMissingModelRows.add(row);
-            const checkbox = row.querySelector('.mr-missing-row-check');
-            if (checkbox) {
-                checkbox.addEventListener('click', (event) => {
-                    event.stopPropagation();
-                    checkbox._missingShiftClick = event.shiftKey;
-                });
-                checkbox.addEventListener('change', (event) => {
-                    const key = row.dataset.missingKey;
-                    if (!key) return;
-                    const selected = checkbox.checked;
-                    const isShiftRange = event.shiftKey || checkbox._missingShiftClick === true;
-                    const currentMissingModels = getCurrentMissingModels();
-
-                    if (isShiftRange && this.lastBatchSelectedMissingKey) {
-                        this.applyBatchSelectionRange(
-                            currentMissingModels,
-                            this.lastBatchSelectedMissingKey,
-                            key,
-                            selected
-                        );
-                    } else {
-                        this.setBatchSelectionForKey(key, selected);
-                    }
-
-                    this.lastBatchSelectedMissingKey = key;
-                    this.refreshBatchSelectionUi();
-                    this.updateBatchFooterButtons();
-                });
-            }
-
-            row.addEventListener('click', (event) => {
-                const clickedLocate = event.target instanceof Element && event.target.closest('.mr-missing-row-locate');
-                if (clickedLocate) return;
-                selectRow(row);
-            });
-
-            row.addEventListener('keydown', (event) => {
-                if (event.target !== row || (event.key !== 'Enter' && event.key !== ' ')) return;
-                event.preventDefault();
-                selectRow(row);
-            });
-        });
-
-        container.querySelectorAll('.mr-missing-row-locate').forEach(button => {
-            if (this._wiredMissingLocateButtons.has(button)) return;
-            this._wiredMissingLocateButtons.add(button);
-            button.addEventListener('click', (event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                const rawNodeId = button.dataset.nodeId;
-                const numericNodeId = Number(rawNodeId);
-                this.locateNodeInGraph(Number.isNaN(numericNodeId) ? rawNodeId : numericNodeId, {
-                    subgraphId: button.dataset.subgraphId || '',
-                    isTopLevel: button.dataset.isTopLevel !== 'false'
-                });
-            });
-        });
+        this.wireVisibleMissingModelRows(container, data, sortedMissingModels);
+        this.setupMissingModelsVirtualizer(container, data, sortedMissingModels);
 
         const selectedMissing = sortedMissingModels.find(missing => this.getMissingModelKey(missing) === this.selectedMissingModelKey);
         const detailPreserved = this._missingBrowserDetailPreserved === true;
@@ -1241,7 +1413,7 @@ export const missingBrowserMethods = {
             startWidth: detailWidth,
             bounds,
             dragThreshold: 4,
-            layoutFrameStride: 3,
+            layoutFrameStride: 1,
             onPreview: (pendingWidth) => {
                 this._pendingMissingBrowserSplitWidth = pendingWidth;
                 this.activateMissingBrowserSplitUi();
@@ -2283,6 +2455,7 @@ export const missingBrowserMethods = {
         }
         this.wireMissingModelsBrowser(container, data, sortedMissingModels);
         this.restoreMissingListScroll(container, listScrollSnapshot);
+        this.refreshMissingModelsVirtualizer(container, true);
         this.scheduleInitialUrnLocalMatchRefresh(sortedMissingModels, container, data);
         this.reconnectActiveSearchProgress(sortedMissingModels);
         this.updateBatchFooterButtons();

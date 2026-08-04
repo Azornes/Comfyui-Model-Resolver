@@ -266,6 +266,7 @@ export class ResolverManagerDialog extends ComfyDialog {
             this.createContent(),
             this.createFooter()
         ]);
+        this.installModalResizeHandle();
 
         this.tooltipObserver = new MutationObserver((mutations) => {
             for (const mutation of mutations) {

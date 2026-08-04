@@ -706,11 +706,30 @@
 }
 
 .mr-missing-list {
+    display: flex;
+    flex-direction: column;
     min-height: 0;
     overflow-y: auto;
     scrollbar-gutter: stable;
     scrollbar-width: auto;
     background: var(--mr-missing-bg);
+}
+
+.mr-missing-list-virtual-scroll {
+    position: relative;
+    flex: 0 0 auto;
+    width: 100%;
+    min-width: 0;
+    contain: layout paint style;
+}
+
+.mr-missing-list-virtual-rows {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    min-width: 0;
+    will-change: transform;
 }
 
 .mr-missing-browser.is-resizing::after {
