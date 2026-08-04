@@ -2638,7 +2638,8 @@ export const searchPanelMethods = {
             return missing.matches;
         }
 
-        const key = this.getUrnResolveKey(missing);
+        const missingKey = this.getMissingModelKey(missing);
+        const key = `${this.getUrnResolveKey(missing)}:${filename}`;
         if (this.urnLocalMatchPromises.has(key)) {
             return this.urnLocalMatchPromises.get(key);
         }
@@ -2646,9 +2647,14 @@ export const searchPanelMethods = {
         const promise = (async () => {
             const data = await this.fetchLocalMatches(filename, missing.category || '', false);
             const matches = Array.isArray(data.matches) ? data.matches : [];
-            missing.matches = this.preserveActiveDownloadLocalMatches?.(missing, matches) || matches;
-            missing.__urnLocalMatchesFilename = filename;
-            return missing.matches;
+            const currentMissing = (this.missingModels || [])
+                .find(item => this.getMissingModelKey(item) === missingKey) || missing;
+            if (currentMissing.civitai_info?.expected_filename !== filename) {
+                return currentMissing.matches || [];
+            }
+            currentMissing.matches = this.preserveActiveDownloadLocalMatches?.(currentMissing, matches) || matches;
+            currentMissing.__urnLocalMatchesFilename = filename;
+            return currentMissing.matches;
         })().finally(() => {
             this.urnLocalMatchPromises.delete(key);
         });
@@ -2660,18 +2666,25 @@ export const searchPanelMethods = {
     async refreshUrnLocalMatches(missing) {
         if (!missing?.civitai_info?.expected_filename || !this.contentElement) return;
 
+        const filename = missing.civitai_info.expected_filename;
         const bodyId = `local-matches-body-${this.getMissingModelDomKey(missing)}`;
         const container = this.contentElement.querySelector(`#${bodyId}`);
+        const refreshToken = this.beginLocalMatchRefresh?.(missing);
+        const isCurrentRefresh = () => (
+            !refreshToken
+            || this.isCurrentLocalMatchRefresh(refreshToken.key, refreshToken.token)
+        );
         if (container) {
             this.patchLocalMatchesContainer(
                 container,
-                `<div class="mr-no-matches">Searching local matches for "${this.escapeHtml(missing.civitai_info.expected_filename)}"...</div>`
+                `<div class="mr-no-matches">Searching local matches for "${this.escapeHtml(filename)}"...</div>`
             );
         }
 
         try {
             await this.fetchUrnLocalMatches(missing);
-            if (container) {
+            if (!isCurrentRefresh() || missing.civitai_info?.expected_filename !== filename) return;
+            if (container?.isConnected !== false) {
                 this.patchLocalMatchesContainer(
                     container,
                     this.renderLocalMatchesContent(missing, missing.__displayIndex || 0)
@@ -2680,12 +2693,17 @@ export const searchPanelMethods = {
             }
             this.refreshMissingListRow(missing, { refreshBaseModels: true });
         } catch (error) {
+            if (!isCurrentRefresh()) return;
             console.error('Model Resolver: URN local match refresh error:', error);
-            if (container) {
+            if (container?.isConnected !== false) {
                 this.patchLocalMatchesContainer(
                     container,
                     '<div class="mr-no-matches">Failed to refresh local matches.</div>'
                 );
+            }
+        } finally {
+            if (refreshToken) {
+                this.finishLocalMatchRefresh(refreshToken.key, refreshToken.token);
             }
         }
     },

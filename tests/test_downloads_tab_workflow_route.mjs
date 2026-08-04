@@ -5250,6 +5250,12 @@ test('search and URN completion ignore stale UI runs', () => {
   const urnStart = resolveDownloadMethodsSource.indexOf('async resolveUrnAsync');
   const searchOnline = resolveDownloadMethodsSource.slice(searchStart, urnStart);
   const resolveUrnAsync = extractMethod(resolveDownloadMethodsSource, 'resolveUrnAsync');
+  const fetchUrnLocalMatches = extractMethod(searchPanelMethodsSource, 'fetchUrnLocalMatches');
+  const refreshUrnLocalMatches = extractMethod(searchPanelMethodsSource, 'refreshUrnLocalMatches');
+  const refreshLocalMatchesForMissing = extractMethod(
+    resolveDownloadMethodsSource,
+    'refreshLocalMatchesForMissing'
+  );
 
   assert.match(searchOnline, /isCurrentSearchRun/);
   assert.match(searchOnline, /currentSearchRun/);
@@ -5258,6 +5264,14 @@ test('search and URN completion ignore stale UI runs', () => {
   assert.match(resolveUrnAsync, /urnResolveUiTokens/);
   assert.match(resolveUrnAsync, /isCurrentUrnUi/);
   assert.match(resolveUrnAsync, /else if \(data\) \{\s*return;/);
+  assert.match(fetchUrnLocalMatches, /getUrnResolveKey\(missing\).*filename/);
+  assert.match(fetchUrnLocalMatches, /expected_filename !== filename/);
+  assert.match(refreshUrnLocalMatches, /beginLocalMatchRefresh/);
+  assert.match(refreshUrnLocalMatches, /container\?\.isConnected !== false/);
+  assert.match(refreshUrnLocalMatches, /finishLocalMatchRefresh/);
+  assert.match(refreshLocalMatchesForMissing, /beginLocalMatchRefresh/);
+  assert.match(refreshLocalMatchesForMissing, /isCurrentLocalMatchRefresh/);
+  assert.match(refreshLocalMatchesForMissing, /finishLocalMatchRefresh/);
 });
 
 test('local match status group warns when match folder is unsupported by node', () => {

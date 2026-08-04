@@ -466,6 +466,36 @@ export const resolveDownloadMethods = {
         }
     },
 
+    getLocalMatchRefreshKey(missing = {}) {
+        return String(
+            this.getMissingModelKey?.(missing)
+            || this.getMissingSearchKey?.(missing)
+            || missing.original_path
+            || missing.name
+            || ''
+        );
+    },
+
+    beginLocalMatchRefresh(missing = {}) {
+        if (!(this.localMatchRefreshTokens instanceof Map)) {
+            this.localMatchRefreshTokens = new Map();
+        }
+        const key = this.getLocalMatchRefreshKey(missing);
+        const token = Symbol(key || 'local-match-refresh');
+        this.localMatchRefreshTokens.set(key, token);
+        return { key, token };
+    },
+
+    isCurrentLocalMatchRefresh(key, token) {
+        return this.localMatchRefreshTokens?.get(key) === token;
+    },
+
+    finishLocalMatchRefresh(key, token) {
+        if (this.isCurrentLocalMatchRefresh(key, token)) {
+            this.localMatchRefreshTokens.delete(key);
+        }
+    },
+
     getLocalMatchIdentity(match = {}) {
         return this.getLocalMatchIdentityKeys(match)[0] || '';
     },
@@ -1483,38 +1513,48 @@ export const resolveDownloadMethods = {
         const targetFilename = this.getDownloadedLocalMatchTarget(missing, downloadedFilename);
         if (!targetFilename) return [];
 
-        if (progressDiv) {
-            progressDiv.innerHTML = this.renderDownloadStatusMessage(
-                `Checking local matches for ${targetFilename}...`,
-                'info',
-                { filename: targetFilename, path: downloadPath, directory: downloadDirectory },
-                { category, downloadPath, downloadDirectory, filename: targetFilename }
-            );
-        }
-        const body = this.contentElement?.querySelector(`#local-matches-body-${this.getMissingModelDomKey(missing)}`);
-        if (body) {
-            this.patchLocalMatchesContainer(
-                body,
-                `<div class="mr-no-matches">Checking local matches for ${this.escapeHtml(targetFilename)}...</div>`
-            );
-        }
-
-        const data = await this.fetchLocalMatches(targetFilename, category || missing.category || '', true);
-        const matches = Array.isArray(data.matches) ? data.matches : [];
         const missingKey = this.getMissingModelKey(missing);
+        const refreshToken = this.beginLocalMatchRefresh(missing);
         const currentMissing = (this.missingModels || []).find(item => this.getMissingModelKey(item) === missingKey) || missing;
-        currentMissing.matches = matches;
-        missing.matches = matches;
-        this.rememberDownloadedLocalMatchesForMissing(currentMissing, matches, {
-            targetFilename,
-            category: category || missing.category || '',
-            downloadPath,
-            downloadDirectory
-        });
-        this.allModels = null;
-        this.invalidateLoadedModelsCacheForActiveWorkflow?.();
-        this.refreshLocalMatchesUiForMissing(currentMissing);
-        return matches;
+
+        try {
+            if (progressDiv) {
+                progressDiv.innerHTML = this.renderDownloadStatusMessage(
+                    `Checking local matches for ${targetFilename}...`,
+                    'info',
+                    { filename: targetFilename, path: downloadPath, directory: downloadDirectory },
+                    { category, downloadPath, downloadDirectory, filename: targetFilename }
+                );
+            }
+            const body = this.contentElement?.querySelector(`#local-matches-body-${this.getMissingModelDomKey(missing)}`);
+            if (body) {
+                this.patchLocalMatchesContainer(
+                    body,
+                    `<div class="mr-no-matches">Checking local matches for ${this.escapeHtml(targetFilename)}...</div>`
+                );
+            }
+
+            const data = await this.fetchLocalMatches(targetFilename, category || missing.category || '', true);
+            if (!this.isCurrentLocalMatchRefresh(refreshToken.key, refreshToken.token)) {
+                return currentMissing.matches || [];
+            }
+
+            const matches = Array.isArray(data.matches) ? data.matches : [];
+            currentMissing.matches = matches;
+            missing.matches = matches;
+            this.rememberDownloadedLocalMatchesForMissing(currentMissing, matches, {
+                targetFilename,
+                category: category || missing.category || '',
+                downloadPath,
+                downloadDirectory
+            });
+            this.allModels = null;
+            this.invalidateLoadedModelsCacheForActiveWorkflow?.();
+            this.refreshLocalMatchesUiForMissing(currentMissing);
+            return matches;
+        } finally {
+            this.finishLocalMatchRefresh(refreshToken.key, refreshToken.token);
+        }
     },
 
     refreshLocalMatchesUiForMissing(missing) {
@@ -1559,6 +1599,7 @@ export const resolveDownloadMethods = {
         const missingKey = this.getMissingModelKey(missing);
         const currentMissing = (this.missingModels || []).find(item => this.getMissingModelKey(item) === missingKey) || missing;
         const previousMatches = this.cloneLocalMatches?.(currentMissing.matches || missing.matches || []) || [];
+        const refreshToken = this.beginLocalMatchRefresh(missing);
 
         try {
             if (button) {
@@ -1573,6 +1614,9 @@ export const resolveDownloadMethods = {
             }
 
             const data = await this.fetchLocalMatches(targetFilename, missing.category || '', true);
+            if (!this.isCurrentLocalMatchRefresh(refreshToken.key, refreshToken.token)) {
+                return currentMissing.matches || [];
+            }
             const refreshedMatches = Array.isArray(data.matches) ? data.matches : [];
             const matches = this.preserveActiveDownloadLocalMatches?.(
                 currentMissing,
@@ -1593,11 +1637,20 @@ export const resolveDownloadMethods = {
             this.allModels = null;
             this.invalidateLoadedModelsCacheForActiveWorkflow?.();
             await minRefreshFeedback;
+            if (!this.isCurrentLocalMatchRefresh(refreshToken.key, refreshToken.token)) {
+                return currentMissing.matches || [];
+            }
             this.refreshLocalMatchesUiForMissing(currentMissing);
 
             return matches;
         } catch (error) {
+            if (!this.isCurrentLocalMatchRefresh(refreshToken.key, refreshToken.token)) {
+                return currentMissing.matches || [];
+            }
             await minRefreshFeedback;
+            if (!this.isCurrentLocalMatchRefresh(refreshToken.key, refreshToken.token)) {
+                return currentMissing.matches || [];
+            }
             console.error('Model Resolver: local match refresh failed:', error);
             currentMissing.matches = previousMatches;
             missing.matches = previousMatches;
@@ -1607,9 +1660,12 @@ export const resolveDownloadMethods = {
         } finally {
             refreshAnimation?.cancel?.();
             if (button) {
-                button.disabled = false;
-                button.classList.remove('mr-btn-is-disabled', 'mr-is-refreshing');
+                if (this.isCurrentLocalMatchRefresh(refreshToken.key, refreshToken.token)) {
+                    button.disabled = false;
+                    button.classList.remove('mr-btn-is-disabled', 'mr-is-refreshing');
+                }
             }
+            this.finishLocalMatchRefresh(refreshToken.key, refreshToken.token);
         }
     },
 

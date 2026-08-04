@@ -13,6 +13,10 @@ const queueMethodsSource = fs.readFileSync(
   path.join(projectRoot, 'web/resolver/actions/queue_methods.js'),
   'utf8'
 );
+const searchPanelMethodsSource = fs.readFileSync(
+  path.join(projectRoot, 'web/resolver/search/search_panel.js'),
+  'utf8'
+);
 const renderFormatMethodsSource = fs.readFileSync(
   path.join(projectRoot, 'web/resolver/utils/render_format_methods.js'),
   'utf8'
@@ -49,6 +53,7 @@ const getSearchResultsPatchKind = eval(`(${extractMethod(resolveDownloadMethodsS
 const wireSearchDownloadButtons = eval(`(${extractMethod(resolveDownloadMethodsSource, 'wireSearchDownloadButtons')})`);
 const patchLocalMatchesContainer = eval(`(${extractMethod(resolveDownloadMethodsSource, 'patchLocalMatchesContainer')})`);
 const resolveUrnAsync = eval(`(${extractMethod(resolveDownloadMethodsSource, 'resolveUrnAsync')})`);
+const fetchUrnLocalMatches = eval(`(${extractMethod(searchPanelMethodsSource, 'fetchUrnLocalMatches')})`);
 const patchQueuedSelections = eval(`(${extractMethod(queueMethodsSource, 'patchQueuedSelections')})`);
 const patchDownloadsPanelElement = eval(`(${extractMethod(queueMethodsSource, 'patchDownloadsPanelElement')})`);
 const patchLoadedModelsProgress = eval(`(${extractMethod(renderFormatMethodsSource, 'patchLoadedModelsProgress')})`);
@@ -284,4 +289,47 @@ test('stale URN responses cannot overwrite the latest UI request', async () => {
     else globalThis.log = previousLog;
     console.error = previousConsoleError;
   }
+});
+
+test('URN local matches use the filename as part of the in-flight request identity', async () => {
+  const missing = {
+    key: 'missing-1',
+    category: 'checkpoints',
+    civitai_info: { expected_filename: 'old.safetensors' },
+    matches: [],
+  };
+  const resolvers = new Map();
+  const calls = [];
+  const dialog = {
+    missingModels: [missing],
+    urnLocalMatchPromises: new Map(),
+    getMissingModelKey(item) {
+      return item.key;
+    },
+    getUrnResolveKey() {
+      return '1:2:missing-1';
+    },
+    fetchLocalMatches(filename) {
+      calls.push(filename);
+      return new Promise(resolve => resolvers.set(filename, resolve));
+    },
+    preserveActiveDownloadLocalMatches(_missing, matches) {
+      return matches;
+    },
+  };
+
+  const first = fetchUrnLocalMatches.call(dialog, missing);
+  await Promise.resolve();
+  missing.civitai_info.expected_filename = 'new.safetensors';
+  const second = fetchUrnLocalMatches.call(dialog, missing);
+  await Promise.resolve();
+
+  assert.deepEqual(calls, ['old.safetensors', 'new.safetensors']);
+  resolvers.get('new.safetensors')({ matches: [{ filename: 'new.safetensors' }] });
+  await second;
+  resolvers.get('old.safetensors')({ matches: [{ filename: 'old.safetensors' }] });
+  await first;
+
+  assert.deepEqual(missing.matches, [{ filename: 'new.safetensors' }]);
+  assert.equal(missing.__urnLocalMatchesFilename, 'new.safetensors');
 });
