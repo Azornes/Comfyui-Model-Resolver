@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, List, Optional
 from ..log_system import create_module_logger
 from . import references
 from . import subgraphs as subgraph_utils
+from .traversal import iter_workflow_nodes_with_scope
 
 log = create_module_logger(__name__)
 
@@ -60,35 +61,15 @@ def _get_workflow_node_fingerprints(
     workflow_json: Dict[str, Any],
 ) -> Dict[tuple[str, str, str], str]:
     fingerprints = {}
-    nodes = workflow_json.get("nodes", [])
-    if isinstance(nodes, list):
-        for node in nodes:
-            if not isinstance(node, dict):
-                continue
-            key = _get_workflow_node_cache_key(node, is_top_level=True)
-            fingerprints[key] = _get_workflow_node_fingerprint(node)
-
-    definitions = workflow_json.get("definitions", {})
-    subgraphs = definitions.get("subgraphs", []) if isinstance(definitions, dict) else []
-    if not isinstance(subgraphs, list):
-        return fingerprints
-
-    for subgraph in subgraphs:
-        if not isinstance(subgraph, dict):
+    for context in iter_workflow_nodes_with_scope(workflow_json):
+        if not isinstance(context.node, dict):
             continue
-        subgraph_id = subgraph.get("id")
-        subgraph_nodes = subgraph.get("nodes", [])
-        if not isinstance(subgraph_nodes, list):
-            continue
-        for node in subgraph_nodes:
-            if not isinstance(node, dict):
-                continue
-            key = _get_workflow_node_cache_key(
-                node,
-                subgraph_id=subgraph_id,
-                is_top_level=False,
-            )
-            fingerprints[key] = _get_workflow_node_fingerprint(node)
+        key = _get_workflow_node_cache_key(
+            context.node,
+            subgraph_id=context.subgraph_id,
+            is_top_level=context.is_top_level,
+        )
+        fingerprints[key] = _get_workflow_node_fingerprint(context.node)
 
     return fingerprints
 
@@ -262,12 +243,8 @@ def analyze_workflow_models(
         previous_node_cache,
         is_top_level=True,
     )
-    total_nodes = len(nodes) + sum(
-        len(subgraph_nodes)
-        for subgraph in subgraphs
-        if isinstance(subgraph, dict)
-        for subgraph_nodes in [subgraph.get("nodes", [])]
-        if isinstance(subgraph_nodes, list)
+    total_nodes = sum(
+        1 for _ in iter_workflow_nodes_with_scope(workflow_json)
     )
     processed_nodes = 0
 

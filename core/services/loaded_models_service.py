@@ -1,6 +1,7 @@
 """Loaded model inspection used by the HTTP route adapter."""
 
 from ..routes.context import RouteContext
+from ..workflow.traversal import iter_workflow_nodes_with_scope
 
 
 class LoadedModelsService:
@@ -40,25 +41,9 @@ class LoadedModelsService:
             self.extension._update_loaded_progress(loaded_id, *args, **kwargs)
 
         def get_workflow_node_count():
-            node_count = 0
-            nodes = workflow_json.get("nodes", [])
-            if isinstance(nodes, list):
-                node_count += len(nodes)
-
-            definitions = workflow_json.get("definitions", {})
-            subgraphs = (
-                definitions.get("subgraphs", [])
-                if isinstance(definitions, dict)
-                else []
+            return sum(
+                1 for _ in iter_workflow_nodes_with_scope(workflow_json)
             )
-            if isinstance(subgraphs, list):
-                for subgraph in subgraphs:
-                    if not isinstance(subgraph, dict):
-                        continue
-                    subgraph_nodes = subgraph.get("nodes", [])
-                    if isinstance(subgraph_nodes, list):
-                        node_count += len(subgraph_nodes)
-            return node_count
 
         def interpolate_percent(start, end, current, total):
             if not total:
@@ -183,40 +168,19 @@ class LoadedModelsService:
                         pass
 
             # Also extract from node.properties.models
-            workflow_nodes = workflow_json.get("nodes", [])
-            nodes = list(workflow_nodes) if isinstance(workflow_nodes, list) else []
-            node_scopes = {
-                id(node): {
-                    "subgraph_id": "",
-                    "subgraph_name": "",
-                    "is_top_level": True,
-                }
-                for node in nodes
-                if isinstance(node, dict)
-            }
-            definitions = workflow_json.get("definitions", {})
-            subgraphs = (
-                definitions.get("subgraphs", [])
-                if isinstance(definitions, dict)
-                else []
+            node_contexts = list(
+                iter_workflow_nodes_with_scope(workflow_json)
             )
-            for subgraph in subgraphs:
-                if isinstance(subgraph, dict):
-                    subgraph_nodes = subgraph.get("nodes", [])
-                    if isinstance(subgraph_nodes, list):
-                        nodes.extend(subgraph_nodes)
-                        for node in subgraph_nodes:
-                            if not isinstance(node, dict):
-                                continue
-                            node_scopes[id(node)] = {
-                                "subgraph_id": subgraph.get("id") or "",
-                                "subgraph_name": (
-                                    subgraph.get("name")
-                                    or subgraph.get("id")
-                                    or ""
-                                ),
-                                "is_top_level": False,
-                            }
+            nodes = [context.node for context in node_contexts]
+            node_scopes = {
+                id(context.node): {
+                    "subgraph_id": context.subgraph_id,
+                    "subgraph_name": context.subgraph_name,
+                    "is_top_level": context.is_top_level,
+                }
+                for context in node_contexts
+                if isinstance(context.node, dict)
+            }
 
             def get_node_scope(node):
                 return node_scopes.get(

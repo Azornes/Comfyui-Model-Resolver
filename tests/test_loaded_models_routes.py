@@ -236,6 +236,43 @@ async def test_loaded_models_route_handles_invalid_node_collections_without_fold
 
 
 @pytest.mark.asyncio
+async def test_loaded_models_progress_counts_top_level_and_subgraph_nodes():
+    handlers, values = _build_routes()
+
+    def inventory_with_progress(_workflow, progress_callback):
+        progress_callback(
+            {
+                "stage": "analyzing",
+                "current": 1,
+                "total": 5,
+            }
+        )
+        return {"available_models": [], "model_refs": []}
+
+    values["get_workflow_model_inventory"].side_effect = inventory_with_progress
+    workflow = {
+        "nodes": [{"id": 1}, {"id": 2}],
+        "definitions": {
+            "subgraphs": [
+                {
+                    "id": "group-1",
+                    "nodes": [{"id": 3}, {"id": 4}, {"id": 5}],
+                }
+            ]
+        },
+    }
+
+    with patch.dict(sys.modules, {"folder_paths": None}):
+        response = await handlers[("POST", "/model_resolver/loaded")](
+            _request({"workflow": workflow})
+        )
+
+    assert response.status == 200
+    values["self"]._update_workflow_analysis_progress.assert_called_once()
+    assert values["self"]._update_workflow_analysis_progress.call_args.args[1] == 5
+
+
+@pytest.mark.asyncio
 async def test_loaded_models_route_reads_folder_paths_and_ignores_category_errors():
     folder_paths = MagicMock()
     folder_paths.get_filename_list.side_effect = [

@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from core.workflow import analysis, references, subgraphs
+from core.workflow import analysis, references, subgraphs, traversal
 from core.workflow_updater import update_workflow_nodes
 
 
@@ -20,6 +20,40 @@ def _loader_node(node_id=10, value="model.safetensors", link=None):
         ],
         "outputs": [],
     }
+
+
+def test_workflow_node_traversal_preserves_node_order_and_scope():
+    top_level_node = {"id": 1, "type": "TopLevel"}
+    subgraph_node = {"id": 2, "type": "Inner"}
+    workflow = {
+        "nodes": [top_level_node, "invalid-top-level-node"],
+        "definitions": {
+            "subgraphs": [
+                None,
+                {
+                    "id": "group-1",
+                    "name": "Group one",
+                    "nodes": [subgraph_node, "invalid-subgraph-node"],
+                },
+            ]
+        },
+    }
+
+    contexts = list(traversal.iter_workflow_nodes_with_scope(workflow))
+
+    assert [context.node for context in contexts] == [
+        top_level_node,
+        "invalid-top-level-node",
+        subgraph_node,
+        "invalid-subgraph-node",
+    ]
+    assert contexts[0].is_top_level is True
+    assert contexts[0].subgraph_id == ""
+    assert contexts[1].is_top_level is True
+    assert contexts[2].is_top_level is False
+    assert contexts[2].subgraph_id == "group-1"
+    assert contexts[2].subgraph_name == "Group one"
+    assert contexts[3].subgraph_id == "group-1"
 
 
 def test_subgraph_widget_indexes_support_named_inputs_and_links():
