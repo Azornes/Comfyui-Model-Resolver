@@ -1,4 +1,5 @@
 import { safeStorage } from "../utils/html_utils.js";
+import { getSourceDisplayLabel } from "../utils/source_labels.js";
 
 const localStorage = safeStorage;
 
@@ -61,16 +62,11 @@ export const searchSourceMethods = {
      * Convert source ids to readable labels
      */
     getSearchSourceLabel(source) {
-        const labels = {
-            all: 'Everything',
-            local: 'Local Database',
-            huggingface: 'HuggingFace',
-            civitai: 'CivitAI',
-            civarchive: 'CivArchive',
-            lora_manager_archive: 'LoRA Manager Archive',
-            custom: 'Custom URL'
-        };
-        return labels[source] || source;
+        return getSourceDisplayLabel(source, {
+            context: 'search',
+            normalize: false,
+            fallback: source,
+        });
     },
 
     getSearchSourceErrorMessage(source, error, status = null) {

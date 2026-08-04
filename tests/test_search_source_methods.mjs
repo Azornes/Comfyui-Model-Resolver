@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { searchSourceMethods } from '../web/resolver/search/search_source_methods.js';
+import { getSourceDisplayLabel } from '../web/resolver/utils/source_labels.js';
 
 const {
   getSearchSourceLabel,
@@ -53,6 +54,14 @@ test('search source labels and definitions remain stable', () => {
       { source: 'lora_manager_archive', storageKey: 'ModelResolver.searchSource.loraManagerArchiveEnabled' },
     ]
   );
+});
+
+test('shared source labels preserve search and hash comparison contexts', () => {
+  assert.equal(getSourceDisplayLabel('lora_manager_archive', { context: 'search' }), 'LoRA Manager Archive');
+  assert.equal(getSourceDisplayLabel('lora_manager_archive'), 'LoRA Archive');
+  assert.equal(getSourceDisplayLabel('lora-archive'), 'LoRA Archive');
+  assert.equal(getSourceDisplayLabel('download-source'), 'Selected source');
+  assert.equal(getSourceDisplayLabel('unknown-source', { fallback: 'Fallback' }), 'Fallback');
 });
 
 test('CivArchive availability failures receive a user-facing retry message', () => {

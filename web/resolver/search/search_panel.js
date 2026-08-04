@@ -1,5 +1,6 @@
 import { getSvgIcon } from "../../utils/icon_utils.js";
 import { getModelCardUrl, parseHuggingFaceFileUrl } from "../utils/url_utils.js";
+import { getSourceDisplayLabel } from "../utils/source_labels.js";
 import { getCivitaiModelUrl } from "../globals.js";
 import { safeStorage, normalizePathIdentity } from "../utils/html_utils.js";
 import { bindEventOnce } from "../utils/dom_patch_utils.js";
@@ -1584,22 +1585,22 @@ export const searchPanelMethods = {
         const downloadFilename = downloadSource.filename || originalFilename || 'model';
         const isFromWorkflow = downloadSource.url_source === 'workflow';
         const source = downloadSource.source || (isFromWorkflow ? 'workflow' : 'online');
-        const sourceLabels = {
-            popular: 'Popular',
-            model_list: 'Local Database',
-            huggingface: 'HuggingFace',
-            civitai: 'CivitAI',
-            civarchive: 'CivArchive',
-            lora_manager_archive: 'LoRA Archive',
-            workflow: 'Workflow',
-            online: 'Online'
-        };
-        const sourceLabel = isFromWorkflow ? 'Workflow URL' : (sourceLabels[source] || source);
+        const sourceLabel = isFromWorkflow
+            ? 'Workflow URL'
+            : getSourceDisplayLabel(source, {
+                context: 'download',
+                normalize: false,
+                fallback: source,
+            });
         const sourceKey = isFromWorkflow
             ? 'workflow-url'
             : String(source).replace(/_/g, '-');
-        const sourceSecondary = isFromWorkflow && sourceLabels[source] && source !== 'workflow'
-            ? sourceLabels[source]
+        const sourceSecondary = isFromWorkflow && source !== 'workflow'
+            ? getSourceDisplayLabel(source, {
+                context: 'download',
+                normalize: false,
+                fallback: '',
+            })
             : '';
         const rawModelUrl = downloadSource.model_url
             || downloadSource.workflow_model_url
@@ -1710,12 +1711,6 @@ export const searchPanelMethods = {
         if (!result || typeof result !== 'object') return null;
 
         const source = String(result.source || result.details_source || 'custom').toLowerCase().replace(/-/g, '_');
-        const sourceLabels = {
-            huggingface: 'HuggingFace',
-            civitai: 'CivitAI',
-            civarchive: 'CivArchive',
-            custom: 'Custom URL'
-        };
         const sourceKeys = {
             huggingface: 'huggingface',
             civitai: 'civitai',
@@ -1770,7 +1765,10 @@ export const searchPanelMethods = {
 
         return {
             sourceKey: sourceKeys[source] || 'custom',
-            sourceLabel: sourceLabels[source] || 'Custom URL',
+            sourceLabel: getSourceDisplayLabel(source, {
+                context: 'custom',
+                fallback: 'Custom URL',
+            }),
             model: modelName,
             version,
             filename,

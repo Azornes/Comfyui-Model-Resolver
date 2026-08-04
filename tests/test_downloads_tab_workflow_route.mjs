@@ -20,6 +20,7 @@ import {
 import { startSplitterDrag } from '../web/resolver/utils/splitter_drag.js';
 import { normalizeDownloadCategoryValue } from '../web/resolver/utils/category_utils.js';
 import { getSha256Field, normalizeSha256 } from '../web/resolver/utils/hash_utils.js';
+import { getSourceDisplayLabel } from '../web/resolver/utils/source_labels.js';
 import { baseModelAliasMethods } from '../web/resolver/search/base_model_alias_methods.js';
 import { searchHashMethods } from '../web/resolver/search/search_hash_methods.js';
 import { missingModelStateMethods } from '../web/resolver/views/missing_model_state_methods.js';
@@ -4213,6 +4214,75 @@ test('manual URL table row preserves the explicit provenance boundary', () => {
   assert.equal(row.detailsContext.url_source, 'custom');
   assert.equal(row.detailsContext.provided_url, result.provided_url);
   assert.equal(row.detailsContext.source, 'huggingface');
+});
+
+test('source table rows preserve context-specific source labels', () => {
+  const getDownloadSourceTableRow = eval(`(${extractMethod(searchPanelMethodsSource, 'getDownloadSourceTableRow')})`);
+  const getCustomUrlResultTableRow = eval(`(${extractMethod(searchPanelMethodsSource, 'getCustomUrlResultTableRow')})`);
+  const dialog = {
+    getFilenameFromPath(value = '') {
+      return String(value).split(/[\\/]/).at(-1) || '';
+    },
+    getSourceResultDownloadCategory() {
+      return 'checkpoints';
+    },
+    getMissingDownloadCategory() {
+      return 'checkpoints';
+    },
+    getModelVersionParts(name, version) {
+      return { name, version };
+    },
+    getVersionedModelName(name, version) {
+      return version ? `${name} ${version}` : name;
+    },
+    getDownloadPathMetadata() {
+      return {};
+    },
+    getDownloadMetadata() {
+      return {};
+    },
+    getLocalHashMatchIdentitiesForResult() {
+      return [];
+    },
+    getHashMatchLabelForSearchResult() {
+      return '';
+    },
+    getSearchResultMatchDisplay() {
+      return { label: 'Known', className: 'strong' };
+    },
+    formatSearchResultSize() {
+      return '';
+    },
+    getSearchResultTimestamp() {
+      return '';
+    },
+    getMissingModelKey() {
+      return 'missing-key';
+    },
+  };
+  const missing = {
+    original_path: 'model.safetensors',
+    category: 'checkpoints',
+    matches: [],
+  };
+
+  const providerRow = getDownloadSourceTableRow.call(dialog, missing, {
+    source: 'civitai',
+    url: 'https://example.test/download',
+  });
+  const workflowRow = getDownloadSourceTableRow.call(dialog, missing, {
+    source: 'civitai',
+    url: 'https://example.test/workflow-download',
+    url_source: 'workflow',
+  });
+  const customRow = getCustomUrlResultTableRow.call(dialog, missing, {
+    source: 'custom',
+    download_url: 'https://example.test/custom-download',
+  });
+
+  assert.equal(providerRow.sourceLabel, 'CivitAI');
+  assert.equal(workflowRow.sourceLabel, 'Workflow URL');
+  assert.equal(customRow.sourceLabel, 'Custom URL');
 });
 
 test('search suggestion does not let a delayed incompatible result replace workflow path context', () => {

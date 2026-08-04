@@ -1,4 +1,5 @@
 import { normalizeSha256 } from '../utils/hash_utils.js';
+import { getSourceDisplayLabel } from '../utils/source_labels.js';
 
 export const modelHashCompareMethods = {
     formatSha256Short(value = '') {
@@ -113,22 +114,10 @@ export const modelHashCompareMethods = {
         if (explicitLabel) return String(explicitLabel);
 
         const rawSource = String(result?.source || result?.details_source || sourceKey || '').toLowerCase().replace(/-/g, '_');
-        const sourceLabels = {
-            download_source: 'Selected source',
-            popular: 'Popular',
-            model_list: 'Local Database',
-            huggingface: 'HuggingFace',
-            civitai: 'CivitAI',
-            civarchive: 'CivArchive',
-            lora_manager_archive: 'LoRA Archive',
-            lora_archive: 'LoRA Archive',
-            workflow: 'Workflow',
-            online: 'Online'
-        };
-
-        return sourceLabels[rawSource]
-            || sourceLabels[String(sourceKey || '').toLowerCase().replace(/-/g, '_')]
-            || String(sourceKey || 'Source').replace(/[_-]+/g, ' ');
+        return getSourceDisplayLabel(rawSource, {
+            context: 'hash_compare',
+            fallback: String(sourceKey || 'Source').replace(/[_-]+/g, ' '),
+        });
     },
 
     getHashCompareResultName(result = {}) {
