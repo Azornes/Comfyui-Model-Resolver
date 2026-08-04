@@ -8,6 +8,7 @@ from core.sources.huggingface import (
     HF_AUTHOR_FALLBACKS,
     _build_author_index_from_models,
     _fetch_author_index,
+    _get_author_index,
     _find_matching_file_in_author_index,
     _is_author_index_fresh,
     _read_persistent_author_indexes,
@@ -238,6 +239,106 @@ class HuggingFaceSourceTests(unittest.TestCase):
             self.assertIn('\n  "authors": {', content)
             self.assertTrue(content.endswith("\n"))
             self.assertEqual("Example", json.loads(content)["authors"]["Example"]["author"])
+
+    def test_force_search_author_index_refresh_does_not_persist(self):
+        fresh_index = {
+            "author": "Example",
+            "updated_at": 123,
+            "repo_count": 1,
+            "file_count": 1,
+            "hash_count": 1,
+            "repos": ["Example/repo"],
+            "files": [],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            index_path = Path(tmpdir) / "huggingface-author-index.json"
+            with (
+                patch(
+                    "core.sources.huggingface.HF_AUTHOR_INDEX_CACHE_PATH",
+                    str(index_path),
+                ),
+                patch(
+                    "core.sources.huggingface._fetch_author_index",
+                    return_value=fresh_index,
+                ) as fetch_index,
+            ):
+                clear_search_cache()
+                result = _get_author_index(
+                    "Example",
+                    headers={},
+                    force_refresh=True,
+                    persist=False,
+                )
+
+            self.assertIs(fresh_index, result)
+            self.assertFalse(index_path.exists())
+            fetch_index.assert_called_once_with("Example", headers={})
+
+    def test_force_search_requests_non_persistent_author_index_refresh(self):
+        sha256 = "d" * 64
+        index = {
+            "author": "Comfy-Org",
+            "updated_at": 123,
+            "repo_count": 1,
+            "file_count": 1,
+            "hash_count": 1,
+            "repos": ["Comfy-Org/example"],
+            "files": [
+                {
+                    "repo_id": "Comfy-Org/example",
+                    "path": "model.safetensors",
+                    "filename": "model.safetensors",
+                    "size": 123,
+                    "sha256": sha256,
+                }
+            ],
+        }
+
+        clear_search_cache()
+        with patch(
+            "core.sources.huggingface._get_author_index",
+            return_value=index,
+        ) as get_index:
+            result = search_huggingface_for_file(
+                "model.safetensors",
+                sha256=sha256,
+                force_refresh=True,
+            )
+
+        self.assertIsNotNone(result)
+        self.assertFalse(get_index.call_args.kwargs["persist"])
+
+    def test_explicit_author_index_refresh_still_persists(self):
+        fresh_index = {
+            "author": "Example",
+            "updated_at": 123,
+            "repo_count": 1,
+            "file_count": 1,
+            "hash_count": 1,
+            "repos": ["Example/repo"],
+            "files": [],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            index_path = Path(tmpdir) / "huggingface-author-index.json"
+            with (
+                patch(
+                    "core.sources.huggingface.HF_AUTHOR_INDEX_CACHE_PATH",
+                    str(index_path),
+                ),
+                patch(
+                    "core.sources.huggingface._fetch_author_index",
+                    return_value=fresh_index,
+                ),
+            ):
+                clear_search_cache()
+                result = _get_author_index(
+                    "Example",
+                    headers={},
+                    force_refresh=True,
+                )
+
+            self.assertIs(fresh_index, result)
+            self.assertTrue(index_path.exists())
 
     def test_parse_huggingface_url_valid_http(self):
         url = "https://huggingface.co/runwayml/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors"

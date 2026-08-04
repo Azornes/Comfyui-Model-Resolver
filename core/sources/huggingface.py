@@ -317,7 +317,10 @@ def _fetch_author_index(author: str, headers: Dict[str, str], limit: int = 200):
 
 
 def _get_author_index(
-    author: str, headers: Dict[str, str], force_refresh: bool = False
+    author: str,
+    headers: Dict[str, str],
+    force_refresh: bool = False,
+    persist: bool = True,
 ) -> Optional[Dict[str, Any]]:
     cache_key = _author_index_cache_key(author, headers)
     can_persist = not headers.get("Authorization")
@@ -340,7 +343,7 @@ def _get_author_index(
         fresh_index = _fetch_author_index(author, headers=headers)
         if fresh_index:
             _author_index_cache[cache_key] = fresh_index
-            if can_persist:
+            if can_persist and persist:
                 _write_persistent_author_index(author, fresh_index)
             return fresh_index
 
@@ -1082,6 +1085,7 @@ def search_huggingface_for_file(
                     author,
                     headers={},
                     force_refresh=force_refresh,
+                    persist=not force_refresh,
                 )
                 cached_author_indexes[author] = index
                 if not index:
@@ -1224,6 +1228,7 @@ def search_huggingface_for_file(
                         author,
                         headers={},
                         force_refresh=force_refresh,
+                        persist=not force_refresh,
                     )
                 if index:
                     result = _find_matching_file_in_author_index(
