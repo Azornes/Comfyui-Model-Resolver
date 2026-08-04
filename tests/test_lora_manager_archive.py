@@ -1,12 +1,15 @@
 import unittest
 import sqlite3
 import json
+from unittest.mock import patch
 from core.sources.lora_manager_archive import (
     _normalize_model_type,
     _extract_search_tokens,
     _query_candidate_rows,
     _load_full_rows_for_versions,
     _build_result_from_row,
+    _find_hash_match_row,
+    search_lora_manager_archive_for_file,
 )
 
 class LoraManagerArchiveTests(unittest.TestCase):
@@ -103,4 +106,21 @@ class LoraManagerArchiveTests(unittest.TestCase):
         self.assertEqual(result["sha256"], archive_hash)
         self.assertEqual(result["hashes"], {"SHA256": archive_hash})
 
-        conn.close()
+        hash_match = _find_hash_match_row(conn, archive_hash)
+        self.assertIsNotNone(hash_match)
+        self.assertEqual(hash_match[0]["version_id"], 10)
+        self.assertEqual(hash_match[1]["name"], "ghost_v1.safetensors")
+
+        with patch(
+            "core.sources.lora_manager_archive._connect_readonly",
+            return_value=conn,
+        ):
+            hash_result = search_lora_manager_archive_for_file(
+                "",
+                sha256=archive_hash,
+            )
+
+        self.assertIsNotNone(hash_result)
+        self.assertEqual(hash_result["match_type"], "hash")
+        self.assertEqual(hash_result["confidence"], 100.0)
+        self.assertEqual(hash_result["sha256"], archive_hash)

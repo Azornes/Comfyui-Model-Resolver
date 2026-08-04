@@ -196,7 +196,11 @@ class SearchProviderRunner:
         self.raise_if_search_cancelled(request, source_key)
         self.owner.log_search_result(source_key, result)
 
-        if not result and request.base_model_context:
+        if (
+            not result
+            and request.base_model_context
+            and not getattr(request, "sha256", "")
+        ):
             self.raise_if_search_cancelled(request, source_key)
             self.owner.search_tracker.update(
                 request.progress_id,

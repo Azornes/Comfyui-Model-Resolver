@@ -172,48 +172,89 @@ def _load_version_files(
 
     files: List[Dict[str, Any]] = []
     for row in rows:
-        try:
-            data = json.loads(row["data"])
-        except Exception:
-            continue
-
-        if not isinstance(data, dict):
-            continue
-
-        mirrors = data.get("mirrors") or []
-        if not isinstance(mirrors, list):
-            mirrors = [mirrors]
-
-        available_mirror = next(
-            (
-                mirror
-                for mirror in mirrors
-                if isinstance(mirror, dict) and mirror.get("deletedAt") is None
-            ),
-            None,
-        )
-
-        download_url = data.get("downloadUrl") or (
-            available_mirror.get("url") if available_mirror else None
-        )
-        file_name = data.get("name") or (
-            available_mirror.get("filename") if available_mirror else None
-        )
-
-        files.append(
-            {
-                "id": data.get("id"),
-                "name": file_name,
-                "type": data.get("type"),
-                "sizeKB": data.get("sizeKB"),
-                "downloadUrl": download_url,
-                "primary": bool(data.get("primary", False)),
-                "hashes": data.get("hashes", {}),
-                "metadata": data.get("metadata"),
-            }
-        )
-
+        file_info = _build_file_info(row["data"])
+        if file_info:
+            files.append(file_info)
     return files
+
+
+def _build_file_info(raw_data: Any) -> Optional[Dict[str, Any]]:
+    """Normalize one archived model-file JSON payload."""
+    try:
+        data = json.loads(raw_data) if isinstance(raw_data, str) else raw_data
+    except Exception:
+        return None
+
+    if not isinstance(data, dict):
+        return None
+
+    mirrors = data.get("mirrors") or []
+    if not isinstance(mirrors, list):
+        mirrors = [mirrors]
+
+    available_mirror = next(
+        (
+            mirror
+            for mirror in mirrors
+            if isinstance(mirror, dict) and mirror.get("deletedAt") is None
+        ),
+        None,
+    )
+
+    download_url = data.get("downloadUrl") or (
+        available_mirror.get("url") if available_mirror else None
+    )
+    file_name = data.get("name") or (
+        available_mirror.get("filename") if available_mirror else None
+    )
+
+    return {
+        "id": data.get("id"),
+        "name": file_name,
+        "type": data.get("type"),
+        "sizeKB": data.get("sizeKB"),
+        "downloadUrl": download_url,
+        "primary": bool(data.get("primary", False)),
+        "hashes": data.get("hashes", {}),
+        "metadata": data.get("metadata"),
+    }
+
+
+def _find_hash_match_row(
+    conn: sqlite3.Connection, requested_sha256: str
+) -> Optional[tuple[sqlite3.Row, Dict[str, Any]]]:
+    """Find an archived file by hash with one filtered SQLite scan."""
+    rows = conn.execute(
+        """
+        SELECT
+            version_id,
+            id AS file_id,
+            data AS file_data
+        FROM model_files
+        WHERE type = 'Model'
+          AND data LIKE ? COLLATE NOCASE
+        ORDER BY id ASC
+        """,
+        (f"%{requested_sha256}%",),
+    )
+
+    for row in rows:
+        file_info = _build_file_info(row["file_data"])
+        if not file_info:
+            continue
+        hashes = file_info.get("hashes") or {}
+        file_sha256 = normalize_sha256(
+            file_info.get("sha256")
+            or hashes.get("SHA256")
+            or hashes.get("sha256")
+        )
+        if file_sha256 == requested_sha256:
+            full_row = _load_full_rows_for_versions(
+                conn, [row["version_id"]]
+            ).get(row["version_id"])
+            if full_row:
+                return full_row, file_info
+    return None
 
 
 def _query_candidate_rows(
@@ -686,44 +727,27 @@ def search_lora_manager_archive_for_file(
     """
     requested_sha256 = normalize_sha256(sha256)
     if requested_sha256:
+        cache_key = (
+            f"hash::{requested_sha256}::{_normalize_model_type(model_type)}::"
+            f"{_normalize_base_model(base_model_context or '')}"
+        )
+        if cache_key in _search_cache:
+            return _search_cache[cache_key]
+
         conn = _connect_readonly()
         if not conn:
             return None
+        started_at = time.perf_counter()
         try:
-            rows = conn.execute(
-                """
-                SELECT
-                    m.id AS model_id,
-                    m.name AS model_name,
-                    m.type AS model_type,
-                    v.id AS version_id,
-                    v.name AS version_name,
-                    v.base_model AS base_model,
-                    v.position AS position
-                FROM models m
-                JOIN model_versions v ON v.model_id = m.id
-                ORDER BY m.id ASC, COALESCE(v.position, 999999) ASC
-                """
-            ).fetchall()
-            for row in rows:
-                files = _load_version_files(conn, row["version_id"])
-                matching_file = next(
-                    (
-                        file_info
-                        for file_info in files
-                        if normalize_sha256(
-                            file_info.get("sha256")
-                            or (file_info.get("hashes") or {}).get("SHA256")
-                            or (file_info.get("hashes") or {}).get("sha256")
-                        )
-                        == requested_sha256
-                    ),
-                    None,
+            match = _find_hash_match_row(conn, requested_sha256)
+            if match:
+                row, matching_file = match
+                result = _build_result_from_row(
+                    conn, row, requested_sha256
                 )
-                if not matching_file:
-                    continue
-
-                result = _build_result_from_row(conn, row)
+                if not result:
+                    _search_cache[cache_key] = None
+                    return None
                 result.update(
                     {
                         "filename": matching_file.get("name") or result.get("filename", ""),
@@ -746,9 +770,19 @@ def search_lora_manager_archive_for_file(
                     92,
                     confidence=100.0,
                 )
+                log.info(
+                    f"LoRA Manager archive hash={requested_sha256} results=1 "
+                    f"elapsed={time.perf_counter() - started_at:.3f}s"
+                )
+                _search_cache[cache_key] = result
                 return result
         finally:
             conn.close()
+        log.info(
+            f"LoRA Manager archive hash={requested_sha256} results=0 "
+            f"elapsed={time.perf_counter() - started_at:.3f}s"
+        )
+        _search_cache[cache_key] = None
         return None
 
     search_query = os.path.splitext(get_filename_from_path(filename))[0]

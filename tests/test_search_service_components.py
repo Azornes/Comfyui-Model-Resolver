@@ -472,6 +472,28 @@ def test_search_provider_runner_searches_lora_manager_archive():
     owner.search_lora_manager_archive_for_file.assert_called_once()
 
 
+def test_search_provider_runner_skips_name_fallback_for_sha256():
+    owner = SimpleNamespace(
+        logger=MagicMock(),
+        search_tracker=MagicMock(),
+        format_log_fields=MagicMock(return_value="file=model.safetensors"),
+        log_search_result=MagicMock(),
+    )
+    owner.search_tracker.is_cancelled.return_value = False
+    runner = SearchProviderRunner(owner)
+    search_fn = MagicMock(return_value=None)
+
+    result = runner.execute_search_with_fallback(
+        _request(sha256="a" * 64),
+        "lora_manager_archive",
+        search_fn,
+        "LoRA archive",
+    )
+
+    assert result is None
+    search_fn.assert_called_once()
+
+
 def test_search_dependencies_require_extension_context():
     with pytest.raises(KeyError, match="Missing route dependency: self"):
         SearchDependencies.from_context(RouteContext({}))
