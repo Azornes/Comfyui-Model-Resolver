@@ -1,7 +1,10 @@
 {
-  "updated_at": "2026-07-27T11:48:51+00:00",
-  "last_checked_at": "2026-07-27T11:48:51+00:00",
-  "local_count": 97,
-  "new_models_added": 0,
-  "new_models_added_list": []
+  "updated_at": "2026-08-04T12:47:49+00:00",
+  "last_checked_at": "2026-08-04T12:47:49+00:00",
+  "local_count": 99,
+  "new_models_added": 2,
+  "new_models_added_list": [
+    "MageFlow",
+    "MiniMax H3"
+  ]
 }

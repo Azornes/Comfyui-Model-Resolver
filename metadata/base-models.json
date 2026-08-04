@@ -660,6 +660,19 @@
       "aliases": [
         "reve"
       ]
+    },
+    {
+      "name": "MageFlow",
+      "aliases": [
+        "mageflow"
+      ]
+    },
+    {
+      "name": "MiniMax H3",
+      "aliases": [
+        "minimax",
+        "minimax h3"
+      ]
     }
   ]
 }
