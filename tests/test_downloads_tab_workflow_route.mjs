@@ -4462,6 +4462,19 @@ test('active download refresh preserves existing cards for hover and tooltip sta
   assert.match(queueMethodsSource, /patchDownloadsPanelElement\(currentElement, nextElement\)/);
 });
 
+test('queue and download panel controls stay stable across repeated renders', () => {
+  const renderQueuedSelections = extractMethod(queueMethodsSource, 'renderQueuedSelections');
+  const patchQueuedSelections = extractMethod(queueMethodsSource, 'patchQueuedSelections');
+  const wireDownloadsPanelControls = extractMethod(queueMethodsSource, 'wireDownloadsPanelControls');
+
+  assert.match(renderQueuedSelections, /data-queue-key=/);
+  assert.match(renderQueuedSelections, /patchQueuedSelections\(/);
+  assert.match(patchQueuedSelections, /data\.queueKey|queueKey/);
+  assert.match(wireDownloadsPanelControls, /\.mr-downloads-subtab[\s\S]*?button\._hasListener/);
+  assert.match(wireDownloadsPanelControls, /clearHistoryButton\._hasListener/);
+  assert.match(wireDownloadsPanelControls, /button\._hasListener/);
+});
+
 test('automatic opening for missing models is disabled by default', () => {
   const isAutoOpenEnabled = eval(`(${extractMethod(modelResolverSource, 'isAutoOpenEnabled')})`);
   const previousLocalStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');

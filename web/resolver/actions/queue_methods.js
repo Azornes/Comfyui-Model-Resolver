@@ -240,7 +240,8 @@ export const queueMethods = {
             const label = (r.resolved_model?.relative_path || r.resolved_model?.filename || r.resolved_path || '').toString();
             const nodeLabel = r.node_label || r.node_type || (r.subgraph_id ? 'Subgraph' : 'Node');
             const orig = (r.original_path || '').toString();
-            html += `<div class="mr-queue-item">`;
+            const queueKey = `${r.node_id ?? ''}:${r.widget_index ?? ''}:${orig}`;
+            html += `<div class="mr-queue-item" data-queue-key="${this.escapeHtml(encodeURIComponent(queueKey))}">`;
             html += `<div class="mr-queue-item-title">${this.escapeHtml(nodeLabel)} #${this.escapeHtml(String(r.node_id))}</div>`;
             html += `<div class="mr-queue-item-meta"><span>Original</span><code>${this.escapeHtml(orig)}</code></div>`;
             html += `<div class="mr-queue-item-selection"><span>Selected</span><code>${this.escapeHtml(label)}</code></div>`;
@@ -248,7 +249,57 @@ export const queueMethods = {
             html += `</div>`;
         }
         html += '</div>';
-        this.queueList.innerHTML = html;
+        this.patchQueuedSelections(html);
+    },
+
+    patchQueuedSelections(html) {
+        if (!this.queueList) return;
+        if (typeof document === 'undefined') {
+            this.queueList.innerHTML = html;
+            return;
+        }
+
+        const template = document.createElement('template');
+        template.innerHTML = html;
+        const nextList = template.content.firstElementChild;
+        const currentList = this.queueList.querySelector('.mr-queue-items');
+        if (!nextList || !currentList || nextList.className !== currentList.className) {
+            this.queueList.innerHTML = html;
+            return;
+        }
+
+        const nextItems = Array.from(nextList.children)
+            .filter(item => item.dataset.queueKey);
+        const currentItems = Array.from(currentList.children)
+            .filter(item => item.dataset.queueKey);
+        if (
+            nextItems.length !== nextList.children.length
+            || currentItems.length !== currentList.children.length
+        ) {
+            this.queueList.innerHTML = html;
+            return;
+        }
+
+        const currentByKey = new Map(
+            currentItems.map(item => [item.dataset.queueKey, item])
+        );
+        const retainedItems = new Set();
+        const nextDomItems = [];
+        for (const nextItem of nextItems) {
+            let currentItem = currentByKey.get(nextItem.dataset.queueKey);
+            if (!currentItem) {
+                currentItem = nextItem.cloneNode(true);
+            } else if (currentItem.innerHTML !== nextItem.innerHTML) {
+                currentItem.innerHTML = nextItem.innerHTML;
+            }
+            retainedItems.add(currentItem);
+            nextDomItems.push(currentItem);
+        }
+
+        currentItems.forEach(item => {
+            if (!retainedItems.has(item)) item.remove();
+        });
+        nextDomItems.forEach(item => currentList.appendChild(item));
     },
 
     getActiveQueuePanelDownloads() {
@@ -1109,6 +1160,8 @@ export const queueMethods = {
         };
 
         this.queueList.querySelectorAll('.mr-downloads-subtab').forEach(button => {
+            if (button._hasListener) return;
+            button._hasListener = true;
             button.addEventListener('click', () => {
                 this.setQueueDownloadsTab(button.dataset.downloadsTab || 'active');
             });
@@ -1162,11 +1215,14 @@ export const queueMethods = {
         });
 
         const clearHistoryButton = this.queueList.querySelector('.mr-download-history-clear');
-        if (clearHistoryButton) {
+        if (clearHistoryButton && !clearHistoryButton._hasListener) {
+            clearHistoryButton._hasListener = true;
             clearHistoryButton.addEventListener('click', () => this.clearDownloadHistory());
         }
 
         this.queueList.querySelectorAll('.mr-download-history-remove').forEach(button => {
+            if (button._hasListener) return;
+            button._hasListener = true;
             button.addEventListener('click', (event) => {
                 event.stopPropagation();
                 const historyId = button.dataset.historyId || '';
