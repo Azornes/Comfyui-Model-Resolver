@@ -1051,6 +1051,12 @@ def search_huggingface_for_file(
         )
         return _search_cache[cache_key]
 
+    # Force Search may initialize a missing persistent index, but must not
+    # overwrite an index that already exists.
+    persist_author_index = not force_refresh or not os.path.isfile(
+        HF_AUTHOR_INDEX_CACHE_PATH
+    )
+
     try:
         def result_matches_requested_hash(result: Optional[Dict[str, Any]]) -> bool:
             if not requested_sha256:
@@ -1085,7 +1091,7 @@ def search_huggingface_for_file(
                     author,
                     headers={},
                     force_refresh=force_refresh,
-                    persist=not force_refresh,
+                    persist=persist_author_index,
                 )
                 cached_author_indexes[author] = index
                 if not index:
@@ -1228,7 +1234,7 @@ def search_huggingface_for_file(
                         author,
                         headers={},
                         force_refresh=force_refresh,
-                        persist=not force_refresh,
+                        persist=persist_author_index,
                     )
                 if index:
                     result = _find_matching_file_in_author_index(
