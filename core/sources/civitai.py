@@ -49,6 +49,7 @@ from ..type_utils import (
     first_non_empty,
     normalize_model_file_info,
     normalize_model_image,
+    normalize_sha256,
     parse_size_to_bytes,
     resolve_model_category,
     select_primary_model_file,
@@ -879,6 +880,7 @@ def search_civitai_for_file(
     use_api_search: bool = True,
     use_html_fallback: bool = True,
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+    sha256: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Search CivitAI for a specific model file.
@@ -896,6 +898,7 @@ def search_civitai_for_file(
     global _search_cache
 
     candidate_limit = max(1, min(int(candidate_limit), MAX_CIVITAI_CANDIDATE_LIMIT))
+    requested_sha256 = normalize_sha256(sha256)
     session_key = "session" if session_token else "anon"
     model_type_key = str(model_type or "").lower()
     base_model_key = _normalize_base_model(base_model_context or "")
@@ -905,7 +908,7 @@ def search_civitai_for_file(
         f"_html{int(bool(use_html_fallback))}"
     )
     cache_key = (
-        f"civit_{filename}_exact{exact_only}_type{model_type_key}_base{base_model_key}_session{session_key}_limit{candidate_limit}_{methods_key}"
+        f"civit_{filename}_sha{requested_sha256}_exact{exact_only}_type{model_type_key}_base{base_model_key}_session{session_key}_limit{candidate_limit}_{methods_key}"
     )
     if cache_key in _search_cache:
         log.debug(f"CivitAI search cache hit for {filename} (exact_only={exact_only})")
@@ -918,6 +921,61 @@ def search_civitai_for_file(
         return _search_cache[cache_key]
 
     try:
+        if requested_sha256:
+            _report_progress(
+                progress_callback,
+                "hash",
+                "Resolving CivitAI SHA-256",
+                62,
+                sha256=requested_sha256,
+            )
+            hash_result = get_model_info_by_hash(
+                requested_sha256,
+                api_key=api_key,
+            )
+            if hash_result:
+                result = build_unified_search_result(
+                    "civitai",
+                    model_id=hash_result.get("model_id"),
+                    version_id=hash_result.get("version_id"),
+                    name=hash_result.get("model_name") or hash_result.get("name") or "",
+                    version_name=hash_result.get("version_name") or "",
+                    type=hash_result.get("model_type") or hash_result.get("type") or "",
+                    filename=hash_result.get("filename") or filename,
+                    url=hash_result.get("version_url") or hash_result.get("url") or "",
+                    download_url=hash_result.get("download_url"),
+                    size=hash_result.get("size"),
+                    base_model=hash_result.get("base_model"),
+                    tags=hash_result.get("tags") or [],
+                    trained_words=hash_result.get("trained_words") or [],
+                    images=hash_result.get("images") or [],
+                    match_type="hash",
+                    confidence=100.0,
+                    sha256=requested_sha256,
+                    hashes=hash_result.get("hashes") or {"SHA256": requested_sha256},
+                    description=hash_result.get("description") or "",
+                    model_description=hash_result.get("model_description") or "",
+                )
+                _search_cache[cache_key] = result
+                _report_progress(
+                    progress_callback,
+                    "found",
+                    "Found exact CivitAI SHA-256 match",
+                    92,
+                    confidence=100.0,
+                )
+                return result
+
+            _search_cache[cache_key] = None
+            _report_progress(
+                progress_callback,
+                "done",
+                "CivitAI SHA-256 not found",
+                92,
+                found=False,
+            )
+            return None
+
         # Prefer the CivitAI.red tRPC search because it is much closer to what
         # the browser search UI returns than the broad public /models API.
         if use_trpc_search:
@@ -1504,6 +1562,7 @@ def get_model_info_by_hash(
     """
     global _hash_cache
 
+    file_hash = normalize_sha256(file_hash)
     if not file_hash:
         return None
 
@@ -1546,6 +1605,9 @@ def get_model_info_by_hash(
                 "version_id": version_info.get("id"),
                 "version_name": version_info.get("name"),
                 "sha256": file_hash,
+                "filename": "",
+                "size": None,
+                "hashes": {},
                 "url": f"https://civitai.com/models/{model_id}" if model_id else None,
                 "version_url": f"https://civitai.com/models/{model_id}?modelVersionId={version_info.get('id')}"
                 if model_id
@@ -1559,6 +1621,28 @@ def get_model_info_by_hash(
                 "description": version_info.get("description", ""),
                 "model_description": model_info.get("description", ""),
             }
+
+            files = version_info.get("files") or []
+            matching_file = next(
+                (
+                    file_info
+                    for file_info in files
+                    if isinstance(file_info, dict)
+                    and normalize_sha256(
+                        file_info.get("sha256")
+                        or (file_info.get("hashes") or {}).get("SHA256")
+                        or (file_info.get("hashes") or {}).get("sha256")
+                    )
+                    == file_hash.lower()
+                ),
+                None,
+            )
+            if matching_file:
+                result["filename"] = matching_file.get("name") or matching_file.get("filename") or ""
+                result["size"] = matching_file.get("size")
+                if result["size"] is None and matching_file.get("sizeKB") is not None:
+                    result["size"] = matching_file.get("sizeKB") * 1024
+                result["hashes"] = matching_file.get("hashes") or {}
 
             result = _enrich_model_info_with_details(
                 result,

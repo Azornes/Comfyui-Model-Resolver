@@ -896,6 +896,7 @@ def search_huggingface_for_file(
     use_brave_fallback: bool = True,
     force_refresh: bool = False,
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+    sha256: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Search HuggingFace for a specific model file.
@@ -912,6 +913,7 @@ def search_huggingface_for_file(
     """
     global _search_cache
 
+    requested_sha256 = normalize_sha256(sha256)
     brave_key = "brave" if brave_api_key and use_brave_fallback else "nobrave"
     token_key = "token" if token else "notoken"
     methods_key = (
@@ -920,7 +922,7 @@ def search_huggingface_for_file(
         f"brave{int(bool(use_brave_fallback))}_"
         f"force{int(bool(force_refresh))}"
     )
-    cache_key = f"hf_{filename}_exact{exact_only}_{token_key}_{brave_key}_{methods_key}"
+    cache_key = f"hf_{filename}_sha{requested_sha256}_exact{exact_only}_{token_key}_{brave_key}_{methods_key}"
     if cache_key in _search_cache:
         log.debug(f"HuggingFace cache hit file={filename} exact={exact_only}")
         _report_progress(
@@ -932,6 +934,16 @@ def search_huggingface_for_file(
         return _search_cache[cache_key]
 
     try:
+        def result_matches_requested_hash(result: Optional[Dict[str, Any]]) -> bool:
+            if not requested_sha256:
+                return True
+            return normalize_sha256(
+                result.get("sha256")
+                or result.get("hash")
+                or (result.get("hashes") or {}).get("SHA256")
+                or (result.get("hashes") or {}).get("sha256")
+            ) == requested_sha256
+
         headers = {}
         if token:
             headers["Authorization"] = f"Bearer {token}"
@@ -1015,7 +1027,7 @@ def search_huggingface_for_file(
                 exact_only=exact_only,
                 headers=headers,
             )
-            if result:
+            if result and result_matches_requested_hash(result):
                 _search_cache[cache_key] = result
                 _report_progress(
                     progress_callback,
@@ -1057,7 +1069,7 @@ def search_huggingface_for_file(
                         headers={},
                     )
                     author_fallback_repo_count += int(index.get("repo_count") or 0)
-                    if result:
+                    if result and result_matches_requested_hash(result):
                         _search_cache[cache_key] = result
                         _report_progress(
                             progress_callback,
@@ -1117,7 +1129,7 @@ def search_huggingface_for_file(
                 exact_only=exact_only,
                 headers=headers,
             )
-            if result:
+            if result and result_matches_requested_hash(result):
                 _search_cache[cache_key] = result
                 _report_progress(
                     progress_callback,
@@ -1178,7 +1190,11 @@ def search_huggingface_for_file(
                 exact_only=True,
                 headers=headers,
             )
-            if result and result.get("filename", "").lower() == filename.lower():
+            if (
+                result
+                and result.get("filename", "").lower() == filename.lower()
+                and result_matches_requested_hash(result)
+            ):
                 _search_cache[cache_key] = result
                 _report_progress(
                     progress_callback,

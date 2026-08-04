@@ -412,7 +412,7 @@ export const searchPanelMethods = {
             ? this.getSearchButtonLabelLines(buttonText).join(' ')
             : String(buttonText || 'Add');
         const icon = mode === 'name' ? getSvgIcon('search') : getSvgIcon('link');
-        return `<span class="mr-link-name-action-text">${this.escapeHtml(label)}</span><span class="mr-link-name-action-icon" aria-hidden="true">${icon}</span>`;
+        return `<span class="mr-btn-icon mr-link-name-action-icon" aria-hidden="true">${icon}</span><span class="mr-link-name-action-text">${this.escapeHtml(label)}</span>`;
     },
 
     renderLinkNameSwitchIcon(mode = 'link') {
@@ -454,11 +454,11 @@ export const searchPanelMethods = {
         const actionHeading = control.querySelector('.mr-link-name-action-heading');
         if (actionHeading) actionHeading.textContent = mode === 'name' ? 'Search' : 'Link';
         if (input) {
-            input.placeholder = mode === 'name' ? 'Search by model name...' : 'https://...';
+            input.placeholder = mode === 'name' ? 'Model name or SHA-256...' : 'https://...';
             if (mode === 'name' && document.activeElement !== input) {
                 input.value = String(currentState.manualSearchQuery || '');
             }
-            input.setAttribute('aria-label', mode === 'name' ? 'Model name' : 'Model URL');
+            input.setAttribute('aria-label', mode === 'name' ? 'Model name or SHA-256 hash' : 'Model URL');
         }
         if (actionButton) {
             const buttonText = mode === 'link'

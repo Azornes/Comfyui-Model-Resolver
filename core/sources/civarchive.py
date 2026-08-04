@@ -2137,19 +2137,21 @@ def search_civarchive_for_file(
     exact_only: bool = False,
     limit: int = DEFAULT_CIVARCHIVE_CANDIDATE_LIMIT,
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+    sha256: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Search CivArchive for the best downloadable match for a model filename.
     """
     normalized_filename = (filename or "").strip()
-    if not normalized_filename:
+    requested_sha256 = _extract_sha256(sha256 or "")
+    if not normalized_filename and not requested_sha256:
         return None
 
     limit = max(1, min(int(limit), MAX_CIVARCHIVE_CANDIDATE_LIMIT))
     detail_limit = min(limit, SEARCH_RESULT_DETAIL_LIMIT)
     base_model_key = _normalize_base_model(base_model_context or "")
     cache_key = (
-        f"file::{normalized_filename.lower()}::{model_type or ''}::{base_model_key}::{exact_only}::{limit}"
+        f"file::{normalized_filename.lower()}::hash::{requested_sha256}::{model_type or ''}::{base_model_key}::{exact_only}::{limit}"
     )
     if cache_key in _search_cache:
         _report_progress(
@@ -2160,17 +2162,17 @@ def search_civarchive_for_file(
         )
         return _search_cache[cache_key]
 
-    sha256 = _extract_sha256(normalized_filename)
-    if sha256:
+    hash_query = requested_sha256 or _extract_sha256(normalized_filename)
+    if hash_query:
         _report_progress(
             progress_callback,
             "hash",
             "Resolving CivArchive hash",
             40,
-            sha256=sha256,
+            sha256=hash_query,
         )
         result = resolve_civarchive_by_hash(
-            sha256,
+            hash_query,
             query=normalized_filename,
             exact_only=exact_only,
             model_type=model_type,

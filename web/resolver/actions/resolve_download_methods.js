@@ -2265,13 +2265,15 @@ export const resolveDownloadMethods = {
      */
     async searchOnline(missing, { workflowKey = this.getWorkflowScopedQueueKey(), forceSearch = false, source = null, searchQuery = '' } = {}) {
         const providedSearchQuery = String(searchQuery || '').trim();
+        const searchSha256 = normalizeSha256(providedSearchQuery);
         const state = this.getSearchStateForWorkflow(workflowKey, missing);
-        const requestedSearchQuery = providedSearchQuery;
+        const requestedSearchQuery = searchSha256 ? '' : providedSearchQuery;
         let filename = requestedSearchQuery || this.getFilenameFromPath(missing.original_path);
         let category = missing.category || this.getNodeTypeDownloadCategory?.(missing.node_type) || '';
         if (providedSearchQuery) {
             state.inputMode = 'name';
             state.manualSearchQuery = providedSearchQuery;
+            state.lastSearchMode = searchSha256 ? 'sha256' : 'name';
             this.persistSearchStateForWorkflow(workflowKey, missing, state);
         }
         const missingSearchKey = this.getMissingSearchKey(missing);
@@ -2297,7 +2299,7 @@ export const resolveDownloadMethods = {
 
         // For URNs, use the resolved file/model name for searching instead of the URN itself
         // and pass the URN type as category (CivitAI expects specific type names)
-        if (missing.is_urn && !requestedSearchQuery) {
+        if (missing.is_urn && !requestedSearchQuery && !searchSha256) {
             const urnSearchName = missing.civitai_info?.expected_filename
                 || missing.download_source?.filename
                 || missing.civitai_info?.model_name;
@@ -2324,7 +2326,7 @@ export const resolveDownloadMethods = {
             }
         }
 
-        const isUrn = Boolean(missing.is_urn && !requestedSearchQuery);
+        const isUrn = Boolean(missing.is_urn && !requestedSearchQuery && !searchSha256);
         const resultsId = `search-results-${missing.node_id}-${missing.widget_index}`;
         const canUpdateCurrentWorkflow = workflowKey === this.getWorkflowScopedQueueKey();
         const resultsDiv = canUpdateCurrentWorkflow
@@ -2404,6 +2406,8 @@ export const resolveDownloadMethods = {
             const tokens = this.getStoredTokens();
             const baseSearchData = {
                 filename,
+                sha256: searchSha256,
+                search_mode: searchSha256 ? 'sha256' : 'name',
                 category,
                 is_urn: isUrn,
                 base_model_context: baseModelContext,

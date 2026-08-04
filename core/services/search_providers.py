@@ -33,6 +33,7 @@ class SearchRequest:
     hf_use_brave_fallback: bool
     force_search: bool
     normalized_sources: frozenset[str]
+    sha256: str = ""
 
     @property
     def search_local(self):
@@ -226,6 +227,17 @@ class SearchProviderRunner:
         def task():
             source_results = {"popular": None, "model_list": None}
             source_found = False
+            request_sha256 = getattr(request, "sha256", "")
+
+            if request_sha256:
+                self.owner.search_tracker.update(
+                    request.progress_id,
+                    "local",
+                    "hash",
+                    "Searching local models by SHA-256",
+                    58,
+                )
+                return source_results, source_found
 
             popular_info = self.owner.get_popular_model_url(request.filename)
             self.owner.log_search_result("popular", popular_info)
@@ -289,6 +301,7 @@ class SearchProviderRunner:
         def task():
             hf_result = self.owner.search_huggingface_for_file(
                 request.filename,
+                sha256=getattr(request, "sha256", ""),
                 token=request.hf_token or None,
                 brave_api_key=request.brave_search_api_key or None,
                 use_api_search=request.hf_use_api_search,
@@ -435,6 +448,7 @@ class SearchProviderRunner:
                     "civitai",
                     lambda base_ctx, callback: self.owner.search_civitai_for_file(
                         request.filename,
+                        sha256=getattr(request, "sha256", ""),
                         api_key=request.civitai_key or None,
                         model_type=request.category,
                         base_model_context=base_ctx,
@@ -508,6 +522,7 @@ class SearchProviderRunner:
                     "civarchive",
                     lambda base_ctx, callback: self.owner.search_civarchive_for_file(
                         request.filename,
+                        sha256=getattr(request, "sha256", ""),
                         model_type=request.category,
                         base_model_context=base_ctx,
                         limit=request.civarchive_candidate_limit,
@@ -589,6 +604,7 @@ class SearchProviderRunner:
                 "lora_manager_archive",
                 lambda base_ctx, callback: self.owner.search_lora_manager_archive_for_file(
                     request.filename,
+                    sha256=getattr(request, "sha256", ""),
                     model_type=request.category,
                     base_model_context=base_ctx,
                     progress_callback=callback,
@@ -626,7 +642,13 @@ class SearchProviderRunner:
                 )
             )
         if request.search_civarchive_source and (
-            request.filename or (request.is_urn and request.data.get("model_id") and request.data.get("version_id"))
+            request.filename
+            or getattr(request, "sha256", "")
+            or (
+                request.is_urn
+                and request.data.get("model_id")
+                and request.data.get("version_id")
+            )
         ):
             tasks.append(
                 self.owner.asyncio.to_thread(
@@ -634,7 +656,9 @@ class SearchProviderRunner:
                     request,
                 )
             )
-        if request.search_lora_manager_archive_source and request.filename:
+        if request.search_lora_manager_archive_source and (
+            request.filename or getattr(request, "sha256", "")
+        ):
             tasks.append(
                 self.owner.asyncio.to_thread(
                     self.search_lora_manager_archive_source_task,

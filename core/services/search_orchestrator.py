@@ -1,6 +1,7 @@
 """Request orchestration for model source searches."""
 
 from ..routes.context import RouteContext
+from ..type_utils import normalize_sha256
 from .search_cache import SearchResultCache
 from .search_dependencies import SearchDependencies
 from .search_providers import (
@@ -135,7 +136,10 @@ class SearchOrchestrator:
         """Execute all requested sources and return a JSON response."""
         try:
             data = await request.json()
-            filename = data.get("filename", "")
+            filename = str(data.get("filename", "") or "").strip()
+            sha256 = normalize_sha256(
+                data.get("sha256") or data.get("hash") or data.get("file_hash")
+            )
             category = data.get("category", "")
             base_model_context = data.get("base_model_context", "")
             progress_id = str(data.get("progress_id") or "").strip()
@@ -186,7 +190,7 @@ class SearchOrchestrator:
 
             model_id = data.get("model_id")
             version_id = data.get("version_id")
-            if not filename and not (is_urn and model_id and version_id):
+            if not filename and not sha256 and not (is_urn and model_id and version_id):
                 return self.web.json_response(
                     {
                         "error": (
@@ -250,6 +254,7 @@ class SearchOrchestrator:
                 hf_use_brave_fallback=hf_use_brave_fallback,
                 force_search=force_search,
                 normalized_sources=normalized_sources,
+                sha256=sha256,
             )
             raise_if_search_cancelled = (
                 self.provider_runner.raise_if_search_cancelled
@@ -303,6 +308,7 @@ class SearchOrchestrator:
                         else model_id or version_id
                     ),
                     base=base_model_context,
+                    sha256=sha256,
                     force=force_search,
                 )
             )
@@ -319,6 +325,8 @@ class SearchOrchestrator:
                 "searched_sources": sorted(normalized_sources),
                 "source_errors": {},
                 "source_status": {},
+                "search_mode": "sha256" if sha256 else "name",
+                "search_sha256": sha256,
             }
 
             def iter_result_items(result):
@@ -333,65 +341,83 @@ class SearchOrchestrator:
                 matches = []
                 seen_match_paths = set()
                 seen_hashes = set()
-                for source_key in (
-                    "huggingface",
-                    "civitai",
-                    "civarchive",
-                    "lora_manager_archive",
-                    "popular",
-                    "model_list",
-                ):
-                    for source_result in iter_result_items(payload.get(source_key)):
-                        raise_if_search_cancelled(search_request, source_key)
-                        sha256 = self.extract_sha256_from_metadata(source_result)
-                        if not sha256 or sha256 in seen_hashes:
-                            continue
-                        seen_hashes.add(sha256)
-
-                        self.search_tracker.update(
-                            progress_id,
-                            progress_source,
-                            "local_hash",
-                            "Checking local metadata hashes",
-                            94,
+                source_entries = []
+                if search_request.sha256:
+                    source_entries.append(
+                        (
+                            "sha256_query",
+                            {
+                                "filename": filename,
+                                "sha256": search_request.sha256,
+                            },
                         )
-                        try:
-                            hash_matches = self.search_local_matches_by_hash(
-                                sha256,
-                                category=category or None,
-                                max_matches=20,
-                                force_rescan=force_search,
-                            )
-                        except Exception as hash_error:
-                            self.logger.warning(
-                                "Local metadata hash lookup failed "
-                                f"for {source_key}:{sha256}: {hash_error}"
-                            )
-                            continue
+                    )
+                source_entries.extend(
+                    (
+                        source_key,
+                        source_result,
+                    )
+                    for source_key in (
+                        "huggingface",
+                        "civitai",
+                        "civarchive",
+                        "lora_manager_archive",
+                        "popular",
+                        "model_list",
+                    )
+                    for source_result in iter_result_items(payload.get(source_key))
+                )
+                for source_key, source_result in source_entries:
+                    raise_if_search_cancelled(search_request, source_key)
+                    sha256 = self.extract_sha256_from_metadata(source_result)
+                    if not sha256 or sha256 in seen_hashes:
+                        continue
+                    seen_hashes.add(sha256)
 
-                        for match in hash_matches:
-                            model_path = (
-                                match.get("model", {}).get("path")
-                                or match.get("path")
-                                or ""
-                            )
-                            path_key = model_path.lower()
-                            if path_key and path_key in seen_match_paths:
-                                continue
-                            if path_key:
-                                seen_match_paths.add(path_key)
-                            matches.append(
-                                {
-                                    **match,
-                                    "hash_lookup_source": source_key,
-                                    "hash_lookup_filename": (
-                                        source_result.get("filename")
-                                        or source_result.get("path")
-                                        or filename
-                                    ),
-                                    "hash_lookup_sha256": sha256,
-                                }
-                            )
+                    self.search_tracker.update(
+                        progress_id,
+                        progress_source,
+                        "local_hash",
+                        "Checking local metadata hashes",
+                        94,
+                    )
+                    try:
+                        hash_matches = self.search_local_matches_by_hash(
+                            sha256,
+                            category=category or None,
+                            max_matches=20,
+                            force_rescan=force_search,
+                        )
+                    except Exception as hash_error:
+                        self.logger.warning(
+                            "Local metadata hash lookup failed "
+                            f"for {source_key}:{sha256}: {hash_error}"
+                        )
+                        continue
+
+                    for match in hash_matches:
+                        model_path = (
+                            match.get("model", {}).get("path")
+                            or match.get("path")
+                            or ""
+                        )
+                        path_key = model_path.lower()
+                        if path_key and path_key in seen_match_paths:
+                            continue
+                        if path_key:
+                            seen_match_paths.add(path_key)
+                        matches.append(
+                            {
+                                **match,
+                                "hash_lookup_source": source_key,
+                                "hash_lookup_filename": (
+                                    source_result.get("filename")
+                                    or source_result.get("path")
+                                    or filename
+                                ),
+                                "hash_lookup_sha256": sha256,
+                            }
+                        )
 
                 if matches:
                     self.logger.info(
@@ -433,6 +459,8 @@ class SearchOrchestrator:
 
             raise_if_search_cancelled(search_request, progress_source)
             results["local_hash_matches"] = collect_local_hash_matches(results)
+            if results["local_hash_matches"]:
+                results["found"] = True
             raise_if_search_cancelled(search_request, progress_source)
 
             self.logger.info(

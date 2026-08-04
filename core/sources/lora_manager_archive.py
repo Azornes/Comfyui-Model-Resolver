@@ -32,6 +32,7 @@ from ..type_utils import (
     build_search_result,
     get_generic_filename_tokens,
     normalize_lora_manager_type,
+    normalize_sha256,
     select_primary_model_file,
 )
 
@@ -678,10 +679,78 @@ def search_lora_manager_archive_for_file(
     exact_only: bool = False,
     limit: int = 10,
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+    sha256: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Search the archive for the best model/version match for a filename.
     """
+    requested_sha256 = normalize_sha256(sha256)
+    if requested_sha256:
+        conn = _connect_readonly()
+        if not conn:
+            return None
+        try:
+            rows = conn.execute(
+                """
+                SELECT
+                    m.id AS model_id,
+                    m.name AS model_name,
+                    m.type AS model_type,
+                    v.id AS version_id,
+                    v.name AS version_name,
+                    v.base_model AS base_model,
+                    v.position AS position
+                FROM models m
+                JOIN model_versions v ON v.model_id = m.id
+                ORDER BY m.id ASC, COALESCE(v.position, 999999) ASC
+                """
+            ).fetchall()
+            for row in rows:
+                files = _load_version_files(conn, row["version_id"])
+                matching_file = next(
+                    (
+                        file_info
+                        for file_info in files
+                        if normalize_sha256(
+                            file_info.get("sha256")
+                            or (file_info.get("hashes") or {}).get("SHA256")
+                            or (file_info.get("hashes") or {}).get("sha256")
+                        )
+                        == requested_sha256
+                    ),
+                    None,
+                )
+                if not matching_file:
+                    continue
+
+                result = _build_result_from_row(conn, row)
+                result.update(
+                    {
+                        "filename": matching_file.get("name") or result.get("filename", ""),
+                        "download_url": matching_file.get("downloadUrl") or result.get("download_url"),
+                        "size": (
+                            int((matching_file.get("sizeKB") or 0) * 1024)
+                            if matching_file.get("sizeKB") is not None
+                            else result.get("size")
+                        ),
+                        "sha256": requested_sha256,
+                        "hashes": matching_file.get("hashes") or {"SHA256": requested_sha256},
+                        "match_type": "hash",
+                        "confidence": 100.0,
+                    }
+                )
+                _report_progress(
+                    progress_callback,
+                    "found",
+                    "Found LoRA archive SHA-256 match",
+                    92,
+                    confidence=100.0,
+                )
+                return result
+        finally:
+            conn.close()
+        return None
+
     search_query = os.path.splitext(get_filename_from_path(filename))[0]
     if not search_query:
         return None
