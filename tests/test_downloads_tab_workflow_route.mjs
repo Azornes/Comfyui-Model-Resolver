@@ -5205,6 +5205,14 @@ test('local match refreshes preserve keyed rows and button handlers', () => {
   assert.doesNotMatch(wireLocalMatchButtons, /addEventListener\('click'/);
 });
 
+test('URN resolution preserves the download panel container', () => {
+  const resolveUrnAsync = extractMethod(resolveDownloadMethodsSource, 'resolveUrnAsync');
+
+  assert.doesNotMatch(resolveUrnAsync, /downloadEl\.outerHTML\s*=/);
+  assert.match(resolveUrnAsync, /downloadEl\.innerHTML\s*=\s*this\.renderKnownDownloadPanel/);
+  assert.match(resolveUrnAsync, /wireDownloadSearchPanel\(downloadEl, missing\)/);
+});
+
 test('local match status group warns when match folder is unsupported by node', () => {
   const renderLocalMatchStatus = eval(`(${extractMethod(searchPanelMethodsSource, 'renderLocalMatchStatus')})`);
   const getLocalMatchCategory = eval(`(${extractMethod(searchPanelMethodsSource, 'getLocalMatchCategory')})`);
