@@ -19,7 +19,7 @@ import {
 } from '../web/resolver/node_context_menu.js';
 import { startSplitterDrag } from '../web/resolver/utils/splitter_drag.js';
 import { normalizeDownloadCategoryValue } from '../web/resolver/utils/category_utils.js';
-import { normalizeSha256 } from '../web/resolver/utils/hash_utils.js';
+import { getSha256Field, normalizeSha256 } from '../web/resolver/utils/hash_utils.js';
 import { baseModelAliasMethods } from '../web/resolver/search/base_model_alias_methods.js';
 import { searchHashMethods } from '../web/resolver/search/search_hash_methods.js';
 import { missingModelStateMethods } from '../web/resolver/views/missing_model_state_methods.js';
@@ -3025,6 +3025,24 @@ function extractMethod(source, methodName, paramsPattern = '[^)]*') {
   }
   throw new Error(`Could not parse ${methodName}`);
 }
+
+test('model info hash readers preserve field precedence and casing', () => {
+  const getInfoDialogHash = eval(`(${extractMethod(modelInfoMethodsSource, 'getInfoDialogHash')})`);
+  const getSourceModelFileHash = eval(`(${extractMethod(modelInfoMethodsSource, 'getSourceModelFileHash')})`);
+  const getSourceModelDisplayHash = eval(`(${extractMethod(modelInfoMethodsSource, 'getSourceModelDisplayHash')})`);
+  const value = {
+    sha256: '  DirectHash  ',
+    hash: 'FallbackHash',
+    hashes: { SHA256: 'NestedHash' },
+  };
+
+  assert.equal(getInfoDialogHash(value), 'DirectHash');
+  assert.equal(getSourceModelFileHash(value), 'directhash');
+  assert.equal(getSourceModelDisplayHash(value), 'DirectHash');
+  assert.equal(getInfoDialogHash({ hashes: { sha256: ' NestedHash ' } }), 'NestedHash');
+  assert.equal(getSourceModelFileHash({}), '');
+  assert.equal(getSourceModelDisplayHash({}), '');
+});
 
 test('workflow signature tracks model strength for bypass and custom LoRA loaders', () => {
   const getWorkflowSignatureData = eval(`(${extractMethod(workflowStateMethodsSource, 'getWorkflowSignatureData')})`);

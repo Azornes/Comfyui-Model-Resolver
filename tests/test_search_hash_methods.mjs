@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { searchHashMethods } from '../web/resolver/search/search_hash_methods.js';
-import { normalizeSha256 } from '../web/resolver/utils/hash_utils.js';
+import { getSha256Field, normalizeSha256 } from '../web/resolver/utils/hash_utils.js';
 
 function createDialog(overrides = {}) {
   return { ...searchHashMethods, ...overrides };
@@ -10,6 +10,19 @@ function createDialog(overrides = {}) {
 
 const hashA = 'a'.repeat(64);
 const hashB = 'b'.repeat(64);
+
+test('shared SHA-256 field extraction preserves precedence and optional casing', () => {
+  const value = {
+    sha256: '  DirectHash  ',
+    hash: 'FallbackHash',
+    hashes: { SHA256: 'NestedHash' },
+  };
+
+  assert.equal(getSha256Field(value), 'DirectHash');
+  assert.equal(getSha256Field(value, { lowercase: true }), 'directhash');
+  assert.equal(getSha256Field({ hashes: { sha256: ' NestedHash ' } }), 'NestedHash');
+  assert.equal(getSha256Field({}), '');
+});
 
 test('shared SHA-256 normalization preserves the accepted input contract', () => {
   assert.equal(normalizeSha256(`sha256:${hashA.toUpperCase()}`), hashA);

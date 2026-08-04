@@ -1,3 +1,13 @@
+export function getSha256Field(value = {}, { lowercase = false } = {}) {
+    const hashes = value.hashes && typeof value.hashes === 'object'
+        ? value.hashes
+        : {};
+    const result = String(
+        value.sha256 || value.hash || hashes.SHA256 || hashes.sha256 || ''
+    ).trim();
+    return lowercase ? result.toLowerCase() : result;
+}
+
 export function normalizeSha256(value = '') {
     let text = String(value || '').trim();
     text = text.replace(/^sha256[:=]/i, '').trim().toLowerCase();

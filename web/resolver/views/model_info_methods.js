@@ -3,7 +3,7 @@ import { getSvgIcon } from "../../utils/icon_utils.js";
 import { escapeHtml, escapeJsString, getFilenameFromPath, sanitizeDescriptionHtml, pollBackgroundTask, safeStorage, copyTextWithFeedback } from "../utils/html_utils.js";
 import { getModelCardUrl } from "../utils/url_utils.js";
 import { extractComfyWorkflow } from "../utils/workflow_metadata.js";
-import { normalizeSha256 } from "../utils/hash_utils.js";
+import { getSha256Field, normalizeSha256 } from "../utils/hash_utils.js";
 import { getCivitaiModelUrl } from "../globals.js";
 export const modelInfoMethods = {
     escapeHtml,
@@ -1328,7 +1328,7 @@ export const modelInfoMethods = {
     },
 
     getInfoDialogHash(data = {}) {
-        return String(data.sha256 || data.hash || data.hashes?.SHA256 || data.hashes?.sha256 || '').trim();
+        return getSha256Field(data);
     },
 
     getInfoDialogModelFilePath(data = {}) {
@@ -2990,8 +2990,7 @@ export const modelInfoMethods = {
     },
 
     getSourceModelFileHash(file = {}) {
-        const hashes = file.hashes && typeof file.hashes === 'object' ? file.hashes : {};
-        return String(file.sha256 || file.hash || hashes.SHA256 || hashes.sha256 || '').trim().toLowerCase();
+        return getSha256Field(file, { lowercase: true });
     },
 
     getSourceModelFileNames(file = {}) {
@@ -3229,8 +3228,7 @@ export const modelInfoMethods = {
     },
 
     getSourceModelDisplayHash(value = {}) {
-        const hashes = value.hashes && typeof value.hashes === 'object' ? value.hashes : {};
-        return String(value.sha256 || value.hash || hashes.SHA256 || hashes.sha256 || '').trim();
+        return getSha256Field(value);
     },
 
     renderSourceModelImageMeta(image = {}) {
