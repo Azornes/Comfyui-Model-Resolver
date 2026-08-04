@@ -48,6 +48,7 @@ const syncSearchElementAttributes = eval(`(${extractMethod(resolveDownloadMethod
 const getSearchResultsPatchKind = eval(`(${extractMethod(resolveDownloadMethodsSource, 'getSearchResultsPatchKind')})`);
 const wireSearchDownloadButtons = eval(`(${extractMethod(resolveDownloadMethodsSource, 'wireSearchDownloadButtons')})`);
 const patchLocalMatchesContainer = eval(`(${extractMethod(resolveDownloadMethodsSource, 'patchLocalMatchesContainer')})`);
+const resolveUrnAsync = eval(`(${extractMethod(resolveDownloadMethodsSource, 'resolveUrnAsync')})`);
 const patchQueuedSelections = eval(`(${extractMethod(queueMethodsSource, 'patchQueuedSelections')})`);
 const patchDownloadsPanelElement = eval(`(${extractMethod(queueMethodsSource, 'patchDownloadsPanelElement')})`);
 const patchLoadedModelsProgress = eval(`(${extractMethod(renderFormatMethodsSource, 'patchLoadedModelsProgress')})`);
@@ -225,4 +226,62 @@ test('search download button wiring remains idempotent on the same node', () => 
   container.querySelector('.search-download-btn').click();
 
   assert.equal(calls, 1);
+});
+
+test('stale URN responses cannot overwrite the latest UI request', async () => {
+  const window = new Window();
+  const previousDocument = globalThis.document;
+  const previousLog = globalThis.log;
+  const previousConsoleError = console.error;
+  const urnErrors = [];
+  globalThis.document = window.document;
+  globalThis.log = { debug() {} };
+  console.error = (...args) => urnErrors.push(args);
+
+  try {
+    const loading = window.document.createElement('div');
+    loading.id = 'urn-loading-1';
+    const download = window.document.createElement('div');
+    download.id = 'urn-download-1';
+    window.document.body.append(loading, download);
+
+    const resolvers = [];
+    const dialog = {
+      missingModels: [],
+      urnResolveUiTokens: new Map(),
+      getStoredTokens() {
+        return {};
+      },
+      fetchJson() {
+        return new Promise(resolve => resolvers.push(resolve));
+      },
+      renderVersionedModelNameHtml(name, version) {
+        return `${name} ${version}`;
+      },
+      escapeHtml(value) {
+        return String(value);
+      },
+    };
+
+    const first = resolveUrnAsync.call(dialog, '1', '1', loading.id, 'https://example.test/one');
+    await Promise.resolve();
+    const second = resolveUrnAsync.call(dialog, '1', '2', loading.id, 'https://example.test/two');
+    await Promise.resolve();
+
+    resolvers[1]({ civitai: { name: 'Latest', version_name: 'v2', download_url: 'latest' } });
+    await second;
+    assert.equal(urnErrors.length, 0, urnErrors.map(args => args.map(String).join(' ')).join('\n'));
+    assert.match(loading.textContent, /Latest v2/);
+
+    resolvers[0]({ civitai: { name: 'Stale', version_name: 'v1', download_url: 'stale' } });
+    await first;
+    assert.match(loading.textContent, /Latest v2/);
+    assert.doesNotMatch(loading.textContent, /Stale v1/);
+  } finally {
+    if (previousDocument === undefined) delete globalThis.document;
+    else globalThis.document = previousDocument;
+    if (previousLog === undefined) delete globalThis.log;
+    else globalThis.log = previousLog;
+    console.error = previousConsoleError;
+  }
 });

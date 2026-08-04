@@ -2456,6 +2456,10 @@ export const resolveDownloadMethods = {
             : null;
         let searchRunId = null;
         let completedSearchRun = false;
+        const isCurrentSearchRun = () => (
+            !searchRunId
+            || this.isBackgroundSearchRunActive(workflowKey, missingSearchKey, searchRunId)
+        );
 
         try {
             if (!sourceIds.length) {
@@ -2776,13 +2780,18 @@ export const resolveDownloadMethods = {
             console.error('Model Resolver: Search error:', error);
             this.clearSearchProgressTimers(searchRunId);
             this.clearBackendSearchProgressTimers?.(searchRunId);
+            if (searchRunId && !isCurrentSearchRun()) return;
             state.lastAttemptError = error.message;
             this.persistSearchStateForWorkflow(workflowKey, missing, state);
-            if (resultsDiv) {
-                resultsDiv.innerHTML = this.renderStatusMessage(`Search failed: ${error.message}`, 'error');
+            if (resultsDiv?.isConnected !== false) {
+                this.patchSearchResultsContainer?.(
+                    resultsDiv,
+                    this.renderStatusMessage(`Search failed: ${error.message}`, 'error')
+                );
             }
         } finally {
-            if (!searchRunId || this.isBackgroundSearchRunActive(workflowKey, missingSearchKey, searchRunId)) {
+            const currentSearchRun = isCurrentSearchRun();
+            if (!searchRunId || currentSearchRun) {
                 this.clearSearchProgressTimers(searchRunId);
                 this.clearBackendSearchProgressTimers?.(searchRunId);
                 state.activeSearchRunId = null;
@@ -2796,7 +2805,7 @@ export const resolveDownloadMethods = {
                     this.backgroundSearchJobs.delete(jobKey);
                 }
             }
-            if (!completedSearchRun) {
+            if (!completedSearchRun && currentSearchRun) {
                 this.settleInactiveSearchProgress?.(missing, state, {
                     workflowKey,
                     message: state.lastAttemptError || 'Search interrupted',
@@ -2804,12 +2813,14 @@ export const resolveDownloadMethods = {
                     refresh: false
                 });
             }
-            if (searchBtn) {
+            if (currentSearchRun && searchBtn?.isConnected !== false) {
                 searchBtn.disabled = false;
                 searchBtn.innerHTML = this.renderSearchButtonContent('Search Again');
             }
-            this.persistSearchStateForWorkflow(workflowKey, missing, state);
-            this.refreshSearchUiForMissing(missing, state, { workflowKey });
+            if (currentSearchRun) {
+                this.persistSearchStateForWorkflow(workflowKey, missing, state);
+                this.refreshSearchUiForMissing(missing, state, { workflowKey });
+            }
         }
     },
 
@@ -2822,6 +2833,14 @@ export const resolveDownloadMethods = {
             log.debug('resolveUrnAsync: missing modelId or versionId');
             return;
         }
+
+        if (!(this.urnResolveUiTokens instanceof Map)) {
+            this.urnResolveUiTokens = new Map();
+        }
+        const uiTokenKey = String(loadingElementId || `urn:${modelId}:${versionId}`);
+        const uiToken = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        this.urnResolveUiTokens.set(uiTokenKey, uiToken);
+        const isCurrentUrnUi = () => this.urnResolveUiTokens.get(uiTokenKey) === uiToken;
 
         try {
             const downloadContainerId = loadingElementId.replace('urn-loading-', 'urn-download-');
@@ -2853,7 +2872,7 @@ export const resolveDownloadMethods = {
                 log.debug('resolveUrnAsync search completed');
             }
 
-            if (data) {
+            if (data && isCurrentUrnUi()) {
                 const loadingEl = document.getElementById(loadingElementId);
                 if (loadingEl && data.civitai) {
                     loadingEl.classList.remove('mr-is-muted', 'mr-is-error');
@@ -2880,6 +2899,8 @@ export const resolveDownloadMethods = {
                 } else if (downloadEl) {
                     downloadEl.innerHTML = `<div class="mr-download-info">Unable to resolve direct download for this URN.</div>`;
                 }
+            } else if (data) {
+                return;
             } else {
                 const loadingEl = document.getElementById(loadingElementId);
                 if (loadingEl) {
@@ -2895,6 +2916,7 @@ export const resolveDownloadMethods = {
             }
         } catch (error) {
             console.error('Model Resolver: URN resolve error:', error);
+            if (!isCurrentUrnUi()) return;
             const loadingEl = document.getElementById(loadingElementId);
             if (loadingEl) {
                 loadingEl.textContent = 'Error';
@@ -2905,6 +2927,10 @@ export const resolveDownloadMethods = {
             const downloadEl = document.getElementById(downloadContainerId);
             if (downloadEl) {
                 downloadEl.innerHTML = `<div class="mr-download-info">Failed to resolve URN download.</div>`;
+            }
+        } finally {
+            if (isCurrentUrnUi()) {
+                this.urnResolveUiTokens.delete(uiTokenKey);
             }
         }
     },

@@ -5245,6 +5245,21 @@ test('URN resolution preserves the download panel container', () => {
   assert.match(resolveUrnAsync, /wireDownloadSearchPanel\(downloadEl, missing\)/);
 });
 
+test('search and URN completion ignore stale UI runs', () => {
+  const searchStart = resolveDownloadMethodsSource.indexOf('async searchOnline');
+  const urnStart = resolveDownloadMethodsSource.indexOf('async resolveUrnAsync');
+  const searchOnline = resolveDownloadMethodsSource.slice(searchStart, urnStart);
+  const resolveUrnAsync = extractMethod(resolveDownloadMethodsSource, 'resolveUrnAsync');
+
+  assert.match(searchOnline, /isCurrentSearchRun/);
+  assert.match(searchOnline, /currentSearchRun/);
+  assert.match(searchOnline, /if \(searchRunId && !isCurrentSearchRun\(\)\) return/);
+  assert.match(searchOnline, /currentSearchRun && searchBtn\?\.isConnected !== false/);
+  assert.match(resolveUrnAsync, /urnResolveUiTokens/);
+  assert.match(resolveUrnAsync, /isCurrentUrnUi/);
+  assert.match(resolveUrnAsync, /else if \(data\) \{\s*return;/);
+});
+
 test('local match status group warns when match folder is unsupported by node', () => {
   const renderLocalMatchStatus = eval(`(${extractMethod(searchPanelMethodsSource, 'renderLocalMatchStatus')})`);
   const getLocalMatchCategory = eval(`(${extractMethod(searchPanelMethodsSource, 'getLocalMatchCategory')})`);
