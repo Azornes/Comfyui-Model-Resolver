@@ -2319,9 +2319,14 @@ export const searchPanelMethods = {
                 const identityAttr = localMatchIdentity
                     ? ` data-local-match-identity="${this.escapeHtml(localMatchIdentity)}"`
                     : '';
+                const localMatchKey = localMatchIdentity
+                    || matchPath
+                    || match.filename
+                    || `match-${matchIndex}`;
+                const localMatchKeyAttr = ` data-local-match-key="${this.escapeHtml(encodeURIComponent(String(localMatchKey)))}"`;
                 const rowClass = `mr-match-row${isBestMatch ? ' mr-best-match' : ''}`;
 
-                html += `<div class="${rowClass}"${identityAttr}${this.getContextMenuAttrs(contextModel)}>`;
+                html += `<div class="${rowClass}"${localMatchKeyAttr}${identityAttr}${this.getContextMenuAttrs(contextModel)}>`;
                 html += this.getConfidenceBadge(match.confidence);
                 html += `<span class="mr-match-filename"${this.getModelPreviewTooltipAttrs(match.model || match, matchPath)}>${this.escapeHtml(matchPath)}</span>`;
                 html += this.renderLocalMatchStatusGroup(missing, match, hashLabelMap);
@@ -2354,7 +2359,12 @@ export const searchPanelMethods = {
                     const identityAttr = localMatchIdentity
                         ? ` data-local-match-identity="${this.escapeHtml(localMatchIdentity)}"`
                         : '';
-                    html += `<div class="mr-match-row"${identityAttr}${this.getContextMenuAttrs(contextModel)}>`;
+                    const localMatchKey = localMatchIdentity
+                        || matchPath
+                        || match.filename
+                        || `alternative-${mIdx}`;
+                    const localMatchKeyAttr = ` data-local-match-key="${this.escapeHtml(encodeURIComponent(String(localMatchKey)))}"`;
+                    html += `<div class="mr-match-row"${localMatchKeyAttr}${identityAttr}${this.getContextMenuAttrs(contextModel)}>`;
                     html += this.getConfidenceBadge(match.confidence);
                     html += `<span class="mr-match-filename"${this.getModelPreviewTooltipAttrs(match.model || match, matchPath)}>${this.escapeHtml(matchPath)}</span>`;
                     html += this.renderLocalMatchStatusGroup(missing, match, hashLabelMap);
@@ -2393,10 +2403,9 @@ export const searchPanelMethods = {
             const buttonId = `resolve-${missingIndex}-${missing.node_id}-${missing.widget_index}-${matchIndex}`;
             const resolveButton = container.querySelector(`#${buttonId}`);
             if (resolveButton) {
-                resolveButton.onclick = null;
-                resolveButton.addEventListener('click', () => {
+                resolveButton.onclick = () => {
                     this.queueResolution(missing, match.model);
-                });
+                };
             }
         });
 
@@ -2406,9 +2415,9 @@ export const searchPanelMethods = {
                 const altBtnId = `resolve-alt-${missingIndex}-${missing.node_id}-${missing.widget_index}-${mIdx}`;
                 const altBtn = container.querySelector(`#${altBtnId}`);
                 if (altBtn) {
-                    altBtn.addEventListener('click', () => {
+                    altBtn.onclick = () => {
                         this.queueResolution(missing, match.model);
-                    });
+                    };
                 }
             }
         }
@@ -2654,20 +2663,29 @@ export const searchPanelMethods = {
         const bodyId = `local-matches-body-${this.getMissingModelDomKey(missing)}`;
         const container = this.contentElement.querySelector(`#${bodyId}`);
         if (container) {
-            container.innerHTML = `<div class="mr-no-matches">Searching local matches for "${missing.civitai_info.expected_filename}"...</div>`;
+            this.patchLocalMatchesContainer(
+                container,
+                `<div class="mr-no-matches">Searching local matches for "${this.escapeHtml(missing.civitai_info.expected_filename)}"...</div>`
+            );
         }
 
         try {
             await this.fetchUrnLocalMatches(missing);
             if (container) {
-                container.innerHTML = this.renderLocalMatchesContent(missing, missing.__displayIndex || 0);
+                this.patchLocalMatchesContainer(
+                    container,
+                    this.renderLocalMatchesContent(missing, missing.__displayIndex || 0)
+                );
                 this.wireLocalMatchButtons(this.contentElement, missing, missing.__displayIndex || 0);
             }
             this.refreshMissingListRow(missing, { refreshBaseModels: true });
         } catch (error) {
             console.error('Model Resolver: URN local match refresh error:', error);
             if (container) {
-                container.innerHTML = `<div class="mr-no-matches">Failed to refresh local matches.</div>`;
+                this.patchLocalMatchesContainer(
+                    container,
+                    '<div class="mr-no-matches">Failed to refresh local matches.</div>'
+                );
             }
         }
     },

@@ -1367,6 +1367,116 @@ export const resolveDownloadMethods = {
         this.renderDownloadSnapshot(snapshot.downloadId, snapshot);
     },
 
+    patchLocalMatchesContainer(container, renderedHtml = '') {
+        if (!container) return;
+        const documentRef = container.ownerDocument || globalThis.document;
+        if (!documentRef?.createElement) {
+            container.innerHTML = renderedHtml;
+            return;
+        }
+
+        const template = documentRef.createElement('template');
+        template.innerHTML = renderedHtml || '';
+        const nextRows = Array.from(template.content.querySelectorAll('.mr-match-row[data-local-match-key]'));
+        const currentRows = Array.from(container.querySelectorAll('.mr-match-row[data-local-match-key]'));
+
+        if (
+            !nextRows.length
+            || !currentRows.length
+            || currentRows.some(row => !row.dataset.localMatchKey)
+        ) {
+            if (container.innerHTML !== renderedHtml) {
+                container.innerHTML = renderedHtml;
+            }
+            return;
+        }
+
+        const currentGroups = Array.from(container.querySelectorAll('.mr-stack-sm'));
+        const currentGroupsById = new Map(currentGroups.map(group => [group.id, group]));
+        const nextGroups = Array.from(template.content.querySelectorAll('.mr-stack-sm'));
+        const nextGroupsById = new Map();
+        const retainedGroups = new Set();
+
+        for (const nextGroup of nextGroups) {
+            const groupId = nextGroup.id || '';
+            let currentGroup = currentGroupsById.get(groupId);
+            if (!currentGroup) {
+                currentGroup = nextGroup.cloneNode(true);
+                currentGroup.querySelectorAll('.mr-match-row').forEach(row => row.remove());
+            }
+            nextGroupsById.set(groupId, currentGroup);
+            retainedGroups.add(currentGroup);
+        }
+
+        const currentRowsByKey = new Map(
+            currentRows.map(row => [row.dataset.localMatchKey, row])
+        );
+        const retainedRows = new Set();
+        const nextRowsByKey = new Map();
+
+        for (const nextRow of nextRows) {
+            const key = nextRow.dataset.localMatchKey;
+            let currentRow = currentRowsByKey.get(key);
+            if (!currentRow) {
+                currentRow = nextRow.cloneNode(true);
+            } else {
+                this.syncSearchElementAttributes(currentRow, nextRow);
+                if (currentRow.innerHTML !== nextRow.innerHTML) {
+                    currentRow.innerHTML = nextRow.innerHTML;
+                }
+            }
+
+            const nextGroup = nextRow.closest('.mr-stack-sm');
+            const targetParent = nextGroup
+                ? nextGroupsById.get(nextGroup.id || '')
+                : container;
+            if (!targetParent) return;
+            targetParent.appendChild(currentRow);
+            retainedRows.add(currentRow);
+            nextRowsByKey.set(key, currentRow);
+        }
+
+        for (const currentRow of currentRows) {
+            if (!retainedRows.has(currentRow)) currentRow.remove();
+        }
+        for (const currentGroup of currentGroups) {
+            if (!retainedGroups.has(currentGroup)) currentGroup.remove();
+        }
+
+        const nextToggle = template.content.querySelector('.mr-local-alternatives-toggle');
+        const currentToggle = container.querySelector('.mr-local-alternatives-toggle');
+        let nextDomToggle = null;
+        if (nextToggle) {
+            nextDomToggle = currentToggle || nextToggle.cloneNode(true);
+            if (currentToggle) {
+                this.syncSearchElementAttributes(currentToggle, nextToggle);
+            }
+        } else if (currentToggle) {
+            currentToggle.remove();
+        }
+
+        const retainedChildren = new Set();
+        const nextDomChildren = [];
+        for (const nextChild of Array.from(template.content.children)) {
+            let nextDomChild = null;
+            if (nextChild.classList.contains('mr-match-row')) {
+                nextDomChild = nextRowsByKey.get(nextChild.dataset.localMatchKey);
+            } else if (nextChild.classList.contains('mr-local-alternatives-toggle')) {
+                nextDomChild = nextDomToggle;
+            } else if (nextChild.classList.contains('mr-stack-sm')) {
+                nextDomChild = nextGroupsById.get(nextChild.id || '');
+            }
+            if (!nextDomChild) continue;
+            retainedChildren.add(nextDomChild);
+            nextDomChildren.push(nextDomChild);
+        }
+
+        Array.from(container.children).forEach(child => {
+            if (!retainedChildren.has(child)) child.remove();
+        });
+        nextDomChildren.forEach(child => container.appendChild(child));
+    },
+
     async refreshLocalMatchesForDownloadedMissing(missing, downloadedFilename, { progressDiv = null, category = '', downloadPath = '', downloadDirectory = '' } = {}) {
         if (!missing) return [];
 
@@ -1383,7 +1493,10 @@ export const resolveDownloadMethods = {
         }
         const body = this.contentElement?.querySelector(`#local-matches-body-${this.getMissingModelDomKey(missing)}`);
         if (body) {
-            body.innerHTML = `<div class="mr-no-matches">Checking local matches for ${this.escapeHtml(targetFilename)}...</div>`;
+            this.patchLocalMatchesContainer(
+                body,
+                `<div class="mr-no-matches">Checking local matches for ${this.escapeHtml(targetFilename)}...</div>`
+            );
         }
 
         const data = await this.fetchLocalMatches(targetFilename, category || missing.category || '', true);
@@ -1410,7 +1523,10 @@ export const resolveDownloadMethods = {
         const body = this.contentElement.querySelector(`#local-matches-body-${this.getMissingModelDomKey(missing)}`);
         const displayIndex = Number.isFinite(missing.__displayIndex) ? missing.__displayIndex : 0;
         if (body) {
-            body.innerHTML = this.renderLocalMatchesContent(missing, displayIndex);
+            this.patchLocalMatchesContainer(
+                body,
+                this.renderLocalMatchesContent(missing, displayIndex)
+            );
             this.wireLocalMatchButtons(body, missing, displayIndex);
         }
 
@@ -1450,7 +1566,10 @@ export const resolveDownloadMethods = {
                 button.classList.add('mr-btn-is-disabled', 'mr-is-refreshing');
             }
             if (body) {
-                body.innerHTML = `<div class="mr-no-matches">Refreshing local matches for ${this.escapeHtml(displayName)}...</div>`;
+                this.patchLocalMatchesContainer(
+                    body,
+                    `<div class="mr-no-matches">Refreshing local matches for ${this.escapeHtml(displayName)}...</div>`
+                );
             }
 
             const data = await this.fetchLocalMatches(targetFilename, missing.category || '', true);

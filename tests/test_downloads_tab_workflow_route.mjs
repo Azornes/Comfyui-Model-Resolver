@@ -5182,6 +5182,29 @@ test('local match status labels hash matches distinctly from exact matches', () 
   );
 });
 
+test('local match refreshes preserve keyed rows and button handlers', () => {
+  const renderLocalMatchesContent = extractMethod(searchPanelMethodsSource, 'renderLocalMatchesContent');
+  const patchLocalMatchesContainer = extractMethod(
+    resolveDownloadMethodsSource,
+    'patchLocalMatchesContainer'
+  );
+  const refreshLocalMatchesUiForMissing = extractMethod(
+    resolveDownloadMethodsSource,
+    'refreshLocalMatchesUiForMissing'
+  );
+  const wireLocalMatchButtons = extractMethod(searchPanelMethodsSource, 'wireLocalMatchButtons');
+
+  assert.match(renderLocalMatchesContent, /data-local-match-key/);
+  assert.match(renderLocalMatchesContent, /encodeURIComponent/);
+  assert.match(patchLocalMatchesContainer, /local-match-key|localMatchKey/);
+  assert.match(patchLocalMatchesContainer, /mr-local-alternatives-toggle/);
+  assert.match(refreshLocalMatchesUiForMissing, /patchLocalMatchesContainer/);
+  assert.doesNotMatch(refreshLocalMatchesUiForMissing, /body\.innerHTML\s*=/);
+  assert.match(wireLocalMatchButtons, /resolveButton\.onclick\s*=/);
+  assert.match(wireLocalMatchButtons, /altBtn\.onclick\s*=/);
+  assert.doesNotMatch(wireLocalMatchButtons, /addEventListener\('click'/);
+});
+
 test('local match status group warns when match folder is unsupported by node', () => {
   const renderLocalMatchStatus = eval(`(${extractMethod(searchPanelMethodsSource, 'renderLocalMatchStatus')})`);
   const getLocalMatchCategory = eval(`(${extractMethod(searchPanelMethodsSource, 'getLocalMatchCategory')})`);
