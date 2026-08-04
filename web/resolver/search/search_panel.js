@@ -1509,9 +1509,39 @@ export const searchPanelMethods = {
     },
 
     formatSearchResultSize(result = {}) {
-        if (result.size === 0) return '0 B';
-        if (!result.size) return '';
-        return typeof result.size === 'number' ? this.formatBytes(result.size) : String(result.size);
+        const candidates = [result];
+        const nestedCandidates = [
+            result.file_info,
+            result.fileInfo,
+            result.selected_file,
+            result.selectedFile,
+        ];
+        const files = Array.isArray(result.files) ? result.files : [];
+        candidates.push(
+            ...nestedCandidates.filter(candidate => candidate && typeof candidate === 'object'),
+            ...files.filter(candidate => candidate && typeof candidate === 'object')
+        );
+
+        for (const candidate of candidates) {
+            const directSize = candidate.size
+                ?? candidate.size_bytes
+                ?? candidate.sizeBytes
+                ?? candidate.file_size
+                ?? candidate.fileSize
+                ?? candidate.bytes;
+            if (directSize === 0) return '0 B';
+            if (directSize !== undefined && directSize !== null && directSize !== '') {
+                return typeof directSize === 'number' ? this.formatBytes(directSize) : String(directSize);
+            }
+
+            const sizeKb = candidate.sizeKB ?? candidate.size_kb;
+            if (sizeKb !== undefined && sizeKb !== null && sizeKb !== '') {
+                const sizeBytes = Number(sizeKb) * 1024;
+                if (Number.isFinite(sizeBytes)) return this.formatBytes(sizeBytes);
+            }
+        }
+
+        return '';
     },
 
     getSearchResultMatchDisplay(result = {}, fallbackLabel = 'Match', fallbackClass = 'neutral', hashLabel = '') {

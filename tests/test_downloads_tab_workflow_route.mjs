@@ -5829,6 +5829,40 @@ test('search result table exposes linked local hash targets for exact matches', 
   assert.match(html, />Exact<\/span>/);
 });
 
+test('CivitAI hash search renders sizeKB when byte size is unavailable', () => {
+  const formatSearchResultSize = eval(`(${extractMethod(searchPanelMethodsSource, 'formatSearchResultSize')})`);
+  const dialog = {
+    formatBytes(value) {
+      const units = ['B', 'KB', 'MB', 'GB'];
+      let index = 0;
+      let number = Number(value);
+      while (number >= 1024 && index < units.length - 1) {
+        number /= 1024;
+        index += 1;
+      }
+      return `${Number(number.toFixed(1))} ${units[index]}`;
+    },
+  };
+
+  assert.equal(
+    formatSearchResultSize.call(dialog, {
+      source: 'civitai',
+      match_type: 'hash',
+      size: null,
+      sizeKB: 12021353.90625,
+    }),
+    '11.5 GB'
+  );
+  assert.equal(
+    formatSearchResultSize.call(dialog, {
+      source: 'civitai',
+      size: null,
+      files: [{ name: 'zImageTurbo_turbo.safetensors', sizeKB: 12021353.90625 }],
+    }),
+    '11.5 GB'
+  );
+});
+
 test('search result refreshes preserve keyed progress and result DOM', () => {
   const displaySearchResults = extractMethod(resolveDownloadMethodsSource, 'displaySearchResults');
   const patchSearchResultsContainer = extractMethod(
