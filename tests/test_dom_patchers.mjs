@@ -60,6 +60,7 @@ const patchLocalMatchesContainer = eval(`(${extractMethod(resolveDownloadMethods
 const resolveUrnAsync = eval(`(${extractMethod(resolveDownloadMethodsSource, 'resolveUrnAsync')})`);
 const fetchUrnLocalMatches = eval(`(${extractMethod(searchPanelMethodsSource, 'fetchUrnLocalMatches')})`);
 const scheduleSearchUiRefresh = eval(`(${extractMethod(searchPanelMethodsSource, 'scheduleSearchUiRefresh')})`);
+const wireLocalMatchButtons = eval(`(${extractMethod(searchPanelMethodsSource, 'wireLocalMatchButtons')})`);
 const patchQueuedSelections = eval(`(${extractMethod(queueMethodsSource, 'patchQueuedSelections')})`);
 const patchDownloadsPanelElement = eval(`(${extractMethod(queueMethodsSource, 'patchDownloadsPanelElement')})`);
 const patchLoadedModelsProgress = eval(`(${extractMethod(renderFormatMethodsSource, 'patchLoadedModelsProgress')})`);
@@ -253,15 +254,54 @@ test('search download button wiring remains idempotent on the same node', () => 
   const window = new Window();
   const dialog = createDialog(window);
   const container = window.document.createElement('div');
-  container.innerHTML = '<button class="search-download-btn" data-url="https://example.test/model" data-filename="model.safetensors" data-category="checkpoints"></button>';
+  container.innerHTML = `
+    <button class="search-download-btn" data-url="https://example.test/model" data-filename="model.safetensors" data-category="checkpoints"></button>
+    <button class="search-show-details-btn" data-model="%7B%22name%22%3A%22Example%22%7D"></button>
+  `;
   let calls = 0;
+  let details = null;
   dialog.downloadFromSearch = () => { calls += 1; };
+  dialog.showSourceModelDetails = model => { details = model; };
 
   dialog.wireSearchDownloadButtons(container, {});
   dialog.wireSearchDownloadButtons(container, {});
   container.querySelector('.search-download-btn').click();
+  container.querySelector('.search-show-details-btn').click();
 
   assert.equal(calls, 1);
+  assert.deepEqual(details, { name: 'Example' });
+});
+
+test('local match action delegation remains idempotent across keyed rows', () => {
+  const window = new Window();
+  const container = window.document.createElement('div');
+  container.innerHTML = `
+    <div class="mr-match-row" data-local-match-index="0">
+      <button class="mr-local-link-btn" type="button">Best</button>
+    </div>
+    <div class="mr-match-row" data-local-match-index="0" data-local-match-alternative="true">
+      <button class="mr-local-link-btn" type="button">Alternative</button>
+    </div>
+  `;
+  const missing = {
+    matches: [
+      { confidence: 100, model: { id: 'best' } },
+      { confidence: 80, model: { id: 'alternative' } },
+    ],
+  };
+  const queued = [];
+  const dialog = {
+    queueResolution(_missing, model) {
+      queued.push(model.id);
+    },
+  };
+
+  wireLocalMatchButtons.call(dialog, container, missing);
+  wireLocalMatchButtons.call(dialog, container, missing);
+  container.querySelector('.mr-match-row button').click();
+  container.querySelector('[data-local-match-alternative="true"] button').click();
+
+  assert.deepEqual(queued, ['best', 'alternative']);
 });
 
 test('stale URN responses cannot overwrite the latest UI request', async () => {

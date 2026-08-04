@@ -5232,8 +5232,9 @@ test('local match refreshes preserve keyed rows and button handlers', () => {
   assert.match(patchLocalMatchesContainer, /mr-local-alternatives-toggle/);
   assert.match(refreshLocalMatchesUiForMissing, /patchLocalMatchesContainer/);
   assert.doesNotMatch(refreshLocalMatchesUiForMissing, /body\.innerHTML\s*=/);
-  assert.match(wireLocalMatchButtons, /resolveButton\.onclick\s*=/);
-  assert.match(wireLocalMatchButtons, /altBtn\.onclick\s*=/);
+  assert.match(wireLocalMatchButtons, /bindEventOnce/);
+  assert.match(wireLocalMatchButtons, /local-match-actions/);
+  assert.doesNotMatch(wireLocalMatchButtons, /\.onclick\s*=/);
   assert.doesNotMatch(wireLocalMatchButtons, /addEventListener\('click'/);
 });
 
@@ -5843,9 +5844,11 @@ test('search result refreshes preserve keyed progress and result DOM', () => {
   assert.doesNotMatch(displaySearchResults, /container\.innerHTML\s*=/);
   assert.match(patchSearchProgressElement, /data-search-progress-source|searchProgressSource/);
   assert.match(patchSearchResultsTable, /data-search-result-key|searchResultKey/);
-  assert.match(wireSearchDownloadButtons, /mlSearchDownloadBound/);
-  assert.match(wireSearchDownloadButtons, /mlSearchOpenPageBound/);
-  assert.match(wireSearchDownloadButtons, /mlSearchDetailsBound/);
+  assert.match(wireSearchDownloadButtons, /bindEventOnce/);
+  assert.match(wireSearchDownloadButtons, /search-result-actions/);
+  assert.doesNotMatch(wireSearchDownloadButtons, /mlSearchDownloadBound/);
+  assert.doesNotMatch(wireSearchDownloadButtons, /mlSearchOpenPageBound/);
+  assert.doesNotMatch(wireSearchDownloadButtons, /mlSearchDetailsBound/);
   assert.match(resolveDownloadMethodsSource, /rows\.push\(\{ \.\.\.row, __searchResultKey: rowKey \}\)/);
   assert.match(searchPanelMethodsSource, /data-search-progress-source=/);
   assert.match(searchPanelMethodsSource, /data-search-result-key=/);

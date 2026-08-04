@@ -2,6 +2,7 @@ import { getSvgIcon } from "../../utils/icon_utils.js";
 import { getModelCardUrl, parseHuggingFaceFileUrl } from "../utils/url_utils.js";
 import { getCivitaiModelUrl } from "../globals.js";
 import { safeStorage, normalizePathIdentity } from "../utils/html_utils.js";
+import { bindEventOnce } from "../utils/dom_patch_utils.js";
 const localStorage = safeStorage;
 export const searchPanelMethods = {
     isAutoFillBaseModelEnabled() {
@@ -2360,7 +2361,7 @@ export const searchPanelMethods = {
                 const localMatchKeyAttr = ` data-local-match-key="${this.escapeHtml(encodeURIComponent(String(localMatchKey)))}"`;
                 const rowClass = `mr-match-row${isBestMatch ? ' mr-best-match' : ''}`;
 
-                html += `<div class="${rowClass}"${localMatchKeyAttr}${identityAttr}${this.getContextMenuAttrs(contextModel)}>`;
+                html += `<div class="${rowClass}" data-local-match-index="${matchIndex}"${localMatchKeyAttr}${identityAttr}${this.getContextMenuAttrs(contextModel)}>`;
                 html += this.getConfidenceBadge(match.confidence);
                 html += `<span class="mr-match-filename"${this.getModelPreviewTooltipAttrs(match.model || match, matchPath)}>${this.escapeHtml(matchPath)}</span>`;
                 html += this.renderLocalMatchStatusGroup(missing, match, hashLabelMap);
@@ -2398,7 +2399,7 @@ export const searchPanelMethods = {
                         || match.filename
                         || `alternative-${mIdx}`;
                     const localMatchKeyAttr = ` data-local-match-key="${this.escapeHtml(encodeURIComponent(String(localMatchKey)))}"`;
-                    html += `<div class="mr-match-row"${localMatchKeyAttr}${identityAttr}${this.getContextMenuAttrs(contextModel)}>`;
+                    html += `<div class="mr-match-row" data-local-match-index="${mIdx}" data-local-match-alternative="true"${localMatchKeyAttr}${identityAttr}${this.getContextMenuAttrs(contextModel)}>`;
                     html += this.getConfidenceBadge(match.confidence);
                     html += `<span class="mr-match-filename"${this.getModelPreviewTooltipAttrs(match.model || match, matchPath)}>${this.escapeHtml(matchPath)}</span>`;
                     html += this.renderLocalMatchStatusGroup(missing, match, hashLabelMap);
@@ -2418,43 +2419,28 @@ export const searchPanelMethods = {
         return html;
     },
 
-    wireLocalMatchButtons(container, missing, missingIndex = 0) {
-        const allMatches = missing.matches || [];
-        const filteredMatches = allMatches.filter(m => m.confidence >= 70);
-        const perfectMatches = filteredMatches.filter(m => m.confidence === 100);
-        const otherMatches = filteredMatches.filter(m => m.confidence < 100 && m.confidence >= 70);
-        const matchesToShow = perfectMatches.length > 0
-            ? perfectMatches
-            : otherMatches.sort((a, b) => b.confidence - a.confidence).slice(0, 5);
+    wireLocalMatchButtons(container, missing) {
+        bindEventOnce(container, 'click', (event) => {
+            const button = event.target?.closest?.('.mr-local-link-btn');
+            if (!button || !container.contains(button)) return;
 
-        const sortedMatches = matchesToShow.sort((a, b) => {
-            if (a.confidence === 100 && b.confidence !== 100) return -1;
-            if (a.confidence !== 100 && b.confidence === 100) return 1;
-            return b.confidence - a.confidence;
-        });
+            const row = button.closest('.mr-match-row');
+            const matchIndex = Number(row?.dataset.localMatchIndex);
+            if (!row || !Number.isInteger(matchIndex) || matchIndex < 0) return;
 
-        sortedMatches.forEach((match, matchIndex) => {
-            const buttonId = `resolve-${missingIndex}-${missing.node_id}-${missing.widget_index}-${matchIndex}`;
-            const resolveButton = container.querySelector(`#${buttonId}`);
-            if (resolveButton) {
-                resolveButton.onclick = () => {
-                    this.queueResolution(missing, match.model);
-                };
+            const filteredMatches = (missing.matches || []).filter(match => match.confidence >= 70);
+            const perfectMatches = filteredMatches.filter(match => match.confidence === 100);
+            const otherMatches = filteredMatches.filter(match => match.confidence < 100 && match.confidence >= 70);
+            const visibleMatches = perfectMatches.length > 0
+                ? perfectMatches
+                : otherMatches.sort((left, right) => right.confidence - left.confidence).slice(0, 5);
+            const match = row.dataset.localMatchAlternative === 'true'
+                ? otherMatches[matchIndex]
+                : visibleMatches[matchIndex];
+            if (match?.model) {
+                this.queueResolution(missing, match.model);
             }
-        });
-
-        if (otherMatches && otherMatches.length > 0) {
-            for (let mIdx = 0; mIdx < otherMatches.length; mIdx++) {
-                const match = otherMatches[mIdx];
-                const altBtnId = `resolve-alt-${missingIndex}-${missing.node_id}-${missing.widget_index}-${mIdx}`;
-                const altBtn = container.querySelector(`#${altBtnId}`);
-                if (altBtn) {
-                    altBtn.onclick = () => {
-                        this.queueResolution(missing, match.model);
-                    };
-                }
-            }
-        }
+        }, 'local-match-actions');
 
         this.wireLocalHashMatchResultHighlights?.(container);
         this.bindTooltips?.(container);
@@ -2723,7 +2709,7 @@ export const searchPanelMethods = {
                     container,
                     this.renderLocalMatchesContent(missing, missing.__displayIndex || 0)
                 );
-                this.wireLocalMatchButtons(this.contentElement, missing, missing.__displayIndex || 0);
+                this.wireLocalMatchButtons(container, missing);
             }
             this.refreshMissingListRow(missing, { refreshBaseModels: true });
         } catch (error) {

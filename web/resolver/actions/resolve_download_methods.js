@@ -4,7 +4,7 @@ import { getModelCardUrl, parseHuggingFaceFileUrl } from "../utils/url_utils.js"
 import { getCivitaiModelUrl } from "../globals.js";
 import { normalizeSha256 } from "../utils/hash_utils.js";
 import { normalizePathIdentity } from "../utils/html_utils.js";
-import { syncElementAttributes } from "../utils/dom_patch_utils.js";
+import { bindEventOnce, syncElementAttributes } from "../utils/dom_patch_utils.js";
 const log = createModuleLogger('resolve_download_methods');
 
 export const resolveDownloadMethods = {
@@ -2996,12 +2996,13 @@ export const resolveDownloadMethods = {
         if (!container) return;
 
         this.wireSearchHashMatchHighlights?.(container);
+        bindEventOnce(container, 'click', (event) => {
+            const btn = event.target?.closest?.(
+                '.search-download-btn, .search-open-page-btn, .search-show-details-btn'
+            );
+            if (!btn || !container.contains(btn)) return;
 
-        const downloadBtns = container.querySelectorAll('.search-download-btn');
-        downloadBtns.forEach(btn => {
-            if (btn.dataset.mlSearchDownloadBound === 'true') return;
-            btn.dataset.mlSearchDownloadBound = 'true';
-            btn.addEventListener('click', () => {
+            if (btn.classList.contains('search-download-btn')) {
                 const url = btn.dataset.url;
                 const filename = btn.dataset.filename;
                 const category = btn.dataset.category;
@@ -3022,14 +3023,10 @@ export const resolveDownloadMethods = {
                     downloadMetadata = null;
                 }
                 this.downloadFromSearch(missing, url, filename, category, btn, pathMetadata, downloadMetadata);
-            });
-        });
+                return;
+            }
 
-        const openPageBtns = container.querySelectorAll('.search-open-page-btn');
-        openPageBtns.forEach(btn => {
-            if (btn.dataset.mlSearchOpenPageBound === 'true') return;
-            btn.dataset.mlSearchOpenPageBound = 'true';
-            btn.addEventListener('click', () => {
+            if (btn.classList.contains('search-open-page-btn')) {
                 const url = btn.dataset.url;
                 if (!url) return;
 
@@ -3037,23 +3034,17 @@ export const resolveDownloadMethods = {
                 if (opened) {
                     opened.opener = null;
                 }
-            });
-        });
+                return;
+            }
 
-        const detailsBtns = container.querySelectorAll('.search-show-details-btn');
-        detailsBtns.forEach(btn => {
-            if (btn.dataset.mlSearchDetailsBound === 'true') return;
-            btn.dataset.mlSearchDetailsBound = 'true';
-            btn.addEventListener('click', () => {
-                try {
-                    const model = JSON.parse(decodeURIComponent(btn.dataset.model || ''));
-                    this.showSourceModelDetails(model);
-                } catch (error) {
-                    console.error('Model Resolver: failed to open model details:', error);
-                    this.showNotification?.('Failed to open model details.', 'error');
-                }
-            });
-        });
+            try {
+                const model = JSON.parse(decodeURIComponent(btn.dataset.model || ''));
+                this.showSourceModelDetails(model);
+            } catch (error) {
+                console.error('Model Resolver: failed to open model details:', error);
+                this.showNotification?.('Failed to open model details.', 'error');
+            }
+        }, 'search-result-actions');
     },
 
     wireDownloadSearchPanel(container, missing) {
