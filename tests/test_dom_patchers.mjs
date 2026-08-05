@@ -389,6 +389,43 @@ test('local match action delegation remains idempotent across keyed rows', () =>
   assert.deepEqual(queued, ['best', 'alternative']);
 });
 
+test('local match action uses the currently selected missing model after detail changes', () => {
+  const window = new Window();
+  const container = window.document.createElement('div');
+  container.innerHTML = `
+    <div class="mr-match-row" data-local-match-index="0">
+      <button class="mr-local-link-btn" type="button">Exact</button>
+    </div>
+  `;
+  const videoMissing = {
+    key: 'video-slot',
+    matches: [{ confidence: 100, model: { id: 'video-model' } }],
+  };
+  const audioMissing = {
+    key: 'audio-slot',
+    matches: [{ confidence: 100, model: { id: 'audio-model' } }],
+  };
+  const queued = [];
+  const dialog = {
+    missingModels: [audioMissing],
+    selectedMissingModelKey: 'audio-slot',
+    getMissingModelKey(model) {
+      return model.key;
+    },
+    queueResolution(missing, model) {
+      queued.push({ missing: missing.key, model: model.id });
+    },
+  };
+
+  // The first call captures the old video model in the delegated listener.
+  wireLocalMatchButtons.call(dialog, container, videoMissing);
+  // The second call must not add another listener, but the click must use audio.
+  wireLocalMatchButtons.call(dialog, container, audioMissing);
+  container.querySelector('.mr-local-link-btn').click();
+
+  assert.deepEqual(queued, [{ missing: 'audio-slot', model: 'audio-model' }]);
+});
+
 test('stale URN responses cannot overwrite the latest UI request', async () => {
   const window = new Window();
   const previousDocument = globalThis.document;

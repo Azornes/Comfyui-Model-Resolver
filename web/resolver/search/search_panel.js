@@ -2471,11 +2471,20 @@ export const searchPanelMethods = {
             const button = event.target?.closest?.('.mr-local-link-btn');
             if (!button || !container.contains(button)) return;
 
+            // The detail pane is rewired when the user switches missing models,
+            // but the delegated listener is intentionally bound only once to
+            // the shared container. Resolve the model from the current state
+            // instead of using the object captured by the first binding.
+            const currentMissing = (this.missingModels || [])
+                .find(item => this.getMissingModelKey?.(item) === this.selectedMissingModelKey)
+                || missing;
+            if (!currentMissing) return;
+
             const row = button.closest('.mr-match-row');
             const matchIndex = Number(row?.dataset.localMatchIndex);
             if (!row || !Number.isInteger(matchIndex) || matchIndex < 0) return;
 
-            const filteredMatches = (missing.matches || []).filter(match => match.confidence >= 70);
+            const filteredMatches = (currentMissing.matches || []).filter(match => match.confidence >= 70);
             const perfectMatches = filteredMatches.filter(match => match.confidence === 100);
             const otherMatches = filteredMatches.filter(match => match.confidence < 100 && match.confidence >= 70);
             const visibleMatches = perfectMatches.length > 0
@@ -2487,7 +2496,7 @@ export const searchPanelMethods = {
             if (match?.model) {
                 event.preventDefault?.();
                 event.stopPropagation?.();
-                this.queueResolution(missing, match.model);
+                this.queueResolution(currentMissing, match.model);
             }
         }, 'local-match-actions');
 
