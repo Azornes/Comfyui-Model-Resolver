@@ -78,6 +78,7 @@ class LoraManagerArchiveTests(unittest.TestCase):
                     {
                         "name": "ghost_v1.safetensors",
                         "downloadUrl": "https://civitai.com/api/download/models/10",
+                        "sizeKB": 3,
                         "hashes": {"SHA256": archive_hash},
                     }
                 ),
@@ -103,6 +104,7 @@ class LoraManagerArchiveTests(unittest.TestCase):
         self.assertEqual(result["filename"], "ghost_v1.safetensors")
         self.assertEqual(result["name"], "ghost_checkpoint")
         self.assertEqual(result["trained_words"], ["ghost_word"])
+        self.assertEqual(result["size"], 3 * 1024)
         self.assertEqual(result["sha256"], archive_hash)
         self.assertEqual(result["hashes"], {"SHA256": archive_hash})
 

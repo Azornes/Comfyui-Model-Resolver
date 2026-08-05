@@ -156,6 +156,7 @@ class CivitaiPrimaryFileSelectionTests(unittest.TestCase):
         result = resolve_urn(123, 456)
 
         self.assertEqual("first.safetensors", result["expected_filename"])
+        self.assertEqual(1024, result["files"][0]["size"])
         clear_search_cache()
 
     @patch("core.sources.civitai.execute_provider_json_request")
@@ -190,6 +191,7 @@ class CivitaiPrimaryFileSelectionTests(unittest.TestCase):
         results = search_civitai("example", limit=1)
 
         self.assertEqual("first.safetensors", results[0]["filename"])
+        self.assertEqual(1024, results[0]["size"])
         clear_search_cache()
 
 

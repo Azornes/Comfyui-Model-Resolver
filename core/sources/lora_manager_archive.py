@@ -30,6 +30,7 @@ from ..path_utils import get_filename_from_path
 from ..progress import get_progress_reporter
 from ..type_utils import (
     build_search_result,
+    extract_file_size,
     get_generic_filename_tokens,
     normalize_lora_manager_type,
     normalize_sha256,
@@ -498,11 +499,7 @@ def _build_result_from_row(
         filename=filename,
         url=f"https://civitai.com/models/{model_id}?modelVersionId={version_id}",
         download_url=primary_file.get("downloadUrl") if primary_file else None,
-        size=(
-            int((primary_file.get("sizeKB") or 0) * 1024)
-            if primary_file and primary_file.get("sizeKB") is not None
-            else None
-        ),
+        size=extract_file_size(primary_file) if primary_file else None,
         base_model=row["base_model"] or version_data.get("baseModel"),
         tags=tags,
         trained_words=trained_words,
@@ -748,15 +745,14 @@ def search_lora_manager_archive_for_file(
                 if not result:
                     _search_cache[cache_key] = None
                     return None
+                matching_size = extract_file_size(matching_file)
+                if matching_size is None:
+                    matching_size = matching_file.get("size")
                 result.update(
                     {
                         "filename": matching_file.get("name") or result.get("filename", ""),
                         "download_url": matching_file.get("downloadUrl") or result.get("download_url"),
-                        "size": (
-                            int((matching_file.get("sizeKB") or 0) * 1024)
-                            if matching_file.get("sizeKB") is not None
-                            else result.get("size")
-                        ),
+                        "size": matching_size if matching_size is not None else result.get("size"),
                         "sha256": requested_sha256,
                         "hashes": matching_file.get("hashes") or {"SHA256": requested_sha256},
                         "match_type": "hash",

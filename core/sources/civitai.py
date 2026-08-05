@@ -46,6 +46,7 @@ from ..type_utils import (
     as_list,
     build_search_result,
     check_credential_http,
+    extract_file_size,
     extract_trained_words,
     first_non_empty,
     normalize_model_file_info,
@@ -199,7 +200,7 @@ def _build_civitai_result_from_version(
 ) -> Dict[str, Any]:
     """Normalize CivitAI model/version/file data into the search result format."""
     version_id = version.get("id")
-    size = file_info.get("sizeKB", 0) * 1024 if file_info.get("sizeKB") else file_info.get("size")
+    size = extract_file_size(file_info)
     download_url = file_info.get("downloadUrl") or get_civitai_download_url(version_id)
     return build_search_result(
         source="civitai",
@@ -1266,7 +1267,7 @@ def search_civitai(
 
                     if primary_file:
                         result["filename"] = primary_file.get("name", "")
-                        result["size"] = primary_file.get("sizeKB", 0) * 1024
+                        result["size"] = extract_file_size(primary_file) or 0
 
                     results.append(result)
 
@@ -1546,7 +1547,7 @@ def resolve_urn(
             "files": [
                 {
                     "name": f.get("name"),
-                    "size": f.get("sizeKB", 0) * 1024,
+                    "size": extract_file_size(f) or 0,
                     "sha256": (
                         f.get("sha256")
                         or (f.get("hashes") or {}).get("SHA256")
@@ -1666,9 +1667,12 @@ def get_model_info_by_hash(
             )
             if matching_file:
                 result["filename"] = matching_file.get("name") or matching_file.get("filename") or ""
-                result["size"] = matching_file.get("size")
-                if result["size"] is None and matching_file.get("sizeKB") is not None:
-                    result["size"] = matching_file.get("sizeKB") * 1024
+                matching_size = extract_file_size(matching_file)
+                result["size"] = (
+                    matching_size
+                    if matching_size is not None
+                    else matching_file.get("size")
+                )
                 result["hashes"] = matching_file.get("hashes") or {}
 
             result = _enrich_model_info_with_details(
@@ -2209,9 +2213,7 @@ def _metadata_to_model_info(metadata: Dict[str, Any]) -> Dict[str, Any]:
                 path_metadata.get("file_size"),
                 path_metadata.get("fileSize"),
                 path_metadata.get("sizeBytes"),
-                (file_info.get("sizeKB") * 1024)
-                if file_info.get("sizeKB") is not None
-                else None,
+                extract_file_size(file_info),
             )
         ),
         "url": page_url,

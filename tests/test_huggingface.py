@@ -426,6 +426,8 @@ class HuggingFaceSourceTests(unittest.TestCase):
         # Directly nested key
         self.assertEqual(extract_file_size({"size": 100}), 100)
         self.assertEqual(extract_file_size({"sizeBytes": "200"}), 200)
+        self.assertEqual(extract_file_size({"sizeKB": 2}), 2048)
+        self.assertEqual(extract_file_size({"sizeKB": 0}), 0)
         
         # LFS nested key
         self.assertEqual(extract_file_size({"lfs": {"size": 300}}), 300)
