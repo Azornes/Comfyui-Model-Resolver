@@ -2349,6 +2349,73 @@ test('cached Missing Models refresh preserves browser geometry after linking a l
   ]);
 });
 
+test('workflow analysis and loaded model caches stay independent and cloned', () => {
+  const saveWorkflowModelCache = eval(
+    `(${extractMethod(workflowStateMethodsSource, 'saveWorkflowModelCache')})`
+  );
+  const restoreWorkflowModelCache = eval(
+    `(${extractMethod(workflowStateMethodsSource, 'restoreWorkflowModelCache')})`
+  );
+  const saveAnalysisCacheForActiveWorkflow = eval(
+    `(${extractMethod(workflowStateMethodsSource, 'saveAnalysisCacheForActiveWorkflow')})`
+  );
+  const restoreAnalysisCacheForActiveWorkflow = eval(
+    `(${extractMethod(workflowStateMethodsSource, 'restoreAnalysisCacheForActiveWorkflow')})`
+  );
+  const saveLoadedModelsCacheForActiveWorkflow = eval(
+    `(${extractMethod(workflowStateMethodsSource, 'saveLoadedModelsCacheForActiveWorkflow')})`
+  );
+  const restoreLoadedModelsCacheForActiveWorkflow = eval(
+    `(${extractMethod(workflowStateMethodsSource, 'restoreLoadedModelsCacheForActiveWorkflow')})`
+  );
+  const dialog = {
+    workflowKey: 'workflow-a\nsignature-a',
+    workflowAnalysisCaches: new Map(),
+    workflowLoadedModelCaches: new Map(),
+    cachedWorkflowSignature: 'analysis-signature',
+    cachedAnalysisData: { missing_models: [{ filename: 'missing.safetensors' }] },
+    cachedLoadedModelsSignature: 'loaded-signature',
+    cachedLoadedModelsData: { loaded_models: [{ filename: 'loaded.safetensors' }] },
+    getWorkflowScopedQueueKey() {
+      return this.workflowKey;
+    },
+    saveWorkflowModelCache,
+    restoreWorkflowModelCache,
+    cloneAnalysisData(data) {
+      return JSON.parse(JSON.stringify(data));
+    },
+  };
+
+  saveAnalysisCacheForActiveWorkflow.call(dialog);
+  saveLoadedModelsCacheForActiveWorkflow.call(dialog);
+
+  dialog.cachedAnalysisData.missing_models[0].filename = 'changed-analysis.safetensors';
+  dialog.cachedLoadedModelsData.loaded_models[0].filename = 'changed-loaded.safetensors';
+  assert.equal(
+    dialog.workflowAnalysisCaches.get(dialog.workflowKey).data.missing_models[0].filename,
+    'missing.safetensors'
+  );
+  assert.equal(
+    dialog.workflowLoadedModelCaches.get(dialog.workflowKey).data.loaded_models[0].filename,
+    'loaded.safetensors'
+  );
+
+  dialog.cachedWorkflowSignature = null;
+  dialog.cachedAnalysisData = null;
+  dialog.cachedLoadedModelsSignature = null;
+  dialog.cachedLoadedModelsData = null;
+  restoreAnalysisCacheForActiveWorkflow.call(dialog);
+  restoreLoadedModelsCacheForActiveWorkflow.call(dialog);
+
+  assert.equal(dialog.cachedWorkflowSignature, 'analysis-signature');
+  assert.equal(dialog.cachedLoadedModelsSignature, 'loaded-signature');
+  assert.equal(dialog.cachedAnalysisData.missing_models[0].filename, 'missing.safetensors');
+  assert.equal(dialog.cachedLoadedModelsData.loaded_models[0].filename, 'loaded.safetensors');
+
+  dialog.cachedAnalysisData.missing_models.push({ filename: 'local-only.safetensors' });
+  assert.equal(dialog.workflowAnalysisCaches.get(dialog.workflowKey).data.missing_models.length, 1);
+});
+
 test('node widget changes request a content-preserving Missing Models refresh', async () => {
   const log = { debug() {} };
   const refreshForActiveWorkflowChange = eval(

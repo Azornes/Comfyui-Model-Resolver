@@ -463,50 +463,55 @@ export const workflowStateMethods = {
         }
     },
 
-    saveAnalysisCacheForActiveWorkflow() {
+    saveWorkflowModelCache(cache, signature, data) {
         const key = this.getWorkflowScopedQueueKey();
         if (!key) return;
 
-        if (this.cachedWorkflowSignature && this.cachedAnalysisData) {
-            this.workflowAnalysisCaches.set(key, {
-                signature: this.cachedWorkflowSignature,
-                data: this.cloneAnalysisData(this.cachedAnalysisData)
+        if (signature && data) {
+            cache.set(key, {
+                signature,
+                data: this.cloneAnalysisData(data)
             });
         } else {
-            this.workflowAnalysisCaches.delete(key);
+            cache.delete(key);
         }
+    },
+
+    restoreWorkflowModelCache(cache) {
+        const key = this.getWorkflowScopedQueueKey();
+        const saved = key ? cache.get(key) : null;
+        return {
+            signature: saved?.signature || null,
+            data: saved?.data ? this.cloneAnalysisData(saved.data) : null
+        };
+    },
+
+    saveAnalysisCacheForActiveWorkflow() {
+        this.saveWorkflowModelCache(
+            this.workflowAnalysisCaches,
+            this.cachedWorkflowSignature,
+            this.cachedAnalysisData
+        );
     },
 
     restoreAnalysisCacheForActiveWorkflow() {
-        const key = this.getWorkflowScopedQueueKey();
-        const saved = key ? this.workflowAnalysisCaches.get(key) : null;
-        this.cachedWorkflowSignature = saved?.signature || null;
-        this.cachedAnalysisData = saved?.data
-            ? this.cloneAnalysisData(saved.data)
-            : null;
+        const saved = this.restoreWorkflowModelCache(this.workflowAnalysisCaches);
+        this.cachedWorkflowSignature = saved.signature;
+        this.cachedAnalysisData = saved.data;
     },
 
     saveLoadedModelsCacheForActiveWorkflow() {
-        const key = this.getWorkflowScopedQueueKey();
-        if (!key) return;
-
-        if (this.cachedLoadedModelsSignature && this.cachedLoadedModelsData) {
-            this.workflowLoadedModelCaches.set(key, {
-                signature: this.cachedLoadedModelsSignature,
-                data: this.cloneAnalysisData(this.cachedLoadedModelsData)
-            });
-        } else {
-            this.workflowLoadedModelCaches.delete(key);
-        }
+        this.saveWorkflowModelCache(
+            this.workflowLoadedModelCaches,
+            this.cachedLoadedModelsSignature,
+            this.cachedLoadedModelsData
+        );
     },
 
     restoreLoadedModelsCacheForActiveWorkflow() {
-        const key = this.getWorkflowScopedQueueKey();
-        const saved = key ? this.workflowLoadedModelCaches.get(key) : null;
-        this.cachedLoadedModelsSignature = saved?.signature || null;
-        this.cachedLoadedModelsData = saved?.data
-            ? this.cloneAnalysisData(saved.data)
-            : null;
+        const saved = this.restoreWorkflowModelCache(this.workflowLoadedModelCaches);
+        this.cachedLoadedModelsSignature = saved.signature;
+        this.cachedLoadedModelsData = saved.data;
     },
 
     invalidateLoadedModelsCacheForActiveWorkflow() {
