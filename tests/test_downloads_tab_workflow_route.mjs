@@ -4703,6 +4703,22 @@ test('automatic opening remains conditional on unresolved models', () => {
   assert.match(optionsMethodsSource, /auto_open_on_missing: Boolean\(autoOpenOnMissingInput\?\.checked\)/);
 });
 
+test('options credential checks preserve every endpoint contract', () => {
+  const contracts = [
+    ['/model_resolver/civitai/session-token/check', 'civitai_session_token', 'Paste token first'],
+    ['/model_resolver/civitai/api-key/check', 'civitai_key', 'Paste API key first'],
+    ['/model_resolver/huggingface/token/check', 'hf_token', 'Paste token first'],
+    ['/model_resolver/brave/api-key/check', 'brave_search_api_key', 'Paste API key first']
+  ];
+
+  assert.match(optionsMethodsSource, /const checkCredential = async/);
+  contracts.forEach(([endpoint, payloadKey, missingText]) => {
+    assert.match(optionsMethodsSource, new RegExp(`endpoint: '${endpoint}'`));
+    assert.match(optionsMethodsSource, new RegExp(`payloadKey: '${payloadKey}'`));
+    assert.match(optionsMethodsSource, new RegExp(`missingText: '${missingText}'`));
+  });
+});
+
 test('automatic opening preserves the current resolver display mode', () => {
   const openResolverForDetectedMissingModels = eval(`(${extractMethod(modelResolverSource, 'openResolverForDetectedMissingModels')})`);
   const refreshReasons = [];

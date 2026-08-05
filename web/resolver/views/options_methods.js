@@ -3401,57 +3401,47 @@ export const optionsMethods = {
             checkAria2Status({ useUnsavedPath: false });
         }
 
-        if (civitaiSessionCheckBtn) {
-            civitaiSessionCheckBtn.addEventListener('click', () => {
-                checkCredential({
-                    input: civitaiSessionInput,
-                    button: civitaiSessionCheckBtn,
-                    statusEl: civitaiSessionCheckStatus,
-                    endpoint: '/model_resolver/civitai/session-token/check',
-                    payloadKey: 'civitai_session_token',
-                    missingText: 'Paste token first'
-                });
-            });
-        }
+        const credentialChecks = [
+            {
+                input: civitaiSessionInput,
+                button: civitaiSessionCheckBtn,
+                statusEl: civitaiSessionCheckStatus,
+                endpoint: '/model_resolver/civitai/session-token/check',
+                payloadKey: 'civitai_session_token',
+                missingText: 'Paste token first'
+            },
+            {
+                input: civitaiInput,
+                button: civitaiKeyCheckBtn,
+                statusEl: civitaiKeyCheckStatus,
+                endpoint: '/model_resolver/civitai/api-key/check',
+                payloadKey: 'civitai_key',
+                missingText: 'Paste API key first'
+            },
+            {
+                input: hfInput,
+                button: hfTokenCheckBtn,
+                statusEl: hfTokenCheckStatus,
+                endpoint: '/model_resolver/huggingface/token/check',
+                payloadKey: 'hf_token',
+                missingText: 'Paste token first'
+            },
+            {
+                input: braveInput,
+                button: braveKeyCheckBtn,
+                statusEl: braveKeyCheckStatus,
+                endpoint: '/model_resolver/brave/api-key/check',
+                payloadKey: 'brave_search_api_key',
+                missingText: 'Paste API key first'
+            }
+        ];
 
-        if (civitaiKeyCheckBtn) {
-            civitaiKeyCheckBtn.addEventListener('click', () => {
-                checkCredential({
-                    input: civitaiInput,
-                    button: civitaiKeyCheckBtn,
-                    statusEl: civitaiKeyCheckStatus,
-                    endpoint: '/model_resolver/civitai/api-key/check',
-                    payloadKey: 'civitai_key',
-                    missingText: 'Paste API key first'
-                });
+        credentialChecks.forEach((config) => {
+            if (!config.button) return;
+            config.button.addEventListener('click', () => {
+                checkCredential(config);
             });
-        }
-
-        if (hfTokenCheckBtn) {
-            hfTokenCheckBtn.addEventListener('click', () => {
-                checkCredential({
-                    input: hfInput,
-                    button: hfTokenCheckBtn,
-                    statusEl: hfTokenCheckStatus,
-                    endpoint: '/model_resolver/huggingface/token/check',
-                    payloadKey: 'hf_token',
-                    missingText: 'Paste token first'
-                });
-            });
-        }
-
-        if (braveKeyCheckBtn) {
-            braveKeyCheckBtn.addEventListener('click', () => {
-                checkCredential({
-                    input: braveInput,
-                    button: braveKeyCheckBtn,
-                    statusEl: braveKeyCheckStatus,
-                    endpoint: '/model_resolver/brave/api-key/check',
-                    payloadKey: 'brave_search_api_key',
-                    missingText: 'Paste API key first'
-                });
-            });
-        }
+        });
 
         loadModelListStatus(false);
         loadBaseModelsStatus(false);
