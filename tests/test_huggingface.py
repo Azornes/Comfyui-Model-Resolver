@@ -1,29 +1,32 @@
-import unittest
-import re
 import json
+import re
 import tempfile
+import time
+import unittest
 from pathlib import Path
 from unittest.mock import patch
+
+from core.matcher import build_filename_search_queries
 from core.sources.huggingface import (
     HF_AUTHOR_FALLBACKS,
     _build_author_index_from_models,
     _fetch_author_index,
-    _get_author_index,
     _find_matching_file_in_author_index,
+    _get_author_index,
     _is_author_index_fresh,
-    _read_persistent_author_indexes,
-    clear_search_cache,
-    build_huggingface_custom_result,
-    get_known_author_fallback_indexes_status,
-    get_huggingface_model_details,
-    parse_huggingface_url,
-    get_huggingface_download_url,
     _normalize_huggingface_size_probe_url,
-    search_huggingface_for_file,
+    _read_persistent_author_indexes,
     _write_persistent_author_index,
+    build_huggingface_custom_result,
+    clear_search_cache,
+    get_huggingface_download_url,
+    get_huggingface_model_details,
+    get_known_author_fallback_indexes_status,
+    parse_huggingface_url,
+    search_huggingface_for_file,
 )
-from core.matcher import build_filename_search_queries
 from core.type_utils import extract_file_size
+
 
 class HuggingFaceSourceTests(unittest.TestCase):
 
@@ -274,30 +277,33 @@ class HuggingFaceSourceTests(unittest.TestCase):
             self.assertFalse(index_path.exists())
             fetch_index.assert_called_once_with("Example", headers={})
 
-    def test_force_search_does_not_overwrite_existing_author_index(self):
-        sha256 = "d" * 64
-        index = {
-            "author": "Comfy-Org",
-            "updated_at": 123,
-            "repo_count": 1,
-            "file_count": 1,
-            "hash_count": 1,
-            "repos": ["Comfy-Org/example"],
-            "files": [
-                {
-                    "repo_id": "Comfy-Org/example",
-                    "path": "model.safetensors",
-                    "filename": "model.safetensors",
-                    "size": 123,
-                    "sha256": sha256,
-                }
-            ],
+    def test_force_search_uses_fresh_author_indexes_without_refreshing(self):
+        now = time.time()
+        indexes = {
+            author: {
+                "author": author,
+                "updated_at": now,
+                "repo_count": 1,
+                "file_count": 1,
+                "hash_count": 1,
+                "repos": [f"{author}/example"],
+                "files": [
+                    {
+                        "repo_id": f"{author}/example",
+                        "path": "other.safetensors",
+                        "filename": "other.safetensors",
+                        "size": 123,
+                        "sha256": "1" * 64,
+                    }
+                ],
+            }
+            for author in HF_AUTHOR_FALLBACKS
         }
 
         with tempfile.TemporaryDirectory() as tmpdir:
             index_path = Path(tmpdir) / "huggingface-author-index.json"
             index_path.write_text(
-                json.dumps({"version": 2, "authors": {"Comfy-Org": index}}),
+                json.dumps({"version": 2, "authors": indexes}),
                 encoding="utf-8",
             )
             with (
@@ -306,19 +312,20 @@ class HuggingFaceSourceTests(unittest.TestCase):
                     str(index_path),
                 ),
                 patch(
-                    "core.sources.huggingface._get_author_index",
-                    return_value=index,
-                ) as get_index,
+                    "core.sources.huggingface._fetch_author_index"
+                ) as fetch_index,
             ):
                 clear_search_cache()
                 result = search_huggingface_for_file(
-                    "model.safetensors",
-                    sha256=sha256,
+                    "missing.safetensors",
+                    sha256="2" * 64,
                     force_refresh=True,
+                    use_api_search=False,
+                    use_brave_fallback=False,
                 )
 
-        self.assertIsNotNone(result)
-        self.assertFalse(get_index.call_args.kwargs["persist"])
+        self.assertIsNone(result)
+        fetch_index.assert_not_called()
 
     def test_force_search_can_initialize_missing_author_index(self):
         sha256 = "e" * 64
@@ -348,19 +355,134 @@ class HuggingFaceSourceTests(unittest.TestCase):
                     str(index_path),
                 ),
                 patch(
-                    "core.sources.huggingface._get_author_index",
+                    "core.sources.huggingface._fetch_author_index",
                     return_value=index,
-                ) as get_index,
+                ) as fetch_index,
             ):
                 clear_search_cache()
                 result = search_huggingface_for_file(
                     "model.safetensors",
                     sha256=sha256,
                     force_refresh=True,
+                    use_api_search=False,
+                    use_brave_fallback=False,
+                )
+                index_was_persisted = index_path.exists()
+
+        self.assertIsNotNone(result)
+        self.assertTrue(index_was_persisted)
+        fetch_index.assert_called_once_with("Comfy-Org", headers={})
+
+    def test_force_search_refreshes_stale_author_index_after_cache_miss(self):
+        sha256 = "f" * 64
+        stale_index = {
+            "author": "Comfy-Org",
+            "updated_at": 0,
+            "repo_count": 1,
+            "file_count": 1,
+            "hash_count": 0,
+            "repos": ["Comfy-Org/example"],
+            "files": [],
+        }
+        refreshed_index = {
+            **stale_index,
+            "updated_at": time.time(),
+            "hash_count": 1,
+            "files": [
+                {
+                    "repo_id": "Comfy-Org/example",
+                    "path": "model.safetensors",
+                    "filename": "model.safetensors",
+                    "size": 123,
+                    "sha256": sha256,
+                }
+            ],
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            index_path = Path(tmpdir) / "huggingface-author-index.json"
+            index_path.write_text(
+                json.dumps(
+                    {
+                        "version": 2,
+                        "authors": {
+                            "Comfy-Org": stale_index,
+                            "Kijai": {**stale_index, "author": "Kijai"},
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with (
+                patch(
+                    "core.sources.huggingface.HF_AUTHOR_INDEX_CACHE_PATH",
+                    str(index_path),
+                ),
+                patch(
+                    "core.sources.huggingface._fetch_author_index",
+                    return_value=refreshed_index,
+                ) as fetch_index,
+            ):
+                clear_search_cache()
+                result = search_huggingface_for_file(
+                    "renamed-model.safetensors",
+                    sha256=sha256,
+                    force_refresh=True,
+                    use_api_search=False,
+                    use_brave_fallback=False,
                 )
 
         self.assertIsNotNone(result)
-        self.assertTrue(get_index.call_args.kwargs["persist"])
+        self.assertEqual("hash", result["match_type"])
+        fetch_index.assert_called_once_with("Comfy-Org", headers={})
+
+    def test_force_search_uses_stale_author_index_when_hash_matches(self):
+        sha256 = "7" * 64
+        stale_index = {
+            "author": "Comfy-Org",
+            "updated_at": 0,
+            "repo_count": 1,
+            "file_count": 1,
+            "hash_count": 1,
+            "repos": ["Comfy-Org/example"],
+            "files": [
+                {
+                    "repo_id": "Comfy-Org/example",
+                    "path": "model.safetensors",
+                    "filename": "model.safetensors",
+                    "size": 123,
+                    "sha256": sha256,
+                }
+            ],
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            index_path = Path(tmpdir) / "huggingface-author-index.json"
+            index_path.write_text(
+                json.dumps({"version": 2, "authors": {"Comfy-Org": stale_index}}),
+                encoding="utf-8",
+            )
+            with (
+                patch(
+                    "core.sources.huggingface.HF_AUTHOR_INDEX_CACHE_PATH",
+                    str(index_path),
+                ),
+                patch(
+                    "core.sources.huggingface._fetch_author_index"
+                ) as fetch_index,
+            ):
+                clear_search_cache()
+                result = search_huggingface_for_file(
+                    "renamed-model.safetensors",
+                    sha256=sha256,
+                    force_refresh=True,
+                    use_api_search=False,
+                    use_brave_fallback=False,
+                )
+
+        self.assertIsNotNone(result)
+        self.assertEqual("hash", result["match_type"])
+        fetch_index.assert_not_called()
 
     def test_explicit_author_index_refresh_still_persists(self):
         fresh_index = {

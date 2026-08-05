@@ -320,6 +320,7 @@ def _get_author_index(
     headers: Dict[str, str],
     force_refresh: bool = False,
     persist: bool = True,
+    allow_stale: bool = False,
 ) -> Optional[Dict[str, Any]]:
     cache_key = _author_index_cache_key(author, headers)
     can_persist = not headers.get("Authorization")
@@ -338,6 +339,13 @@ def _get_author_index(
                 _author_index_cache[cache_key] = persistent_index
                 log.debug(f"HuggingFace author index cache hit for author={author}")
                 return persistent_index
+
+        if allow_stale and not force_refresh:
+            stale_index = persistent_index or memory_index
+            if isinstance(stale_index, dict):
+                _author_index_cache[cache_key] = stale_index
+                log.debug(f"HuggingFace stale author index cache hit for author={author}")
+                return stale_index
 
         fresh_index = _fetch_author_index(author, headers=headers)
         if fresh_index:
@@ -1051,12 +1059,6 @@ def search_huggingface_for_file(
         )
         return _search_cache[cache_key]
 
-    # Force Search may initialize a missing persistent index, but must not
-    # overwrite an index that already exists.
-    persist_author_index = not force_refresh or not os.path.isfile(
-        HF_AUTHOR_INDEX_CACHE_PATH
-    )
-
     try:
         def result_matches_requested_hash(result: Optional[Dict[str, Any]]) -> bool:
             if not requested_sha256:
@@ -1074,6 +1076,51 @@ def search_huggingface_for_file(
 
         log.info(f"HuggingFace start file={filename} exact={exact_only}")
 
+        def find_author_index_result(
+            author: str,
+        ) -> tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+            index = _get_author_index(
+                author,
+                headers={},
+                allow_stale=force_refresh,
+            )
+            result = (
+                _find_matching_file_in_author_index(
+                    index,
+                    filename,
+                    exact_only=exact_only,
+                    headers={},
+                    sha256=requested_sha256,
+                )
+                if index
+                else None
+            )
+
+            if (
+                force_refresh
+                and index
+                and not _is_author_index_fresh(index)
+                and result is None
+            ):
+                index = _get_author_index(
+                    author,
+                    headers={},
+                    force_refresh=True,
+                )
+                result = (
+                    _find_matching_file_in_author_index(
+                        index,
+                        filename,
+                        exact_only=exact_only,
+                        headers={},
+                        sha256=requested_sha256,
+                    )
+                    if index
+                    else None
+                )
+
+            return index, result
+
         cached_author_indexes: Dict[str, Optional[Dict[str, Any]]] = {}
         if requested_sha256 and use_comfy_org_fallback:
             total_authors = max(1, len(HF_AUTHOR_FALLBACKS))
@@ -1087,23 +1134,11 @@ def search_huggingface_for_file(
                     author_index=author_index,
                     author_count=total_authors,
                 )
-                index = _get_author_index(
-                    author,
-                    headers={},
-                    force_refresh=force_refresh,
-                    persist=persist_author_index,
-                )
+                index, result = find_author_index_result(author)
                 cached_author_indexes[author] = index
                 if not index:
                     continue
 
-                result = _find_matching_file_in_author_index(
-                    index,
-                    filename,
-                    exact_only=exact_only,
-                    headers={},
-                    sha256=requested_sha256,
-                )
                 if result:
                     _search_cache[cache_key] = result
                     _report_progress(
@@ -1229,21 +1264,20 @@ def search_huggingface_for_file(
                 )
                 if author in cached_author_indexes:
                     index = cached_author_indexes[author]
+                    result = (
+                        _find_matching_file_in_author_index(
+                            index,
+                            filename,
+                            exact_only=exact_only,
+                            headers={},
+                            sha256=requested_sha256,
+                        )
+                        if index
+                        else None
+                    )
                 else:
-                    index = _get_author_index(
-                        author,
-                        headers={},
-                        force_refresh=force_refresh,
-                        persist=persist_author_index,
-                    )
+                    index, result = find_author_index_result(author)
                 if index:
-                    result = _find_matching_file_in_author_index(
-                        index,
-                        filename,
-                        exact_only=exact_only,
-                        headers={},
-                        sha256=requested_sha256,
-                    )
                     author_fallback_repo_count += int(index.get("repo_count") or 0)
                     if result and result_matches_requested_hash(result):
                         _search_cache[cache_key] = result
