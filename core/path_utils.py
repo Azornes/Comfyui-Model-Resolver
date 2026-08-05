@@ -1315,14 +1315,17 @@ def get_metadata_sidecar_path(model_path: str) -> str:
     return _metadata_sidecar_paths(model_path)[0]
 
 
-def get_safe_metadata_sidecar_path(file_path: str) -> str:
-    """Return a validated legacy external sidecar path for compatibility."""
+def _get_safe_sidecar_path(
+    file_path: str,
+    sidecar_factory: Callable[[str], str],
+) -> str:
+    """Return a validated sidecar path produced by ``sidecar_factory``."""
     raw_model_path = str(file_path or "").strip()
     if not raw_model_path:
         raise ValueError("A model path is required")
     model_path = os.path.realpath(os.path.abspath(raw_model_path))
     model_dir = os.path.realpath(os.path.dirname(model_path))
-    metadata_path = os.path.realpath(get_metadata_sidecar_path(model_path))
+    metadata_path = os.path.realpath(sidecar_factory(model_path))
     if (
         not model_dir
         or os.path.dirname(metadata_path) != model_dir
@@ -1331,23 +1334,15 @@ def get_safe_metadata_sidecar_path(file_path: str) -> str:
     ):
         raise ValueError("Metadata path is outside the model directory")
     return metadata_path
+
+
+def get_safe_metadata_sidecar_path(file_path: str) -> str:
+    """Return a validated legacy external sidecar path for compatibility."""
+    return _get_safe_sidecar_path(file_path, get_metadata_sidecar_path)
 
 
 def get_safe_model_resolver_sidecar_path(file_path: str) -> str:
     """Return a validated sidecar path owned exclusively by Model Resolver."""
-    raw_model_path = str(file_path or "").strip()
-    if not raw_model_path:
-        raise ValueError("A model path is required")
-    model_path = os.path.realpath(os.path.abspath(raw_model_path))
-    model_dir = os.path.realpath(os.path.dirname(model_path))
-    metadata_path = os.path.realpath(get_model_resolver_sidecar_path(model_path))
-    if (
-        not model_dir
-        or os.path.dirname(metadata_path) != model_dir
-        or metadata_path == model_path
-        or not is_path_within(metadata_path, model_dir)
-    ):
-        raise ValueError("Metadata path is outside the model directory")
-    return metadata_path
+    return _get_safe_sidecar_path(file_path, get_model_resolver_sidecar_path)
 
 

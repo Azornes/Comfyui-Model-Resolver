@@ -26,6 +26,7 @@ from core.network_utils import (
     validate_public_http_url,
 )
 from core.path_utils import (
+    get_safe_metadata_sidecar_path,
     get_safe_model_resolver_sidecar_path,
     is_path_in_configured_model_roots,
 )
@@ -148,6 +149,40 @@ class PathSecurityTests(unittest.TestCase):
                 metadata_path,
             )
             self.assertNotEqual(model_path, metadata_path)
+
+    def test_safe_sidecar_paths_reject_empty_input(self):
+        for get_safe_sidecar_path in (
+            get_safe_metadata_sidecar_path,
+            get_safe_model_resolver_sidecar_path,
+        ):
+            with self.subTest(function=get_safe_sidecar_path.__name__), self.assertRaisesRegex(
+                ValueError, "A model path is required"
+            ):
+                get_safe_sidecar_path("  ")
+
+    def test_safe_sidecar_paths_reject_sidecars_outside_model_directory(self):
+        with tempfile.TemporaryDirectory() as model_root:
+            model_path = os.path.join(model_root, "model.safetensors")
+            outside_path = os.path.join(
+                os.path.dirname(model_root),
+                "outside.modelresolver.json",
+            )
+            with patch(
+                "core.path_utils.get_metadata_sidecar_path",
+                return_value=outside_path,
+            ), patch(
+                "core.path_utils.get_model_resolver_sidecar_path",
+                return_value=outside_path,
+            ):
+                for get_safe_sidecar_path in (
+                    get_safe_metadata_sidecar_path,
+                    get_safe_model_resolver_sidecar_path,
+                ):
+                    with self.subTest(function=get_safe_sidecar_path.__name__), self.assertRaisesRegex(
+                        ValueError,
+                        "Metadata path is outside the model directory",
+                    ):
+                        get_safe_sidecar_path(model_path)
 
     def test_private_and_local_download_urls_are_rejected(self):
         for url in (
