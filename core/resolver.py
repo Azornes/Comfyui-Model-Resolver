@@ -55,6 +55,7 @@ from .path_utils import (
     find_metadata_sidecar_path,
     get_filename_from_path,
     get_path_identity,
+    get_path_key,
     read_merged_model_metadata,
 )
 
@@ -79,17 +80,6 @@ def _clone_hash_match(match: Dict[str, Any]) -> Dict[str, Any]:
     return cloned
 
 
-def _normalize_download_match_path(path: Any) -> str:
-    text = str(path or "").strip()
-    if not text:
-        return ""
-
-    try:
-        return os.path.normcase(os.path.abspath(os.path.normpath(text)))
-    except (OSError, ValueError):
-        return os.path.normcase(os.path.normpath(text))
-
-
 def _get_active_downloads_by_path() -> Dict[str, Dict[str, Any]]:
     try:
         from .download.api import get_all_progress
@@ -111,7 +101,7 @@ def _get_active_downloads_by_path() -> Dict[str, Dict[str, Any]]:
         if not path and progress.get("directory") and progress.get("filename"):
             path = os.path.join(str(progress["directory"]), str(progress["filename"]))
 
-        path_key = _normalize_download_match_path(path)
+        path_key = get_path_key(path)
         if not path_key:
             continue
 
@@ -153,7 +143,7 @@ def annotate_local_matches_with_download_state(
         ]
         download_info = None
         for candidate_path in candidate_paths:
-            path_key = _normalize_download_match_path(candidate_path)
+            path_key = get_path_key(candidate_path)
             if path_key and path_key in active_downloads:
                 download_info = active_downloads[path_key]
                 break

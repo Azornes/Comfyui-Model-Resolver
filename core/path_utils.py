@@ -83,12 +83,13 @@ def get_path_abs(path_value: Any) -> str:
 
 def get_path_key(path_value: Any) -> str:
     """Return a normalized absolute path key for comparison."""
-    if not path_value:
+    text = str(path_value or "").strip()
+    if not text:
         return ""
     try:
-        return os.path.normcase(os.path.abspath(str(path_value)))
+        return os.path.normcase(os.path.abspath(os.path.normpath(text)))
     except (OSError, ValueError):
-        return os.path.normcase(str(path_value or ""))
+        return os.path.normcase(os.path.normpath(text))
 
 
 def is_path_within(path_value: Any, root_value: Any) -> bool:

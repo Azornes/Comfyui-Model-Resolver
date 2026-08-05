@@ -18,7 +18,7 @@ from core.download.api import (
 from core.download.api import context as downloader_context
 from core.download.metadata import read_completed_metadata_sha256
 from core.download.state import download_lock, download_progress
-from core.path_utils import get_metadata_sidecar_path
+from core.path_utils import get_metadata_sidecar_path, get_path_key
 from core.workflow_updater import (
     convert_to_relative_path,
     update_model_path,
@@ -33,6 +33,27 @@ from core.progress import JobProgressTracker
 
 
 class ModelResolverRobustnessTests(unittest.TestCase):
+
+    def test_download_match_paths_use_a_normalized_absolute_comparison_key(self):
+        raw_path = "  models{}..{}checkpoints{}model.safetensors  ".format(
+            os.sep,
+            os.sep,
+            os.sep,
+        )
+        expected = os.path.normcase(
+            os.path.abspath(os.path.normpath(raw_path.strip()))
+        )
+
+        self.assertEqual(
+            get_path_key(raw_path),
+            expected,
+        )
+        self.assertEqual(get_path_key(""), "")
+        with patch("core.path_utils.os.path.abspath", side_effect=OSError):
+            self.assertEqual(
+                get_path_key(raw_path),
+                os.path.normcase(os.path.normpath(raw_path.strip())),
+            )
 
     def test_metadata_sidecar_credentials_scrubbing(self):
         """
