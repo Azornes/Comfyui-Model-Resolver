@@ -1083,6 +1083,19 @@ export const missingBrowserMethods = {
         });
     },
 
+    bindMissingFilterToggle(toggle, { boundKey, storageKey, setValue, container, data }) {
+        if (!toggle || toggle.dataset[boundKey] === 'true') return;
+        toggle.dataset[boundKey] = 'true';
+        toggle.addEventListener('change', () => {
+            const value = Boolean(toggle.checked);
+            setValue(value);
+            try {
+                safeStorage.setItem(storageKey, value ? '1' : '0');
+            } catch (_e) {}
+            this.displayMissingModels(container, data, { preserveBrowser: true });
+        });
+    },
+
     wireMissingModelsBrowser(container, data, sortedMissingModels) {
         this.wireMissingBrowserSplitter(container);
 
@@ -1161,40 +1174,31 @@ export const missingBrowserMethods = {
         }
 
         const showResolvedToggle = container.querySelector('#mr-show-resolved-models');
-        if (showResolvedToggle && showResolvedToggle.dataset.mlResolvedBound !== 'true') {
-            showResolvedToggle.dataset.mlResolvedBound = 'true';
-            showResolvedToggle.addEventListener('change', () => {
-                this.showResolvedModels = Boolean(showResolvedToggle.checked);
-                try {
-                    safeStorage.setItem(this.showResolvedModelsStorageKey, this.showResolvedModels ? '1' : '0');
-                } catch (_e) {}
-                this.displayMissingModels(container, data, { preserveBrowser: true });
-            });
-        }
+        this.bindMissingFilterToggle(showResolvedToggle, {
+            boundKey: 'mlResolvedBound',
+            storageKey: this.showResolvedModelsStorageKey,
+            setValue: value => { this.showResolvedModels = value; },
+            container,
+            data,
+        });
 
         const showAutoDownloadToggle = container.querySelector('#mr-show-auto-download-models');
-        if (showAutoDownloadToggle && showAutoDownloadToggle.dataset.mlAutoDownloadBound !== 'true') {
-            showAutoDownloadToggle.dataset.mlAutoDownloadBound = 'true';
-            showAutoDownloadToggle.addEventListener('change', () => {
-                this.showAutoDownloadModels = Boolean(showAutoDownloadToggle.checked);
-                try {
-                    safeStorage.setItem(this.showAutoDownloadModelsStorageKey, this.showAutoDownloadModels ? '1' : '0');
-                } catch (_e) {}
-                this.displayMissingModels(container, data, { preserveBrowser: true });
-            });
-        }
+        this.bindMissingFilterToggle(showAutoDownloadToggle, {
+            boundKey: 'mlAutoDownloadBound',
+            storageKey: this.showAutoDownloadModelsStorageKey,
+            setValue: value => { this.showAutoDownloadModels = value; },
+            container,
+            data,
+        });
 
         const showInactiveToggle = container.querySelector('#mr-show-inactive-models');
-        if (showInactiveToggle && showInactiveToggle.dataset.mlInactiveBound !== 'true') {
-            showInactiveToggle.dataset.mlInactiveBound = 'true';
-            showInactiveToggle.addEventListener('change', () => {
-                this.showInactiveModels = Boolean(showInactiveToggle.checked);
-                try {
-                    safeStorage.setItem(this.showInactiveModelsStorageKey, this.showInactiveModels ? '1' : '0');
-                } catch (_e) {}
-                this.displayMissingModels(container, data, { preserveBrowser: true });
-            });
-        }
+        this.bindMissingFilterToggle(showInactiveToggle, {
+            boundKey: 'mlInactiveBound',
+            storageKey: this.showInactiveModelsStorageKey,
+            setValue: value => { this.showInactiveModels = value; },
+            container,
+            data,
+        });
 
         const getCurrentMissingModels = () => (
             Array.isArray(this.missingModels)

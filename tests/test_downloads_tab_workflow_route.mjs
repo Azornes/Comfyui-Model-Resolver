@@ -2416,6 +2416,96 @@ test('workflow analysis and loaded model caches stay independent and cloned', ()
   assert.equal(dialog.workflowAnalysisCaches.get(dialog.workflowKey).data.missing_models.length, 1);
 });
 
+test('Missing Models filter toggles persist state and rerender once per change', () => {
+  const bindMissingFilterToggle = eval(
+    `(${extractMethod(missingBrowserMethodsSource, 'bindMissingFilterToggle')})`
+  );
+  const wireMissingModelsBrowser = eval(
+    `(${extractMethod(missingBrowserMethodsSource, 'wireMissingModelsBrowser')})`
+  );
+  const window = new Window();
+  const previousDocument = globalThis.document;
+  const previousElement = globalThis.Element;
+  const previousHTMLElement = globalThis.HTMLElement;
+  const previousLocalStorage = globalThis.localStorage;
+  const localStorageValues = new Map();
+  const container = window.document.createElement('div');
+  container.innerHTML = `
+    <div class="mr-missing-browser">
+      <input id="mr-show-resolved-models" type="checkbox">
+      <input id="mr-show-auto-download-models" type="checkbox">
+      <input id="mr-show-inactive-models" type="checkbox">
+    </div>
+  `;
+  const renderOptions = [];
+  const dialog = {
+    showResolvedModels: false,
+    showAutoDownloadModels: true,
+    showInactiveModels: false,
+    showResolvedModelsStorageKey: 'test_show_resolved_models',
+    showAutoDownloadModelsStorageKey: 'test_show_auto_download_models',
+    showInactiveModelsStorageKey: 'test_show_inactive_models',
+    missingModelsTypeFilterMenuOpen: false,
+    bindMissingFilterToggle,
+    wireMissingBrowserSplitter() {},
+    wireVisibleMissingModelRows() {},
+    setupMissingModelsVirtualizer() {},
+    displayMissingModels(_container, _data, options) {
+      renderOptions.push(options);
+    },
+  };
+
+  globalThis.document = window.document;
+  globalThis.Element = window.Element;
+  globalThis.HTMLElement = window.HTMLElement;
+  globalThis.localStorage = {
+    getItem(key) {
+      return localStorageValues.has(key) ? localStorageValues.get(key) : null;
+    },
+    setItem(key, value) {
+      localStorageValues.set(key, String(value));
+    },
+    removeItem(key) {
+      localStorageValues.delete(key);
+    },
+  };
+
+  try {
+    wireMissingModelsBrowser.call(dialog, container, {}, []);
+    wireMissingModelsBrowser.call(dialog, container, {}, []);
+
+    const resolvedToggle = container.querySelector('#mr-show-resolved-models');
+    const autoDownloadToggle = container.querySelector('#mr-show-auto-download-models');
+    const inactiveToggle = container.querySelector('#mr-show-inactive-models');
+    resolvedToggle.checked = true;
+    autoDownloadToggle.checked = false;
+    inactiveToggle.checked = true;
+    resolvedToggle.dispatchEvent(new window.Event('change'));
+    autoDownloadToggle.dispatchEvent(new window.Event('change'));
+    inactiveToggle.dispatchEvent(new window.Event('change'));
+
+    assert.equal(dialog.showResolvedModels, true);
+    assert.equal(dialog.showAutoDownloadModels, false);
+    assert.equal(dialog.showInactiveModels, true);
+    assert.equal(safeStorage.getItem(dialog.showResolvedModelsStorageKey), '1');
+    assert.equal(safeStorage.getItem(dialog.showAutoDownloadModelsStorageKey), '0');
+    assert.equal(safeStorage.getItem(dialog.showInactiveModelsStorageKey), '1');
+    assert.deepEqual(renderOptions, [
+      { preserveBrowser: true },
+      { preserveBrowser: true },
+      { preserveBrowser: true },
+    ]);
+  } finally {
+    safeStorage.removeItem(dialog.showResolvedModelsStorageKey);
+    safeStorage.removeItem(dialog.showAutoDownloadModelsStorageKey);
+    safeStorage.removeItem(dialog.showInactiveModelsStorageKey);
+    globalThis.document = previousDocument;
+    globalThis.Element = previousElement;
+    globalThis.HTMLElement = previousHTMLElement;
+    globalThis.localStorage = previousLocalStorage;
+  }
+});
+
 test('node widget changes request a content-preserving Missing Models refresh', async () => {
   const log = { debug() {} };
   const refreshForActiveWorkflowChange = eval(
