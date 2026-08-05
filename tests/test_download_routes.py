@@ -330,6 +330,7 @@ async def test_download_control_routes_preserve_progress_and_status_codes():
     pause_handler = handlers[("POST", "/model_resolver/pause/{download_id}")]
     response = await pause_handler(_request(download_id="pause-1"))
     assert response.status == 200
+    assert json.loads(response.text) == {"success": True}
     values["pause_download"].assert_called_once_with("pause-1")
 
     values["pause_download"].return_value = {"success": False, "error": "not aria2"}
@@ -339,7 +340,13 @@ async def test_download_control_routes_preserve_progress_and_status_codes():
     resume_handler = handlers[("POST", "/model_resolver/resume/{download_id}")]
     response = await resume_handler(_request(download_id="resume-1"))
     assert response.status == 200
+    assert json.loads(response.text) == {"success": True}
     values["resume_download"].assert_called_once_with("resume-1")
+
+    values["resume_download"].return_value = {"success": False, "error": "not aria2"}
+    response = await resume_handler(_request(download_id="resume-2"))
+    assert response.status == 400
+    assert json.loads(response.text) == {"success": False, "error": "not aria2"}
 
     clear_handler = handlers[("POST", "/model_resolver/clear_completed_downloads")]
     response = await clear_handler(_request())
@@ -363,11 +370,28 @@ async def test_aria2_routes_use_override_settings_and_map_failures():
     assert values["get_aria2_status"].call_count == 2
 
     values["start_aria2_daemon"].return_value = {
+        "success": True,
+        "message": "started",
+    }
+    response = await start_handler(_request())
+    assert response.status == 200
+    assert json.loads(response.text) == {"success": True, "message": "started"}
+
+    values["start_aria2_daemon"].return_value = {
         "success": False,
         "error": "cannot start",
     }
     response = await start_handler(_request())
     assert response.status == 400
+    assert json.loads(response.text) == {"success": False, "error": "cannot start"}
+
+    values["stop_aria2_daemon"].return_value = {
+        "success": True,
+        "message": "stopped",
+    }
+    response = await stop_get(_request(method="GET"))
+    assert response.status == 200
+    assert json.loads(response.text) == {"success": True, "message": "stopped"}
 
     values["stop_aria2_daemon"].return_value = {
         "success": False,
@@ -375,6 +399,7 @@ async def test_aria2_routes_use_override_settings_and_map_failures():
     }
     response = await stop_get(_request(method="GET"))
     assert response.status == 400
+    assert json.loads(response.text) == {"success": False, "error": "not running"}
 
     response = await install_handler(_request({"force": True}))
     assert json.loads(response.text)["success"] is True

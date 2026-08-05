@@ -265,19 +265,22 @@ class DownloadService:
         self.cancel_download_fn(download_id)
         return self.web.json_response({"success": True})
 
+    def _json_result_with_success_status(self, result):
+        """Return a JSON result using HTTP status 200/400 from its success flag."""
+        status = 200 if result.get("success") else 400
+        return self.web.json_response(result, status=status)
+
     async def pause_download(self, request):
         """Pause an aria2 download."""
         download_id = request.match_info["download_id"]
         result = self.pause_download_fn(download_id)
-        status = 200 if result.get("success") else 400
-        return self.web.json_response(result, status=status)
+        return self._json_result_with_success_status(result)
 
     async def resume_download(self, request):
         """Resume an aria2 download."""
         download_id = request.match_info["download_id"]
         result = self.resume_download_fn(download_id)
-        status = 200 if result.get("success") else 400
-        return self.web.json_response(result, status=status)
+        return self._json_result_with_success_status(result)
 
     async def clear_completed_downloads(self, request):
         """Clear completed and failed downloads from progress memory."""
@@ -294,14 +297,12 @@ class DownloadService:
         """Start the aria2 daemon without starting a download."""
         settings = await self.get_override_settings_from_request(request)
         result = await self.asyncio.to_thread(self.start_aria2_daemon, settings)
-        status = 200 if result.get("success") else 400
-        return self.web.json_response(result, status=status)
+        return self._json_result_with_success_status(result)
 
     async def aria2_stop(self, request):
         """Stop the aria2 daemon started by Model Resolver."""
         result = await self.asyncio.to_thread(self.stop_aria2_daemon)
-        status = 200 if result.get("success") else 400
-        return self.web.json_response(result, status=status)
+        return self._json_result_with_success_status(result)
 
     async def aria2_install(self, request):
         """Install aria2 and persist the selected download backend."""
