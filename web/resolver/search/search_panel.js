@@ -569,20 +569,20 @@ export const searchPanelMethods = {
     async getTooltipPreviewMediaType(previewUrl) {
         if (!previewUrl) return 'image';
 
-        let mediaType = 'image';
         try {
             const response = await fetch(previewUrl, {
                 method: 'HEAD',
                 cache: 'no-cache'
             });
             const contentType = String(response.headers.get('Content-Type') || '').toLowerCase();
-            if (response.ok && contentType.startsWith('video/')) {
-                mediaType = 'video';
-            }
+            if (!response.ok) return null;
+            if (contentType.startsWith('video/')) return 'video';
+            if (contentType.startsWith('image/')) return 'image';
+            return null;
         } catch (error) {
             console.debug('Model Resolver: Could not detect tooltip preview type:', error);
+            return null;
         }
-        return mediaType;
     },
 
     async showTooltip(target) {
@@ -618,6 +618,11 @@ export const searchPanelMethods = {
                 this._tooltipTarget !== target
                 || this.contextMenu?.style.display === 'block'
             ) {
+                return;
+            }
+            if (!mediaType) {
+                this.tooltipElement.classList.remove('mr-global-tooltip-with-image');
+                this.positionTooltip(target);
                 return;
             }
 
@@ -2390,7 +2395,7 @@ export const searchPanelMethods = {
         html += this.getConfidenceBadge(match.confidence);
         html += `<span class="mr-match-filename"${this.getModelPreviewTooltipAttrs(match.model || match, matchPath)}>${this.escapeHtml(matchPath)}</span>`;
         html += this.renderLocalMatchStatusGroup(missing, match, hashLabelMap);
-        html += `<button id="${buttonId}" class="mr-btn mr-btn-secondary mr-btn-sm mr-btn-icon-only mr-local-link-btn" data-tooltip="Link this local match" aria-label="Link this local match">`;
+        html += `<button type="button" id="${buttonId}" class="mr-btn mr-btn-secondary mr-btn-sm mr-btn-icon-only mr-local-link-btn" data-tooltip="Link this local match" aria-label="Link this local match">`;
         html += getSvgIcon('link');
         html += `</button>`;
         html += `</div>`;
@@ -2480,6 +2485,8 @@ export const searchPanelMethods = {
                 ? otherMatches[matchIndex]
                 : visibleMatches[matchIndex];
             if (match?.model) {
+                event.preventDefault?.();
+                event.stopPropagation?.();
                 this.queueResolution(missing, match.model);
             }
         }, 'local-match-actions');
@@ -2751,7 +2758,6 @@ export const searchPanelMethods = {
                     container,
                     this.renderLocalMatchesContent(missing, missing.__displayIndex || 0)
                 );
-                this.wireLocalMatchButtons(container, missing);
             }
             this.refreshMissingListRow(missing, { refreshBaseModels: true });
         } catch (error) {

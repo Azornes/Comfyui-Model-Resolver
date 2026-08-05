@@ -2751,8 +2751,11 @@ export const missingBrowserMethods = {
             html += `<div id="search-results-${missing.node_id}-${missing.widget_index}" class="mr-search-results"></div>`;
         }
 
-        // Progress container (for downloads)
-        html += `<div id="download-progress-${missing.node_id}-${missing.widget_index}" class="mr-download-progress-slot"></div>`;
+        // Progress container (for downloads). Use the complete model identity,
+        // because node/widget coordinates alone can repeat in custom nodes.
+        const downloadProgressId = this.getDownloadProgressElementId?.(missing)
+            || `download-progress-${missing.node_id}-${missing.widget_index}`;
+        html += `<div id="${downloadProgressId}" class="mr-download-progress-slot"></div>`;
 
         html += `</div>`; // End right column
         html += `</div>`; // End columns

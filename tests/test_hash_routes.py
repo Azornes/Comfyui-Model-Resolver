@@ -179,9 +179,22 @@ async def test_hash_routes_validate_local_metadata_and_preview_paths():
         )
         assert response.status == 404
 
+        response = await preview_handler(
+            SimpleNamespace(
+                method="HEAD",
+                query={"path": os.path.join(temp_dir, "missing.safetensors")},
+            )
+        )
+        assert response.status == 204
+
         values["get_existing_model_preview_path"].return_value = None
         response = await preview_handler(SimpleNamespace(query={"path": model_path}))
         assert response.status == 404
+
+        response = await preview_handler(
+            SimpleNamespace(method="HEAD", query={"path": model_path})
+        )
+        assert response.status == 204
 
         values["get_existing_model_preview_path"].return_value = preview_path
         values["is_path_in_configured_model_roots"].side_effect = [True, False]

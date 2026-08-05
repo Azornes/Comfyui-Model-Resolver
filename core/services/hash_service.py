@@ -108,6 +108,7 @@ class HashService:
     async def get_model_preview(self, request):
         """Serve an adjacent model preview from a configured model directory."""
         model_path = str(request.query.get("path") or "").strip()
+        is_preview_probe = str(getattr(request, "method", "")).upper() == "HEAD"
         if not model_path:
             return self.web.Response(text="path is required", status=400)
 
@@ -116,6 +117,8 @@ class HashService:
         except (OSError, TypeError, ValueError):
             return self.web.Response(text="invalid model path", status=400)
         if not self.os.path.isfile(normalized_path):
+            if is_preview_probe:
+                return self.web.Response(status=204)
             return self.web.Response(text="model file does not exist", status=404)
         if not self.is_path_in_configured_model_roots(normalized_path):
             return self.web.Response(
@@ -125,6 +128,8 @@ class HashService:
 
         preview_path = self.get_existing_model_preview_path(normalized_path)
         if not preview_path:
+            if is_preview_probe:
+                return self.web.Response(status=204)
             return self.web.Response(text="preview not found", status=404)
         if not self.is_path_in_configured_model_roots(preview_path):
             return self.web.Response(

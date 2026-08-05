@@ -381,7 +381,9 @@ test('local match action delegation remains idempotent across keyed rows', () =>
 
   wireLocalMatchButtons.call(dialog, container, missing);
   wireLocalMatchButtons.call(dialog, container, missing);
-  container.querySelector('.mr-match-row button').click();
+  const bestClick = new window.MouseEvent('click', { bubbles: true, cancelable: true });
+  container.querySelector('.mr-match-row button').dispatchEvent(bestClick);
+  assert.equal(bestClick.defaultPrevented, true);
   container.querySelector('[data-local-match-alternative="true"] button').click();
 
   assert.deepEqual(queued, ['best', 'alternative']);

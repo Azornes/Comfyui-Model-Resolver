@@ -175,6 +175,46 @@ test('manual model selection uses the two-line status card layout', () => {
   );
 });
 
+test('manual model selection restores the per-model apply card after browser refresh', () => {
+  const queueResolution = eval(`(${extractMethod(queueMethodsSource, 'queueResolution')})`);
+  const calls = [];
+  const missing = { key: 'missing-a' };
+  const dialog = {
+    pendingIndex: new Map(),
+    pendingResolutions: [],
+    missingModels: [{ key: 'missing-a', refreshed: true }],
+    getMissingModelKey(model) {
+      return model.key;
+    },
+    buildResolutionSelection(model, resolvedModel) {
+      return {
+        missing_key: model.key,
+        resolved_model: resolvedModel,
+        resolved_path: resolvedModel.path,
+      };
+    },
+    getResolutionQueueKey(selection) {
+      return selection.missing_key;
+    },
+    savePendingQueueForActiveWorkflow() {},
+    updateQueuePanel() {},
+    updateApplyPendingButton() {},
+    refreshMissingModelsBrowserFromCache() {
+      calls.push('refresh');
+    },
+    updateSelectedBarForMissing(model) {
+      calls.push(['selected', model]);
+    },
+  };
+
+  queueResolution.call(dialog, missing, { path: 'models/vae/model.safetensors' });
+
+  assert.deepEqual(calls, [
+    'refresh',
+    ['selected', { key: 'missing-a', refreshed: true }],
+  ]);
+});
+
 test('floating dialog drag stays on the compositor without forced style reads', () => {
   const isVisible = extractMethod(dialogShellMethodsSource, 'isVisible');
   const saveModalPosition = extractMethod(dialogShellMethodsSource, 'saveModalPosition');
@@ -1301,6 +1341,29 @@ test('node context scope identifies an outer subgraph instance', () => {
     } else {
       globalThis.app = previousApp;
     }
+  }
+});
+
+test('model tooltip ignores missing preview probes without creating a broken media request', async () => {
+  const getTooltipPreviewMediaType = eval(`(${extractMethod(searchPanelMethodsSource, 'getTooltipPreviewMediaType')})`);
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok: true,
+    headers: {
+      get() {
+        return '';
+      },
+    },
+  });
+
+  try {
+    const dialog = {};
+    assert.equal(
+      await getTooltipPreviewMediaType.call(dialog, '/model_resolver/model-preview?path=missing.safetensors'),
+      null
+    );
+  } finally {
+    globalThis.fetch = previousFetch;
   }
 });
 
@@ -5258,6 +5321,56 @@ test('active download controls are scoped to the workflow that started them', ()
   assert.equal(getActiveDownloadEntryForMissing.call(dialog, missing).downloadId, 'download-b');
 });
 
+test('download identity and progress slots stay separate for repeated custom-node coordinates', () => {
+  const getDownloadMissingIdentity = eval(`(${extractMethod(resolveDownloadMethodsSource, 'getDownloadMissingIdentity')})`);
+  const getDownloadProgressElementId = eval(`(${extractMethod(resolveDownloadMethodsSource, 'getDownloadProgressElementId')})`);
+  const getActiveDownloadEntriesForMissing = eval(`(${extractMethod(resolveDownloadMethodsSource, 'getActiveDownloadEntriesForMissing')})`);
+  const first = {
+    node_id: 7,
+    widget_index: 0,
+    category: 'vae',
+    original_path: 'MINIMAX/minimax_h3_audio_vae_fp32.safetensors',
+  };
+  const second = {
+    node_id: 7,
+    widget_index: 0,
+    category: 'diffusion_models',
+    original_path: 'MINIMAX/minimax_h3_fl2va_pruned_int8_converted.safetensors',
+  };
+  const dialog = {
+    getDownloadMissingIdentity,
+    getMissingModelKey(value) {
+      return [value.node_id, value.widget_index, value.category, value.original_path].join(':');
+    },
+    getMissingSearchKey() {
+      return 'shared-search-key';
+    },
+    getMissingModelDomKey(value) {
+      return `model-${value.category}-${value.original_path}`;
+    },
+    isDownloadInCurrentWorkflowScope() {
+      return true;
+    },
+    activeDownloads: {
+      first: { missing: first },
+      second: { missing: second },
+    },
+  };
+
+  assert.notEqual(
+    getDownloadMissingIdentity.call(dialog, first),
+    getDownloadMissingIdentity.call(dialog, second)
+  );
+  assert.notEqual(
+    getDownloadProgressElementId.call(dialog, first),
+    getDownloadProgressElementId.call(dialog, second)
+  );
+  assert.deepEqual(
+    getActiveDownloadEntriesForMissing.call(dialog, first).map(({ downloadId }) => downloadId),
+    ['first']
+  );
+});
+
 test('download snapshots with identical model keys remain separated by workflow', () => {
   const getDownloadWorkflowScopeIdentity = eval(`(${extractMethod(resolveDownloadMethodsSource, 'getDownloadWorkflowScopeIdentity')})`);
   const getCurrentDownloadWorkflowScopeIdentity = eval(`(${extractMethod(resolveDownloadMethodsSource, 'getCurrentDownloadWorkflowScopeIdentity')})`);
@@ -5690,6 +5803,7 @@ test('local match refreshes preserve keyed rows and button handlers', () => {
   assert.match(patchLocalMatchesContainer, /mr-local-alternatives-toggle/);
   assert.match(refreshLocalMatchesUiForMissing, /patchLocalMatchesContainer/);
   assert.doesNotMatch(refreshLocalMatchesUiForMissing, /body\.innerHTML\s*=/);
+  assert.doesNotMatch(refreshLocalMatchesUiForMissing, /wireLocalMatchButtons/);
   assert.match(wireLocalMatchButtons, /bindEventOnce/);
   assert.match(wireLocalMatchButtons, /local-match-actions/);
   assert.doesNotMatch(wireLocalMatchButtons, /\.onclick\s*=/);

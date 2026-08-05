@@ -5262,33 +5262,34 @@
     },
     "Kijai": {
       "author": "Kijai",
-      "updated_at": 1785847679.9844618,
-      "repo_count": 73,
-      "file_count": 932,
-      "hash_count": 639,
+      "updated_at": 1785968945.3678622,
+      "repo_count": 75,
+      "file_count": 938,
+      "hash_count": 641,
       "repos": [
-        "Kijai/LTX2.3_comfy",
+        "Kijai/MiniMax-H3-TAE",
+        "Kijai/MiniMax-H3-experimental",
         "Kijai/WanVideo_comfy",
+        "Kijai/LTX2.3_comfy",
         "Kijai/Wan_ID_V2V_comfy",
         "Kijai/WanVideo_comfy_fp8_scaled",
-        "Kijai/MelBandRoFormer_comfy",
         "Kijai/LTXV2_comfy",
-        "Kijai/SUPIR_pruned",
         "Kijai/ccsr-safetensors",
         "Kijai/LivePortrait_safetensors",
-        "Kijai/CogVideoX_GGUF",
-        "Kijai/CogVideoX-5b-1.5",
         "Kijai/HunyuanVideo_comfy",
         "Kijai/MMAudio_safetensors",
         "Kijai/WanVideo_comfy_GGUF",
+        "Kijai/MelBandRoFormer_comfy",
         "Kijai/wav2vec2_safetensors",
         "Kijai/vitpose_comfy",
         "Kijai/LongCat-Video_comfy",
         "Kijai/VCG_comfy",
+        "Kijai/LTX2-IC-LoRAs",
         "Kijai/animatediff_motion_director_loras",
         "Kijai/AnimateLCM-SVD-Comfy",
         "Kijai/DynamiCrafter_pruned",
         "Kijai/depth-fm-pruned",
+        "Kijai/SUPIR_pruned",
         "Kijai/flan-t5-xl-encoder-only-bf16",
         "Kijai/MagicTime-merged-fp16",
         "Kijai/t5-large-encoder-only-bf16",
@@ -5309,6 +5310,7 @@
         "Kijai/ControlNeXt-SVD-V2-Comfy",
         "Kijai/VEnhancer-fp16",
         "Kijai/CogVideoX-Fun-pruned",
+        "Kijai/CogVideoX_GGUF",
         "Kijai/LVCD-pruned",
         "Kijai/OpenFLUX-comfy",
         "Kijai/lotus-comfyui",
@@ -5318,6 +5320,7 @@
         "Kijai/MoGe_safetensors",
         "Kijai/GIMM-VFI_safetensors",
         "Kijai/CogVideoX-loras",
+        "Kijai/CogVideoX-5b-1.5",
         "Kijai/CogVideoX-VAE",
         "Kijai/CogVideoX-comfy",
         "Kijai/FLUX.1-dev-IP-Adapter-safetensors",
@@ -5336,200 +5339,52 @@
         "Kijai/Z-Image_comfy_fp8_scaled",
         "Kijai/Kandinsky5_comfy",
         "Kijai/Gemma3_comfy",
-        "Kijai/LTX2-IC-LoRAs",
         "Kijai/hidream-O1-image_comfy",
         "Kijai/Gemma2_comfy",
         "Kijai/WanVideo_comfy_nvfp4"
       ],
       "files": [
         {
-          "repo_id": "Kijai/LTX2.3_comfy",
+          "repo_id": "Kijai/MiniMax-H3-TAE",
           "path": ".gitattributes",
           "filename": ".gitattributes",
           "size": null,
           "sha256": ""
         },
         {
-          "repo_id": "Kijai/LTX2.3_comfy",
-          "path": "LICENSE",
-          "filename": "LICENSE",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2.3_comfy",
+          "repo_id": "Kijai/MiniMax-H3-TAE",
           "path": "README.md",
           "filename": "README.md",
           "size": null,
           "sha256": ""
         },
         {
-          "repo_id": "Kijai/LTX2.3_comfy",
-          "path": "diffusion_models/experimental/ltx-2.3-22b-distilled_transformer_only_mxfp8_block32.safetensors",
-          "filename": "ltx-2.3-22b-distilled_transformer_only_mxfp8_block32.safetensors",
-          "size": 24052755264,
-          "sha256": "49458be71f14bc9341b5bedb8f906a5411e12d8ef135ae1b90d25f76d52fc1f6"
+          "repo_id": "Kijai/MiniMax-H3-TAE",
+          "path": "vae_approx/taeh3.safetensors",
+          "filename": "taeh3.safetensors",
+          "size": 9791388,
+          "sha256": "f0f60fa072089997f817402098c2fd90777cb2660dd79cf5df42fc1e3e08e527"
         },
         {
-          "repo_id": "Kijai/LTX2.3_comfy",
-          "path": "diffusion_models/ltx-2-3-22b-dev_transformer_only_fp8_input_scaled.safetensors",
-          "filename": "ltx-2-3-22b-dev_transformer_only_fp8_input_scaled.safetensors",
-          "size": 25016398608,
-          "sha256": "8d157a0f1394116684d08865555cf392498e9367fd410564172f072b0e3800ef"
+          "repo_id": "Kijai/MiniMax-H3-experimental",
+          "path": ".gitattributes",
+          "filename": ".gitattributes",
+          "size": null,
+          "sha256": ""
         },
         {
-          "repo_id": "Kijai/LTX2.3_comfy",
-          "path": "diffusion_models/ltx-2.3-22b-dev_transformer_only_bf16.safetensors",
-          "filename": "ltx-2.3-22b-dev_transformer_only_bf16.safetensors",
-          "size": 42020149760,
-          "sha256": "0c83957f8c79d49c52ff5e3c0980a759d4dd532563d62cab35fda2b247606bd2"
-        },
-        {
-          "repo_id": "Kijai/LTX2.3_comfy",
-          "path": "diffusion_models/ltx-2.3-22b-dev_transformer_only_fp8_scaled.safetensors",
-          "filename": "ltx-2.3-22b-dev_transformer_only_fp8_scaled.safetensors",
-          "size": 23470368720,
-          "sha256": "f0b8f92f8a33daf7e7f508878db6d6f25f9c8bc7b90fcb5650fb402a9d9e9f13"
-        },
-        {
-          "repo_id": "Kijai/LTX2.3_comfy",
-          "path": "diffusion_models/ltx-2.3-22b-dev_transformer_only_int8_convrot.safetensors",
-          "filename": "ltx-2.3-22b-dev_transformer_only_int8_convrot.safetensors",
-          "size": 21505993064,
-          "sha256": "6f4b86bd840cb83179e9021306a63119c3b4e664248292c4103613a2d4a4484c"
-        },
-        {
-          "repo_id": "Kijai/LTX2.3_comfy",
-          "path": "diffusion_models/ltx-2.3-22b-dev_transformer_only_mxfp8_block32.safetensors",
-          "filename": "ltx-2.3-22b-dev_transformer_only_mxfp8_block32.safetensors",
-          "size": 24052754144,
-          "sha256": "309ca1dafedca95cb75ad00d1cc4668eba014c2e99f33dd025fd82e553bd12c9"
-        },
-        {
-          "repo_id": "Kijai/LTX2.3_comfy",
-          "path": "diffusion_models/ltx-2.3-22b-distilled-1.1_transformer_only_bf16.safetensors",
-          "filename": "ltx-2.3-22b-distilled-1.1_transformer_only_bf16.safetensors",
-          "size": 42020150120,
-          "sha256": "cf9c5aafda70d495ff7c9bd3d591899b3cefe679a1a2458feee4c5b6ff9db249"
-        },
-        {
-          "repo_id": "Kijai/LTX2.3_comfy",
-          "path": "diffusion_models/ltx-2.3-22b-distilled-1.1_transformer_only_fp8_scaled.safetensors",
-          "filename": "ltx-2.3-22b-distilled-1.1_transformer_only_fp8_scaled.safetensors",
-          "size": 25226571988,
-          "sha256": "0a1d7aac2b338e8ec7e832149f1dcf11c9323272482b1cca0673d229702370f0"
-        },
-        {
-          "repo_id": "Kijai/LTX2.3_comfy",
-          "path": "diffusion_models/ltx-2.3-22b-distilled-1.1_transformer_only_int8_convrot.safetensors",
-          "filename": "ltx-2.3-22b-distilled-1.1_transformer_only_int8_convrot.safetensors",
-          "size": 21505993424,
-          "sha256": "30fe2173fdb18881eb2482ece17ca044bedb8f28a38550ea7230da796fb8b614"
-        },
-        {
-          "repo_id": "Kijai/LTX2.3_comfy",
-          "path": "diffusion_models/ltx-2.3-22b-distilled-1.1_transformer_only_mxfp8_block32.safetensors",
-          "filename": "ltx-2.3-22b-distilled-1.1_transformer_only_mxfp8_block32.safetensors",
-          "size": 24052755552,
-          "sha256": "b7a945ff24d65ad22c6977787c2e594e74df226e35f1f9dedb64be8fdbd6ffd8"
-        },
-        {
-          "repo_id": "Kijai/LTX2.3_comfy",
-          "path": "diffusion_models/ltx-2.3-22b-distilled_transformer_only_bf16.safetensors",
-          "filename": "ltx-2.3-22b-distilled_transformer_only_bf16.safetensors",
-          "size": 42020149824,
-          "sha256": "742bff9126f773e362b1a5d75a026ec88c560b3212e9c59dc9bd8a5063cae480"
-        },
-        {
-          "repo_id": "Kijai/LTX2.3_comfy",
-          "path": "diffusion_models/ltx-2.3-22b-distilled_transformer_only_fp8_input_scaled.safetensors",
-          "filename": "ltx-2.3-22b-distilled_transformer_only_fp8_input_scaled.safetensors",
-          "size": 23470602704,
-          "sha256": "5dc6ddf0f09aaac6be6d24811c651e35589048270341697243b5004186ab15d4"
-        },
-        {
-          "repo_id": "Kijai/LTX2.3_comfy",
-          "path": "diffusion_models/ltx-2.3-22b-distilled_transformer_only_fp8_input_scaled_v2.safetensors",
-          "filename": "ltx-2.3-22b-distilled_transformer_only_fp8_input_scaled_v2.safetensors",
-          "size": 23163222368,
-          "sha256": "37e03a4711ccf074954d4245429c8ace9f3569d9fc8abd13f22a90f8e33992f2"
-        },
-        {
-          "repo_id": "Kijai/LTX2.3_comfy",
-          "path": "diffusion_models/ltx-2.3-22b-distilled_transformer_only_fp8_input_scaled_v3.safetensors",
-          "filename": "ltx-2.3-22b-distilled_transformer_only_fp8_input_scaled_v3.safetensors",
-          "size": 25016398672,
-          "sha256": "7327111e298066af8032f573d8db187986229ed2d4c926818ebf02041cfac8cf"
-        },
-        {
-          "repo_id": "Kijai/LTX2.3_comfy",
-          "path": "diffusion_models/ltx-2.3-22b-distilled_transformer_only_fp8_scaled.safetensors",
-          "filename": "ltx-2.3-22b-distilled_transformer_only_fp8_scaled.safetensors",
-          "size": 23470368784,
-          "sha256": "412ad3606a480963666ad44ad9e0edea5360ee304ff2395cf9e0017e8cc53474"
-        },
-        {
-          "repo_id": "Kijai/LTX2.3_comfy",
-          "path": "loras/LTX-2.3-OmniNFT-RL-Lora_bf16.safetensors",
-          "filename": "LTX-2.3-OmniNFT-RL-Lora_bf16.safetensors",
-          "size": 616948520,
-          "sha256": "204b491f76da5c7ef0998dee636b4db695a00d28729ebccfda8dfdc3c37df63c"
-        },
-        {
-          "repo_id": "Kijai/LTX2.3_comfy",
-          "path": "loras/README.md",
+          "repo_id": "Kijai/MiniMax-H3-experimental",
+          "path": "README.md",
           "filename": "README.md",
           "size": null,
           "sha256": ""
         },
         {
-          "repo_id": "Kijai/LTX2.3_comfy",
-          "path": "loras/ltx-2.3-22b-distilled-1.1_lora-dynamic_fro09_avg_rank_111_bf16.safetensors",
-          "filename": "ltx-2.3-22b-distilled-1.1_lora-dynamic_fro09_avg_rank_111_bf16.safetensors",
-          "size": 2741024390,
-          "sha256": "31e0c0195fb841bf31af78e8b60858f489e87ddcea4a5239abc80943da65e3ac"
-        },
-        {
-          "repo_id": "Kijai/LTX2.3_comfy",
-          "path": "loras/ltx-2.3-22b-distilled-lora-dynamic_fro09_avg_rank_105_bf16.safetensors",
-          "filename": "ltx-2.3-22b-distilled-lora-dynamic_fro09_avg_rank_105_bf16.safetensors",
-          "size": 2586318182,
-          "sha256": "289441f530ca30520bd5e1d4f34b8437f75d6c66f9b40e32b3824e225dd96325"
-        },
-        {
-          "repo_id": "Kijai/LTX2.3_comfy",
-          "path": "text_encoders/ltx-2.3_text_projection_bf16.safetensors",
-          "filename": "ltx-2.3_text_projection_bf16.safetensors",
-          "size": 2312149072,
-          "sha256": "911d59bb4cb7708179c9a0045ea0fe41212ecfb77aed3a02702b7c0a8274911f"
-        },
-        {
-          "repo_id": "Kijai/LTX2.3_comfy",
-          "path": "vae/LTX23_audio_vae_bf16.safetensors",
-          "filename": "LTX23_audio_vae_bf16.safetensors",
-          "size": 364855188,
-          "sha256": "5bc10fa4adecf99dda132d916e23048cbd56797702c5fa50eb5d2079048a38c3"
-        },
-        {
-          "repo_id": "Kijai/LTX2.3_comfy",
-          "path": "vae/LTX23_video_vae_bf16.safetensors",
-          "filename": "LTX23_video_vae_bf16.safetensors",
-          "size": 1452258578,
-          "sha256": "01ea62d09bc139f95c5dee7b5c062ad6a3e6cd8be910a1983ac02e7eb5b8ee3b"
-        },
-        {
-          "repo_id": "Kijai/LTX2.3_comfy",
-          "path": "vae/pruna_ltx2.3_vae_comfy_bf16.safetensors",
-          "filename": "pruna_ltx2.3_vae_comfy_bf16.safetensors",
-          "size": 1327910922,
-          "sha256": "04690af9832b1fa1ec9bd2118e5870b858fbc526998b41cfec9b0017d309edfc"
-        },
-        {
-          "repo_id": "Kijai/LTX2.3_comfy",
-          "path": "vae/taeltx2_3.safetensors",
-          "filename": "taeltx2_3.safetensors",
-          "size": 23531296,
-          "sha256": "f0773b4e3e57318e6aa4dd4a35e1d16213a5f160fbc0376163f06888bbcbe246"
+          "repo_id": "Kijai/MiniMax-H3-experimental",
+          "path": "minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+          "filename": "minimax_h3_fl2va_pruned_w4a8_mixed.safetensors",
+          "size": 12540858008,
+          "sha256": "01aa7b92c007c599890461c325f9b7e3c96fb06c36f242f95b62f7f20e538dec"
         },
         {
           "repo_id": "Kijai/WanVideo_comfy",
@@ -7163,6 +7018,195 @@
           "sha256": "3fe5173588270c22505d4f9158bb1644b78331b8614206a97e92760b960c9ffa"
         },
         {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": ".gitattributes",
+          "filename": ".gitattributes",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": "LICENSE",
+          "filename": "LICENSE",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": "README.md",
+          "filename": "README.md",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": "diffusion_models/experimental/ltx-2.3-22b-distilled_transformer_only_mxfp8_block32.safetensors",
+          "filename": "ltx-2.3-22b-distilled_transformer_only_mxfp8_block32.safetensors",
+          "size": 24052755264,
+          "sha256": "49458be71f14bc9341b5bedb8f906a5411e12d8ef135ae1b90d25f76d52fc1f6"
+        },
+        {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": "diffusion_models/ltx-2-3-22b-dev_transformer_only_fp8_input_scaled.safetensors",
+          "filename": "ltx-2-3-22b-dev_transformer_only_fp8_input_scaled.safetensors",
+          "size": 25016398608,
+          "sha256": "8d157a0f1394116684d08865555cf392498e9367fd410564172f072b0e3800ef"
+        },
+        {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": "diffusion_models/ltx-2.3-22b-dev_transformer_only_bf16.safetensors",
+          "filename": "ltx-2.3-22b-dev_transformer_only_bf16.safetensors",
+          "size": 42020149760,
+          "sha256": "0c83957f8c79d49c52ff5e3c0980a759d4dd532563d62cab35fda2b247606bd2"
+        },
+        {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": "diffusion_models/ltx-2.3-22b-dev_transformer_only_fp8_scaled.safetensors",
+          "filename": "ltx-2.3-22b-dev_transformer_only_fp8_scaled.safetensors",
+          "size": 23470368720,
+          "sha256": "f0b8f92f8a33daf7e7f508878db6d6f25f9c8bc7b90fcb5650fb402a9d9e9f13"
+        },
+        {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": "diffusion_models/ltx-2.3-22b-dev_transformer_only_int8_convrot.safetensors",
+          "filename": "ltx-2.3-22b-dev_transformer_only_int8_convrot.safetensors",
+          "size": 21505993064,
+          "sha256": "6f4b86bd840cb83179e9021306a63119c3b4e664248292c4103613a2d4a4484c"
+        },
+        {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": "diffusion_models/ltx-2.3-22b-dev_transformer_only_mxfp8_block32.safetensors",
+          "filename": "ltx-2.3-22b-dev_transformer_only_mxfp8_block32.safetensors",
+          "size": 24052754144,
+          "sha256": "309ca1dafedca95cb75ad00d1cc4668eba014c2e99f33dd025fd82e553bd12c9"
+        },
+        {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": "diffusion_models/ltx-2.3-22b-distilled-1.1_transformer_only_bf16.safetensors",
+          "filename": "ltx-2.3-22b-distilled-1.1_transformer_only_bf16.safetensors",
+          "size": 42020150120,
+          "sha256": "cf9c5aafda70d495ff7c9bd3d591899b3cefe679a1a2458feee4c5b6ff9db249"
+        },
+        {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": "diffusion_models/ltx-2.3-22b-distilled-1.1_transformer_only_fp8_scaled.safetensors",
+          "filename": "ltx-2.3-22b-distilled-1.1_transformer_only_fp8_scaled.safetensors",
+          "size": 25226571988,
+          "sha256": "0a1d7aac2b338e8ec7e832149f1dcf11c9323272482b1cca0673d229702370f0"
+        },
+        {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": "diffusion_models/ltx-2.3-22b-distilled-1.1_transformer_only_int8_convrot.safetensors",
+          "filename": "ltx-2.3-22b-distilled-1.1_transformer_only_int8_convrot.safetensors",
+          "size": 21505993424,
+          "sha256": "30fe2173fdb18881eb2482ece17ca044bedb8f28a38550ea7230da796fb8b614"
+        },
+        {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": "diffusion_models/ltx-2.3-22b-distilled-1.1_transformer_only_mxfp8_block32.safetensors",
+          "filename": "ltx-2.3-22b-distilled-1.1_transformer_only_mxfp8_block32.safetensors",
+          "size": 24052755552,
+          "sha256": "b7a945ff24d65ad22c6977787c2e594e74df226e35f1f9dedb64be8fdbd6ffd8"
+        },
+        {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": "diffusion_models/ltx-2.3-22b-distilled_transformer_only_bf16.safetensors",
+          "filename": "ltx-2.3-22b-distilled_transformer_only_bf16.safetensors",
+          "size": 42020149824,
+          "sha256": "742bff9126f773e362b1a5d75a026ec88c560b3212e9c59dc9bd8a5063cae480"
+        },
+        {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": "diffusion_models/ltx-2.3-22b-distilled_transformer_only_fp8_input_scaled.safetensors",
+          "filename": "ltx-2.3-22b-distilled_transformer_only_fp8_input_scaled.safetensors",
+          "size": 23470602704,
+          "sha256": "5dc6ddf0f09aaac6be6d24811c651e35589048270341697243b5004186ab15d4"
+        },
+        {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": "diffusion_models/ltx-2.3-22b-distilled_transformer_only_fp8_input_scaled_v2.safetensors",
+          "filename": "ltx-2.3-22b-distilled_transformer_only_fp8_input_scaled_v2.safetensors",
+          "size": 23163222368,
+          "sha256": "37e03a4711ccf074954d4245429c8ace9f3569d9fc8abd13f22a90f8e33992f2"
+        },
+        {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": "diffusion_models/ltx-2.3-22b-distilled_transformer_only_fp8_input_scaled_v3.safetensors",
+          "filename": "ltx-2.3-22b-distilled_transformer_only_fp8_input_scaled_v3.safetensors",
+          "size": 25016398672,
+          "sha256": "7327111e298066af8032f573d8db187986229ed2d4c926818ebf02041cfac8cf"
+        },
+        {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": "diffusion_models/ltx-2.3-22b-distilled_transformer_only_fp8_scaled.safetensors",
+          "filename": "ltx-2.3-22b-distilled_transformer_only_fp8_scaled.safetensors",
+          "size": 23470368784,
+          "sha256": "412ad3606a480963666ad44ad9e0edea5360ee304ff2395cf9e0017e8cc53474"
+        },
+        {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": "loras/LTX-2.3-OmniNFT-RL-Lora_bf16.safetensors",
+          "filename": "LTX-2.3-OmniNFT-RL-Lora_bf16.safetensors",
+          "size": 616948520,
+          "sha256": "204b491f76da5c7ef0998dee636b4db695a00d28729ebccfda8dfdc3c37df63c"
+        },
+        {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": "loras/README.md",
+          "filename": "README.md",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": "loras/ltx-2.3-22b-distilled-1.1_lora-dynamic_fro09_avg_rank_111_bf16.safetensors",
+          "filename": "ltx-2.3-22b-distilled-1.1_lora-dynamic_fro09_avg_rank_111_bf16.safetensors",
+          "size": 2741024390,
+          "sha256": "31e0c0195fb841bf31af78e8b60858f489e87ddcea4a5239abc80943da65e3ac"
+        },
+        {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": "loras/ltx-2.3-22b-distilled-lora-dynamic_fro09_avg_rank_105_bf16.safetensors",
+          "filename": "ltx-2.3-22b-distilled-lora-dynamic_fro09_avg_rank_105_bf16.safetensors",
+          "size": 2586318182,
+          "sha256": "289441f530ca30520bd5e1d4f34b8437f75d6c66f9b40e32b3824e225dd96325"
+        },
+        {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": "text_encoders/ltx-2.3_text_projection_bf16.safetensors",
+          "filename": "ltx-2.3_text_projection_bf16.safetensors",
+          "size": 2312149072,
+          "sha256": "911d59bb4cb7708179c9a0045ea0fe41212ecfb77aed3a02702b7c0a8274911f"
+        },
+        {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": "vae/LTX23_audio_vae_bf16.safetensors",
+          "filename": "LTX23_audio_vae_bf16.safetensors",
+          "size": 364855188,
+          "sha256": "5bc10fa4adecf99dda132d916e23048cbd56797702c5fa50eb5d2079048a38c3"
+        },
+        {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": "vae/LTX23_video_vae_bf16.safetensors",
+          "filename": "LTX23_video_vae_bf16.safetensors",
+          "size": 1452258578,
+          "sha256": "01ea62d09bc139f95c5dee7b5c062ad6a3e6cd8be910a1983ac02e7eb5b8ee3b"
+        },
+        {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": "vae/pruna_ltx2.3_vae_comfy_bf16.safetensors",
+          "filename": "pruna_ltx2.3_vae_comfy_bf16.safetensors",
+          "size": 1327910922,
+          "sha256": "04690af9832b1fa1ec9bd2118e5870b858fbc526998b41cfec9b0017d309edfc"
+        },
+        {
+          "repo_id": "Kijai/LTX2.3_comfy",
+          "path": "vae/taeltx2_3.safetensors",
+          "filename": "taeltx2_3.safetensors",
+          "size": 23531296,
+          "sha256": "f0773b4e3e57318e6aa4dd4a35e1d16213a5f160fbc0376163f06888bbcbe246"
+        },
+        {
           "repo_id": "Kijai/Wan_ID_V2V_comfy",
           "path": ".gitattributes",
           "filename": ".gitattributes",
@@ -7737,34 +7781,6 @@
           "sha256": "88aa449ce87dae29f3e6c1ec1c6107ba1a2d5057e6547ac1720d75c71eac32e9"
         },
         {
-          "repo_id": "Kijai/MelBandRoFormer_comfy",
-          "path": ".gitattributes",
-          "filename": ".gitattributes",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/MelBandRoFormer_comfy",
-          "path": "MelBandRoformer_fp16.safetensors",
-          "filename": "MelBandRoformer_fp16.safetensors",
-          "size": 456479072,
-          "sha256": "6119aef379a6c7264e0b37db65ae1e6488b8ca4a00baf56d6d244737b8488226"
-        },
-        {
-          "repo_id": "Kijai/MelBandRoFormer_comfy",
-          "path": "MelBandRoformer_fp32.safetensors",
-          "filename": "MelBandRoformer_fp32.safetensors",
-          "size": 912885656,
-          "sha256": "bdc1643fc59480722b50b223d6b07021eacdee4cb4d72f55dd600ee3c96d6327"
-        },
-        {
-          "repo_id": "Kijai/MelBandRoFormer_comfy",
-          "path": "README.md",
-          "filename": "README.md",
-          "size": null,
-          "sha256": ""
-        },
-        {
           "repo_id": "Kijai/LTXV2_comfy",
           "path": ".gitattributes",
           "filename": ".gitattributes",
@@ -7912,27 +7928,6 @@
           "sha256": "8990ec3fe88396ca33ac1795c89b1771d88190e51e24084b21f54b25399acbed"
         },
         {
-          "repo_id": "Kijai/SUPIR_pruned",
-          "path": ".gitattributes",
-          "filename": ".gitattributes",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/SUPIR_pruned",
-          "path": "SUPIR-v0F_fp16.safetensors",
-          "filename": "SUPIR-v0F_fp16.safetensors",
-          "size": 2664825592,
-          "sha256": "a8f1846de1985cf0473fac6d8c0ef17c9498a90d1c19906e944134c5572275d0"
-        },
-        {
-          "repo_id": "Kijai/SUPIR_pruned",
-          "path": "SUPIR-v0Q_fp16.safetensors",
-          "filename": "SUPIR-v0Q_fp16.safetensors",
-          "size": 2664858464,
-          "sha256": "3eef33ec7633122ca23b1e5ef167faa048b5a0845768694d5e8070138ac013ce"
-        },
-        {
           "repo_id": "Kijai/ccsr-safetensors",
           "path": ".gitattributes",
           "filename": ".gitattributes",
@@ -8050,174 +8045,6 @@
           "filename": "warping_module.safetensors",
           "size": 182158564,
           "sha256": "f7b7834bd6039b4088f72e5161e60ad366f68a3763df8a3eac0bc0f9d46fdbbf"
-        },
-        {
-          "repo_id": "Kijai/CogVideoX_GGUF",
-          "path": ".gitattributes",
-          "filename": ".gitattributes",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/CogVideoX_GGUF",
-          "path": "CogVideoX_5b_1_5_I2V_GGUF_Q4_0.safetensors",
-          "filename": "CogVideoX_5b_1_5_I2V_GGUF_Q4_0.safetensors",
-          "size": 4426696544,
-          "sha256": "73e09992d764822bc8310f50577b30e05140a8c8a77ccac233911c14b7a08539"
-        },
-        {
-          "repo_id": "Kijai/CogVideoX_GGUF",
-          "path": "CogVideoX_5b_I2V_GGUF_Q4_0.safetensors",
-          "filename": "CogVideoX_5b_I2V_GGUF_Q4_0.safetensors",
-          "size": 3544307088,
-          "sha256": "c70632e8391f0098b5dd7d7cc7eceef62465874f63b84995d250c275af9abc25"
-        },
-        {
-          "repo_id": "Kijai/CogVideoX_GGUF",
-          "path": "CogVideoX_5b_Interpolation_GGUF_Q4_0.safetensors",
-          "filename": "CogVideoX_5b_Interpolation_GGUF_Q4_0.safetensors",
-          "size": 3544307088,
-          "sha256": "11f1a1f0463c4b932c2a20d7b6e3f9974b260efdaff7f2e5e8ddbf0c40e804bc"
-        },
-        {
-          "repo_id": "Kijai/CogVideoX_GGUF",
-          "path": "CogVideoX_5b_Tora_GGUF_Q4_0.safetensors",
-          "filename": "CogVideoX_5b_Tora_GGUF_Q4_0.safetensors",
-          "size": 3489502384,
-          "sha256": "57935cf62920203759191fb52907c38f1e378d740ebca9b6c5915bddff02fdba"
-        },
-        {
-          "repo_id": "Kijai/CogVideoX_GGUF",
-          "path": "CogVideoX_5b_fun_1_1_GGUF_Q4_0.safetensors",
-          "filename": "CogVideoX_5b_fun_1_1_GGUF_Q4_0.safetensors",
-          "size": 3489711280,
-          "sha256": "ba28fc70abe6168565f113ce0f7a2920a705812c482a4e7434c0d289e3fa7c76"
-        },
-        {
-          "repo_id": "Kijai/CogVideoX_GGUF",
-          "path": "CogVideoX_5b_fun_1_1_Pose_GGUF_Q4_0.safetensors",
-          "filename": "CogVideoX_5b_fun_1_1_Pose_GGUF_Q4_0.safetensors",
-          "size": 3489698992,
-          "sha256": "d59ccbf196d5dc0ebb27f1b9f9a8139ce3314c4e7ee23359bda1ee7392da2392"
-        },
-        {
-          "repo_id": "Kijai/CogVideoX-5b-1.5",
-          "path": ".gitattributes",
-          "filename": ".gitattributes",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/CogVideoX-5b-1.5",
-          "path": "LICENSE",
-          "filename": "LICENSE",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/CogVideoX-5b-1.5",
-          "path": "README.md",
-          "filename": "README.md",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/CogVideoX-5b-1.5",
-          "path": "model_index.json",
-          "filename": "model_index.json",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/CogVideoX-5b-1.5",
-          "path": "scheduler/scheduler_config.json",
-          "filename": "scheduler_config.json",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/CogVideoX-5b-1.5",
-          "path": "transformer_I2V/config.json",
-          "filename": "config.json",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/CogVideoX-5b-1.5",
-          "path": "transformer_I2V/diffusion_pytorch_model-00001-of-00003.safetensors",
-          "filename": "diffusion_pytorch_model-00001-of-00003.safetensors",
-          "size": 4979532864,
-          "sha256": "e4d392921dd79e0e7adbef45f2c88a21dfe9aeb8688a9dd6e757275b2e4c1bca"
-        },
-        {
-          "repo_id": "Kijai/CogVideoX-5b-1.5",
-          "path": "transformer_I2V/diffusion_pytorch_model-00002-of-00003.safetensors",
-          "filename": "diffusion_pytorch_model-00002-of-00003.safetensors",
-          "size": 4948039832,
-          "sha256": "052af05f6d91fcb5bc7cb85805c507fc3c476b2bc01a1b2475a384cff03a7854"
-        },
-        {
-          "repo_id": "Kijai/CogVideoX-5b-1.5",
-          "path": "transformer_I2V/diffusion_pytorch_model-00003-of-00003.safetensors",
-          "filename": "diffusion_pytorch_model-00003-of-00003.safetensors",
-          "size": 1215733728,
-          "sha256": "03f3b8812a540aca85a15fb06909cfd36b7b1f3bc638042cf8f6899d38043787"
-        },
-        {
-          "repo_id": "Kijai/CogVideoX-5b-1.5",
-          "path": "transformer_I2V/diffusion_pytorch_model.safetensors.index.json",
-          "filename": "diffusion_pytorch_model.safetensors.index.json",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/CogVideoX-5b-1.5",
-          "path": "transformer_T2V/config.json",
-          "filename": "config.json",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/CogVideoX-5b-1.5",
-          "path": "transformer_T2V/diffusion_pytorch_model-00001-of-00003.safetensors",
-          "filename": "diffusion_pytorch_model-00001-of-00003.safetensors",
-          "size": 4977695424,
-          "sha256": "c2b2fc9286adfe838c16f7dff83d0952484606731f1c52e2bf4d9f13a8760587"
-        },
-        {
-          "repo_id": "Kijai/CogVideoX-5b-1.5",
-          "path": "transformer_T2V/diffusion_pytorch_model-00002-of-00003.safetensors",
-          "filename": "diffusion_pytorch_model-00002-of-00003.safetensors",
-          "size": 4948039832,
-          "sha256": "fcb0e8acfdbcd482cabc8fba4dc2789f517430d7104ff693fd1d54da75973522"
-        },
-        {
-          "repo_id": "Kijai/CogVideoX-5b-1.5",
-          "path": "transformer_T2V/diffusion_pytorch_model-00003-of-00003.safetensors",
-          "filename": "diffusion_pytorch_model-00003-of-00003.safetensors",
-          "size": 1215733728,
-          "sha256": "f6c1af103e253d0b4ad500c17e06b48528f85f30230bd6fa52d3e1e03c88b19d"
-        },
-        {
-          "repo_id": "Kijai/CogVideoX-5b-1.5",
-          "path": "transformer_T2V/diffusion_pytorch_model.safetensors.index.json",
-          "filename": "diffusion_pytorch_model.safetensors.index.json",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/CogVideoX-5b-1.5",
-          "path": "vae/config.json",
-          "filename": "config.json",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/CogVideoX-5b-1.5",
-          "path": "vae/diffusion_pytorch_model.safetensors",
-          "filename": "diffusion_pytorch_model.safetensors",
-          "size": 431221142,
-          "sha256": "bd47d57ad948ff80da0af0cb2e4dcdef65073aba59bccfd383ada9a7d1c02024"
         },
         {
           "repo_id": "Kijai/HunyuanVideo_comfy",
@@ -8647,6 +8474,34 @@
           "sha256": "b747dda4d89aea033dcd49e18e26d78d7e0854296136c2ccc0b14e85df7e77cd"
         },
         {
+          "repo_id": "Kijai/MelBandRoFormer_comfy",
+          "path": ".gitattributes",
+          "filename": ".gitattributes",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/MelBandRoFormer_comfy",
+          "path": "MelBandRoformer_fp16.safetensors",
+          "filename": "MelBandRoformer_fp16.safetensors",
+          "size": 456479072,
+          "sha256": "6119aef379a6c7264e0b37db65ae1e6488b8ca4a00baf56d6d244737b8488226"
+        },
+        {
+          "repo_id": "Kijai/MelBandRoFormer_comfy",
+          "path": "MelBandRoformer_fp32.safetensors",
+          "filename": "MelBandRoformer_fp32.safetensors",
+          "size": 912885656,
+          "sha256": "bdc1643fc59480722b50b223d6b07021eacdee4cb4d72f55dd600ee3c96d6327"
+        },
+        {
+          "repo_id": "Kijai/MelBandRoFormer_comfy",
+          "path": "README.md",
+          "filename": "README.md",
+          "size": null,
+          "sha256": ""
+        },
+        {
           "repo_id": "Kijai/wav2vec2_safetensors",
           "path": ".gitattributes",
           "filename": ".gitattributes",
@@ -8778,6 +8633,510 @@
           "filename": "vcg_combined_fp16.safetensors",
           "size": 4119430034,
           "sha256": "788ee27da6d2459f867238488055d32ebb79f50c1988c3362efc91c25240221d"
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": ".gitattributes",
+          "filename": ".gitattributes",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "README.md",
+          "filename": "README.md",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "ltx23_sam3dbody_v42_restarts-step00004000.comfy.safetensors",
+          "filename": "ltx23_sam3dbody_v42_restarts-step00004000.comfy.safetensors",
+          "size": 654446912,
+          "sha256": "740351ad4c54d9f4f1f31b4ab99ec4894e10de261616f16fdf2b5c037a58ba03"
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "realisdance_ltx2.3_ic-lora_step_02000.safetensors",
+          "filename": "realisdance_ltx2.3_ic-lora_step_02000.safetensors",
+          "size": 327287384,
+          "sha256": "a6ac97bed1c269c53d1d2c3710f9fa8752e6e715ec9e597cd475c7db2fe61893"
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0002.mp4",
+          "filename": "0002.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0003.mp4",
+          "filename": "0003.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0004.mp4",
+          "filename": "0004.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0008.mp4",
+          "filename": "0008.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0009.mp4",
+          "filename": "0009.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0014.mp4",
+          "filename": "0014.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0015.mp4",
+          "filename": "0015.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0016.mp4",
+          "filename": "0016.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0018.mp4",
+          "filename": "0018.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0021.mp4",
+          "filename": "0021.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0026.mp4",
+          "filename": "0026.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0031.mp4",
+          "filename": "0031.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0032.mp4",
+          "filename": "0032.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0033.mp4",
+          "filename": "0033.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0036.mp4",
+          "filename": "0036.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0042.mp4",
+          "filename": "0042.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0052.mp4",
+          "filename": "0052.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0053.mp4",
+          "filename": "0053.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0055.mp4",
+          "filename": "0055.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0056.mp4",
+          "filename": "0056.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0057.mp4",
+          "filename": "0057.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0059.mp4",
+          "filename": "0059.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0063.mp4",
+          "filename": "0063.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0065.mp4",
+          "filename": "0065.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0072.mp4",
+          "filename": "0072.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0075.mp4",
+          "filename": "0075.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0081.mp4",
+          "filename": "0081.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0082.mp4",
+          "filename": "0082.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0088.mp4",
+          "filename": "0088.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0090.mp4",
+          "filename": "0090.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0091.mp4",
+          "filename": "0091.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0092.mp4",
+          "filename": "0092.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/0094.mp4",
+          "filename": "0094.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1001.mp4",
+          "filename": "1001.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1002.mp4",
+          "filename": "1002.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1003.mp4",
+          "filename": "1003.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1004.mp4",
+          "filename": "1004.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1005.mp4",
+          "filename": "1005.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1006.mp4",
+          "filename": "1006.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1007.mp4",
+          "filename": "1007.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1008.mp4",
+          "filename": "1008.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1009.mp4",
+          "filename": "1009.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1010.mp4",
+          "filename": "1010.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1011.mp4",
+          "filename": "1011.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1012.mp4",
+          "filename": "1012.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1013.mp4",
+          "filename": "1013.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1014.mp4",
+          "filename": "1014.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1015.mp4",
+          "filename": "1015.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1016.mp4",
+          "filename": "1016.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1017.mp4",
+          "filename": "1017.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1018.mp4",
+          "filename": "1018.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1019.mp4",
+          "filename": "1019.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1020.mp4",
+          "filename": "1020.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1021.mp4",
+          "filename": "1021.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1022.mp4",
+          "filename": "1022.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1023.mp4",
+          "filename": "1023.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1024.mp4",
+          "filename": "1024.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1025.mp4",
+          "filename": "1025.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1026.mp4",
+          "filename": "1026.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1027.mp4",
+          "filename": "1027.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1028.mp4",
+          "filename": "1028.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1029.mp4",
+          "filename": "1029.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1030.mp4",
+          "filename": "1030.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1031.mp4",
+          "filename": "1031.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1032.mp4",
+          "filename": "1032.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1033.mp4",
+          "filename": "1033.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1034.mp4",
+          "filename": "1034.mp4",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/LTX2-IC-LoRAs",
+          "path": "sam3dbody_tests/1035.mp4",
+          "filename": "1035.mp4",
+          "size": null,
+          "sha256": ""
         },
         {
           "repo_id": "Kijai/animatediff_motion_director_loras",
@@ -9065,6 +9424,27 @@
           "filename": "depthfm-v1_fp32.safetensors",
           "size": 3464423398,
           "sha256": "b7aa646a8e8bc32eec1ac4d609fd194daa1487ea72f47afbbeef4d502c916f33"
+        },
+        {
+          "repo_id": "Kijai/SUPIR_pruned",
+          "path": ".gitattributes",
+          "filename": ".gitattributes",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/SUPIR_pruned",
+          "path": "SUPIR-v0F_fp16.safetensors",
+          "filename": "SUPIR-v0F_fp16.safetensors",
+          "size": 2664825592,
+          "sha256": "a8f1846de1985cf0473fac6d8c0ef17c9498a90d1c19906e944134c5572275d0"
+        },
+        {
+          "repo_id": "Kijai/SUPIR_pruned",
+          "path": "SUPIR-v0Q_fp16.safetensors",
+          "filename": "SUPIR-v0Q_fp16.safetensors",
+          "size": 2664858464,
+          "sha256": "3eef33ec7633122ca23b1e5ef167faa048b5a0845768694d5e8070138ac013ce"
         },
         {
           "repo_id": "Kijai/flan-t5-xl-encoder-only-bf16",
@@ -10145,6 +10525,55 @@
           "sha256": "bd47d57ad948ff80da0af0cb2e4dcdef65073aba59bccfd383ada9a7d1c02024"
         },
         {
+          "repo_id": "Kijai/CogVideoX_GGUF",
+          "path": ".gitattributes",
+          "filename": ".gitattributes",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/CogVideoX_GGUF",
+          "path": "CogVideoX_5b_1_5_I2V_GGUF_Q4_0.safetensors",
+          "filename": "CogVideoX_5b_1_5_I2V_GGUF_Q4_0.safetensors",
+          "size": 4426696544,
+          "sha256": "73e09992d764822bc8310f50577b30e05140a8c8a77ccac233911c14b7a08539"
+        },
+        {
+          "repo_id": "Kijai/CogVideoX_GGUF",
+          "path": "CogVideoX_5b_I2V_GGUF_Q4_0.safetensors",
+          "filename": "CogVideoX_5b_I2V_GGUF_Q4_0.safetensors",
+          "size": 3544307088,
+          "sha256": "c70632e8391f0098b5dd7d7cc7eceef62465874f63b84995d250c275af9abc25"
+        },
+        {
+          "repo_id": "Kijai/CogVideoX_GGUF",
+          "path": "CogVideoX_5b_Interpolation_GGUF_Q4_0.safetensors",
+          "filename": "CogVideoX_5b_Interpolation_GGUF_Q4_0.safetensors",
+          "size": 3544307088,
+          "sha256": "11f1a1f0463c4b932c2a20d7b6e3f9974b260efdaff7f2e5e8ddbf0c40e804bc"
+        },
+        {
+          "repo_id": "Kijai/CogVideoX_GGUF",
+          "path": "CogVideoX_5b_Tora_GGUF_Q4_0.safetensors",
+          "filename": "CogVideoX_5b_Tora_GGUF_Q4_0.safetensors",
+          "size": 3489502384,
+          "sha256": "57935cf62920203759191fb52907c38f1e378d740ebca9b6c5915bddff02fdba"
+        },
+        {
+          "repo_id": "Kijai/CogVideoX_GGUF",
+          "path": "CogVideoX_5b_fun_1_1_GGUF_Q4_0.safetensors",
+          "filename": "CogVideoX_5b_fun_1_1_GGUF_Q4_0.safetensors",
+          "size": 3489711280,
+          "sha256": "ba28fc70abe6168565f113ce0f7a2920a705812c482a4e7434c0d289e3fa7c76"
+        },
+        {
+          "repo_id": "Kijai/CogVideoX_GGUF",
+          "path": "CogVideoX_5b_fun_1_1_Pose_GGUF_Q4_0.safetensors",
+          "filename": "CogVideoX_5b_fun_1_1_Pose_GGUF_Q4_0.safetensors",
+          "size": 3489698992,
+          "sha256": "d59ccbf196d5dc0ebb27f1b9f9a8139ce3314c4e7ee23359bda1ee7392da2392"
+        },
+        {
           "repo_id": "Kijai/LVCD-pruned",
           "path": ".gitattributes",
           "filename": ".gitattributes",
@@ -10577,6 +11006,125 @@
           "filename": "DimensionX_orbit_left_lora_rank256_bf16.safetensors",
           "size": 528527480,
           "sha256": "458b775727b0a437387876a868bce70233125c5def05c47d7e086a20f3190521"
+        },
+        {
+          "repo_id": "Kijai/CogVideoX-5b-1.5",
+          "path": ".gitattributes",
+          "filename": ".gitattributes",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/CogVideoX-5b-1.5",
+          "path": "LICENSE",
+          "filename": "LICENSE",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/CogVideoX-5b-1.5",
+          "path": "README.md",
+          "filename": "README.md",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/CogVideoX-5b-1.5",
+          "path": "model_index.json",
+          "filename": "model_index.json",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/CogVideoX-5b-1.5",
+          "path": "scheduler/scheduler_config.json",
+          "filename": "scheduler_config.json",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/CogVideoX-5b-1.5",
+          "path": "transformer_I2V/config.json",
+          "filename": "config.json",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/CogVideoX-5b-1.5",
+          "path": "transformer_I2V/diffusion_pytorch_model-00001-of-00003.safetensors",
+          "filename": "diffusion_pytorch_model-00001-of-00003.safetensors",
+          "size": 4979532864,
+          "sha256": "e4d392921dd79e0e7adbef45f2c88a21dfe9aeb8688a9dd6e757275b2e4c1bca"
+        },
+        {
+          "repo_id": "Kijai/CogVideoX-5b-1.5",
+          "path": "transformer_I2V/diffusion_pytorch_model-00002-of-00003.safetensors",
+          "filename": "diffusion_pytorch_model-00002-of-00003.safetensors",
+          "size": 4948039832,
+          "sha256": "052af05f6d91fcb5bc7cb85805c507fc3c476b2bc01a1b2475a384cff03a7854"
+        },
+        {
+          "repo_id": "Kijai/CogVideoX-5b-1.5",
+          "path": "transformer_I2V/diffusion_pytorch_model-00003-of-00003.safetensors",
+          "filename": "diffusion_pytorch_model-00003-of-00003.safetensors",
+          "size": 1215733728,
+          "sha256": "03f3b8812a540aca85a15fb06909cfd36b7b1f3bc638042cf8f6899d38043787"
+        },
+        {
+          "repo_id": "Kijai/CogVideoX-5b-1.5",
+          "path": "transformer_I2V/diffusion_pytorch_model.safetensors.index.json",
+          "filename": "diffusion_pytorch_model.safetensors.index.json",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/CogVideoX-5b-1.5",
+          "path": "transformer_T2V/config.json",
+          "filename": "config.json",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/CogVideoX-5b-1.5",
+          "path": "transformer_T2V/diffusion_pytorch_model-00001-of-00003.safetensors",
+          "filename": "diffusion_pytorch_model-00001-of-00003.safetensors",
+          "size": 4977695424,
+          "sha256": "c2b2fc9286adfe838c16f7dff83d0952484606731f1c52e2bf4d9f13a8760587"
+        },
+        {
+          "repo_id": "Kijai/CogVideoX-5b-1.5",
+          "path": "transformer_T2V/diffusion_pytorch_model-00002-of-00003.safetensors",
+          "filename": "diffusion_pytorch_model-00002-of-00003.safetensors",
+          "size": 4948039832,
+          "sha256": "fcb0e8acfdbcd482cabc8fba4dc2789f517430d7104ff693fd1d54da75973522"
+        },
+        {
+          "repo_id": "Kijai/CogVideoX-5b-1.5",
+          "path": "transformer_T2V/diffusion_pytorch_model-00003-of-00003.safetensors",
+          "filename": "diffusion_pytorch_model-00003-of-00003.safetensors",
+          "size": 1215733728,
+          "sha256": "f6c1af103e253d0b4ad500c17e06b48528f85f30230bd6fa52d3e1e03c88b19d"
+        },
+        {
+          "repo_id": "Kijai/CogVideoX-5b-1.5",
+          "path": "transformer_T2V/diffusion_pytorch_model.safetensors.index.json",
+          "filename": "diffusion_pytorch_model.safetensors.index.json",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/CogVideoX-5b-1.5",
+          "path": "vae/config.json",
+          "filename": "config.json",
+          "size": null,
+          "sha256": ""
+        },
+        {
+          "repo_id": "Kijai/CogVideoX-5b-1.5",
+          "path": "vae/diffusion_pytorch_model.safetensors",
+          "filename": "diffusion_pytorch_model.safetensors",
+          "size": 431221142,
+          "sha256": "bd47d57ad948ff80da0af0cb2e4dcdef65073aba59bccfd383ada9a7d1c02024"
         },
         {
           "repo_id": "Kijai/CogVideoX-VAE",
@@ -11270,510 +11818,6 @@
           "filename": "Gemma3_4b_it_vision_bf16.safetensors",
           "size": 8604954858,
           "sha256": "469f3f6f0d262d0cc015d8831805fd64960dd8714c95a48bbf921cdd132c9173"
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": ".gitattributes",
-          "filename": ".gitattributes",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "README.md",
-          "filename": "README.md",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "ltx23_sam3dbody_v42_restarts-step00004000.comfy.safetensors",
-          "filename": "ltx23_sam3dbody_v42_restarts-step00004000.comfy.safetensors",
-          "size": 654446912,
-          "sha256": "740351ad4c54d9f4f1f31b4ab99ec4894e10de261616f16fdf2b5c037a58ba03"
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "realisdance_ltx2.3_ic-lora_step_02000.safetensors",
-          "filename": "realisdance_ltx2.3_ic-lora_step_02000.safetensors",
-          "size": 327287384,
-          "sha256": "a6ac97bed1c269c53d1d2c3710f9fa8752e6e715ec9e597cd475c7db2fe61893"
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0002.mp4",
-          "filename": "0002.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0003.mp4",
-          "filename": "0003.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0004.mp4",
-          "filename": "0004.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0008.mp4",
-          "filename": "0008.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0009.mp4",
-          "filename": "0009.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0014.mp4",
-          "filename": "0014.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0015.mp4",
-          "filename": "0015.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0016.mp4",
-          "filename": "0016.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0018.mp4",
-          "filename": "0018.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0021.mp4",
-          "filename": "0021.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0026.mp4",
-          "filename": "0026.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0031.mp4",
-          "filename": "0031.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0032.mp4",
-          "filename": "0032.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0033.mp4",
-          "filename": "0033.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0036.mp4",
-          "filename": "0036.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0042.mp4",
-          "filename": "0042.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0052.mp4",
-          "filename": "0052.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0053.mp4",
-          "filename": "0053.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0055.mp4",
-          "filename": "0055.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0056.mp4",
-          "filename": "0056.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0057.mp4",
-          "filename": "0057.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0059.mp4",
-          "filename": "0059.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0063.mp4",
-          "filename": "0063.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0065.mp4",
-          "filename": "0065.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0072.mp4",
-          "filename": "0072.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0075.mp4",
-          "filename": "0075.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0081.mp4",
-          "filename": "0081.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0082.mp4",
-          "filename": "0082.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0088.mp4",
-          "filename": "0088.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0090.mp4",
-          "filename": "0090.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0091.mp4",
-          "filename": "0091.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0092.mp4",
-          "filename": "0092.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/0094.mp4",
-          "filename": "0094.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1001.mp4",
-          "filename": "1001.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1002.mp4",
-          "filename": "1002.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1003.mp4",
-          "filename": "1003.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1004.mp4",
-          "filename": "1004.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1005.mp4",
-          "filename": "1005.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1006.mp4",
-          "filename": "1006.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1007.mp4",
-          "filename": "1007.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1008.mp4",
-          "filename": "1008.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1009.mp4",
-          "filename": "1009.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1010.mp4",
-          "filename": "1010.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1011.mp4",
-          "filename": "1011.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1012.mp4",
-          "filename": "1012.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1013.mp4",
-          "filename": "1013.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1014.mp4",
-          "filename": "1014.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1015.mp4",
-          "filename": "1015.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1016.mp4",
-          "filename": "1016.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1017.mp4",
-          "filename": "1017.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1018.mp4",
-          "filename": "1018.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1019.mp4",
-          "filename": "1019.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1020.mp4",
-          "filename": "1020.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1021.mp4",
-          "filename": "1021.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1022.mp4",
-          "filename": "1022.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1023.mp4",
-          "filename": "1023.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1024.mp4",
-          "filename": "1024.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1025.mp4",
-          "filename": "1025.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1026.mp4",
-          "filename": "1026.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1027.mp4",
-          "filename": "1027.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1028.mp4",
-          "filename": "1028.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1029.mp4",
-          "filename": "1029.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1030.mp4",
-          "filename": "1030.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1031.mp4",
-          "filename": "1031.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1032.mp4",
-          "filename": "1032.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1033.mp4",
-          "filename": "1033.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1034.mp4",
-          "filename": "1034.mp4",
-          "size": null,
-          "sha256": ""
-        },
-        {
-          "repo_id": "Kijai/LTX2-IC-LoRAs",
-          "path": "sam3dbody_tests/1035.mp4",
-          "filename": "1035.mp4",
-          "size": null,
-          "sha256": ""
         },
         {
           "repo_id": "Kijai/hidream-O1-image_comfy",

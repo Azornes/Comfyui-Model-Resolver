@@ -379,11 +379,27 @@ export const resolveDownloadMethods = {
     },
 
     getDownloadProgressElementId(missing = {}) {
-        return `download-progress-${missing.node_id}-${missing.widget_index}`;
+        const modelDomKey = this.getMissingModelDomKey?.(missing)
+            || [
+                missing.node_id ?? '',
+                missing.widget_index ?? '',
+                missing.subgraph_id || '',
+                missing.category || '',
+                missing.original_path || missing.filename || ''
+            ].join(':').replace(/[^A-Za-z0-9_-]+/g, '-');
+        return `download-progress-${modelDomKey}`;
     },
 
     getDownloadButtonElementId(missing = {}) {
-        return `download-${missing.node_id}-${missing.widget_index}`;
+        const modelDomKey = this.getMissingModelDomKey?.(missing)
+            || [
+                missing.node_id ?? '',
+                missing.widget_index ?? '',
+                missing.subgraph_id || '',
+                missing.category || '',
+                missing.original_path || missing.filename || ''
+            ].join(':').replace(/[^A-Za-z0-9_-]+/g, '-');
+        return `download-${modelDomKey}`;
     },
 
     getDownloadProgressStore() {
@@ -425,7 +441,13 @@ export const resolveDownloadMethods = {
     },
 
     getDownloadMissingIdentity(missing) {
-        return this.getMissingSearchKey?.(missing) || this.getMissingModelKey(missing);
+        // Search keys can intentionally be shared by related model references.
+        // Download UI state belongs to the concrete workflow model slot, so use
+        // the full model identity first to prevent unrelated downloads from
+        // being rendered in the same progress container.
+        return this.getMissingModelKey?.(missing)
+            || this.getMissingSearchKey?.(missing)
+            || '';
     },
 
     getDownloadStateKey(missing, context = null) {
@@ -1550,7 +1572,6 @@ export const resolveDownloadMethods = {
                 body,
                 this.renderLocalMatchesContent(missing, displayIndex)
             );
-            this.wireLocalMatchButtons(body, missing, displayIndex);
         }
 
         this.refreshMissingListRow(missing);

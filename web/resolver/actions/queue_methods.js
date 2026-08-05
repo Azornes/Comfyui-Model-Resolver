@@ -2092,11 +2092,16 @@ export const queueMethods = {
         }
         this.savePendingQueueForActiveWorkflow();
 
-        // Update selected bar UI
-        this.updateSelectedBarForMissing?.(missing);
         this.updateQueuePanel();
         this.updateApplyPendingButton();
         this.refreshMissingModelsBrowserFromCache?.();
+
+        // Refreshing the Missing Models browser can replace the detail pane,
+        // so render the per-model selected bar after that refresh has finished.
+        const currentMissing = (this.missingModels || [])
+            .find(item => this.getMissingModelKey(item) === resolution.missing_key)
+            || missing;
+        this.updateSelectedBarForMissing?.(currentMissing);
     },
 
     /**
