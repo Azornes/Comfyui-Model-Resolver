@@ -63,7 +63,7 @@ export const optionsMethods = {
         const renderPathTemplateRows = () => pathTemplateCategories
             .map(category => {
                 const template = tokens.download_path_templates?.[category.key] ?? this.getDefaultDownloadPathTemplates()[category.key] ?? '';
-                const normalizedTemplate = this.normalizeDownloadPathTemplate(template);
+                const normalizedTemplate = this.normalizeDownloadPathValue(template);
                 const isPreset = pathTemplatePresetValues.has(normalizedTemplate);
                 const selectedValue = isPreset ? normalizedTemplate : 'custom';
                 const options = [
@@ -1198,7 +1198,7 @@ export const optionsMethods = {
 
         const setMetadataSizeAuditStatus = (text, mode = '') => setElementStatusText(metadataSizeAuditStatus, text, mode);
 
-        const setMetadataSizeSummaryValue = (element, value, mode = '') => {
+        const setSummaryValue = (element, value, mode = '') => {
             if (!element) return;
             element.textContent = formatAuditNumber(value);
             setStatusMode(element, mode);
@@ -1248,11 +1248,11 @@ export const optionsMethods = {
             const mismatchCount = Number(data.mismatch_count || 0);
             const missingSizeCount = Number(data.missing_size || 0);
             const errorCount = Number(data.error_count || 0);
-            setMetadataSizeSummaryValue(metadataSizeScannedEl, data.scanned_models || 0);
-            setMetadataSizeSummaryValue(metadataSizeCheckedEl, data.metadata_files ?? data.checked_metadata ?? 0);
-            setMetadataSizeSummaryValue(metadataSizeMismatchesEl, mismatchCount, mismatchCount > 0 ? 'is-invalid' : '');
-            setMetadataSizeSummaryValue(metadataSizeMissingEl, missingSizeCount, missingSizeCount > 0 ? 'is-pending' : '');
-            setMetadataSizeSummaryValue(metadataSizeErrorsEl, errorCount, errorCount > 0 ? 'is-invalid' : '');
+            setSummaryValue(metadataSizeScannedEl, data.scanned_models || 0);
+            setSummaryValue(metadataSizeCheckedEl, data.metadata_files ?? data.checked_metadata ?? 0);
+            setSummaryValue(metadataSizeMismatchesEl, mismatchCount, mismatchCount > 0 ? 'is-invalid' : '');
+            setSummaryValue(metadataSizeMissingEl, missingSizeCount, missingSizeCount > 0 ? 'is-pending' : '');
+            setSummaryValue(metadataSizeErrorsEl, errorCount, errorCount > 0 ? 'is-invalid' : '');
         };
 
         const renderMetadataSizeAuditResults = (data = null) => {
@@ -1405,12 +1405,6 @@ export const optionsMethods = {
         };
 
         const setMetadataBuildStatus = (text, mode = '') => setElementStatusText(metadataBuildStatus, text, mode);
-
-        const setMetadataBuildSummaryValue = (element, value, mode = '') => {
-            if (!element) return;
-            element.textContent = formatAuditNumber(value);
-            setStatusMode(element, mode);
-        };
 
         const setMetadataBuildControlsCollapsed = (collapsed, persist = true) => {
             const isCollapsed = Boolean(collapsed);
@@ -1598,12 +1592,12 @@ export const optionsMethods = {
                 const activeWorkers = Number(source.active_worker_count ?? source.worker_count ?? normalizeMetadataBuildWorkerCount());
                 metadataBuildWorkersEl.textContent = Number.isFinite(activeWorkers) ? activeWorkers.toLocaleString() : '0';
             }
-            setMetadataBuildSummaryValue(metadataBuildScannedEl, source.scanned_models || source.current || 0);
-            setMetadataBuildSummaryValue(metadataBuildCreatedEl, created, created > 0 ? 'is-valid' : '');
-            setMetadataBuildSummaryValue(metadataBuildUpdatedEl, updated, updated > 0 ? 'is-valid' : '');
-            setMetadataBuildSummaryValue(metadataBuildSkippedEl, source.skipped_complete || 0);
-            setMetadataBuildSummaryValue(metadataBuildHashesEl, calculatedHashes, calculatedHashes > 0 ? 'is-pending' : '');
-            setMetadataBuildSummaryValue(metadataBuildErrorsEl, errorCount, errorCount > 0 ? 'is-invalid' : '');
+            setSummaryValue(metadataBuildScannedEl, source.scanned_models || source.current || 0);
+            setSummaryValue(metadataBuildCreatedEl, created, created > 0 ? 'is-valid' : '');
+            setSummaryValue(metadataBuildUpdatedEl, updated, updated > 0 ? 'is-valid' : '');
+            setSummaryValue(metadataBuildSkippedEl, source.skipped_complete || 0);
+            setSummaryValue(metadataBuildHashesEl, calculatedHashes, calculatedHashes > 0 ? 'is-pending' : '');
+            setSummaryValue(metadataBuildErrorsEl, errorCount, errorCount > 0 ? 'is-invalid' : '');
         };
 
         const metadataBuildStageLabels = {
@@ -2183,26 +2177,10 @@ export const optionsMethods = {
             }
         };
 
-        const setTokenCheckStatus = (statusEl, text, mode = '') => {
-            if (!statusEl) return;
-            statusEl.textContent = text;
-            statusEl.classList.remove('is-valid', 'is-invalid', 'is-pending');
-            if (mode) statusEl.classList.add(mode);
-        };
-
         const setAria2Status = (text, mode = '') => {
             if (!aria2StatusEl) return;
             aria2StatusEl.hidden = !text;
-            aria2StatusEl.textContent = text;
-            aria2StatusEl.classList.remove('is-valid', 'is-invalid', 'is-pending');
-            if (mode) aria2StatusEl.classList.add(mode);
-        };
-
-        const setAria2SummaryValue = (element, text, mode = '') => {
-            if (!element) return;
-            element.textContent = text;
-            element.classList.remove('is-valid', 'is-invalid', 'is-pending');
-            if (mode) element.classList.add(mode);
+            setElementStatusText(aria2StatusEl, text, mode);
         };
 
         const syncAria2DaemonButton = (data = {}) => {
@@ -2227,30 +2205,30 @@ export const optionsMethods = {
                 ? `aria2${version ? ` ${version}` : ''}`
                 : 'Python';
 
-            setAria2SummaryValue(aria2BackendStateEl, backendLabel);
+            setElementStatusText(aria2BackendStateEl, backendLabel);
 
             if (state === 'checking') {
                 syncAria2DaemonButton({ available: false, running: false });
-                setAria2SummaryValue(aria2AvailabilityEl, 'Checking...', 'is-pending');
-                setAria2SummaryValue(aria2DaemonEl, 'Checking...', 'is-pending');
+                setElementStatusText(aria2AvailabilityEl, 'Checking...', 'is-pending');
+                setElementStatusText(aria2DaemonEl, 'Checking...', 'is-pending');
                 return;
             }
 
             if (state === 'installing') {
                 syncAria2DaemonButton({ available: false, running: false });
-                setAria2SummaryValue(aria2AvailabilityEl, 'Installing...', 'is-pending');
-                setAria2SummaryValue(aria2DaemonEl, 'Not started');
+                setElementStatusText(aria2AvailabilityEl, 'Installing...', 'is-pending');
+                setElementStatusText(aria2DaemonEl, 'Not started');
                 return;
             }
 
             if (data && typeof data.available === 'boolean') {
                 syncAria2DaemonButton(data);
-                setAria2SummaryValue(
+                setElementStatusText(
                     aria2AvailabilityEl,
                     data.available ? 'Available' : 'Not found',
                     data.available ? 'is-valid' : 'is-invalid'
                 );
-                setAria2SummaryValue(
+                setElementStatusText(
                     aria2DaemonEl,
                     data.running ? 'Running' : 'Starts on first download',
                     data.running ? 'is-valid' : ''
@@ -2259,8 +2237,8 @@ export const optionsMethods = {
             }
 
             syncAria2DaemonButton({ available: false, running: false });
-            setAria2SummaryValue(aria2AvailabilityEl, 'Not checked');
-            setAria2SummaryValue(aria2DaemonEl, 'Not checked');
+            setElementStatusText(aria2AvailabilityEl, 'Not checked');
+            setElementStatusText(aria2DaemonEl, 'Not checked');
         };
 
         const syncAria2OptionsVisibility = () => {
@@ -2375,7 +2353,7 @@ export const optionsMethods = {
         const startAria2 = async () => {
             if (aria2StopBtn) aria2StopBtn.disabled = true;
             setAria2Status('');
-            setAria2SummaryValue(aria2DaemonEl, 'Starting...', 'is-pending');
+            setElementStatusText(aria2DaemonEl, 'Starting...', 'is-pending');
             let refreshed = false;
             try {
                 const result = await requestAria2Control('/model_resolver/aria2/start', {
@@ -2401,7 +2379,7 @@ export const optionsMethods = {
         const stopAria2 = async () => {
             if (aria2StopBtn) aria2StopBtn.disabled = true;
             setAria2Status('');
-            setAria2SummaryValue(aria2DaemonEl, 'Stopping...', 'is-pending');
+            setElementStatusText(aria2DaemonEl, 'Stopping...', 'is-pending');
             let refreshed = false;
             try {
                 let result;
@@ -2429,25 +2407,25 @@ export const optionsMethods = {
         const checkCredential = async ({ input, button, statusEl, endpoint, payloadKey, missingText }) => {
             const value = (input?.value || '').trim();
             if (!value) {
-                setTokenCheckStatus(statusEl, missingText, 'is-invalid');
+                setElementStatusText(statusEl, missingText, 'is-invalid');
                 return;
             }
 
             try {
                 if (button) button.disabled = true;
-                setTokenCheckStatus(statusEl, 'Checking...', 'is-pending');
+                setElementStatusText(statusEl, 'Checking...', 'is-pending');
                 const data = await this.fetchJson(endpoint, {
                     method: 'POST',
                     body: JSON.stringify({ [payloadKey]: value })
                 }, 'Check credential');
-                setTokenCheckStatus(
+                setElementStatusText(
                     statusEl,
                     data.message || (data.valid ? 'Valid' : 'Invalid'),
                     data.valid ? 'is-valid' : 'is-invalid'
                 );
             } catch (error) {
                 console.error('Model Resolver: Credential check error:', error);
-                setTokenCheckStatus(statusEl, error.message || 'Check failed', 'is-invalid');
+                setElementStatusText(statusEl, error.message || 'Check failed', 'is-invalid');
             } finally {
                 if (button) button.disabled = false;
             }
@@ -2948,7 +2926,7 @@ export const optionsMethods = {
                 '{model_name}': this.sanitizeDownloadPathSegment(pathPreviewMetadata.model_name, 'Model'),
                 '{version_name}': this.sanitizeDownloadPathSegment(pathPreviewMetadata.version_name, '')
             };
-            let formatted = this.normalizeDownloadPathTemplate(template);
+            let formatted = this.normalizeDownloadPathValue(template);
             Object.entries(replacements).forEach(([token, value]) => {
                 formatted = formatted.split(token).join(value);
             });
@@ -3016,7 +2994,7 @@ export const optionsMethods = {
             const select = templatePresetInputs.find(input => input.dataset.templateCategory === categoryKey);
             const custom = templateCustomInputs.find(input => input.dataset.templateCategory === categoryKey);
             if (!select) return false;
-            const normalizedTemplate = this.normalizeDownloadPathTemplate(template);
+            const normalizedTemplate = this.normalizeDownloadPathValue(template);
             select.value = pathTemplatePresetValues.has(normalizedTemplate)
                 ? normalizedTemplate
                 : 'custom';
@@ -3468,7 +3446,7 @@ export const optionsMethods = {
                 });
                 const downloadPathTemplates = {};
                 pathTemplateCategories.forEach(category => {
-                    downloadPathTemplates[category.key] = this.normalizeDownloadPathTemplate(
+                    downloadPathTemplates[category.key] = this.normalizeDownloadPathValue(
                         getTemplateInputValue(category.key)
                     );
                 });

@@ -512,8 +512,8 @@ export const downloadTargetMethods = {
 
     getSavedDownloadSubfolderSuggestion(saved = {}, subfolder = '', baseDirectory = '') {
         if (!saved?.subfolderSuggestionSource) return null;
-        const selectedValue = this.normalizeDownloadSubfolderPath(subfolder);
-        const savedValue = this.normalizeDownloadSubfolderPath(saved.subfolder || '');
+        const selectedValue = this.normalizeDownloadPathValue(subfolder);
+        const savedValue = this.normalizeDownloadPathValue(saved.subfolder || '');
         if (!selectedValue || selectedValue !== savedValue) return null;
         if (String(baseDirectory || '') !== String(saved.subfolderBaseDirectory || '')) return null;
 
@@ -529,14 +529,14 @@ export const downloadTargetMethods = {
     },
 
     getCurrentDownloadSubfolderSuggestion(missing = {}, category = '', subfolder = '', baseDirectory = '') {
-        const selectedValue = this.normalizeDownloadSubfolderPath(subfolder);
+        const selectedValue = this.normalizeDownloadPathValue(subfolder);
         if (!selectedValue) return null;
 
         const folders = this.getAvailableSubfolders(category);
         const suggestion = this.getSuggestedDownloadSubfolder(missing, category, folders);
         if (!suggestion || typeof suggestion !== 'object') return null;
 
-        const suggestionValue = this.normalizeDownloadSubfolderPath(suggestion.value || '');
+        const suggestionValue = this.normalizeDownloadPathValue(suggestion.value || '');
         if (suggestionValue !== selectedValue) return null;
 
         const suggestionBaseDirectory = String(suggestion.baseDirectory || '');
@@ -553,7 +553,7 @@ export const downloadTargetMethods = {
         const category = this.normalizeDownloadCategory(selectedCategory || 'checkpoints');
         const categoryLabel = this.getCategoryDisplayName(category);
         const saved = options.saved || this.getSavedDownloadTargetSelection(missing);
-        const subfolder = this.normalizeDownloadSubfolderPath(selectedSubfolder || '');
+        const subfolder = this.normalizeDownloadPathValue(selectedSubfolder || '');
         const baseDirectory = options.baseDirectory || '';
         const mode = this.getDownloadPathMode();
         const savedSuggestion = this.getSavedDownloadSubfolderSuggestion(saved, subfolder, baseDirectory);
@@ -845,7 +845,7 @@ export const downloadTargetMethods = {
         return this.downloadSubfolders.get(this.normalizeDownloadCategory(category)) || [];
     },
 
-    normalizeDownloadSubfolderPath(value = '') {
+    normalizeDownloadPathValue(value = '') {
         return this.normalizePathToForward(value)
             .split('/')
             .map(part => part.trim())
@@ -854,7 +854,7 @@ export const downloadTargetMethods = {
     },
 
     getDownloadSubfolderPrefixes(value = '') {
-        const parts = this.normalizeDownloadSubfolderPath(value).split('/').filter(Boolean);
+        const parts = this.normalizeDownloadPathValue(value).split('/').filter(Boolean);
         const prefixes = [];
         let current = '';
         parts.forEach(part => {
@@ -882,7 +882,7 @@ export const downloadTargetMethods = {
             .replace(/[\\/]+/g, '/')
             .replace(/\/+$/g, '')
             .toLowerCase();
-        const normalizeValue = (value = '') => this.normalizeDownloadSubfolderPath(value).toLowerCase();
+        const normalizeValue = (value = '') => this.normalizeDownloadPathValue(value).toLowerCase();
         const makeIdentity = (value = '', base = '') => `${normalizeValue(value)}::${normalizeBase(base)}`;
         const known = new Set(cached.map(option => makeIdentity(
             this.getSubfolderOptionValue(option),
@@ -917,7 +917,7 @@ export const downloadTargetMethods = {
                 ? option.value || ''
                 : option || ''
         );
-        return this.normalizeDownloadSubfolderPath(value);
+        return this.normalizeDownloadPathValue(value);
     },
 
     getSubfolderOptionLabel(option) {
@@ -971,7 +971,7 @@ export const downloadTargetMethods = {
         const targetBaseDirectory = baseDirectory || this.getDownloadTargetBaseDirectory(normalizedCategory);
         if (!targetBaseDirectory) return null;
 
-        const cleanSubfolder = this.normalizeDownloadSubfolderPath(subfolder);
+        const cleanSubfolder = this.normalizeDownloadPathValue(subfolder);
         const folderPath = cleanSubfolder
             ? this.joinLocalPath(targetBaseDirectory, cleanSubfolder)
             : targetBaseDirectory;
@@ -1000,7 +1000,7 @@ export const downloadTargetMethods = {
     syncDownloadTargetFolderContext(categoryEl, subfolderEl) {
         if (!categoryEl) return;
         const category = this.normalizeDownloadCategory(this.getDropdownValue(categoryEl) || 'checkpoints');
-        const subfolder = this.normalizeDownloadSubfolderPath(subfolderEl?.value || '');
+        const subfolder = this.normalizeDownloadPathValue(subfolderEl?.value || '');
         const subfolderBaseDirectory = subfolderEl?.dataset.baseDirectory || '';
 
         this.setDownloadFolderContextTarget(
@@ -1082,14 +1082,6 @@ export const downloadTargetMethods = {
         }
     },
 
-    normalizeDownloadPathTemplate(template = '') {
-        return this.normalizePathToForward(template)
-            .split('/')
-            .map(part => part.trim())
-            .filter(part => part && part !== '.' && part !== '..')
-            .join('/');
-    },
-
     getDownloadPathMode() {
         return this.normalizeDownloadPathMode(localStorage.getItem('ModelResolver.downloadPathMode') || 'suggested');
     },
@@ -1102,7 +1094,7 @@ export const downloadTargetMethods = {
         );
         const templates = { ...defaults };
         Object.entries(parsed).forEach(([key, value]) => {
-            templates[this.normalizeDownloadCategory(key)] = this.normalizeDownloadPathTemplate(value);
+            templates[this.normalizeDownloadCategory(key)] = this.normalizeDownloadPathValue(value);
         });
         return templates;
     },
@@ -2076,7 +2068,7 @@ export const downloadTargetMethods = {
             preferTemplate: Boolean(options.preferTemplate)
         });
         if (suggestion) {
-            const suggestedSubfolder = this.normalizeDownloadSubfolderPath(suggestion.value || '');
+            const suggestedSubfolder = this.normalizeDownloadPathValue(suggestion.value || '');
             subfolderEl.value = suggestedSubfolder;
             subfolderEl.dataset.baseDirectory = suggestion.baseDirectory || '';
             this.saveDownloadTargetSelection(missing, {
@@ -2118,7 +2110,7 @@ export const downloadTargetMethods = {
         }
 
         this.setDropdownValue(categoryEl, category, this.getCategoryDisplayName(category));
-        const suggestedSubfolder = this.normalizeDownloadSubfolderPath(suggestion.value || '');
+        const suggestedSubfolder = this.normalizeDownloadPathValue(suggestion.value || '');
         subfolderEl.value = suggestedSubfolder;
         subfolderEl.dataset.baseDirectory = suggestion.baseDirectory || '';
         this.saveDownloadTargetSelection(missing, {
@@ -2289,7 +2281,7 @@ export const downloadTargetMethods = {
         });
         const preserveSavedSubfolder = Boolean(saved?.subfolderTouched);
         const selectedSubfolder = preserveSavedSubfolder
-            ? this.normalizeDownloadSubfolderPath(saved.subfolder || '')
+            ? this.normalizeDownloadPathValue(saved.subfolder || '')
             : '';
         const selectedSubfolderBaseDirectory = preserveSavedSubfolder ? saved.subfolderBaseDirectory || '' : '';
         const subfolderTooltip = this.getDownloadSubfolderTooltip(missing, selectedCategory, selectedSubfolder, {
@@ -2324,7 +2316,7 @@ export const downloadTargetMethods = {
             this.getDropdownValue(categoryEl)
             || this.getMissingDownloadCategory(missing, fallbackCategory || 'checkpoints')
         );
-        const subfolder = this.normalizeDownloadSubfolderPath(subfolderEl?.value || '');
+        const subfolder = this.normalizeDownloadPathValue(subfolderEl?.value || '');
         if (subfolderEl && subfolderEl.value !== subfolder) {
             subfolderEl.value = subfolder;
         }
@@ -2584,7 +2576,7 @@ export const downloadTargetMethods = {
             });
         };
 
-        const normalizeSubfolderPath = (value = '') => this.normalizeDownloadSubfolderPath(value)
+        const normalizeSubfolderPath = (value = '') => this.normalizeDownloadPathValue(value)
             .split('/')
             .map(part => part.trim())
             .filter(part => part && part !== '.')
@@ -2950,7 +2942,7 @@ export const downloadTargetMethods = {
                 }
                 this.saveDownloadTargetSelection(missing, {
                     category,
-                    subfolder: this.normalizeDownloadSubfolderPath(subfolderEl.value || ''),
+                    subfolder: this.normalizeDownloadPathValue(subfolderEl.value || ''),
                     subfolderBaseDirectory: subfolderEl.dataset.baseDirectory || '',
                     categoryTouched: true,
                     subfolderTouched: Boolean(subfolderEl.value),
@@ -2995,7 +2987,7 @@ export const downloadTargetMethods = {
 
         subfolderEl.addEventListener('input', () => {
             subfolderEl.dataset.baseDirectory = '';
-            const normalizedSubfolder = this.normalizeDownloadSubfolderPath(subfolderEl.value);
+            const normalizedSubfolder = this.normalizeDownloadPathValue(subfolderEl.value);
             this.saveDownloadTargetSelection(missing, {
                 category: this.getDropdownValue(categoryEl),
                 subfolder: normalizedSubfolder,
@@ -3008,7 +3000,7 @@ export const downloadTargetMethods = {
             populateSubfolderOptions(subfolderEl.value);
         });
         subfolderEl.addEventListener('blur', () => {
-            const normalizedSubfolder = this.normalizeDownloadSubfolderPath(subfolderEl.value);
+            const normalizedSubfolder = this.normalizeDownloadPathValue(subfolderEl.value);
             if (subfolderEl.value !== normalizedSubfolder) {
                 subfolderEl.value = normalizedSubfolder;
             }

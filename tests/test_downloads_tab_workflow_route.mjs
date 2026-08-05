@@ -3871,14 +3871,14 @@ test('download subfolder tooltip explains automatic suggestion source', () => {
   const getDownloadSubfolderSuggestionReason = eval(`(${extractMethod(downloadTargetMethodsSource, 'getDownloadSubfolderSuggestionReason')})`);
   const getSavedDownloadSubfolderSuggestion = eval(`(${extractMethod(downloadTargetMethodsSource, 'getSavedDownloadSubfolderSuggestion')})`);
   const getCurrentDownloadSubfolderSuggestion = eval(`(${extractMethod(downloadTargetMethodsSource, 'getCurrentDownloadSubfolderSuggestion')})`);
-  const normalizeDownloadSubfolderPath = eval(`(${extractMethod(downloadTargetMethodsSource, 'normalizeDownloadSubfolderPath')})`);
+  const normalizeDownloadPathValue = eval(`(${extractMethod(downloadTargetMethodsSource, 'normalizeDownloadPathValue')})`);
 
   const dialog = {
     getDownloadSubfolderTooltip,
     getDownloadSubfolderSuggestionReason,
     getSavedDownloadSubfolderSuggestion,
     getCurrentDownloadSubfolderSuggestion,
-    normalizeDownloadSubfolderPath,
+    normalizeDownloadPathValue,
     normalizePathToForward(value) {
       return String(value || '').replace(/\\/g, '/');
     },
@@ -3918,18 +3918,18 @@ test('download subfolder tooltip explains automatic suggestion source', () => {
 });
 
 test('portable subfolder paths use forward slashes and join to the host path style', () => {
-  const normalizeDownloadSubfolderPath = eval(`(${extractMethod(downloadTargetMethodsSource, 'normalizeDownloadSubfolderPath')})`);
+  const normalizeDownloadPathValue = eval(`(${extractMethod(downloadTargetMethodsSource, 'normalizeDownloadPathValue')})`);
   const joinLocalPath = eval(`(${extractMethod(downloadTargetMethodsSource, 'joinLocalPath')})`);
   const dialog = {
-    normalizeDownloadSubfolderPath,
+    normalizeDownloadPathValue,
     joinLocalPath,
     normalizePathToForward(value) {
       return String(value || '').trim().replace(/\\/g, '/');
     }
   };
 
-  assert.equal(normalizeDownloadSubfolderPath.call(dialog, 'Pony\\Styles'), 'Pony/Styles');
-  assert.equal(normalizeDownloadSubfolderPath.call(dialog, 'Pony/Styles'), 'Pony/Styles');
+  assert.equal(normalizeDownloadPathValue.call(dialog, 'Pony\\Styles'), 'Pony/Styles');
+  assert.equal(normalizeDownloadPathValue.call(dialog, 'Pony/Styles'), 'Pony/Styles');
   assert.equal(
     joinLocalPath.call(dialog, '/models/loras', 'Pony\\Styles'),
     '/models/loras/Pony/Styles'
@@ -3956,6 +3956,21 @@ test('portable subfolder paths use forward slashes and join to the host path sty
   );
 });
 
+test('download subfolder and path template normalization apply the same segment rules', () => {
+  const normalizeDownloadPathValue = eval(`(${extractMethod(downloadTargetMethodsSource, 'normalizeDownloadPathValue')})`);
+  const dialog = {
+    normalizePathToForward(value) {
+      return String(value || '').replace(/\\/g, '/');
+    }
+  };
+  const input = ' Pony\\Styles / . / .. / {author} ';
+
+  assert.equal(
+    normalizeDownloadPathValue.call(dialog, input),
+    'Pony/Styles/{author}'
+  );
+});
+
 test('download subfolder tooltip identifies a folder taken from the workflow model path', () => {
   const getDownloadSubfolderSuggestionReason = eval(`(${extractMethod(downloadTargetMethodsSource, 'getDownloadSubfolderSuggestionReason')})`);
   const dialog = {
@@ -3979,7 +3994,7 @@ test('download subfolder tooltip explains Suggest button choice', () => {
   const getDownloadSubfolderSuggestionReason = eval(`(${extractMethod(downloadTargetMethodsSource, 'getDownloadSubfolderSuggestionReason')})`);
   const getSavedDownloadSubfolderSuggestion = eval(`(${extractMethod(downloadTargetMethodsSource, 'getSavedDownloadSubfolderSuggestion')})`);
   const getCurrentDownloadSubfolderSuggestion = eval(`(${extractMethod(downloadTargetMethodsSource, 'getCurrentDownloadSubfolderSuggestion')})`);
-  const normalizeDownloadSubfolderPath = eval(`(${extractMethod(downloadTargetMethodsSource, 'normalizeDownloadSubfolderPath')})`);
+  const normalizeDownloadPathValue = eval(`(${extractMethod(downloadTargetMethodsSource, 'normalizeDownloadPathValue')})`);
   const saved = {
     subfolder: 'Pony\\Styles',
     subfolderBaseDirectory: '',
@@ -3994,7 +4009,7 @@ test('download subfolder tooltip explains Suggest button choice', () => {
     getDownloadSubfolderSuggestionReason,
     getSavedDownloadSubfolderSuggestion,
     getCurrentDownloadSubfolderSuggestion,
-    normalizeDownloadSubfolderPath,
+    normalizeDownloadPathValue,
     normalizePathToForward(value) {
       return String(value || '').replace(/\\/g, '/');
     },
@@ -4075,7 +4090,7 @@ test('post-search auto-fill can refresh earlier suggested subfolder', async () =
     normalizeDownloadCategory(value) {
       return String(value || '');
     },
-    normalizeDownloadSubfolderPath(value) {
+    normalizeDownloadPathValue(value) {
       return String(value || '').replace(/\\/g, '/');
     },
     getDropdownValue(element) {
@@ -4954,6 +4969,15 @@ test('options credential checks preserve every endpoint contract', () => {
     assert.match(optionsMethodsSource, new RegExp(`payloadKey: '${payloadKey}'`));
     assert.match(optionsMethodsSource, new RegExp(`missingText: '${missingText}'`));
   });
+});
+
+test('options display helpers use one shared summary and status update contract', () => {
+  assert.match(optionsMethodsSource, /const setSummaryValue = \(element, value, mode = ''\)/);
+  assert.match(optionsMethodsSource, /setSummaryValue\(metadataSizeScannedEl/);
+  assert.match(optionsMethodsSource, /setSummaryValue\(metadataBuildScannedEl/);
+  assert.doesNotMatch(optionsMethodsSource, /setMetadataSizeSummaryValue|setMetadataBuildSummaryValue/);
+  assert.doesNotMatch(optionsMethodsSource, /setTokenCheckStatus|setAria2SummaryValue/);
+  assert.match(optionsMethodsSource, /aria2StatusEl\.hidden = !text[\s\S]*?setElementStatusText\(aria2StatusEl, text, mode\)/);
 });
 
 test('automatic opening preserves the current resolver display mode', () => {
