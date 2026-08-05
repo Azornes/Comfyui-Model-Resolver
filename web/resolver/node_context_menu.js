@@ -1,3 +1,5 @@
+import { getFilenameFromPath } from './utils/html_utils.js';
+
 function normalizeIdentity(value) {
     return String(value ?? '').trim().replaceAll('\\', '/').toLowerCase();
 }
@@ -15,7 +17,7 @@ function getResolvedModelFilename(model = {}) {
         || getResolvedModelPath(model)
         || 'Resolved model'
     );
-    return source.split(/[\\/]/).pop() || source;
+    return getFilenameFromPath(source) || source;
 }
 
 function getResolvedModelCategoryLabel(model = {}, formatCategory = null) {

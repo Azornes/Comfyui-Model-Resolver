@@ -175,3 +175,17 @@ test('node context conversion prefers resolved paths and derives safe display fi
   assert.equal(context.relative_path, model.relative_path);
   assert.equal(context.context_scope, 'local_model');
 });
+
+test('node context conversion derives filenames from Windows paths and fallback paths', () => {
+  const context = toResolverContextModel({
+    original_path: 'folder\\nested\\model.gguf',
+  });
+  const fallbackContext = toResolverContextModel({
+    resolved_path: 'C:\\models\\fallback.safetensors',
+  });
+
+  assert.equal(context.filename, 'model.gguf');
+  assert.equal(context.name, 'model.gguf');
+  assert.equal(fallbackContext.filename, 'fallback.safetensors');
+  assert.equal(fallbackContext.name, 'fallback.safetensors');
+});
