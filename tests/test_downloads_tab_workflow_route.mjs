@@ -20,7 +20,10 @@ import {
 } from '../web/resolver/node_context_menu.js';
 import { startSplitterDrag } from '../web/resolver/utils/splitter_drag.js';
 import { normalizeDownloadCategoryValue } from '../web/resolver/utils/category_utils.js';
-import { CATEGORY_ALIASES } from '../web/resolver/utils/category_aliases.generated.js';
+import {
+  CATEGORY_ALIASES,
+  normalizeCategoryToken,
+} from '../web/resolver/utils/category_aliases.generated.js';
 import { getSha256Field, normalizeSha256 } from '../web/resolver/utils/hash_utils.js';
 import { getSourceDisplayLabel, normalizeSourceKey } from '../web/resolver/utils/source_labels.js';
 import { baseModelAliasMethods } from '../web/resolver/search/base_model_alias_methods.js';
@@ -39,6 +42,7 @@ import {
 
 void normalizeDownloadCategoryValue;
 void CATEGORY_ALIASES;
+void normalizeCategoryToken;
 void normalizeSha256;
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
@@ -5991,6 +5995,25 @@ test('download category normalization maps gguf folder keys to diffusion models'
 test('download category normalization uses the generated backend alias fallback', () => {
   assert.equal(CATEGORY_ALIASES.control_net, 'controlnet');
   assert.equal(normalizeDownloadCategoryValue('control-net'), 'controlnet');
+});
+
+test('download category normalization follows the shared separator contract', () => {
+  const expected = [
+    ['  TEXTUAL\\INVERSION  ', 'embeddings'],
+    ['unet / gguf', 'diffusion_models'],
+    ['select---safetensors', 'diffusion_models'],
+    ['clip__vision', 'clip_vision'],
+  ];
+
+  for (const [rawCategory, canonicalCategory] of expected) {
+    assert.equal(normalizeCategoryToken(rawCategory), rawCategory
+      .trim()
+      .toLowerCase()
+      .replace(/[/\\\s-]+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, ''));
+    assert.equal(normalizeDownloadCategoryValue(rawCategory), canonicalCategory);
+  }
 });
 
 test('missing model categories preserve node priority and fallback order', () => {

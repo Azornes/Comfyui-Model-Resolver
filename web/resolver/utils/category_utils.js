@@ -1,13 +1,4 @@
-import { CATEGORY_ALIASES } from './category_aliases.generated.js';
-
-function normalizeCategoryToken(category) {
-    return String(category || '')
-        .trim()
-        .toLowerCase()
-        .replace(/[/\\\s-]+/g, '_')
-        .replace(/_+/g, '_')
-        .replace(/^_|_$/g, '');
-}
+import { CATEGORY_ALIASES, normalizeCategoryToken } from './category_aliases.generated.js';
 
 export function normalizeDownloadCategoryValue(
     category = '',

@@ -358,6 +358,22 @@ CIVARCHIVE_API_TYPE_MAP = {
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 
+def normalize_category_token(category: Any) -> str:
+    """Normalize a raw category into the shared alias lookup token format."""
+    token = (
+        str(category or "")
+        .strip()
+        .lower()
+        .replace("\\", "_")
+        .replace("/", "_")
+        .replace("-", "_")
+        .replace(" ", "_")
+    )
+    while "__" in token:
+        token = token.replace("__", "_")
+    return token.strip("_")
+
+
 def resolve_model_category(
     category: Any,
     target_format: str = "folder",
@@ -370,18 +386,7 @@ def resolve_model_category(
     - 'civarchive': CivArchive API type string (e.g. 'Checkpoint', 'LoCon')
     - 'urn': URN category string
     """
-    token = (
-        str(category or "")
-        .strip()
-        .lower()
-        .replace("\\", "_")
-        .replace("/", "_")
-        .replace("-", "_")
-        .replace(" ", "_")
-    )
-    while "__" in token:
-        token = token.replace("__", "_")
-    token = token.strip("_")
+    token = normalize_category_token(category)
 
     if target_format == "civitai":
         canonical_folder = CATEGORY_MAP.get(token, token)
