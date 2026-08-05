@@ -3045,6 +3045,29 @@ test('model info hash readers preserve field precedence and casing', () => {
   assert.equal(getSourceModelDisplayHash({}), '');
 });
 
+test('model info metadata source labels match the shared source label contract', () => {
+  const getInfoMetadataSourceLabel = eval(`(${extractMethod(modelInfoMethodsSource, 'getInfoMetadataSourceLabel')})`);
+  const dialog = {
+    sourceKey: 'metadata',
+    getInfoMetadataSourceKey() {
+      return this.sourceKey;
+    },
+  };
+
+  const expectedLabels = new Map([
+    ['huggingface', 'HuggingFace'],
+    ['civarchive', 'CivArchive'],
+    ['civitai', 'CivitAI'],
+    ['lora_manager_archive', 'LoRA Archive'],
+    ['metadata', 'metadata source'],
+  ]);
+
+  for (const [sourceKey, expectedLabel] of expectedLabels) {
+    dialog.sourceKey = sourceKey;
+    assert.equal(getInfoMetadataSourceLabel.call(dialog), expectedLabel);
+  }
+});
+
 test('workflow signature tracks model strength for bypass and custom LoRA loaders', () => {
   const getWorkflowSignatureData = eval(`(${extractMethod(workflowStateMethodsSource, 'getWorkflowSignatureData')})`);
   const dialog = { capabilities: { node_rules: {} } };

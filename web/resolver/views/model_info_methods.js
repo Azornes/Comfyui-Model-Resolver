@@ -4,6 +4,7 @@ import { escapeHtml, escapeJsString, getFilenameFromPath, sanitizeDescriptionHtm
 import { getModelCardUrl } from "../utils/url_utils.js";
 import { extractComfyWorkflow } from "../utils/workflow_metadata.js";
 import { getSha256Field, normalizeSha256 } from "../utils/hash_utils.js";
+import { getSourceDisplayLabel } from "../utils/source_labels.js";
 import { getCivitaiModelUrl } from "../globals.js";
 export const modelInfoMethods = {
     escapeHtml,
@@ -1874,11 +1875,7 @@ export const modelInfoMethods = {
 
     getInfoMetadataSourceLabel(data = {}) {
         const key = this.getInfoMetadataSourceKey(data);
-        if (key === 'huggingface') return 'HuggingFace';
-        if (key === 'civarchive') return 'CivArchive';
-        if (key === 'civitai') return 'CivitAI';
-        if (key === 'lora_manager_archive') return 'LoRA Archive';
-        return 'metadata source';
+        return getSourceDisplayLabel(key, { fallback: 'metadata source' });
     },
 
     getInfoMetadataSourceIcon(data = {}) {
