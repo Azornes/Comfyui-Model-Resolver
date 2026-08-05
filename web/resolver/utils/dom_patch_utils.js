@@ -42,3 +42,24 @@ export function bindEventOnce(element, eventName, handler, key = eventName) {
     element.addEventListener(eventName, handler);
     return true;
 }
+
+export function bindInstantAction(button, handler) {
+    if (!button || button._hasListener) return false;
+    button._hasListener = true;
+    const run = (event) => {
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
+        if (button.disabled) return;
+        if (event?.type === 'click' && button._handledPointerAction) {
+            button._handledPointerAction = false;
+            return;
+        }
+        if (event?.type === 'pointerdown') {
+            button._handledPointerAction = true;
+        }
+        handler(event);
+    };
+    button.addEventListener('pointerdown', run);
+    button.addEventListener('click', run);
+    return true;
+}

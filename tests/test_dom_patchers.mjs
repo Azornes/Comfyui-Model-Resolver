@@ -9,6 +9,7 @@ import {
   setTextIfChanged,
   syncElementAttributes,
 } from '../web/resolver/utils/dom_patch_utils.js';
+import * as domPatchUtils from '../web/resolver/utils/dom_patch_utils.js';
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
 const resolveDownloadMethodsSource = fs.readFileSync(
@@ -90,6 +91,29 @@ test('shared DOM helpers synchronize attributes, text, and one-time listeners', 
   assert.equal(bindEventOnce(current, 'click', handler, 'ready'), false);
   current.click();
   assert.equal(clicks, 1);
+});
+
+test('instant actions handle pointer and click as one idempotent action', () => {
+  assert.equal(typeof domPatchUtils.bindInstantAction, 'function');
+
+  const window = new Window();
+  const button = window.document.createElement('button');
+  let calls = 0;
+  const events = [];
+
+  assert.equal(domPatchUtils.bindInstantAction(button, event => {
+    calls += 1;
+    events.push(event.type);
+  }), true);
+  assert.equal(domPatchUtils.bindInstantAction(button, () => {
+    calls += 100;
+  }), false);
+
+  button.dispatchEvent(new window.Event('pointerdown', { bubbles: true, cancelable: true }));
+  button.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+
+  assert.equal(calls, 1);
+  assert.deepEqual(events, ['pointerdown']);
 });
 
 function createDialog(window) {

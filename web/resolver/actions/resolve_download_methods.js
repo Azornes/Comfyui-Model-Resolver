@@ -4,7 +4,7 @@ import { getModelCardUrl, parseHuggingFaceFileUrl } from "../utils/url_utils.js"
 import { getCivitaiModelUrl } from "../globals.js";
 import { normalizeSha256 } from "../utils/hash_utils.js";
 import { normalizePathIdentity } from "../utils/html_utils.js";
-import { bindEventOnce, syncElementAttributes } from "../utils/dom_patch_utils.js";
+import { bindEventOnce, bindInstantAction, syncElementAttributes } from "../utils/dom_patch_utils.js";
 const log = createModuleLogger('resolve_download_methods');
 
 export const resolveDownloadMethods = {
@@ -1108,25 +1108,6 @@ export const resolveDownloadMethods = {
 
     attachDownloadActionHandlers(progressDiv, downloadId) {
         if (!progressDiv) return;
-        const bindInstantAction = (button, handler) => {
-            if (!button || button._hasListener) return;
-            button._hasListener = true;
-            const run = (event) => {
-                event?.preventDefault?.();
-                event?.stopPropagation?.();
-                if (button.disabled) return;
-                if (event?.type === 'click' && button._handledPointerAction) {
-                    button._handledPointerAction = false;
-                    return;
-                }
-                if (event?.type === 'pointerdown') {
-                    button._handledPointerAction = true;
-                }
-                handler(event);
-            };
-            button.addEventListener('pointerdown', run);
-            button.addEventListener('click', run);
-        };
         progressDiv.querySelectorAll('.cancel-download-btn, .cancel-download-btn-pending, .mr-download-queue-cancel').forEach(cancelBtn => {
             bindInstantAction(cancelBtn, () => {
                 const targetDownloadId = cancelBtn.dataset.downloadId || downloadId;

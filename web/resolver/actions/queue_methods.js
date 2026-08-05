@@ -2,7 +2,7 @@ import { app } from "../../../../../scripts/app.js";
 import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
 import { startSplitterDrag } from "../utils/splitter_drag.js";
-import { syncElementAttributes } from "../utils/dom_patch_utils.js";
+import { bindInstantAction, syncElementAttributes } from "../utils/dom_patch_utils.js";
 const FOOTER_VERSION_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const FOOTER_VERSION_FAILURE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -1115,26 +1115,6 @@ export const queueMethods = {
     },
 
     wireDownloadsPanelControls() {
-        const bindInstantAction = (button, handler) => {
-            if (!button || button._hasListener) return;
-            button._hasListener = true;
-            const run = (event) => {
-                event?.preventDefault?.();
-                event?.stopPropagation?.();
-                if (button.disabled) return;
-                if (event?.type === 'click' && button._handledPointerAction) {
-                    button._handledPointerAction = false;
-                    return;
-                }
-                if (event?.type === 'pointerdown') {
-                    button._handledPointerAction = true;
-                }
-                handler();
-            };
-            button.addEventListener('pointerdown', run);
-            button.addEventListener('click', run);
-        };
-
         const getDownloadContext = (button) => {
             const downloadId = button?.dataset?.downloadId || '';
             const info = this.activeDownloads?.[downloadId];
