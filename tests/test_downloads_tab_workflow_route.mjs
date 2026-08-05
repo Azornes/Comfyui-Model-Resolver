@@ -5558,6 +5558,47 @@ test('download category normalization maps gguf folder keys to diffusion models'
   assert.equal(normalizeDownloadCategory('model_gguf'), 'diffusion_models');
 });
 
+test('missing model categories preserve node priority and fallback order', () => {
+  const getMissingSupportedDownloadCategories = eval(
+    `(${extractMethod(downloadTargetMethodsSource, 'getMissingSupportedDownloadCategories')})`
+  );
+  const dialog = {
+    downloadDirectories: {
+      checkpoints: [],
+      loras: [],
+      vae: [],
+    },
+    getDefaultDownloadCategoryKeys() {
+      return [];
+    },
+    getKnownDownloadCategorySet() {
+      return new Set(Object.keys(this.downloadDirectories));
+    },
+    normalizeDownloadCategory(value = '') {
+      return String(value || '').trim().toLowerCase();
+    },
+    getMissingNodeTypeDownloadCategory(missing) {
+      return missing.node_category || '';
+    },
+  };
+
+  assert.deepEqual(
+    getMissingSupportedDownloadCategories.call(dialog, {
+      node_category: 'loras',
+      category: 'checkpoints',
+      directory: 'vae',
+    }),
+    ['loras']
+  );
+  assert.deepEqual(
+    getMissingSupportedDownloadCategories.call(dialog, {
+      category: 'checkpoints, checkpoints',
+      directory: 'vae|loras',
+    }),
+    ['checkpoints', 'vae', 'loras']
+  );
+});
+
 test('download category normalization maps select safetensors alias to diffusion models', () => {
   const normalizeDownloadCategory = eval(`(${extractMethod(downloadTargetMethodsSource, 'normalizeDownloadCategory')})`);
 

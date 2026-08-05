@@ -158,30 +158,14 @@ export const downloadTargetMethods = {
             return chooseSupported(supported);
         }
 
-        const fallbackSupported = [];
-        const addCategory = (value) => {
-            if (value === undefined || value === null || String(value).trim() === '') return;
-            if (Array.isArray(value)) {
-                value.forEach(addCategory);
-                return;
-            }
-            String(value).split(/[,|;]/).forEach(part => {
-                const normalized = this.normalizeDownloadCategory(part);
-                if (normalized && knownCategories.has(normalized) && !fallbackSupported.includes(normalized)) {
-                    fallbackSupported.push(normalized);
-                }
-            });
-        };
-
-        addCategory(this.getMissingNodeTypeDownloadCategory(missing));
-        if (fallbackSupported.length) {
-            return fallbackSupported;
+        const nodeSupported = collectCategories(
+            this.getMissingNodeTypeDownloadCategory(missing)
+        );
+        if (nodeSupported.length) {
+            return nodeSupported;
         }
 
-        addCategory(missing.category);
-        addCategory(missing.directory);
-
-        return fallbackSupported;
+        return collectCategories(missing.category, missing.directory);
     },
 
     getSourceResultDownloadCategory(source = {}, fallbackCategory = '', missing = null) {
