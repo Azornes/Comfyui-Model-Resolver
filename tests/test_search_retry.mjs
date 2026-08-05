@@ -29,11 +29,13 @@ function extractMethod(source, methodName, paramsPattern = '[^)]*') {
 }
 
 globalThis.getSvgIcon = () => '';
+const renderSearchProgressItem = eval(`(${extractMethod(searchPanelSource, 'renderSearchProgressItem', '[\\s\\S]*?')})`);
 const renderSearchProgress = eval(`(${extractMethod(searchPanelSource, 'renderSearchProgress')})`);
 const wireSearchProgressRetryButtons = eval(`(${extractMethod(searchPanelSource, 'wireSearchProgressRetryButtons', '[\\s\\S]*?')})`);
 
 function createDialog() {
   return {
+    renderSearchProgressItem,
     renderSearchProgress,
     wireSearchProgressRetryButtons,
     getSearchSourceLabel(source) {
@@ -82,6 +84,56 @@ test('retryable provider failures render a source-specific retry action', () => 
   assert.match(html, /data-source="civarchive"/);
   assert.match(html, /Retry CivArchive search/);
   assert.doesNotMatch(html, /data-source="civitai"[^>]*>.*Retry/);
+});
+
+test('active search progress renders the full progress rows', () => {
+  const dialog = createDialog();
+  const html = dialog.renderSearchProgress({
+    activeSearchRunId: 'run-42',
+    sourceProgress: {
+      civitai: {
+        status: 'running',
+        percent: 42,
+        message: 'Querying models',
+      },
+      civarchive: {
+        status: 'error',
+        message: 'Search failed',
+        error: 'HTTP 522',
+        retryable: true,
+      },
+    },
+  });
+
+  assert.match(html, /class="mr-search-progress-list"/);
+  assert.doesNotMatch(html, /mr-search-progress-list-compact/);
+  assert.match(html, /aria-valuenow="42"/);
+  assert.match(html, /width: 42%/);
+  assert.match(html, /mr-search-progress-cancel/);
+  assert.match(html, /data-run-id="run-42"/);
+  assert.match(html, /mr-search-progress-retry/);
+});
+
+test('inactive search progress renders compact rows without progress controls', () => {
+  const dialog = createDialog();
+  const html = dialog.renderSearchProgress({
+    sourceProgress: {
+      civitai: {
+        status: 'found',
+        message: 'Found',
+      },
+      civarchive: {
+        status: 'error',
+        message: 'Search failed',
+        retryable: true,
+      },
+    },
+  });
+
+  assert.match(html, /mr-search-progress-list-compact/);
+  assert.doesNotMatch(html, /mr-search-progress-bar/);
+  assert.doesNotMatch(html, /mr-search-progress-cancel/);
+  assert.match(html, /mr-search-progress-retry/);
 });
 
 test('source retry action searches only the failed provider with force search', () => {

@@ -1122,6 +1122,59 @@ export const searchPanelMethods = {
         ));
     },
 
+    renderSearchProgressItem(source, progress, {
+        compact = false,
+        activeSearchRunId = null,
+        statusLabels = {},
+    } = {}) {
+        const status = progress?.status || 'pending';
+        const statusClass = String(status).replace(/[^a-z0-9_-]/gi, '');
+        const label = this.getSearchSourceLabel(source);
+        const retryButton = status === 'error' && progress?.retryable
+            ? `<button type="button" class="mr-search-result-action-btn mr-search-progress-retry" data-source="${this.escapeHtml(source)}" data-tooltip="Retry ${this.escapeHtml(label)} search" aria-label="Retry ${this.escapeHtml(label)} search">${getSvgIcon('refreshCw')}</button>`
+            : '';
+
+        if (compact) {
+            const statusLabel = progress?.message || statusLabels[status] || status;
+            const title = `${label}: ${progress?.error || statusLabel}`;
+            return `
+                <div class="mr-search-progress-item mr-search-progress-${statusClass}" data-search-progress-source="${this.escapeHtml(source)}" data-tooltip="${this.escapeHtml(title)}">
+                    <span class="mr-search-progress-source">${this.escapeHtml(label)}</span>
+                    <span class="mr-search-progress-status">${this.escapeHtml(statusLabel)}</span>
+                    ${retryButton}
+                </div>
+            `;
+        }
+
+        const canCancel = activeSearchRunId && (status === 'pending' || status === 'running');
+        const percent = status === 'pending'
+            ? 0
+            : (status === 'running' ? progress?.percent : 100);
+        const safePercent = Math.max(0, Math.min(100, Number(percent) || 0));
+        const runningMessage = progress?.message || 'Searching...';
+        const statusLabel = status === 'running'
+            ? `${runningMessage} ${Math.round(safePercent)}%`
+            : (progress?.message || statusLabels[status] || status);
+        const title = progress?.error ? ` data-tooltip="${this.escapeHtml(`${label}: ${progress.error}`)}"` : '';
+        const cancelButton = canCancel
+            ? `<button type="button" class="mr-search-result-action-btn mr-search-progress-cancel" data-source="${this.escapeHtml(source)}" data-run-id="${this.escapeHtml(activeSearchRunId)}" data-tooltip="Cancel ${this.escapeHtml(label)} search" aria-label="Cancel ${this.escapeHtml(label)} search">${getSvgIcon('x')}</button>`
+            : '';
+
+        return `
+            <div class="mr-search-progress-item mr-search-progress-${statusClass}" data-search-progress-source="${this.escapeHtml(source)}"${title}>
+                <div class="mr-search-progress-head">
+                    <span class="mr-search-progress-source">${this.escapeHtml(label)}</span>
+                    <span class="mr-search-progress-status">${this.escapeHtml(statusLabel)}</span>
+                    ${cancelButton}
+                    ${retryButton}
+                </div>
+                <div class="mr-search-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${safePercent}">
+                    <div class="mr-search-progress-fill" style="width: ${safePercent}%;"></div>
+                </div>
+            </div>
+        `;
+    },
+
     renderSearchProgress(state = {}) {
         const progressEntries = Object.entries(state.sourceProgress || {});
         if (!progressEntries.length) return '';
@@ -1136,63 +1189,15 @@ export const searchPanelMethods = {
             cancelled: 'Cancelled'
         };
 
-        if (isCompact) {
-            let html = '<div class="mr-search-progress-list mr-search-progress-list-compact">';
-            for (const [source, progress] of progressEntries) {
-                const status = progress?.status || 'pending';
-                const statusClass = String(status).replace(/[^a-z0-9_-]/gi, '');
-                const label = this.getSearchSourceLabel(source);
-                const statusLabel = progress?.message || statusLabels[status] || status;
-                const title = `${label}: ${progress?.error || statusLabel}`;
-                const retryButton = status === 'error' && progress?.retryable
-                    ? `<button type="button" class="mr-search-result-action-btn mr-search-progress-retry" data-source="${this.escapeHtml(source)}" data-tooltip="Retry ${this.escapeHtml(label)} search" aria-label="Retry ${this.escapeHtml(label)} search">${getSvgIcon('refreshCw')}</button>`
-                    : '';
-                html += `
-                    <div class="mr-search-progress-item mr-search-progress-${statusClass}" data-search-progress-source="${this.escapeHtml(source)}" data-tooltip="${this.escapeHtml(title)}">
-                        <span class="mr-search-progress-source">${this.escapeHtml(label)}</span>
-                        <span class="mr-search-progress-status">${this.escapeHtml(statusLabel)}</span>
-                        ${retryButton}
-                    </div>
-                `;
-            }
-            html += '</div>';
-            return html;
-        }
-
-        let html = '<div class="mr-search-progress-list">';
+        let html = isCompact
+            ? '<div class="mr-search-progress-list mr-search-progress-list-compact">'
+            : '<div class="mr-search-progress-list">';
         for (const [source, progress] of progressEntries) {
-            const status = progress?.status || 'pending';
-            const statusClass = String(status).replace(/[^a-z0-9_-]/gi, '');
-            const label = this.getSearchSourceLabel(source);
-            const canCancel = state.activeSearchRunId && (status === 'pending' || status === 'running');
-            const percent = status === 'pending'
-                ? 0
-                : (status === 'running' ? progress?.percent : 100);
-            const safePercent = Math.max(0, Math.min(100, Number(percent) || 0));
-            const runningMessage = progress?.message || 'Searching...';
-            const statusLabel = status === 'running'
-                ? `${runningMessage} ${Math.round(safePercent)}%`
-                : (progress?.message || statusLabels[status] || status);
-            const title = progress?.error ? ` data-tooltip="${this.escapeHtml(`${label}: ${progress.error}`)}"` : '';
-            const cancelButton = canCancel
-                ? `<button type="button" class="mr-search-result-action-btn mr-search-progress-cancel" data-source="${this.escapeHtml(source)}" data-run-id="${this.escapeHtml(state.activeSearchRunId)}" data-tooltip="Cancel ${this.escapeHtml(label)} search" aria-label="Cancel ${this.escapeHtml(label)} search">${getSvgIcon('x')}</button>`
-                : '';
-            const retryButton = status === 'error' && progress?.retryable
-                ? `<button type="button" class="mr-search-result-action-btn mr-search-progress-retry" data-source="${this.escapeHtml(source)}" data-tooltip="Retry ${this.escapeHtml(label)} search" aria-label="Retry ${this.escapeHtml(label)} search">${getSvgIcon('refreshCw')}</button>`
-                : '';
-            html += `
-                <div class="mr-search-progress-item mr-search-progress-${statusClass}" data-search-progress-source="${this.escapeHtml(source)}"${title}>
-                    <div class="mr-search-progress-head">
-                        <span class="mr-search-progress-source">${this.escapeHtml(label)}</span>
-                        <span class="mr-search-progress-status">${this.escapeHtml(statusLabel)}</span>
-                        ${cancelButton}
-                        ${retryButton}
-                    </div>
-                    <div class="mr-search-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${safePercent}">
-                        <div class="mr-search-progress-fill" style="width: ${safePercent}%;"></div>
-                    </div>
-                </div>
-            `;
+            html += this.renderSearchProgressItem(source, progress, {
+                compact: isCompact,
+                activeSearchRunId: state.activeSearchRunId,
+                statusLabels,
+            });
         }
         html += '</div>';
         return html;
