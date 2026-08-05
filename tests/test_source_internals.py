@@ -53,6 +53,8 @@ from core.sources.civitai import (
     get_model_info_by_hash,
     get_model_info_for_file,
     parse_civitai_url,
+    resolve_urn,
+    search_civitai,
     search_civitai_for_file,
 )
 from core.sources.common import is_remote_link_marked_dead
@@ -123,6 +125,72 @@ class CivitaiResultBuilderTests(unittest.TestCase):
         self.assertEqual("Anima", result["base_model"])
         self.assertEqual("abc123", result["sha256"])
         self.assertEqual(10 * 1024, result["size"])
+
+
+class CivitaiPrimaryFileSelectionTests(unittest.TestCase):
+
+    @patch("core.sources.civitai.execute_provider_json_request")
+    def test_resolve_urn_preserves_first_marked_file_order(self, mock_request):
+        clear_search_cache()
+        mock_request.return_value = {
+            "name": "Example model",
+            "tags": [],
+            "modelVersions": [
+                {
+                    "id": 456,
+                    "name": "v1",
+                    "baseModel": "SDXL",
+                    "files": [
+                        {"name": "first.safetensors", "type": "Model", "sizeKB": 1},
+                        {
+                            "name": "primary.safetensors",
+                            "primary": True,
+                            "type": "Model",
+                            "sizeKB": 2,
+                        },
+                    ],
+                }
+            ],
+        }
+
+        result = resolve_urn(123, 456)
+
+        self.assertEqual("first.safetensors", result["expected_filename"])
+        clear_search_cache()
+
+    @patch("core.sources.civitai.execute_provider_json_request")
+    def test_general_search_preserves_first_marked_file_order(self, mock_request):
+        clear_search_cache()
+        mock_request.return_value = {
+            "items": [
+                {
+                    "id": 123,
+                    "name": "Example model",
+                    "type": "Checkpoint",
+                    "stats": {"downloadCount": 1},
+                    "modelVersions": [
+                        {
+                            "id": 456,
+                            "baseModel": "SDXL",
+                            "files": [
+                                {"name": "first.safetensors", "type": "Model", "sizeKB": 1},
+                                {
+                                    "name": "primary.safetensors",
+                                    "primary": True,
+                                    "type": "Model",
+                                    "sizeKB": 2,
+                                },
+                            ],
+                        }
+                    ],
+                }
+            ]
+        }
+
+        results = search_civitai("example", limit=1)
+
+        self.assertEqual("first.safetensors", results[0]["filename"])
+        clear_search_cache()
 
 
 class CustomUrlResultBuilderTests(unittest.TestCase):

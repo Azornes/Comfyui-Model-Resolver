@@ -871,10 +871,6 @@ def _extract_version_files(
     return _merge_top_file_mirrors(files, top_files or [])
 
 
-def _select_primary_file(files: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    return select_primary_model_file(files)
-
-
 def _collect_archive_download_urls(
     file_info: Dict[str, Any],
     prioritize_civitai_last: bool = False,
@@ -1603,7 +1599,7 @@ def _build_result_from_payload(
             selected_file = file_info
 
     if selected_file is None:
-        selected_file = _select_primary_file(files)
+        selected_file = select_primary_model_file(files)
         best_confidence = calculate_archived_model_confidence(
             query_value,
             context.get("name", ""),

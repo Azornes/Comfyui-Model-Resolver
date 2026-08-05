@@ -738,13 +738,11 @@ def _find_civitai_file_in_model(
         resolved: Dict[str, Any], version_id: int
     ) -> Dict[str, Any]:
         expected_filename = resolved.get("expected_filename", "")
-        primary_file = None
-        for file_info in resolved.get("files", []):
-            if file_info.get("name") == expected_filename:
-                primary_file = file_info
-                break
-        if primary_file is None:
-            primary_file = (resolved.get("files") or [{}])[0]
+        primary_file = select_primary_model_file(
+            resolved.get("files") or [],
+            expected_filename=expected_filename,
+            fallback_to_first=True,
+        ) or {}
 
         return {
             "source": "civitai",
@@ -1248,14 +1246,10 @@ def search_civitai(
                     version_id = latest.get("id")
 
                     files = latest.get("files", [])
-                    primary_file = None
-                    for f in files:
-                        if f.get("primary", False) or f.get("type") == "Model":
-                            primary_file = f
-                            break
-
-                    if not primary_file and files:
-                        primary_file = files[0]
+                    primary_file = select_primary_model_file(
+                        files,
+                        prefer_first_marked=True,
+                    )
 
                     result = {
                         "source": "civitai",
@@ -1533,16 +1527,10 @@ def resolve_urn(
             return None
 
         files = target_version.get("files", [])
-        primary_file = None
-
-        # Prefer primary file or type=='Model'
-        for f in files:
-            if f.get("primary") or f.get("type") == "Model":
-                primary_file = f
-                break
-
-        if not primary_file and files:
-            primary_file = files[0]  # Fallback to first
+        primary_file = select_primary_model_file(
+            files,
+            prefer_first_marked=True,
+        )
 
         if not primary_file:
             log.warning(f"No files found for version {version_id}")

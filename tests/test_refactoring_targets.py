@@ -1082,6 +1082,26 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
         # Require download excludes main.safetensors because it has no download url
         self.assertEqual(select_primary_model_file(files, require_download=True)["id"], 1)
 
+        marked_files = [
+            {"id": 4, "name": "first.safetensors", "type": "Model"},
+            {"id": 5, "name": "primary.safetensors", "primary": True, "type": "Model"},
+        ]
+        self.assertEqual(
+            select_primary_model_file(
+                marked_files,
+                prefer_first_marked=True,
+            )["id"],
+            4,
+        )
+        self.assertEqual(
+            select_primary_model_file(
+                marked_files,
+                expected_filename="missing.safetensors",
+                fallback_to_first=True,
+            )["id"],
+            4,
+        )
+
     def _build_model_service_for_unit_test(
         self,
         service_module="model_service",

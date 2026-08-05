@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..sources.civitai import build_civitai_result_payload
+from ..type_utils import select_primary_model_file
 
 
 class SearchCancelled(BaseException):
@@ -358,15 +359,11 @@ class SearchProviderRunner:
                             "Selecting CivitAI file",
                             76,
                         )
-                        primary_file = None
-                        for file_info in model_info.get("files", []):
-                            if file_info.get("name") == model_info.get(
-                                "expected_filename"
-                            ):
-                                primary_file = file_info
-                                break
-                        if primary_file is None:
-                            primary_file = (model_info.get("files") or [{}])[0]
+                        primary_file = select_primary_model_file(
+                            model_info.get("files") or [],
+                            expected_filename=model_info.get("expected_filename"),
+                            fallback_to_first=True,
+                        ) or {}
 
                         download_url = self.owner.get_civitai_download_url(version_id)
                         result_payload = build_civitai_result_payload(

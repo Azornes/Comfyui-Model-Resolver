@@ -389,6 +389,48 @@ def test_search_provider_runner_resolves_civitai_urn():
     assert result["civitai"]["hashes"] == {}
 
 
+def test_search_provider_runner_keeps_first_file_when_expected_name_is_missing():
+    owner = SimpleNamespace(
+        CivArchiveSearchError=Exception,
+        logger=MagicMock(),
+        search_tracker=MagicMock(),
+        format_log_fields=MagicMock(return_value="ids=10@20"),
+        resolve_urn=MagicMock(
+            return_value={
+                "model_name": "URN Model",
+                "version_name": "v1",
+                "expected_filename": "missing.safetensors",
+                "base_model": "SDXL",
+                "files": [
+                    {"name": "fallback.safetensors", "sha256": "a" * 64},
+                    {
+                        "name": "primary.safetensors",
+                        "primary": True,
+                        "type": "Model",
+                        "sha256": "b" * 64,
+                    },
+                ],
+            }
+        ),
+        get_civitai_download_url=MagicMock(return_value="https://example.test/download"),
+        build_search_result=MagicMock(side_effect=lambda source, **fields: {"source": source, **fields}),
+    )
+    owner.search_tracker.is_cancelled.return_value = False
+    owner.log_search_result = MagicMock()
+    runner = SearchProviderRunner(owner)
+
+    result, found = runner.search_civitai_source_task(
+        _request(
+            data={"model_id": 10, "version_id": 20},
+            is_urn=True,
+            base_model_context="",
+        )
+    )
+
+    assert found is True
+    assert result["civitai"]["sha256"] == "a" * 64
+
+
 def test_search_provider_runner_falls_back_for_civitai_urn_without_ids():
     owner = SimpleNamespace(
         logger=MagicMock(),

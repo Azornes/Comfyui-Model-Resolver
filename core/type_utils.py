@@ -409,10 +409,16 @@ def select_primary_model_file(
     files: List[Dict[str, Any]],
     expected_filename: Optional[str] = None,
     require_download: bool = False,
+    fallback_to_first: bool = False,
+    prefer_first_marked: bool = False,
 ) -> Optional[Dict[str, Any]]:
     """
     Selects the primary file from a list of model version files,
     optionally filtering by expected filename or requiring a download URL.
+
+    ``fallback_to_first`` preserves callers that use an exact filename match
+    followed by the first available file. ``prefer_first_marked`` preserves
+    callers that select the first file marked primary or of type ``Model``.
     """
     if not isinstance(files, list):
         files = [files] if files else []
@@ -440,6 +446,14 @@ def select_primary_model_file(
         for file_info in candidates:
             if get_filename_from_path(file_name(file_info)).lower() == expected:
                 return file_info
+        if fallback_to_first:
+            return candidates[0]
+
+    if prefer_first_marked:
+        for file_info in candidates:
+            if file_info.get("primary") or str(file_info.get("type") or "").lower() == "model":
+                return file_info
+        return candidates[0]
 
     # 1. Look for file marked primary and of type Model
     for file_info in candidates:
