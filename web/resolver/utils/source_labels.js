@@ -23,6 +23,19 @@ const SOURCE_LABEL_CONTEXT_OVERRIDES = Object.freeze({
     }),
 });
 
+export function normalizeSourceKey(value, { trim = true } = {}) {
+    const text = String(value ?? '');
+    return (trim ? text.trim() : text).toLowerCase().replace(/-/g, '_');
+}
+
+export function normalizeSourceList(sources = []) {
+    return new Set(
+        (Array.isArray(sources) ? sources : [sources])
+            .map(source => String(source ?? '').trim())
+            .filter(Boolean)
+    );
+}
+
 export function getSourceDisplayLabel(
     source,
     {
@@ -32,7 +45,7 @@ export function getSourceDisplayLabel(
     } = {}
 ) {
     const sourceKey = normalize
-        ? String(source ?? '').toLowerCase().replace(/-/g, '_')
+        ? normalizeSourceKey(source, { trim: false })
         : source;
     const contextLabels = SOURCE_LABEL_CONTEXT_OVERRIDES[context] || {};
     return contextLabels[sourceKey] || COMMON_SOURCE_LABELS[sourceKey] || fallback;

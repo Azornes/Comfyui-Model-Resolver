@@ -1,13 +1,15 @@
 import { safeStorage } from "../utils/html_utils.js";
-import { getSourceDisplayLabel } from "../utils/source_labels.js";
+import {
+    getSourceDisplayLabel,
+    normalizeSourceKey,
+    normalizeSourceList,
+} from "../utils/source_labels.js";
 
 const localStorage = safeStorage;
 
 export const searchSourceMethods = {
     getSearchResultKeysForSources(sources = []) {
-        const normalized = new Set((Array.isArray(sources) ? sources : [sources])
-            .map(source => String(source || '').trim())
-            .filter(Boolean));
+        const normalized = normalizeSourceList(sources);
         if (normalized.has('all')) {
             return ['popular', 'model_list', 'huggingface', 'civitai', 'civarchive', 'lora_manager_archive'];
         }
@@ -25,9 +27,7 @@ export const searchSourceMethods = {
     },
 
     getHashLookupSourcesForSearchSources(sources = []) {
-        const normalized = new Set((Array.isArray(sources) ? sources : [sources])
-            .map(source => String(source || '').trim())
-            .filter(Boolean));
+        const normalized = normalizeSourceList(sources);
         const hashSources = ['huggingface', 'civitai', 'civarchive'];
         if (normalized.has('all')) return new Set(hashSources);
         return new Set(hashSources.filter(source => normalized.has(source)));
@@ -75,7 +75,7 @@ export const searchSourceMethods = {
         }
 
         const message = String(error || '').trim();
-        const normalizedSource = String(source || '').trim().toLowerCase().replace(/-/g, '_');
+        const normalizedSource = normalizeSourceKey(source);
         const statusCode = String(status?.code || '').trim().toLowerCase();
         if (normalizedSource === 'civarchive') {
             const messagesByCode = {
@@ -116,7 +116,7 @@ export const searchSourceMethods = {
 
     isSearchSourceRetryable(source, error = '', status = null) {
         if (typeof status?.retryable === 'boolean') return status.retryable;
-        const normalizedSource = String(source || '').trim().toLowerCase().replace(/-/g, '_');
+        const normalizedSource = normalizeSourceKey(source);
         if (normalizedSource !== 'civarchive') return false;
         return /network error|timeout|timed out|connection (?:error|reset|refused)|temporarily unavailable|\bHTTP\s+(?:408|429|5\d{2})\b/i.test(String(error || ''));
     },

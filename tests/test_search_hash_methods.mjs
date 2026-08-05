@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { searchHashMethods } from '../web/resolver/search/search_hash_methods.js';
 import { getSha256Field, normalizeSha256 } from '../web/resolver/utils/hash_utils.js';
+import { normalizeSourceKey } from '../web/resolver/utils/source_labels.js';
 
 function createDialog(overrides = {}) {
   return { ...searchHashMethods, ...overrides };
@@ -108,7 +109,7 @@ test('hash source keys and local identities match by hash or normalized source',
     null,
   ];
 
-  assert.equal(dialog.normalizeHashLookupSourceKey(' Civit-AI '), 'civit_ai');
+  assert.equal(normalizeSourceKey(' Civit-AI '), 'civit_ai');
   assert.deepEqual(
     dialog.getLocalHashMatchIdentitiesForResult(matches, 'civit-ai', { sha256: hashA }),
     ['local-a']

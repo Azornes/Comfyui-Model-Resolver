@@ -1,4 +1,5 @@
 import { normalizeSha256 } from '../utils/hash_utils.js';
+import { normalizeSourceKey } from '../utils/source_labels.js';
 
 export const searchHashMethods = {
     getSearchResultSha256(result = {}) {
@@ -97,13 +98,6 @@ export const searchHashMethods = {
             : '';
     },
 
-    normalizeHashLookupSourceKey(source = '') {
-        return String(source || '')
-            .trim()
-            .toLowerCase()
-            .replace(/-/g, '_');
-    },
-
     getLocalHashMatchIdentitiesForResult(hashMatches = [], sourceKey = '', sourceResult = {}) {
         const identities = [];
         const seen = new Set();
@@ -118,7 +112,7 @@ export const searchHashMethods = {
             sourceResult.hash_verified_local_match_identities.forEach(addIdentity);
         }
 
-        const normalizedSource = this.normalizeHashLookupSourceKey(sourceKey);
+        const normalizedSource = normalizeSourceKey(sourceKey);
         const sourceHash = this.getSearchResultSha256(sourceResult);
         if (!Array.isArray(hashMatches) || !hashMatches.length || !normalizedSource) {
             return identities;
@@ -127,7 +121,7 @@ export const searchHashMethods = {
         hashMatches.forEach(match => {
             if (!match || typeof match !== 'object') return;
 
-            const matchSource = this.normalizeHashLookupSourceKey(match.hash_lookup_source || '');
+            const matchSource = normalizeSourceKey(match.hash_lookup_source || '');
             const matchHash = normalizeSha256(this.getLocalMatchHash(match));
             if (sourceHash) {
                 if (matchHash !== sourceHash) return;

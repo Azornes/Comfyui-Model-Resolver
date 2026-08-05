@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { searchSourceMethods } from '../web/resolver/search/search_source_methods.js';
-import { getSourceDisplayLabel } from '../web/resolver/utils/source_labels.js';
+import {
+  getSourceDisplayLabel,
+  normalizeSourceKey,
+  normalizeSourceList,
+} from '../web/resolver/utils/source_labels.js';
 
 const {
   getSearchSourceLabel,
@@ -62,6 +66,26 @@ test('shared source labels preserve search and hash comparison contexts', () => 
   assert.equal(getSourceDisplayLabel('lora-archive'), 'LoRA Archive');
   assert.equal(getSourceDisplayLabel('download-source'), 'Selected source');
   assert.equal(getSourceDisplayLabel('unknown-source', { fallback: 'Fallback' }), 'Fallback');
+});
+
+test('source normalization preserves labels, trimmed selections, and provider errors', () => {
+  const dialog = { getSearchSourceLabel, getSearchSourceErrorMessage };
+
+  assert.equal(normalizeSourceKey(' Civit-AI '), 'civit_ai');
+  assert.equal(normalizeSourceKey(' Civit-AI ', { trim: false }), ' civit_ai ');
+  assert.deepEqual([...normalizeSourceList([' ', ' local ', null, 'civitai'])], ['local', 'civitai']);
+  assert.equal(
+    getSourceDisplayLabel(' Civit-AI ', { fallback: 'Fallback' }),
+    'Fallback'
+  );
+  assert.deepEqual(
+    getSearchResultKeysForSources([' ', ' local ', null]),
+    ['popular', 'model_list']
+  );
+  assert.equal(
+    getSearchSourceErrorMessage.call(dialog, ' CivArchive ', 'HTTP 502'),
+    'CivArchive may be overloaded or temporarily unavailable. Please try again.'
+  );
 });
 
 test('CivArchive availability failures receive a user-facing retry message', () => {

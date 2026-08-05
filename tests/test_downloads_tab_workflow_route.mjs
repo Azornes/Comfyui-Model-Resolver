@@ -20,7 +20,7 @@ import {
 import { startSplitterDrag } from '../web/resolver/utils/splitter_drag.js';
 import { normalizeDownloadCategoryValue } from '../web/resolver/utils/category_utils.js';
 import { getSha256Field, normalizeSha256 } from '../web/resolver/utils/hash_utils.js';
-import { getSourceDisplayLabel } from '../web/resolver/utils/source_labels.js';
+import { getSourceDisplayLabel, normalizeSourceKey } from '../web/resolver/utils/source_labels.js';
 import { baseModelAliasMethods } from '../web/resolver/search/base_model_alias_methods.js';
 import { searchHashMethods } from '../web/resolver/search/search_hash_methods.js';
 import { missingModelStateMethods } from '../web/resolver/views/missing_model_state_methods.js';
@@ -5767,14 +5767,12 @@ test('local hash identities link search results across sources by sha', () => {
   const {
     getLocalMatchHash,
     getSearchResultSha256,
-    normalizeHashLookupSourceKey,
     getLocalHashMatchIdentitiesForResult,
   } = searchHashMethods;
   const sha256 = 'e'.repeat(64);
   const dialog = {
     getLocalMatchHash,
     getSearchResultSha256,
-    normalizeHashLookupSourceKey,
     getLocalMatchIdentity() {
       return 'local-match-id';
     },

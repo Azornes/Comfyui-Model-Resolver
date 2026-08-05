@@ -1,3 +1,5 @@
+import { normalizeSourceKey } from '../utils/source_labels.js';
+
 export const missingModelStateMethods = {
     getBestLocalMatch(missing = {}, minConfidence = 0) {
         const matches = Array.isArray(missing.matches) ? missing.matches : [];
@@ -44,10 +46,7 @@ export const missingModelStateMethods = {
     },
 
     isLocalDatabaseDownloadSource(downloadSource = {}) {
-        const source = String(downloadSource?.source || '')
-            .trim()
-            .toLowerCase()
-            .replace(/-/g, '_');
+        const source = normalizeSourceKey(downloadSource?.source || '');
         return source === 'local' || source === 'model_list' || source === 'popular';
     },
 
@@ -78,7 +77,7 @@ export const missingModelStateMethods = {
         if (['huggingface', 'civitai', 'civarchive'].includes(source)) {
             const customResults = Array.isArray(results.custom) ? results.custom : [];
             customResults
-                .filter(result => String(result?.source || '').toLowerCase().replace(/-/g, '_') === source)
+                .filter(result => normalizeSourceKey(result?.source || '', { trim: false }) === source)
                 .forEach(result => candidates.push(result));
         }
 

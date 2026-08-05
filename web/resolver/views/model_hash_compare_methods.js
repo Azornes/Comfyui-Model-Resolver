@@ -1,5 +1,5 @@
 import { normalizeSha256 } from '../utils/hash_utils.js';
-import { getSourceDisplayLabel } from '../utils/source_labels.js';
+import { getSourceDisplayLabel, normalizeSourceKey } from '../utils/source_labels.js';
 
 export const modelHashCompareMethods = {
     formatSha256Short(value = '') {
@@ -113,7 +113,10 @@ export const modelHashCompareMethods = {
         const explicitLabel = result?.sourceLabel || result?.source_label || '';
         if (explicitLabel) return String(explicitLabel);
 
-        const rawSource = String(result?.source || result?.details_source || sourceKey || '').toLowerCase().replace(/-/g, '_');
+        const rawSource = normalizeSourceKey(
+            result?.source || result?.details_source || sourceKey || '',
+            { trim: false }
+        );
         return getSourceDisplayLabel(rawSource, {
             context: 'hash_compare',
             fallback: String(sourceKey || 'Source').replace(/[_-]+/g, ' '),

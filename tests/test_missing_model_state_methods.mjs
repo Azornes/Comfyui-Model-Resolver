@@ -78,6 +78,8 @@ test('known local download sources are hidden until local search was attempted',
   const state = { explicitSearchSources: [] };
 
   assert.equal(dialog.isLocalDatabaseDownloadSource(source), true);
+  assert.equal(dialog.isLocalDatabaseDownloadSource({ source: 'POPULAR' }), true);
+  assert.equal(dialog.isLocalDatabaseDownloadSource({ source: 'model-list' }), true);
   assert.equal(dialog.shouldDisplayKnownDownloadSource({}, source, state), false);
   assert.equal(
     dialog.shouldDisplayKnownDownloadSource({}, source, { explicitSearchSources: ['local'] }),
@@ -87,6 +89,18 @@ test('known local download sources are hidden until local search was attempted',
     dialog.shouldDisplayKnownDownloadSource({}, { source: 'civitai', url: source.url }, state),
     true
   );
+});
+
+test('custom provider results use normalized source identities', () => {
+  const dialog = createDialog();
+  const missing = { download_source: null };
+  const state = {
+    results: {
+      custom: [{ source: 'CivArchive', url: 'https://example.test/archive' }],
+    },
+  };
+
+  assert.equal(dialog.getMissingSourceResultStatus(missing, 'civarchive', state), 'found');
 });
 
 test('search result status and missing model counters expose stable state', () => {

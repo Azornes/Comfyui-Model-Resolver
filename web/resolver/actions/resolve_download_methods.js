@@ -5,6 +5,7 @@ import { getCivitaiModelUrl } from "../globals.js";
 import { normalizeSha256 } from "../utils/hash_utils.js";
 import { normalizePathIdentity } from "../utils/html_utils.js";
 import { bindEventOnce, bindInstantAction, syncElementAttributes } from "../utils/dom_patch_utils.js";
+import { normalizeSourceKey } from "../utils/source_labels.js";
 const log = createModuleLogger('resolve_download_methods');
 
 export const resolveDownloadMethods = {
@@ -739,13 +740,13 @@ export const resolveDownloadMethods = {
             return existingMatches;
         }
 
-        const sourceKey = String(
+        const sourceKey = normalizeSourceKey(
             options.sourceKey
             || result.sourceKey
             || result.source
             || result.details_source
             || 'download_source'
-        ).trim().toLowerCase().replace(/-/g, '_');
+        );
         const category = options.category
             || result.category
             || result.directory

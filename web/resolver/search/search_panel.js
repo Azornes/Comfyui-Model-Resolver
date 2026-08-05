@@ -1,6 +1,6 @@
 import { getSvgIcon } from "../../utils/icon_utils.js";
 import { getModelCardUrl, parseHuggingFaceFileUrl } from "../utils/url_utils.js";
-import { getSourceDisplayLabel } from "../utils/source_labels.js";
+import { getSourceDisplayLabel, normalizeSourceKey } from "../utils/source_labels.js";
 import { getCivitaiModelUrl } from "../globals.js";
 import { safeStorage, normalizePathIdentity } from "../utils/html_utils.js";
 import { bindEventOnce } from "../utils/dom_patch_utils.js";
@@ -1710,7 +1710,10 @@ export const searchPanelMethods = {
     getCustomUrlResultTableRow(missing, result = {}, hashLabelMap = null, localHashMatches = []) {
         if (!result || typeof result !== 'object') return null;
 
-        const source = String(result.source || result.details_source || 'custom').toLowerCase().replace(/-/g, '_');
+        const source = normalizeSourceKey(
+            result.source || result.details_source || 'custom',
+            { trim: false }
+        );
         const sourceKeys = {
             huggingface: 'huggingface',
             civitai: 'civitai',
