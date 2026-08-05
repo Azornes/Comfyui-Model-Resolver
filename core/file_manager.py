@@ -8,6 +8,8 @@ import shutil
 import subprocess
 from typing import Any, Dict
 
+from .path_utils import normalize_absolute_path
+
 LAUNCH_HANDOFF_TIMEOUT_SECONDS = 2.0
 
 
@@ -24,7 +26,7 @@ class UnsupportedFileManagerPlatformError(FileManagerError):
 
 
 def _normalized_absolute_path(path_value: str) -> str:
-    return os.path.realpath(os.path.abspath(os.path.normpath(path_value)))
+    return normalize_absolute_path(path_value)
 
 
 def normalize_file_manager_path(path_value: Any) -> str:
