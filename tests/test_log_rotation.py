@@ -4,10 +4,38 @@ import tempfile
 import unittest
 
 from core.log_system.logger import (
+    ANSI_RESET,
+    ColoredFormatter,
     SafeRotatingFileHandler,
     parse_rotated_log_filename,
     rotated_log_filename,
 )
+
+
+class ColoredFormatterTests(unittest.TestCase):
+    def test_colors_timestamp_and_root_label_with_the_context_badge(self):
+        formatter = ColoredFormatter(
+            use_colors=True,
+            include_milliseconds=False,
+            include_brackets=True,
+        )
+        record = logging.LogRecord(
+            'azlogs.module',
+            logging.INFO,
+            'test_file.py',
+            12,
+            'message',
+            (),
+            None,
+        )
+
+        formatted = formatter.format(record)
+        badge_prefix = '\033[97;48;2;38;63;76m '
+        timestamp = formatter._format_time(record)
+
+        self.assertIn(f'{badge_prefix}[{timestamp}] {ANSI_RESET}', formatted)
+        self.assertIn(f'{badge_prefix}[module] {ANSI_RESET}', formatted)
+        self.assertEqual(formatted.count(badge_prefix), 2)
 
 
 class RotatedLogFilenameTests(unittest.TestCase):

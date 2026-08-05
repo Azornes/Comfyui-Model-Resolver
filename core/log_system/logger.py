@@ -238,8 +238,8 @@ class ColoredFormatter(logging.Formatter):
             root_label = f"[{root_label}]"
         if self.use_colors:
             level = self._color_level_badge(levelname, level)
-            timestamp = self._color_timestamp(timestamp)
-            root_label = self._color_root_label(root_label)
+            timestamp = self._color_context_badge(timestamp)
+            root_label = self._color_context_badge(root_label)
             separator = self._color_separator(levelname, separator)
             message = self._color_message(levelname, message)
             return f"{level}{timestamp}{separator}{root_label}{separator} {message} {source}"
@@ -290,10 +290,7 @@ class ColoredFormatter(logging.Formatter):
         r, g, b = rgb
         return f"\033[1;97;48;2;{r};{g};{b}m {text} {ANSI_RESET}"
 
-    def _color_timestamp(self, text):
-        return f"\033[97;48;2;38;63;76m {text} {ANSI_RESET}"
-
-    def _color_root_label(self, text):
+    def _color_context_badge(self, text):
         return f"\033[97;48;2;38;63;76m {text} {ANSI_RESET}"
 
     def _color_separator(self, levelname, text):
