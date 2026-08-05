@@ -5,6 +5,19 @@ import threading
 from functools import wraps
 
 
+def register_service_post_route(context, *, path, error_prefix, operation):
+    """Register a JSON POST route for a bound service operation."""
+    json_api_endpoint = context.get("json_api_endpoint")
+    routes = context.get("routes")
+
+    async def service_route(request):
+        return await operation(request)
+
+    service_route.__name__ = getattr(operation, "__name__", "service_route")
+    decorated_route = json_api_endpoint(error_prefix)(service_route)
+    routes.post(path)(decorated_route)
+
+
 def create_route_helpers(web, logger, load_settings, hash_calculation_cancelled):
     """Create route helpers bound to the current ComfyUI server context."""
 

@@ -2,15 +2,14 @@
 
 from ..services.model_service import ModelService
 from .context import RouteContext
+from .helpers import register_service_post_route
 
 
 def register_custom_url_routes(context: RouteContext):
-    json_api_endpoint = context.get("json_api_endpoint")
-    routes = context.get("routes")
     model_service = ModelService(context)
-
-    @routes.post("/model_resolver/custom-url")
-    @json_api_endpoint("custom-url")
-    async def custom_url(request):
-        """Delegate model operation to the model service."""
-        return await model_service.custom_url(request)
+    register_service_post_route(
+        context,
+        path="/model_resolver/custom-url",
+        error_prefix="custom-url",
+        operation=model_service.custom_url,
+    )
