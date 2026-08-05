@@ -46,6 +46,7 @@ from core.sources.civitai import (
     _search_civitai_red_candidates,
     _search_civitai_trpc_candidates,
     build_civitai_custom_result,
+    build_civitai_result_payload,
     build_civitai_session_cookie,
     clear_search_cache,
     get_civitai_model_details,
@@ -77,6 +78,29 @@ def write_safetensors_stub(file_path, header):
 
 
 class CivitaiResultBuilderTests(unittest.TestCase):
+
+    def test_build_result_payload_preserves_optional_search_fields(self):
+        payload = build_civitai_result_payload(
+            model_id=123,
+            version_id=456,
+            model_name="Example model",
+            model_type="Checkpoint",
+            file_info={"name": "example.safetensors", "hashes": {"SHA256": "abc123"}},
+            filename="example.safetensors",
+            download_url="https://example.test/download",
+            size=2048,
+            base_model="SDXL",
+            tags=["style"],
+            match_type="exact",
+            version_name="v1",
+            confidence=100.0,
+        )
+
+        self.assertEqual("Example model", payload["name"])
+        self.assertEqual("v1", payload["version_name"])
+        self.assertEqual("example.safetensors", payload["filename"])
+        self.assertEqual("abc123", payload["sha256"])
+        self.assertEqual(100.0, payload["confidence"])
 
     def test_build_result_from_version_has_unified_builder_available(self):
         result = _build_civitai_result_from_version(

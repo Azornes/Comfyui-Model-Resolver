@@ -147,6 +147,47 @@ def check_civitai_api_key(api_key: Optional[str]) -> Dict[str, Any]:
 from .common import build_custom_url_result
 
 
+def build_civitai_result_payload(
+    *,
+    model_id: int,
+    version_id: int,
+    model_name: str,
+    model_type: str,
+    file_info: Dict[str, Any],
+    filename: str,
+    download_url: Optional[str],
+    size: Optional[int],
+    base_model: Optional[str],
+    tags: Optional[List[str]],
+    match_type: str,
+    version_name: Optional[str] = None,
+    confidence: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Build the shared CivitAI result fields used by search entry points."""
+    hashes = file_info.get("hashes") if isinstance(file_info.get("hashes"), dict) else {}
+    sha256 = file_info.get("sha256") or hashes.get("SHA256") or hashes.get("sha256")
+    payload = {
+        "model_id": model_id,
+        "version_id": version_id,
+        "name": model_name,
+        "type": model_type,
+        "filename": filename,
+        "url": f"https://civitai.com/models/{model_id}?modelVersionId={version_id}",
+        "download_url": download_url,
+        "size": size,
+        "base_model": base_model,
+        "tags": tags or [],
+        "match_type": match_type,
+        "sha256": sha256,
+        "hashes": hashes,
+    }
+    if version_name is not None:
+        payload["version_name"] = version_name
+    if confidence is not None:
+        payload["confidence"] = confidence
+    return payload
+
+
 def _build_civitai_result_from_version(
     model_id: int,
     model_name: str,
@@ -158,25 +199,23 @@ def _build_civitai_result_from_version(
 ) -> Dict[str, Any]:
     """Normalize CivitAI model/version/file data into the search result format."""
     version_id = version.get("id")
-    hashes = file_info.get("hashes") if isinstance(file_info.get("hashes"), dict) else {}
-    sha256 = file_info.get("sha256") or hashes.get("SHA256") or hashes.get("sha256")
     size = file_info.get("sizeKB", 0) * 1024 if file_info.get("sizeKB") else file_info.get("size")
     download_url = file_info.get("downloadUrl") or get_civitai_download_url(version_id)
     return build_search_result(
         source="civitai",
-        model_id=model_id,
-        version_id=version_id,
-        name=model_name,
-        type=model_type,
-        filename=file_info.get("name", ""),
-        url=f"https://civitai.com/models/{model_id}?modelVersionId={version_id}",
-        download_url=download_url,
-        size=size,
-        base_model=version.get("baseModel"),
-        tags=tags or [],
-        match_type=match_type,
-        sha256=sha256,
-        hashes=hashes,
+        **build_civitai_result_payload(
+            model_id=model_id,
+            version_id=version_id,
+            model_name=model_name,
+            model_type=model_type,
+            file_info=file_info,
+            filename=file_info.get("name", ""),
+            download_url=download_url,
+            size=size,
+            base_model=version.get("baseModel"),
+            tags=tags,
+            match_type=match_type,
+        ),
         normalize_hashes=True,
     )
 
@@ -707,27 +746,24 @@ def _find_civitai_file_in_model(
         if primary_file is None:
             primary_file = (resolved.get("files") or [{}])[0]
 
-        hashes = primary_file.get("hashes") if isinstance(primary_file.get("hashes"), dict) else {}
-        sha256 = primary_file.get("sha256") or hashes.get("SHA256") or hashes.get("sha256")
-
         return {
             "source": "civitai",
-            "model_id": model_id,
-            "version_id": version_id,
-            "name": resolved.get("model_name", ""),
-            "type": "",
-            "filename": expected_filename,
-            "url": f"https://civitai.com/models/{model_id}?modelVersionId={version_id}",
-            "download_url": get_civitai_download_url(version_id, api_key),
-            "size": primary_file.get("size"),
-            "base_model": resolved.get("base_model"),
-            "tags": resolved.get("tags", []),
-            "match_type": "exact",
-            "confidence": calculate_filename_confidence(
-                filename, expected_filename
+            **build_civitai_result_payload(
+                model_id=model_id,
+                version_id=version_id,
+                model_name=resolved.get("model_name", ""),
+                model_type="",
+                file_info=primary_file,
+                filename=expected_filename,
+                download_url=get_civitai_download_url(version_id, api_key),
+                size=primary_file.get("size"),
+                base_model=resolved.get("base_model"),
+                tags=resolved.get("tags", []),
+                match_type="exact",
+                confidence=calculate_filename_confidence(
+                    filename, expected_filename
+                ),
             ),
-            "sha256": sha256,
-            "hashes": hashes,
         }
 
     def resolved_version_matches(resolved: Dict[str, Any]) -> bool:

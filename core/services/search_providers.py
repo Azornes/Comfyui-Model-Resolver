@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from typing import Any
 
+from ..sources.civitai import build_civitai_result_payload
+
 
 class SearchCancelled(BaseException):
     """Signal cancellation through provider worker boundaries."""
@@ -366,37 +368,24 @@ class SearchProviderRunner:
                         if primary_file is None:
                             primary_file = (model_info.get("files") or [{}])[0]
 
-                        download_url = self.owner.get_civitai_download_url(
-                            version_id
-                        )
-                        source_results["civitai"] = self.owner.build_search_result(
-                            "civitai",
+                        download_url = self.owner.get_civitai_download_url(version_id)
+                        result_payload = build_civitai_result_payload(
                             model_id=model_id,
                             version_id=version_id,
-                            name=model_info.get("model_name"),
-                            version_name=model_info.get("version_name"),
+                            model_name=model_info.get("model_name"),
+                            model_type=request.category,
+                            file_info=primary_file,
                             filename=model_info.get("expected_filename"),
-                            type=request.category,
                             download_url=download_url,
-                            url=(
-                                "https://civitai.com/models/"
-                                f"{model_id}?modelVersionId={version_id}"
-                            ),
                             size=primary_file.get("size"),
                             base_model=model_info.get("base_model"),
                             tags=model_info.get("tags", []),
-                            sha256=(
-                                primary_file.get("sha256")
-                                or (primary_file.get("hashes") or {}).get(
-                                    "SHA256"
-                                )
-                                or (primary_file.get("hashes") or {}).get(
-                                    "sha256"
-                                )
-                            ),
-                            hashes=primary_file.get("hashes") or {},
                             match_type="exact",
+                            version_name=model_info.get("version_name"),
                             confidence=100.0,
+                        )
+                        source_results["civitai"] = self.owner.build_search_result(
+                            "civitai", **result_payload
                         )
                         self.owner.log_search_result(
                             "civitai/urn",

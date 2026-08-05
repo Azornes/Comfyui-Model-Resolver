@@ -375,7 +375,18 @@ def test_search_provider_runner_resolves_civitai_urn():
     assert found is True
     assert result["civitai"]["model_id"] == 10
     assert result["civitai"]["version_id"] == 20
+    assert result["civitai"]["name"] == "URN Model"
+    assert result["civitai"]["version_name"] == "v1"
+    assert result["civitai"]["filename"] == "urn.safetensors"
+    assert result["civitai"]["type"] == "checkpoints"
+    assert result["civitai"]["download_url"] == "https://example.test/download"
+    assert result["civitai"]["url"] == "https://civitai.com/models/10?modelVersionId=20"
+    assert result["civitai"]["size"] is None
+    assert result["civitai"]["base_model"] == "SDXL"
+    assert result["civitai"]["match_type"] == "exact"
+    assert result["civitai"]["confidence"] == 100.0
     assert result["civitai"]["sha256"] == "a" * 64
+    assert result["civitai"]["hashes"] == {}
 
 
 def test_search_provider_runner_falls_back_for_civitai_urn_without_ids():
