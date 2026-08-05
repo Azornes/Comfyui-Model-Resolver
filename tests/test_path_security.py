@@ -1,15 +1,22 @@
 import io
 import os
+import stat
 import tarfile
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import requests
 
-from core.aria2_installer import ARIA2_INSTALL_ROOT, Aria2InstallError, _safe_extract_tar
+from core.aria2_installer import (
+    ARIA2_INSTALL_ROOT,
+    Aria2InstallError,
+    _safe_extract_tar,
+    _safe_extract_zip,
+)
 from core.download.api import context as downloader_module
 from core.download.api import (
     download_file,
@@ -721,6 +728,44 @@ class PathSecurityTests(unittest.TestCase):
 
             with self.assertRaises(Aria2InstallError):
                 _safe_extract_tar(Path(archive_path), destination)
+
+    def test_zip_paths_outside_destination_are_rejected(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            archive_path = Path(temp_dir) / "aria2.zip"
+            destination = Path(temp_dir) / "extract"
+            destination.mkdir()
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.writestr("../outside.txt", "unsafe")
+
+            with self.assertRaises(Aria2InstallError):
+                _safe_extract_zip(archive_path, destination)
+
+    def test_zip_links_are_rejected(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            archive_path = Path(temp_dir) / "aria2.zip"
+            destination = Path(temp_dir) / "extract"
+            destination.mkdir()
+            link = zipfile.ZipInfo("escape")
+            link.create_system = 3
+            link.external_attr = (stat.S_IFLNK | 0o777) << 16
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.writestr(link, "../../outside")
+
+            with self.assertRaises(Aria2InstallError):
+                _safe_extract_zip(archive_path, destination)
+
+    def test_tar_paths_outside_destination_are_rejected(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            archive_path = Path(temp_dir) / "aria2.tar"
+            destination = Path(temp_dir) / "extract"
+            destination.mkdir()
+            with tarfile.open(archive_path, "w") as archive:
+                payload = tarfile.TarInfo("../outside.txt")
+                payload.size = 6
+                archive.addfile(payload, io.BytesIO(b"unsafe"))
+
+            with self.assertRaises(Aria2InstallError):
+                _safe_extract_tar(archive_path, destination)
 
 
 if __name__ == "__main__":

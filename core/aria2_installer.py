@@ -201,6 +201,14 @@ def _assert_within_install_root(path: Path) -> None:
         raise Aria2InstallError(f"Refusing to write outside aria2 install root: {target}")
 
 
+def _validate_archive_member_path(destination_abs: Path, member_name: str) -> None:
+    target_abs = (destination_abs / member_name).resolve()
+    if target_abs != destination_abs and not is_path_within(
+        str(target_abs), str(destination_abs)
+    ):
+        raise Aria2InstallError(f"Unsafe path in aria2 archive: {member_name}")
+
+
 def _safe_extract_zip(archive_path: Path, destination: Path) -> None:
     destination_abs = destination.resolve()
     with zipfile.ZipFile(archive_path) as archive:
@@ -210,10 +218,7 @@ def _safe_extract_zip(archive_path: Path, destination: Path) -> None:
                 raise Aria2InstallError(
                     f"Refusing symbolic link in aria2 archive: {member.filename}"
                 )
-            target = destination_abs / member.filename
-            target_abs = target.resolve()
-            if not is_path_within(str(target_abs), str(destination_abs)) and target_abs != destination_abs:
-                raise Aria2InstallError(f"Unsafe path in aria2 archive: {member.filename}")
+            _validate_archive_member_path(destination_abs, member.filename)
         archive.extractall(destination_abs)
 
 
@@ -229,10 +234,7 @@ def _safe_extract_tar(archive_path: Path, destination: Path) -> None:
                 raise Aria2InstallError(
                     f"Refusing special file in aria2 archive: {member.name}"
                 )
-            target = destination_abs / member.name
-            target_abs = target.resolve()
-            if not is_path_within(str(target_abs), str(destination_abs)) and target_abs != destination_abs:
-                raise Aria2InstallError(f"Unsafe path in aria2 archive: {member.name}")
+            _validate_archive_member_path(destination_abs, member.name)
         archive.extractall(destination_abs)
 
 
