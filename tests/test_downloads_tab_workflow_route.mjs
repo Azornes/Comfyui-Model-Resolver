@@ -5667,6 +5667,7 @@ test('local match status labels hash matches distinctly from exact matches', () 
 
 test('local match refreshes preserve keyed rows and button handlers', () => {
   const renderLocalMatchesContent = extractMethod(searchPanelMethodsSource, 'renderLocalMatchesContent');
+  const renderLocalMatchRow = extractMethod(searchPanelMethodsSource, 'renderLocalMatchRow');
   const patchLocalMatchesContainer = extractMethod(
     resolveDownloadMethodsSource,
     'patchLocalMatchesContainer'
@@ -5678,8 +5679,9 @@ test('local match refreshes preserve keyed rows and button handlers', () => {
   const wireLocalMatchButtons = extractMethod(searchPanelMethodsSource, 'wireLocalMatchButtons');
   const refreshMissingListRow = extractMethod(missingBrowserMethodsSource, 'refreshMissingListRow');
 
-  assert.match(renderLocalMatchesContent, /data-local-match-key/);
-  assert.match(renderLocalMatchesContent, /encodeURIComponent/);
+  assert.match(renderLocalMatchesContent, /renderLocalMatchRow/);
+  assert.match(renderLocalMatchRow, /data-local-match-key/);
+  assert.match(renderLocalMatchRow, /encodeURIComponent/);
   assert.match(patchLocalMatchesContainer, /local-match-key|localMatchKey/);
   assert.match(patchLocalMatchesContainer, /mr-local-alternatives-toggle/);
   assert.match(refreshLocalMatchesUiForMissing, /patchLocalMatchesContainer/);
@@ -5690,6 +5692,76 @@ test('local match refreshes preserve keyed rows and button handlers', () => {
   assert.doesNotMatch(wireLocalMatchButtons, /addEventListener\('click'/);
   assert.match(refreshMissingListRow, /renderedSources/);
   assert.match(refreshMissingListRow, /innerHTML !== renderedSources/);
+});
+
+test('local match rows preserve best-match and alternative rendering contracts', () => {
+  globalThis.getSvgIcon = () => '<svg></svg>';
+  const renderLocalMatchRow = eval(`(${extractMethod(searchPanelMethodsSource, 'renderLocalMatchRow')})`);
+  const renderLocalMatchesContent = eval(`(${extractMethod(searchPanelMethodsSource, 'renderLocalMatchesContent')})`);
+  const dialog = {
+    renderLocalMatchRow,
+    getHashMatchLabelMap() {
+      return null;
+    },
+    buildContextMenuModelData() {
+      return { model: 'context' };
+    },
+    getLocalMatchContextData() {
+      return { source: 'local' };
+    },
+    getLocalMatchIdentity(match) {
+      return match.identity;
+    },
+    escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      }[char]));
+    },
+    getContextMenuAttrs() {
+      return ' data-context-menu="true"';
+    },
+    getConfidenceBadge(confidence) {
+      return `<span class="confidence">${confidence}</span>`;
+    },
+    getModelPreviewTooltipAttrs() {
+      return '';
+    },
+    renderLocalMatchStatusGroup() {
+      return '<span class="status-group">Status</span>';
+    },
+    areLocalMatchAlternativesCollapsed() {
+      return false;
+    },
+  };
+  const html = renderLocalMatchesContent.call(dialog, {
+    node_id: 1,
+    widget_index: 2,
+    matches: [
+      {
+        confidence: 100,
+        identity: 'path:/models/best.safetensors',
+        model: { relative_path: 'models/best.safetensors' },
+      },
+      {
+        confidence: 80,
+        identity: 'path:/models/alternative.safetensors',
+        model: { relative_path: 'models/alternative.safetensors' },
+      },
+    ],
+  }, 0);
+
+  assert.match(html, /class="mr-match-row mr-best-match"/);
+  assert.match(html, /id="resolve-0-1-2-0"/);
+  assert.match(html, /data-local-match-key="path%3A%2Fmodels%2Fbest\.safetensors"/);
+  assert.match(html, /data-context-menu="true"/g);
+  assert.match(html, /data-local-match-alternative="true"/);
+  assert.match(html, /id="resolve-alt-0-1-2-0"/);
+  assert.match(html, /data-local-match-key="path%3A%2Fmodels%2Falternative\.safetensors"/);
+  assert.equal((html.match(/class="status-group"/g) || []).length, 2);
 });
 
 test('URN resolution preserves the download panel container', () => {

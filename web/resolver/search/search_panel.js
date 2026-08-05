@@ -2358,6 +2358,45 @@ export const searchPanelMethods = {
         } catch (_e) {}
     },
 
+    renderLocalMatchRow(missing, match, {
+        missingIndex = 0,
+        matchIndex = 0,
+        hashLabelMap = null,
+        alternative = false,
+        bestMatch = false,
+    } = {}) {
+        const buttonPrefix = alternative ? 'resolve-alt' : 'resolve';
+        const buttonId = `${buttonPrefix}-${missingIndex}-${missing.node_id}-${missing.widget_index}-${matchIndex}`;
+        const matchPath = match.model?.relative_path || match.model?.path || match.path || match.filename || '';
+        const contextModel = this.buildContextMenuModelData(
+            match.model || {},
+            match.filename || '',
+            this.getLocalMatchContextData(missing, match)
+        );
+        const localMatchIdentity = this.getLocalMatchIdentity?.(match) || '';
+        const identityAttr = localMatchIdentity
+            ? ` data-local-match-identity="${this.escapeHtml(localMatchIdentity)}"`
+            : '';
+        const fallbackKey = alternative ? `alternative-${matchIndex}` : `match-${matchIndex}`;
+        const localMatchKey = localMatchIdentity
+            || matchPath
+            || match.filename
+            || fallbackKey;
+        const localMatchKeyAttr = ` data-local-match-key="${this.escapeHtml(encodeURIComponent(String(localMatchKey)))}"`;
+        const alternativeAttr = alternative ? ' data-local-match-alternative="true"' : '';
+        const rowClass = `mr-match-row${bestMatch ? ' mr-best-match' : ''}`;
+
+        let html = `<div class="${rowClass}" data-local-match-index="${matchIndex}"${alternativeAttr}${localMatchKeyAttr}${identityAttr}${this.getContextMenuAttrs(contextModel)}>`;
+        html += this.getConfidenceBadge(match.confidence);
+        html += `<span class="mr-match-filename"${this.getModelPreviewTooltipAttrs(match.model || match, matchPath)}>${this.escapeHtml(matchPath)}</span>`;
+        html += this.renderLocalMatchStatusGroup(missing, match, hashLabelMap);
+        html += `<button id="${buttonId}" class="mr-btn mr-btn-secondary mr-btn-sm mr-btn-icon-only mr-local-link-btn" data-tooltip="Link this local match" aria-label="Link this local match">`;
+        html += getSvgIcon('link');
+        html += `</button>`;
+        html += `</div>`;
+        return html;
+    },
+
     renderLocalMatchesContent(missing, missingIndex = 0) {
         const allMatches = missing.matches || [];
         const filteredMatches = allMatches.filter(m => m.confidence >= 70);
@@ -2381,33 +2420,13 @@ export const searchPanelMethods = {
 
             for (let matchIndex = 0; matchIndex < sortedMatches.length; matchIndex++) {
                 const match = sortedMatches[matchIndex];
-                const buttonId = `resolve-${missingIndex}-${missing.node_id}-${missing.widget_index}-${matchIndex}`;
-                const matchPath = match.model?.relative_path || match.model?.path || match.path || match.filename || '';
                 const isBestMatch = matchIndex === 0 && match.confidence >= 95;
-                const contextModel = this.buildContextMenuModelData(
-                    match.model || {},
-                    match.filename || '',
-                    this.getLocalMatchContextData(missing, match)
-                );
-                const localMatchIdentity = this.getLocalMatchIdentity?.(match) || '';
-                const identityAttr = localMatchIdentity
-                    ? ` data-local-match-identity="${this.escapeHtml(localMatchIdentity)}"`
-                    : '';
-                const localMatchKey = localMatchIdentity
-                    || matchPath
-                    || match.filename
-                    || `match-${matchIndex}`;
-                const localMatchKeyAttr = ` data-local-match-key="${this.escapeHtml(encodeURIComponent(String(localMatchKey)))}"`;
-                const rowClass = `mr-match-row${isBestMatch ? ' mr-best-match' : ''}`;
-
-                html += `<div class="${rowClass}" data-local-match-index="${matchIndex}"${localMatchKeyAttr}${identityAttr}${this.getContextMenuAttrs(contextModel)}>`;
-                html += this.getConfidenceBadge(match.confidence);
-                html += `<span class="mr-match-filename"${this.getModelPreviewTooltipAttrs(match.model || match, matchPath)}>${this.escapeHtml(matchPath)}</span>`;
-                html += this.renderLocalMatchStatusGroup(missing, match, hashLabelMap);
-                html += `<button id="${buttonId}" class="mr-btn mr-btn-secondary mr-btn-sm mr-btn-icon-only mr-local-link-btn" data-tooltip="Link this local match" aria-label="Link this local match">`;
-                html += getSvgIcon('link');
-                html += `</button>`;
-                html += `</div>`;
+                html += this.renderLocalMatchRow(missing, match, {
+                    missingIndex,
+                    matchIndex,
+                    hashLabelMap,
+                    bestMatch: isBestMatch,
+                });
             }
 
             if (perfectMatches.length > 0 && otherMatches.length > 0) {
@@ -2422,28 +2441,12 @@ export const searchPanelMethods = {
                 html += `<div id="${matchId}" class="mr-stack-sm ${alternativesCollapsed ? 'mr-hidden' : ''}">`;
                 for (let mIdx = 0; mIdx < otherMatches.length; mIdx++) {
                     const match = otherMatches[mIdx];
-                    const altBtnId = `resolve-alt-${missingIndex}-${missing.node_id}-${missing.widget_index}-${mIdx}`;
-                    const contextModel = this.buildContextMenuModelData(
-                        match.model || {},
-                        match.filename || '',
-                        this.getLocalMatchContextData(missing, match)
-                    );
-                    const matchPath = match.model?.relative_path || match.model?.path || match.path || match.filename || '';
-                    const localMatchIdentity = this.getLocalMatchIdentity?.(match) || '';
-                    const identityAttr = localMatchIdentity
-                        ? ` data-local-match-identity="${this.escapeHtml(localMatchIdentity)}"`
-                        : '';
-                    const localMatchKey = localMatchIdentity
-                        || matchPath
-                        || match.filename
-                        || `alternative-${mIdx}`;
-                    const localMatchKeyAttr = ` data-local-match-key="${this.escapeHtml(encodeURIComponent(String(localMatchKey)))}"`;
-                    html += `<div class="mr-match-row" data-local-match-index="${mIdx}" data-local-match-alternative="true"${localMatchKeyAttr}${identityAttr}${this.getContextMenuAttrs(contextModel)}>`;
-                    html += this.getConfidenceBadge(match.confidence);
-                    html += `<span class="mr-match-filename"${this.getModelPreviewTooltipAttrs(match.model || match, matchPath)}>${this.escapeHtml(matchPath)}</span>`;
-                    html += this.renderLocalMatchStatusGroup(missing, match, hashLabelMap);
-                    html += `<button id="${altBtnId}" class="mr-btn mr-btn-secondary mr-btn-sm mr-btn-icon-only mr-local-link-btn" data-tooltip="Link this local match" aria-label="Link this local match">${getSvgIcon('link')}</button>`;
-                    html += `</div>`;
+                    html += this.renderLocalMatchRow(missing, match, {
+                        missingIndex,
+                        matchIndex: mIdx,
+                        hashLabelMap,
+                        alternative: true,
+                    });
                 }
                 html += `</div>`;
             }
