@@ -5,11 +5,30 @@ from unittest.mock import MagicMock
 import pytest
 from aiohttp import web
 
-from core.routes.helpers import create_route_helpers
+from core.routes.helpers import create_route_helpers, register_service_route
 
 
 class _HashCancelled(Exception):
     pass
+
+
+class _Routes:
+    def __init__(self):
+        self.handlers = {}
+
+    def post(self, path):
+        def register(handler):
+            self.handlers[('POST', path)] = handler
+            return handler
+
+        return register
+
+    def get(self, path):
+        def register(handler):
+            self.handlers[('GET', path)] = handler
+            return handler
+
+        return register
 
 
 def _build_helpers():
@@ -21,6 +40,63 @@ def _build_helpers():
         hash_calculation_cancelled=_HashCancelled,
     )
     return helpers, logger
+
+
+@pytest.mark.asyncio
+async def test_register_service_route_delegates_to_the_operation():
+    routes = _Routes()
+    requests = []
+
+    async def operation(request):
+        requests.append(request)
+        return 'ok'
+
+    register_service_route(
+        {
+            'json_api_endpoint': lambda _error_prefix: lambda func: func,
+            'routes': routes,
+        },
+        path='/model_resolver/example',
+        error_prefix='example',
+        operation=operation,
+    )
+
+    request = object()
+    response = await routes.handlers[('POST', '/model_resolver/example')](request)
+
+    assert response == 'ok'
+    assert requests == [request]
+
+
+@pytest.mark.asyncio
+async def test_register_service_route_supports_multiple_methods_and_error_flags():
+    routes = _Routes()
+    endpoint_options = []
+
+    def endpoint(error_prefix, return_success_on_error=False):
+        endpoint_options.append((error_prefix, return_success_on_error))
+        return lambda func: func
+
+    async def operation(_request):
+        return 'ok'
+
+    register_service_route(
+        {
+            'json_api_endpoint': endpoint,
+            'routes': routes,
+        },
+        path='/model_resolver/example',
+        methods=('get', 'post'),
+        error_prefix='example',
+        operation=operation,
+        return_success_on_error=True,
+    )
+
+    assert set(routes.handlers) == {
+        ('GET', '/model_resolver/example'),
+        ('POST', '/model_resolver/example'),
+    }
+    assert endpoint_options == [('example', True)]
 
 
 @pytest.mark.asyncio

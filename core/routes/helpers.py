@@ -5,8 +5,16 @@ import threading
 from functools import wraps
 
 
-def register_service_post_route(context, *, path, error_prefix, operation):
-    """Register a JSON POST route for a bound service operation."""
+def register_service_route(
+    context,
+    *,
+    path,
+    methods=("post",),
+    error_prefix,
+    operation,
+    return_success_on_error=False,
+):
+    """Register JSON routes for a bound service operation."""
     json_api_endpoint = context.get("json_api_endpoint")
     routes = context.get("routes")
 
@@ -14,8 +22,18 @@ def register_service_post_route(context, *, path, error_prefix, operation):
         return await operation(request)
 
     service_route.__name__ = getattr(operation, "__name__", "service_route")
-    decorated_route = json_api_endpoint(error_prefix)(service_route)
-    routes.post(path)(decorated_route)
+    endpoint = (
+        json_api_endpoint(
+            error_prefix,
+            return_success_on_error=True,
+        )
+        if return_success_on_error
+        else json_api_endpoint(error_prefix)
+    )
+    decorated_route = endpoint(service_route)
+    method_names = (methods,) if isinstance(methods, str) else methods
+    for method in method_names:
+        getattr(routes, method.lower())(path)(decorated_route)
 
 
 def create_route_helpers(web, logger, load_settings, hash_calculation_cancelled):

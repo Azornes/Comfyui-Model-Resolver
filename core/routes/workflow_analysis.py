@@ -2,6 +2,7 @@
 
 from ..services.workflow_service import WorkflowService
 from .context import RouteContext
+from .helpers import register_service_route
 
 
 def register_workflow_analysis_routes(context: RouteContext):
@@ -32,12 +33,16 @@ def register_workflow_analysis_routes(context: RouteContext):
             }
         )
 
-    @routes.post("/model_resolver/resolve")
-    @json_api_endpoint("resolve", return_success_on_error=True)
-    async def resolve_models(request):
-        return await workflow_service.resolve_models(request)
-
-    @routes.post("/model_resolver/local-matches")
-    @json_api_endpoint("local-matches")
-    async def local_matches(request):
-        return await workflow_service.local_matches(request)
+    register_service_route(
+        context,
+        path="/model_resolver/resolve",
+        error_prefix="resolve",
+        operation=workflow_service.resolve_models,
+        return_success_on_error=True,
+    )
+    register_service_route(
+        context,
+        path="/model_resolver/local-matches",
+        error_prefix="local-matches",
+        operation=workflow_service.local_matches,
+    )

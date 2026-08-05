@@ -2,67 +2,87 @@
 
 from ..services.download_service import DownloadService
 from .context import RouteContext
+from .helpers import register_service_route
 
 
 def register_download_routes(context: RouteContext):
     """Register download routes and delegate behavior to :class:`DownloadService`."""
     service = DownloadService(context)
-    json_api_endpoint = context.get("json_api_endpoint")
-    routes = context.get("routes")
 
-    @routes.post("/model_resolver/download")
-    @json_api_endpoint("download", return_success_on_error=True)
-    async def download_model(request):
-        return await service.download_model(request)
-
-    @routes.get("/model_resolver/progress/{download_id}")
-    @json_api_endpoint("progress")
-    async def get_download_progress(request):
-        return await service.get_download_progress(request)
-
-    @routes.get("/model_resolver/progress")
-    @json_api_endpoint("progress")
-    async def get_all_downloads_progress(request):
-        return await service.get_all_downloads_progress(request)
-
-    @routes.post("/model_resolver/cancel/{download_id}")
-    @json_api_endpoint("cancel", return_success_on_error=True)
-    async def cancel_download_route(request):
-        return await service.cancel_download(request)
-
-    @routes.post("/model_resolver/pause/{download_id}")
-    @json_api_endpoint("pause", return_success_on_error=True)
-    async def pause_download_route(request):
-        return await service.pause_download(request)
-
-    @routes.post("/model_resolver/resume/{download_id}")
-    @json_api_endpoint("resume", return_success_on_error=True)
-    async def resume_download_route(request):
-        return await service.resume_download(request)
-
-    @routes.post("/model_resolver/clear_completed_downloads")
-    @json_api_endpoint("clear_completed_downloads", return_success_on_error=True)
-    async def clear_completed_downloads_route(request):
-        return await service.clear_completed_downloads(request)
-
-    @routes.get("/model_resolver/aria2/status")
-    @routes.post("/model_resolver/aria2/status")
-    @json_api_endpoint("aria2 status")
-    async def aria2_status_route(request):
-        return await service.aria2_status(request)
-
-    @routes.post("/model_resolver/aria2/start")
-    @json_api_endpoint("aria2 start", return_success_on_error=True)
-    async def aria2_start_route(request):
-        return await service.aria2_start(request)
-
-    @routes.get("/model_resolver/aria2/stop")
-    @routes.post("/model_resolver/aria2/stop")
-    @json_api_endpoint("aria2 stop", return_success_on_error=True)
-    async def aria2_stop_route(request):
-        return await service.aria2_stop(request)
-
-    @routes.post("/model_resolver/aria2/install")
-    @json_api_endpoint("aria2 install")
-    async def aria2_install_route(request):
-        return await service.aria2_install(request)
+    register_service_route(
+        context,
+        path="/model_resolver/download",
+        error_prefix="download",
+        operation=service.download_model,
+        return_success_on_error=True,
+    )
+    register_service_route(
+        context,
+        path="/model_resolver/progress/{download_id}",
+        methods=("get",),
+        error_prefix="progress",
+        operation=service.get_download_progress,
+    )
+    register_service_route(
+        context,
+        path="/model_resolver/progress",
+        methods=("get",),
+        error_prefix="progress",
+        operation=service.get_all_downloads_progress,
+    )
+    register_service_route(
+        context,
+        path="/model_resolver/cancel/{download_id}",
+        error_prefix="cancel",
+        operation=service.cancel_download,
+        return_success_on_error=True,
+    )
+    register_service_route(
+        context,
+        path="/model_resolver/pause/{download_id}",
+        error_prefix="pause",
+        operation=service.pause_download,
+        return_success_on_error=True,
+    )
+    register_service_route(
+        context,
+        path="/model_resolver/resume/{download_id}",
+        error_prefix="resume",
+        operation=service.resume_download,
+        return_success_on_error=True,
+    )
+    register_service_route(
+        context,
+        path="/model_resolver/clear_completed_downloads",
+        error_prefix="clear_completed_downloads",
+        operation=service.clear_completed_downloads,
+        return_success_on_error=True,
+    )
+    register_service_route(
+        context,
+        path="/model_resolver/aria2/status",
+        methods=("get", "post"),
+        error_prefix="aria2 status",
+        operation=service.aria2_status,
+    )
+    register_service_route(
+        context,
+        path="/model_resolver/aria2/start",
+        error_prefix="aria2 start",
+        operation=service.aria2_start,
+        return_success_on_error=True,
+    )
+    register_service_route(
+        context,
+        path="/model_resolver/aria2/stop",
+        methods=("get", "post"),
+        error_prefix="aria2 stop",
+        operation=service.aria2_stop,
+        return_success_on_error=True,
+    )
+    register_service_route(
+        context,
+        path="/model_resolver/aria2/install",
+        error_prefix="aria2 install",
+        operation=service.aria2_install,
+    )

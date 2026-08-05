@@ -3,6 +3,7 @@
 from ..services.directory_service import DirectoryService
 from ..services.scanner_service import ScannerService
 from .context import RouteContext
+from .helpers import register_service_route
 
 
 def register_directory_routes(context: RouteContext):
@@ -14,29 +15,41 @@ def register_directory_routes(context: RouteContext):
     directory_service = DirectoryService(context)
     scanner_service = ScannerService(context)
 
-    @routes.get("/model_resolver/directories")
-    @json_api_endpoint("directories")
-    async def get_directories(request):
-        return await directory_service.get_directories(request)
-
-    @routes.get("/model_resolver/root-directories")
-    @json_api_endpoint("root directories")
-    async def get_root_directories(request):
-        return await directory_service.get_root_directories(request)
-
-    @routes.get("/model_resolver/path-template-suggestions")
-    @json_api_endpoint("path template suggestions")
-    async def get_path_template_suggestions(request):
-        return await scanner_service.get_path_template_suggestions(request)
-
-    @routes.get("/model_resolver/capabilities")
-    @json_api_endpoint("capabilities")
-    async def get_capabilities(request):
-        return await directory_service.get_capabilities(request)
+    register_service_route(
+        context,
+        path="/model_resolver/directories",
+        methods=("get",),
+        error_prefix="directories",
+        operation=directory_service.get_directories,
+    )
+    register_service_route(
+        context,
+        path="/model_resolver/root-directories",
+        methods=("get",),
+        error_prefix="root directories",
+        operation=directory_service.get_root_directories,
+    )
+    register_service_route(
+        context,
+        path="/model_resolver/path-template-suggestions",
+        methods=("get",),
+        error_prefix="path template suggestions",
+        operation=scanner_service.get_path_template_suggestions,
+    )
+    register_service_route(
+        context,
+        path="/model_resolver/capabilities",
+        methods=("get",),
+        error_prefix="capabilities",
+        operation=directory_service.get_capabilities,
+    )
 
     register_version_routes(routes, web, json_api_endpoint)
 
-    @routes.get("/model_resolver/subfolders/{category}")
-    @json_api_endpoint("subfolders")
-    async def get_subfolders(request):
-        return await directory_service.get_subfolders(request)
+    register_service_route(
+        context,
+        path="/model_resolver/subfolders/{category}",
+        methods=("get",),
+        error_prefix="subfolders",
+        operation=directory_service.get_subfolders,
+    )

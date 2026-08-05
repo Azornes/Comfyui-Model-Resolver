@@ -2,12 +2,12 @@
 
 from ..services.model_service import ModelService
 from .context import RouteContext
-from .helpers import register_service_post_route
+from .helpers import register_service_route
 
 
 def register_civitai_search_routes(context: RouteContext):
     model_service = ModelService(context)
-    register_service_post_route(
+    register_service_route(
         context,
         path="/model_resolver/civitai-search",
         error_prefix="civitai-search",
