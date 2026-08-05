@@ -1,4 +1,4 @@
-import { normalizeSha256 } from '../utils/hash_utils.js';
+import { getSha256Field, normalizeSha256 } from '../utils/hash_utils.js';
 import { normalizeSourceKey } from '../utils/source_labels.js';
 
 export const searchHashMethods = {
@@ -137,14 +137,11 @@ export const searchHashMethods = {
 
     getLocalMatchHash(match = {}) {
         const model = match.model || {};
-        const hashes = model.hashes && typeof model.hashes === 'object' ? model.hashes : {};
+        const modelHash = getSha256Field(model);
         return String(
             match.sha256
             || match.hash
-            || model.sha256
-            || model.hash
-            || hashes.SHA256
-            || hashes.sha256
+            || modelHash
             || ''
         ).trim();
     },

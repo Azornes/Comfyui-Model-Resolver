@@ -49,6 +49,7 @@ test('search hash extraction checks result and nested provider fields in priorit
   assert.equal(dialog.getSearchResultSha256({ hash: 'invalid', file_info: { hash: hashB } }), hashB);
   assert.equal(dialog.getSearchResultSha256({ hashes: { SHA256: hashA }, sha256: hashB }), hashB);
   assert.equal(dialog.getSearchResultSha256({ file_info: { hashes: { sha256: hashA } } }), hashA);
+  assert.equal(dialog.getSearchResultSha256({ sha256: 'invalid', hash: hashB }), hashB);
   assert.equal(dialog.getSearchResultSha256({ hashes: null, file_info: null }), '');
 });
 
@@ -133,5 +134,6 @@ test('local hash extraction checks direct, model, and nested hash fields', () =>
   assert.equal(dialog.getLocalMatchHash({ sha256: hashA, model: { sha256: hashB } }), hashA);
   assert.equal(dialog.getLocalMatchHash({ model: { hash: hashB } }), hashB);
   assert.equal(dialog.getLocalMatchHash({ model: { hashes: { SHA256: hashA } } }), hashA);
+  assert.equal(dialog.getLocalMatchHash({ hashes: { SHA256: hashA }, model: { sha256: hashB } }), hashB);
   assert.equal(dialog.getLocalMatchHash({}), '');
 });
