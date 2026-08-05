@@ -31,7 +31,6 @@ from ..type_utils import (
     normalize_sha256,
     prepare_remote_size_probe_url,
 )
-from .common import build_unified_search_result
 
 HF_API_URL = "https://huggingface.co/api"
 HF_AUTHOR_FALLBACKS = ["Comfy-Org", "Kijai"]
@@ -717,7 +716,7 @@ def _build_huggingface_result(
     size = extract_file_size(file_info)
     if not size:
         size = _fetch_remote_file_size_bytes(download_url, headers=headers)
-    return build_unified_search_result(
+    return build_search_result(
         "huggingface",
         model_id=repo_id,
         version_id=None,
@@ -727,6 +726,7 @@ def _build_huggingface_result(
         size=size,
         match_type=match_type,
         sha256=sha256,
+        normalize_hashes=True,
         repo_id=repo_id,
         path=file_path,
         branch="main",

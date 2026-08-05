@@ -262,22 +262,33 @@ class TestRefactoringUnification(unittest.TestCase):
         self.assertEqual(as_list(["a", "", None, "b"]), ["a", "b"])
         self.assertEqual(list(_listify_tags(["a", "", None, "b"])), ["a", "b"])
 
-    def test_build_unified_search_result(self):
-        from core.sources.common import build_unified_search_result, normalize_hashes_dict
-        
+    def test_build_search_result_normalizes_hashes(self):
+        from core.type_utils import normalize_hashes_dict
+
         valid_sha = "a" * 64
         norm_hashes = normalize_hashes_dict({"sha256": valid_sha, "autoV2": "1234567890"})
         self.assertEqual(norm_hashes["sha256"], valid_sha.lower())
         self.assertEqual(norm_hashes["autoV2"], "1234567890")
 
-        res = build_unified_search_result(
+        res = build_search_result(
             "civitai",
             model_id=123,
             version_id=456,
             name="Test Model",
             hashes={"sha256": valid_sha},
             download_url="https://civitai.com/api/download/123",
+            normalize_hashes=True,
         )
+        expected = build_search_result(
+            "civitai",
+            model_id=123,
+            version_id=456,
+            name="Test Model",
+            download_url="https://civitai.com/api/download/123",
+            sha256=valid_sha.lower(),
+            hashes={"sha256": valid_sha.lower()},
+        )
+        self.assertEqual(expected, res)
         self.assertEqual(res["source"], "civitai")
         self.assertEqual(res["model_id"], 123)
         self.assertEqual(res["version_id"], 456)

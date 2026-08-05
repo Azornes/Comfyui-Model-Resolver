@@ -874,6 +874,31 @@ def normalize_sha256(value: Any) -> str:
     return text.lower() if SHA256_PATTERN.match(text) else ""
 
 
+def normalize_hashes_dict(hashes: Optional[Dict[str, Any]]) -> Dict[str, str]:
+    """Normalize common model hash keys and values into a stable mapping."""
+    if not isinstance(hashes, dict):
+        return {}
+
+    normalized: Dict[str, str] = {}
+    for key, value in hashes.items():
+        if not key or not value:
+            continue
+        key_str = str(key).strip()
+        value_str = str(value).strip()
+        if key_str.lower() in ("sha256", "sha-256"):
+            normalized["sha256"] = normalize_sha256(value_str)
+        elif key_str.lower() in ("autov2", "auto_v2"):
+            normalized["autoV2"] = value_str
+        elif key_str.lower() in ("autov1", "auto_v1"):
+            normalized["autoV1"] = value_str
+        elif key_str.lower() == "blake3":
+            normalized["blake3"] = value_str
+        else:
+            normalized[key_str] = value_str
+
+    return normalized
+
+
 def unique_ordered_strings(values: List[Any]) -> List[str]:
     """Return unique, non-empty strings while preserving their original order."""
     seen = set()
@@ -1245,12 +1270,18 @@ def build_search_result(
     match_type: str = "similar",
     confidence: float = 0.0,
     sha256: Optional[str] = None,
-    hashes: Optional[Dict[str, str]] = None,
+    hashes: Optional[Dict[str, Any]] = None,
+    normalize_hashes: bool = False,
     trained_words: Optional[List[str]] = None,
     images: Optional[List[Dict[str, Any]]] = None,
     **extra: Any,
 ) -> Dict[str, Any]:
     """Helper to unify search result dictionary creation across different sources."""
+    if normalize_hashes:
+        hashes = normalize_hashes_dict(hashes)
+        if not sha256 and "sha256" in hashes:
+            sha256 = hashes["sha256"]
+
     result = {
         "source": source,
         "model_id": model_id,

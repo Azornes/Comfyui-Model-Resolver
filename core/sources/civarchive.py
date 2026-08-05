@@ -34,6 +34,7 @@ from ..path_utils import get_filename_from_path
 from ..progress import get_progress_reporter
 from ..type_utils import (
     DEFAULT_BROWSER_USER_AGENT,
+    build_search_result,
     clear_remote_size_cache,
     extract_file_size,
     extract_trained_words,
@@ -50,7 +51,6 @@ from ..type_utils import (
 )
 from .common import (
     build_custom_url_result,
-    build_unified_search_result,
     collect_download_urls,
     is_remote_link_marked_dead,
 )
@@ -1208,7 +1208,7 @@ def _build_result_from_normalized_version(
     if size is None:
         size = _resolve_file_size_bytes(file_info, download_urls)
 
-    return build_unified_search_result(
+    return build_search_result(
         source="civarchive",
         model_id=model_id,
         version_id=version_id,
@@ -1231,6 +1231,7 @@ def _build_result_from_normalized_version(
         platform=model_details.get("platform"),
         is_deleted=False,
         match_type=match_type,
+        normalize_hashes=True,
     )
 
 
@@ -1658,7 +1659,7 @@ def _build_result_from_payload(
         else ""
     )
 
-    return build_unified_search_result(
+    return build_search_result(
         source="civarchive",
         model_id=model_id,
         version_id=version_id,
@@ -1689,6 +1690,7 @@ def _build_result_from_payload(
         sha256=sha256,
         hash=sha256,
         hashes=hashes,
+        normalize_hashes=True,
     )
 
 
@@ -1815,7 +1817,7 @@ def _build_result_from_search_candidate(
 
     open_url = urljoin(CIVARCHIVE_BASE_URL, str(candidate.get("url") or ""))
     sha256 = (parsed or {}).get("sha256")
-    return build_unified_search_result(
+    return build_search_result(
         source="civarchive",
         model_id=candidate.get("model_id") or candidate.get("modelId"),
         version_id=candidate.get("version_id") or candidate.get("modelVersionId"),
@@ -1839,6 +1841,7 @@ def _build_result_from_search_candidate(
         sha256=sha256,
         hash=sha256,
         hashes={"SHA256": sha256} if sha256 else {},
+        normalize_hashes=True,
     )
 
 
