@@ -2,7 +2,7 @@
 
 from .. import path_utils
 from ..routes.context import RouteContext
-from ..sources.common import is_remote_link_marked_dead
+from ..sources.common import collect_download_urls
 from .model_utils import CivitAISearchDependencies, ModelServiceDependencies
 
 
@@ -361,53 +361,14 @@ class CivitAISearchService(ModelServiceDependencies):
             )
 
         def collect_result_download_urls(result):
-            urls = []
-            if is_remote_link_marked_dead(result):
-                return urls
-            expected_filename = result.get("filename") or filename
-            dead_urls = set()
-            mirrors = result.get("mirrors") or []
-            if not isinstance(mirrors, list):
-                mirrors = [mirrors]
-            for mirror in mirrors:
-                if not isinstance(mirror, dict):
-                    continue
-                if is_remote_link_marked_dead(mirror):
-                    dead_url = str(mirror.get("url") or "").strip()
-                    if dead_url.startswith(("http://", "https://")):
-                        dead_urls.add(dead_url)
-                    continue
-                url = str(mirror.get("url") or "").strip()
-                mirror_filename = (
-                    mirror.get("filename")
-                    or mirror.get("name")
-                    or expected_filename
-                )
-                if (
-                    looks_like_model_file(url, mirror_filename)
-                    and url not in urls
-                ):
-                    urls.append(url)
-            raw_urls = result.get("download_urls") or []
-            if not isinstance(raw_urls, list):
-                raw_urls = [raw_urls]
-            for raw_url in raw_urls:
-                url = str(raw_url or "").strip()
-                if (
-                    looks_like_model_file(url, expected_filename)
-                    and url not in dead_urls
-                    and url not in urls
-                ):
-                    urls.append(url)
-            for key in ("download_url", "downloadUrl"):
-                url = str(result.get(key) or "").strip()
-                if (
-                    looks_like_model_file(url, expected_filename)
-                    and url not in dead_urls
-                    and url not in urls
-                ):
-                    urls.append(url)
-            return urls
+            return collect_download_urls(
+                result,
+                model_file_predicate=looks_like_model_file,
+                expected_filename=filename,
+                include_download_urls=True,
+                skip_dead_item=True,
+                download_url_keys=("download_url", "downloadUrl"),
+            )
 
         def remote_download_url_is_alive(url):
             headers = {

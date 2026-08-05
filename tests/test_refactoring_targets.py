@@ -2,6 +2,7 @@ import importlib
 import json
 import os
 import sys
+import tempfile
 import unittest
 from typing import ClassVar
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -1289,6 +1290,78 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
             json.loads(response.text)["error"],
             "resolved_path is outside configured model directories",
         )
+
+    async def test_civitai_service_filters_dead_and_duplicate_download_urls(self):
+        expected_hash = "a" * 64
+        dead_url = "https://dead.example/model.safetensors"
+        mirror_url = "https://mirror.example/model.safetensors"
+        listed_url = "https://listed.example/model.safetensors"
+        direct_url = "https://direct.example/model.safetensors"
+        result = {
+            "source": "civarchive",
+            "from_metadata": True,
+            "filename": "model.safetensors",
+            "sha256": expected_hash,
+            "mirrors": [
+                {"url": dead_url, "isDead": True},
+                {"url": mirror_url},
+            ],
+            "download_urls": [dead_url, listed_url, mirror_url],
+            "download_url": direct_url,
+        }
+
+        def to_bool(value, default=False):
+            return default if value is None else bool(value)
+
+        response = MagicMock(status_code=200)
+        request_public_url = MagicMock(return_value=(response, mirror_url, {}))
+        resolve_civarchive_by_hash = MagicMock(return_value=result)
+        service = self._build_model_service_for_unit_test(
+            service_module="civitai_search_service",
+            service_class="CivitAISearchService",
+            download_available=True,
+            extract_sha256_from_metadata=lambda value: value.get("sha256", ""),
+            find_local_file_path=lambda filename, category=None: None,
+            get_filename_from_path=lambda value: str(value or "").replace(
+                "\\", "/"
+            ).rsplit("/", 1)[-1],
+            is_path_in_configured_model_roots=lambda path: True,
+            looks_like_model_file=lambda url, expected_filename="": str(url).endswith(
+                ".safetensors"
+            ),
+            normalize_category_to_model_type=lambda value: value,
+            normalize_sha256=lambda value: str(value or ""),
+            request_public_url=request_public_url,
+            resolve_civarchive_by_hash=resolve_civarchive_by_hash,
+            search_huggingface_for_file=MagicMock(return_value=None),
+            to_bool=to_bool,
+        )
+        with tempfile.NamedTemporaryFile(
+            suffix=".safetensors", delete=False
+        ) as handle:
+            model_path = handle.name
+        request = AsyncMock()
+        request.json.return_value = {
+            "filename": "model.safetensors",
+            "resolved_path": model_path,
+            "sha256": expected_hash,
+        }
+
+        try:
+            with patch(
+                "core.sources.civitai.get_model_info_by_hash",
+                return_value=None,
+            ):
+                api_response = await service.civitai_search(request)
+        finally:
+            os.unlink(model_path)
+
+        self.assertEqual(api_response.status, 200)
+        resolve_civarchive_by_hash.assert_called_once()
+        request_public_url.assert_called_once()
+        self.assertEqual(request_public_url.call_args.args[1], mirror_url)
+        payload = json.loads(api_response.text)
+        self.assertEqual(payload["download_url"], mirror_url)
 
     async def test_custom_url_service_rejects_unsafe_url(self):
         class TestUnsafeUrlError(Exception):
