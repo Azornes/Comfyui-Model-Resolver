@@ -1,14 +1,22 @@
 import unittest
-from unittest.mock import patch, MagicMock
-from core.scanner import _model_identity, scan_directory, find_local_file_path
+from unittest.mock import patch
+
+from core.scanner import find_local_file_path, scan_directory
+
 
 class ScannerTests(unittest.TestCase):
 
-    def test_model_identity_empty_and_valid(self):
-        self.assertEqual(_model_identity({}), "")
-        
-        with patch("core.scanner._path_identity", return_value="stable_id"):
-            self.assertEqual(_model_identity({"path": "/path/to/file"}), "stable_id")
+    def test_model_path_identity_empty_and_valid(self):
+        from core.path_utils import get_model_path_identity
+
+        self.assertEqual(get_model_path_identity(None), "")
+        self.assertEqual(get_model_path_identity(""), "")
+
+        with patch("core.path_utils.get_path_identity", return_value="stable_id"):
+            self.assertEqual(
+                get_model_path_identity("/path/to/file"),
+                "stable_id",
+            )
 
     @patch("os.walk")
     @patch("os.path.exists")

@@ -55,6 +55,12 @@ def get_path_identity(path: str) -> str:
         return os.path.normcase(os.path.abspath(path))
 
 
+def get_model_path_identity(path_value: Any) -> str:
+    """Return a stable filesystem identity for a model path value."""
+    path = str(path_value or "").strip()
+    return get_path_identity(path)
+
+
 def normalize_absolute_path(path_value: Any, path_module=os.path) -> str:
     """Return an absolute, normalized and symlink-resolved path."""
     return path_module.realpath(

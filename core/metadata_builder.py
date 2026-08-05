@@ -13,7 +13,7 @@ from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .log_system import create_module_logger
-from .metadata_model_utils import dedupe_models, is_model_file_path, model_identity_key
+from .metadata_model_utils import dedupe_models, is_model_file_path
 from .path_utils import (
     MODEL_RESOLVER_METADATA_SCHEMA,
     MODEL_RESOLVER_METADATA_SCHEMA_VERSION,
@@ -22,6 +22,7 @@ from .path_utils import (
     extract_safetensors_header_metadata,
     find_external_metadata_sidecar_path,
     get_filename_from_path,
+    get_model_path_identity,
     get_model_resolver_sidecar_path,
     normalize_metadata_file_path,
     read_json_safe,
@@ -579,7 +580,7 @@ def _build_missing_local_metadata_parallel(
     def run_one_model(model: Dict[str, Any]) -> Dict[str, Any]:
         model_path = str(model.get("path") or "").strip()
         filename = get_filename_from_path(model_path)
-        model_key = model_identity_key(model) or model_path
+        model_key = get_model_path_identity(model.get("path")) or model_path
 
         def child_progress(data: Dict[str, Any]) -> None:
             if not isinstance(data, dict):
@@ -632,7 +633,7 @@ def _build_missing_local_metadata_parallel(
             model = futures[future]
             model_path = str(model.get("path") or "").strip()
             filename = get_filename_from_path(model_path)
-            model_key = model_identity_key(model) or model_path
+            model_key = get_model_path_identity(model.get("path")) or model_path
             try:
                 item_result = future.result()
             except CancelledError:

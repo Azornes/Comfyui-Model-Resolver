@@ -13,7 +13,7 @@ from .log_system import create_module_logger
 log = create_module_logger(__name__)
 
 
-from .path_utils import get_filename_from_path, get_path_identity
+from .path_utils import get_filename_from_path, get_model_path_identity, get_path_identity
 
 # Import folder_paths lazily - it may not be available until ComfyUI is initialized
 try:
@@ -34,13 +34,6 @@ def _path_identity(path: str) -> str:
 
 def _directory_identity(path: str) -> str:
     """Return a stable identity for loop detection across symlinks/junctions."""
-    return _path_identity(path)
-
-
-def _model_identity(model: Dict[str, str]) -> str:
-    path = model.get("path", "")
-    if not path:
-        return ""
     return _path_identity(path)
 
 
@@ -251,7 +244,7 @@ def scan_all_directories() -> List[Dict[str, str]]:
 
                 models = scan_directory(directory_path, extensions, category)
                 for model in models:
-                    identity = _model_identity(model)
+                    identity = get_model_path_identity(model.get("path"))
                     model_key = (model.get("category", category), identity)
                     if identity and model_key in seen_models:
                         continue

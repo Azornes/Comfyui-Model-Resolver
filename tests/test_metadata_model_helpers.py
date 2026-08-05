@@ -3,8 +3,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from core.metadata_model_utils import dedupe_models, is_model_file_path, model_identity_key
-from core.scanner import _model_identity
+from core.metadata_model_utils import dedupe_models, is_model_file_path
+from core.path_utils import get_model_path_identity
 
 
 class MetadataModelHelperTests(unittest.TestCase):
@@ -43,8 +43,11 @@ class MetadataModelHelperTests(unittest.TestCase):
             empty = {"path": ""}
             models = [first, duplicate, empty, "not a model"]
 
-            self.assertEqual(model_identity_key(first), model_identity_key(duplicate))
-            self.assertEqual("", model_identity_key(empty))
+            self.assertEqual(
+                get_model_path_identity(first["path"]),
+                get_model_path_identity(duplicate["path"]),
+            )
+            self.assertEqual("", get_model_path_identity(empty["path"]))
             self.assertEqual([first], dedupe_models(models))
 
     def test_scanner_and_metadata_identity_share_path_fallback(self):
@@ -52,8 +55,12 @@ class MetadataModelHelperTests(unittest.TestCase):
         expected = os.path.normcase(os.path.abspath(model_path))
 
         with patch("core.path_utils.os.path.realpath", side_effect=OSError):
-            self.assertEqual(expected, _model_identity({"path": model_path}))
-            self.assertEqual(expected, model_identity_key({"path": model_path}))
+            self.assertEqual(expected, get_model_path_identity(model_path))
+
+    def test_model_path_identity_rejects_empty_and_whitespace_paths(self):
+        self.assertEqual("", get_model_path_identity(None))
+        self.assertEqual("", get_model_path_identity(""))
+        self.assertEqual("", get_model_path_identity("   "))
 
 
 if __name__ == "__main__":

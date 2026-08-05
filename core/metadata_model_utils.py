@@ -3,7 +3,7 @@
 import os
 from typing import Any, Dict, List
 
-from .path_utils import get_filename_from_path, get_path_identity
+from .path_utils import get_filename_from_path, get_model_path_identity
 from .type_utils import MODEL_EXTENSIONS
 
 
@@ -19,14 +19,6 @@ def is_model_file_path(path: str) -> bool:
     return os.path.splitext(filename)[1].lower() in MODEL_EXTENSIONS
 
 
-def model_identity_key(model: Dict[str, Any]) -> str:
-    """Return the stable filesystem identity for a model entry."""
-    model_path = str(model.get("path") or "").strip()
-    if not model_path:
-        return ""
-    return get_path_identity(model_path)
-
-
 def dedupe_models(models: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Keep the first valid model entry for every filesystem identity."""
     result: List[Dict[str, Any]] = []
@@ -34,7 +26,7 @@ def dedupe_models(models: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     for model in models or []:
         if not isinstance(model, dict):
             continue
-        identity = model_identity_key(model)
+        identity = get_model_path_identity(model.get("path"))
         if not identity or identity in seen:
             continue
         seen.add(identity)
