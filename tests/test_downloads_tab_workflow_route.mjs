@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { Window } from 'happy-dom';
 import {
   html,
   normalizePathIdentity,
@@ -2173,6 +2174,10 @@ test('content-preserving Missing Models refresh patches the browser instead of c
     missingBrowserMethodsSource,
     'patchMissingModelRowElement'
   );
+  const reconcileMissingModelRows = extractMethod(
+    missingBrowserMethodsSource,
+    'reconcileMissingModelRows'
+  );
   const setupMissingModelsVirtualizer = extractMethod(
     missingBrowserMethodsSource,
     'setupMissingModelsVirtualizer'
@@ -2188,6 +2193,10 @@ test('content-preserving Missing Models refresh patches the browser instead of c
 
   assert.match(
     patchMissingModelsBrowserElement,
+    /reconcileMissingModelRows\(/
+  );
+  assert.match(
+    reconcileMissingModelRows,
     /patchMissingModelRowElement\(currentRow, nextRow\)/
   );
   assert.match(
@@ -2200,7 +2209,7 @@ test('content-preserving Missing Models refresh patches the browser instead of c
   );
   assert.match(
     setupMissingModelsVirtualizer,
-    /patchMissingModelRowElement\(currentRow, nextRow\)/
+    /reconcileMissingModelRows\(rowsHost, nextRows\)/
   );
   assert.doesNotMatch(
     setupMissingModelsVirtualizer,
@@ -2224,7 +2233,7 @@ test('content-preserving Missing Models refresh patches the browser instead of c
   );
   assert.match(
     patchMissingModelsBrowserElement,
-    /currentList\.appendChild\(row\)/
+    /currentRowsHost === currentList \? currentList : currentRowsHost/
   );
   assert.match(
     patchMissingModelsBrowserElement,
@@ -2242,6 +2251,77 @@ test('content-preserving Missing Models refresh patches the browser instead of c
     displayMissingModels,
     /if \(!browserPatched\) \{\s*this\.destroyMissingModelsVirtualizer\(container\);\s*container\.innerHTML = browserHtml;/
   );
+});
+
+test('Missing Models browser reuses rows by key, slot, and index while removing stale rows', () => {
+  const patchMissingModelsBrowserElement = eval(
+    `(${extractMethod(missingBrowserMethodsSource, 'patchMissingModelsBrowserElement')})`
+  );
+  const patchMissingModelRowElement = eval(
+    `(${extractMethod(missingBrowserMethodsSource, 'patchMissingModelRowElement')})`
+  );
+  const reconcileMissingModelRows = eval(
+    `(${extractMethod(missingBrowserMethodsSource, 'reconcileMissingModelRows')})`
+  );
+  const window = new Window();
+  const previousDocument = globalThis.document;
+  const container = window.document.createElement('div');
+  globalThis.document = window.document;
+
+  try {
+    container.innerHTML = `
+    <div class="mr-missing-browser">
+      <div class="mr-missing-list">
+        <div class="mr-missing-list-virtual-scroll">
+          <div class="mr-missing-list-virtual-rows">
+            <div class="mr-missing-list-row" data-missing-key="key-a" data-missing-index="0" data-missing-slot-keys="slot-a">old-a</div>
+            <div class="mr-missing-list-row" data-missing-key="key-b" data-missing-index="1" data-missing-slot-keys="slot-b">old-b</div>
+            <div class="mr-missing-list-row" data-missing-key="key-c" data-missing-index="2" data-missing-slot-keys="slot-c">old-c</div>
+            <div class="mr-missing-list-row" data-missing-key="stale" data-missing-index="3" data-missing-slot-keys="slot-stale">stale</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    `;
+    const keyRow = container.querySelector('[data-missing-key="key-a"]');
+    const slotRow = container.querySelector('[data-missing-key="key-b"]');
+    const indexRow = container.querySelector('[data-missing-key="key-c"]');
+    const dialog = {
+      _wiredMissingModelRows: new Set(),
+      patchMissingModelRowElement,
+      reconcileMissingModelRows,
+    };
+
+    const patched = patchMissingModelsBrowserElement.call(dialog, container, `
+    <div class="mr-missing-browser">
+      <div class="mr-missing-list">
+        <div class="mr-missing-list-virtual-scroll">
+          <div class="mr-missing-list-virtual-rows">
+            <div class="mr-missing-list-row" data-missing-key="key-a" data-missing-index="10" data-missing-slot-keys="slot-new-a">new-a</div>
+            <div class="mr-missing-list-row" data-missing-key="new-b" data-missing-index="11" data-missing-slot-keys="slot-b">new-b</div>
+            <div class="mr-missing-list-row" data-missing-key="new-c" data-missing-index="2" data-missing-slot-keys="slot-new-c">new-c</div>
+            <div class="mr-missing-list-row" data-missing-key="new-d" data-missing-index="12" data-missing-slot-keys="slot-new-d">new-d</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    `);
+
+    assert.equal(patched, true);
+    const rows = Array.from(container.querySelectorAll('.mr-missing-list-row'));
+    assert.deepEqual(
+      rows.map(row => row.dataset.missingKey),
+      ['key-a', 'new-b', 'new-c', 'new-d']
+    );
+    assert.equal(container.querySelector('[data-missing-key="key-a"]'), keyRow);
+    assert.equal(container.querySelector('[data-missing-key="new-b"]'), slotRow);
+    assert.equal(container.querySelector('[data-missing-key="new-c"]'), indexRow);
+    assert.equal(keyRow.textContent, 'new-a');
+    assert.equal(slotRow.textContent, 'new-b');
+    assert.equal(indexRow.textContent, 'new-c');
+  } finally {
+    globalThis.document = previousDocument;
+  }
 });
 
 test('cached Missing Models refresh preserves browser geometry after linking a local match', () => {

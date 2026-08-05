@@ -682,37 +682,6 @@ export const missingBrowserMethods = {
             state.start = nextStart;
             state.end = nextEnd;
             rowsHost.style.transform = `translateY(${Math.round(nextStart * rowHeight)}px)`;
-            const currentRows = new Map(
-                Array.from(rowsHost.querySelectorAll('.mr-missing-list-row'))
-                    .map(row => [row.dataset.missingKey || '', row])
-                    .filter(([key]) => key)
-            );
-            const currentRowsBySlot = new Map();
-            const currentRowsByIndex = new Map();
-            currentRows.forEach((row) => {
-                const index = row.dataset.missingIndex || '';
-                if (index && !currentRowsByIndex.has(index)) currentRowsByIndex.set(index, row);
-                String(row.dataset.missingSlotKeys || '')
-                    .split('|')
-                    .filter(Boolean)
-                    .forEach(slotKey => {
-                        if (!currentRowsBySlot.has(slotKey)) currentRowsBySlot.set(slotKey, row);
-                    });
-            });
-            const retainedRows = new Set();
-            const findCurrentRow = (nextRow) => {
-                const byKey = currentRows.get(nextRow.dataset.missingKey || '');
-                if (byKey && !retainedRows.has(byKey)) return byKey;
-
-                const bySlot = String(nextRow.dataset.missingSlotKeys || '')
-                    .split('|')
-                    .map(slotKey => currentRowsBySlot.get(slotKey))
-                    .find(row => row && !retainedRows.has(row));
-                if (bySlot) return bySlot;
-
-                const byIndex = currentRowsByIndex.get(nextRow.dataset.missingIndex || '');
-                return byIndex && !retainedRows.has(byIndex) ? byIndex : null;
-            };
             const nextRowsTemplate = document.createElement('template');
             nextRowsTemplate.innerHTML = state.models
                 .slice(nextStart, nextEnd)
@@ -727,17 +696,7 @@ export const missingBrowserMethods = {
                 nextRowsTemplate.content.querySelectorAll('.mr-missing-list-row')
             );
 
-            nextRows.forEach((nextRow) => {
-                const currentRow = findCurrentRow(nextRow);
-                const row = currentRow
-                    ? this.patchMissingModelRowElement(currentRow, nextRow)
-                    : nextRow;
-                retainedRows.add(row);
-                rowsHost.appendChild(row);
-            });
-            currentRows.forEach((row) => {
-                if (!retainedRows.has(row)) row.remove();
-            });
+            this.reconcileMissingModelRows(rowsHost, nextRows);
             this.wireVisibleMissingModelRows(container, state.data, state.models);
         };
 
@@ -919,37 +878,7 @@ export const missingBrowserMethods = {
         return html;
     },
 
-    patchMissingModelsBrowserElement(container, html) {
-        const currentBrowser = container?.querySelector?.('.mr-missing-browser');
-        if (!currentBrowser || typeof document === 'undefined') return false;
-
-        const template = document.createElement('template');
-        template.innerHTML = String(html || '').trim();
-        const nextBrowser = template.content.firstElementChild;
-        const currentList = currentBrowser.querySelector('.mr-missing-list');
-        const nextList = nextBrowser?.querySelector?.('.mr-missing-list');
-        if (!nextBrowser || !currentList || !nextList) return false;
-
-        currentBrowser.style.cssText = nextBrowser.style.cssText;
-        const currentToolbar = currentBrowser.querySelector('.mr-missing-list-toolbar');
-        const nextToolbar = nextBrowser.querySelector('.mr-missing-list-toolbar');
-        if (currentToolbar && nextToolbar) {
-            currentToolbar.replaceWith(nextToolbar);
-        }
-
-        const currentHead = currentList.querySelector('.mr-missing-list-head');
-        const nextHead = nextList.querySelector('.mr-missing-list-head');
-        if (currentHead && nextHead) {
-            currentHead.replaceWith(nextHead);
-        }
-
-        const currentVirtualScroll = currentList.querySelector('.mr-missing-list-virtual-scroll');
-        const nextVirtualScroll = nextList.querySelector('.mr-missing-list-virtual-scroll');
-        if (currentVirtualScroll && nextVirtualScroll) {
-            currentVirtualScroll.style.height = nextVirtualScroll.style.height;
-        }
-        const currentRowsHost = currentVirtualScroll?.querySelector('.mr-missing-list-virtual-rows') || currentList;
-        const nextRowsHost = nextVirtualScroll?.querySelector('.mr-missing-list-virtual-rows') || nextList;
+    reconcileMissingModelRows(currentRowsHost, nextRows, appendTarget = currentRowsHost) {
         const currentRows = new Map(
             Array.from(currentRowsHost.querySelectorAll('.mr-missing-list-row'))
                 .map(row => [row.dataset.missingKey || '', row])
@@ -981,21 +910,56 @@ export const missingBrowserMethods = {
             const byIndex = currentRowsByIndex.get(nextRow.dataset.missingIndex || '');
             return byIndex && !retainedRows.has(byIndex) ? byIndex : null;
         };
-        nextRowsHost.querySelectorAll('.mr-missing-list-row').forEach((nextRow) => {
+
+        nextRows.forEach((nextRow) => {
             const currentRow = findCurrentRow(nextRow);
             const row = currentRow
                 ? this.patchMissingModelRowElement(currentRow, nextRow)
                 : nextRow;
             retainedRows.add(row);
-            if (currentRowsHost === currentList) {
-                currentList.appendChild(row);
-            } else {
-                currentRowsHost.appendChild(row);
-            }
+            appendTarget.appendChild(row);
         });
         currentRows.forEach((row) => {
             if (!retainedRows.has(row)) row.remove();
         });
+    },
+
+    patchMissingModelsBrowserElement(container, html) {
+        const currentBrowser = container?.querySelector?.('.mr-missing-browser');
+        if (!currentBrowser || typeof document === 'undefined') return false;
+
+        const template = document.createElement('template');
+        template.innerHTML = String(html || '').trim();
+        const nextBrowser = template.content.firstElementChild;
+        const currentList = currentBrowser.querySelector('.mr-missing-list');
+        const nextList = nextBrowser?.querySelector?.('.mr-missing-list');
+        if (!nextBrowser || !currentList || !nextList) return false;
+
+        currentBrowser.style.cssText = nextBrowser.style.cssText;
+        const currentToolbar = currentBrowser.querySelector('.mr-missing-list-toolbar');
+        const nextToolbar = nextBrowser.querySelector('.mr-missing-list-toolbar');
+        if (currentToolbar && nextToolbar) {
+            currentToolbar.replaceWith(nextToolbar);
+        }
+
+        const currentHead = currentList.querySelector('.mr-missing-list-head');
+        const nextHead = nextList.querySelector('.mr-missing-list-head');
+        if (currentHead && nextHead) {
+            currentHead.replaceWith(nextHead);
+        }
+
+        const currentVirtualScroll = currentList.querySelector('.mr-missing-list-virtual-scroll');
+        const nextVirtualScroll = nextList.querySelector('.mr-missing-list-virtual-scroll');
+        if (currentVirtualScroll && nextVirtualScroll) {
+            currentVirtualScroll.style.height = nextVirtualScroll.style.height;
+        }
+        const currentRowsHost = currentVirtualScroll?.querySelector('.mr-missing-list-virtual-rows') || currentList;
+        const nextRowsHost = nextVirtualScroll?.querySelector('.mr-missing-list-virtual-rows') || nextList;
+        this.reconcileMissingModelRows(
+            currentRowsHost,
+            Array.from(nextRowsHost.querySelectorAll('.mr-missing-list-row')),
+            currentRowsHost === currentList ? currentList : currentRowsHost
+        );
 
         const currentSplitter = currentBrowser.querySelector('.mr-missing-browser-splitter');
         const nextSplitter = nextBrowser.querySelector('.mr-missing-browser-splitter');
