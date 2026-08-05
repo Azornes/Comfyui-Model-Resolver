@@ -89,6 +89,27 @@ class WorkflowAnalyzerCaseSensitivityTests(unittest.TestCase):
 
 
 class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
+    def test_choice_info_merge_preserves_source_and_choice_rules(self):
+        current = {"source": "folder_paths", "choices": ["A", "B"]}
+        incoming = {"source": "static", "choices": ["B", "C"]}
+        expected = {
+            "source": "hybrid",
+            "choices": ["A", "B", "C"],
+        }
+        target = {"model": current}
+
+        dynamic_widgets._merge_choice_info(target, "model", incoming)
+
+        self.assertEqual(expected, target["model"])
+        self.assertEqual(
+            expected,
+            dynamic_widgets._merge_choice_info_values(current, incoming),
+        )
+        self.assertEqual(
+            current,
+            dynamic_widgets._merge_choice_info_values(current, None),
+        )
+
     def test_named_widget_does_not_inherit_conflicting_index_category(self):
         cases = [
             ("easy fullLoader", 7, "resolution", "512 x 512"),

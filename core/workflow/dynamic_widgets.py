@@ -36,15 +36,17 @@ def _merge_category_hints(
     target[key] = _ordered_unique_categories(target.get(key, []) + categories)
 
 
-def _merge_choice_info(target: Dict[Any, Dict[str, Any]], key: Any, info: Dict[str, Any]) -> None:
-    if not isinstance(info, dict):
-        return
+def _merge_choice_info_values(
+    current: Dict[str, Any],
+    incoming: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    if not isinstance(incoming, dict):
+        return current
 
-    current = target.get(key, {})
     sources = _ordered_unique_categories(
         [
             source
-            for source in [current.get("source"), info.get("source")]
+            for source in [current.get("source"), incoming.get("source")]
             if str(source or "").lower() != "unknown"
         ]
     )
@@ -53,12 +55,21 @@ def _merge_choice_info(target: Dict[Any, Dict[str, Any]], key: Any, info: Dict[s
     else:
         source = sources[0] if sources else "unknown"
 
-    target[key] = {
+    return {
         "source": source,
         "choices": _ordered_unique_categories(
-            list(current.get("choices") or []) + list(info.get("choices") or [])
+            list(current.get("choices") or []) + list(incoming.get("choices") or [])
         ),
     }
+
+
+def _merge_choice_info(
+    target: Dict[Any, Dict[str, Any]], key: Any, info: Dict[str, Any]
+) -> None:
+    if not isinstance(info, dict):
+        return
+
+    target[key] = _merge_choice_info_values(target.get(key, {}), info)
 
 
 def _summarize_choice_info_for_log(info_by_key: Dict[Any, Dict[str, Any]]) -> Dict[Any, Dict[str, Any]]:
@@ -796,33 +807,6 @@ def _normalize_choice_for_match(value: Any) -> str:
     )
 
 
-def _merge_widget_choice_info_values(
-    current: Dict[str, Any],
-    candidate: Dict[str, Any],
-) -> Dict[str, Any]:
-    if not isinstance(candidate, dict):
-        return current
-
-    sources = _ordered_unique_categories(
-        [
-            source
-            for source in [current.get("source"), candidate.get("source")]
-            if str(source or "").lower() != "unknown"
-        ]
-    )
-    if "hybrid" in sources or ("folder_paths" in sources and "static" in sources):
-        source = "hybrid"
-    else:
-        source = sources[0] if sources else "unknown"
-
-    return {
-        "source": source,
-        "choices": _ordered_unique_categories(
-            list(current.get("choices") or []) + list(candidate.get("choices") or [])
-        ),
-    }
-
-
 def get_dynamic_widget_choice_info(
     node: Dict[str, Any], widget_index: int
 ) -> Dict[str, Any]:
@@ -845,7 +829,8 @@ def get_dynamic_widget_choice_info(
     if isinstance(by_name, dict):
         for candidate in normalized_candidates:
             candidate_info = by_name.get(candidate, {})
-            info = _merge_widget_choice_info_values(info, candidate_info)
+            if isinstance(candidate_info, dict):
+                info = _merge_choice_info_values(info, candidate_info)
 
     known_widget_names = set(hints.get("widget_names") or [])
     if any(candidate in known_widget_names for candidate in normalized_candidates):
@@ -853,7 +838,8 @@ def get_dynamic_widget_choice_info(
 
     by_index = hints.get("choice_info_by_index", {})
     if isinstance(by_index, dict):
-        info = _merge_widget_choice_info_values(info, by_index.get(widget_index, {}))
+        candidate_info = by_index.get(widget_index, {})
+        if isinstance(candidate_info, dict):
+            info = _merge_choice_info_values(info, candidate_info)
 
     return info
-
