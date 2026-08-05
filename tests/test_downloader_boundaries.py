@@ -3,10 +3,14 @@ import tempfile
 import threading
 import unittest
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 from core.download.api import context as downloader
-from core.download.aria2_backend import recover_aria2_missing_control_file
+from core.download.aria2_backend import (
+    pause_download,
+    recover_aria2_missing_control_file,
+    resume_download,
+)
 from core.download.orchestrator import find_active_download_for_path
 from core.path_utils import normalize_metadata_file_path
 
@@ -134,6 +138,50 @@ class DownloaderBoundaryTests(unittest.TestCase):
         self.assertTrue(downloader._aria2_action_error_is_ok("downloading", "not paused"))
         self.assertFalse(downloader._aria2_action_error_is_ok("paused", "permission denied"))
         self.assertFalse(downloader._aria2_action_error_is_ok("completed", "already paused"))
+
+    def test_pause_and_resume_queue_their_expected_aria2_states(self):
+        facade = SimpleNamespace(
+            cancelled_downloads=set(),
+            _queue_aria2_desired_state=MagicMock(
+                side_effect=lambda download_id, status: {
+                    "success": True,
+                    "download_id": download_id,
+                    "status": status,
+                }
+            ),
+        )
+
+        self.assertEqual(
+            {"success": True, "download_id": "pause-1", "status": "paused"},
+            pause_download("pause-1", dependencies=facade),
+        )
+        self.assertEqual(
+            {
+                "success": True,
+                "download_id": "resume-1",
+                "status": "downloading",
+            },
+            resume_download("resume-1", dependencies=facade),
+        )
+        facade._queue_aria2_desired_state.assert_has_calls(
+            [call("pause-1", "paused"), call("resume-1", "downloading")]
+        )
+
+    def test_pause_and_resume_reject_downloads_being_cancelled(self):
+        facade = SimpleNamespace(
+            cancelled_downloads={"cancelled-1"},
+            _queue_aria2_desired_state=MagicMock(),
+        )
+
+        self.assertEqual(
+            {"success": False, "error": "Download is being cancelled"},
+            pause_download("cancelled-1", dependencies=facade),
+        )
+        self.assertEqual(
+            {"success": False, "error": "Download is being cancelled"},
+            resume_download("cancelled-1", dependencies=facade),
+        )
+        facade._queue_aria2_desired_state.assert_not_called()
 
     def test_aria2_missing_control_file_error_is_detected(self):
         self.assertTrue(

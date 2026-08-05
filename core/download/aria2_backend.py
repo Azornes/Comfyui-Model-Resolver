@@ -1187,23 +1187,34 @@ def queue_aria2_desired_state(
     return {"success": True, "message": message}
 
 
-def pause_download(download_id: str, *, dependencies: Any = None) -> Dict[str, Any]:
-    """Pause an aria2 download. Built-in Python downloads cannot be paused."""
+def _set_aria2_desired_download_state(
+    download_id: str,
+    status: str,
+    *,
+    dependencies: Any = None,
+) -> Dict[str, Any]:
     facade = _require_dependencies(dependencies)
     if download_id in facade.cancelled_downloads:
         return {"success": False, "error": "Download is being cancelled"}
     return facade._queue_aria2_desired_state(
         download_id,
+        status,
+    )
+
+
+def pause_download(download_id: str, *, dependencies: Any = None) -> Dict[str, Any]:
+    """Pause an aria2 download. Built-in Python downloads cannot be paused."""
+    return _set_aria2_desired_download_state(
+        download_id,
         "paused",
+        dependencies=dependencies,
     )
 
 
 def resume_download(download_id: str, *, dependencies: Any = None) -> Dict[str, Any]:
     """Resume a paused aria2 download."""
-    facade = _require_dependencies(dependencies)
-    if download_id in facade.cancelled_downloads:
-        return {"success": False, "error": "Download is being cancelled"}
-    return facade._queue_aria2_desired_state(
+    return _set_aria2_desired_download_state(
         download_id,
         "downloading",
+        dependencies=dependencies,
     )
