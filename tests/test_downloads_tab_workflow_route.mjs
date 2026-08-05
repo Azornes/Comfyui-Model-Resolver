@@ -3950,7 +3950,56 @@ test('search suggestion metadata prefers exact matching base model over weaker a
   assert.equal(merged.filename, 'snofs_krea_v1.safetensors');
 });
 
+test('download path metadata preserves source precedence and workflow fallbacks', () => {
+  const getDownloadSourceContext = eval(`(${extractMethod(downloadTargetMethodsSource, 'getDownloadSourceContext')})`);
+  const getDownloadPathMetadata = eval(`(${extractMethod(downloadTargetMethodsSource, 'getDownloadPathMetadata')})`);
+  const dialog = {
+    getDownloadSourceContext,
+    getCachedSearchSuggestionData() {
+      return {
+        model_name: 'Cached model',
+        tags: ['style'],
+        repo_id: 'cached/repo',
+        category: 'loras'
+      };
+    },
+    getCompatibleCivitaiSearchResult() {
+      return {
+        base_model: 'SDXL',
+        creator_username: 'workflow-author'
+      };
+    },
+    getFilenameFromPath(value = '') {
+      return String(value).split(/[\\/]/).at(-1) || '';
+    }
+  };
+
+  const metadata = getDownloadPathMetadata.call(dialog, {
+    original_path: 'workflow/model.safetensors',
+    category: 'checkpoints',
+    civitai_info: { model_name: 'Workflow model' },
+    download_source: { model_name: 'Selected model' }
+  }, {
+    filename: 'explicit.safetensors',
+    model_name: 'Explicit model',
+    tags: ['explicit'],
+    repo_id: 'owner/repo',
+    author: 'explicit-author',
+    category: 'text_encoders'
+  });
+
+  assert.equal(metadata.filename, 'explicit.safetensors');
+  assert.equal(metadata.name, 'Explicit model');
+  assert.equal(metadata.base_model, 'SDXL');
+  assert.deepEqual(metadata.tags, ['explicit']);
+  assert.equal(metadata.creator.username, 'workflow-author');
+  assert.equal(metadata.author, 'explicit-author');
+  assert.equal(metadata.repo_id, 'owner/repo');
+  assert.equal(metadata.category, 'text_encoders');
+});
+
 test('manual URL download metadata never inherits provider identity or hash from search results', () => {
+  const getDownloadSourceContext = eval(`(${extractMethod(downloadTargetMethodsSource, 'getDownloadSourceContext')})`);
   const getDownloadMetadata = eval(`(${extractMethod(downloadTargetMethodsSource, 'getDownloadMetadata')})`);
   const staleHash = 'a'.repeat(64);
   const exactHash = 'b'.repeat(64);
@@ -3987,6 +4036,7 @@ test('manual URL download metadata never inherits provider identity or hash from
     hashes: { SHA256: exactHash }
   };
   const dialog = {
+    getDownloadSourceContext,
     getCachedSearchSuggestionData() {
       throw new Error('manual URL must not read cached search metadata');
     },
@@ -4021,6 +4071,7 @@ test('manual URL download metadata never inherits provider identity or hash from
 });
 
 test('selected provider file hash overrides stale workflow hash', () => {
+  const getDownloadSourceContext = eval(`(${extractMethod(downloadTargetMethodsSource, 'getDownloadSourceContext')})`);
   const getDownloadMetadata = eval(`(${extractMethod(downloadTargetMethodsSource, 'getDownloadMetadata')})`);
   const staleHash = '1'.repeat(64);
   const selectedHash = 'f'.repeat(64);
@@ -4044,6 +4095,7 @@ test('selected provider file hash overrides stale workflow hash', () => {
     }
   };
   const dialog = {
+    getDownloadSourceContext,
     getCachedSearchSuggestionData() {
       throw new Error('selected provider metadata must not read cached search metadata');
     },
@@ -4068,6 +4120,7 @@ test('selected provider file hash overrides stale workflow hash', () => {
 });
 
 test('selected provider without a file hash does not inherit workflow hash', () => {
+  const getDownloadSourceContext = eval(`(${extractMethod(downloadTargetMethodsSource, 'getDownloadSourceContext')})`);
   const getDownloadMetadata = eval(`(${extractMethod(downloadTargetMethodsSource, 'getDownloadMetadata')})`);
   const staleHash = '1'.repeat(64);
   const missing = {
@@ -4085,6 +4138,7 @@ test('selected provider without a file hash does not inherit workflow hash', () 
     selected_file: { name: 'another-variant.safetensors' }
   };
   const dialog = {
+    getDownloadSourceContext,
     getCachedSearchSuggestionData() {
       throw new Error('selected provider metadata must not read cached search metadata');
     },
@@ -4107,6 +4161,7 @@ test('selected provider without a file hash does not inherit workflow hash', () 
 });
 
 test('CivArchive metadata keeps its page URL when the download mirror is HuggingFace', () => {
+  const getDownloadSourceContext = eval(`(${extractMethod(downloadTargetMethodsSource, 'getDownloadSourceContext')})`);
   const getDownloadMetadata = eval(`(${extractMethod(downloadTargetMethodsSource, 'getDownloadMetadata')})`);
   const civarchivePage = 'https://civarchive.com/models/123?modelVersionId=456';
   const huggingFaceMirror = 'https://huggingface.co/author/repo/resolve/main/model.safetensors';
@@ -4121,6 +4176,7 @@ test('CivArchive metadata keeps its page URL when the download mirror is Hugging
     download_url: huggingFaceMirror
   };
   const dialog = {
+    getDownloadSourceContext,
     getCachedSearchSuggestionData() {
       return {
         source: 'huggingface',

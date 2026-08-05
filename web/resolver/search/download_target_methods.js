@@ -1224,17 +1224,50 @@ export const downloadTargetMethods = {
         return list[0];
     },
 
-    getDownloadPathMetadata(missing = {}, source = {}) {
+    getDownloadSourceContext(missing = {}, source = {}, { respectProvenanceBoundary = true } = {}) {
         const sourceData = source && typeof source === 'object' ? source : {};
-        const searchSuggestion = this.getCachedSearchSuggestionData(missing);
-        const compatibleCivitaiSearch = this.getCompatibleCivitaiSearchResult?.(missing) || {};
+        const isProvidedUrl = Boolean(
+            sourceData.custom_url
+            || sourceData.url_source === 'custom'
+            || sourceData.match_type === 'custom_url'
+            || sourceData.provided_url
+        );
+        const sourceIdentity = String(
+            sourceData.details_source || sourceData.source || sourceData.sourceKey || ''
+        ).trim().toLowerCase().replace(/[-\s]+/g, '_');
+        const isProviderSelection = sourceData.match_type === 'selected'
+            || ['civitai', 'civarchive', 'huggingface', 'lora_manager_archive'].includes(sourceIdentity);
+        const useSourceProvenanceBoundary = Boolean(
+            respectProvenanceBoundary && (isProvidedUrl || isProviderSelection)
+        );
+        const searchSuggestion = useSourceProvenanceBoundary
+            ? null
+            : this.getCachedSearchSuggestionData(missing);
+        const compatibleCivitaiSearch = useSourceProvenanceBoundary
+            ? {}
+            : (this.getCompatibleCivitaiSearchResult?.(missing) || {});
+        const inheritedDownloadSource = useSourceProvenanceBoundary ? {} : (missing?.download_source || {});
+        const inheritedCivitaiInfo = useSourceProvenanceBoundary ? {} : (missing?.civitai_info || {});
         const merged = {
-            ...(missing?.civitai_info || {}),
+            ...inheritedCivitaiInfo,
             ...compatibleCivitaiSearch,
-            ...(missing?.download_source || {}),
+            ...inheritedDownloadSource,
             ...(searchSuggestion || {}),
             ...sourceData
         };
+        return {
+            sourceData,
+            merged,
+            inheritedDownloadSource,
+            isProvidedUrl,
+            useSourceProvenanceBoundary
+        };
+    },
+
+    getDownloadPathMetadata(missing = {}, source = {}) {
+        const { merged } = this.getDownloadSourceContext(missing, source, {
+            respectProvenanceBoundary: false
+        });
         const repoId = merged.repo_id || merged.repo || '';
         const filename = merged.downloadFilename
             || merged.filename
@@ -1264,36 +1297,17 @@ export const downloadTargetMethods = {
     },
 
     getDownloadMetadata(missing = {}, source = {}, options = {}) {
-        const sourceData = source && typeof source === 'object' ? source : {};
-        const isProvidedUrl = Boolean(
-            sourceData.custom_url
-            || sourceData.url_source === 'custom'
-            || sourceData.match_type === 'custom_url'
-            || sourceData.provided_url
-        );
-        const sourceIdentity = String(
-            sourceData.details_source || sourceData.source || sourceData.sourceKey || ''
-        ).trim().toLowerCase().replace(/[-\s]+/g, '_');
-        const isProviderSelection = sourceData.match_type === 'selected'
-            || ['civitai', 'civarchive', 'huggingface', 'lora_manager_archive'].includes(sourceIdentity);
-        const useSourceProvenanceBoundary = isProvidedUrl || isProviderSelection;
         // A URL explicitly selected by the user is an authoritative provenance
         // boundary. Never fill its hash, provider IDs, or file details from an
         // earlier fuzzy search result belonging to another provider. The same
         // rule applies to a selected/provider result, including LoRA Archive.
-        const searchSuggestion = useSourceProvenanceBoundary ? null : this.getCachedSearchSuggestionData(missing);
-        const compatibleCivitaiSearch = useSourceProvenanceBoundary
-            ? {}
-            : (this.getCompatibleCivitaiSearchResult?.(missing) || {});
-        const inheritedDownloadSource = useSourceProvenanceBoundary ? {} : (missing?.download_source || {});
-        const inheritedCivitaiInfo = useSourceProvenanceBoundary ? {} : (missing?.civitai_info || {});
-        const merged = {
-            ...inheritedCivitaiInfo,
-            ...compatibleCivitaiSearch,
-            ...inheritedDownloadSource,
-            ...(searchSuggestion || {}),
-            ...sourceData
-        };
+        const {
+            sourceData,
+            merged,
+            inheritedDownloadSource,
+            isProvidedUrl,
+            useSourceProvenanceBoundary
+        } = this.getDownloadSourceContext(missing, source);
         const sourceHasIdentity = Boolean(
             sourceData.model_id
             || sourceData.modelId
