@@ -1091,6 +1091,49 @@ class UnifiedHelpersTests(unittest.TestCase):
         path = find_metadata_sidecar_path("e:/models/ae.metadata.json")
         self.assertEqual(path, "")
 
+    def test_sidecar_candidates_prefer_exact_names_when_both_forms_exist(self):
+        import os
+        import tempfile
+
+        from core.path_utils import (
+            _metadata_sidecar_paths,
+            find_external_metadata_sidecar_path,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_path = os.path.join(tmpdir, "model.safetensors")
+            legacy_path = os.path.join(tmpdir, "model.metadata.json")
+            exact_path = os.path.join(tmpdir, "model.safetensors.metadata.json")
+            for path in (model_path, legacy_path, exact_path):
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write("{}")
+
+            self.assertEqual(_metadata_sidecar_paths(model_path)[0], exact_path)
+            self.assertEqual(find_external_metadata_sidecar_path(model_path), exact_path)
+
+    def test_external_legacy_sidecar_keeps_collision_matching_rules(self):
+        import json
+        import os
+        import tempfile
+
+        from core.path_utils import find_external_metadata_sidecar_path
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_path = os.path.join(tmpdir, "model.safetensors")
+            collision_path = os.path.join(tmpdir, "model.ckpt")
+            legacy_path = os.path.join(tmpdir, "model.metadata.json")
+            for path in (model_path, collision_path):
+                with open(path, "wb") as handle:
+                    handle.write(b"model")
+
+            with open(legacy_path, "w", encoding="utf-8") as handle:
+                json.dump({"filename": "model.ckpt"}, handle)
+            self.assertEqual(find_external_metadata_sidecar_path(model_path), "")
+
+            with open(legacy_path, "w", encoding="utf-8") as handle:
+                json.dump({"filename": "model.safetensors"}, handle)
+            self.assertEqual(find_external_metadata_sidecar_path(model_path), legacy_path)
+
     def test_merges_external_user_fields_with_model_resolver_metadata(self):
         import json
         import os

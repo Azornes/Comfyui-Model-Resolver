@@ -1082,8 +1082,6 @@ def find_external_metadata_sidecar_path(model_path: str) -> str:
     # Base name without extension
     base_name = filename.rsplit(".", 1)[0] if "." in filename else filename
     has_stem_collision = has_model_sidecar_name_collision(model_path)
-    exact_metadata_path = os.path.join(directory, filename + ".metadata.json")
-    prefer_exact_names = has_stem_collision or os.path.isfile(exact_metadata_path)
 
     # Name patterns based on civitai.py and resolver.py.
     exact_names = [
@@ -1097,15 +1095,12 @@ def find_external_metadata_sidecar_path(model_path: str) -> str:
         base_name + ".json",
         filename.replace("_", " ").split()[0] + ".metadata.json" if "_" in base_name else None,
     ]
-    possible_names = exact_names + legacy_names if prefer_exact_names else [
-        legacy_names[0],
-        exact_names[0],
-        legacy_names[1],
-        exact_names[1],
-        legacy_names[2],
-        exact_names[2],
-        legacy_names[3],
-    ]
+    possible_names = _ordered_sidecar_names(
+        model_path,
+        exact_names,
+        legacy_names,
+        has_stem_collision=has_stem_collision,
+    )
 
     for name in possible_names:
         if name:
@@ -1294,13 +1289,12 @@ def _metadata_sidecar_paths(model_path: str) -> List[str]:
     directory = os.path.dirname(model_path)
     filename = get_filename_from_path(model_path)
     base_name = os.path.splitext(filename)[0]
-    legacy_path = os.path.join(directory, f"{base_name}.metadata.json")
-    exact_path = os.path.join(directory, f"{filename}.metadata.json")
-    candidates = (
-        [exact_path, legacy_path]
-        if has_model_sidecar_name_collision(model_path) or os.path.isfile(exact_path)
-        else [legacy_path, exact_path]
+    candidate_names = _ordered_sidecar_names(
+        model_path,
+        [f"{filename}.metadata.json"],
+        [f"{base_name}.metadata.json"],
     )
+    candidates = [os.path.join(directory, name) for name in candidate_names]
 
     result: List[str] = []
     seen = set()
@@ -1314,6 +1308,36 @@ def _metadata_sidecar_paths(model_path: str) -> List[str]:
         seen.add(key)
         result.append(candidate)
     return result
+
+
+def _ordered_sidecar_names(
+    model_path: str,
+    exact_names: List[Optional[str]],
+    legacy_names: List[Optional[str]],
+    *,
+    has_stem_collision: Optional[bool] = None,
+) -> List[str]:
+    """Return sidecar names in the established exact/legacy preference order."""
+    directory = os.path.dirname(model_path)
+    exact_names = [name for name in exact_names if name]
+    legacy_names = [name for name in legacy_names if name]
+    if has_stem_collision is None:
+        has_stem_collision = has_model_sidecar_name_collision(model_path)
+
+    exact_path = os.path.join(directory, exact_names[0]) if exact_names else ""
+    prefer_exact_names = has_stem_collision or (
+        bool(exact_path) and os.path.isfile(exact_path)
+    )
+    if prefer_exact_names:
+        return exact_names + legacy_names
+
+    candidates: List[str] = []
+    for index in range(max(len(exact_names), len(legacy_names))):
+        if index < len(legacy_names):
+            candidates.append(legacy_names[index])
+        if index < len(exact_names):
+            candidates.append(exact_names[index])
+    return candidates
 
 
 def get_metadata_sidecar_path(model_path: str) -> str:
