@@ -24,13 +24,7 @@ def model_identity_key(model: Dict[str, Any]) -> str:
     model_path = str(model.get("path") or "").strip()
     if not model_path:
         return ""
-    try:
-        return get_path_identity(model_path)
-    except (OSError, ValueError):
-        try:
-            return os.path.normcase(os.path.abspath(model_path))
-        except (OSError, ValueError):
-            return os.path.normcase(model_path)
+    return get_path_identity(model_path)
 
 
 def dedupe_models(models: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

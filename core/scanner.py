@@ -41,11 +41,7 @@ def _model_identity(model: Dict[str, str]) -> str:
     path = model.get("path", "")
     if not path:
         return ""
-
-    try:
-        return _path_identity(path)
-    except (OSError, ValueError):
-        return os.path.normcase(os.path.abspath(path))
+    return _path_identity(path)
 
 
 def get_model_directories() -> Dict[str, Tuple[List[str], set]]:

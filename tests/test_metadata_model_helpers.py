@@ -1,8 +1,10 @@
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from core.metadata_model_utils import dedupe_models, is_model_file_path, model_identity_key
+from core.scanner import _model_identity
 
 
 class MetadataModelHelperTests(unittest.TestCase):
@@ -44,6 +46,14 @@ class MetadataModelHelperTests(unittest.TestCase):
             self.assertEqual(model_identity_key(first), model_identity_key(duplicate))
             self.assertEqual("", model_identity_key(empty))
             self.assertEqual([first], dedupe_models(models))
+
+    def test_scanner_and_metadata_identity_share_path_fallback(self):
+        model_path = os.path.join("models", "model.safetensors")
+        expected = os.path.normcase(os.path.abspath(model_path))
+
+        with patch("core.path_utils.os.path.realpath", side_effect=OSError):
+            self.assertEqual(expected, _model_identity({"path": model_path}))
+            self.assertEqual(expected, model_identity_key({"path": model_path}))
 
 
 if __name__ == "__main__":
