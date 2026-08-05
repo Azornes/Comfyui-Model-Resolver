@@ -1,6 +1,8 @@
+import json
 import unittest
+from pathlib import Path
 
-from core.type_utils import normalize_download_category, resolve_model_category
+from core.type_utils import CATEGORY_MAP, normalize_download_category, resolve_model_category
 
 
 class CategoryMappingTests(unittest.TestCase):
@@ -35,6 +37,15 @@ class CategoryMappingTests(unittest.TestCase):
         self.assertEqual("checkpoints", normalize_download_category(""))
         self.assertEqual("checkpoints", normalize_download_category(None))
         self.assertEqual("new_category", normalize_download_category("new category"))
+
+    def test_frontend_category_alias_artifact_matches_backend_map(self):
+        project_root = Path(__file__).resolve().parents[1]
+        artifact = (
+            project_root / "web" / "resolver" / "utils" / "category_aliases.generated.js"
+        ).read_text(encoding="utf-8")
+        payload = artifact.split("Object.freeze(", 1)[1].rsplit(");", 1)[0].strip()
+
+        self.assertEqual(CATEGORY_MAP, json.loads(payload))
 
 
 if __name__ == "__main__":

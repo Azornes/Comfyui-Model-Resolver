@@ -19,6 +19,7 @@ import {
 } from '../web/resolver/node_context_menu.js';
 import { startSplitterDrag } from '../web/resolver/utils/splitter_drag.js';
 import { normalizeDownloadCategoryValue } from '../web/resolver/utils/category_utils.js';
+import { CATEGORY_ALIASES } from '../web/resolver/utils/category_aliases.generated.js';
 import { getSha256Field, normalizeSha256 } from '../web/resolver/utils/hash_utils.js';
 import { getSourceDisplayLabel, normalizeSourceKey } from '../web/resolver/utils/source_labels.js';
 import { baseModelAliasMethods } from '../web/resolver/search/base_model_alias_methods.js';
@@ -36,6 +37,7 @@ import {
 } from '../web/resolver/custom_nodes/registry.js';
 
 void normalizeDownloadCategoryValue;
+void CATEGORY_ALIASES;
 void normalizeSha256;
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
@@ -5579,6 +5581,11 @@ test('download category normalization maps gguf folder keys to diffusion models'
   assert.equal(normalizeDownloadCategory('unet_gguf'), 'diffusion_models');
   assert.equal(normalizeDownloadCategory('UNET GGUF'), 'diffusion_models');
   assert.equal(normalizeDownloadCategory('model_gguf'), 'diffusion_models');
+});
+
+test('download category normalization uses the generated backend alias fallback', () => {
+  assert.equal(CATEGORY_ALIASES.control_net, 'controlnet');
+  assert.equal(normalizeDownloadCategoryValue('control-net'), 'controlnet');
 });
 
 test('missing model categories preserve node priority and fallback order', () => {
