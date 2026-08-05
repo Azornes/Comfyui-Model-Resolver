@@ -93,6 +93,37 @@ test('shared DOM helpers synchronize attributes, text, and one-time listeners', 
   assert.equal(clicks, 1);
 });
 
+test('sidebar active helper recognizes supported state attributes and classes', () => {
+  assert.equal(typeof domPatchUtils.isSidebarButtonActive, 'function');
+
+  const window = new Window();
+  const selectors = [
+    '[aria-pressed="true"]',
+    '[aria-selected="true"]',
+    '[data-active="true"]',
+    '[data-selected="true"]',
+    '.active',
+    '.is-active',
+    '.selected',
+    '.p-highlight',
+  ];
+
+  for (const selector of selectors) {
+    const button = window.document.createElement('button');
+    if (selector.startsWith('[')) {
+      const [attribute, value] = selector.slice(1, -1).split('=');
+      button.setAttribute(attribute, value.replaceAll('"', ''));
+    } else {
+      button.className = selector.slice(1);
+    }
+    assert.equal(domPatchUtils.isSidebarButtonActive(button), true, selector);
+  }
+
+  const inactiveButton = window.document.createElement('button');
+  assert.equal(domPatchUtils.isSidebarButtonActive(inactiveButton), false);
+  assert.equal(domPatchUtils.isSidebarButtonActive(null), false);
+});
+
 test('instant actions handle pointer and click as one idempotent action', () => {
   assert.equal(typeof domPatchUtils.bindInstantAction, 'function');
 

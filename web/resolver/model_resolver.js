@@ -4,6 +4,7 @@ import { $el } from "../../../../scripts/ui.js";
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { logger as frontendLogger } from "../log_system/logger.js";
 import { loadStylesWhenNeeded } from "../utils/css_loader.js";
+import { isSidebarButtonActive } from "../utils/dom_patch_utils.js";
 import { ResolverManagerDialog } from "./resolver_dialog.js";
 import { showNotification } from "../utils/notification_utils.js";
 import {
@@ -763,24 +764,11 @@ export class ModelResolver {
             event.stopImmediatePropagation?.();
 
             requestAnimationFrame(() => {
-                if (this.isSidebarButtonActive(button)) {
+                if (isSidebarButtonActive(button)) {
                     button.click();
                 }
             });
         }
-    }
-
-    isSidebarButtonActive(button) {
-        return button.matches([
-            '[aria-pressed="true"]',
-            '[aria-selected="true"]',
-            '[data-active="true"]',
-            '[data-selected="true"]',
-            '.active',
-            '.is-active',
-            '.selected',
-            '.p-highlight'
-        ].join(','));
     }
 
     renderSidebarPanel(element) {

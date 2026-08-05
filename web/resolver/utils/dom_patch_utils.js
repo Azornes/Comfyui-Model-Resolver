@@ -1,4 +1,14 @@
 const boundEventKeys = new WeakMap();
+const SIDEBAR_ACTIVE_SELECTOR = [
+    '[aria-pressed="true"]',
+    '[aria-selected="true"]',
+    '[data-active="true"]',
+    '[data-selected="true"]',
+    '.active',
+    '.is-active',
+    '.selected',
+    '.p-highlight'
+].join(',');
 
 export function syncElementAttributes(current, next) {
     if (!current || !next) return current;
@@ -25,6 +35,10 @@ export function setTextIfChanged(element, value) {
     if (element.textContent === nextText) return false;
     element.textContent = nextText;
     return true;
+}
+
+export function isSidebarButtonActive(element) {
+    return Boolean(element?.matches?.(SIDEBAR_ACTIVE_SELECTOR));
 }
 
 export function bindEventOnce(element, eventName, handler, key = eventName) {

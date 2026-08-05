@@ -1,6 +1,7 @@
 import { app } from "../../../../../scripts/app.js";
 import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
+import { isSidebarButtonActive } from "../utils/dom_patch_utils.js";
 import { safeStorage } from "../utils/html_utils.js";
 export const dialogShellMethods = {
     createHeader() {
@@ -555,16 +556,7 @@ export const dialogShellMethods = {
 
             const button = document.querySelector(`.${this.sidebarTabId}-tab-button`);
             if (button instanceof HTMLElement) {
-                const isActive = button.matches([
-                    '[aria-pressed="true"]',
-                    '[aria-selected="true"]',
-                    '[data-active="true"]',
-                    '[data-selected="true"]',
-                    '.active',
-                    '.is-active',
-                    '.selected',
-                    '.p-highlight'
-                ].join(','));
+                const isActive = isSidebarButtonActive(button);
 
                 if (!isActive) {
                     button.click();
@@ -670,16 +662,7 @@ export const dialogShellMethods = {
             const button = document.querySelector(`.${this.sidebarTabId}-tab-button`);
             if (!(button instanceof HTMLElement)) return;
 
-            const isActive = button.matches([
-                '[aria-pressed="true"]',
-                '[aria-selected="true"]',
-                '[data-active="true"]',
-                '[data-selected="true"]',
-                '.active',
-                '.is-active',
-                '.selected',
-                '.p-highlight'
-            ].join(','));
+            const isActive = isSidebarButtonActive(button);
 
             if (!closedByState || isActive) {
                 button.click();
