@@ -126,6 +126,20 @@ async def test_metadata_size_audit_uses_defaults_for_unreadable_body():
 
 
 @pytest.mark.asyncio
+async def test_metadata_size_audit_normalizes_non_object_payload():
+    handlers, values = _build_routes()
+    handler = handlers[("POST", "/model_resolver/metadata-size-audit")]
+
+    await handler(_request(["not", "a", "mapping"]))
+
+    values["audit_metadata_sizes"].assert_called_once_with(
+        force_rescan=True,
+        worker_count=None,
+        batch_size=None,
+    )
+
+
+@pytest.mark.asyncio
 async def test_metadata_routes_handle_json_parse_failures():
     handlers, values = _build_routes()
 
