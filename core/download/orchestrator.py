@@ -2,6 +2,8 @@
 
 from typing import Any, Callable, Dict, Optional
 
+from .state import create_initial_progress
+
 
 def find_active_download_for_path(
     download_progress: Dict[str, Dict[str, Any]],
@@ -112,20 +114,14 @@ def download_file(
     last_cli_log = start_time
 
     with download_lock:
-        download_progress[download_id] = {
-            "status": "starting",
-            "progress": 0,
-            "total_size": 0,
-            "downloaded": 0,
-            "filename": facade.get_filename_from_path(dest_path),
-            "path": dest_path,
-            "directory": os.path.dirname(dest_path),
-            "url": url,
-            "error": None,
-            "speed": 0,
-            "start_time": start_time,
-            "download_backend": "python",
-        }
+        download_progress[download_id] = create_initial_progress(
+            url=url,
+            path=dest_path,
+            filename=facade.get_filename_from_path(dest_path),
+            directory=os.path.dirname(dest_path),
+            download_backend="python",
+            start_time=start_time,
+        )
 
     try:
         destination_directory = os.path.dirname(dest_path)
@@ -596,20 +592,14 @@ def start_background_download(
                 f"(download_id={active_download_id})"
             )
             return active_download_id
-        download_progress[download_id] = {
-            "status": "starting",
-            "progress": 0,
-            "total_size": 0,
-            "downloaded": 0,
-            "filename": filename,
-            "path": initial_path,
-            "directory": initial_directory,
-            "url": url,
-            "error": None,
-            "speed": 0,
-            "start_time": time.time(),
-            "download_backend": facade._download_backend_from_settings(),
-        }
+        download_progress[download_id] = create_initial_progress(
+            url=url,
+            path=initial_path,
+            filename=filename,
+            directory=initial_directory,
+            download_backend=facade._download_backend_from_settings(),
+            start_time=time.time(),
+        )
 
     def run_download() -> None:
         try:

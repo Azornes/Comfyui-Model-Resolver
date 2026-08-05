@@ -16,6 +16,33 @@ xet_transfers: Dict[str, Dict[str, Any]] = {}
 xet_transfers_lock = threading.Lock()
 
 
+def create_initial_progress(
+    *,
+    url: str,
+    path: str,
+    filename: str,
+    directory: str,
+    download_backend: str,
+    start_time: float,
+    total_size: int = 0,
+) -> Dict[str, Any]:
+    """Build the shared initial progress record for a download."""
+    return {
+        "status": "starting",
+        "progress": 0,
+        "total_size": total_size,
+        "downloaded": 0,
+        "filename": filename,
+        "path": path,
+        "directory": directory,
+        "url": url,
+        "error": None,
+        "speed": 0,
+        "start_time": start_time,
+        "download_backend": download_backend,
+    }
+
+
 @dataclass(frozen=True)
 class DownloadStateDependencies:
     """State and side-effect dependencies supplied by the composition layer."""

@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
 from ..log_system import create_module_logger
+from .state import create_initial_progress
 
 log = create_module_logger("core.downloader")
 
@@ -334,20 +335,15 @@ def download_huggingface_xet(
     )
 
     with facade.download_lock:
-        facade.download_progress[download_id] = {
-            "status": "starting",
-            "progress": 0,
-            "total_size": expected_size,
-            "downloaded": 0,
-            "filename": filename,
-            "path": dest_path,
-            "directory": facade.os.path.dirname(dest_path),
-            "url": validated_url,
-            "error": None,
-            "speed": 0,
-            "start_time": start_time,
-            "download_backend": "huggingface_xet",
-        }
+        facade.download_progress[download_id] = create_initial_progress(
+            url=validated_url,
+            path=dest_path,
+            filename=filename,
+            directory=facade.os.path.dirname(dest_path),
+            download_backend="huggingface_xet",
+            start_time=start_time,
+            total_size=expected_size,
+        )
 
     facade.cancelled_downloads.discard(download_id)
     try:

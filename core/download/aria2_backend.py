@@ -4,6 +4,7 @@ import socket
 from typing import Any, Dict, Optional
 
 from ..log_system import create_module_logger
+from .state import create_initial_progress
 
 log = create_module_logger("core.downloader")
 
@@ -724,20 +725,14 @@ def download_file_with_aria2(
     expected_sha256 = facade._extract_expected_sha256(metadata)
 
     with facade.download_lock:
-        facade.download_progress[download_id] = {
-            "status": "starting",
-            "progress": 0,
-            "total_size": 0,
-            "downloaded": 0,
-            "filename": filename,
-            "path": dest_path,
-            "directory": facade.os.path.dirname(dest_path),
-            "url": url,
-            "error": None,
-            "speed": 0,
-            "start_time": start_time,
-            "download_backend": "aria2",
-        }
+        facade.download_progress[download_id] = create_initial_progress(
+            url=url,
+            path=dest_path,
+            filename=filename,
+            directory=facade.os.path.dirname(dest_path),
+            download_backend="aria2",
+            start_time=start_time,
+        )
 
     try:
         facade.os.makedirs(facade.os.path.dirname(dest_path), exist_ok=True)
