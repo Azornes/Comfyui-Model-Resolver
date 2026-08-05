@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from core import resolver as resolver_core
 from core.workflow import analysis, references, subgraphs, traversal
 from core.workflow_updater import update_workflow_nodes
 
@@ -54,6 +55,108 @@ def test_workflow_node_traversal_preserves_node_order_and_scope():
     assert contexts[2].subgraph_id == "group-1"
     assert contexts[2].subgraph_name == "Group one"
     assert contexts[3].subgraph_id == "group-1"
+
+
+def test_active_workflow_node_traversal_follows_nested_referenced_subgraphs_only():
+    workflow = {
+        "nodes": [
+            {"id": "top", "type": "subgraph-1", "widgets_values": []},
+            "invalid-top-level-node",
+        ],
+        "definitions": {
+            "subgraphs": [
+                {
+                    "id": "subgraph-1",
+                    "name": "Active group",
+                    "nodes": [
+                        {"id": "inner", "type": "subgraph-2"},
+                        "invalid-inner-node",
+                    ],
+                },
+                {
+                    "id": "subgraph-2",
+                    "name": "Nested active group",
+                    "nodes": [{"id": "nested", "type": "NestedLoader"}],
+                },
+                {
+                    "id": "unused",
+                    "name": "Unused group",
+                    "nodes": [{"id": "unused-node", "type": "UnusedLoader"}],
+                },
+            ]
+        },
+    }
+
+    active_contexts = list(
+        traversal.iter_active_workflow_nodes_with_scope(workflow)
+    )
+
+    assert [context.node["id"] for context in active_contexts] == [
+        "top",
+        "inner",
+        "nested",
+    ]
+    assert active_contexts[1].subgraph_id == "subgraph-1"
+    assert active_contexts[2].subgraph_id == "subgraph-2"
+
+
+def test_extract_workflow_urls_includes_all_serialized_subgraph_nodes():
+    workflow = {
+        "nodes": [
+            {
+                "id": "top",
+                "type": "TopLoader",
+                "properties": {
+                    "models": [
+                        {
+                            "name": "top.safetensors",
+                            "url": "https://civitai.com/api/download/models/1",
+                            "directory": "checkpoints",
+                        }
+                    ]
+                },
+            }
+        ],
+        "definitions": {
+            "subgraphs": [
+                {
+                    "id": "unused",
+                    "nodes": [
+                        {
+                            "id": "subgraph-node",
+                            "type": "SubgraphLoader",
+                            "properties": {
+                                "models": [
+                                    {
+                                        "name": "subgraph.safetensors",
+                                        "url": "https://civitai.com/api/download/models/2",
+                                        "directory": "loras",
+                                    }
+                                ]
+                            },
+                        }
+                    ],
+                }
+            ]
+        },
+    }
+
+    url_map = resolver_core.extract_workflow_urls(workflow)
+
+    assert url_map["top.safetensors"] == {
+        "url": "https://civitai.com/api/download/models/1",
+        "model_url": "https://civitai.com/api/download/models/1",
+        "directory": "checkpoints",
+        "node_type": "TopLoader",
+        "source": "node_properties",
+    }
+    assert url_map["subgraph.safetensors"] == {
+        "url": "https://civitai.com/api/download/models/2",
+        "model_url": "https://civitai.com/api/download/models/2",
+        "directory": "loras",
+        "node_type": "SubgraphLoader",
+        "source": "node_properties",
+    }
 
 
 def test_subgraph_widget_indexes_support_named_inputs_and_links():

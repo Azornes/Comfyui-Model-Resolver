@@ -37,6 +37,10 @@ from .workflow.references import (
     get_model_widget_category_hint,
     should_scan_as_model_reference,
 )
+from .workflow.traversal import (
+    iter_active_workflow_nodes_with_scope,
+    iter_workflow_nodes_with_scope,
+)
 from .workflow.widgets import NESTED_MODEL_KEYS, NODE_TYPE_TO_CATEGORY_HINTS
 from .workflow_updater import update_workflow_nodes
 
@@ -393,64 +397,6 @@ def workflow_has_nodes(workflow_json: Dict[str, Any]) -> bool:
     return isinstance(nodes, list) and len(nodes) > 0
 
 
-def iter_active_workflow_nodes(workflow_json: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Return top-level nodes plus nodes from subgraphs referenced by top-level nodes."""
-    if not isinstance(workflow_json, dict):
-        return []
-
-    top_level_nodes = workflow_json.get("nodes")
-    if not isinstance(top_level_nodes, list):
-        return []
-
-    active_nodes = [
-        node for node in top_level_nodes if isinstance(node, dict)
-    ]
-
-    definitions = workflow_json.get("definitions")
-    if not isinstance(definitions, dict):
-        return active_nodes
-
-    subgraph_list = definitions.get("subgraphs")
-    if not isinstance(subgraph_list, list):
-        return active_nodes
-
-    subgraphs = {
-        str(subgraph.get("id")): subgraph
-        for subgraph in subgraph_list
-        if isinstance(subgraph, dict) and subgraph.get("id") is not None
-    }
-    pending_subgraphs = [
-        str(node.get("type"))
-        for node in active_nodes
-        if str(node.get("type")) in subgraphs
-    ]
-    seen_subgraphs = set()
-
-    while pending_subgraphs:
-        subgraph_id = pending_subgraphs.pop(0)
-        if subgraph_id in seen_subgraphs:
-            continue
-        seen_subgraphs.add(subgraph_id)
-
-        subgraph = subgraphs.get(subgraph_id)
-        subgraph_nodes = subgraph.get("nodes") if isinstance(subgraph, dict) else None
-        if not isinstance(subgraph_nodes, list):
-            continue
-
-        for node in subgraph_nodes:
-            if not isinstance(node, dict):
-                continue
-            active_nodes.append(node)
-            nested_subgraph_id = str(node.get("type"))
-            if (
-                nested_subgraph_id in subgraphs
-                and nested_subgraph_id not in seen_subgraphs
-            ):
-                pending_subgraphs.append(nested_subgraph_id)
-
-    return active_nodes
-
-
 def node_has_potential_model_reference(node: Dict[str, Any]) -> bool:
     """Detect model-looking widget values without resolving paths or scanning disks."""
     if not isinstance(node, dict):
@@ -489,8 +435,8 @@ def node_has_potential_model_reference(node: Dict[str, Any]) -> bool:
 def workflow_has_potential_model_references(workflow_json: Dict[str, Any]) -> bool:
     """Return True when active workflow nodes contain any model-looking values."""
     return any(
-        node_has_potential_model_reference(node)
-        for node in iter_active_workflow_nodes(workflow_json)
+        node_has_potential_model_reference(context.node)
+        for context in iter_active_workflow_nodes_with_scope(workflow_json)
     )
 
 def normalize_workflow_download_url(url: str) -> str:
@@ -742,13 +688,10 @@ def extract_workflow_urls(workflow_json: Dict[str, Any]) -> Dict[str, Dict[str, 
     # Convert to string for regex search
     workflow_str = json.dumps(workflow_json)
 
-    # Collect all nodes including from subgraphs
-    all_nodes = list(workflow_json.get("nodes", []))
-    definitions = workflow_json.get("definitions", {})
-    subgraphs = definitions.get("subgraphs", [])
-    for subgraph in subgraphs:
-        subgraph_nodes = subgraph.get("nodes", [])
-        all_nodes.extend(subgraph_nodes)
+    # Collect all serialized nodes, including nodes from subgraphs.
+    all_nodes = [
+        context.node for context in iter_workflow_nodes_with_scope(workflow_json)
+    ]
 
     # 1. Extract from node.properties.models (authoritative source)
     for node in all_nodes:
