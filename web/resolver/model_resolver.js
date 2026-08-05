@@ -4,7 +4,7 @@ import { $el } from "../../../../scripts/ui.js";
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { logger as frontendLogger } from "../log_system/logger.js";
 import { loadStylesWhenNeeded } from "../utils/css_loader.js";
-import { isSidebarButtonActive } from "../utils/dom_patch_utils.js";
+import { isSidebarButtonActive } from "./utils/dom_patch_utils.js";
 import { ResolverManagerDialog } from "./resolver_dialog.js";
 import { showNotification } from "../utils/notification_utils.js";
 import {

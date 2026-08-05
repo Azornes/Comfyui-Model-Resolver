@@ -6,6 +6,10 @@ const resolverSource = await readFile(
   new URL('../web/resolver.js', import.meta.url),
   'utf8'
 );
+const modelResolverSource = await readFile(
+  new URL('../web/resolver/model_resolver.js', import.meta.url),
+  'utf8'
+);
 
 test('frontend entrypoint registers the ComfyUI extension contract', () => {
   assert.match(
@@ -16,6 +20,10 @@ test('frontend entrypoint registers the ComfyUI extension contract', () => {
   assert.match(resolverSource, /const modelResolver = new ModelResolverClass\(\);/);
   assert.match(resolverSource, /app\.registerExtension\(\{/);
   assert.match(resolverSource, /name:\s*["']Model Resolver["']/);
+  assert.match(
+    modelResolverSource,
+    /import\s+\{\s*isSidebarButtonActive\s*\}\s+from\s+["']\.\/utils\/dom_patch_utils\.js["']/
+  );
   assert.match(resolverSource, /id:\s*MODEL_RESOLVER_OPEN_COMMAND_ID/);
   assert.match(resolverSource, /function:\s*\(\)\s*=>\s*modelResolver\.activateResolverButton\(\)/);
   assert.match(resolverSource, /keybindings:\s*\[\s*MODEL_RESOLVER_OPEN_DEFAULT_KEYBINDING/);
