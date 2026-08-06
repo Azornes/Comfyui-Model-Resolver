@@ -1,13 +1,9 @@
 import { getSvgIcon } from "../../utils/icon_utils.js";
-import { escapeHtml } from "../utils/html_utils.js";
 import {
     getCustomNodeModelEntries,
     getCustomNodeOriginalIdentity,
 } from "../custom_nodes/registry.js";
 export const tabsLoadedMethods = {
-    escapeHtml(value) {
-        return escapeHtml(value);
-    },
     getTabButton(tab) {
         return {
             missing: this.missingTab,

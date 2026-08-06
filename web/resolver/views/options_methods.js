@@ -4,9 +4,6 @@ import { escapeHtml, pollBackgroundTask, safeStorage } from "../utils/html_utils
 const SETTINGS_MAP = [];
 
 export const optionsMethods = {
-    escapeHtml(value) {
-        return escapeHtml(value);
-    },
     buildLocalModelContext(item = {}, contextSource = '', extraFields = {}) {
         const modelLabel = item.relative_path || item.filename || item.model_path || 'Model';
         const modelPath = item.model_path || '';
