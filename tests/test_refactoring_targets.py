@@ -1384,6 +1384,244 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
         payload = json.loads(api_response.text)
         self.assertEqual(payload["download_url"], mirror_url)
 
+    async def test_civitai_service_preserves_remote_sidecar_payload_fields(self):
+        expected_hash = "b" * 64
+        remote_result = {
+            "source": "civitai",
+            "model_name": "Remote Model",
+            "model_type": "Checkpoint",
+            "model_id": 12,
+            "version_id": 34,
+            "version_name": "v1",
+            "sha256": expected_hash,
+            "size": 123,
+            "base_model": "SDXL",
+            "base_model_source": "civitai",
+            "tags": ["tag"],
+            "trained_words": ["trigger"],
+            "images": [{"url": "https://example.com/preview.png"}],
+            "clip_skip": 2,
+            "description": "Model description",
+            "version_description": "Version description",
+            "url": "https://civitai.com/models/12",
+            "version_url": "https://civitai.com/models/12?modelVersionId=34",
+            "download_url": "https://civitai.com/api/download/models/34",
+            "author": "Author",
+        }
+        write_metadata = MagicMock(return_value="remote.modelresolver.json")
+
+        def to_bool(value, default=False):
+            return default if value is None else bool(value)
+
+        service = self._build_model_service_for_unit_test(
+            service_module="civitai_search_service",
+            service_class="CivitAISearchService",
+            download_available=True,
+            extract_sha256_from_metadata=lambda value: (
+                value.get("sha256", "") if isinstance(value, dict) else ""
+            ),
+            find_external_metadata_sidecar_path=lambda path: "",
+            get_filename_from_path=lambda value: str(value or "").replace(
+                "\\", "/"
+            ).rsplit("/", 1)[-1],
+            is_path_in_configured_model_roots=lambda path: True,
+            normalize_category_to_model_type=lambda value: "Checkpoint",
+            normalize_sha256=lambda value: str(value or ""),
+            read_json_safe=lambda path, default=None: default,
+            to_bool=to_bool,
+            write_model_resolver_metadata=write_metadata,
+        )
+        with tempfile.NamedTemporaryFile(
+            suffix=".safetensors", delete=False
+        ) as handle:
+            model_path = handle.name
+        request = AsyncMock()
+        request.json.return_value = {
+            "filename": "remote.safetensors",
+            "category": "checkpoints",
+            "resolved_path": model_path,
+            "sha256": expected_hash,
+        }
+
+        try:
+            civitai_module = importlib.import_module(
+                "comfyui-model-resolver.core.sources.civitai"
+            )
+            with patch.object(
+                civitai_module,
+                "get_model_info_by_hash",
+                return_value=remote_result,
+            ):
+                response = await service.civitai_search(request)
+        finally:
+            os.unlink(model_path)
+
+        self.assertEqual(response.status, 200)
+        metadata_payload = write_metadata.call_args.args[1]
+        self.assertEqual("civitai", metadata_payload["source"])
+        self.assertEqual("Remote Model", metadata_payload["model_name"])
+        self.assertEqual(expected_hash, metadata_payload["sha256"])
+        self.assertEqual("Author", metadata_payload["author"])
+        self.assertEqual(
+            {
+                "filename": "remote.safetensors",
+                "category": "checkpoints",
+                "source": "civitai",
+                "model_id": 12,
+                "version_id": 34,
+                "repo_id": None,
+                "path": None,
+            },
+            metadata_payload["path_metadata"],
+        )
+
+    async def test_civitai_service_preserves_metadata_import_sidecar_fields(self):
+        expected_hash = "c" * 64
+        imported_from = "external.metadata.json"
+        imported_result = {
+            "source": "civitai",
+            "from_metadata": True,
+            "metadata_path": imported_from,
+            "model_name": "Imported Model",
+            "model_type": "Lora",
+            "model_id": 56,
+            "version_id": 78,
+            "version_name": "v2",
+            "sha256": expected_hash,
+            "size": 456,
+            "description": "Imported description",
+            "preview_url": "https://example.com/imported.png",
+            "url": "https://civitai.com/models/56",
+            "version_url": "https://civitai.com/models/56?modelVersionId=78",
+        }
+        write_metadata = MagicMock(return_value="imported.modelresolver.json")
+
+        def to_bool(value, default=False):
+            return default if value is None else bool(value)
+
+        service = self._build_model_service_for_unit_test(
+            service_module="civitai_search_service",
+            service_class="CivitAISearchService",
+            download_available=True,
+            extract_sha256_from_metadata=lambda value: (
+                value.get("sha256", "") if isinstance(value, dict) else ""
+            ),
+            find_external_metadata_sidecar_path=lambda path: "",
+            get_existing_model_preview_path=lambda path: "",
+            get_filename_from_path=lambda value: str(value or "").replace(
+                "\\", "/"
+            ).rsplit("/", 1)[-1],
+            get_model_resolver_sidecar_path=lambda path: f"{path}.modelresolver.json",
+            is_path_in_configured_model_roots=lambda path: True,
+            normalize_category_to_model_type=lambda value: "Lora",
+            normalize_sha256=lambda value: str(value or ""),
+            read_json_safe=lambda path, default=None: default,
+            to_bool=to_bool,
+            write_model_resolver_metadata=write_metadata,
+        )
+        with tempfile.NamedTemporaryFile(
+            suffix=".safetensors", delete=False
+        ) as handle:
+            model_path = handle.name
+        request = AsyncMock()
+        request.json.return_value = {
+            "filename": "imported.safetensors",
+            "category": "loras",
+            "resolved_path": model_path,
+            "local_only": True,
+        }
+
+        try:
+            civitai_module = importlib.import_module(
+                "comfyui-model-resolver.core.sources.civitai"
+            )
+            with patch.object(
+                civitai_module,
+                "get_model_info_for_file",
+                return_value=imported_result,
+            ):
+                response = await service.civitai_search(request)
+        finally:
+            os.unlink(model_path)
+
+        self.assertEqual(response.status, 200)
+        metadata_payload = write_metadata.call_args.args[1]
+        self.assertEqual("metadata_import", metadata_payload["source"])
+        self.assertEqual("https://example.com/imported.png", metadata_payload["preview_url"])
+        self.assertEqual(
+            imported_from,
+            metadata_payload["path_metadata"]["imported_from"],
+        )
+        self.assertEqual(
+            "imported.modelresolver.json",
+            json.loads(response.text)["metadata_path"],
+        )
+
+    async def test_civitai_service_preserves_missing_remote_metadata_flags(self):
+        local_result = {
+            "source": "local",
+            "base_model": "SDXL",
+            "base_model_source": "safetensors_header",
+            "base_model_inferred": True,
+            "description": "Local description",
+            "sha256": "d" * 64,
+        }
+        write_metadata = MagicMock(return_value="deleted.modelresolver.json")
+
+        def to_bool(value, default=False):
+            return default if value is None else bool(value)
+
+        service = self._build_model_service_for_unit_test(
+            service_module="civitai_search_service",
+            service_class="CivitAISearchService",
+            download_available=True,
+            extract_sha256_from_metadata=lambda value: (
+                value.get("sha256", "") if isinstance(value, dict) else ""
+            ),
+            find_external_metadata_sidecar_path=lambda path: "",
+            get_filename_from_path=lambda value: str(value or "").replace(
+                "\\", "/"
+            ).rsplit("/", 1)[-1],
+            is_path_in_configured_model_roots=lambda path: True,
+            normalize_category_to_model_type=lambda value: "Checkpoint",
+            normalize_sha256=lambda value: str(value or ""),
+            read_json_safe=lambda path, default=None: default,
+            search_huggingface_for_file=MagicMock(return_value=None),
+            to_bool=to_bool,
+            write_model_resolver_metadata=write_metadata,
+        )
+        with tempfile.NamedTemporaryFile(
+            suffix=".safetensors", delete=False
+        ) as handle:
+            model_path = handle.name
+        request = AsyncMock()
+        request.json.return_value = {
+            "filename": "deleted.safetensors",
+            "category": "checkpoints",
+            "resolved_path": model_path,
+            "force_refresh": True,
+        }
+
+        try:
+            civitai_module = importlib.import_module(
+                "comfyui-model-resolver.core.sources.civitai"
+            )
+            with patch.object(
+                civitai_module,
+                "get_model_info_for_file",
+                return_value=local_result,
+            ):
+                response = await service.civitai_search(request)
+        finally:
+            os.unlink(model_path)
+
+        self.assertEqual(response.status, 200)
+        metadata_payload = write_metadata.call_args.args[1]
+        self.assertEqual("local", metadata_payload["source"])
+        self.assertTrue(metadata_payload["civitai_deleted"])
+        self.assertTrue(metadata_payload["civitai_checked"])
+        self.assertTrue(metadata_payload["remote_metadata_missing"])
+
     async def test_custom_url_service_rejects_unsafe_url(self):
         class TestUnsafeUrlError(Exception):
             pass

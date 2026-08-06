@@ -6,6 +6,42 @@ from ..sources.common import collect_download_urls
 from .model_utils import CivitAISearchDependencies, ModelServiceDependencies
 
 
+def _build_metadata_sidecar_payload(
+    *,
+    source,
+    details_source,
+    filename,
+    category,
+    model_name,
+    model_type,
+    sha256,
+    size,
+    result,
+    description,
+    version_description,
+    extra_fields=None,
+):
+    payload = {
+        "source": source,
+        "details_source": details_source,
+        "filename": filename,
+        "category": category,
+        "model_name": model_name,
+        "name": model_name,
+        "model_type": model_type,
+        "sha256": sha256,
+        "size": size,
+        "base_model": result.get("base_model"),
+        "base_model_source": result.get("base_model_source"),
+        "base_model_inferred": bool(result.get("base_model_inferred")),
+        "description": description,
+        "model_description": description,
+        "version_description": version_description,
+    }
+    payload.update(extra_fields or {})
+    return payload
+
+
 class CivitAISearchService(ModelServiceDependencies):
     """Execute exact-match CivitAI and model metadata searches."""
 
@@ -434,51 +470,51 @@ class CivitAISearchService(ModelServiceDependencies):
                 model_description, version_description = (
                     split_result_descriptions(result)
                 )
-                metadata_payload = {
-                    "source": source_name,
-                    "details_source": result.get("details_source")
-                    or source_name,
-                    "filename": filename,
-                    "category": category,
-                    "model_name": result.get("model_name", clean_name),
-                    "name": result.get("model_name", clean_name),
-                    "model_type": result.get("model_type", "")
-                    or result.get("type", ""),
-                    "type": result.get("model_type", "")
-                    or result.get("type", ""),
-                    "model_id": result.get("model_id"),
-                    "version_id": result.get("version_id"),
-                    "version_name": result.get("version_name", ""),
-                    "sha256": result.get("sha256") or provided_hash,
-                    "size": result.get("size"),
-                    "base_model": result.get("base_model"),
-                    "base_model_source": result.get("base_model_source"),
-                    "base_model_inferred": bool(result.get("base_model_inferred")),
-                    "tags": result.get("tags", []),
-                    "trained_words": result.get("trained_words", []),
-                    "images": result.get("images", []),
-                    "clip_skip": result.get("clip_skip"),
-                    "description": model_description,
-                    "model_description": model_description,
-                    "version_description": version_description,
-                    "download_url": result.get("download_url"),
-                    "source_url": result.get("version_url") or result.get("url"),
-                    "version_url": result.get("version_url") or result.get("url"),
-                    "model_url": result.get("url"),
-                    "url": result.get("version_url") or result.get("url"),
-                    "platform_url": result.get("platform_url"),
-                    "repo_id": result.get("repo_id"),
-                    "path": result.get("path"),
-                    "path_metadata": {
-                        "filename": filename,
-                        "category": category,
-                        "source": source_name,
+                model_type = result.get("model_type", "") or result.get(
+                    "type", ""
+                )
+                metadata_payload = _build_metadata_sidecar_payload(
+                    source=source_name,
+                    details_source=result.get("details_source") or source_name,
+                    filename=filename,
+                    category=category,
+                    model_name=result.get("model_name", clean_name),
+                    model_type=model_type,
+                    sha256=result.get("sha256") or provided_hash,
+                    size=result.get("size"),
+                    result=result,
+                    description=model_description,
+                    version_description=version_description,
+                    extra_fields={
+                        "type": model_type,
                         "model_id": result.get("model_id"),
                         "version_id": result.get("version_id"),
+                        "version_name": result.get("version_name", ""),
+                        "tags": result.get("tags", []),
+                        "trained_words": result.get("trained_words", []),
+                        "images": result.get("images", []),
+                        "clip_skip": result.get("clip_skip"),
+                        "download_url": result.get("download_url"),
+                        "source_url": result.get("version_url")
+                        or result.get("url"),
+                        "version_url": result.get("version_url")
+                        or result.get("url"),
+                        "model_url": result.get("url"),
+                        "url": result.get("version_url") or result.get("url"),
+                        "platform_url": result.get("platform_url"),
                         "repo_id": result.get("repo_id"),
                         "path": result.get("path"),
+                        "path_metadata": {
+                            "filename": filename,
+                            "category": category,
+                            "source": source_name,
+                            "model_id": result.get("model_id"),
+                            "version_id": result.get("version_id"),
+                            "repo_id": result.get("repo_id"),
+                            "path": result.get("path"),
+                        },
                     },
-                }
+                )
                 add_local_metadata_fields(metadata_payload, result)
                 metadata_path = write_model_resolver_metadata(
                     file_path,
@@ -539,47 +575,47 @@ class CivitAISearchService(ModelServiceDependencies):
                         model_description, version_description = (
                             split_result_descriptions(result)
                         )
-                        metadata_payload = {
-                            "source": "metadata_import",
-                            "details_source": result.get("source") or "metadata",
-                            "filename": filename,
-                            "category": category,
-                            "model_name": result.get("model_name", clean_name),
-                            "name": result.get("model_name", clean_name),
-                            "model_type": result.get("model_type", ""),
-                            "type": result.get("model_type", ""),
-                            "model_id": result.get("model_id"),
-                            "version_id": result.get("version_id"),
-                            "version_name": result.get("version_name", ""),
-                            "sha256": result.get("sha256"),
-                            "size": result.get("size"),
-                            "base_model": result.get("base_model"),
-                            "base_model_source": result.get("base_model_source"),
-                            "base_model_inferred": bool(result.get("base_model_inferred")),
-                            "tags": result.get("tags", []),
-                            "trained_words": result.get("trained_words", []),
-                            "images": result.get("images", []),
-                            "clip_skip": result.get("clip_skip"),
-                            "description": model_description,
-                            "model_description": model_description,
-                            "version_description": version_description,
-                            "download_url": result.get("download_url"),
-                            "preview_url": preview_url,
-                            "source_url": result.get("version_url")
-                            or result.get("url"),
-                            "version_url": result.get("version_url")
-                            or result.get("url"),
-                            "model_url": result.get("url"),
-                            "url": result.get("version_url") or result.get("url"),
-                            "path_metadata": {
-                                "filename": filename,
-                                "category": category,
-                                "source": "metadata_import",
+                        model_type = result.get("model_type", "")
+                        metadata_payload = _build_metadata_sidecar_payload(
+                            source="metadata_import",
+                            details_source=result.get("source") or "metadata",
+                            filename=filename,
+                            category=category,
+                            model_name=result.get("model_name", clean_name),
+                            model_type=model_type,
+                            sha256=result.get("sha256"),
+                            size=result.get("size"),
+                            result=result,
+                            description=model_description,
+                            version_description=version_description,
+                            extra_fields={
+                                "type": model_type,
                                 "model_id": result.get("model_id"),
                                 "version_id": result.get("version_id"),
-                                "imported_from": source_metadata_path,
+                                "version_name": result.get("version_name", ""),
+                                "tags": result.get("tags", []),
+                                "trained_words": result.get("trained_words", []),
+                                "images": result.get("images", []),
+                                "clip_skip": result.get("clip_skip"),
+                                "download_url": result.get("download_url"),
+                                "preview_url": preview_url,
+                                "source_url": result.get("version_url")
+                                or result.get("url"),
+                                "version_url": result.get("version_url")
+                                or result.get("url"),
+                                "model_url": result.get("url"),
+                                "url": result.get("version_url")
+                                or result.get("url"),
+                                "path_metadata": {
+                                    "filename": filename,
+                                    "category": category,
+                                    "source": "metadata_import",
+                                    "model_id": result.get("model_id"),
+                                    "version_id": result.get("version_id"),
+                                    "imported_from": source_metadata_path,
+                                },
                             },
-                        }
+                        )
                         add_local_metadata_fields(metadata_payload, result)
                         metadata_path = write_model_resolver_metadata(
                             file_path,
@@ -805,34 +841,29 @@ class CivitAISearchService(ModelServiceDependencies):
         response["url"] = None
         if force_refresh and file_path and _os.path.exists(file_path):
             try:
-                metadata_payload = {
-                    "filename": filename,
-                    "category": category,
-                    "model_name": response.get("model_name") or clean_name,
-                    "name": response.get("model_name") or clean_name,
-                    "model_type": response.get("model_type")
+                model_description = response.get("model_description") or response.get(
+                    "description"
+                ) or ""
+                metadata_payload = _build_metadata_sidecar_payload(
+                    source="local",
+                    details_source=response.get("details_source") or "",
+                    filename=filename,
+                    category=category,
+                    model_name=response.get("model_name") or clean_name,
+                    model_type=response.get("model_type")
                     or infer_model_type_from_category(category),
-                    "sha256": response.get("sha256") or provided_hash,
-                    "size": response.get("size") or _os.path.getsize(file_path),
-                    "base_model": response.get("base_model"),
-                    "base_model_source": response.get("base_model_source"),
-                    "base_model_inferred": bool(response.get("base_model_inferred")),
-                    "description": response.get("model_description")
-                    or response.get("description")
+                    sha256=response.get("sha256") or provided_hash,
+                    size=response.get("size") or _os.path.getsize(file_path),
+                    result=response,
+                    description=model_description,
+                    version_description=response.get("version_description")
                     or "",
-                    "model_description": response.get("model_description")
-                    or response.get("description")
-                    or "",
-                    "version_description": response.get(
-                        "version_description"
-                    )
-                    or "",
-                    "civitai_deleted": True,
-                    "civitai_checked": True,
-                    "remote_metadata_missing": True,
-                    "source": "local",
-                    "details_source": response.get("details_source") or "",
-                }
+                    extra_fields={
+                        "civitai_deleted": True,
+                        "civitai_checked": True,
+                        "remote_metadata_missing": True,
+                    },
+                )
                 add_local_metadata_fields(metadata_payload, response)
                 metadata_path = write_model_resolver_metadata(
                     file_path,
