@@ -151,6 +151,44 @@ class TestRefactoringUnification(unittest.TestCase):
         self.assertIn("update_available", res)
         mock_get.assert_called_once_with("https://civitai.com/api/v1/enums", params={}, headers=None, timeout=15)
 
+    @patch("core.sources.popular.request_source_json")
+    @patch("core.sources.popular._read_base_models_file")
+    @patch("core.sources.popular._read_base_models_meta")
+    @patch("core.sources.popular.base_models_mgr")
+    @patch("core.sources.popular.reload_databases")
+    def test_base_model_alias_matching_is_consistent_for_status_and_update(
+        self,
+        mock_reload_databases,
+        mock_base_models_mgr,
+        mock_read_meta,
+        mock_read_file,
+        mock_request_source_json,
+    ):
+        from core.sources.popular import get_base_models_status, update_base_models_from_remote
+
+        local_data = {
+            "base_models": [{"name": "Known Model", "aliases": ["Known Alias"]}]
+        }
+        mock_read_file.return_value = local_data
+        mock_read_meta.return_value = {}
+        mock_request_source_json.return_value = {
+            "BaseModel": ["Known Alias", "New Model"]
+        }
+
+        status = get_base_models_status(check_remote=True)
+        self.assertTrue(status["update_available"])
+
+        result = update_base_models_from_remote()
+
+        self.assertEqual(result["new_models_added"], 1)
+        self.assertEqual(result["new_models_added_list"], ["New Model"])
+        saved_data = mock_base_models_mgr.sync_catalog.call_args[0][0]
+        self.assertEqual(
+            [model["name"] for model in saved_data["base_models"]],
+            ["Known Model", "New Model"],
+        )
+        mock_reload_databases.assert_called_once()
+
     @patch("core.sources.popular.base_models_mgr")
     @patch("requests.get")
     def test_update_base_models_from_remote_success(self, mock_get, mock_base_models_mgr):

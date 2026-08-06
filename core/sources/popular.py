@@ -6,7 +6,7 @@ Curated list of common models with known download URLs.
 
 import os
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from ..log_system import create_module_logger
 
@@ -257,6 +257,16 @@ def generate_aliases(name: str) -> List[str]:
     return sorted(list({a for a in aliases if len(a) > 1}))
 
 
+def _collect_normalized_base_model_tokens(base_models: List[Dict[str, Any]]) -> Set[str]:
+    """Collect normalized names and aliases from the base-model catalog."""
+    normalized_tokens = set()
+    for model in base_models:
+        normalized_tokens.add(normalize_alphanumeric_key(model.get("name", "")))
+        for alias in model.get("aliases", []):
+            normalized_tokens.add(normalize_alphanumeric_key(alias))
+    return normalized_tokens
+
+
 def get_base_models_status(check_remote: bool = False) -> Dict[str, Any]:
     """Return local base-models metadata and optionally compare with CivitAI."""
     local_data = _read_base_models_file()
@@ -281,11 +291,7 @@ def get_base_models_status(check_remote: bool = False) -> Dict[str, Any]:
                 remote_models = enums.get("BaseModel", [])
 
                 # Check if there are new models by comparing normalized names and aliases
-                all_existing_normalized = set()
-                for m in base_models:
-                    all_existing_normalized.add(normalize_alphanumeric_key(m.get("name", "")))
-                    for alias in m.get("aliases", []):
-                        all_existing_normalized.add(normalize_alphanumeric_key(alias))
+                all_existing_normalized = _collect_normalized_base_model_tokens(base_models)
 
                 new_models_found = False
                 for remote_name in remote_models:
@@ -318,11 +324,7 @@ def update_base_models_from_remote() -> Dict[str, Any]:
     base_models = local_data.get("base_models", [])
 
     # 1. Build a set of all normalized aliases currently in base-models.json
-    all_known_normalized = set()
-    for m in base_models:
-        for alias in m.get("aliases", []):
-            all_known_normalized.add(normalize_alphanumeric_key(alias))
-        all_known_normalized.add(normalize_alphanumeric_key(m.get("name", "")))
+    all_known_normalized = _collect_normalized_base_model_tokens(base_models)
 
     updated_models = list(base_models)
     new_added_count = 0
