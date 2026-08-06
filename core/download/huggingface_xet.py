@@ -324,6 +324,75 @@ def download_huggingface_xet(
         "error": None,
         "size": 0,
     }
+    expected_sha256 = facade._extract_expected_sha256(metadata)
+    if not expected_sha256:
+        try:
+            from ..sources.huggingface import get_huggingface_file_sha256
+
+            expected_sha256 = get_huggingface_file_sha256(
+                validated_url,
+                headers=request_headers,
+            )
+        except Exception as exc:
+            log.debug(
+                "Hugging Face API SHA256 lookup failed; continuing without "
+                f"provider hash: {type(exc).__name__}"
+            )
+    metadata_for_sidecar = dict(metadata) if isinstance(metadata, dict) else {}
+    if expected_sha256:
+        # Hugging Face exposes the regular file SHA256 through its repository
+        # metadata. Xet's own file hash is a different CAS identifier, so keep
+        # the provider SHA256 as the model hash used by local matching.
+        metadata_for_sidecar["sha256"] = expected_sha256
+        metadata_for_sidecar["hash"] = expected_sha256
+        source_hashes = metadata_for_sidecar.get("hashes")
+        source_hashes = dict(source_hashes) if isinstance(source_hashes, dict) else {}
+        source_hashes["SHA256"] = expected_sha256
+        metadata_for_sidecar["hashes"] = source_hashes
+        target_filename = facade.get_filename_from_path(dest_path).lower()
+        for key in ("selected_file", "selectedFile", "file_info", "file"):
+            nested_file = metadata_for_sidecar.get(key)
+            if isinstance(nested_file, dict):
+                nested_filename = str(
+                    nested_file.get("filename")
+                    or nested_file.get("name")
+                    or ""
+                ).lower()
+                if not nested_filename or nested_filename == target_filename:
+                    nested_file["sha256"] = expected_sha256
+                    nested_file["hash"] = expected_sha256
+                    nested_hashes = nested_file.get("hashes")
+                    nested_hashes = (
+                        dict(nested_hashes)
+                        if isinstance(nested_hashes, dict)
+                        else {}
+                    )
+                    nested_hashes["SHA256"] = expected_sha256
+                    nested_file["hashes"] = nested_hashes
+        selected_version = metadata_for_sidecar.get("selected_version")
+        if isinstance(selected_version, dict):
+            file_list = selected_version.get("files")
+            if isinstance(file_list, list):
+                for nested_file in file_list:
+                    if not isinstance(nested_file, dict):
+                        continue
+                    nested_filename = str(
+                        nested_file.get("filename")
+                        or nested_file.get("name")
+                        or ""
+                    ).lower()
+                    if nested_filename == target_filename:
+                        nested_file["sha256"] = expected_sha256
+                        nested_file["hash"] = expected_sha256
+                        nested_hashes = nested_file.get("hashes")
+                        nested_hashes = (
+                            dict(nested_hashes)
+                            if isinstance(nested_hashes, dict)
+                            else {}
+                        )
+                        nested_hashes["SHA256"] = expected_sha256
+                        nested_file["hashes"] = nested_hashes
+                        break
     start_time = facade.time.time()
     filename = facade.get_filename_from_path(dest_path)
     partial_path = f"{dest_path}.xet-part"
@@ -374,7 +443,7 @@ def download_huggingface_xet(
 
         metadata_path = facade.write_model_resolver_metadata(
             dest_path,
-            metadata or {},
+            metadata_for_sidecar,
             category,
             validated_url,
             create_preview=True,
@@ -391,6 +460,14 @@ def download_huggingface_xet(
                         "speed": 0,
                     }
                 )
+                if expected_sha256:
+                    state.update(
+                        {
+                            "sha256": expected_sha256,
+                            "expected_sha256": expected_sha256,
+                            "sha256_source": "huggingface_api",
+                        }
+                    )
                 if metadata_path:
                     state["metadata_path"] = metadata_path
 
@@ -401,6 +478,14 @@ def download_huggingface_xet(
                 "metadata_path": metadata_path,
             }
         )
+        if expected_sha256:
+            result.update(
+                {
+                    "sha256": expected_sha256,
+                    "expected_sha256": expected_sha256,
+                    "sha256_source": "huggingface_api",
+                }
+            )
         elapsed = facade.time.time() - start_time
         avg_speed = size / elapsed if elapsed > 0 else 0
         log.info(f"✓ Hugging Face Xet download complete: {filename}")

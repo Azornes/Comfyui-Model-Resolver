@@ -20,6 +20,7 @@ from core.sources.huggingface import (
     build_huggingface_custom_result,
     clear_search_cache,
     get_huggingface_download_url,
+    get_huggingface_file_sha256,
     get_huggingface_model_details,
     get_known_author_fallback_indexes_status,
     parse_huggingface_url,
@@ -534,6 +535,31 @@ class HuggingFaceSourceTests(unittest.TestCase):
     def test_parse_huggingface_url_invalid(self):
         self.assertIsNone(parse_huggingface_url("https://example.com/not-hf"))
         self.assertIsNone(parse_huggingface_url("hf://not_enough_slashes"))
+
+    def test_get_huggingface_file_sha256_matches_repo_path(self):
+        sha256 = "a" * 64
+        repo_tree = [
+            {
+                "path": "vae/minimax_h3_audio_vae_fp32.safetensors",
+                "lfs": {"oid": f"sha256:{sha256}"},
+            }
+        ]
+        with patch(
+            "core.sources.huggingface._get_repo_tree",
+            return_value=repo_tree,
+        ) as get_repo_tree:
+            result = get_huggingface_file_sha256(
+                "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/main/"
+                "vae/minimax_h3_audio_vae_fp32.safetensors",
+                headers={"Authorization": "Bearer test"},
+            )
+
+        self.assertEqual(sha256, result)
+        get_repo_tree.assert_called_once_with(
+            "Comfy-Org/MiniMax-H3",
+            headers={"Authorization": "Bearer test"},
+            branch="main",
+        )
 
     def test_get_huggingface_download_url(self):
         repo = "runwayml/stable-diffusion-v1-5"

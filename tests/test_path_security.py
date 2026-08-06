@@ -549,6 +549,79 @@ class PathSecurityTests(unittest.TestCase):
                 ],
             )
 
+    def test_huggingface_xet_persists_provider_sha256_in_metadata(self):
+        expected_sha256 = "a" * 64
+        file_metadata = MagicMock()
+        file_metadata.size = 5
+        file_metadata.xet_file_data = SimpleNamespace(
+            file_hash="test-xet-hash",
+            refresh_route="https://huggingface.co/xet-token",
+        )
+        session = MagicMock()
+        group = MagicMock()
+        session.new_file_download_group.return_value = group
+        group.__enter__.return_value = group
+
+        def fake_start_download_file(file_info, destination_path):
+            Path(destination_path).write_bytes(b"model")
+
+        group.start_download_file.side_effect = fake_start_download_file
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            destination = os.path.join(temp_dir, "model.safetensors")
+            metadata_path = os.path.join(
+                temp_dir,
+                "model.safetensors.modelresolver.json",
+            )
+            with patch(
+                "core.download.api.context.validate_public_http_url",
+                side_effect=lambda url: url,
+            ), patch(
+                "huggingface_hub.file_download.get_hf_file_metadata",
+                return_value=file_metadata,
+            ), patch(
+                "huggingface_hub.utils._xet.get_xet_session",
+                return_value=session,
+                create=True,
+            ), patch(
+                "huggingface_hub.utils._xet.xet_headers_without_auth",
+                side_effect=lambda headers: headers,
+                create=True,
+            ), patch(
+                "hf_xet.XetSession",
+                create=True,
+            ), patch(
+                "hf_xet.XetFileInfo",
+                side_effect=lambda file_hash, file_size: SimpleNamespace(
+                    hash=file_hash,
+                    file_size=file_size,
+                ),
+                create=True,
+            ), patch(
+                "core.sources.huggingface.get_huggingface_file_sha256",
+                return_value=expected_sha256,
+            ), patch(
+                "core.download.api.context.write_model_resolver_metadata",
+                return_value=metadata_path,
+            ) as write_metadata:
+                result = downloader_module._download_huggingface_xet(
+                    "https://huggingface.co/example/model/resolve/main/model.safetensors",
+                    destination,
+                    "xet-sha256-test",
+                )
+
+            self.assertTrue(result["success"])
+            self.assertEqual(expected_sha256, result["sha256"])
+            self.assertEqual("huggingface_api", result["sha256_source"])
+            metadata_call = write_metadata.call_args.args
+            self.assertEqual(expected_sha256, metadata_call[1]["sha256"])
+            self.assertEqual(expected_sha256, metadata_call[1]["hashes"]["SHA256"])
+            progress = downloader_module.get_progress("xet-sha256-test")
+            self.assertEqual(expected_sha256, progress["sha256"])
+            self.assertEqual("huggingface_api", progress["sha256_source"])
+
+        downloader_module.download_progress.pop("xet-sha256-test", None)
+
     def test_huggingface_xet_detailed_progress_reports_speed_and_fraction(self):
         download_id = "xet-progress-test"
         total_size = 8 * 1024**3

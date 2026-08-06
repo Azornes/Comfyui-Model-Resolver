@@ -11,7 +11,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Dict, List, Optional
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 from ..log_system import create_module_logger
 from ..progress import get_progress_reporter
@@ -770,6 +770,31 @@ def _get_repo_tree(
     except Exception as e:
         log.debug(f"Error getting HuggingFace tree for {repo_id}@{branch}: {e}")
         return None
+
+
+def get_huggingface_file_sha256(
+    url: str,
+    headers: Optional[Dict[str, str]] = None,
+) -> str:
+    """Return the regular file SHA256 for a Hugging Face file URL."""
+    parsed = parse_huggingface_url(url)
+    if not parsed:
+        return ""
+
+    repo_id = str(parsed.get("repo") or "").strip()
+    branch = str(parsed.get("branch") or "main").strip() or "main"
+    target_path = _normalize_huggingface_path(
+        unquote(str(parsed.get("filename") or ""))
+    )
+    if not repo_id or not target_path:
+        return ""
+
+    repo_tree = _get_repo_tree(repo_id, headers=headers or {}, branch=branch)
+    for file_info in repo_tree or []:
+        candidate_path = _normalize_huggingface_path(file_info.get("path"))
+        if candidate_path == target_path:
+            return _extract_huggingface_file_sha256(file_info)
+    return ""
 
 
 def _find_matching_file_in_repo(
