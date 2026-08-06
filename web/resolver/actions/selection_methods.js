@@ -76,39 +76,64 @@ export const selectionMethods = {
         return (this.missingModels || []).filter(missing => selectedKeys.has(this.getMissingModelKey(missing)));
     },
 
+    _filterMissingModels(predicate, missingModels = this.missingModels || []) {
+        return missingModels.filter(predicate);
+    },
+
     getMissingWithExactLocalMatches(missingModels = this.missingModels || []) {
-        return missingModels.filter(missing => this.getBestLocalMatch(missing, 100));
+        return this._filterMissingModels(
+            missing => this.getBestLocalMatch(missing, 100),
+            missingModels,
+        );
     },
 
     getMissingWithoutExactLocalMatches(missingModels = this.missingModels || []) {
-        return missingModels.filter(missing => !this.getBestLocalMatch(missing, 100));
+        return this._filterMissingModels(
+            missing => !this.getBestLocalMatch(missing, 100),
+            missingModels,
+        );
     },
 
     getMissingWithPartialLocalMatches(missingModels = this.missingModels || []) {
-        return missingModels.filter(missing => {
+        return this._filterMissingModels(missing => {
             const bestMatch = this.getBestLocalMatch(missing, 70);
             return bestMatch && Number(bestMatch.confidence || 0) < 100;
-        });
+        }, missingModels);
     },
 
     getMissingWithoutLocalMatches(missingModels = this.missingModels || []) {
-        return missingModels.filter(missing => !this.getBestLocalMatch(missing, 70));
+        return this._filterMissingModels(
+            missing => !this.getBestLocalMatch(missing, 70),
+            missingModels,
+        );
     },
 
     getMissingWithDownloadSources(missingModels = this.missingModels || []) {
-        return missingModels.filter(missing => this.getBestDownloadSourceForMissing(missing));
+        return this._filterMissingModels(
+            missing => this.getBestDownloadSourceForMissing(missing),
+            missingModels,
+        );
     },
 
     getMissingWithoutDownloadSources(missingModels = this.missingModels || []) {
-        return missingModels.filter(missing => !this.getBestDownloadSourceForMissing(missing));
+        return this._filterMissingModels(
+            missing => !this.getBestDownloadSourceForMissing(missing),
+            missingModels,
+        );
     },
 
     getSearchedMissingModels(missingModels = this.missingModels || []) {
-        return missingModels.filter(missing => this.hasRenderableSearchState(this.getSearchState(missing)));
+        return this._filterMissingModels(
+            missing => this.hasRenderableSearchState(this.getSearchState(missing)),
+            missingModels,
+        );
     },
 
     getUnsearchedMissingModels(missingModels = this.missingModels || []) {
-        return missingModels.filter(missing => !this.hasRenderableSearchState(this.getSearchState(missing)));
+        return this._filterMissingModels(
+            missing => !this.hasRenderableSearchState(this.getSearchState(missing)),
+            missingModels,
+        );
     },
 
     selectBatchMissingModels(mode) {
