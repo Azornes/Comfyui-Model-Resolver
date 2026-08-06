@@ -7,6 +7,26 @@ export const optionsMethods = {
     escapeHtml(value) {
         return escapeHtml(value);
     },
+    buildLocalModelContext(item = {}, contextSource = '', extraFields = {}) {
+        const modelLabel = item.relative_path || item.filename || item.model_path || 'Model';
+        const modelPath = item.model_path || '';
+        if (!modelPath) return null;
+        return {
+            context_scope: 'local_model',
+            open_folder_label: 'Show File in Folder',
+            name: item.filename || modelLabel,
+            filename: item.filename || modelLabel,
+            relative_path: item.relative_path || modelLabel,
+            path: modelPath,
+            resolved_path: modelPath,
+            open_path: modelPath,
+            folder_path: item.base_directory || '',
+            category: item.category || '',
+            metadata_path: item.metadata_path || '',
+            ...extraFields,
+            context_source: contextSource
+        };
+    },
     displayOptions() {
         if (!this.contentElement) return;
         this.contentElement.style.overflowY = 'hidden';
@@ -1279,23 +1299,11 @@ export const optionsMethods = {
                     const differenceClass = difference > 0 ? 'is-positive' : (difference < 0 ? 'is-negative' : '');
                     const differenceLabel = item.difference_label || `${difference >= 0 ? '+' : '-'}${this.formatBytes(Math.abs(difference))}`;
                     const sizeField = item.size_field || 'size';
-                    const auditContext = modelPath ? {
-                        context_scope: 'local_model',
-                        open_folder_label: 'Show File in Folder',
-                        name: item.filename || modelLabel,
-                        filename: item.filename || modelLabel,
-                        relative_path: item.relative_path || modelLabel,
-                        path: modelPath,
-                        resolved_path: modelPath,
-                        open_path: modelPath,
-                        folder_path: item.base_directory || '',
-                        category: item.category || '',
-                        metadata_path: metadataPath,
+                    const auditContext = this.buildLocalModelContext(item, 'metadata_size_audit', {
                         size: item.actual_size || 0,
                         file_size: item.actual_size || 0,
-                        metadata_size: item.metadata_size || 0,
-                        context_source: 'metadata_size_audit'
-                    } : null;
+                        metadata_size: item.metadata_size || 0
+                    });
                     const contextAttrs = auditContext
                         ? this.getContextMenuAttrs(auditContext, 'Right-click for model options')
                         : '';
@@ -1891,23 +1899,11 @@ export const optionsMethods = {
                     const actionClass = actionValue.replace(/[^a-z0-9_-]+/g, '-');
                     const message = item.message || changedFieldsSummary;
                     const rowMatchesFilter = metadataBuildHistoryActionMatchesFilter(actionValue, activeHistoryFilter);
-                    const buildContext = modelPath ? {
-                        context_scope: 'local_model',
-                        open_folder_label: 'Show File in Folder',
-                        name: item.filename || modelLabel,
-                        filename: item.filename || modelLabel,
-                        relative_path: item.relative_path || modelLabel,
-                        path: modelPath,
-                        resolved_path: modelPath,
-                        open_path: modelPath,
-                        folder_path: item.base_directory || '',
-                        category: item.category || '',
-                        metadata_path: metadataPath,
+                    const buildContext = this.buildLocalModelContext(item, 'metadata_builder', {
                         size: item.size || 0,
                         file_size: item.size || 0,
-                        sha256: item.sha256 || '',
-                        context_source: 'metadata_builder'
-                    } : null;
+                        sha256: item.sha256 || ''
+                    });
                     const contextAttrs = buildContext
                         ? this.getContextMenuAttrs(buildContext, 'Right-click for model options')
                         : '';

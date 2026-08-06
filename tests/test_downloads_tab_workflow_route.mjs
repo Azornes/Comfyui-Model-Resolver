@@ -2965,6 +2965,60 @@ test('download result context menu offers subfolder suggestions only for CivitAI
   assert.match(resolverDialogSource, /textContent: "Suggest Subfolder"/);
 });
 
+test('metadata audit context menus preserve the local model context contract', () => {
+  const item = {
+    filename: 'model.safetensors',
+    relative_path: 'checkpoints/model.safetensors',
+    model_path: 'C:/models/checkpoints/model.safetensors',
+    base_directory: 'C:/models',
+    category: 'checkpoints',
+    metadata_path: 'C:/models/checkpoints/model.safetensors.modelresolver.json',
+    actual_size: 2048,
+    metadata_size: 512,
+    size: 2048,
+    sha256: 'a'.repeat(64),
+  };
+  const buildLocalModelContext = eval(
+    `(${extractMethod(optionsMethodsSource, 'buildLocalModelContext')})`
+  );
+  const auditContext = buildLocalModelContext.call(item, item, 'metadata_size_audit', {
+    size: item.actual_size,
+    file_size: item.actual_size,
+    metadata_size: item.metadata_size,
+  });
+  const buildContext = buildLocalModelContext.call(item, item, 'metadata_builder', {
+    size: item.size,
+    file_size: item.size,
+    sha256: item.sha256,
+  });
+  assert.equal(buildLocalModelContext({ filename: 'missing.safetensors' }, 'metadata_builder'), null);
+
+  const sharedFields = [
+    'context_scope',
+    'open_folder_label',
+    'name',
+    'filename',
+    'relative_path',
+    'path',
+    'resolved_path',
+    'open_path',
+    'folder_path',
+    'category',
+    'metadata_path',
+  ];
+  for (const field of sharedFields) {
+    assert.equal(auditContext[field], buildContext[field], field);
+  }
+  assert.equal(auditContext.context_source, 'metadata_size_audit');
+  assert.equal(buildContext.context_source, 'metadata_builder');
+  assert.equal(auditContext.size, item.actual_size);
+  assert.equal(auditContext.file_size, item.actual_size);
+  assert.equal(auditContext.metadata_size, item.metadata_size);
+  assert.equal(buildContext.size, item.size);
+  assert.equal(buildContext.file_size, item.size);
+  assert.equal(buildContext.sha256, item.sha256);
+});
+
 test('download result context menu reuses the existing forced subfolder suggestion', async () => {
   const getContextMenuDownloadMissing = eval(`(${extractMethod(downloadTargetMethodsSource, 'getContextMenuDownloadMissing')})`);
   const suggestDownloadSubfolderFromContextMenu = eval(`(${extractMethod(downloadTargetMethodsSource, 'suggestDownloadSubfolderFromContextMenu')})`);
