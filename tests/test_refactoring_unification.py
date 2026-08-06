@@ -189,6 +189,35 @@ class TestRefactoringUnification(unittest.TestCase):
         )
         mock_reload_databases.assert_called_once()
 
+    @patch("core.sources.popular.request_source_json")
+    @patch("core.sources.popular._read_base_models_file")
+    @patch("core.sources.popular._read_base_models_meta")
+    def test_base_model_remote_payload_keeps_status_tolerant_and_update_strict(
+        self,
+        mock_read_meta,
+        mock_read_file,
+        mock_request_source_json,
+    ):
+        from core.sources.popular import (
+            get_base_models_status,
+            update_base_models_from_remote,
+        )
+
+        mock_read_file.return_value = {"base_models": []}
+        mock_read_meta.return_value = {}
+        mock_request_source_json.return_value = {"unexpected": []}
+
+        status = get_base_models_status(check_remote=True)
+
+        self.assertFalse(status["update_available"])
+        self.assertTrue(status["remote_checked_at"])
+        with self.assertRaisesRegex(ValueError, "valid BaseModel list"):
+            update_base_models_from_remote()
+
+        self.assertEqual(mock_request_source_json.call_count, 2)
+        self.assertNotIn("raise_on_error", mock_request_source_json.call_args_list[0].kwargs)
+        self.assertTrue(mock_request_source_json.call_args_list[1].kwargs["raise_on_error"])
+
     @patch("core.sources.popular.base_models_mgr")
     @patch("requests.get")
     def test_update_base_models_from_remote_success(self, mock_get, mock_base_models_mgr):
@@ -436,4 +465,3 @@ class TestRefactoringUnification(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

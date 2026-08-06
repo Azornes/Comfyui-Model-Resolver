@@ -267,6 +267,20 @@ def _collect_normalized_base_model_tokens(base_models: List[Dict[str, Any]]) -> 
     return normalized_tokens
 
 
+def _fetch_civitai_enums(*, raise_on_error: bool = False):
+    """Fetch CivitAI enum data using the shared source request configuration."""
+    request_kwargs = {
+        "timeout": 15,
+        "log_name": "CivitAI Enums",
+    }
+    if raise_on_error:
+        request_kwargs["raise_on_error"] = True
+    return request_source_json(
+        "https://civitai.com/api/v1/enums",
+        **request_kwargs,
+    )
+
+
 def get_base_models_status(check_remote: bool = False) -> Dict[str, Any]:
     """Return local base-models metadata and optionally compare with CivitAI."""
     local_data = _read_base_models_file()
@@ -286,7 +300,7 @@ def get_base_models_status(check_remote: bool = False) -> Dict[str, Any]:
     if check_remote:
         try:
             # Fetch from CivitAI API using unified helper
-            enums = request_source_json("https://civitai.com/api/v1/enums", timeout=15, log_name="CivitAI Enums")
+            enums = _fetch_civitai_enums()
             if enums:
                 remote_models = enums.get("BaseModel", [])
 
@@ -313,7 +327,7 @@ def get_base_models_status(check_remote: bool = False) -> Dict[str, Any]:
 
 def update_base_models_from_remote() -> Dict[str, Any]:
     """Fetch live BaseModel enums from CivitAI and merge into base-models.json."""
-    enums = request_source_json("https://civitai.com/api/v1/enums", timeout=15, log_name="CivitAI Enums", raise_on_error=True)
+    enums = _fetch_civitai_enums(raise_on_error=True)
     if not enums:
         raise ValueError("CivitAI enums did not return a valid response")
     remote_names = enums.get("BaseModel", [])
