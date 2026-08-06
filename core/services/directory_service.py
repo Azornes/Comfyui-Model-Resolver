@@ -23,6 +23,7 @@ class DirectoryService:
             "get_enabled_download_categories"
         )
         self.get_local_path_identity = context.require("get_local_path_identity")
+        self.is_path_within = context.require("is_path_within")
         self.is_civarchive_available = context.require("is_civarchive_available")
         self.is_lora_manager_archive_available = context.require(
             "is_lora_manager_archive_available"
@@ -232,19 +233,9 @@ class DirectoryService:
         def find_base_dir(full_path):
             if not full_path:
                 return ""
-            full_path_identity = self.get_local_path_identity(full_path)
             for base_dir in base_dirs:
-                base_identity = self.get_local_path_identity(base_dir)
-                try:
-                    if (
-                        os.path.commonpath(
-                            [full_path_identity, base_identity]
-                        )
-                        == base_identity
-                    ):
-                        return base_dir
-                except Exception:
-                    continue
+                if self.is_path_within(full_path, base_dir):
+                    return base_dir
             return ""
 
         for folder_key in available_folder_keys:

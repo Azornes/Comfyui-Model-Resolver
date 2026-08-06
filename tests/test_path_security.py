@@ -36,6 +36,7 @@ from core.path_utils import (
     get_safe_metadata_sidecar_path,
     get_safe_model_resolver_sidecar_path,
     is_path_in_configured_model_roots,
+    is_path_within,
 )
 
 
@@ -51,6 +52,17 @@ class DummyFolderPaths:
 
 
 class PathSecurityTests(unittest.TestCase):
+    def test_is_path_within_rejects_sibling_directory_with_shared_prefix(self):
+        with tempfile.TemporaryDirectory() as temp_root:
+            model_root = os.path.join(temp_root, "models")
+            sibling_root = os.path.join(temp_root, "models2")
+            os.makedirs(model_root)
+            os.makedirs(sibling_root)
+
+            self.assertTrue(is_path_within(model_root, model_root))
+            self.assertTrue(is_path_within(os.path.join(model_root, "model.safetensors"), model_root))
+            self.assertFalse(is_path_within(os.path.join(sibling_root, "model.safetensors"), model_root))
+
     def test_external_model_root_is_allowed(self):
         with tempfile.TemporaryDirectory() as model_root:
             model_path = os.path.join(model_root, "model.safetensors")

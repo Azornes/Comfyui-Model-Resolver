@@ -73,6 +73,7 @@ def register_routes(self):
                 get_comfy_root_path,
                 get_filename_from_path,
                 is_path_in_configured_model_roots,
+                is_path_within,
                 prefer_local_base_directory,
                 read_json_safe,
                 split_path_segments,

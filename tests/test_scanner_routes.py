@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from aiohttp import web
 
+from core.path_utils import is_path_within
 from core.routes.context import RouteContext
 from core.routes.directories import register_directory_routes
 from core.routes.metadata import register_metadata_routes
@@ -81,6 +82,7 @@ def _build_directory_routes():
             side_effect=lambda categories: categories
         ),
         "get_local_path_identity": MagicMock(),
+        "is_path_within": is_path_within,
         "get_model_files": MagicMock(
             return_value=[{"filename": "model.safetensors"}]
         ),

@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from aiohttp import web
 
+from core.path_utils import is_path_within
 from core.routes.context import RouteContext
 from core.routes.directories import register_directory_routes
 from core.type_utils import to_bool
@@ -57,6 +58,7 @@ def _build_routes(**overrides):
         "get_local_path_identity": lambda path: os.path.normcase(
             os.path.abspath(path)
         ),
+        "is_path_within": is_path_within,
         "get_model_files": MagicMock(return_value=[]),
         "infer_download_path_templates": MagicMock(return_value=[]),
         "invalidate_local_hash_match_cache": MagicMock(),
