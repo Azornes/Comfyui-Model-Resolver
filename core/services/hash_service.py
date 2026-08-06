@@ -78,6 +78,10 @@ class HashService:
             path_module=self.os.path,
         )
 
+    def _normalize_model_path(self, path):
+        normalized_path = self._normalize_path(path)
+        return normalized_path, self.is_path_in_configured_model_roots(normalized_path)
+
     async def local_model_hashes(self, request):
         """Return SHA256 hashes already stored in local sidecar metadata."""
         data = await request.json()
@@ -96,8 +100,8 @@ class HashService:
                 {"error": "path is required"}, status=400
             )
 
-        normalized_path = self._normalize_path(path)
-        if not self.is_path_in_configured_model_roots(normalized_path):
+        normalized_path, is_configured_model_path = self._normalize_model_path(path)
+        if not is_configured_model_path:
             return self.web.json_response(
                 {"error": "path is outside configured model directories"},
                 status=403,
@@ -115,14 +119,16 @@ class HashService:
             return self.web.Response(text="path is required", status=400)
 
         try:
-            normalized_path = self._normalize_path(model_path)
+            normalized_path, is_configured_model_path = self._normalize_model_path(
+                model_path
+            )
         except (OSError, TypeError, ValueError):
             return self.web.Response(text="invalid model path", status=400)
         if not self.os.path.isfile(normalized_path):
             if is_preview_probe:
                 return self.web.Response(status=204)
             return self.web.Response(text="model file does not exist", status=404)
-        if not self.is_path_in_configured_model_roots(normalized_path):
+        if not is_configured_model_path:
             return self.web.Response(
                 text="path is outside configured model directories",
                 status=403,
@@ -133,7 +139,8 @@ class HashService:
             if is_preview_probe:
                 return self.web.Response(status=204)
             return self.web.Response(text="preview not found", status=404)
-        if not self.is_path_in_configured_model_roots(preview_path):
+        _, is_configured_preview_path = self._normalize_model_path(preview_path)
+        if not is_configured_preview_path:
             return self.web.Response(
                 text="preview is outside configured model directories",
                 status=403,
@@ -370,13 +377,13 @@ class HashService:
         if not file_path:
             return "", "file_path is required"
 
-        normalized_path = self._normalize_path(file_path)
+        normalized_path, is_configured_model_path = self._normalize_model_path(file_path)
         if (
             not self.os.path.exists(normalized_path)
             or not self.os.path.isfile(normalized_path)
         ):
             return "", "file does not exist"
-        if not self.is_path_in_configured_model_roots(normalized_path):
+        if not is_configured_model_path:
             return "", "file is outside configured model directories"
         return normalized_path, ""
 
