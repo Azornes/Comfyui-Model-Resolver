@@ -893,6 +893,21 @@ def normalize_sha256(value: Any) -> str:
     return text.lower() if SHA256_PATTERN.match(text) else ""
 
 
+def extract_file_sha256(file_info: Any) -> Any:
+    """Extract a provider file's SHA256 value using the common field precedence."""
+    if not isinstance(file_info, dict):
+        return ""
+
+    hashes = file_info.get("hashes") if isinstance(file_info.get("hashes"), dict) else {}
+    return (
+        file_info.get("sha256")
+        or file_info.get("hash")
+        or hashes.get("SHA256")
+        or hashes.get("sha256")
+        or ""
+    )
+
+
 def normalize_hashes_dict(hashes: Optional[Dict[str, Any]]) -> Dict[str, str]:
     """Normalize common model hash keys and values into a stable mapping."""
     if not isinstance(hashes, dict):

@@ -10,6 +10,7 @@ from core.type_utils import (
     normalize_sha256,
     unique_ordered_strings,
     extract_sha256_from_metadata,
+    extract_file_sha256,
     extract_trained_words,
     fetch_remote_file_size_cached,
     clear_remote_size_cache,
@@ -29,6 +30,33 @@ from core.path_utils import (
 )
 
 class UnifiedHelpersTests(unittest.TestCase):
+
+    def test_extract_file_sha256_preserves_provider_precedence(self):
+        self.assertEqual(
+            "direct",
+            extract_file_sha256({
+                "sha256": "direct",
+                "hash": "legacy",
+                "hashes": {"SHA256": "uppercase", "sha256": "lowercase"},
+            }),
+        )
+        self.assertEqual(
+            "legacy",
+            extract_file_sha256({
+                "hash": "legacy",
+                "hashes": {"SHA256": "uppercase", "sha256": "lowercase"},
+            }),
+        )
+        self.assertEqual(
+            "uppercase",
+            extract_file_sha256({"hashes": {"SHA256": "uppercase", "sha256": "lowercase"}}),
+        )
+        self.assertEqual("lowercase", extract_file_sha256({"hashes": {"sha256": "lowercase"}}))
+
+    def test_extract_file_sha256_handles_missing_or_invalid_shapes(self):
+        self.assertEqual("", extract_file_sha256(None))
+        self.assertEqual("", extract_file_sha256({"hashes": []}))
+        self.assertEqual("fallback", extract_file_sha256({"sha256": "", "hash": "fallback"}))
 
     def test_looks_like_model_file_huggingface(self):
         # Valid HuggingFace URLs

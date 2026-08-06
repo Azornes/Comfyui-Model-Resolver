@@ -33,6 +33,7 @@ from ..type_utils import (
     DEFAULT_BROWSER_USER_AGENT,
     build_model_result,
     clear_remote_size_cache,
+    extract_file_sha256,
     extract_file_size,
     extract_trained_words,
     fetch_remote_file_size_cached,
@@ -690,13 +691,7 @@ def _mirror_from_top_file(file_data: Dict[str, Any]) -> Optional[Dict[str, Any]]
     if not url:
         return None
 
-    hashes = file_data.get("hashes") if isinstance(file_data.get("hashes"), dict) else {}
-    sha256 = (
-        file_data.get("sha256")
-        or file_data.get("hash")
-        or hashes.get("SHA256")
-        or hashes.get("sha256")
-    )
+    sha256 = extract_file_sha256(file_data)
 
     return {
         "filename": file_data.get("filename") or file_data.get("name"),
@@ -1360,12 +1355,7 @@ def _build_result_from_model_details(
         return None
 
     hashes = selected_file.get("hashes") if isinstance(selected_file.get("hashes"), dict) else {}
-    sha256 = (
-        selected_file.get("sha256")
-        or selected_file.get("hash")
-        or hashes.get("SHA256")
-        or hashes.get("sha256")
-    )
+    sha256 = extract_file_sha256(selected_file)
     result["confidence"] = best_confidence
     result["sha256"] = sha256
     result["hash"] = sha256
@@ -1458,13 +1448,7 @@ def _select_model_details_file(
         ):
             continue
 
-        hashes = file_info.get("hashes") if isinstance(file_info.get("hashes"), dict) else {}
-        file_hash = (
-            file_info.get("sha256")
-            or file_info.get("hash")
-            or hashes.get("SHA256")
-            or hashes.get("sha256")
-        )
+        file_hash = extract_file_sha256(file_info)
         if normalized_hash and str(file_hash or "").lower() == normalized_hash:
             return file_info
 
@@ -1630,12 +1614,7 @@ def _build_result_from_payload(
     filename = selected_file.get("name") or preferred_filename or query
     match_type = "exact" if best_confidence == 100.0 else "similar"
     hashes = selected_file.get("hashes") if isinstance(selected_file.get("hashes"), dict) else {}
-    sha256 = (
-        selected_file.get("sha256")
-        or selected_file.get("hash")
-        or hashes.get("SHA256")
-        or hashes.get("sha256")
-    )
+    sha256 = extract_file_sha256(selected_file)
 
     tags = context.get("tags") or []
     if not isinstance(tags, list):
@@ -2362,12 +2341,7 @@ def build_civarchive_custom_result(
         if isinstance(file_info.get("hashes"), dict)
         else {}
     )
-    sha256 = (
-        file_info.get("sha256")
-        or file_info.get("hash")
-        or hashes.get("SHA256")
-        or hashes.get("sha256")
-    )
+    sha256 = extract_file_sha256(file_info)
     version_id = details.get("version_id") or selected_version.get("id")
     model_id = details.get("model_id")
     version_url = (

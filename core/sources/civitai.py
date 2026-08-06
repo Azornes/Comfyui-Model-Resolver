@@ -43,6 +43,7 @@ from ..type_utils import (
     as_list,
     build_model_result,
     check_credential_http,
+    extract_file_sha256,
     extract_file_size,
     extract_trained_words,
     first_non_empty,
@@ -2367,12 +2368,7 @@ def build_civitai_custom_result(
         if isinstance(file_info.get("hashes"), dict)
         else {}
     )
-    sha256 = (
-        file_info.get("sha256")
-        or file_info.get("hash")
-        or hashes.get("SHA256")
-        or hashes.get("sha256")
-    )
+    sha256 = extract_file_sha256(file_info)
     version_url = (
         details.get("version_url")
         or selected_version.get("url")
