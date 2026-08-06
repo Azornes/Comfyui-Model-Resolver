@@ -1248,6 +1248,26 @@ export const downloadTargetMethods = {
         };
     },
 
+    prepareSearchResultRow(missing = {}, row = {}, metadataSource = null, pathMetadataSource = null) {
+        if (!row || typeof row !== 'object') return row;
+
+        const source = metadataSource || row.detailsContext || row;
+        const pathSource = pathMetadataSource || source;
+        if (!row.pathMetadata) {
+            row.pathMetadata = this.getDownloadPathMetadata(missing, pathSource);
+        }
+        if (!row.downloadMetadata) {
+            row.downloadMetadata = this.getDownloadMetadata(missing, source, {
+                filename: row.downloadFilename || row.filename || '',
+                category: row.category || missing.category || '',
+                url: row.downloadUrl || '',
+                openUrl: row.openUrl || '',
+                pathMetadata: row.pathMetadata
+            });
+        }
+        return row;
+    },
+
     getDownloadPathMetadata(missing = {}, source = {}) {
         const { merged } = this.getDownloadSourceContext(missing, source, {
             respectProvenanceBoundary: false

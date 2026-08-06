@@ -4840,7 +4840,10 @@ test('manual URL table row preserves the explicit provenance boundary', () => {
 test('source table rows preserve context-specific source labels', () => {
   const getDownloadSourceTableRow = eval(`(${extractMethod(searchPanelMethodsSource, 'getDownloadSourceTableRow')})`);
   const getCustomUrlResultTableRow = eval(`(${extractMethod(searchPanelMethodsSource, 'getCustomUrlResultTableRow')})`);
+  const prepareSearchResultRow = eval(`(${extractMethod(downloadTargetMethodsSource, 'prepareSearchResultRow')})`);
+  const metadataCalls = { path: [], download: [] };
   const dialog = {
+    prepareSearchResultRow,
     getFilenameFromPath(value = '') {
       return String(value).split(/[\\/]/).at(-1) || '';
     },
@@ -4856,11 +4859,13 @@ test('source table rows preserve context-specific source labels', () => {
     getVersionedModelName(name, version) {
       return version ? `${name} ${version}` : name;
     },
-    getDownloadPathMetadata() {
-      return {};
+    getDownloadPathMetadata(_missing, source) {
+      metadataCalls.path.push(source);
+      return { type: 'path' };
     },
-    getDownloadMetadata() {
-      return {};
+    getDownloadMetadata(_missing, source, options) {
+      metadataCalls.download.push({ source, options });
+      return { type: 'download' };
     },
     getLocalHashMatchIdentitiesForResult() {
       return [];
@@ -4904,6 +4909,13 @@ test('source table rows preserve context-specific source labels', () => {
   assert.equal(providerRow.sourceLabel, 'CivitAI');
   assert.equal(workflowRow.sourceLabel, 'Workflow URL');
   assert.equal(customRow.sourceLabel, 'Custom URL');
+  assert.deepEqual(providerRow.pathMetadata, { type: 'path' });
+  assert.deepEqual(providerRow.downloadMetadata, { type: 'download' });
+  assert.equal(metadataCalls.path[0].filename, 'model.safetensors');
+  assert.equal(metadataCalls.path[0].model, 'model.safetensors');
+  assert.equal(metadataCalls.download[0].source.filename, 'model.safetensors');
+  assert.equal(metadataCalls.download[0].options.filename, 'model.safetensors');
+  assert.equal(metadataCalls.download[0].options.url, 'https://example.test/download');
 });
 
 test('search suggestion does not let a delayed incompatible result replace workflow path context', () => {
@@ -7181,6 +7193,7 @@ test('search result refreshes preserve keyed progress and result DOM', () => {
 test('search provider rows preserve a shared result row contract', () => {
   const displaySearchResults = eval(`(${extractMethod(resolveDownloadMethodsSource, 'displaySearchResults')})`);
   const buildSearchResultRow = eval(`(${extractMethod(searchPanelMethodsSource, 'buildSearchResultRow')})`);
+  const prepareSearchResultRow = eval(`(${extractMethod(downloadTargetMethodsSource, 'prepareSearchResultRow')})`);
   const previousGlobals = {
     getModelCardUrl: globalThis.getModelCardUrl,
     getCivitaiModelUrl: globalThis.getCivitaiModelUrl,
@@ -7189,6 +7202,7 @@ test('search provider rows preserve a shared result row contract', () => {
   const rows = [];
   const dialog = {
     buildSearchResultRow,
+    prepareSearchResultRow,
     getHashMatchLabelMap() {
       return null;
     },

@@ -1696,13 +1696,6 @@ export const searchPanelMethods = {
             fullModelName && fullModelName !== downloadFilename ? downloadFilename : '',
             baseModel
         ].filter(Boolean);
-        const rowPathMetadata = this.getDownloadPathMetadata(missing, {
-            ...downloadSource,
-            filename: downloadFilename,
-            model: modelName,
-            version: modelParts.version,
-            category: rowCategory
-        });
         const rowDetailsContext = ['civitai', 'civarchive', 'huggingface'].includes(normalizedSource)
             ? {
                 ...downloadSource,
@@ -1723,6 +1716,14 @@ export const searchPanelMethods = {
                 category: rowCategory
             }
             : null;
+        const rowPathMetadataSource = {
+            ...downloadSource,
+            filename: downloadFilename,
+            model: modelName,
+            version: modelParts.version,
+            category: rowCategory
+        };
+        const rowMetadataSource = rowDetailsContext || rowPathMetadataSource;
         const localHashMatches = Array.isArray(missing.matches)
             ? missing.matches.filter(match => match?.hash_lookup_source)
             : [];
@@ -1738,7 +1739,7 @@ export const searchPanelMethods = {
             localHashMatchIdentities
         ) || '';
 
-        return {
+        const row = {
             sourceKey,
             sourceLabel,
             model: modelName,
@@ -1752,25 +1753,12 @@ export const searchPanelMethods = {
             openUrl: modelUrl,
             searchedAt: this.getSearchResultTimestamp(downloadSource),
             localHashMatchIdentities,
-            pathMetadata: rowPathMetadata,
-            downloadMetadata: this.getDownloadMetadata(missing, rowDetailsContext || {
-                ...downloadSource,
-                filename: downloadFilename,
-                model: modelName,
-                version: modelParts.version,
-                category: rowCategory
-            }, {
-                filename: downloadFilename,
-                category: rowCategory,
-                url: downloadSource.url,
-                openUrl: modelUrl,
-                pathMetadata: rowPathMetadata
-            }),
             detailsContext: rowDetailsContext,
             match: isFromWorkflow
                 ? { label: 'Provided', className: 'strong' }
                 : this.getSearchResultMatchDisplay(downloadSource, 'Known', 'strong', hashMatchLabel)
         };
+        return this.prepareSearchResultRow(missing, row, rowMetadataSource, rowPathMetadataSource);
     },
 
     getCustomUrlResultTableRow(missing, result = {}, hashLabelMap = null, localHashMatches = []) {

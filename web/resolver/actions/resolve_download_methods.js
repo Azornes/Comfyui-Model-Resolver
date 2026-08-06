@@ -3703,18 +3703,7 @@ export const resolveDownloadMethods = {
         const rowKeys = new Set();
         const addRow = (row) => {
             if (!row) return;
-            if (!row.pathMetadata) {
-                row.pathMetadata = this.getDownloadPathMetadata(missing, row.detailsContext || row);
-            }
-            if (!row.downloadMetadata) {
-                row.downloadMetadata = this.getDownloadMetadata(missing, row.detailsContext || row, {
-                    filename: row.downloadFilename || row.filename || '',
-                    category: row.category || missing.category || '',
-                    url: row.downloadUrl || '',
-                    openUrl: row.openUrl || '',
-                    pathMetadata: row.pathMetadata
-                });
-            }
+            row = this.prepareSearchResultRow(missing, row);
             const rowKey = `${row.sourceKey}:${row.downloadUrl || row.openUrl || `${row.model}:${row.filename}`}`;
             if (rowKeys.has(rowKey)) return;
             rowKeys.add(rowKey);
