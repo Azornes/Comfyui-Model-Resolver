@@ -6,6 +6,7 @@ import { normalizeSha256 } from "../utils/hash_utils.js";
 import { normalizePathIdentity } from "../utils/html_utils.js";
 import { bindEventOnce, syncElementAttributes } from "../utils/dom_patch_utils.js";
 import { bindDownloadActionHandlers } from "../utils/download_action_handlers.js";
+import { matchesSearchText } from "../utils/search_utils.js";
 import { normalizeSourceKey } from "../utils/source_labels.js";
 const log = createModuleLogger('resolve_download_methods');
 
@@ -3359,7 +3360,6 @@ export const resolveDownloadMethods = {
 
             const renderBaseOptions = (filterText = '') => {
                 const filter = String(filterText || '').trim().toLowerCase();
-                const normalizedFilter = this.normalizeBaseModelToken?.(filter) || filter.replace(/[^a-z0-9]+/g, '');
                 const options = this.getKnownBaseModelOptions()
                     .map(option => {
                         const label = option.value === 'auto'
@@ -3367,14 +3367,7 @@ export const resolveDownloadMethods = {
                             : option.label;
                         return { ...option, label };
                     })
-                    .filter(option => {
-                        if (!filter) return true;
-                        const searchText = `${option.value} ${option.label}`.toLowerCase();
-                        const normalizedSearchText = this.normalizeBaseModelToken?.(searchText)
-                            || searchText.replace(/[^a-z0-9]+/g, '');
-                        return searchText.includes(filter)
-                            || (normalizedFilter && normalizedSearchText.includes(normalizedFilter));
-                    });
+                    .filter(option => matchesSearchText(`${option.value} ${option.label}`, filter));
                 baseList.innerHTML = options
                     .map(option => {
                         const label = option.label;

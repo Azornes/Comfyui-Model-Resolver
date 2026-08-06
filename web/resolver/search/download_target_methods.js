@@ -4,6 +4,7 @@ import { createFloatingTreePicker } from "../utils/tree_picker.js";
 import { normalizeDownloadCategoryValue } from "../utils/category_utils.js";
 import { safeStorage } from "../utils/html_utils.js";
 import { getSha256Field } from "../utils/hash_utils.js";
+import { matchesSearchText } from "../utils/search_utils.js";
 const localStorage = safeStorage;
 const invalidWindowsPathCharacters = new RegExp(
     `[<>:"|?*${Array.from({ length: 32 }, (_, code) => String.fromCharCode(code)).join('')}]+`,
@@ -2856,19 +2857,12 @@ export const downloadTargetMethods = {
         const populateCategoryOptions = (filterText = '') => {
             if (!categoryListEl) return;
             const filter = String(filterText || '').trim().toLowerCase();
-            const normalizedFilter = filter.replace(/[^a-z0-9]+/g, '');
             const options = this.getDownloadCategoryOptions(this.getDropdownValue(categoryEl) || 'checkpoints')
                 .map(category => ({
                     value: category,
                     label: this.getCategoryDisplayName(category)
                 }))
-                .filter(option => {
-                    if (!filter) return true;
-                    const searchText = `${option.value} ${option.label}`.toLowerCase();
-                    const normalizedSearchText = searchText.replace(/[^a-z0-9]+/g, '');
-                    return searchText.includes(filter)
-                        || (normalizedFilter && normalizedSearchText.includes(normalizedFilter));
-                });
+                .filter(option => matchesSearchText(`${option.value} ${option.label}`, filter));
             renderOptions(categoryListEl, options, (value, label) => {
                 this.setDropdownValue(categoryEl, value, label);
                 subfolderEl.value = '';

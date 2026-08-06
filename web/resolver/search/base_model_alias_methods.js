@@ -1,3 +1,5 @@
+import { normalizeSearchToken } from '../utils/search_utils.js';
+
 export const baseModelAliasMethods = {
     getBaseModelAliases() {
         const baseModelsList = this.baseModels?.base_models;
@@ -22,9 +24,7 @@ export const baseModelAliasMethods = {
     },
 
     normalizeBaseModelToken(value = '') {
-        return String(value || '')
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '');
+        return normalizeSearchToken(value);
     },
 
     getBaseModelTokenVariants(value = '') {
