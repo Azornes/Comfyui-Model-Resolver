@@ -3,12 +3,7 @@
 import os
 from typing import Any, List, Optional
 
-
-def _require_dependencies(dependencies: Any) -> Any:
-    """Return explicitly supplied services for directory resolution."""
-    if dependencies is None:
-        raise RuntimeError("download directory dependencies were not provided")
-    return dependencies
+from .dependencies import require_download_dependencies
 
 
 def get_download_directory(
@@ -18,7 +13,7 @@ def get_download_directory(
     dependencies: Any = None,
 ) -> Optional[str]:
     """Get the appropriate download directory for a model category."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "download directory")
     folder_paths = facade.folder_paths
 
     if folder_paths is None:

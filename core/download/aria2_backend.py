@@ -4,6 +4,7 @@ import socket
 from typing import Any, Dict, Optional
 
 from ..log_system import create_module_logger
+from .dependencies import require_download_dependencies
 from .state import create_initial_progress
 
 log = create_module_logger("core.downloader")
@@ -13,16 +14,9 @@ class Aria2Error(RuntimeError):
     """Raised when the aria2 backend cannot start or process a request."""
 
 
-def _require_dependencies(dependencies: Any) -> Any:
-    """Return explicitly supplied services for the aria2 backend."""
-    if dependencies is None:
-        raise RuntimeError("aria2 backend dependencies were not provided")
-    return dependencies
-
-
 def try_certifi_ca_path(*, dependencies: Any = None) -> str:
     """Return certifi's CA bundle path when it is available."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "aria2 backend")
     try:
         import certifi  # type: ignore
 
@@ -38,7 +32,7 @@ def resolve_aria2c_executable(
     dependencies: Any = None,
 ) -> str:
     """Resolve aria2c while restricting explicit paths to the managed install."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "aria2 backend")
     active_settings = (
         settings if isinstance(settings, dict) else facade.load_settings()
     )
@@ -121,7 +115,7 @@ def delete_partial_download_files(
     dependencies: Any = None,
 ) -> None:
     """Delete an incomplete model and its aria2 control sidecar."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "aria2 backend")
     for path in (dest_path, f"{dest_path}.aria2"):
         try:
             if path and facade.os.path.exists(path):
@@ -136,7 +130,7 @@ def delete_python_partial_download_file(
     dependencies: Any = None,
 ) -> None:
     """Remove a partial Python download without touching the final model path."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "aria2 backend")
     try:
         if partial_path and facade.os.path.exists(partial_path):
             facade.os.remove(partial_path)
@@ -153,7 +147,7 @@ def delete_xet_partial_file(
     dependencies: Any = None,
 ) -> bool:
     """Delete a stopped Xet partial file, retrying while Windows releases it."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "aria2 backend")
     attempts = max(1, int(attempts or 1))
     last_error: Optional[Exception] = None
     for attempt in range(attempts):
@@ -188,7 +182,7 @@ def resolve_download_url_for_aria2(
     dependencies: Any = None,
 ) -> tuple[str, Dict[str, str]]:
     """Preflight an aria2 URL and validate every redirect before RPC handoff."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "aria2 backend")
     request_headers = facade.build_download_headers(url, headers)
     source_host = facade.urlparse(str(url or "")).hostname
     is_huggingface_source = facade.host_matches_domain(
@@ -221,7 +215,7 @@ def resolve_download_url_for_aria2(
 
 def read_aria2_version(executable: str, *, dependencies: Any = None) -> str:
     """Read the installed aria2 version without raising process errors."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "aria2 backend")
     if not executable:
         return ""
     try:
@@ -265,7 +259,7 @@ def get_aria2_status(
     dependencies: Any = None,
 ) -> Dict[str, Any]:
     """Return aria2 availability, daemon and active-transfer information."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "aria2 backend")
     active_settings = (
         settings if isinstance(settings, dict) else facade.load_settings()
     )
@@ -317,7 +311,7 @@ def aria2_rpc(
     dependencies: Any = None,
 ) -> Any:
     """Call the local aria2 JSON-RPC endpoint."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "aria2 backend")
     if not facade.aria2_rpc_url:
         raise Aria2Error("aria2 RPC endpoint is not initialized")
 
@@ -356,7 +350,7 @@ def aria2_rpc(
 
 def aria2_ping(*, dependencies: Any = None) -> bool:
     """Check whether the local aria2 RPC endpoint responds."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "aria2 backend")
     try:
         result = facade._aria2_rpc(
             "aria2.getVersion",
@@ -369,7 +363,7 @@ def aria2_ping(*, dependencies: Any = None) -> bool:
 
 def cancel_aria2_idle_timer_locked(*, dependencies: Any = None) -> None:
     """Cancel the pending idle timer while holding the aria2 lock."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "aria2 backend")
     if facade.aria2_idle_timer is not None:
         facade.aria2_idle_timer.cancel()
         facade.aria2_idle_timer = None
@@ -377,7 +371,7 @@ def cancel_aria2_idle_timer_locked(*, dependencies: Any = None) -> None:
 
 def aria2_has_active_transfers_locked(*, dependencies: Any = None) -> bool:
     """Return whether aria2 has active resolver-owned transfers."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "aria2 backend")
     return bool(facade.aria2_transfers)
 
 
@@ -387,7 +381,7 @@ def stop_aria2_daemon(
     dependencies: Any = None,
 ) -> Dict[str, Any]:
     """Stop the aria2 RPC process started by Model Resolver."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "aria2 backend")
     with facade.aria2_lock:
         facade._cancel_aria2_idle_timer_locked()
         process = facade.aria2_process
@@ -442,7 +436,7 @@ def start_aria2_daemon(
     dependencies: Any = None,
 ) -> Dict[str, Any]:
     """Start the aria2 RPC process without creating a download."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "aria2 backend")
     active_settings = (
         settings if isinstance(settings, dict) else facade.load_settings()
     )
@@ -476,7 +470,7 @@ def start_aria2_daemon(
 
 def aria2_idle_stop_worker(*, dependencies: Any = None) -> None:
     """Stop a resolver-owned daemon after its idle timeout."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "aria2 backend")
     with facade.aria2_lock:
         facade.aria2_idle_timer = None
 
@@ -497,7 +491,7 @@ def aria2_idle_stop_worker(*, dependencies: Any = None) -> None:
 
 def schedule_aria2_idle_stop(*, dependencies: Any = None) -> None:
     """Schedule daemon shutdown when no resolver transfer remains active."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "aria2 backend")
     settings = facade.load_settings()
     if not settings.get("aria2_auto_stop_daemon", True):
         return
@@ -525,7 +519,7 @@ def ensure_aria2_daemon(
     dependencies: Any = None,
 ) -> None:
     """Start or reuse the resolver-owned aria2 daemon."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "aria2 backend")
     active_settings = (
         settings if isinstance(settings, dict) else facade.load_settings()
     )
@@ -624,7 +618,7 @@ def recover_aria2_missing_control_file(
     dependencies: Any = None,
 ) -> bool:
     """Restart a stale resolver daemon when a download loses its control file."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "aria2 backend")
     with facade.aria2_lock:
         other_transfers = [
             active_id
@@ -670,7 +664,7 @@ def recover_aria2_missing_control_file(
 
 def aria2_tell_status(gid: str, *, dependencies: Any = None) -> Dict[str, Any]:
     """Read an aria2 transfer status with retries for transient resets."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "aria2 backend")
     keys = [
         "gid",
         "status",
@@ -711,7 +705,7 @@ def download_file_with_aria2(
     dependencies: Any = None,
 ) -> Dict[str, Any]:
     """Download a file with an aria2c JSON-RPC process."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "aria2 backend")
     settings = facade.load_settings()
     result = {
         "success": False,
@@ -1025,7 +1019,7 @@ def force_remove_aria2_transfer(
     dependencies: Any = None,
 ) -> None:
     """Request removal of an active aria2 transfer."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "aria2 backend")
     try:
         facade._aria2_rpc(
             "aria2.forceRemove",
@@ -1041,7 +1035,7 @@ def get_aria2_action_lock(
     dependencies: Any = None,
 ) -> Any:
     """Return the per-download lock used to serialize aria2 actions."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "aria2 backend")
     with facade.aria2_lock:
         lock = facade.aria2_action_locks.get(download_id)
         if lock is None:
@@ -1058,7 +1052,7 @@ def set_download_progress_status(
     **updates: Any,
 ) -> None:
     """Update a download status while holding the progress lock."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "aria2 backend")
     with facade.download_lock:
         if download_id in facade.download_progress:
             facade.download_progress[download_id]["status"] = status
@@ -1071,7 +1065,7 @@ def run_aria2_desired_state_worker(
     dependencies: Any = None,
 ) -> None:
     """Apply the latest queued pause/resume request for a transfer."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "aria2 backend")
     while True:
         with facade.aria2_lock:
             desired = dict(facade.aria2_desired_states.get(download_id) or {})
@@ -1152,7 +1146,7 @@ def queue_aria2_desired_state(
     dependencies: Any = None,
 ) -> Dict[str, Any]:
     """Queue an aria2 pause/resume state change and start its worker."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "aria2 backend")
     transfer = facade.aria2_transfers.get(download_id)
     if not transfer or not transfer.get("gid"):
         return {"success": False, "error": "Download action is not available yet"}
@@ -1193,7 +1187,7 @@ def _set_aria2_desired_download_state(
     *,
     dependencies: Any = None,
 ) -> Dict[str, Any]:
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "aria2 backend")
     if download_id in facade.cancelled_downloads:
         return {"success": False, "error": "Download is being cancelled"}
     return facade._queue_aria2_desired_state(

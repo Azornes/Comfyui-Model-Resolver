@@ -23,6 +23,7 @@ from ..type_utils import (
     first_non_empty,
     normalize_category_to_model_type,
 )
+from .dependencies import require_download_dependencies
 from .validation import _is_sensitive_metadata_key, _strip_sensitive_url_params
 
 log = create_module_logger("core.downloader")
@@ -30,13 +31,6 @@ log = create_module_logger("core.downloader")
 _as_dict = as_dict
 _as_list = as_list
 _first_present = first_non_empty
-
-
-def _require_dependencies(dependencies: Any) -> Any:
-    """Return explicitly supplied services for metadata sidecars."""
-    if dependencies is None:
-        raise RuntimeError("metadata sidecar dependencies were not provided")
-    return dependencies
 
 
 def write_model_resolver_metadata(
@@ -49,7 +43,7 @@ def write_model_resolver_metadata(
     dependencies: Any = None,
 ) -> Optional[str]:
     """Write metadata only to the sidecar owned by Model Resolver."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "metadata sidecar")
     metadata_path = facade.get_model_resolver_sidecar_path(dest_path)
 
     try:

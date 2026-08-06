@@ -11,6 +11,7 @@ import requests
 from ..log_system import create_module_logger
 from ..path_utils import get_filename_from_path
 from ..type_utils import as_dict, as_list
+from .dependencies import require_download_dependencies
 
 log = create_module_logger("core.downloader")
 
@@ -33,13 +34,6 @@ MODEL_PREVIEW_EXTENSIONS = (
     ".preview.jpg",
     ".preview.png",
 )
-
-
-def _require_dependencies(dependencies: Any) -> Any:
-    """Return explicitly supplied services for preview downloads."""
-    if dependencies is None:
-        raise RuntimeError("preview download dependencies were not provided")
-    return dependencies
 
 
 def get_existing_model_preview_path(dest_path: str) -> str:
@@ -122,7 +116,7 @@ def _download_preview_asset(
     *,
     dependencies: Any = None,
 ) -> bytes:
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "preview download")
     max_bytes = (
         MODEL_PREVIEW_VIDEO_MAX_DOWNLOAD_BYTES
         if media_type == "video"
@@ -200,7 +194,7 @@ def _download_preview_asset_with_system_trust(
         build_opener,
     )
 
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "preview download")
     max_bytes = (
         MODEL_PREVIEW_VIDEO_MAX_DOWNLOAD_BYTES
         if media_type == "video"
@@ -362,7 +356,7 @@ def create_model_preview(
     dependencies: Any = None,
 ) -> str:
     """Create adjacent preview media using LoRA Manager-compatible behavior."""
-    dependencies = _require_dependencies(dependencies)
+    dependencies = require_download_dependencies(dependencies, "preview download")
     existing_path = get_existing_model_preview_path(dest_path)
     source = metadata if isinstance(metadata, dict) else {}
     preview_url, media_type = _first_model_preview_asset(source)

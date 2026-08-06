@@ -5,16 +5,10 @@ from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
 from ..log_system import create_module_logger
+from .dependencies import require_download_dependencies
 from .state import create_initial_progress
 
 log = create_module_logger("core.downloader")
-
-
-def _require_dependencies(dependencies: Any) -> Any:
-    """Return explicitly supplied services for Hugging Face Xet."""
-    if dependencies is None:
-        raise RuntimeError("Hugging Face Xet dependencies were not provided")
-    return dependencies
 
 
 class HuggingFaceXetDownloadCancelled(Exception):
@@ -32,7 +26,7 @@ class HuggingFaceXetProgressAdapter:
         *,
         dependencies: Any = None,
     ) -> None:
-        self.dependencies = _require_dependencies(dependencies)
+        self.dependencies = require_download_dependencies(dependencies, "Hugging Face Xet")
         self.download_id = download_id
         self.total_size = max(0, int(total_size or 0))
         self.downloaded = 0
@@ -165,7 +159,7 @@ def run_huggingface_xet_transfer(
     dependencies: Any = None,
 ) -> None:
     """Use detailed native Xet progress when supported, with legacy fallback."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "Hugging Face Xet")
     import hf_xet
     from huggingface_hub.file_download import xet_get
     try:
@@ -279,7 +273,7 @@ def download_huggingface_xet(
     dependencies: Any = None,
 ) -> Optional[Dict[str, Any]]:
     """Download Hugging Face Xet files with the official hf_xet transport."""
-    facade = _require_dependencies(dependencies)
+    facade = require_download_dependencies(dependencies, "Hugging Face Xet")
     validated_url = facade.validate_public_http_url(url)
     parsed_url = urlparse(validated_url)
     if not (
