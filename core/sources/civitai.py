@@ -2401,26 +2401,22 @@ def resolve_civitai_version_custom_result(
     if not version_id:
         return None
 
-    headers = {}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-
     try:
-        response = requests.get(
+        data = execute_provider_json_request(
+            "CivitAI custom URL version lookup",
             f"https://civitai.com/api/v1/model-versions/{version_id}",
-            headers=headers,
+            api_key=api_key,
             timeout=20,
+            max_attempts=1,
+            raise_on_error=False,
         )
-        try:
-            if response.status_code != 200:
-                return None
-            data = response.json()
-        finally:
-            response.close()
     except Exception as e:
         log.warning(
             f"CivitAI custom URL version lookup failed: version_id={version_id}, error={e}"
         )
+        return None
+
+    if not isinstance(data, dict):
         return None
 
     model_block = data.get("model") if isinstance(data.get("model"), dict) else {}

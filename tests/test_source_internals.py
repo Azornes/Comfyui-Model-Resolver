@@ -58,6 +58,7 @@ from core.sources.civitai import (
     get_model_info_for_file,
     parse_civitai_url,
     resolve_urn,
+    resolve_civitai_version_custom_result,
     search_civitai,
     search_civitai_for_file,
 )
@@ -130,6 +131,64 @@ class CivitaiResultBuilderTests(unittest.TestCase):
         self.assertEqual("Anima", result["base_model"])
         self.assertEqual("abc123", result["sha256"])
         self.assertEqual(10 * 1024, result["size"])
+
+
+class CivitaiCustomVersionLookupTests(unittest.TestCase):
+
+    def test_version_lookup_uses_shared_json_request_contract(self):
+        with (
+            patch(
+                "core.sources.civitai.execute_provider_json_request",
+                return_value={"modelId": 123},
+            ) as request_json,
+            patch(
+                "core.sources.civitai.get_civitai_model_details",
+                return_value={"model_id": 123},
+            ) as get_details,
+            patch(
+                "core.sources.civitai.build_civitai_custom_result",
+                return_value={"source": "civitai", "version_id": 456},
+            ),
+        ):
+            result = resolve_civitai_version_custom_result(
+                456,
+                expected_filename="model.safetensors",
+                api_key="secret",
+            )
+
+        self.assertEqual({"source": "civitai", "version_id": 456}, result)
+        request_json.assert_called_once_with(
+            "CivitAI custom URL version lookup",
+            "https://civitai.com/api/v1/model-versions/456",
+            api_key="secret",
+            timeout=20,
+            max_attempts=1,
+            raise_on_error=False,
+        )
+        get_details.assert_called_once_with(123, 456, "secret")
+
+    def test_version_lookup_returns_none_without_json_payload(self):
+        with (
+            patch(
+                "core.sources.civitai.execute_provider_json_request",
+                return_value=None,
+            ) as request_json,
+            patch("core.sources.civitai.get_civitai_model_details") as get_details,
+        ):
+            result = resolve_civitai_version_custom_result(456)
+
+        self.assertIsNone(result)
+        request_json.assert_called_once()
+        get_details.assert_not_called()
+
+    def test_version_lookup_handles_adapter_exception(self):
+        with patch(
+            "core.sources.civitai.execute_provider_json_request",
+            side_effect=RuntimeError("network failure"),
+        ):
+            result = resolve_civitai_version_custom_result(456)
+
+        self.assertIsNone(result)
 
 
 class CivarchiveResultBuilderTests(unittest.TestCase):
