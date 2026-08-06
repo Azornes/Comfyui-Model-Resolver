@@ -17,14 +17,12 @@ from .path_utils import (
     get_path_identity,
     read_merged_model_metadata,
 )
-from .type_utils import format_size_bytes
+from .type_utils import FILE_SIZE_BYTE_KEYS, FILE_SIZE_KIB_KEYS, format_size_bytes
 from .worker_utils import resolve_worker_count
 
 log = create_module_logger(__name__)
 
 
-BYTE_SIZE_KEYS = ("size", "sizeBytes", "size_bytes", "fileSize", "file_size", "bytes")
-KIB_SIZE_KEYS = ("sizeKB", "size_kb")
 MAX_AUDIT_WORKERS = 64
 MIN_AUDIT_WORKERS = 1
 MIN_AUDIT_BATCH_SIZE = 16
@@ -68,10 +66,10 @@ def _coerce_size_bytes(value: Any, multiplier: int = 1) -> Optional[int]:
 
 
 def _iter_size_fields(data: Dict[str, Any], prefix: str = "") -> Iterable[Tuple[str, Any, int]]:
-    for key in BYTE_SIZE_KEYS:
+    for key in FILE_SIZE_BYTE_KEYS:
         if key in data:
             yield (f"{prefix}{key}", data.get(key), 1)
-    for key in KIB_SIZE_KEYS:
+    for key in FILE_SIZE_KIB_KEYS:
         if key in data:
             yield (f"{prefix}{key}", data.get(key), 1024)
 

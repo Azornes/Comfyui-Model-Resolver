@@ -118,6 +118,11 @@ QUANTIZATION_LEVEL_SUFFIXES = (
 )
 
 
+FILE_SIZE_BYTE_KEYS = ("size", "sizeBytes", "size_bytes", "fileSize", "file_size", "bytes")
+FILE_SIZE_KIB_KEYS = ("sizeKB", "size_kb")
+FILE_SIZE_LFS_KEYS = FILE_SIZE_BYTE_KEYS[:3]
+
+
 QUANTIZATION_SCHEME_SUFFIXES = (
     "gptq",
     "awq",
@@ -1119,7 +1124,7 @@ def extract_file_size(file_info: Dict[str, Any]) -> Optional[int]:
         return None
 
     # 1. Check direct sizeKB or size_kb keys (e.g. from CivArchive or CivitAI)
-    for key in ("sizeKB", "size_kb"):
+    for key in FILE_SIZE_KIB_KEYS:
         val = file_info.get(key)
         if val is not None and val != "":
             try:
@@ -1128,7 +1133,7 @@ def extract_file_size(file_info: Dict[str, Any]) -> Optional[int]:
                 pass
 
     # 2. Check direct size bytes keys
-    for key in ("sizeBytes", "size_bytes", "fileSize", "file_size", "bytes", "size"):
+    for key in (*FILE_SIZE_BYTE_KEYS[1:], FILE_SIZE_BYTE_KEYS[0]):
         val = file_info.get(key)
         if val is not None and val != "":
             size = parse_size_header(val)
@@ -1138,7 +1143,7 @@ def extract_file_size(file_info: Dict[str, Any]) -> Optional[int]:
     # 3. Check nested LFS info (common in HuggingFace API metadata)
     lfs_info = file_info.get("lfs")
     if isinstance(lfs_info, dict):
-        for key in ("size", "sizeBytes", "size_bytes"):
+        for key in FILE_SIZE_LFS_KEYS:
             size = parse_size_header(lfs_info.get(key))
             if size:
                 return size
