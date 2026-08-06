@@ -170,6 +170,27 @@ def test_progress_helpers_validate_ids_and_wrap_results():
     tracker.mark_cancelled.assert_called_once_with("job-1", "Cancelled")
 
 
+@pytest.mark.parametrize("helper_index", [1, 2])
+def test_progress_helpers_reject_blank_ids(helper_index):
+    (
+        _,
+        get_progress_response,
+        cancel_progress_response,
+        *_rest,
+    ), _ = _build_helpers()
+    tracker = MagicMock()
+    request = SimpleNamespace(match_info={"analysis_id": "   "})
+    helper = (get_progress_response, cancel_progress_response)[helper_index - 1]
+
+    response = helper(tracker, request, param_name="analysis_id")
+
+    assert response.status == 400
+    assert response.text == '{"error": "analysis_id is required"}'
+    tracker.cleanup.assert_not_called()
+    tracker.get.assert_not_called()
+    tracker.mark_cancelled.assert_not_called()
+
+
 def test_background_helper_reports_unexpected_task_errors():
     (_, _, _, run_in_background_thread, *_rest), logger = _build_helpers()
     tracker = MagicMock()

@@ -64,6 +64,10 @@ def create_route_helpers(web, logger, load_settings, hash_calculation_cancelled)
 
         return decorator
 
+    def _get_required_match_param(request, param_name):
+        value = request.match_info.get(param_name, "").strip()
+        return value or None
+
     def get_progress_response(
         tracker,
         request,
@@ -72,7 +76,7 @@ def create_route_helpers(web, logger, load_settings, hash_calculation_cancelled)
         not_found_status=200,
         found_wrapper=None,
     ):
-        job_id = request.match_info.get(param_name, "").strip()
+        job_id = _get_required_match_param(request, param_name)
         if not job_id:
             return web.json_response(
                 {"error": f"{param_name} is required"},
@@ -93,7 +97,7 @@ def create_route_helpers(web, logger, load_settings, hash_calculation_cancelled)
         param_name="progress_id",
         cancel_message="Cancelled",
     ):
-        job_id = request.match_info.get(param_name, "").strip()
+        job_id = _get_required_match_param(request, param_name)
         if not job_id:
             return web.json_response(
                 {"error": f"{param_name} is required"},
