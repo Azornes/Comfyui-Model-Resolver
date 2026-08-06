@@ -1,4 +1,86 @@
 export const queueStorageMethods = {
+    getActiveDownloadRecoveryStorageKey() {
+        return this.activeDownloadsStorageKey || 'model_resolver_active_downloads';
+    },
+
+    loadActiveDownloadRecovery() {
+        if (this._activeDownloadRecoveryLoaded) {
+            return this._activeDownloadRecovery || {};
+        }
+
+        this._activeDownloadRecoveryLoaded = true;
+        try {
+            const raw = localStorage.getItem(this.getActiveDownloadRecoveryStorageKey());
+            const parsed = raw ? JSON.parse(raw) : {};
+            this._activeDownloadRecovery = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+                ? parsed
+                : {};
+        } catch (error) {
+            console.warn('Model Resolver: failed to load active download recovery', error);
+            this._activeDownloadRecovery = {};
+        }
+        return this._activeDownloadRecovery;
+    },
+
+    saveActiveDownloadRecovery() {
+        const recovery = this.loadActiveDownloadRecovery();
+        try {
+            localStorage.setItem(
+                this.getActiveDownloadRecoveryStorageKey(),
+                JSON.stringify(recovery)
+            );
+        } catch (error) {
+            console.warn('Model Resolver: failed to save active download recovery', error);
+        }
+    },
+
+    persistActiveDownloadRecovery(downloadId, info = {}) {
+        if (!downloadId || !info) return;
+
+        const recovery = this.loadActiveDownloadRecovery();
+        const cloneForStorage = (value) => {
+            try {
+                return JSON.parse(JSON.stringify(value, (key, item) => (
+                    key === 'matches' || key === 'local_matches' ? undefined : item
+                )));
+            } catch (_error) {
+                return null;
+            }
+        };
+        const entry = {
+            missing: cloneForStorage(info.missing),
+            category: info.category || '',
+            subfolder: info.subfolder || '',
+            filename: info.filename || '',
+            downloadPath: info.downloadPath || '',
+            downloadDirectory: info.downloadDirectory || '',
+            baseDirectory: info.baseDirectory || '',
+            sourceUrl: info.sourceUrl || '',
+            workflowKey: info.workflowKey || '',
+            workflowRouteKey: info.workflowRouteKey || '',
+            workflowLabel: info.workflowLabel || '',
+            workflowSignature: info.workflowSignature || '',
+            workflowId: info.workflowId || '',
+            workflowTabId: info.workflowTabId || '',
+            workflowTabName: info.workflowTabName || '',
+            workflowTabAriaControls: info.workflowTabAriaControls || '',
+            workflowTabText: info.workflowTabText || '',
+            downloadBackend: info.downloadBackend || ''
+        };
+        recovery[String(downloadId)] = entry;
+        this.saveActiveDownloadRecovery();
+    },
+
+    removeActiveDownloadRecovery(downloadId) {
+        if (!downloadId) return;
+
+        const recovery = this.loadActiveDownloadRecovery();
+        const key = String(downloadId);
+        if (!(key in recovery)) return;
+        delete recovery[key];
+        this.saveActiveDownloadRecovery();
+    },
+
     persistQueueCollapsedState(collapsed, delayMs = 250) {
         if (this._queueCollapsedPersistTimer) {
             clearTimeout(this._queueCollapsedPersistTimer);

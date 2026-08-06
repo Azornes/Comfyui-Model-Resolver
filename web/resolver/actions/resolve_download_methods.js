@@ -988,6 +988,7 @@ export const resolveDownloadMethods = {
         }
 
         delete this.activeDownloads?.[downloadId];
+        this.removeActiveDownloadRecovery?.(downloadId);
 
         const elements = this.resolveDownloadUiElements?.(info) || {};
         this.renderDownloadSnapshot?.(downloadId, cancelledSnapshot, elements);
@@ -1758,6 +1759,181 @@ export const resolveDownloadMethods = {
         }
     },
 
+    buildRecoveredDownloadMissing(downloadId, progress = {}, recovery = {}) {
+        const filename = progress.filename || recovery.filename || 'Download';
+        const url = progress.url || recovery.sourceUrl || '';
+        const category = progress.category || recovery.category || '';
+        return {
+            missing_key: `download:${downloadId}`,
+            original_path: filename,
+            filename,
+            category,
+            node_type: 'Backend download',
+            download_source: {
+                source: 'backend',
+                url,
+                filename,
+                directory: category,
+                category
+            }
+        };
+    },
+
+    rebindActiveDownloadMissingModels() {
+        const candidates = [];
+        const seen = new Set();
+        const addCandidates = (models) => {
+            for (const model of Array.isArray(models) ? models : []) {
+                if (!model || seen.has(model)) continue;
+                seen.add(model);
+                candidates.push(model);
+            }
+        };
+        addCandidates(this.missingModels);
+        addCandidates(this.cachedAnalysisData?.missing_models);
+        for (const cached of this.workflowAnalysisCaches?.values?.() || []) {
+            addCandidates(cached?.data?.missing_models);
+        }
+        if (!candidates.length) return;
+
+        const normalizeUrl = (value = '') => String(value || '')
+            .trim()
+            .replace(/\/blob\//g, '/resolve/')
+            .replace(/[?#].*$/, '')
+            .toLowerCase();
+        const getFilename = (value = '') => String(value || '')
+            .split(/[\\/]+/)
+            .pop()
+            .trim()
+            .toLowerCase();
+
+        for (const info of Object.values(this.activeDownloads || {})) {
+            if (!info?.missing) continue;
+
+            const missingKey = this.getMissingModelKey?.(info.missing) || '';
+            let replacement = candidates.find(model => (
+                missingKey && this.getMissingModelKey?.(model) === missingKey
+            ));
+
+            if (!replacement) {
+                const progress = info.lastProgress || {};
+                const downloadUrl = normalizeUrl(progress.url || info.sourceUrl);
+                const filename = getFilename(progress.filename || info.filename);
+                const urlMatches = downloadUrl
+                    ? candidates.filter(model => normalizeUrl(
+                        model.download_source?.url
+                        || model.download_source?.download_url
+                        || model.url
+                    ) === downloadUrl)
+                    : [];
+                replacement = urlMatches.length === 1 ? urlMatches[0] : null;
+                if (!replacement && filename) {
+                    const filenameMatches = candidates.filter(model => (
+                        getFilename(model.download_source?.filename)
+                        || getFilename(model.original_path)
+                    ) === filename);
+                    replacement = filenameMatches.length === 1 ? filenameMatches[0] : null;
+                }
+            }
+
+            if (replacement) info.missing = replacement;
+        }
+    },
+
+    async restoreActiveDownloadsFromBackend() {
+        if (this._activeDownloadsRestorePromise) {
+            return this._activeDownloadsRestorePromise;
+        }
+
+        this._activeDownloadsRestorePromise = (async () => {
+            let allProgress;
+            try {
+                allProgress = await this.fetchJson(
+                    '/model_resolver/progress',
+                    { silent: true },
+                    'Get active downloads'
+                );
+            } catch (error) {
+                console.warn('Model Resolver: failed to restore active downloads:', error);
+                return 0;
+            }
+
+            const terminalStatuses = new Set([
+                'completed',
+                'completed_checking',
+                'cancelled',
+                'error',
+                'refresh_error'
+            ]);
+            const recovery = this.loadActiveDownloadRecovery?.() || {};
+            const activeIds = new Set();
+            let restored = 0;
+
+            for (const [downloadId, rawProgress] of Object.entries(allProgress || {})) {
+                const progress = rawProgress && typeof rawProgress === 'object'
+                    ? rawProgress
+                    : {};
+                const status = String(progress.status || '').toLowerCase();
+                if (terminalStatuses.has(status) || !this.isDownloadProgressStatus(status, true)) {
+                    continue;
+                }
+
+                activeIds.add(String(downloadId));
+                const stored = recovery[downloadId] && typeof recovery[downloadId] === 'object'
+                    ? recovery[downloadId]
+                    : {};
+                const existing = this.activeDownloads?.[downloadId];
+                if (existing) {
+                    existing.lastProgress = progress;
+                    existing.lastStatus = status || existing.lastStatus || 'starting';
+                    this.rememberDownloadUiState?.(downloadId, existing, progress, { isActive: true });
+                    continue;
+                }
+
+                const info = {
+                    ...stored,
+                    missing: stored.missing && typeof stored.missing === 'object'
+                        ? stored.missing
+                        : this.buildRecoveredDownloadMissing(downloadId, progress, stored),
+                    progressDiv: null,
+                    downloadBtn: null,
+                    category: progress.category || stored.category || '',
+                    subfolder: stored.subfolder || '',
+                    filename: progress.filename || stored.filename || 'Download',
+                    downloadPath: progress.path || stored.downloadPath || '',
+                    downloadDirectory: progress.directory || stored.downloadDirectory || '',
+                    baseDirectory: stored.baseDirectory || '',
+                    sourceUrl: progress.url || stored.sourceUrl || '',
+                    downloadBackend: progress.download_backend || stored.downloadBackend || '',
+                    lastProgress: progress,
+                    lastStatus: status || 'starting'
+                };
+                this.activeDownloads[downloadId] = info;
+                this.rememberDownloadUiState?.(downloadId, info, progress, { isActive: true });
+                this.persistActiveDownloadRecovery?.(downloadId, info);
+                this.pollDownloadProgress(downloadId);
+                restored += 1;
+            }
+
+            for (const downloadId of Object.keys(recovery)) {
+                if (!activeIds.has(String(downloadId))) {
+                    this.removeActiveDownloadRecovery?.(downloadId);
+                }
+            }
+
+            this.rebindActiveDownloadMissingModels();
+            this.updateDownloadAllButtonState?.();
+            this.updateQueuePanel?.({ force: true });
+            return restored;
+        })();
+
+        try {
+            return await this._activeDownloadsRestorePromise;
+        } finally {
+            this._activeDownloadsRestorePromise = null;
+        }
+    },
+
     async executeDownloadRequest(missing, {
         url,
         filename,
@@ -1866,6 +2042,7 @@ export const resolveDownloadMethods = {
                 workflowTabText,
                 downloadBackend: data.download_backend || ''
             };
+            this.persistActiveDownloadRecovery?.(downloadId, this.activeDownloads[downloadId]);
 
             const snapshot = this.rememberDownloadUiState(
                 downloadId,
@@ -2070,6 +2247,7 @@ export const resolveDownloadMethods = {
                 this.rememberDownloadSubfolderAfterCompletion(info, progress);
                 this.rememberCompletedDownloadHistory?.(downloadId, info, progress);
                 delete this.activeDownloads[downloadId];
+                this.removeActiveDownloadRecovery?.(downloadId);
                 this.updateDownloadAllButtonState();
                 this.updateQueuePanel?.();
                 this.refreshLocalMatchesUiForMissing?.(missing);
@@ -2102,6 +2280,7 @@ export const resolveDownloadMethods = {
                 });
                 this.renderDownloadSnapshot(downloadId, errorSnapshot, { progressDiv, downloadBtn });
                 delete this.activeDownloads[downloadId];
+                this.removeActiveDownloadRecovery?.(downloadId);
                 this.updateDownloadAllButtonState();
                 this.updateQueuePanel?.();
                 this.refreshLocalMatchesUiForMissing?.(missing);
@@ -2134,6 +2313,7 @@ export const resolveDownloadMethods = {
                 this.renderDownloadSnapshot(downloadId, snapshot);
             }
             delete this.activeDownloads[downloadId];
+            this.removeActiveDownloadRecovery?.(downloadId);
             this.updateDownloadAllButtonState();
             this.updateQueuePanel?.();
         }

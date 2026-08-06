@@ -4913,6 +4913,80 @@ test('downloads tab shows active downloads from all workflow tabs', () => {
   ]);
 });
 
+test('browser refresh restores active backend downloads with their workflow context', async () => {
+  const restoreActiveDownloadsFromBackend = eval(
+    `(${extractMethod(resolveDownloadMethodsSource, 'restoreActiveDownloadsFromBackend')})`
+  );
+  const progress = {
+    status: 'downloading',
+    progress: 42,
+    downloaded: 1024,
+    total_size: 2048,
+    filename: 'model.safetensors',
+    path: 'vae/model.safetensors',
+    directory: 'vae',
+    url: 'https://huggingface.co/example/repo/resolve/main/model.safetensors',
+    download_backend: 'huggingface_xet',
+  };
+  const polled = [];
+  const removed = [];
+  const dialog = {
+    activeDownloads: {},
+    _activeDownloadsRestorePromise: null,
+    fetchJson: async endpoint => {
+      assert.equal(endpoint, '/model_resolver/progress');
+      return {
+        'download-1': progress,
+        'download-completed': { status: 'completed', filename: 'done.safetensors' },
+      };
+    },
+    loadActiveDownloadRecovery() {
+      return {
+        'download-1': {
+          missing: {
+            missing_key: 'workflow-model-1',
+            original_path: 'vae/original.safetensors',
+            node_id: 7,
+            widget_index: 0,
+            category: 'vae',
+          },
+          workflowLabel: 'Video workflow',
+          workflowRouteKey: '#video-workflow',
+          sourceUrl: progress.url,
+        },
+        stale: { filename: 'stale.safetensors' },
+      };
+    },
+    isDownloadProgressStatus(status) {
+      return status === 'downloading';
+    },
+    rememberDownloadUiState(downloadId, info, nextProgress) {
+      info.lastProgress = nextProgress;
+      info.lastStatus = nextProgress.status;
+      return { downloadId, progress: nextProgress };
+    },
+    persistActiveDownloadRecovery() {},
+    removeActiveDownloadRecovery(downloadId) {
+      removed.push(downloadId);
+    },
+    pollDownloadProgress(downloadId) {
+      polled.push(downloadId);
+    },
+    rebindActiveDownloadMissingModels() {},
+    updateDownloadAllButtonState() {},
+    updateQueuePanel() {},
+  };
+
+  const restored = await restoreActiveDownloadsFromBackend.call(dialog);
+
+  assert.equal(restored, 1);
+  assert.deepEqual(polled, ['download-1']);
+  assert.deepEqual(removed, ['stale']);
+  assert.equal(dialog.activeDownloads['download-1'].missing.missing_key, 'workflow-model-1');
+  assert.equal(dialog.activeDownloads['download-1'].workflowLabel, 'Video workflow');
+  assert.equal(dialog.activeDownloads['download-1'].lastProgress.progress, 42);
+});
+
 test('downloads tab renders workflow label for active downloads', () => {
   const renderQueueDownloadsHtml = eval(`(${extractMethod(queueMethodsSource, 'renderQueueDownloadsHtml')})`);
   const getDownloadProgressPresentation = eval(

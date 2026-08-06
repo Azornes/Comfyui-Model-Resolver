@@ -45,6 +45,7 @@ export const lifecycleGraphMethods = {
         this.updateTabButtonStates();
         this.updateQueueVisibility();
         this.syncWorkflowScopedQueue(workflow || this.getCurrentWorkflow());
+        await this.restoreActiveDownloadsFromBackend?.();
 
         if (this.activeTab === 'missing') {
             await this.loadWorkflowData(workflow);
@@ -795,6 +796,7 @@ export const lifecycleGraphMethods = {
     reconnectActiveDownloads() {
         if (!this.contentElement) return;
 
+        this.rebindActiveDownloadMissingModels?.();
         for (const [downloadId, info] of Object.entries(this.activeDownloads)) {
             if (!info?.missing) continue;
             const snapshot = this.rememberDownloadUiState?.(
@@ -805,6 +807,8 @@ export const lifecycleGraphMethods = {
             );
             this.renderDownloadSnapshot?.(downloadId, snapshot);
         }
+        this.updateDownloadAllButtonState?.();
+        this.updateQueuePanel?.({ force: true });
     },
 
 };

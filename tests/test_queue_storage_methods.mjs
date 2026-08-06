@@ -51,6 +51,45 @@ test('queue storage persists collapsed state and splitter width immediately', ()
   }
 });
 
+test('queue storage persists active download recovery without transient DOM state', () => {
+  const storage = createStorage();
+  const restoreStorage = installStorage(storage);
+
+  try {
+    const context = {
+      ...queueStorageMethods,
+      activeDownloadsStorageKey: 'active-download-recovery',
+    };
+    const progressDiv = { nodeType: 1 };
+    const downloadBtn = { nodeType: 1 };
+    context.persistActiveDownloadRecovery('download-1', {
+      missing: {
+        missing_key: 'model-1',
+        original_path: 'vae/model.safetensors',
+        matches: [{ path: 'old-match' }],
+      },
+      progressDiv,
+      downloadBtn,
+      category: 'vae',
+      filename: 'model.safetensors',
+      sourceUrl: 'https://huggingface.co/example/model/resolve/main/model.safetensors',
+      workflowKey: 'workflow-1',
+    });
+
+    const persisted = JSON.parse(storage.getItem('active-download-recovery'));
+    assert.equal(persisted['download-1'].filename, 'model.safetensors');
+    assert.equal(persisted['download-1'].missing.missing_key, 'model-1');
+    assert.equal('matches' in persisted['download-1'].missing, false);
+    assert.equal('progressDiv' in persisted['download-1'], false);
+    assert.equal('downloadBtn' in persisted['download-1'], false);
+
+    context.removeActiveDownloadRecovery('download-1');
+    assert.deepEqual(JSON.parse(storage.getItem('active-download-recovery')), {});
+  } finally {
+    restoreStorage();
+  }
+});
+
 test('download history replaces duplicate identities and keeps newest entries first', () => {
   const storage = createStorage();
   const restoreStorage = installStorage(storage);
