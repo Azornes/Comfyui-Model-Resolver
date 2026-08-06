@@ -1166,6 +1166,72 @@ def _select_primary_model_file(files: List[Dict[str, Any]]) -> Optional[Dict[str
     return select_primary_model_file(valid_files)
 
 
+_RESULT_HASH_UNSET = object()
+
+
+def _build_civarchive_result(
+    *,
+    model_id: Any,
+    version_id: Any,
+    name: str,
+    version_name: str,
+    model_type: str,
+    filename: str,
+    url: str,
+    platform_url: Optional[str],
+    civitai_model_id: Any,
+    civitai_model_version_id: Any,
+    download_urls: List[str],
+    size: Optional[int],
+    base_model: Optional[str],
+    tags: List[str],
+    trained_words: List[Any],
+    images: List[Any],
+    creator: Dict[str, Any],
+    platform: Optional[str],
+    is_deleted: bool,
+    match_type: str,
+    confidence: float = 0.0,
+    sha256: Optional[str] = None,
+    hashes: Optional[Dict[str, Any]] = None,
+    hash_value: Any = _RESULT_HASH_UNSET,
+) -> Dict[str, Any]:
+    extra_fields = {
+        "civitai_model_id": civitai_model_id,
+        "civitai_model_version_id": civitai_model_version_id,
+        "creator": creator,
+        "platform": platform,
+        "is_deleted": is_deleted,
+    }
+    if hash_value is not _RESULT_HASH_UNSET:
+        extra_fields["hash"] = hash_value
+
+    return build_model_result(
+        source="civarchive",
+        model_id=model_id,
+        version_id=version_id,
+        name=name,
+        version_name=version_name,
+        type=model_type,
+        filename=filename,
+        url=url,
+        platform_url=platform_url,
+        download_url=download_urls[0],
+        download_urls=download_urls,
+        size=size,
+        base_model=base_model,
+        tags=tags,
+        trained_words=trained_words,
+        images=images,
+        match_type=match_type,
+        confidence=confidence,
+        sha256=sha256,
+        hashes=hashes,
+        normalize_hashes=True,
+        **extra_fields,
+    )
+
+
 def _build_result_from_normalized_version(
     model_details: Dict[str, Any],
     version: Dict[str, Any],
@@ -1196,19 +1262,17 @@ def _build_result_from_normalized_version(
     if size is None:
         size = _resolve_file_size_bytes(file_info, download_urls)
 
-    return build_model_result(
-        source="civarchive",
+    return _build_civarchive_result(
         model_id=model_id,
         version_id=version_id,
         name=model_details.get("name") or "",
         version_name=version.get("name") or "",
-        type=model_details.get("type") or file_info.get("type"),
+        model_type=model_details.get("type") or file_info.get("type"),
         filename=filename,
         url=url,
         platform_url=version.get("platform_url") or version.get("platformUrl"),
         civitai_model_id=version.get("civitai_model_id") or version.get("civitaiModelId"),
         civitai_model_version_id=version.get("civitai_model_version_id") or version.get("civitaiModelVersionId"),
-        download_url=download_urls[0],
         download_urls=download_urls,
         size=size,
         base_model=version.get("base_model") or version.get("baseModel") or version.get("baseModelType"),
@@ -1219,7 +1283,9 @@ def _build_result_from_normalized_version(
         platform=model_details.get("platform"),
         is_deleted=False,
         match_type=match_type,
-        normalize_hashes=True,
+        confidence=0.0,
+        sha256=None,
+        hashes=None,
     )
 
 
@@ -1631,19 +1697,17 @@ def _build_result_from_payload(
         else ""
     )
 
-    return build_model_result(
-        source="civarchive",
+    return _build_civarchive_result(
         model_id=model_id,
         version_id=version_id,
         name=model_name,
         version_name=version_name,
-        type=context.get("type") or selected_file.get("type"),
+        model_type=context.get("type") or selected_file.get("type"),
         filename=filename,
         url=civarchive_url,
         platform_url=version.get("platform_url") or version.get("platformUrl"),
         civitai_model_id=version.get("civitai_model_id") or version.get("civitaiModelId"),
         civitai_model_version_id=version.get("civitai_model_version_id") or version.get("civitaiModelVersionId"),
-        download_url=download_urls[0],
         download_urls=download_urls,
         size=_resolve_file_size_bytes(selected_file, download_urls),
         base_model=version.get("baseModel") or version.get("base_model") or version.get("baseModelType"),
@@ -1660,9 +1724,8 @@ def _build_result_from_payload(
         match_type=match_type,
         confidence=best_confidence,
         sha256=sha256,
-        hash=sha256,
         hashes=hashes,
-        normalize_hashes=True,
+        hash_value=sha256,
     )
 
 

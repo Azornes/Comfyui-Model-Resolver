@@ -22,6 +22,8 @@ import requests
 # civarchive internals
 # ---------------------------------------------------------------------------
 from core.sources.civarchive import (
+    _build_result_from_normalized_version,
+    _build_result_from_payload,
     _collect_archive_download_urls,
     _fetch_remote_file_size_bytes,
     _normalize_archive_version,
@@ -128,6 +130,89 @@ class CivitaiResultBuilderTests(unittest.TestCase):
         self.assertEqual("Anima", result["base_model"])
         self.assertEqual("abc123", result["sha256"])
         self.assertEqual(10 * 1024, result["size"])
+
+
+class CivarchiveResultBuilderTests(unittest.TestCase):
+
+    def test_normalized_version_builder_preserves_search_result_contract(self):
+        result = _build_result_from_normalized_version(
+            model_details={
+                "model_id": 123,
+                "name": "Archive model",
+                "type": "LORA",
+                "tags": ["style"],
+                "creator": {"username": "archive-user"},
+                "platform": "civarchive",
+            },
+            version={
+                "id": 456,
+                "name": "v1",
+                "base_model": "SDXL",
+                "trained_words": ["trigger"],
+                "images": [],
+                "url": "https://civarchive.com/models/123?modelVersionId=456",
+            },
+            file_info={
+                "name": "archive.safetensors",
+                "download_url": "https://civarchive.com/api/download/models/456.safetensors",
+                "size": 2048,
+            },
+            match_type="similar",
+        )
+
+        self.assertEqual("civarchive", result["source"])
+        self.assertEqual(123, result["model_id"])
+        self.assertEqual(456, result["version_id"])
+        self.assertEqual("archive.safetensors", result["filename"])
+        self.assertEqual(2048, result["size"])
+        self.assertEqual("SDXL", result["base_model"])
+        self.assertEqual("archive-user", result["creator"]["username"])
+        self.assertFalse(result["is_deleted"])
+        self.assertEqual(0.0, result["confidence"])
+        self.assertNotIn("hash", result)
+
+    def test_payload_builder_preserves_confidence_hash_and_deleted_fields(self):
+        sha256 = "a" * 64
+        result = _build_result_from_payload(
+            {
+                "id": 123,
+                "name": "Archive model",
+                "type": "LORA",
+                "creator_username": "archive-user",
+                "creator_name": "Archive User",
+                "creator_url": "https://civarchive.com/users/archive-user",
+                "deletedAt": "2025-01-01T00:00:00Z",
+                "tags": ["style"],
+                "version": {
+                    "id": 456,
+                    "name": "v1",
+                    "baseModel": "SDXL",
+                    "trainedWords": ["trigger"],
+                    "files": [
+                        {
+                            "name": "archive.safetensors",
+                            "downloadUrl": "https://civarchive.com/api/download/models/456.safetensors",
+                            "sizeBytes": 4096,
+                            "hashes": {"SHA256": sha256},
+                        }
+                    ],
+                },
+            },
+            query="archive.safetensors",
+            preferred_filename="archive.safetensors",
+        )
+
+        self.assertEqual("civarchive", result["source"])
+        self.assertEqual(123, result["model_id"])
+        self.assertEqual(456, result["version_id"])
+        self.assertEqual(4096, result["size"])
+        self.assertEqual(100.0, result["confidence"])
+        self.assertEqual("exact", result["match_type"])
+        self.assertEqual(sha256, result["sha256"])
+        self.assertEqual(sha256, result["hash"])
+        self.assertEqual(sha256, result["hashes"]["sha256"])
+        self.assertTrue(result["is_deleted"])
+        self.assertEqual("archive-user", result["creator"]["username"])
 
 
 class CivitaiCredentialCheckTests(unittest.TestCase):
