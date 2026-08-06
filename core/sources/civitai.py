@@ -43,7 +43,6 @@ from ..type_utils import (
     as_list,
     build_model_result,
     check_credential_http,
-    extract_file_sha256,
     extract_file_size,
     extract_trained_words,
     first_non_empty,
@@ -55,6 +54,7 @@ from ..type_utils import (
     resolve_model_category,
     select_primary_model_file,
 )
+from .common import build_custom_result_fields
 
 log = create_module_logger(__name__)
 
@@ -2363,12 +2363,6 @@ def build_civitai_custom_result(
     if not download_url:
         return None
 
-    hashes = (
-        file_info.get("hashes")
-        if isinstance(file_info.get("hashes"), dict)
-        else {}
-    )
-    sha256 = extract_file_sha256(file_info)
     version_url = (
         details.get("version_url")
         or selected_version.get("url")
@@ -2379,29 +2373,15 @@ def build_civitai_custom_result(
         )
     )
     return build_model_result(
-        source="civitai",
-        model_id=model_id,
-        version_id=version_id,
-        name=details.get("name") or filename,
-        version_name=selected_version.get("name") or "",
-        type=details.get("type") or file_info.get("type") or "",
-        filename=filename,
-        url=version_url or details.get("url"),
-        download_url=download_url,
-        size=file_info.get("size"),
-        base_model=selected_version.get("base_model"),
-        tags=details.get("tags") or [],
-        trained_words=selected_version.get("trained_words") or [],
-        images=details.get("images") or selected_version.get("images") or [],
-        description=selected_version.get("description")
-        or details.get("description")
-        or "",
-        sha256=sha256,
-        hashes=hashes,
-        details_source="civitai",
-        version_url=version_url or details.get("url"),
-        custom_url=True,
-        result_mode="custom_url",
+        **build_custom_result_fields(
+            source="civitai",
+            details=details,
+            selected_version=selected_version,
+            file_info=file_info,
+            filename=filename,
+            download_url=download_url,
+            version_url=version_url,
+        ),
         model_description=details.get("description") or "",
     )
 

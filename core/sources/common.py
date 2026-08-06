@@ -4,6 +4,54 @@ Common utilities for external model metadata sources.
 
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from ..type_utils import extract_file_sha256
+
+
+def build_custom_result_fields(
+    *,
+    source: str,
+    details: Dict[str, Any],
+    selected_version: Dict[str, Any],
+    file_info: Dict[str, Any],
+    filename: str,
+    download_url: Optional[str],
+    version_url: Optional[str],
+) -> Dict[str, Any]:
+    """Build the shared result fields for provider custom-URL results."""
+    hashes = (
+        file_info.get("hashes")
+        if isinstance(file_info.get("hashes"), dict)
+        else {}
+    )
+    resolved_url = version_url or details.get("url")
+    return {
+        "source": source,
+        "model_id": details.get("model_id"),
+        "version_id": details.get("version_id") or selected_version.get("id"),
+        "name": details.get("name") or filename,
+        "version_name": selected_version.get("name") or "",
+        "type": details.get("type") or file_info.get("type") or "",
+        "filename": filename,
+        "url": resolved_url,
+        "download_url": download_url,
+        "size": file_info.get("size"),
+        "base_model": selected_version.get("base_model"),
+        "tags": details.get("tags") or [],
+        "trained_words": selected_version.get("trained_words") or [],
+        "images": details.get("images") or selected_version.get("images") or [],
+        "description": (
+            selected_version.get("description")
+            or details.get("description")
+            or ""
+        ),
+        "sha256": extract_file_sha256(file_info),
+        "hashes": hashes,
+        "details_source": source,
+        "version_url": resolved_url,
+        "custom_url": True,
+        "result_mode": "custom_url",
+    }
+
 
 def is_remote_link_marked_dead(item: Any) -> bool:
     """Return whether remote metadata marks a link as unavailable."""

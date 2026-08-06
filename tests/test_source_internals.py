@@ -57,7 +57,7 @@ from core.sources.civitai import (
     search_civitai,
     search_civitai_for_file,
 )
-from core.sources.common import is_remote_link_marked_dead
+from core.sources.common import build_custom_result_fields, is_remote_link_marked_dead
 from core.type_utils import prepare_remote_size_probe_url
 
 # ---------------------------------------------------------------------------
@@ -196,6 +196,44 @@ class CivitaiPrimaryFileSelectionTests(unittest.TestCase):
 
 
 class CustomUrlResultBuilderTests(unittest.TestCase):
+    def test_build_custom_result_fields_preserves_shared_result_contract(self):
+        result = build_custom_result_fields(
+            source="civitai",
+            details={
+                "model_id": 123,
+                "name": "Example model",
+                "type": "LORA",
+                "tags": ["style"],
+                "images": [{"url": "https://example.test/image"}],
+                "description": "Model description",
+            },
+            selected_version={
+                "id": 456,
+                "name": "v1",
+                "base_model": "SD 1.5",
+                "trained_words": ["example"],
+                "description": "Version notes",
+            },
+            file_info={
+                "name": "example.safetensors",
+                "type": "Model",
+                "size": 123,
+                "sha256": "abc123",
+                "hashes": {"SHA256": "abc123"},
+            },
+            filename="example.safetensors",
+            download_url="https://civitai.com/api/download/models/456",
+            version_url="https://civitai.com/models/123?modelVersionId=456",
+        )
+
+        self.assertEqual("civitai", result["source"])
+        self.assertEqual(123, result["model_id"])
+        self.assertEqual(456, result["version_id"])
+        self.assertEqual("Version notes", result["description"])
+        self.assertEqual("abc123", result["sha256"])
+        self.assertEqual({"SHA256": "abc123"}, result["hashes"])
+        self.assertEqual("custom_url", result["result_mode"])
+
     def test_civitai_custom_result_preserves_all_result_fields(self):
         result = build_civitai_custom_result({
             "model_id": 123,

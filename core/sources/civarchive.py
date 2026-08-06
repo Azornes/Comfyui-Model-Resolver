@@ -48,6 +48,7 @@ from ..type_utils import (
     to_int,
 )
 from .common import (
+    build_custom_result_fields,
     collect_download_urls,
     is_remote_link_marked_dead,
 )
@@ -2336,12 +2337,6 @@ def build_civarchive_custom_result(
         or details.get("name")
         or "model"
     )
-    hashes = (
-        file_info.get("hashes")
-        if isinstance(file_info.get("hashes"), dict)
-        else {}
-    )
-    sha256 = extract_file_sha256(file_info)
     version_id = details.get("version_id") or selected_version.get("id")
     model_id = details.get("model_id")
     version_url = (
@@ -2353,34 +2348,21 @@ def build_civarchive_custom_result(
             else details.get("url")
         )
     )
-    return build_model_result(
+    common_result_fields = build_custom_result_fields(
         source="civarchive",
-        model_id=model_id,
-        version_id=version_id,
-        name=details.get("name") or filename,
-        version_name=selected_version.get("name") or "",
-        type=details.get("type") or file_info.get("type") or "",
+        details=details,
+        selected_version=selected_version,
+        file_info=file_info,
         filename=filename,
-        url=version_url or details.get("url"),
         download_url=download_url,
-        size=file_info.get("size"),
-        base_model=selected_version.get("base_model"),
-        tags=details.get("tags") or [],
-        trained_words=selected_version.get("trained_words") or [],
-        images=details.get("images") or selected_version.get("images") or [],
-        description=selected_version.get("description")
-        or details.get("description")
-        or "",
-        sha256=sha256,
-        hashes=hashes,
-        details_source="civarchive",
-        version_url=version_url or details.get("url"),
-        custom_url=True,
-        result_mode="custom_url",
+        version_url=version_url,
+    )
+    return build_model_result(
+        **common_result_fields,
         platform_url=details.get("platform_url")
         or selected_version.get("platform_url"),
         download_urls=[url for url in download_urls if url],
-        hash=sha256,
+        hash=common_result_fields["sha256"],
         platform=details.get("platform"),
     )
 
