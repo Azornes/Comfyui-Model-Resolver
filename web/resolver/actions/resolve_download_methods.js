@@ -4,7 +4,8 @@ import { getModelCardUrl, parseHuggingFaceFileUrl } from "../utils/url_utils.js"
 import { getCivitaiModelUrl } from "../globals.js";
 import { normalizeSha256 } from "../utils/hash_utils.js";
 import { normalizePathIdentity } from "../utils/html_utils.js";
-import { bindEventOnce, bindInstantAction, syncElementAttributes } from "../utils/dom_patch_utils.js";
+import { bindEventOnce, syncElementAttributes } from "../utils/dom_patch_utils.js";
+import { bindDownloadActionHandlers } from "../utils/download_action_handlers.js";
 import { normalizeSourceKey } from "../utils/source_labels.js";
 const log = createModuleLogger('resolve_download_methods');
 
@@ -1132,24 +1133,6 @@ export const resolveDownloadMethods = {
 
     attachDownloadActionHandlers(progressDiv, downloadId) {
         if (!progressDiv) return;
-        progressDiv.querySelectorAll('.cancel-download-btn, .cancel-download-btn-pending, .mr-download-queue-cancel').forEach(cancelBtn => {
-            bindInstantAction(cancelBtn, () => {
-                const targetDownloadId = cancelBtn.dataset.downloadId || downloadId;
-                if (targetDownloadId) this.cancelDownload(targetDownloadId);
-            });
-        });
-        progressDiv.querySelectorAll('.pause-download-btn, .mr-download-queue-pause').forEach(pauseBtn => {
-            bindInstantAction(pauseBtn, () => {
-                const targetDownloadId = pauseBtn.dataset.downloadId || downloadId;
-                if (targetDownloadId) this.pauseDownload(targetDownloadId);
-            });
-        });
-        progressDiv.querySelectorAll('.resume-download-btn, .mr-download-queue-resume').forEach(resumeBtn => {
-            bindInstantAction(resumeBtn, () => {
-                const targetDownloadId = resumeBtn.dataset.downloadId || downloadId;
-                if (targetDownloadId) this.resumeDownload(targetDownloadId);
-            });
-        });
         const getDownloadContext = (button) => {
             const targetDownloadId = button?.dataset?.downloadId || downloadId;
             const info = this.activeDownloads?.[targetDownloadId];
@@ -1162,23 +1145,26 @@ export const resolveDownloadMethods = {
                 || this.getDownloadFolderContext?.(progress, info)
                 || null;
         };
-        progressDiv.querySelectorAll('.mr-download-queue-open-folder').forEach(folderBtn => {
-            bindInstantAction(folderBtn, () => {
-                const context = getDownloadContext(folderBtn);
-                if (context) this.openContainingFolder?.(context);
-            });
-        });
-        progressDiv.querySelectorAll('.mr-download-queue-switch-workflow').forEach(workflowBtn => {
-            bindInstantAction(workflowBtn, () => {
-                const context = getDownloadContext(workflowBtn);
-                if (context) this.switchToDownloadWorkflow?.(context);
-            });
-        });
-        progressDiv.querySelectorAll('.mr-download-queue-more').forEach(moreBtn => {
-            bindInstantAction(moreBtn, (event) => {
-                const item = moreBtn.closest('.mr-download-queue-item');
+        bindDownloadActionHandlers(progressDiv, {
+            fallbackDownloadId: downloadId,
+            selectors: {
+                cancel: '.cancel-download-btn, .cancel-download-btn-pending, .mr-download-queue-cancel',
+                pause: '.pause-download-btn, .mr-download-queue-pause',
+                resume: '.resume-download-btn, .mr-download-queue-resume',
+                openFolder: '.mr-download-queue-open-folder',
+                switchWorkflow: '.mr-download-queue-switch-workflow',
+                more: '.mr-download-queue-more',
+            },
+            getContext: getDownloadContext,
+            onCancel: targetDownloadId => this.cancelDownload(targetDownloadId),
+            onPause: targetDownloadId => this.pauseDownload(targetDownloadId),
+            onResume: targetDownloadId => this.resumeDownload(targetDownloadId),
+            onOpenFolder: context => this.openContainingFolder?.(context),
+            onSwitchWorkflow: context => this.switchToDownloadWorkflow?.(context),
+            onMore: (event, button) => {
+                const item = button.closest('.mr-download-queue-item');
                 if (item) window.MLOpenContextMenu?.(event, item);
-            });
+            },
         });
     },
 

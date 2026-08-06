@@ -2,7 +2,8 @@ import { app } from "../../../../../scripts/app.js";
 import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
 import { startSplitterDrag } from "../utils/splitter_drag.js";
-import { bindInstantAction, syncElementAttributes } from "../utils/dom_patch_utils.js";
+import { syncElementAttributes } from "../utils/dom_patch_utils.js";
+import { bindDownloadActionHandlers } from "../utils/download_action_handlers.js";
 const FOOTER_VERSION_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const FOOTER_VERSION_FAILURE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -1135,51 +1136,27 @@ export const queueMethods = {
             });
         });
 
-        this.queueList.querySelectorAll('.mr-download-queue-cancel').forEach(button => {
-            bindInstantAction(button, () => {
-                const downloadId = button.dataset.downloadId;
-                if (downloadId) this.cancelDownload(downloadId);
-            });
-        });
-
-        this.queueList.querySelectorAll('.mr-download-queue-pause').forEach(button => {
-            bindInstantAction(button, () => {
-                const downloadId = button.dataset.downloadId;
-                if (downloadId) this.pauseDownload(downloadId);
-            });
-        });
-
-        this.queueList.querySelectorAll('.mr-download-queue-resume').forEach(button => {
-            bindInstantAction(button, () => {
-                const downloadId = button.dataset.downloadId;
-                if (downloadId) this.resumeDownload(downloadId);
-            });
-        });
-
-        this.queueList.querySelectorAll('.mr-download-queue-open-folder').forEach(button => {
-            bindInstantAction(button, () => {
-                const context = getDownloadContext(button);
-                if (context) this.openContainingFolder?.(context);
-            });
-        });
-
-        this.queueList.querySelectorAll('.mr-download-queue-switch-workflow').forEach(button => {
-            bindInstantAction(button, () => {
-                const context = getDownloadContext(button);
-                if (context) this.switchToDownloadWorkflow?.(context);
-            });
-        });
-
-        this.queueList.querySelectorAll('.mr-download-queue-more').forEach(button => {
-            if (button._hasListener) return;
-            button._hasListener = true;
-            button.addEventListener('click', (event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                if (button.disabled) return;
+        bindDownloadActionHandlers(this.queueList, {
+            selectors: {
+                cancel: '.mr-download-queue-cancel',
+                pause: '.mr-download-queue-pause',
+                resume: '.mr-download-queue-resume',
+                openFolder: '.mr-download-queue-open-folder',
+                switchWorkflow: '.mr-download-queue-switch-workflow',
+                more: '.mr-download-queue-more',
+            },
+            getDownloadId: button => button?.dataset?.downloadId || '',
+            getContext: getDownloadContext,
+            onCancel: downloadId => this.cancelDownload(downloadId),
+            onPause: downloadId => this.pauseDownload(downloadId),
+            onResume: downloadId => this.resumeDownload(downloadId),
+            onOpenFolder: context => this.openContainingFolder?.(context),
+            onSwitchWorkflow: context => this.switchToDownloadWorkflow?.(context),
+            moreBinding: 'click',
+            onMore: (event, button) => {
                 const item = button.closest('.mr-download-queue-item');
                 if (item) window.MLOpenContextMenu?.(event, item);
-            });
+            },
         });
 
         const clearHistoryButton = this.queueList.querySelector('.mr-download-history-clear');
