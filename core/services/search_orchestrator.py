@@ -1,5 +1,6 @@
 """Request orchestration for model source searches."""
 
+from ..local_hash_matches import collect_local_hash_matches_for_result
 from ..routes.context import RouteContext
 from ..type_utils import normalize_sha256
 from .search_cache import SearchResultCache
@@ -382,11 +383,18 @@ class SearchOrchestrator:
                         94,
                     )
                     try:
-                        hash_matches = self.search_local_matches_by_hash(
+                        hash_matches = collect_local_hash_matches_for_result(
                             sha256,
+                            search_local_matches_by_hash=self.search_local_matches_by_hash,
                             category=category or None,
                             max_matches=20,
                             force_rescan=force_search,
+                            source=source_key,
+                            filename=(
+                                source_result.get("filename")
+                                or source_result.get("path")
+                                or filename
+                            ),
                         )
                     except Exception as hash_error:
                         self.logger.warning(
@@ -406,18 +414,7 @@ class SearchOrchestrator:
                             continue
                         if path_key:
                             seen_match_paths.add(path_key)
-                        matches.append(
-                            {
-                                **match,
-                                "hash_lookup_source": source_key,
-                                "hash_lookup_filename": (
-                                    source_result.get("filename")
-                                    or source_result.get("path")
-                                    or filename
-                                ),
-                                "hash_lookup_sha256": sha256,
-                            }
-                        )
+                        matches.append(match)
 
                 if matches:
                     self.logger.info(

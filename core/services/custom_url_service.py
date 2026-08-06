@@ -1,5 +1,6 @@
 """Custom model URL service."""
 
+from ..local_hash_matches import collect_local_hash_matches_for_result
 from ..routes.context import RouteContext
 from .model_utils import CustomUrlDependencies, ModelServiceDependencies
 
@@ -85,28 +86,21 @@ class CustomUrlService(ModelServiceDependencies):
                 return []
 
             try:
-                matches = search_local_matches_by_hash(
+                return collect_local_hash_matches_for_result(
                     sha256,
+                    search_local_matches_by_hash=search_local_matches_by_hash,
                     category=category or None,
                     max_matches=20,
+                    source=source_key,
+                    filename=result.get("filename")
+                    or result.get("path")
+                    or "",
                 )
             except Exception as hash_error:
                 self.logger.warning(
                     f"Custom URL local metadata hash lookup failed for {source_key}:{sha256}: {hash_error}"
                 )
                 return []
-
-            return [
-                {
-                    **match,
-                    "hash_lookup_source": source_key,
-                    "hash_lookup_filename": result.get("filename")
-                    or result.get("path")
-                    or "",
-                    "hash_lookup_sha256": sha256,
-                }
-                for match in matches
-            ]
 
         data = await request.json()
         raw_url = str(data.get("url") or data.get("custom_url") or "").strip()

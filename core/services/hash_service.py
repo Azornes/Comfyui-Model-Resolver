@@ -5,6 +5,7 @@ import time
 import uuid
 
 from .. import path_utils
+from ..local_hash_matches import collect_local_hash_matches_for_result
 from ..routes.context import RouteContext
 
 
@@ -268,21 +269,15 @@ class HashService:
         max_matches = self.to_int(data.get("max_matches"), 20)
         force_rescan = self.to_bool(data.get("force_rescan"), False)
 
-        matches = self.search_local_matches_by_hash(
+        enriched_matches = collect_local_hash_matches_for_result(
             sha256,
+            search_local_matches_by_hash=self.search_local_matches_by_hash,
             category=category or None,
             max_matches=max_matches,
             force_rescan=force_rescan,
+            source=source or "download_source",
+            filename=filename,
         )
-        enriched_matches = [
-            {
-                **match,
-                "hash_lookup_source": source or "download_source",
-                "hash_lookup_filename": filename,
-                "hash_lookup_sha256": sha256,
-            }
-            for match in matches
-        ]
         return self.web.json_response(
             {
                 "sha256": sha256,

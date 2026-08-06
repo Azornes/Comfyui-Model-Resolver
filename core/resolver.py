@@ -20,6 +20,7 @@ from .log_system import create_module_logger
 
 log = create_module_logger(__name__)
 
+from .local_hash_matches import collect_local_hash_matches_for_result
 from .matcher import find_matches, strip_known_model_extension
 from .scanner import get_model_files
 from .type_utils import MODEL_EXTENSIONS as _MODEL_EXTENSIONS
@@ -1043,21 +1044,15 @@ def analyze_and_find_matches(
         workflow_sha256 = normalize_sha256(model_ref.get("workflow_sha256"))
         hash_matches = []
         if workflow_sha256:
-            hash_matches = search_local_matches_by_hash(
+            hash_matches = collect_local_hash_matches_for_result(
                 workflow_sha256,
+                search_local_matches_by_hash=search_local_matches_by_hash,
                 category=category,
                 max_matches=max_matches_per_model,
                 force_rescan=False,
+                source=model_ref.get("hash_lookup_source") or "workflow_metadata",
+                filename=get_filename_from_path(model_ref.get("original_path") or ""),
             )
-            hash_matches = [
-                {
-                    **match,
-                    "hash_lookup_source": model_ref.get("hash_lookup_source") or "workflow_metadata",
-                    "hash_lookup_filename": get_filename_from_path(model_ref.get("original_path") or ""),
-                    "hash_lookup_sha256": workflow_sha256,
-                }
-                for match in hash_matches
-            ]
 
         if not target_for_matching:
             return hash_matches
