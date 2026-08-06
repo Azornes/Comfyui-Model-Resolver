@@ -7178,6 +7178,151 @@ test('search result refreshes preserve keyed progress and result DOM', () => {
   assert.match(searchPanelMethodsSource, /data-search-result-key=/);
 });
 
+test('search provider rows preserve a shared result row contract', () => {
+  const displaySearchResults = eval(`(${extractMethod(resolveDownloadMethodsSource, 'displaySearchResults')})`);
+  const buildSearchResultRow = eval(`(${extractMethod(searchPanelMethodsSource, 'buildSearchResultRow')})`);
+  const previousGlobals = {
+    getModelCardUrl: globalThis.getModelCardUrl,
+    getCivitaiModelUrl: globalThis.getCivitaiModelUrl,
+    parseHuggingFaceFileUrl: globalThis.parseHuggingFaceFileUrl,
+  };
+  const rows = [];
+  const dialog = {
+    buildSearchResultRow,
+    getHashMatchLabelMap() {
+      return null;
+    },
+    shouldDisplayKnownDownloadSource() {
+      return false;
+    },
+    getDownloadSourceTableRow() {
+      return null;
+    },
+    renderSearchProgress() {
+      return '';
+    },
+    hasActiveSearchProgress() {
+      return false;
+    },
+    getLocalHashMatchIdentitiesForResult() {
+      return [];
+    },
+    getHashMatchLabelForSearchResult() {
+      return '';
+    },
+    getSearchResultMatchDisplay(_result, fallbackLabel, fallbackClass) {
+      return { label: fallbackLabel, className: fallbackClass };
+    },
+    getFilenameFromPath(value = '') {
+      return String(value).split(/[\\/]/).at(-1) || '';
+    },
+    getMissingDownloadCategory() {
+      return 'checkpoints';
+    },
+    getSourceResultDownloadCategory(_result, fallback) {
+      return fallback;
+    },
+    formatSearchResultSize(result = {}) {
+      return result.size || '';
+    },
+    getSearchResultTimestamp() {
+      return '';
+    },
+    getMissingModelKey() {
+      return 'missing-key';
+    },
+    getDownloadPathMetadata() {
+      return {};
+    },
+    getDownloadMetadata() {
+      return {};
+    },
+    renderStatusMessage() {
+      return '';
+    },
+    renderSearchResultsTable(searchRows) {
+      rows.push(...searchRows);
+      return '';
+    },
+    patchSearchResultsContainer() {},
+    wireSearchProgressCancelButtons() {},
+    wireSearchProgressRetryButtons() {},
+    wireSearchDownloadButtons() {},
+  };
+
+  globalThis.getModelCardUrl = value => value || '';
+  globalThis.getCivitaiModelUrl = (modelId, versionId) => `civitai/${modelId}/${versionId}`;
+  globalThis.parseHuggingFaceFileUrl = () => null;
+
+  try {
+    displaySearchResults.call(dialog, {
+      original_path: 'models/model.safetensors',
+      category: 'checkpoints',
+      matches: [],
+    }, {
+      results: {
+        popular: {
+          name: 'Popular model',
+          filename: 'popular.safetensors',
+          url: 'popular/download',
+        },
+        model_list: {
+          name: 'Local model',
+          filename: 'local.safetensors',
+          url: 'local/download',
+        },
+        huggingface: {
+          repo_id: 'owner/repo',
+          filename: 'hf.safetensors',
+          url: 'hf/download',
+        },
+        civarchive: {
+          name: 'Archive model',
+          filename: 'archive.safetensors',
+          download_url: 'archive/download',
+          url: 'archive/page',
+        },
+        lora_manager_archive: {
+          name: 'LoRA model',
+          filename: 'lora.safetensors',
+          download_url: 'lora/download',
+          url: 'lora/page',
+        },
+        civitai: {
+          name: 'CivitAI model',
+          filename: 'civitai.safetensors',
+          download_url: 'civitai/download',
+          url: 'civitai/page',
+        },
+      },
+    }, {});
+  } finally {
+    if (previousGlobals.getModelCardUrl === undefined) delete globalThis.getModelCardUrl;
+    else globalThis.getModelCardUrl = previousGlobals.getModelCardUrl;
+    if (previousGlobals.getCivitaiModelUrl === undefined) delete globalThis.getCivitaiModelUrl;
+    else globalThis.getCivitaiModelUrl = previousGlobals.getCivitaiModelUrl;
+    if (previousGlobals.parseHuggingFaceFileUrl === undefined) delete globalThis.parseHuggingFaceFileUrl;
+    else globalThis.parseHuggingFaceFileUrl = previousGlobals.parseHuggingFaceFileUrl;
+  }
+
+  assert.equal(rows.length, 6);
+  for (const row of rows) {
+    assert.equal(typeof row.sourceKey, 'string');
+    assert.equal(typeof row.sourceLabel, 'string');
+    assert.equal(typeof row.model, 'string');
+    assert.equal(typeof row.filename, 'string');
+    assert.equal(typeof row.match, 'object');
+    assert.equal(typeof row.size, 'string');
+    assert.equal(typeof row.downloadUrl, 'string');
+    assert.equal(typeof row.downloadFilename, 'string');
+    assert.equal(typeof row.category, 'string');
+    assert.equal(typeof row.searchedAt, 'string');
+    assert.ok(Array.isArray(row.localHashMatchIdentities));
+    assert.ok(row.pathMetadata);
+    assert.ok(row.downloadMetadata);
+  }
+});
+
 test('source model details file selection includes selected file hash metadata', () => {
   const renderSourceModelDetailsFiles = eval(`(${extractMethod(modelInfoMethodsSource, 'renderSourceModelDetailsFiles')})`);
   const sha256 = 'a'.repeat(64);

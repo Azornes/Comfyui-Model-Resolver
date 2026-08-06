@@ -3662,17 +3662,6 @@ export const resolveDownloadMethods = {
             ...(Array.isArray(missing.matches) ? missing.matches.filter(match => match?.hash_lookup_source) : [])
         ];
         const hashLabelMap = this.getHashMatchLabelMap?.(missing, results) || null;
-        const getHashMatchIdentities = (sourceKey, result) => (
-            this.getLocalHashMatchIdentitiesForResult?.(localHashMatches, sourceKey, result) || []
-        );
-        const getHashMatchDisplay = (sourceKey, result, fallbackLabel = 'Match', fallbackClass = 'neutral') => {
-            const identities = getHashMatchIdentities(sourceKey, result);
-            const hashLabel = this.getHashMatchLabelForSearchResult?.(result, hashLabelMap, identities) || '';
-            return {
-                identities,
-                match: this.getSearchResultMatchDisplay(result, fallbackLabel, fallbackClass, hashLabel)
-            };
-        };
         const knownDownloadRow = this.shouldDisplayKnownDownloadSource(missing, missing.download_source, state)
             ? this.getDownloadSourceTableRow(missing, missing.download_source, hashLabelMap)
             : null;
@@ -3740,7 +3729,6 @@ export const resolveDownloadMethods = {
         addRow(knownDownloadRow);
 
         if (popular) {
-            const popularHash = getHashMatchDisplay('popular', popular, 'Known', 'strong');
             const popularFilename = popular.filename || this.getFilenameFromPath(missing.original_path);
             const missingCategory = this.getMissingDownloadCategory?.(missing, 'checkpoints') || missing.category || 'checkpoints';
             const popularSize = popular.size
@@ -3751,25 +3739,26 @@ export const resolveDownloadMethods = {
                         ? modelListResult.size
                         : ''
                 );
-            addRow({
+            addRow(this.buildSearchResultRow(missing, {
+                result: popular,
                 sourceKey: 'popular',
                 sourceLabel: 'Popular',
                 model: popular.name || popularFilename,
                 filename: popularFilename,
                 secondary: popular.name && popular.name !== popularFilename ? popularFilename : '',
-                match: popularHash.match,
-                size: this.formatSearchResultSize({ ...popular, size: popularSize }),
+                sizeResult: { ...popular, size: popularSize },
                 downloadUrl: popular.url,
                 downloadFilename: popularFilename,
                 category: popular.directory || missingCategory,
                 openUrl: getModelCardUrl(popular.url),
-                searchedAt: this.getSearchResultTimestamp(popular),
-                localHashMatchIdentities: popularHash.identities
-            });
+                hashLabelMap,
+                localHashMatches,
+                fallbackLabel: 'Known',
+                fallbackClass: 'strong',
+            }));
         }
 
         if (modelListResult && modelListResult.url) {
-            const modelListHash = getHashMatchDisplay('model_list', modelListResult);
             const missingCategory = this.getMissingDownloadCategory?.(missing, 'checkpoints') || missing.category || 'checkpoints';
             const huggingFaceFile = parseHuggingFaceFileUrl(modelListResult.url);
             const modelListDetailsContext = huggingFaceFile
@@ -3787,43 +3776,40 @@ export const resolveDownloadMethods = {
                     category: modelListResult.directory || missingCategory
                 }
                 : null;
-            addRow({
+            addRow(this.buildSearchResultRow(missing, {
+                result: modelListResult,
                 sourceKey: 'model-list',
                 sourceLabel: 'Local Database',
                 model: modelListResult.name || modelListResult.filename,
                 filename: modelListResult.filename,
                 secondary: modelListResult.name && modelListResult.name !== modelListResult.filename ? modelListResult.filename : '',
-                match: modelListHash.match,
-                size: this.formatSearchResultSize(modelListResult),
                 downloadUrl: modelListResult.url,
                 downloadFilename: modelListResult.filename,
                 category: modelListResult.directory || missingCategory,
                 openUrl: getModelCardUrl(modelListResult.url),
-                searchedAt: this.getSearchResultTimestamp(modelListResult),
-                localHashMatchIdentities: modelListHash.identities,
-                detailsContext: modelListDetailsContext
-            });
+                hashLabelMap,
+                localHashMatches,
+                detailsContext: modelListDetailsContext,
+            }));
         }
 
         if (hfResult && hfResult.url) {
-            const hfHash = getHashMatchDisplay('huggingface', hfResult);
             const hfRepo = hfResult.repo_id || hfResult.repo || '';
             const hfModelUrl = hfRepo ? `https://huggingface.co/${hfRepo}` : getModelCardUrl(hfResult.url);
             const missingCategory = this.getMissingDownloadCategory?.(missing, 'checkpoints') || missing.category || 'checkpoints';
-            addRow({
+            addRow(this.buildSearchResultRow(missing, {
+                result: hfResult,
                 sourceKey: 'huggingface',
                 sourceLabel: 'HuggingFace',
                 model: hfRepo || hfResult.filename,
                 filename: hfResult.filename,
                 secondary: hfResult.path && hfResult.path !== hfResult.filename ? hfResult.path : '',
-                match: hfHash.match,
-                size: this.formatSearchResultSize(hfResult),
                 downloadUrl: hfResult.url,
                 downloadFilename: hfResult.filename,
                 category: missingCategory,
                 openUrl: hfModelUrl,
-                searchedAt: this.getSearchResultTimestamp(hfResult),
-                localHashMatchIdentities: hfHash.identities,
+                hashLabelMap,
+                localHashMatches,
                 detailsContext: {
                     ...hfResult,
                     name: hfRepo || hfResult.filename,
@@ -3832,11 +3818,10 @@ export const resolveDownloadMethods = {
                     missing_key: this.getMissingModelKey(missing),
                     category: missingCategory
                 }
-            });
+            }));
         }
 
         if (civarchiveResult && civarchiveResult.download_url) {
-            const civarchiveHash = getHashMatchDisplay('civarchive', civarchiveResult);
             const archiveFilename = civarchiveResult.filename || this.getFilenameFromPath(missing.original_path);
             const archiveName = civarchiveResult.name || archiveFilename || 'Model';
             const archiveCategory = this.getSourceResultDownloadCategory?.(
@@ -3849,32 +3834,30 @@ export const resolveDownloadMethods = {
                 civarchiveResult.platform || '',
                 civarchiveResult.base_model || ''
             ].filter(Boolean).join(' / ');
-            addRow({
+            addRow(this.buildSearchResultRow(missing, {
+                result: civarchiveResult,
                 sourceKey: 'civarchive',
                 sourceLabel: 'CivArchive',
                 model: archiveName,
                 version: civarchiveResult.version_name || '',
                 filename: archiveFilename,
                 secondary: archiveSecondary,
-                match: civarchiveHash.match,
-                size: this.formatSearchResultSize(civarchiveResult),
                 downloadUrl: civarchiveResult.download_url,
                 downloadFilename: archiveFilename,
                 category: archiveCategory,
                 openUrl: civarchiveResult.url,
-                searchedAt: this.getSearchResultTimestamp(civarchiveResult),
-                localHashMatchIdentities: civarchiveHash.identities,
+                hashLabelMap,
+                localHashMatches,
                 detailsContext: {
                     ...civarchiveResult,
                     details_source: 'civarchive',
                     missing_key: this.getMissingModelKey(missing),
                     category: archiveCategory
                 }
-            });
+            }));
         }
 
         if (loraManagerArchiveResult && loraManagerArchiveResult.download_url) {
-            const loraArchiveHash = getHashMatchDisplay('lora_manager_archive', loraManagerArchiveResult);
             const archiveFilename = loraManagerArchiveResult.filename || this.getFilenameFromPath(missing.original_path);
             const archiveName = loraManagerArchiveResult.name || archiveFilename;
             const archiveCategory = this.getSourceResultDownloadCategory?.(
@@ -3882,21 +3865,21 @@ export const resolveDownloadMethods = {
                 this.getMissingDownloadCategory?.(missing, 'loras') || 'loras',
                 missing
             ) || this.getMissingDownloadCategory?.(missing, 'loras') || 'loras';
-            addRow({
+            addRow(this.buildSearchResultRow(missing, {
+                result: loraManagerArchiveResult,
                 sourceKey: 'lora-archive',
                 sourceLabel: 'LoRA Archive',
                 model: archiveName,
                 version: loraManagerArchiveResult.version_name || '',
                 filename: archiveFilename,
                 secondary: archiveName && archiveName !== archiveFilename ? archiveFilename : '',
-                match: loraArchiveHash.match,
-                size: this.formatSearchResultSize(loraManagerArchiveResult),
                 downloadUrl: loraManagerArchiveResult.download_url || '',
                 downloadFilename: archiveFilename,
                 category: archiveCategory,
                 openUrl: loraManagerArchiveResult.url || getModelCardUrl(loraManagerArchiveResult.download_url),
-                searchedAt: this.getSearchResultTimestamp(loraManagerArchiveResult),
-                localHashMatchIdentities: loraArchiveHash.identities,
+                hashSourceKey: 'lora_manager_archive',
+                hashLabelMap,
+                localHashMatches,
                 detailsContext: {
                     ...loraManagerArchiveResult,
                     source: 'lora_manager_archive',
@@ -3904,11 +3887,10 @@ export const resolveDownloadMethods = {
                     missing_key: this.getMissingModelKey(missing),
                     category: archiveCategory
                 }
-            });
+            }));
         }
 
         if (civitaiResult && civitaiResult.download_url) {
-            const civitaiHash = getHashMatchDisplay('civitai', civitaiResult);
             const modelUrl = civitaiResult.url || getCivitaiModelUrl(civitaiResult.model_id, civitaiResult.version_id);
             const downloadFilename = civitaiResult.filename || missing.civitai_info?.expected_filename || civitaiResult.name;
             const modelName = civitaiResult.name || missing.civitai_info?.model_name || downloadFilename || 'Model';
@@ -3921,21 +3903,20 @@ export const resolveDownloadMethods = {
                 civitaiResult.type || '',
                 civitaiResult.base_model || missing.civitai_info?.base_model || ''
             ].filter(Boolean).join(' / ');
-            addRow({
+            addRow(this.buildSearchResultRow(missing, {
+                result: civitaiResult,
                 sourceKey: 'civitai',
                 sourceLabel: 'CivitAI',
                 model: modelName,
                 version: civitaiResult.version_name || missing.civitai_info?.version_name || '',
                 filename: downloadFilename,
                 secondary: civitaiSecondary,
-                match: civitaiHash.match,
-                size: this.formatSearchResultSize(civitaiResult),
                 downloadUrl: civitaiResult.download_url,
                 downloadFilename,
                 category: civitaiCategory,
                 openUrl: modelUrl,
-                searchedAt: this.getSearchResultTimestamp(civitaiResult),
-                localHashMatchIdentities: civitaiHash.identities,
+                hashLabelMap,
+                localHashMatches,
                 detailsContext: {
                     ...civitaiResult,
                     name: modelName,
@@ -3944,7 +3925,7 @@ export const resolveDownloadMethods = {
                     missing_key: this.getMissingModelKey(missing),
                     category: civitaiCategory
                 }
-            });
+            }));
         }
 
         customResults.forEach((customResult) => {

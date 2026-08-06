@@ -1594,6 +1594,56 @@ export const searchPanelMethods = {
         return { label: fallbackLabel, className: fallbackClass };
     },
 
+    buildSearchResultRow(missing, {
+        result = {},
+        sourceKey,
+        sourceLabel,
+        hashSourceKey = sourceKey,
+        hashLabelMap = null,
+        localHashMatches = [],
+        model = '',
+        version = '',
+        filename = '',
+        secondary = '',
+        sizeResult = result,
+        downloadUrl = '',
+        downloadFilename = filename,
+        category = '',
+        openUrl = '',
+        detailsContext = null,
+        fallbackLabel = 'Match',
+        fallbackClass = 'neutral',
+    } = {}) {
+        const localHashMatchIdentities = this.getLocalHashMatchIdentitiesForResult?.(
+            localHashMatches,
+            hashSourceKey,
+            result
+        ) || [];
+        const hashMatchLabel = this.getHashMatchLabelForSearchResult?.(
+            result,
+            hashLabelMap,
+            localHashMatchIdentities
+        ) || '';
+
+        return {
+            sourceKey,
+            sourceLabel,
+            model,
+            version,
+            filename,
+            secondary,
+            match: this.getSearchResultMatchDisplay(result, fallbackLabel, fallbackClass, hashMatchLabel),
+            size: this.formatSearchResultSize(sizeResult),
+            downloadUrl,
+            downloadFilename,
+            category,
+            openUrl,
+            searchedAt: this.getSearchResultTimestamp(result),
+            localHashMatchIdentities,
+            detailsContext,
+        };
+    },
+
     getDownloadSourceTableRow(missing, downloadSource = {}, hashLabelMap = null) {
         if (!downloadSource?.url) return null;
 
