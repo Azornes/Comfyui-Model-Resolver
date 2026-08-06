@@ -11,6 +11,8 @@ import os
 import re
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
+from .type_utils import normalize_alphanumeric_key
+
 _log = None
 
 MODEL_RESOLVER_METADATA_SUFFIX = ".modelresolver.json"
@@ -420,11 +422,6 @@ def extract_safetensors_header_sha256(
     return None
 
 
-def _normalize_base_model_token(value: Any) -> str:
-    from .type_utils import normalize_alphanumeric_key
-    return normalize_alphanumeric_key(value)
-
-
 def _load_base_model_aliases() -> List[Tuple[str, str]]:
     """Return normalized base-model aliases ordered from most specific first."""
     global _BASE_MODEL_ALIAS_CACHE
@@ -447,7 +444,7 @@ def _load_base_model_aliases() -> List[Tuple[str, str]]:
             if not isinstance(raw_aliases, (list, tuple, set)):
                 raw_aliases = []
             for raw_alias in [name, *raw_aliases]:
-                alias = _normalize_base_model_token(raw_alias)
+                alias = normalize_alphanumeric_key(raw_alias)
                 if alias:
                     aliases.append((alias, name))
     except Exception as e:
@@ -465,7 +462,7 @@ def clear_base_model_alias_cache() -> None:
 
 
 def _canonical_base_model_from_text(value: Any) -> str:
-    normalized = _normalize_base_model_token(value)
+    normalized = normalize_alphanumeric_key(value)
     if not normalized:
         return ""
 

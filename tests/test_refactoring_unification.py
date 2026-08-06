@@ -241,23 +241,14 @@ class TestRefactoringUnification(unittest.TestCase):
 
     def test_alphanumeric_normalizers(self):
         from core.matcher import normalize_base_model
-        from core.path_templates import _normalize_token
-        from core.path_utils import _normalize_base_model_token
-        from core.settings import _normalize_tag
         from core.type_utils import normalize_alphanumeric_key
 
         inputs = ["SD 1.5", "sd-xl_1.0!!", "Flux.1-dev", "", None]
         for val in inputs:
             res_matcher = normalize_base_model(val)
-            res_path = _normalize_base_model_token(val)
-            res_temp = _normalize_token(val)
-            res_set = _normalize_tag(val)
             res_key = normalize_alphanumeric_key(val)
 
-            # verify they all behave identically
-            self.assertEqual(res_matcher, res_path)
-            self.assertEqual(res_matcher, res_temp)
-            self.assertEqual(res_matcher, res_set)
+            # verify the public domain helper uses the canonical implementation
             self.assertEqual(res_matcher, res_key)
 
             # verify correct regex behavior
@@ -407,5 +398,4 @@ class TestRefactoringUnification(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
 

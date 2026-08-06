@@ -26,9 +26,6 @@ from ..matcher import (
 from ..matcher import (
     has_known_model_extension as _has_known_model_extension,
 )
-from ..matcher import (
-    normalize_base_model as _normalize_base_model,
-)
 from ..network_utils import host_matches_domain, request_source_response
 from ..path_utils import get_filename_from_path
 from ..progress import get_progress_reporter
@@ -2106,7 +2103,7 @@ def search_civarchive_for_file(
 
     limit = max(1, min(int(limit), MAX_CIVARCHIVE_CANDIDATE_LIMIT))
     detail_limit = min(limit, SEARCH_RESULT_DETAIL_LIMIT)
-    base_model_key = _normalize_base_model(base_model_context or "")
+    base_model_key = normalize_alphanumeric_key(base_model_context or "")
     cache_key = (
         f"file::{normalized_filename.lower()}::hash::{requested_sha256}::{model_type or ''}::{base_model_key}::{exact_only}::{limit}"
     )

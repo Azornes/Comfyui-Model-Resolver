@@ -11,7 +11,7 @@ from .path_utils import read_json_safe, write_json_atomic
 
 SETTINGS_FILE = Path(__file__).resolve().parents[1] / "model_resolver_settings.json"
 
-from .type_utils import normalize_download_category, to_bool
+from .type_utils import normalize_alphanumeric_key, normalize_download_category, to_bool
 
 DOWNLOAD_PATH_MODES = {"suggested", "template", "manual"}
 DOWNLOAD_BACKENDS = {"python", "aria2"}
@@ -243,25 +243,19 @@ def _listify_tags(value: Any) -> List[str]:
     return as_list(value)
 
 
-def _normalize_tag(value: str) -> str:
-    from .type_utils import normalize_alphanumeric_key
-    return normalize_alphanumeric_key(value)
-
-
-
 def _resolve_base_model_mapping(mappings: Mapping[str, str], base_model: Any) -> str:
     base_text = str(base_model or "")
     if base_text in mappings:
         return mappings[base_text]
 
-    base_token = _normalize_tag(base_text)
+    base_token = normalize_alphanumeric_key(base_text)
     if not base_token:
         return base_text
 
     normalized_mappings = {
-        _normalize_tag(key): value
+        normalize_alphanumeric_key(key): value
         for key, value in mappings.items()
-        if _normalize_tag(key)
+        if normalize_alphanumeric_key(key)
     }
     if base_token in normalized_mappings:
         return normalized_mappings[base_token]
@@ -284,9 +278,9 @@ def _first_tag(tags: Any) -> str:
     tag_list = list(as_list(tags))
     if not tag_list:
         return "no tags"
-    normalized_tags = {tag: _normalize_tag(tag) for tag in tag_list}
+    normalized_tags = {tag: normalize_alphanumeric_key(tag) for tag in tag_list}
     for priority in PRIORITY_TAGS:
-        priority_token = _normalize_tag(priority)
+        priority_token = normalize_alphanumeric_key(priority)
         for tag, normalized in normalized_tags.items():
             if normalized == priority_token:
                 return tag

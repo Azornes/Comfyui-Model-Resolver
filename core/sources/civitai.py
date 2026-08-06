@@ -25,9 +25,6 @@ from ..matcher import (
 from ..matcher import (
     has_known_model_extension as _has_known_model_extension,
 )
-from ..matcher import (
-    normalize_base_model as _normalize_base_model,
-)
 from ..network_utils import execute_provider_json_request, request_source_response
 from ..path_utils import (
     calculate_file_sha256,
@@ -49,6 +46,7 @@ from ..type_utils import (
     extract_file_size,
     extract_trained_words,
     first_non_empty,
+    normalize_alphanumeric_key,
     normalize_model_file_info,
     normalize_model_image,
     normalize_sha256,
@@ -937,7 +935,7 @@ def search_civitai_for_file(
     requested_sha256 = normalize_sha256(sha256)
     session_key = "session" if session_token else "anon"
     model_type_key = str(model_type or "").lower()
-    base_model_key = _normalize_base_model(base_model_context or "")
+    base_model_key = normalize_alphanumeric_key(base_model_context or "")
     methods_key = (
         f"trpc{int(bool(use_trpc_search))}"
         f"_api{int(bool(use_api_search))}"

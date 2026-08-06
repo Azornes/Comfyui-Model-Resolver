@@ -16,6 +16,7 @@ log = create_module_logger(__name__)
 from ..catalog_manager import CatalogManager
 from ..network_utils import request_source_json
 from ..path_utils import METADATA_DIR, read_json_safe
+from ..type_utils import normalize_alphanumeric_key
 
 POPULAR_MODELS_FILE = os.path.join(METADATA_DIR, "popular-models.json")
 MODEL_ALIASES_FILE = os.path.join(METADATA_DIR, "model-aliases.json")
@@ -52,8 +53,6 @@ def _load_model_aliases() -> Dict[str, List[str]]:
     return _model_aliases_cache
 
 
-from ..matcher import normalize_base_model as _normalize_base_model
-
 base_models_mgr = CatalogManager(BASE_MODELS_FILE, BASE_MODELS_META_FILE, "base_models")
 
 
@@ -85,7 +84,7 @@ def load_base_model_aliases() -> Dict[str, List[str]]:
         base_models = load_raw_base_models()
         for model in base_models:
             name = model.get("name", "")
-            normalized_name = _normalize_base_model(name)
+            normalized_name = normalize_alphanumeric_key(name)
             if not normalized_name:
                 continue
 
@@ -96,7 +95,7 @@ def load_base_model_aliases() -> Dict[str, List[str]]:
             for alias in aliases:
                 if not alias:
                     continue
-                normalized_alias = _normalize_base_model(alias)
+                normalized_alias = normalize_alphanumeric_key(alias)
                 if normalized_alias and normalized_alias not in seen_tokens:
                     seen_tokens.add(normalized_alias)
                     normalized_tokens.append(normalized_alias)
@@ -284,13 +283,13 @@ def get_base_models_status(check_remote: bool = False) -> Dict[str, Any]:
                 # Check if there are new models by comparing normalized names and aliases
                 all_existing_normalized = set()
                 for m in base_models:
-                    all_existing_normalized.add(_normalize_base_model(m.get("name", "")))
+                    all_existing_normalized.add(normalize_alphanumeric_key(m.get("name", "")))
                     for alias in m.get("aliases", []):
-                        all_existing_normalized.add(_normalize_base_model(alias))
+                        all_existing_normalized.add(normalize_alphanumeric_key(alias))
 
                 new_models_found = False
                 for remote_name in remote_models:
-                    norm_remote = _normalize_base_model(remote_name)
+                    norm_remote = normalize_alphanumeric_key(remote_name)
                     if norm_remote and norm_remote not in all_existing_normalized:
                         new_models_found = True
                         break
@@ -322,15 +321,15 @@ def update_base_models_from_remote() -> Dict[str, Any]:
     all_known_normalized = set()
     for m in base_models:
         for alias in m.get("aliases", []):
-            all_known_normalized.add(_normalize_base_model(alias))
-        all_known_normalized.add(_normalize_base_model(m.get("name", "")))
+            all_known_normalized.add(normalize_alphanumeric_key(alias))
+        all_known_normalized.add(normalize_alphanumeric_key(m.get("name", "")))
 
     updated_models = list(base_models)
     new_added_count = 0
     new_added_names = []
 
     for name in remote_names:
-        norm_name = _normalize_base_model(name)
+        norm_name = normalize_alphanumeric_key(name)
         if not norm_name:
             continue
 
@@ -344,7 +343,7 @@ def update_base_models_from_remote() -> Dict[str, Any]:
         # Filter out aliases that are already registered/known
         filtered_aliases = []
         for alias in candidates:
-            norm_alias = _normalize_base_model(alias)
+            norm_alias = normalize_alphanumeric_key(alias)
             if norm_alias not in all_known_normalized:
                 filtered_aliases.append(alias)
                 all_known_normalized.add(norm_alias)

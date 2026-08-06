@@ -239,7 +239,6 @@ def normalize_base_model(value: str) -> str:
     Returns:
         Normalized base model name
     """
-    from .type_utils import normalize_alphanumeric_key
     return normalize_alphanumeric_key(value)
 
 
@@ -292,7 +291,12 @@ def base_model_score(candidate: str, preferred: Optional[str]) -> float:
 
 # ==================== CENTRALIZED MATCHING & CONFIDENCE HELPERS ====================
 
-from .type_utils import MODEL_EXTENSIONS, TECHNICAL_MODEL_SUFFIXES, get_version_sort_key
+from .type_utils import (
+    MODEL_EXTENSIONS,
+    TECHNICAL_MODEL_SUFFIXES,
+    get_version_sort_key,
+    normalize_alphanumeric_key,
+)
 
 _TECHNICAL_VARIANT_TOKENS = {
     *TECHNICAL_MODEL_SUFFIXES,

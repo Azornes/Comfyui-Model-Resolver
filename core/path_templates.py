@@ -11,6 +11,7 @@ from .settings import (
     normalize_relative_subfolder,
     sanitize_folder_name,
 )
+from .type_utils import normalize_alphanumeric_key
 
 TEMPLATE_CATEGORIES = (
     "loras",
@@ -45,13 +46,8 @@ TAG_FOLDER_TOKENS = {
 }
 
 
-def _normalize_token(value: Any) -> str:
-    from .type_utils import normalize_alphanumeric_key
-    return normalize_alphanumeric_key(value)
-
-
 def _base_model_token_variants(value: Any) -> List[str]:
-    token = _normalize_token(value)
+    token = normalize_alphanumeric_key(value)
     if not token:
         return []
 
@@ -101,7 +97,7 @@ def _match_base_model_segment(
     *,
     allow_partial: bool = True,
 ) -> Optional[Dict[str, str]]:
-    token = _normalize_token(segment)
+    token = normalize_alphanumeric_key(segment)
     if not token:
         return None
     if token in base_alias_index:
@@ -169,7 +165,7 @@ def _match_base_model_path(
 
 
 def _is_tag_like_segment(segment: str) -> bool:
-    return _normalize_token(segment) in TAG_FOLDER_TOKENS
+    return normalize_alphanumeric_key(segment) in TAG_FOLDER_TOKENS
 
 
 def _reason_for_template(template: str, confidence: float) -> str:

@@ -23,15 +23,13 @@ from ..matcher import (
     calculate_candidate_rank,
     should_update_best_match,
 )
-from ..matcher import (
-    normalize_base_model as _normalize_base_model,
-)
 from ..path_utils import get_filename_from_path
 from ..progress import get_progress_reporter
 from ..type_utils import (
     build_model_result,
     extract_file_size,
     get_generic_filename_tokens,
+    normalize_alphanumeric_key,
     normalize_lora_manager_type,
     normalize_sha256,
     select_primary_model_file,
@@ -538,7 +536,7 @@ def search_lora_manager_archive(
         return []
 
     normalized_type = _normalize_model_type(model_type)
-    base_model_key = _normalize_base_model(base_model_context or "")
+    base_model_key = normalize_alphanumeric_key(base_model_context or "")
     cache_key = (
         f"search::{normalized_query.lower()}::{normalized_type}::{base_model_key}::{limit}"
     )
@@ -726,7 +724,7 @@ def search_lora_manager_archive_for_file(
     if requested_sha256:
         cache_key = (
             f"hash::{requested_sha256}::{_normalize_model_type(model_type)}::"
-            f"{_normalize_base_model(base_model_context or '')}"
+            f"{normalize_alphanumeric_key(base_model_context or '')}"
         )
         if cache_key in _search_cache:
             return _search_cache[cache_key]
@@ -785,7 +783,7 @@ def search_lora_manager_archive_for_file(
     if not search_query:
         return None
 
-    base_model_key = _normalize_base_model(base_model_context or "")
+    base_model_key = normalize_alphanumeric_key(base_model_context or "")
     cache_key = (
         f"file::{filename.lower()}::{_normalize_model_type(model_type)}::{base_model_key}::{exact_only}::{limit}"
     )
