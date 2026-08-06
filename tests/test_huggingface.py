@@ -11,11 +11,9 @@ from core.sources.huggingface import (
     HF_AUTHOR_FALLBACKS,
     _build_author_index_from_models,
     _fetch_author_index,
-    _fetch_remote_file_size_bytes,
     _find_matching_file_in_author_index,
     _get_author_index,
     _is_author_index_fresh,
-    _normalize_huggingface_size_probe_url,
     _read_persistent_author_indexes,
     _write_persistent_author_index,
     build_huggingface_custom_result,
@@ -27,6 +25,7 @@ from core.sources.huggingface import (
     parse_huggingface_url,
     search_huggingface_for_file,
 )
+from core.sources.common import probe_remote_file_size
 from core.type_utils import extract_file_size
 
 
@@ -585,20 +584,28 @@ class HuggingFaceSourceTests(unittest.TestCase):
         self.assertIsNone(extract_file_size(None))
         self.assertIsNone(extract_file_size({}))
 
-    def test_normalize_huggingface_size_probe_url(self):
+    @patch(
+        "core.sources.common.fetch_remote_file_size_cached",
+        return_value=None,
+    )
+    def test_remote_size_probe_normalizes_huggingface_blob_url(self, mock_fetch):
         url = "https://huggingface.co/user/repo/blob/main/model.safetensors"
-        normalized = _normalize_huggingface_size_probe_url(url)
-        self.assertEqual(normalized, "https://huggingface.co/user/repo/resolve/main/model.safetensors")
+        self.assertIsNone(probe_remote_file_size(url))
+        mock_fetch.assert_called_once_with(
+            "https://huggingface.co/user/repo/resolve/main/model.safetensors",
+            headers=None,
+            timeout=15,
+        )
 
     @patch(
-        "core.sources.huggingface.fetch_remote_file_size_cached",
+        "core.sources.common.fetch_remote_file_size_cached",
         return_value=789,
     )
     def test_remote_size_probe_preserves_headers_and_timeout(self, mock_fetch):
         url = "https://huggingface.co/user/repo/blob/main/model.safetensors"
         headers = {"Authorization": "Bearer test"}
 
-        size = _fetch_remote_file_size_bytes(url, headers=headers, timeout=7)
+        size = probe_remote_file_size(url, headers=headers, timeout=7)
 
         self.assertEqual(size, 789)
         mock_fetch.assert_called_once_with(
@@ -636,7 +643,7 @@ class HuggingFaceSourceTests(unittest.TestCase):
         url = "https://huggingface.co/user/repo/blob/main/model.safetensors"
         with patch("core.sources.huggingface._get_repo_tree", return_value=None):
             with patch(
-                "core.sources.huggingface.fetch_remote_file_size_cached",
+                "core.sources.common.fetch_remote_file_size_cached",
                 return_value=456,
             ):
                 result = build_huggingface_custom_result(url)

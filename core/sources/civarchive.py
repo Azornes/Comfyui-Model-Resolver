@@ -36,13 +36,11 @@ from ..type_utils import (
     extract_file_sha256,
     extract_file_size,
     extract_trained_words,
-    fetch_remote_file_size_cached,
     looks_like_model_file,
     normalize_alphanumeric_key,
     normalize_model_file_info,
     normalize_model_image,
     normalize_sha256,
-    prepare_remote_size_probe_url,
     resolve_model_category,
     select_primary_model_file,
     to_int,
@@ -51,6 +49,7 @@ from .common import (
     build_custom_result_fields,
     collect_download_urls,
     is_remote_link_marked_dead,
+    probe_remote_file_size,
     resolve_file_size,
 )
 
@@ -642,19 +641,6 @@ def _download_url_looks_like_model_file(
         return False
     return looks_like_model_file(normalized, expected_filename)
 
-def _fetch_remote_file_size_bytes(url: Any, timeout: int = 15) -> Optional[int]:
-    normalized = _normalize_download_url(url)
-    if not normalized:
-        return None
-    probe_url = prepare_remote_size_probe_url(
-        normalized,
-        list(CIVARCHIVE_SIZE_PROBE_DOMAINS),
-    )
-    if not probe_url:
-        return None
-    return fetch_remote_file_size_cached(probe_url, headers=REQUEST_HEADERS, timeout=timeout)
-
-
 def _remote_size_probe_priority(url: Any) -> int:
     try:
         host = urlparse(str(url or "")).hostname
@@ -680,7 +666,12 @@ def _resolve_file_size_bytes(
     return resolve_file_size(
         file_info,
         ordered_urls,
-        probe=_fetch_remote_file_size_bytes,
+        probe=lambda url: probe_remote_file_size(
+            url,
+            url_normalizer=_normalize_download_url,
+            allowed_domains=CIVARCHIVE_SIZE_PROBE_DOMAINS,
+            headers=REQUEST_HEADERS,
+        ),
     )
 
 

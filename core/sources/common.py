@@ -4,7 +4,35 @@ Common utilities for external model metadata sources.
 
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
-from ..type_utils import extract_file_sha256, extract_file_size
+from ..type_utils import (
+    extract_file_sha256,
+    extract_file_size,
+    fetch_remote_file_size_cached,
+    prepare_remote_size_probe_url,
+)
+
+
+def probe_remote_file_size(
+    url: Any,
+    *,
+    url_normalizer: Optional[Callable[[Any], Optional[str]]] = None,
+    allowed_domains: Optional[Iterable[str]] = None,
+    headers: Optional[Dict[str, str]] = None,
+    timeout: int = 15,
+) -> Optional[int]:
+    """Fetch a remote file size after applying provider-specific URL rules."""
+    normalized = url_normalizer(url) if url_normalizer is not None else url
+    if not normalized:
+        return None
+
+    probe_url = prepare_remote_size_probe_url(
+        normalized,
+        list(allowed_domains) if allowed_domains is not None else None,
+    )
+    if not probe_url:
+        return None
+
+    return fetch_remote_file_size_cached(probe_url, headers=headers, timeout=timeout)
 
 
 def resolve_file_size(

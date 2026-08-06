@@ -22,10 +22,11 @@ import requests
 # civarchive internals
 # ---------------------------------------------------------------------------
 from core.sources.civarchive import (
+    CIVARCHIVE_SIZE_PROBE_DOMAINS,
+    REQUEST_HEADERS,
     _build_result_from_normalized_version,
     _build_result_from_payload,
     _collect_archive_download_urls,
-    _fetch_remote_file_size_bytes,
     _normalize_archive_version,
     _normalize_download_url,
     _resolve_file_size_bytes,
@@ -65,6 +66,7 @@ from core.sources.civitai import (
 from core.sources.common import (
     build_custom_result_fields,
     is_remote_link_marked_dead,
+    probe_remote_file_size,
     resolve_file_size,
 )
 from core.type_utils import prepare_remote_size_probe_url
@@ -1186,7 +1188,7 @@ class CivArchiveMirrorSizeProbeTests(unittest.TestCase):
         self.assertEqual(probe.call_count, 2)
 
     def test_metadata_size_is_preferred_over_remote_probe(self):
-        with patch("core.sources.civarchive._fetch_remote_file_size_bytes") as mock_fetch:
+        with patch("core.sources.civarchive.probe_remote_file_size") as mock_fetch:
             size = _resolve_file_size_bytes(
                 {"size": 123456},
                 ["https://huggingface.co/org/repo/resolve/main/model.safetensors"],
@@ -1196,7 +1198,7 @@ class CivArchiveMirrorSizeProbeTests(unittest.TestCase):
         mock_fetch.assert_not_called()
 
     @patch(
-        "core.sources.civarchive._fetch_remote_file_size_bytes",
+        "core.sources.civarchive.probe_remote_file_size",
         return_value=654321,
     )
     def test_zero_metadata_size_falls_back_to_remote_probe(self, mock_fetch):
@@ -1205,10 +1207,15 @@ class CivArchiveMirrorSizeProbeTests(unittest.TestCase):
         size = _resolve_file_size_bytes({"size": 0}, [url])
 
         self.assertEqual(size, 654321)
-        mock_fetch.assert_called_once_with(url)
+        mock_fetch.assert_called_once_with(
+            url,
+            url_normalizer=_normalize_download_url,
+            allowed_domains=CIVARCHIVE_SIZE_PROBE_DOMAINS,
+            headers=REQUEST_HEADERS,
+        )
 
     @patch(
-        "core.sources.civarchive.fetch_remote_file_size_cached",
+        "core.sources.common.fetch_remote_file_size_cached",
         return_value=364853140,
     )
     def test_huggingface_mirror_is_allowed(self, mock_fetch):
@@ -1217,12 +1224,19 @@ class CivArchiveMirrorSizeProbeTests(unittest.TestCase):
             "ltx-2.3-22b-distilled_audio_vae.safetensors"
         )
 
-        self.assertEqual(_fetch_remote_file_size_bytes(url), 364853140)
+        self.assertEqual(
+            probe_remote_file_size(
+                url,
+                allowed_domains=CIVARCHIVE_SIZE_PROBE_DOMAINS,
+                headers=REQUEST_HEADERS,
+            ),
+            364853140,
+        )
         mock_fetch.assert_called_once()
         self.assertEqual(mock_fetch.call_args.args[0], url)
 
     @patch(
-        "core.sources.civarchive.fetch_remote_file_size_cached",
+        "core.sources.common.fetch_remote_file_size_cached",
         return_value=364853140,
     )
     def test_modelscope_mirror_is_allowed(self, mock_fetch):
@@ -1231,15 +1245,22 @@ class CivArchiveMirrorSizeProbeTests(unittest.TestCase):
             "ltx-2.3-22b-distilled_audio_vae.safetensors"
         )
 
-        self.assertEqual(_fetch_remote_file_size_bytes(url), 364853140)
+        self.assertEqual(
+            probe_remote_file_size(
+                url,
+                allowed_domains=CIVARCHIVE_SIZE_PROBE_DOMAINS,
+                headers=REQUEST_HEADERS,
+            ),
+            364853140,
+        )
         mock_fetch.assert_called_once()
         self.assertEqual(mock_fetch.call_args.args[0], url)
 
-    @patch("core.sources.civarchive._fetch_remote_file_size_bytes")
+    @patch("core.sources.civarchive.probe_remote_file_size")
     def test_huggingface_is_probed_before_modelscope(self, mock_fetch):
         modelscope_url = "https://www.modelscope.ai/org/repo/resolve/master/model.safetensors"
         huggingface_url = "https://huggingface.co/org/repo/resolve/main/model.safetensors"
-        mock_fetch.side_effect = lambda url: 123456 if url == huggingface_url else None
+        mock_fetch.side_effect = lambda url, **kwargs: 123456 if url == huggingface_url else None
 
         size = _resolve_file_size_bytes(
             {},
@@ -1247,13 +1268,20 @@ class CivArchiveMirrorSizeProbeTests(unittest.TestCase):
         )
 
         self.assertEqual(size, 123456)
-        mock_fetch.assert_called_once_with(huggingface_url)
+        mock_fetch.assert_called_once_with(
+            huggingface_url,
+            url_normalizer=_normalize_download_url,
+            allowed_domains=CIVARCHIVE_SIZE_PROBE_DOMAINS,
+            headers=REQUEST_HEADERS,
+        )
 
-    @patch("core.sources.civarchive.fetch_remote_file_size_cached")
+    @patch("core.sources.common.fetch_remote_file_size_cached")
     def test_untrusted_mirror_is_not_probed(self, mock_fetch):
         self.assertIsNone(
-            _fetch_remote_file_size_bytes(
-                "https://example.com/models/model.safetensors"
+            probe_remote_file_size(
+                "https://example.com/models/model.safetensors",
+                allowed_domains=CIVARCHIVE_SIZE_PROBE_DOMAINS,
+                headers=REQUEST_HEADERS,
             )
         )
         mock_fetch.assert_not_called()

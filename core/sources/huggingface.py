@@ -26,12 +26,10 @@ from ..type_utils import (
     check_credential_http,
     clear_remote_size_cache,
     extract_file_size,
-    fetch_remote_file_size_cached,
     looks_like_model_file,
     normalize_sha256,
-    prepare_remote_size_probe_url,
 )
-from .common import resolve_file_size
+from .common import probe_remote_file_size, resolve_file_size
 
 HF_API_URL = "https://huggingface.co/api"
 HF_AUTHOR_FALLBACKS = ["Comfy-Org", "Kijai"]
@@ -696,23 +694,6 @@ def get_huggingface_model_details(
 
 
 
-def _normalize_huggingface_size_probe_url(url: str) -> Optional[str]:
-    return prepare_remote_size_probe_url(url)
-
-
-
-
-def _fetch_remote_file_size_bytes(
-    url: str,
-    headers: Optional[Dict[str, str]] = None,
-    timeout: int = 15,
-) -> Optional[int]:
-    probe_url = _normalize_huggingface_size_probe_url(url)
-    if not probe_url:
-        return None
-    return fetch_remote_file_size_cached(probe_url, headers=headers, timeout=timeout)
-
-
 def _build_huggingface_result(
     repo_id: str,
     file_path: str,
@@ -725,7 +706,7 @@ def _build_huggingface_result(
     size = resolve_file_size(
         file_info,
         [download_url],
-        probe=lambda url: _fetch_remote_file_size_bytes(url, headers=headers),
+        probe=lambda url: probe_remote_file_size(url, headers=headers),
     )
     return build_model_result(
         "huggingface",
@@ -1558,11 +1539,7 @@ def build_huggingface_custom_result(
     size = resolve_file_size(
         file_info,
         [download_url],
-        probe=lambda url: fetch_remote_file_size_cached(
-            url,
-            headers=headers,
-            timeout=10,
-        ),
+        probe=lambda url: probe_remote_file_size(url, headers=headers, timeout=10),
     )
     sha256 = _extract_huggingface_file_sha256(file_info)
 
