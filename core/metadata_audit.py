@@ -18,6 +18,7 @@ from .path_utils import (
     read_merged_model_metadata,
 )
 from .type_utils import format_size_bytes
+from .worker_utils import resolve_worker_count
 
 log = create_module_logger(__name__)
 
@@ -176,22 +177,6 @@ def _model_key(model_path: str, metadata_path: str) -> Tuple[str, str]:
     except (OSError, ValueError):
         metadata_identity = os.path.normcase(os.path.abspath(metadata_path))
     return model_identity, metadata_identity
-
-
-def _get_worker_count(total_models: int, requested_workers: Optional[int] = None) -> Tuple[int, int]:
-    cpu_count = os.cpu_count() or 4
-    if requested_workers is not None:
-        try:
-            workers = int(requested_workers)
-        except (TypeError, ValueError):
-            workers = 0
-        if workers > 0:
-            return min(total_models or 1, max(MIN_AUDIT_WORKERS, min(workers, MAX_AUDIT_WORKERS))), cpu_count
-
-    # The audit is mostly disk I/O plus small JSON parsing, so a few workers per
-    # CPU core keeps the drive busy without creating an unbounded thread swarm.
-    workers = max(MIN_AUDIT_WORKERS, min(MAX_AUDIT_WORKERS, cpu_count * 4))
-    return min(total_models or 1, workers), cpu_count
 
 
 def _get_batch_size(
@@ -356,7 +341,16 @@ def audit_metadata_sizes(
 
     audit_models = dedupe_models(models or [])
     total_models = len(audit_models)
-    resolved_worker_count, cpu_count = _get_worker_count(total_models, worker_count)
+    resolved_worker_count, cpu_count = resolve_worker_count(
+        total_models,
+        worker_count,
+        default_worker_multiplier=4,
+        default_worker_limit=MAX_AUDIT_WORKERS,
+        cpu_count_fallback=4,
+        minimum_workers=MIN_AUDIT_WORKERS,
+        maximum_workers=MAX_AUDIT_WORKERS,
+        empty_total_workers=1,
+    )
     resolved_batch_size = _get_batch_size(total_models, resolved_worker_count, batch_size)
     batches = _make_batches(audit_models, resolved_batch_size)
     active_worker_count = min(resolved_worker_count, len(batches) or 1)

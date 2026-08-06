@@ -35,6 +35,7 @@ from .type_utils import (
     normalize_category_to_model_type,
     normalize_sha256,
 )
+from .worker_utils import resolve_worker_count
 
 log = create_module_logger(__name__)
 
@@ -61,37 +62,18 @@ def _select_metadata_path(model_path: str) -> Tuple[str, str, bool]:
     return target_path, target_path if target_exists else "", target_exists
 
 
-def _coerce_positive_int(value: Any) -> int:
-    try:
-        number = int(value)
-    except (TypeError, ValueError):
-        return 0
-    return number if number > 0 else 0
-
-
-def _resolve_worker_count(total_models: int, requested_workers: Optional[int] = None) -> Tuple[int, int]:
-    cpu_count = os.cpu_count() or 1
-    requested = _coerce_positive_int(requested_workers)
-    if requested:
-        workers = requested
-    else:
-        workers = min(cpu_count, DEFAULT_METADATA_BUILD_WORKER_LIMIT)
-    workers = max(MIN_METADATA_BUILD_WORKERS, min(MAX_METADATA_BUILD_WORKERS, workers))
-    if total_models > 0:
-        workers = min(total_models, workers)
-    return workers, cpu_count
-
-
 def get_metadata_build_capabilities() -> Dict[str, Any]:
     """Return local concurrency limits for the metadata builder UI."""
-    cpu_count = os.cpu_count() or 1
+    default_worker_count, cpu_count = resolve_worker_count(
+        0,
+        default_worker_limit=DEFAULT_METADATA_BUILD_WORKER_LIMIT,
+        minimum_workers=MIN_METADATA_BUILD_WORKERS,
+        maximum_workers=MAX_METADATA_BUILD_WORKERS,
+    )
     return {
         "success": True,
         "cpu_count": cpu_count,
-        "default_worker_count": max(
-            MIN_METADATA_BUILD_WORKERS,
-            min(cpu_count, DEFAULT_METADATA_BUILD_WORKER_LIMIT),
-        ),
+        "default_worker_count": default_worker_count,
         "min_worker_count": MIN_METADATA_BUILD_WORKERS,
         "max_worker_count": MAX_METADATA_BUILD_WORKERS,
         "default_metadata_mode": METADATA_BUILD_MODE_CALCULATE_FRESH,
@@ -741,7 +723,13 @@ def build_missing_local_metadata(
         if is_model_file_path(str(model.get("path") or "").strip())
     ]
     total = len(model_items)
-    resolved_worker_count, cpu_count = _resolve_worker_count(total, worker_count)
+    resolved_worker_count, cpu_count = resolve_worker_count(
+        total,
+        worker_count,
+        default_worker_limit=DEFAULT_METADATA_BUILD_WORKER_LIMIT,
+        minimum_workers=MIN_METADATA_BUILD_WORKERS,
+        maximum_workers=MAX_METADATA_BUILD_WORKERS,
+    )
     if resolved_worker_count > 1:
         return _build_missing_local_metadata_parallel(
             model_items,

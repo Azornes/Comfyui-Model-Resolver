@@ -2,7 +2,9 @@ import json
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
+from core import worker_utils
 from core.metadata_audit import audit_metadata_sizes
 from core.path_utils import get_model_resolver_sidecar_path
 
@@ -29,6 +31,51 @@ class MetadataSizeAuditTests(unittest.TestCase):
             "category": category,
             "base_directory": os.path.dirname(model_path),
         }
+
+    def test_worker_count_preserves_audit_defaults_and_empty_input_behavior(self):
+        with patch.object(worker_utils.os, "cpu_count", return_value=8):
+            self.assertEqual(
+                worker_utils.resolve_worker_count(
+                    100,
+                    default_worker_multiplier=4,
+                    default_worker_limit=64,
+                    cpu_count_fallback=4,
+                    empty_total_workers=1,
+                ),
+                (32, 8),
+            )
+            self.assertEqual(
+                worker_utils.resolve_worker_count(
+                    20,
+                    6,
+                    default_worker_multiplier=4,
+                    default_worker_limit=64,
+                    cpu_count_fallback=4,
+                    empty_total_workers=1,
+                ),
+                (6, 8),
+            )
+            self.assertEqual(
+                worker_utils.resolve_worker_count(
+                    0,
+                    default_worker_multiplier=4,
+                    default_worker_limit=64,
+                    cpu_count_fallback=4,
+                    empty_total_workers=1,
+                ),
+                (1, 8),
+            )
+            self.assertEqual(
+                worker_utils.resolve_worker_count(
+                    0,
+                    6,
+                    default_worker_multiplier=4,
+                    default_worker_limit=64,
+                    cpu_count_fallback=4,
+                    empty_total_workers=1,
+                ),
+                (1, 8),
+            )
 
     def test_reports_top_level_size_mismatch(self):
         with tempfile.TemporaryDirectory() as tmpdir:

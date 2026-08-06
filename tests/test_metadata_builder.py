@@ -3,7 +3,9 @@ import json
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
+from core import worker_utils
 from core.metadata_builder import (
     METADATA_BUILD_MODE_CALCULATE_FRESH,
     METADATA_BUILD_MODE_IMPORT_EXISTING,
@@ -44,6 +46,31 @@ class MetadataBuilderTests(unittest.TestCase):
             "category": category,
             "base_directory": os.path.dirname(model_path),
         }
+
+    def test_worker_count_preserves_builder_defaults_and_requested_limits(self):
+        with patch.object(worker_utils.os, "cpu_count", return_value=8):
+            self.assertEqual(
+                worker_utils.resolve_worker_count(
+                    20,
+                    default_worker_limit=4,
+                ),
+                (4, 8),
+            )
+            self.assertEqual(
+                worker_utils.resolve_worker_count(
+                    20,
+                    6,
+                    default_worker_limit=4,
+                ),
+                (6, 8),
+            )
+            self.assertEqual(
+                worker_utils.resolve_worker_count(
+                    0,
+                    default_worker_limit=4,
+                ),
+                (4, 8),
+            )
 
     def test_creates_missing_metadata_from_local_safetensors_header(self):
         with tempfile.TemporaryDirectory() as tmpdir:
