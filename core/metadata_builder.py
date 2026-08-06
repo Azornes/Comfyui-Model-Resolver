@@ -431,11 +431,12 @@ def _build_result_payload(
     total_models: int,
     worker_count: int,
     cpu_count: int,
+    include_updated_count: bool = True,
 ) -> Dict[str, Any]:
     errors = counts.get("errors") or []
     updated = counts.get("updated") or []
     history = counts.get("history") or []
-    return {
+    result = {
         "success": success,
         "cancelled": cancelled,
         "scanned_models": counts.get("scanned_models", 0),
@@ -452,10 +453,51 @@ def _build_result_payload(
         "error_count": len(errors),
         "errors": errors[:50],
         "updated": updated[:200],
-        "updated_count": len(updated),
         "history": history,
         "history_count": len(history),
     }
+    if include_updated_count:
+        result["updated_count"] = len(updated)
+    return result
+
+
+def _build_metadata_history_item(
+    model: Dict[str, Any],
+    *,
+    action: str,
+    filename: str,
+    relative_path: str,
+    model_path: str,
+    metadata_path: str,
+    file_size: int,
+    sha256: str,
+    sha256_source: str,
+    metadata_mode: str,
+    message: Optional[str] = None,
+    imported_from: Optional[str] = None,
+    changed_fields: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    item = {
+        "action": action,
+        "filename": filename,
+        "relative_path": relative_path,
+        "category": model.get("category") or "",
+        "base_directory": model.get("base_directory") or "",
+        "model_path": model_path,
+        "metadata_path": metadata_path,
+        "size": file_size,
+        "size_label": format_size_bytes(file_size),
+        "sha256": sha256,
+        "sha256_source": sha256_source,
+        "metadata_mode": metadata_mode,
+    }
+    if message is not None:
+        item["message"] = message
+    if imported_from is not None:
+        item["imported_from"] = imported_from
+    if changed_fields is not None:
+        item["changed_fields"] = changed_fields
+    return item
 
 
 def _history_items_for_model(model: Dict[str, Any], result: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -752,6 +794,38 @@ def build_missing_local_metadata(
     updated: List[Dict[str, Any]] = []
     history: List[Dict[str, Any]] = []
 
+    def build_sequential_result(
+        *,
+        success: bool,
+        cancelled: bool,
+        include_updated_count: bool,
+        include_metadata_mode: bool = False,
+    ) -> Dict[str, Any]:
+        result = _build_result_payload(
+            {
+                "scanned_models": scanned_models,
+                "created_metadata": created_metadata,
+                "updated_metadata": updated_metadata,
+                "skipped_complete": skipped_complete,
+                "header_hashes": header_hashes,
+                "calculated_hashes": calculated_hashes,
+                "header_metadata_count": header_metadata_count,
+                "invalid_metadata": invalid_metadata,
+                "errors": errors,
+                "updated": updated,
+                "history": history,
+            },
+            success=success,
+            cancelled=cancelled,
+            total_models=total,
+            worker_count=resolved_worker_count,
+            cpu_count=cpu_count,
+            include_updated_count=include_updated_count,
+        )
+        if include_metadata_mode:
+            result["metadata_mode"] = metadata_mode
+        return result
+
     _emit(
         progress_callback,
         {
@@ -778,26 +852,11 @@ def build_missing_local_metadata(
                     "percent": _progress_percent(index, total),
                 },
             )
-            return {
-                "success": False,
-                "cancelled": True,
-                "scanned_models": scanned_models,
-                "total_models": total,
-                "created_metadata": created_metadata,
-                "updated_metadata": updated_metadata,
-                "skipped_complete": skipped_complete,
-                "header_hashes": header_hashes,
-                "calculated_hashes": calculated_hashes,
-                "header_metadata_count": header_metadata_count,
-                "invalid_metadata": invalid_metadata,
-                "worker_count": resolved_worker_count,
-                "cpu_count": cpu_count,
-                "error_count": len(errors),
-                "errors": errors[:50],
-                "updated": updated[:200],
-                "history": history,
-                "history_count": len(history),
-            }
+            return build_sequential_result(
+                success=False,
+                cancelled=True,
+                include_updated_count=False,
+            )
 
         model_path = str(model.get("path") or "").strip()
         filename = get_filename_from_path(model_path)
@@ -835,21 +894,19 @@ def build_missing_local_metadata(
             )
             if metadata_exists and existing_sha256:
                 skipped_complete += 1
-                history_item = {
-                    "action": "skipped",
-                    "filename": filename,
-                    "relative_path": relative_path,
-                    "category": model.get("category") or "",
-                    "base_directory": model.get("base_directory") or "",
-                    "model_path": model_path,
-                    "metadata_path": metadata_path,
-                    "size": file_size,
-                    "size_label": format_size_bytes(file_size),
-                    "sha256": existing_sha256,
-                        "sha256_source": "existing_metadata",
-                        "metadata_mode": metadata_mode,
-                        "message": "Already had SHA256",
-                }
+                history_item = _build_metadata_history_item(
+                    model,
+                    action="skipped",
+                    filename=filename,
+                    relative_path=relative_path,
+                    model_path=model_path,
+                    metadata_path=metadata_path,
+                    file_size=file_size,
+                    sha256=existing_sha256,
+                    sha256_source="existing_metadata",
+                    metadata_mode=metadata_mode,
+                    message="Already had SHA256",
+                )
                 history.append(history_item)
                 _emit(
                     progress_callback,
@@ -1009,41 +1066,37 @@ def build_missing_local_metadata(
                     updated_metadata += 1
                 else:
                     created_metadata += 1
-                history_item = {
-                    "action": action,
-                    "filename": filename,
-                    "relative_path": relative_path,
-                    "category": model.get("category") or "",
-                    "base_directory": model.get("base_directory") or "",
-                    "model_path": model_path,
-                    "metadata_path": metadata_path,
-                    "size": file_size,
-                    "size_label": format_size_bytes(file_size),
-                    "sha256": sha256,
-                    "sha256_source": sha256_source,
-                    "metadata_mode": metadata_mode,
-                    "imported_from": external_metadata_path,
-                    "changed_fields": changed_fields,
-                }
+                history_item = _build_metadata_history_item(
+                    model,
+                    action=action,
+                    filename=filename,
+                    relative_path=relative_path,
+                    model_path=model_path,
+                    metadata_path=metadata_path,
+                    file_size=file_size,
+                    sha256=sha256,
+                    sha256_source=sha256_source,
+                    metadata_mode=metadata_mode,
+                    imported_from=external_metadata_path,
+                    changed_fields=changed_fields,
+                )
                 updated.append(history_item)
                 history.append(history_item)
             else:
                 skipped_complete += 1
-                history_item = {
-                    "action": "skipped",
-                    "filename": filename,
-                    "relative_path": relative_path,
-                    "category": model.get("category") or "",
-                    "base_directory": model.get("base_directory") or "",
-                    "model_path": model_path,
-                    "metadata_path": metadata_path,
-                    "size": file_size,
-                    "size_label": format_size_bytes(file_size),
-                    "sha256": sha256,
-                    "sha256_source": sha256_source,
-                    "metadata_mode": metadata_mode,
-                    "message": "No changes needed",
-                }
+                history_item = _build_metadata_history_item(
+                    model,
+                    action="skipped",
+                    filename=filename,
+                    relative_path=relative_path,
+                    model_path=model_path,
+                    metadata_path=metadata_path,
+                    file_size=file_size,
+                    sha256=sha256,
+                    sha256_source=sha256_source,
+                    metadata_mode=metadata_mode,
+                    message="No changes needed",
+                )
                 history.append(history_item)
 
             _emit(
@@ -1080,26 +1133,11 @@ def build_missing_local_metadata(
                     "current_path": model_path,
                 },
             )
-            return {
-                "success": False,
-                "cancelled": True,
-                "scanned_models": scanned_models,
-                "total_models": total,
-                "created_metadata": created_metadata,
-                "updated_metadata": updated_metadata,
-                "skipped_complete": skipped_complete,
-                "header_hashes": header_hashes,
-                "calculated_hashes": calculated_hashes,
-                "header_metadata_count": header_metadata_count,
-                "invalid_metadata": invalid_metadata,
-                "worker_count": resolved_worker_count,
-                "cpu_count": cpu_count,
-                "error_count": len(errors),
-                "errors": errors[:50],
-                "updated": updated[:200],
-                "history": history,
-                "history_count": len(history),
-            }
+            return build_sequential_result(
+                success=False,
+                cancelled=True,
+                include_updated_count=False,
+            )
         except Exception as exc:
             log.warning(f"Could not build local metadata for {model_path}: {exc}", exc_info=True)
             error_item = {
@@ -1133,28 +1171,12 @@ def build_missing_local_metadata(
                 },
             )
 
-    result = {
-        "success": True,
-        "cancelled": False,
-        "scanned_models": scanned_models,
-        "total_models": total,
-        "created_metadata": created_metadata,
-        "updated_metadata": updated_metadata,
-        "skipped_complete": skipped_complete,
-        "header_hashes": header_hashes,
-        "calculated_hashes": calculated_hashes,
-        "header_metadata_count": header_metadata_count,
-        "invalid_metadata": invalid_metadata,
-        "worker_count": resolved_worker_count,
-        "cpu_count": cpu_count,
-        "error_count": len(errors),
-        "errors": errors[:50],
-        "updated": updated[:200],
-        "updated_count": len(updated),
-        "history": history,
-        "history_count": len(history),
-        "metadata_mode": metadata_mode,
-    }
+    result = build_sequential_result(
+        success=True,
+        cancelled=False,
+        include_updated_count=True,
+        include_metadata_mode=True,
+    )
     _emit(
         progress_callback,
         {

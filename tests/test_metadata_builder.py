@@ -403,6 +403,118 @@ class MetadataBuilderTests(unittest.TestCase):
         self.assertTrue(all(payload.get("sha256") for payload in metadata_payloads))
         self.assertTrue(any(event.get("worker_count") == 2 for event in events))
 
+    def test_final_result_contract_matches_between_sequential_and_parallel_builds(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sequential_path = self._write_model(
+                tmpdir,
+                "sequential.ckpt",
+                b"sequential model",
+            )
+            parallel_paths = [
+                self._write_model(
+                    tmpdir,
+                    f"parallel_contract_{index}.ckpt",
+                    f"parallel model {index}".encode(),
+                )
+                for index in range(2)
+            ]
+
+            sequential_result = build_missing_local_metadata(
+                models=[self._model_info(sequential_path, "checkpoints")],
+                worker_count=1,
+                metadata_mode=METADATA_BUILD_MODE_IMPORT_EXISTING,
+            )
+            parallel_result = build_missing_local_metadata(
+                models=[
+                    self._model_info(path, "checkpoints")
+                    for path in parallel_paths
+                ],
+                worker_count=2,
+                metadata_mode=METADATA_BUILD_MODE_IMPORT_EXISTING,
+            )
+
+        expected_keys = {
+            "success",
+            "cancelled",
+            "scanned_models",
+            "total_models",
+            "created_metadata",
+            "updated_metadata",
+            "skipped_complete",
+            "header_hashes",
+            "calculated_hashes",
+            "header_metadata_count",
+            "invalid_metadata",
+            "worker_count",
+            "cpu_count",
+            "error_count",
+            "errors",
+            "updated",
+            "updated_count",
+            "history",
+            "history_count",
+            "metadata_mode",
+        }
+        self.assertEqual(expected_keys, set(sequential_result))
+        self.assertEqual(expected_keys, set(parallel_result))
+        self.assertEqual(
+            METADATA_BUILD_MODE_IMPORT_EXISTING,
+            sequential_result["metadata_mode"],
+        )
+        self.assertEqual(
+            METADATA_BUILD_MODE_IMPORT_EXISTING,
+            parallel_result["metadata_mode"],
+        )
+        self.assertEqual(
+            sequential_result["history_count"],
+            len(sequential_result["history"]),
+        )
+        self.assertEqual(
+            parallel_result["history_count"],
+            len(parallel_result["history"]),
+        )
+
+    def test_history_items_preserve_model_context_for_created_and_skipped_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            created_path = self._write_model(
+                tmpdir,
+                "history_created.ckpt",
+                b"created model",
+            )
+            skipped_path = self._write_model(
+                tmpdir,
+                "history_skipped.ckpt",
+                b"skipped model",
+            )
+            self._write_metadata(
+                skipped_path,
+                {"filename": "history_skipped.ckpt", "sha256": "f" * 64},
+            )
+
+            result = build_missing_local_metadata(
+                models=[
+                    self._model_info(created_path, "checkpoints"),
+                    self._model_info(skipped_path, "loras"),
+                ],
+                worker_count=1,
+            )
+
+        history_by_filename = {
+            item["filename"]: item for item in result["history"]
+        }
+        self.assertEqual("created", history_by_filename["history_created.ckpt"]["action"])
+        self.assertEqual("skipped", history_by_filename["history_skipped.ckpt"]["action"])
+        for filename, category in (
+            ("history_created.ckpt", "checkpoints"),
+            ("history_skipped.ckpt", "loras"),
+        ):
+            with self.subTest(filename=filename):
+                item = history_by_filename[filename]
+                self.assertEqual(filename, item["relative_path"])
+                self.assertEqual(category, item["category"])
+                self.assertTrue(item["model_path"])
+                self.assertTrue(item["metadata_path"])
+
 
 if __name__ == "__main__":
     unittest.main()
