@@ -43,6 +43,7 @@ from ..type_utils import (
     as_list,
     build_model_result,
     check_credential_http,
+    check_credential_preconditions,
     extract_file_size,
     extract_trained_words,
     first_non_empty,
@@ -98,49 +99,55 @@ def _extract_civitai_username(data: Dict[str, Any]) -> str:
     return data.get("username") or data.get("name") or data.get("email") or ""
 
 
-def check_civitai_session_token(session_token: Optional[str]) -> Dict[str, Any]:
-    """Check whether a CivitAI browser session token is accepted by civitai.com."""
-    from ..type_utils import check_credential_preconditions
-    precheck = check_credential_preconditions(session_token, "CivitAI session token")
+def _check_civitai_credential(
+    credential: Optional[str],
+    *,
+    credential_name: str,
+    build_headers: Callable[[str], Dict[str, str]],
+    success_message: str,
+    invalid_message: str,
+) -> Dict[str, Any]:
+    precheck = check_credential_preconditions(credential, credential_name)
     if precheck:
         return precheck
 
-    token = (session_token or "").strip()
-    headers = {
-        "accept": "application/json",
-        "Cookie": build_civitai_session_cookie(token),
-        "user-agent": DEFAULT_BROWSER_USER_AGENT,
-    }
-
+    value = (credential or "").strip()
     return check_credential_http(
         "https://civitai.com/api/v1/me",
-        headers=headers,
-        success_message="Session token is valid.",
+        headers=build_headers(value),
+        success_message=success_message,
         get_username=_extract_civitai_username,
-        error_msg_401_403="Session token is not accepted by CivitAI.",
+        error_msg_401_403=invalid_message,
+    )
+
+
+def check_civitai_session_token(session_token: Optional[str]) -> Dict[str, Any]:
+    """Check whether a CivitAI browser session token is accepted by civitai.com."""
+    return _check_civitai_credential(
+        session_token,
+        credential_name="CivitAI session token",
+        build_headers=lambda value: {
+            "accept": "application/json",
+            "Cookie": build_civitai_session_cookie(value),
+            "user-agent": DEFAULT_BROWSER_USER_AGENT,
+        },
+        success_message="Session token is valid.",
+        invalid_message="Session token is not accepted by CivitAI.",
     )
 
 
 def check_civitai_api_key(api_key: Optional[str]) -> Dict[str, Any]:
     """Check whether a CivitAI API key is accepted by civitai.com."""
-    from ..type_utils import check_credential_preconditions
-    precheck = check_credential_preconditions(api_key, "CivitAI API key")
-    if precheck:
-        return precheck
-
-    key = (api_key or "").strip()
-    headers = {
-        "accept": "application/json",
-        "Authorization": f"Bearer {key}",
-        "user-agent": DEFAULT_BROWSER_USER_AGENT,
-    }
-
-    return check_credential_http(
-        "https://civitai.com/api/v1/me",
-        headers=headers,
+    return _check_civitai_credential(
+        api_key,
+        credential_name="CivitAI API key",
+        build_headers=lambda value: {
+            "accept": "application/json",
+            "Authorization": f"Bearer {value}",
+            "user-agent": DEFAULT_BROWSER_USER_AGENT,
+        },
         success_message="CivitAI API key is valid.",
-        get_username=_extract_civitai_username,
-        error_msg_401_403="CivitAI API key is not accepted.",
+        invalid_message="CivitAI API key is not accepted.",
     )
 
 

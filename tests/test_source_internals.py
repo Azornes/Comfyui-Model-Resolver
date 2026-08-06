@@ -48,6 +48,8 @@ from core.sources.civitai import (
     build_civitai_custom_result,
     build_civitai_result_payload,
     build_civitai_session_cookie,
+    check_civitai_api_key,
+    check_civitai_session_token,
     clear_search_cache,
     get_civitai_model_details,
     get_model_info_by_hash,
@@ -104,6 +106,7 @@ class CivitaiResultBuilderTests(unittest.TestCase):
         self.assertEqual("abc123", payload["sha256"])
         self.assertEqual(100.0, payload["confidence"])
 
+
     def test_build_result_from_version_has_unified_builder_available(self):
         result = _build_civitai_result_from_version(
             model_id=123,
@@ -125,6 +128,68 @@ class CivitaiResultBuilderTests(unittest.TestCase):
         self.assertEqual("Anima", result["base_model"])
         self.assertEqual("abc123", result["sha256"])
         self.assertEqual(10 * 1024, result["size"])
+
+
+class CivitaiCredentialCheckTests(unittest.TestCase):
+
+    def test_empty_credentials_keep_provider_specific_precheck_messages(self):
+        self.assertEqual(
+            {
+                "success": False,
+                "valid": False,
+                "status": "missing",
+                "message": "Paste a CivitAI session token first.",
+            },
+            check_civitai_session_token("  "),
+        )
+        self.assertEqual(
+            {
+                "success": False,
+                "valid": False,
+                "status": "missing",
+                "message": "Paste a CivitAI API key first.",
+            },
+            check_civitai_api_key("  "),
+        )
+
+    @patch("core.sources.civitai.check_credential_http")
+    def test_session_token_uses_cookie_transport_and_shared_result(self, mock_check):
+        expected = {"success": True, "valid": True, "status": "valid", "username": "tester"}
+        mock_check.return_value = expected
+
+        result = check_civitai_session_token("  session-value  ")
+
+        self.assertIs(expected, result)
+        mock_check.assert_called_once()
+        args, kwargs = mock_check.call_args
+        self.assertEqual("https://civitai.com/api/v1/me", args[0])
+        self.assertEqual(
+            {
+                "accept": "application/json",
+                "Cookie": "__Secure-civ-token=session-value; __Secure-civitai-token=session-value",
+                "user-agent": kwargs["headers"]["user-agent"],
+            },
+            kwargs["headers"],
+        )
+        self.assertEqual("Session token is valid.", kwargs["success_message"])
+        self.assertEqual("Session token is not accepted by CivitAI.", kwargs["error_msg_401_403"])
+
+    @patch("core.sources.civitai.check_credential_http")
+    def test_api_key_uses_bearer_transport_and_shared_result(self, mock_check):
+        expected = {"success": False, "valid": False, "status": "invalid"}
+        mock_check.return_value = expected
+
+        result = check_civitai_api_key("  api-key-value  ")
+
+        self.assertIs(expected, result)
+        mock_check.assert_called_once()
+        args, kwargs = mock_check.call_args
+        self.assertEqual("https://civitai.com/api/v1/me", args[0])
+        self.assertEqual("application/json", kwargs["headers"]["accept"])
+        self.assertEqual("Bearer api-key-value", kwargs["headers"]["Authorization"])
+        self.assertNotIn("Cookie", kwargs["headers"])
+        self.assertEqual("CivitAI API key is valid.", kwargs["success_message"])
+        self.assertEqual("CivitAI API key is not accepted.", kwargs["error_msg_401_403"])
 
 
 class CivitaiPrimaryFileSelectionTests(unittest.TestCase):
