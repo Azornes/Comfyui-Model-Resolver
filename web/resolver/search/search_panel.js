@@ -3,6 +3,7 @@ import { getModelCardUrl, parseHuggingFaceFileUrl } from "../utils/url_utils.js"
 import { getSourceDisplayLabel, normalizeSourceKey } from "../utils/source_labels.js";
 import { getCivitaiModelUrl } from "../globals.js";
 import { safeStorage, normalizePathIdentity } from "../utils/html_utils.js";
+import { getSha256Field } from "../utils/hash_utils.js";
 import { bindEventOnce } from "../utils/dom_patch_utils.js";
 const localStorage = safeStorage;
 export const searchPanelMethods = {
@@ -2092,16 +2093,10 @@ export const searchPanelMethods = {
         const confidence = Number(match.confidence || 0);
         const isHashMatch = Boolean(match.hash_match || match.match_type === 'hash');
         const model = match.model || {};
-        const hashes = model.hashes && typeof model.hashes === 'object' ? model.hashes : {};
-        const normalizedHash = String(
-            match.sha256
-            || match.hash
-            || model.sha256
-            || model.hash
-            || hashes.SHA256
-            || hashes.sha256
-            || ''
-        ).trim().toLowerCase();
+        const normalizedHash = getSha256Field(
+            { sha256: match.sha256, hash: match.hash },
+            { lowercase: true }
+        ) || getSha256Field(model, { lowercase: true });
         const hashLabel = normalizedHash && hashLabelMap?.get?.(normalizedHash)
             ? hashLabelMap.get(normalizedHash)
             : '';

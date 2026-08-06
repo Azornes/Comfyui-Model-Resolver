@@ -3,6 +3,7 @@ import { getCustomNodeModelCategory } from "../custom_nodes/registry.js";
 import { createFloatingTreePicker } from "../utils/tree_picker.js";
 import { normalizeDownloadCategoryValue } from "../utils/category_utils.js";
 import { safeStorage } from "../utils/html_utils.js";
+import { getSha256Field } from "../utils/hash_utils.js";
 const localStorage = safeStorage;
 const invalidWindowsPathCharacters = new RegExp(
     `[<>:"|?*${Array.from({ length: 32 }, (_, code) => String.fromCharCode(code)).join('')}]+`,
@@ -1341,17 +1342,6 @@ export const downloadTargetMethods = {
             || (merged.creator_username ? { username: merged.creator_username } : null)
             || (merged.username ? { username: merged.username } : null)
             || null;
-        const getHashFromValue = (value) => {
-            if (!value || typeof value !== 'object') return '';
-            const hashes = value.hashes && typeof value.hashes === 'object' ? value.hashes : {};
-            return String(
-                value.sha256
-                || value.hash
-                || hashes.SHA256
-                || hashes.sha256
-                || ''
-            ).trim().toLowerCase();
-        };
         const getComparableFilename = (value) => String(value || '').split(/[\\/]+/).pop().trim().toLowerCase();
         const selectedFilename = getComparableFilename(
             options.filename || sourceData.filename || sourceData.file_name || merged.filename
@@ -1368,8 +1358,8 @@ export const downloadTargetMethods = {
             const filename = getComparableFilename(file.name || file.filename || file.fileName);
             return selectedFilename && filename === selectedFilename;
         }) || fileCandidates[0] || null;
-        const selectedFileSha256 = getHashFromValue(selectedFile);
-        const sourceDataSha256 = getHashFromValue(sourceData);
+        const selectedFileSha256 = getSha256Field(selectedFile || {}, { lowercase: true });
+        const sourceDataSha256 = getSha256Field(sourceData, { lowercase: true });
         const selectedSourceSha256 = selectedFileSha256 || sourceDataSha256;
         const sourceName = sourceData.details_source
             || sourceData.source
