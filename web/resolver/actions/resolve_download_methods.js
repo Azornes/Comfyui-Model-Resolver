@@ -6,6 +6,7 @@ import { normalizeSha256 } from "../utils/hash_utils.js";
 import { normalizePathIdentity } from "../utils/html_utils.js";
 import { bindEventOnce, syncElementAttributes } from "../utils/dom_patch_utils.js";
 import { bindDownloadActionHandlers } from "../utils/download_action_handlers.js";
+import { matchesLocalModelDownload } from "../utils/local_match_utils.js";
 import { matchesSearchText } from "../utils/search_utils.js";
 import { normalizeSourceKey } from "../utils/source_labels.js";
 const log = createModuleLogger('resolve_download_methods');
@@ -889,39 +890,7 @@ export const resolveDownloadMethods = {
     },
 
     isLocalMatchForDownloadTarget(match = {}, info = {}, progress = {}) {
-        const model = match.model || {};
-        const normalizePath = (value = '') => this.normalizeLocalMatchPathIdentity(value);
-        const joinPath = (...parts) => normalizePath(parts.filter(Boolean).join('/'));
-        const filename = progress.filename || info.filename || '';
-        const matchAbsolute = [
-            model.path,
-            model.resolved_path,
-            match.path,
-            match.resolved_path
-        ].map(normalizePath).filter(Boolean);
-        const matchRelative = [
-            model.relative_path,
-            match.relative_path
-        ].map(normalizePath).filter(Boolean);
-        const targetAbsolute = [
-            progress.path,
-            info.downloadPath,
-            joinPath(progress.directory || '', filename),
-            joinPath(info.downloadDirectory || '', filename)
-        ].map(normalizePath).filter(Boolean);
-        const targetRelative = [
-            info.subfolder && filename ? joinPath(info.subfolder, filename) : '',
-            progress.relative_path,
-            info.relativePath
-        ].map(normalizePath).filter(Boolean);
-
-        return targetAbsolute.some(target => (
-            matchAbsolute.includes(target)
-            || matchRelative.some(relative => target.endsWith(`/${relative}`))
-        )) || targetRelative.some(target => (
-            matchRelative.includes(target)
-            || matchAbsolute.some(absolute => absolute.endsWith(`/${target}`))
-        ));
+        return matchesLocalModelDownload(match, { info, progress });
     },
 
     removeCancelledDownloadLocalMatches(info = {}, progress = {}) {

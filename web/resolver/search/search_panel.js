@@ -5,7 +5,10 @@ import { getCivitaiModelUrl } from "../globals.js";
 import { safeStorage, normalizePathIdentity } from "../utils/html_utils.js";
 import { getSha256Field } from "../utils/hash_utils.js";
 import { bindEventOnce } from "../utils/dom_patch_utils.js";
-import { classifyLocalMatches } from "../utils/local_match_utils.js";
+import {
+    classifyLocalMatches,
+    matchesLocalModelDownload,
+} from "../utils/local_match_utils.js";
 const localStorage = safeStorage;
 export const searchPanelMethods = {
     isAutoFillBaseModelEnabled() {
@@ -2246,20 +2249,8 @@ export const searchPanelMethods = {
 
     getActiveDownloadInfoForLocalMatch(match = {}) {
         const model = match.model || {};
-        const normalizePath = (value = '') => normalizePathIdentity(value);
-        const joinPath = (...parts) => normalizePath(parts.filter(Boolean).join('/'));
         const activeStatuses = new Set(['starting', 'downloading', 'paused', 'cancelling']);
-        const matchAbsolutePaths = [
-            model.path,
-            model.resolved_path,
-            match.path,
-            match.resolved_path
-        ].map(normalizePath).filter(Boolean);
-        const matchRelativePaths = [
-            model.relative_path,
-            match.relative_path
-        ].map(normalizePath).filter(Boolean);
-        const matchFilename = normalizePath(model.filename || match.filename || '');
+        const matchFilename = normalizePathIdentity(model.filename || match.filename || '');
 
         for (const [downloadId, info] of Object.entries(this.activeDownloads || {})) {
             const progress = info?.lastProgress || info?.statusSnapshot?.progress || {};
@@ -2267,29 +2258,12 @@ export const searchPanelMethods = {
             if (!activeStatuses.has(status)) continue;
 
             const filename = progress.filename || info?.filename || '';
-            const absoluteCandidates = [
-                progress.path,
-                info?.downloadPath,
-                info?.statusSnapshot?.downloadPath,
-                joinPath(progress.directory || '', filename),
-                joinPath(info?.downloadDirectory || '', filename),
-                joinPath(info?.statusSnapshot?.downloadDirectory || '', filename)
-            ].map(normalizePath).filter(Boolean);
-            const relativeCandidates = [
-                info?.subfolder && filename ? joinPath(info.subfolder, filename) : '',
-                progress.relative_path,
-                info?.relativePath
-            ].map(normalizePath).filter(Boolean);
-
-            const absoluteMatch = absoluteCandidates.some(activePath => (
-                matchAbsolutePaths.includes(activePath)
-                || matchRelativePaths.some(relativePath => activePath.endsWith(`/${relativePath}`))
-            ));
-            const relativeMatch = relativeCandidates.some(activeRelative => (
-                matchRelativePaths.includes(activeRelative)
-                || matchAbsolutePaths.some(matchPath => matchPath.endsWith(`/${activeRelative}`))
-            ));
-            if (!absoluteMatch && !relativeMatch) continue;
+            if (!matchesLocalModelDownload(match, {
+                info,
+                progress,
+                statusSnapshot: info?.statusSnapshot,
+                includeStatusSnapshot: true,
+            })) continue;
 
             return {
                 download_id: downloadId,

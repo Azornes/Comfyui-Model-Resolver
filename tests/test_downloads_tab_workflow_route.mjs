@@ -9,7 +9,10 @@ import {
   safeStorage,
 } from '../web/resolver/utils/html_utils.js';
 import { getModelCardUrl } from '../web/resolver/utils/url_utils.js';
-import { classifyLocalMatches } from '../web/resolver/utils/local_match_utils.js';
+import {
+  classifyLocalMatches,
+  matchesLocalModelDownload,
+} from '../web/resolver/utils/local_match_utils.js';
 import { extractComfyWorkflow } from '../web/resolver/utils/workflow_metadata.js';
 import {
   buildModelResolverNodeMenu,
@@ -5637,6 +5640,52 @@ test('active download folder context opens the existing directory before the tar
   assert.equal(context.open_path, directory);
   assert.equal(context.folder_path, directory);
   assert.equal(context.download_path, filePath);
+});
+
+test('local download match predicate covers absolute, relative, and optional snapshot identities', () => {
+  const match = {
+    model: {
+      path: 'C:/models/diffusion_models/ANIMA/test/anima_baseV10.safetensors',
+      relative_path: 'ANIMA/test/anima_baseV10.safetensors',
+      filename: 'anima_baseV10.safetensors'
+    }
+  };
+  const info = {
+    filename: 'anima_baseV10.safetensors',
+    subfolder: 'ANIMA/test',
+    downloadPath: 'C:/models/diffusion_models/ANIMA/test/anima_baseV10.safetensors',
+    downloadDirectory: 'C:/models/diffusion_models/ANIMA/test'
+  };
+  const progress = {
+    filename: 'anima_baseV10.safetensors',
+    path: info.downloadPath,
+    relative_path: 'ANIMA/test/anima_baseV10.safetensors'
+  };
+
+  assert.equal(matchesLocalModelDownload(match, { info, progress }), true);
+  assert.equal(matchesLocalModelDownload({ model: { relative_path: 'ANIMA/other/model.safetensors' } }, { info, progress }), false);
+
+  const snapshot = {
+    downloadPath: 'C:/models/diffusion_models/ANIMA/test/anima_baseV10.safetensors',
+    downloadDirectory: 'C:/models/diffusion_models/ANIMA/test'
+  };
+  assert.equal(
+    matchesLocalModelDownload(match, {
+      info: { filename: info.filename },
+      progress: {},
+      statusSnapshot: snapshot,
+      includeStatusSnapshot: true
+    }),
+    true
+  );
+  assert.equal(
+    matchesLocalModelDownload(match, {
+      info: { filename: info.filename },
+      progress: {},
+      statusSnapshot: snapshot
+    }),
+    false
+  );
 });
 
 test('cancelled download removes only its path-specific local match', () => {
