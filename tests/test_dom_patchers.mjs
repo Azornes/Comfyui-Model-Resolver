@@ -10,6 +10,7 @@ import {
   syncElementAttributes,
 } from '../web/resolver/utils/dom_patch_utils.js';
 import * as domPatchUtils from '../web/resolver/utils/dom_patch_utils.js';
+import { classifyLocalMatches } from '../web/resolver/utils/local_match_utils.js';
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
 const resolveDownloadMethodsSource = fs.readFileSync(

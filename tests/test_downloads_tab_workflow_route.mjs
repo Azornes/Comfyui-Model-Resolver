@@ -9,6 +9,7 @@ import {
   safeStorage,
 } from '../web/resolver/utils/html_utils.js';
 import { getModelCardUrl } from '../web/resolver/utils/url_utils.js';
+import { classifyLocalMatches } from '../web/resolver/utils/local_match_utils.js';
 import { extractComfyWorkflow } from '../web/resolver/utils/workflow_metadata.js';
 import {
   buildModelResolverNodeMenu,
@@ -6018,6 +6019,130 @@ test('local match rows preserve best-match and alternative rendering contracts',
   assert.match(html, /id="resolve-alt-0-1-2-0"/);
   assert.match(html, /data-local-match-key="path%3A%2Fmodels%2Falternative\.safetensors"/);
   assert.equal((html.match(/class="status-group"/g) || []).length, 2);
+});
+
+test('local match classification preserves the confidence threshold and alternative partition', () => {
+  globalThis.getSvgIcon = () => '<svg></svg>';
+  const renderLocalMatchRow = eval(`(${extractMethod(searchPanelMethodsSource, 'renderLocalMatchRow')})`);
+  const renderLocalMatchesContent = eval(`(${extractMethod(searchPanelMethodsSource, 'renderLocalMatchesContent')})`);
+  const dialog = {
+    renderLocalMatchRow,
+    getHashMatchLabelMap() {
+      return null;
+    },
+    buildContextMenuModelData() {
+      return { model: 'context' };
+    },
+    getLocalMatchContextData() {
+      return { source: 'local' };
+    },
+    getLocalMatchIdentity(match) {
+      return match.identity;
+    },
+    escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      }[char]));
+    },
+    getContextMenuAttrs() {
+      return '';
+    },
+    getConfidenceBadge(confidence) {
+      return `<span class="confidence">${confidence}</span>`;
+    },
+    getModelPreviewTooltipAttrs() {
+      return '';
+    },
+    renderLocalMatchStatusGroup() {
+      return '';
+    },
+    areLocalMatchAlternativesCollapsed() {
+      return false;
+    },
+  };
+  const html = renderLocalMatchesContent.call(dialog, {
+    node_id: 1,
+    widget_index: 2,
+    matches: [
+      { confidence: 69, identity: 'below-threshold', model: { relative_path: 'below.safetensors' } },
+      { confidence: 70, identity: 'minimum-threshold', model: { relative_path: 'minimum.safetensors' } },
+      { confidence: 80, identity: 'alternative', model: { relative_path: 'alternative.safetensors' } },
+      { confidence: 100, identity: 'perfect', model: { relative_path: 'perfect.safetensors' } },
+    ],
+  }, 0);
+
+  assert.match(html, /perfect\.safetensors/);
+  assert.match(html, /minimum\.safetensors/);
+  assert.match(html, /alternative\.safetensors/);
+  assert.doesNotMatch(html, /below\.safetensors/);
+  assert.match(html, /Alternatives \(2\)/);
+});
+
+test('local match classification limits visible non-perfect matches to the five highest confidences', () => {
+  globalThis.getSvgIcon = () => '<svg></svg>';
+  const renderLocalMatchRow = eval(`(${extractMethod(searchPanelMethodsSource, 'renderLocalMatchRow')})`);
+  const renderLocalMatchesContent = eval(`(${extractMethod(searchPanelMethodsSource, 'renderLocalMatchesContent')})`);
+  const dialog = {
+    renderLocalMatchRow,
+    getHashMatchLabelMap() {
+      return null;
+    },
+    buildContextMenuModelData() {
+      return { model: 'context' };
+    },
+    getLocalMatchContextData() {
+      return { source: 'local' };
+    },
+    getLocalMatchIdentity(match) {
+      return match.identity;
+    },
+    escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      }[char]));
+    },
+    getContextMenuAttrs() {
+      return '';
+    },
+    getConfidenceBadge(confidence) {
+      return `<span class="confidence">${confidence}</span>`;
+    },
+    getModelPreviewTooltipAttrs() {
+      return '';
+    },
+    renderLocalMatchStatusGroup() {
+      return '';
+    },
+    areLocalMatchAlternativesCollapsed() {
+      return false;
+    },
+  };
+  const html = renderLocalMatchesContent.call(dialog, {
+    node_id: 1,
+    widget_index: 2,
+    matches: [
+      { confidence: 69, identity: 'below-threshold', model: { relative_path: 'below.safetensors' } },
+      ...[70, 75, 80, 85, 90, 95].map(confidence => ({
+        confidence,
+        identity: `match-${confidence}`,
+        model: { relative_path: `match-${confidence}.safetensors` },
+      })),
+    ],
+  }, 0);
+
+  assert.match(html, /match-95\.safetensors/);
+  assert.match(html, /match-75\.safetensors/);
+  assert.doesNotMatch(html, /match-70\.safetensors/);
+  assert.doesNotMatch(html, /below\.safetensors/);
+  assert.equal((html.match(/class="mr-match-row/g) || []).length, 5);
 });
 
 test('URN resolution preserves the download panel container', () => {

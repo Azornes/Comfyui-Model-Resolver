@@ -5,6 +5,7 @@ import { getCivitaiModelUrl } from "../globals.js";
 import { safeStorage, normalizePathIdentity } from "../utils/html_utils.js";
 import { getSha256Field } from "../utils/hash_utils.js";
 import { bindEventOnce } from "../utils/dom_patch_utils.js";
+import { classifyLocalMatches } from "../utils/local_match_utils.js";
 const localStorage = safeStorage;
 export const searchPanelMethods = {
     isAutoFillBaseModelEnabled() {
@@ -2399,18 +2400,19 @@ export const searchPanelMethods = {
 
     renderLocalMatchesContent(missing, missingIndex = 0) {
         const allMatches = missing.matches || [];
-        const filteredMatches = allMatches.filter(m => m.confidence >= 70);
-        const hasMatches = filteredMatches.length > 0;
-        const perfectMatches = filteredMatches.filter(m => m.confidence === 100);
-        const otherMatches = filteredMatches.filter(m => m.confidence < 100 && m.confidence >= 70);
+        const {
+            filteredMatches,
+            hasMatches,
+            perfectMatches,
+            otherMatches,
+            visibleMatches,
+        } = classifyLocalMatches(allMatches);
         const hashLabelMap = this.getHashMatchLabelMap?.(missing) || null;
 
         let html = '';
 
         if (hasMatches) {
-            const matchesToShow = perfectMatches.length > 0
-                ? perfectMatches
-                : otherMatches.sort((a, b) => b.confidence - a.confidence).slice(0, 5);
+            const matchesToShow = perfectMatches.length > 0 ? perfectMatches : visibleMatches;
 
             const sortedMatches = matchesToShow.sort((a, b) => {
                 if (a.confidence === 100 && b.confidence !== 100) return -1;
@@ -2479,12 +2481,10 @@ export const searchPanelMethods = {
             const matchIndex = Number(row?.dataset.localMatchIndex);
             if (!row || !Number.isInteger(matchIndex) || matchIndex < 0) return;
 
-            const filteredMatches = (currentMissing.matches || []).filter(match => match.confidence >= 70);
-            const perfectMatches = filteredMatches.filter(match => match.confidence === 100);
-            const otherMatches = filteredMatches.filter(match => match.confidence < 100 && match.confidence >= 70);
-            const visibleMatches = perfectMatches.length > 0
-                ? perfectMatches
-                : otherMatches.sort((left, right) => right.confidence - left.confidence).slice(0, 5);
+            const {
+                otherMatches,
+                visibleMatches,
+            } = classifyLocalMatches(currentMissing.matches || []);
             const match = row.dataset.localMatchAlternative === 'true'
                 ? otherMatches[matchIndex]
                 : visibleMatches[matchIndex];

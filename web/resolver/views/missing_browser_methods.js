@@ -4,6 +4,7 @@ import { startSplitterDrag } from "../utils/splitter_drag.js";
 import { getCivitaiModelUrl } from "../globals.js";
 import { safeStorage, normalizePathIdentity } from "../utils/html_utils.js";
 import { matchesWorkflowModelReference } from "../node_context_menu.js";
+import { classifyLocalMatches } from "../utils/local_match_utils.js";
 
 const MISSING_ROW_FALLBACK_HEIGHT = 70;
 const MISSING_VIRTUAL_INITIAL_ROWS = 24;
@@ -2409,7 +2410,7 @@ export const missingBrowserMethods = {
         // Check if there are active downloads
         const activeCount = Object.keys(this.activeDownloads).length;
         const hasAny100Match = visibleMissingModels.some(missing =>
-            (missing.matches || []).some(match => match.confidence === 100)
+            classifyLocalMatches(missing.matches || []).perfectMatches.length > 0
         );
         const hasAnyModelsToDisplay = rawMissingCount > 0 || resolvedModels.length > 0;
 
@@ -2481,13 +2482,13 @@ export const missingBrowserMethods = {
             const aMatches = a.matches || [];
             const bMatches = b.matches || [];
 
-            // Filter to 70%+ confidence
-            const aFiltered = aMatches.filter(m => m.confidence >= 70);
-            const bFiltered = bMatches.filter(m => m.confidence >= 70);
+            const aClassification = classifyLocalMatches(aMatches);
+            const bClassification = classifyLocalMatches(bMatches);
+            const aFiltered = aClassification.filteredMatches;
+            const bFiltered = bClassification.filteredMatches;
 
-            // Check if they have 100% matches
-            const aHas100 = aFiltered.some(m => m.confidence === 100);
-            const bHas100 = bFiltered.some(m => m.confidence === 100);
+            const aHas100 = aClassification.perfectMatches.length > 0;
+            const bHas100 = bClassification.perfectMatches.length > 0;
 
             // If one has 100% and the other doesn't, prioritize the one with 100%
             if (aHas100 && !bHas100) return -1;
@@ -2612,11 +2613,7 @@ export const missingBrowserMethods = {
     renderMissingModel(missing, missingIndex = 0) {
         const allMatches = missing.matches || [];
 
-        // Filter out matches below 70% confidence threshold
-        const filteredMatches = allMatches.filter(m => m.confidence >= 70);
-
-        // Calculate 100% matches upfront (needed for download section)
-        const perfectMatches = filteredMatches.filter(m => m.confidence === 100);
+        const { perfectMatches } = classifyLocalMatches(allMatches);
 
         const missingFilename = this.getMissingFilename(missing);
 
