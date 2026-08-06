@@ -5,8 +5,10 @@ from .context import RouteContext
 from .helpers import register_service_route
 
 
-def register_model_details_routes(context: RouteContext):
-    model_service = ModelService(context)
+def register_model_details_routes(
+    context: RouteContext,
+    model_service: ModelService,
+):
     register_service_route(
         context,
         path="/model_resolver/model-details",

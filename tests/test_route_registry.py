@@ -85,6 +85,31 @@ def test_register_routes_registers_each_route_family(route_environment):
     }.issubset(routes.registered)
 
 
+def test_register_routes_reuses_one_model_service_for_model_route_families(
+    monkeypatch,
+    route_environment,
+):
+    extension, _ = route_environment
+    constructors = []
+    service = SimpleNamespace(
+        civitai_search=MagicMock(),
+        custom_url=MagicMock(),
+        model_details=MagicMock(),
+    )
+
+    def build_service(context):
+        constructors.append(context)
+        return service
+
+    service_module = importlib.import_module(
+        f"{PACKAGE_NAME}.core.services.model_service"
+    )
+    monkeypatch.setattr(service_module, "ModelService", build_service)
+
+    assert registry_module.register_routes(extension) is True
+    assert len(constructors) == 1
+
+
 def test_register_routes_is_idempotent(route_environment):
     extension, routes = route_environment
 

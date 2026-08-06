@@ -91,6 +91,7 @@ def register_routes(self):
                 search_local_matches_by_hash,
             )
             from ..scanner import find_local_file_path, get_model_files, invalidate_model_files_cache
+            from ..services.model_service import ModelService
             from ..settings import (
                 TEMPLATE_KEY_ALIASES,
                 get_default_root_for_category,
@@ -249,9 +250,10 @@ def register_routes(self):
         register_hash_routes(route_context)
         register_metadata_routes(route_context)
         register_loaded_model_routes(route_context)
-        register_civitai_search_routes(route_context)
-        register_custom_url_routes(route_context)
-        register_model_details_routes(route_context)
+        model_service = ModelService(route_context)
+        register_civitai_search_routes(route_context, model_service)
+        register_custom_url_routes(route_context, model_service)
+        register_model_details_routes(route_context, model_service)
 
         if download_available:
             register_source_search_routes(route_context)
