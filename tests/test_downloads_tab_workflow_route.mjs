@@ -30,6 +30,7 @@ import {
   normalizeCategoryToken,
 } from '../web/resolver/utils/category_aliases.generated.js';
 import { getSha256Field, normalizeSha256 } from '../web/resolver/utils/hash_utils.js';
+import { normalizeSearchToken } from '../web/resolver/utils/search_utils.js';
 import { getSourceDisplayLabel, normalizeSourceKey } from '../web/resolver/utils/source_labels.js';
 import { baseModelAliasMethods } from '../web/resolver/search/base_model_alias_methods.js';
 import { searchHashMethods } from '../web/resolver/search/search_hash_methods.js';
@@ -3089,6 +3090,22 @@ test('clicked Krea 2 concept metadata resolves to the matching LoRA subfolder', 
   assert.equal(suggestion.matchedTag, 'concept');
 });
 
+test('folder token normalization matches the shared search token normalization', () => {
+  const normalizeFolderToken = eval(`(${extractMethod(downloadTargetMethodsSource, 'normalizeFolderToken')})`);
+  const values = [
+    '',
+    'Pony\\Styles',
+    'KREA-2 / Concept',
+    '  SDXL_v1.0  ',
+    'Żółć 模型',
+    'a+++b'
+  ];
+
+  values.forEach(value => {
+    assert.equal(normalizeFolderToken.call({}, value), normalizeSearchToken(value), value);
+  });
+});
+
 test('queued workflow model selection survives missing data and completes after analysis', () => {
   const queueWorkflowModelReferenceSelection = eval(`(${extractMethod(missingBrowserMethodsSource, 'queueWorkflowModelReferenceSelection')})`);
   const applyPendingWorkflowModelSelection = eval(`(${extractMethod(missingBrowserMethodsSource, 'applyPendingWorkflowModelSelection')})`);
@@ -4188,9 +4205,7 @@ test('options path preview delegates token rendering to the shared template form
 test('download subfolder tooltip identifies a folder taken from the workflow model path', () => {
   const getDownloadSubfolderSuggestionReason = eval(`(${extractMethod(downloadTargetMethodsSource, 'getDownloadSubfolderSuggestionReason')})`);
   const dialog = {
-    normalizeFolderToken(value = '') {
-      return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
-    }
+    normalizeFolderToken: normalizeSearchToken
   };
 
   const reason = getDownloadSubfolderSuggestionReason.call(dialog, {
@@ -4914,12 +4929,7 @@ test('subfolder suggestion ignores hidden local matches below the visible confid
     getCachedSearchSuggestionData() {
       return {};
     },
-    normalizeFolderToken(value = '') {
-      return String(value || '')
-        .toLowerCase()
-        .replace(/[\\/]+/g, ' ')
-        .replace(/[^a-z0-9]+/g, '');
-    }
+    normalizeFolderToken: normalizeSearchToken
   };
   const missing = {
     original_path: 'KNPV3_1.safetensors',

@@ -5,7 +5,7 @@ import { normalizeDownloadCategoryValue } from "../utils/category_utils.js";
 import { safeStorage } from "../utils/html_utils.js";
 import { getSha256Field } from "../utils/hash_utils.js";
 import { joinPathPreservingStyle } from "../utils/path_utils.js";
-import { matchesSearchText } from "../utils/search_utils.js";
+import { matchesSearchText, normalizeSearchToken } from "../utils/search_utils.js";
 const localStorage = safeStorage;
 const invalidWindowsPathCharacters = new RegExp(
     `[<>:"|?*${Array.from({ length: 32 }, (_, code) => String.fromCharCode(code)).join('')}]+`,
@@ -1712,10 +1712,7 @@ export const downloadTargetMethods = {
     },
 
     normalizeFolderToken(value = '') {
-        return String(value || '')
-            .toLowerCase()
-            .replace(/[/\\]+/g, ' ')
-            .replace(/[^a-z0-9]+/g, '');
+        return normalizeSearchToken(value);
     },
 
     getFolderSuggestionEntries(folders = []) {
