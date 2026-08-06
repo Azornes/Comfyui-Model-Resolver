@@ -171,6 +171,19 @@ export const renderFormatMethods = {
         `;
     },
 
+    renderProgressSection({ statusLabel, messageHtml = '', progressHtml = '', detailHtml = '' } = {}) {
+        return `
+            <div class="mr-download-section">
+                <div class="mr-status-inline">
+                    ${this.getStatusBadge(statusLabel, 'info')}
+                    <span class="mr-download-info">${messageHtml}</span>
+                </div>
+                ${progressHtml}
+                ${detailHtml}
+            </div>
+        `;
+    },
+
     renderAnalysisProgress(progress = {}) {
         const current = Number(progress.current) || 0;
         const total = Number(progress.total) || 0;
@@ -179,16 +192,12 @@ export const renderFormatMethods = {
         const modelName = progress.model_name ? this.escapeHtml(String(progress.model_name)) : '';
         const detail = total > 0 ? `${current} / ${total}` : 'Preparing...';
 
-        return `
-            <div class="mr-download-section">
-                <div class="mr-status-inline">
-                    ${this.getStatusBadge('Analyzing', 'info')}
-                    <span class="mr-download-info">${message}</span>
-                </div>
-                ${this.renderProgressBar(percent, detail, `${percent}%`)}
-                ${modelName ? `<div class="mr-download-info">${modelName}</div>` : ''}
-            </div>
-        `;
+        return this.renderProgressSection({
+            statusLabel: 'Analyzing',
+            messageHtml: message,
+            progressHtml: this.renderProgressBar(percent, detail, `${percent}%`),
+            detailHtml: modelName ? `<div class="mr-download-info">${modelName}</div>` : '',
+        });
     },
 
     renderLoadedModelsProgress(progress = {}) {
@@ -202,16 +211,12 @@ export const renderFormatMethods = {
         const detail = total > 0 ? `${current} / ${total}` : 'Preparing...';
         const nodeType = progress.node_type ? this.escapeHtml(String(progress.node_type)) : '';
 
-        return `
-            <div class="mr-download-section">
-                <div class="mr-status-inline">
-                    ${this.getStatusBadge('Loading', 'info')}
-                    <span class="mr-download-info">${this.escapeHtml(message)}</span>
-                </div>
-                ${this.renderProgressBar(percent, detail, `${percent}%`)}
-                ${nodeType ? `<div class="mr-download-info">${nodeType}</div>` : ''}
-            </div>
-        `;
+        return this.renderProgressSection({
+            statusLabel: 'Loading',
+            messageHtml: this.escapeHtml(message),
+            progressHtml: this.renderProgressBar(percent, detail, `${percent}%`),
+            detailHtml: nodeType ? `<div class="mr-download-info">${nodeType}</div>` : '',
+        });
     },
 
     patchLoadedModelsProgress(container, renderedHtml = '') {

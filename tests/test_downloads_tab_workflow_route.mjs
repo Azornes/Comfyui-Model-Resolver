@@ -124,6 +124,61 @@ const resolverShellCssSource = fs.readFileSync(
   'utf8'
 );
 
+test('progress renderers preserve their distinct percent and escaping contracts', () => {
+  const renderProgressBar = eval(`(${extractMethod(renderFormatMethodsSource, 'renderProgressBar')})`);
+  const getStatusBadge = eval(`(${extractMethod(renderFormatMethodsSource, 'getStatusBadge')})`);
+  const renderProgressSection = eval(`(${extractMethod(renderFormatMethodsSource, 'renderProgressSection')})`);
+  const renderAnalysisProgress = eval(`(${extractMethod(renderFormatMethodsSource, 'renderAnalysisProgress')})`);
+  const renderLoadedModelsProgress = eval(`(${extractMethod(renderFormatMethodsSource, 'renderLoadedModelsProgress')})`);
+  const dialog = {
+    renderProgressBar,
+    getStatusBadge,
+    renderProgressSection,
+    escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+  };
+
+  const analysis = renderAnalysisProgress.call(dialog, {
+    current: 1,
+    total: 4,
+    message: 'Analyzing <step>',
+    model_name: 'Model <A>'
+  });
+  assert.match(analysis, /Analyzing <step>/);
+  assert.match(analysis, /Model &lt;A&gt;/);
+  assert.match(analysis, /1 \/ 4/);
+  assert.match(analysis, /width: 25%/);
+
+  const loaded = renderLoadedModelsProgress.call(dialog, {
+    current: 1,
+    total: 4,
+    percent: 73.4,
+    message: 'Loading <step>',
+    node_type: 'Node <A>'
+  });
+  assert.match(loaded, /Loading &lt;step&gt;/);
+  assert.match(loaded, /Node &lt;A&gt;/);
+  assert.match(loaded, /1 \/ 4/);
+  assert.match(loaded, /width: 73%/);
+
+  const shared = renderProgressSection.call(dialog, {
+    statusLabel: 'Shared',
+    messageHtml: 'Shared message',
+    progressHtml: '<div class="shared-progress"></div>',
+    detailHtml: '<div class="shared-detail"></div>'
+  });
+  assert.match(shared, /mr-badge-info">Shared/);
+  assert.match(shared, /Shared message/);
+  assert.match(shared, /shared-progress/);
+  assert.match(shared, /shared-detail/);
+});
+
 test('Missing Models rows use fixed-size virtualization for smooth stable scrolling', () => {
   const rowRules = Array.from(
     resolverMainCssSource.matchAll(/#model-resolver-modal \.mr-missing-list-row\s*\{([^}]+)\}/g)
