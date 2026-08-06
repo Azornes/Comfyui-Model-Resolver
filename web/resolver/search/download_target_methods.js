@@ -4,6 +4,7 @@ import { createFloatingTreePicker } from "../utils/tree_picker.js";
 import { normalizeDownloadCategoryValue } from "../utils/category_utils.js";
 import { safeStorage } from "../utils/html_utils.js";
 import { getSha256Field } from "../utils/hash_utils.js";
+import { joinPathPreservingStyle } from "../utils/path_utils.js";
 import { matchesSearchText } from "../utils/search_utils.js";
 const localStorage = safeStorage;
 const invalidWindowsPathCharacters = new RegExp(
@@ -953,19 +954,9 @@ export const downloadTargetMethods = {
     },
 
     joinLocalPath(basePath = '', relativePath = '') {
-        const rawBase = String(basePath || '');
-        const relative = String(relativePath || '').replace(/^[/\\]+/, '');
-        const usesBackslash = /^[A-Za-z]:\\/.test(rawBase)
-            || /^\\\\/.test(rawBase)
-            || (!rawBase.includes('/') && rawBase.includes('\\'));
-        const separator = usesBackslash ? '\\' : '/';
-        const base = rawBase.replace(usesBackslash ? /[/\\]+$/ : /\/+$/, '')
-            || (usesBackslash ? (/^\\+$/.test(rawBase) ? '\\' : '') : (/^\/+$/.test(rawBase) ? '/' : ''));
-        if (!base) return this.normalizePathToForward(relative);
-        if (!relative) return base;
-        const normalizedRelative = relative.replace(/[/\\]+/g, separator);
-        const joiner = base.endsWith(separator) ? '' : separator;
-        return `${base}${joiner}${normalizedRelative}`;
+        return joinPathPreservingStyle(basePath, relativePath, {
+            normalizeRelativeWhenBaseEmpty: true,
+        });
     },
 
     getDownloadTargetFolderContext(category = '', subfolder = '', baseDirectory = '') {

@@ -5,6 +5,7 @@ import { getCivitaiModelUrl } from "../globals.js";
 import { safeStorage, normalizePathIdentity } from "../utils/html_utils.js";
 import { matchesWorkflowModelReference } from "../node_context_menu.js";
 import { classifyLocalMatches } from "../utils/local_match_utils.js";
+import { joinPathPreservingStyle } from "../utils/path_utils.js";
 
 const MISSING_ROW_FALLBACK_HEIGHT = 70;
 const MISSING_VIRTUAL_INITIAL_ROWS = 24;
@@ -1874,23 +1875,6 @@ export const missingBrowserMethods = {
             return Array.from(byIdentity.values());
         };
 
-        const joinLocalModelPath = (basePath = '', relativePath = '') => {
-            if (typeof this.joinLocalPath === 'function') {
-                return this.joinLocalPath(basePath, relativePath);
-            }
-            const rawBase = String(basePath || '');
-            const relative = String(relativePath || '').replace(/^[/\\]+/, '');
-            const usesBackslash = /^[A-Za-z]:\\/.test(rawBase)
-                || /^\\\\/.test(rawBase)
-                || (!rawBase.includes('/') && rawBase.includes('\\'));
-            const separator = usesBackslash ? '\\' : '/';
-            const base = rawBase.replace(usesBackslash ? /[/\\]+$/ : /\/+$/, '')
-                || (usesBackslash ? (/^\\+$/.test(rawBase) ? '\\' : '') : (/^\/+$/.test(rawBase) ? '/' : ''));
-            if (!base) return relative;
-            if (!relative) return base;
-            const joiner = base.endsWith(separator) ? '' : separator;
-            return `${base}${joiner}${relative.replace(/[/\\]+/g, separator)}`;
-        };
         const buildLocalFolderContext = (folderPath = '', name = 'Folder', category = '') => {
             const path = String(folderPath || '').trim();
             if (!path) return null;
@@ -1911,7 +1895,7 @@ export const missingBrowserMethods = {
             const path = entry.fullPath || model.path || model.resolved_path || '';
             if (!path) return null;
             const directory = entry.folderPath
-                ? joinLocalModelPath(entry.baseDirectory, entry.folderPath)
+                ? joinPathPreservingStyle(entry.baseDirectory, entry.folderPath)
                 : entry.baseDirectory;
             return {
                 ...model,
@@ -2037,7 +2021,7 @@ export const missingBrowserMethods = {
                     const modelCount = countTreeModels(folder);
                     const shouldExpand = Boolean(filter) || expandedSet.has(stateKey);
                     const folderFullPath = group.baseDirectory
-                        ? joinLocalModelPath(group.baseDirectory, folder.path)
+                        ? joinPathPreservingStyle(group.baseDirectory, folder.path)
                         : '';
                     const context = buildLocalFolderContext(folderFullPath, folder.path, group.category);
                     const contextAttrs = getLocalPathContextAttrs(context, folderFullPath);

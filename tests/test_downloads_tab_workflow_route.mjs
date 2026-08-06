@@ -9,6 +9,7 @@ import {
   safeStorage,
 } from '../web/resolver/utils/html_utils.js';
 import { getModelCardUrl } from '../web/resolver/utils/url_utils.js';
+import { joinPathPreservingStyle } from '../web/resolver/utils/path_utils.js';
 import {
   classifyLocalMatches,
   matchesLocalModelDownload,
@@ -4024,6 +4025,29 @@ test('portable subfolder paths use forward slashes and join to the host path sty
   assert.equal(
     joinLocalPath.call(dialog, '\\\\server\\share\\', 'Pony/Styles'),
     '\\\\server\\share\\Pony\\Styles'
+  );
+});
+
+test('shared local path join preserves host separators and empty-base contracts', () => {
+  assert.equal(
+    joinPathPreservingStyle('/models/loras', 'Pony\\Styles'),
+    '/models/loras/Pony/Styles'
+  );
+  assert.equal(
+    joinPathPreservingStyle('C:\\models\\loras', 'Pony/Styles'),
+    'C:\\models\\loras\\Pony\\Styles'
+  );
+  assert.equal(
+    joinPathPreservingStyle('\\\\server\\share\\', 'Pony/Styles'),
+    '\\\\server\\share\\Pony\\Styles'
+  );
+  assert.equal(
+    joinPathPreservingStyle('', 'Pony\\Styles', { normalizeRelativeWhenBaseEmpty: true }),
+    'Pony/Styles'
+  );
+  assert.equal(
+    joinPathPreservingStyle('', 'Pony\\Styles'),
+    'Pony\\Styles'
   );
 });
 
