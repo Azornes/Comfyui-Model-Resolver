@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from aiohttp import web
 
+from core.path_utils import get_filename_from_path
 from core.routes.context import RouteContext
 from core.routes.downloads import register_download_routes
 from core.type_utils import to_bool, to_int
@@ -68,6 +69,7 @@ def _build_download_routes(overrides=None):
         ),
         "get_default_root_for_category": MagicMock(return_value=r"C:\base"),
         "get_download_directory": MagicMock(return_value=r"C:\models"),
+        "get_filename_from_path": get_filename_from_path,
         "get_override_settings_from_request": AsyncMock(
             return_value={"aria2c_path": "aria2c"}
         ),
@@ -226,6 +228,27 @@ async def test_download_route_supports_huggingface_headers_and_optional_inputs()
     assert download_call["headers"] == {"Authorization": "Bearer hf-token"}
     assert download_call["metadata"]["source"] == "huggingface"
     values["get_default_root_for_category"].assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_download_route_derives_encoded_filename_from_url_path():
+    handlers, values = _build_download_routes()
+    handler = handlers[("POST", "/model_resolver/download")]
+
+    response = await handler(
+        _request(
+            {
+                "url": "https://example.com/download/model%20name.safetensors",
+            }
+        )
+    )
+
+    body = json.loads(response.text)
+    assert response.status == 200
+    assert body["filename"] == "model name.safetensors"
+    assert values["start_background_download"].call_args.kwargs["filename"] == (
+        "model name.safetensors"
+    )
 
 
 @pytest.mark.asyncio

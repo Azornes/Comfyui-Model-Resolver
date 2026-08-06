@@ -28,6 +28,7 @@ class DownloadService:
             "get_default_root_for_category"
         )
         self.get_download_directory = context.require("get_download_directory")
+        self.get_filename_from_path = context.require("get_filename_from_path")
         self.get_override_settings_from_request = context.require(
             "get_override_settings_from_request"
         )
@@ -103,7 +104,7 @@ class DownloadService:
         download_host = urlparse(url).hostname
 
         if not filename:
-            filename = unquote(urlparse(url).path.split("/")[-1])
+            filename = self.get_filename_from_path(unquote(urlparse(url).path))
         filename = self.sanitize_download_filename(filename)
 
         if not filename:

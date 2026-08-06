@@ -5236,6 +5236,9 @@ test('downloads tab renders workflow label for active downloads', () => {
     getDownloadFolderContext() {
       return null;
     },
+    getFilenameFromPath(value = '') {
+      return String(value).split(/[\\/]/).at(-1) || '';
+    },
     getDownloadDisplayProgress(progress) {
       return {
         percent: progress.progress || 0,
@@ -5266,6 +5269,68 @@ test('downloads tab renders workflow label for active downloads', () => {
 
   assert.match(html, /<span>Workflow<\/span>/);
   assert.match(html, /Workflow B/);
+
+  const fallbackHtml = renderQueueDownloadsHtml.call(dialog, [{
+    downloadId: 'download-2',
+    info: {
+      missing: {
+        original_path: 'models\\fallback.safetensors',
+        node_id: 9,
+        widget_index: 1,
+        node_type: 'CheckpointLoaderSimple',
+        category: 'checkpoints',
+      },
+      lastProgress: { status: 'downloading', progress: 10 },
+    },
+  }]);
+
+  assert.match(fallbackHtml, /fallback\.safetensors/);
+});
+
+test('download queue context derives fallback names from Windows paths', () => {
+  const getDownloadQueueContext = eval(`(${extractMethod(queueMethodsSource, 'getDownloadQueueContext')})`);
+  const dialog = {
+    getDownloadFolderContext() {
+      return null;
+    },
+    getFilenameFromPath(value = '') {
+      return String(value).split(/[\\/]/).at(-1) || '';
+    },
+    getDownloadWorkflowLabel() {
+      return '';
+    },
+    getWorkflowContextId() {
+      return 'workflow-1';
+    },
+    getWorkflowContextRouteKey() {
+      return 'workflow-route-1';
+    },
+    canSwitchToDownloadWorkflow() {
+      return true;
+    },
+  };
+
+  const context = getDownloadQueueContext.call(dialog, {}, {
+    missing: { original_path: 'models\\fallback.safetensors' },
+  }, '', 'download-1');
+
+  assert.equal(context.name, 'fallback.safetensors');
+});
+
+test('context menu model data derives fallback names from Windows paths', () => {
+  const buildContextMenuModelData = eval(`(${extractMethod(searchPanelMethodsSource, 'buildContextMenuModelData')})`);
+  const dialog = {
+    getFilenameFromPath(value = '') {
+      return String(value).split(/[\\/]/).at(-1) || '';
+    },
+  };
+
+  const model = buildContextMenuModelData.call(dialog, {}, '', {
+    resolved_path: 'models\\fallback.safetensors',
+  });
+
+  assert.equal(model.name, 'fallback.safetensors');
+  assert.equal(model.original_path, 'fallback.safetensors');
 });
 
 test('active download refresh preserves existing cards for hover and tooltip state', () => {

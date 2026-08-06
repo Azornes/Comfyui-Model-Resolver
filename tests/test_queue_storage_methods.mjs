@@ -239,15 +239,18 @@ test('queue storage remembers completed downloads using progress and missing-mod
       ...queueStorageMethods,
       downloadHistoryStorageKey: 'completed-history',
       updateQueuePanel() {},
+      getFilenameFromPath(value = '') {
+        return String(value).split(/[\\/]/).at(-1) || '';
+      },
       getDownloadWorkflowLabel: () => 'Workflow A',
       getCategoryDisplayName: category => category.toUpperCase(),
     };
 
     const entry = context.rememberCompletedDownloadHistory(
       'download-1',
-      {
-        missing: {
-          original_path: 'loras/fallback.safetensors',
+        {
+          missing: {
+          original_path: 'loras\\fallback.safetensors',
           category: 'loras',
           node_id: 7,
           widget_index: 2,

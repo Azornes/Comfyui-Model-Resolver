@@ -857,7 +857,7 @@ export const queueMethods = {
             context_scope: 'download_queue',
             download_id: downloadId,
             open_folder_label: folderContext ? 'Open Download Folder' : '',
-            name: folderContext?.name || progress?.filename || info?.filename || missing?.original_path?.split(/[/\\]/).pop() || 'Download',
+            name: folderContext?.name || progress?.filename || info?.filename || this.getFilenameFromPath(missing?.original_path) || 'Download',
             workflow_id: info.workflowId || info.workflow_id || this.getWorkflowContextId(info) || '',
             workflow_label: label,
             workflow_route_key: info.workflowRouteKey || this.getWorkflowContextRouteKey(info) || '',
@@ -1202,7 +1202,7 @@ export const queueMethods = {
             const filename = progress.filename
                 || info.filename
                 || info.missing?.download_source?.filename
-                || info.missing?.original_path?.split(/[/\\]/).pop()
+                || this.getFilenameFromPath(info.missing?.original_path)
                 || 'model';
             const category = this.getCategoryDisplayName?.(info.category || info.missing?.category || '') || info.category || '';
             const nodeLabel = info.missing?.subgraph_name || info.missing?.node_type || (info.missing?.subgraph_id ? 'Subgraph' : 'Node');

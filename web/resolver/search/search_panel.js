@@ -2104,7 +2104,7 @@ export const searchPanelMethods = {
             ...(extra && typeof extra === 'object' ? extra : {})
         };
         const resolvedPath = merged.path || merged.resolved_path || '';
-        const filename = merged.filename || fallbackName || resolvedPath.split(/[/\\]/).pop() || '';
+        const filename = merged.filename || fallbackName || this.getFilenameFromPath(resolvedPath) || '';
         return {
             ...merged,
             name: merged.name || filename,

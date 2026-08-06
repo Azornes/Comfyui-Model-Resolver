@@ -190,7 +190,7 @@ export const queueStorageMethods = {
         const filename = progress.filename
             || info.filename
             || missing.download_source?.filename
-            || missing.original_path?.split(/[/\\]/).pop()
+            || this.getFilenameFromPath(missing.original_path)
             || '';
         if (!filename) return null;
 
