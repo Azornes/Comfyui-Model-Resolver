@@ -381,7 +381,7 @@ class SearchProviderRunner:
                             version_name=model_info.get("version_name"),
                             confidence=100.0,
                         )
-                        source_results["civitai"] = self.owner.build_search_result(
+                        source_results["civitai"] = self.owner.build_model_result(
                             "civitai", **result_payload
                         )
                         self.owner.log_search_result(
@@ -418,7 +418,7 @@ class SearchProviderRunner:
                     )
                     if civitai_results:
                         first_result = civitai_results[0]
-                        source_results["civitai"] = self.owner.build_search_result(
+                        source_results["civitai"] = self.owner.build_model_result(
                             "civitai",
                             model_id=first_result.get("model_id"),
                             version_id=first_result.get("version_id"),

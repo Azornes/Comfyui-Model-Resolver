@@ -34,7 +34,7 @@ from ..path_utils import get_filename_from_path
 from ..progress import get_progress_reporter
 from ..type_utils import (
     DEFAULT_BROWSER_USER_AGENT,
-    build_search_result,
+    build_model_result,
     clear_remote_size_cache,
     extract_file_size,
     extract_trained_words,
@@ -50,7 +50,6 @@ from ..type_utils import (
     to_int,
 )
 from .common import (
-    build_custom_url_result,
     collect_download_urls,
     is_remote_link_marked_dead,
 )
@@ -1204,7 +1203,7 @@ def _build_result_from_normalized_version(
     if size is None:
         size = _resolve_file_size_bytes(file_info, download_urls)
 
-    return build_search_result(
+    return build_model_result(
         source="civarchive",
         model_id=model_id,
         version_id=version_id,
@@ -1655,7 +1654,7 @@ def _build_result_from_payload(
         else ""
     )
 
-    return build_search_result(
+    return build_model_result(
         source="civarchive",
         model_id=model_id,
         version_id=version_id,
@@ -1813,7 +1812,7 @@ def _build_result_from_search_candidate(
 
     open_url = urljoin(CIVARCHIVE_BASE_URL, str(candidate.get("url") or ""))
     sha256 = (parsed or {}).get("sha256")
-    return build_search_result(
+    return build_model_result(
         source="civarchive",
         model_id=candidate.get("model_id") or candidate.get("modelId"),
         version_id=candidate.get("version_id") or candidate.get("modelVersionId"),
@@ -2383,7 +2382,7 @@ def build_civarchive_custom_result(
             else details.get("url")
         )
     )
-    return build_custom_url_result(
+    return build_model_result(
         source="civarchive",
         model_id=model_id,
         version_id=version_id,
@@ -2403,6 +2402,10 @@ def build_civarchive_custom_result(
         or "",
         sha256=sha256,
         hashes=hashes,
+        details_source="civarchive",
+        version_url=version_url or details.get("url"),
+        custom_url=True,
+        result_mode="custom_url",
         platform_url=details.get("platform_url")
         or selected_version.get("platform_url"),
         download_urls=[url for url in download_urls if url],

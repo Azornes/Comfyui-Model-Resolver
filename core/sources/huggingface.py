@@ -22,7 +22,7 @@ from ..matcher import build_filename_search_queries
 from ..network_utils import execute_provider_json_request, host_matches_domain, request_source_response
 from ..path_utils import METADATA_DIR, get_filename_from_path, read_json_safe, write_json_atomic
 from ..type_utils import (
-    build_search_result,
+    build_model_result,
     check_credential_http,
     clear_remote_size_cache,
     extract_file_size,
@@ -724,7 +724,7 @@ def _build_huggingface_result(
     size = extract_file_size(file_info)
     if not size:
         size = _fetch_remote_file_size_bytes(download_url, headers=headers)
-    return build_search_result(
+    return build_model_result(
         "huggingface",
         model_id=repo_id,
         version_id=None,
@@ -1567,7 +1567,7 @@ def build_huggingface_custom_result(
     page_url = (
         f"https://huggingface.co/{repo_id}/blob/{branch}/{quote_url_path(file_path)}"
     )
-    return build_search_result(
+    return build_model_result(
         "huggingface",
         model_id=repo_id,
         version_id=None,

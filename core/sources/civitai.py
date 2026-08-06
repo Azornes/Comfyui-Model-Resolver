@@ -44,7 +44,7 @@ from ..type_utils import (
     DEFAULT_BROWSER_USER_AGENT,
     as_dict,
     as_list,
-    build_search_result,
+    build_model_result,
     check_credential_http,
     extract_file_size,
     extract_trained_words,
@@ -145,7 +145,6 @@ def check_civitai_api_key(api_key: Optional[str]) -> Dict[str, Any]:
     )
 
 
-from .common import build_custom_url_result
 
 
 def build_civitai_result_payload(
@@ -202,7 +201,7 @@ def _build_civitai_result_from_version(
     version_id = version.get("id")
     size = extract_file_size(file_info)
     download_url = file_info.get("downloadUrl") or get_civitai_download_url(version_id)
-    return build_search_result(
+    return build_model_result(
         source="civitai",
         **build_civitai_result_payload(
             model_id=model_id,
@@ -971,7 +970,7 @@ def search_civitai_for_file(
                 api_key=api_key,
             )
             if hash_result:
-                result = build_search_result(
+                result = build_model_result(
                     "civitai",
                     model_id=hash_result.get("model_id"),
                     version_id=hash_result.get("version_id"),
@@ -2385,7 +2384,7 @@ def build_civitai_custom_result(
             else details.get("url")
         )
     )
-    return build_custom_url_result(
+    return build_model_result(
         source="civitai",
         model_id=model_id,
         version_id=version_id,
@@ -2405,6 +2404,10 @@ def build_civitai_custom_result(
         or "",
         sha256=sha256,
         hashes=hashes,
+        details_source="civitai",
+        version_url=version_url or details.get("url"),
+        custom_url=True,
+        result_mode="custom_url",
         model_description=details.get("description") or "",
     )
 

@@ -46,6 +46,10 @@ class NormalizeSha256Protocol(Protocol):
     def __call__(self, value: Any) -> str: ...
 
 
+class ModelResultBuilderProtocol(Protocol):
+    def __call__(self, source: str, **fields: Any) -> Dict[str, Any]: ...
+
+
 class ReadJsonProtocol(Protocol):
     def __call__(self, file_path: str, default: Any = None) -> Any: ...
 
@@ -276,6 +280,7 @@ class CustomUrlDependencies:
     logger: Any
     UnsafeUrlError: type[Exception]
     asyncio: Any
+    build_model_result: ModelResultBuilderProtocol
     build_civarchive_custom_result: Optional[BuildCivarchiveCustomResultProtocol]
     build_civitai_custom_result: Optional[BuildCivitaiCustomResultProtocol]
     build_huggingface_custom_result: Optional[BuildHuggingFaceCustomResultProtocol]
@@ -305,6 +310,7 @@ class CustomUrlDependencies:
             logger=extension.logger,
             UnsafeUrlError=context.require("UnsafeUrlError"),
             asyncio=context.require("asyncio"),
+            build_model_result=context.require("build_model_result"),
             build_civarchive_custom_result=context.get(
                 "build_civarchive_custom_result"
             ),

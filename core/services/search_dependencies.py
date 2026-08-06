@@ -30,7 +30,7 @@ class IntParserProtocol(Protocol):
     def __call__(self, value: Any, default: int = 0) -> int: ...
 
 
-class SearchResultBuilderProtocol(Protocol):
+class ModelResultBuilderProtocol(Protocol):
     def __call__(self, source: str, **fields: Any) -> dict[str, Any]: ...
 
 
@@ -100,7 +100,7 @@ class SearchDependencies:
     logger: LoggerProtocol
     civarchive_search_error: type[BaseException]
     asyncio: Any
-    build_search_result: SearchResultBuilderProtocol
+    build_model_result: ModelResultBuilderProtocol
     clear_civarchive_search_cache: ClearCacheProtocol
     clear_civitai_search_cache: ClearCacheProtocol
     clear_huggingface_search_cache: ClearCacheProtocol
@@ -144,7 +144,7 @@ class SearchDependencies:
             logger=cls._extension_value(extension, "logger"),
             asyncio=context.require("asyncio"),
             civarchive_search_error=context.require("CivArchiveSearchError"),
-            build_search_result=context.require("build_search_result"),
+            build_model_result=context.require("build_model_result"),
             clear_civarchive_search_cache=context.require(
                 "clear_civarchive_search_cache"
             ),

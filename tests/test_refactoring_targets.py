@@ -1226,6 +1226,7 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
                 "logger",
                 "UnsafeUrlError",
                 "asyncio",
+                "build_model_result",
                 "build_civarchive_custom_result",
                 "build_civitai_custom_result",
                 "build_huggingface_custom_result",

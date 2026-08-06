@@ -105,7 +105,7 @@ def register_routes(self):
                 save_settings as save_resolver_settings,
             )
             from ..type_utils import (
-                build_search_result,
+                build_model_result,
                 extract_sha256_from_metadata,
                 fetch_remote_file_size_cached,
                 first_non_empty,

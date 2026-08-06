@@ -22,7 +22,7 @@ class SearchOrchestrator:
         self.logger = dependencies.logger
         self.CivArchiveSearchError = dependencies.civarchive_search_error
         self.asyncio = dependencies.asyncio
-        self.build_search_result = dependencies.build_search_result
+        self.build_model_result = dependencies.build_model_result
         self.clear_civarchive_search_cache = (
             dependencies.clear_civarchive_search_cache
         )

@@ -14,6 +14,7 @@ class CustomUrlService(ModelServiceDependencies):
         """Resolve a user-provided provider URL into a normal search result."""
         UnsafeUrlError = self.UnsafeUrlError
         asyncio = self.asyncio
+        build_model_result = self.build_model_result
         build_civarchive_custom_result = self.build_civarchive_custom_result
         build_civitai_custom_result = self.build_civitai_custom_result
         build_huggingface_custom_result = self.build_huggingface_custom_result
@@ -64,17 +65,18 @@ class CustomUrlService(ModelServiceDependencies):
                 "civitai": "CivitAI",
                 "huggingface": "HuggingFace",
             }.get(source, "Custom URL")
-            return {
-                "source": source,
-                "details_source": source,
-                "name": source_label,
-                "filename": filename,
-                "url": url,
-                "version_url": url,
-                "download_url": url,
-                "match_type": "custom_url",
-                "custom_url": True,
-            }
+            return build_model_result(
+                source,
+                name=source_label,
+                filename=filename,
+                url=url,
+                version_url=url,
+                download_url=url,
+                match_type="custom_url",
+                details_source=source,
+                custom_url=True,
+                result_mode="compact_custom_url",
+            )
 
         def _collect_custom_url_local_hash_matches(result, category):
             source_key = str(result.get("source") or "custom").strip().lower()
@@ -171,21 +173,22 @@ class CustomUrlService(ModelServiceDependencies):
                     civitai_key or None,
                 )
             if not result and version_id:
-                result = {
-                    "source": "civitai",
-                    "details_source": "civitai",
-                    "version_id": version_id,
-                    "name": expected_filename or f"CivitAI version {version_id}",
-                    "filename": expected_filename or f"civitai-{version_id}",
-                    "url": normalized_url,
-                    "version_url": normalized_url,
-                    "download_url": get_civitai_download_url(
+                result = build_model_result(
+                    "civitai",
+                    version_id=version_id,
+                    name=expected_filename or f"CivitAI version {version_id}",
+                    filename=expected_filename or f"civitai-{version_id}",
+                    url=normalized_url,
+                    version_url=normalized_url,
+                    download_url=get_civitai_download_url(
                         version_id,
                         civitai_key or None,
                     ),
-                    "match_type": "custom_url",
-                    "custom_url": True,
-                }
+                    match_type="custom_url",
+                    details_source="civitai",
+                    custom_url=True,
+                    result_mode="compact_custom_url",
+                )
         elif civarchive_parsed:
             source = "civarchive"
             if civarchive_parsed.get("sha256"):

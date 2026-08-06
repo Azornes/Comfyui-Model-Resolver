@@ -55,7 +55,7 @@ def _build_search_orchestrator():
         "self": extension,
         "asyncio": asyncio,
         "CivArchiveSearchError": Exception,
-        "build_search_result": lambda source, **fields: {
+        "build_model_result": lambda source, **fields: {
             "source": source,
             **fields,
         },
@@ -358,7 +358,7 @@ def test_search_provider_runner_resolves_civitai_urn():
             }
         ),
         get_civitai_download_url=MagicMock(return_value="https://example.test/download"),
-        build_search_result=MagicMock(side_effect=lambda source, **fields: {"source": source, **fields}),
+        build_model_result=MagicMock(side_effect=lambda source, **fields: {"source": source, **fields}),
     )
     owner.search_tracker.is_cancelled.return_value = False
     owner.log_search_result = MagicMock()
@@ -413,7 +413,7 @@ def test_search_provider_runner_keeps_first_file_when_expected_name_is_missing()
             }
         ),
         get_civitai_download_url=MagicMock(return_value="https://example.test/download"),
-        build_search_result=MagicMock(side_effect=lambda source, **fields: {"source": source, **fields}),
+        build_model_result=MagicMock(side_effect=lambda source, **fields: {"source": source, **fields}),
     )
     owner.search_tracker.is_cancelled.return_value = False
     owner.log_search_result = MagicMock()
@@ -452,7 +452,7 @@ def test_search_provider_runner_falls_back_for_civitai_urn_without_ids():
                 }
             ]
         ),
-        build_search_result=MagicMock(
+        build_model_result=MagicMock(
             side_effect=lambda source, **fields: {"source": source, **fields}
         ),
         log_search_result=MagicMock(),

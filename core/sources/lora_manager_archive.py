@@ -29,7 +29,7 @@ from ..matcher import (
 from ..path_utils import get_filename_from_path
 from ..progress import get_progress_reporter
 from ..type_utils import (
-    build_search_result,
+    build_model_result,
     extract_file_size,
     get_generic_filename_tokens,
     normalize_lora_manager_type,
@@ -489,7 +489,7 @@ def _build_result_from_row(
     )
     match_type = "exact" if confidence == 100.0 else "similar"
 
-    return build_search_result(
+    return build_model_result(
         source="lora_manager_archive",
         model_id=model_id,
         version_id=version_id,

@@ -1272,11 +1272,11 @@ def normalize_model_file_info(
     }
 
 
-def build_search_result(
+def build_model_result(
     source: str,
     *,
-    model_id: Any,
-    version_id: Any,
+    model_id: Any = None,
+    version_id: Any = None,
     name: str = "",
     version_name: str = "",
     type: str = "",
@@ -1293,13 +1293,39 @@ def build_search_result(
     normalize_hashes: bool = False,
     trained_words: Optional[List[str]] = None,
     images: Optional[List[Dict[str, Any]]] = None,
+    details_source: Optional[str] = None,
+    version_url: Optional[str] = None,
+    custom_url: bool = False,
+    result_mode: str = "search",
     **extra: Any,
 ) -> Dict[str, Any]:
-    """Helper to unify search result dictionary creation across different sources."""
+    """Build the shared model-result contract for search and custom URL results."""
     if normalize_hashes:
         hashes = normalize_hashes_dict(hashes)
         if not sha256 and "sha256" in hashes:
             sha256 = hashes["sha256"]
+
+    if result_mode not in {"search", "custom_url", "compact_custom_url"}:
+        raise ValueError(f"Unsupported model result mode: {result_mode}")
+
+    if result_mode == "compact_custom_url":
+        result = {
+            "source": source,
+            "details_source": details_source or source,
+            "name": name,
+            "filename": filename,
+            "url": url,
+            "version_url": version_url or url,
+            "download_url": download_url,
+            "match_type": match_type,
+            "custom_url": custom_url,
+        }
+        if model_id is not None:
+            result["model_id"] = model_id
+        if version_id is not None:
+            result["version_id"] = version_id
+        result.update(extra)
+        return result
 
     result = {
         "source": source,
@@ -1321,6 +1347,25 @@ def build_search_result(
         "trained_words": trained_words or [],
         "images": images or [],
     }
+
+    if result_mode == "custom_url":
+        result.pop("confidence", None)
+        result.update(
+            {
+                "details_source": details_source or source,
+                "version_url": version_url or url,
+                "match_type": "custom_url",
+                "custom_url": custom_url,
+            }
+        )
+    else:
+        if details_source is not None:
+            result["details_source"] = details_source
+        if version_url is not None:
+            result["version_url"] = version_url
+        if custom_url:
+            result["custom_url"] = True
+
     result.update(extra)
     return result
 

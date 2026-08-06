@@ -1,5 +1,5 @@
 """
-Common utilities and result builder functions for external model metadata sources.
+Common utilities for external model metadata sources.
 """
 
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -91,52 +91,3 @@ def collect_download_urls(
                 urls.append(url)
 
     return urls
-
-
-def build_custom_url_result(
-    source: str,
-    *,
-    model_id: Any,
-    version_id: Any,
-    name: str,
-    version_name: str,
-    type: str,
-    filename: str,
-    url: str,
-    download_url: str,
-    size: Optional[int],
-    base_model: Optional[str],
-    tags: List[Any],
-    trained_words: List[Any],
-    images: List[Dict[str, Any]],
-    description: str,
-    sha256: Optional[str],
-    hashes: Dict[str, Any],
-    **extra: Any,
-) -> Dict[str, Any]:
-    """Build the shared, unnormalized result contract for custom URL resolvers."""
-    result = {
-        "source": source,
-        "details_source": source,
-        "model_id": model_id,
-        "version_id": version_id,
-        "name": name,
-        "version_name": version_name,
-        "type": type,
-        "filename": filename,
-        "url": url,
-        "version_url": url,
-        "download_url": download_url,
-        "size": size,
-        "base_model": base_model,
-        "tags": tags,
-        "trained_words": trained_words,
-        "images": images,
-        "description": description,
-        "sha256": sha256,
-        "hashes": hashes,
-        "match_type": "custom_url",
-        "custom_url": True,
-    }
-    result.update(extra)
-    return result

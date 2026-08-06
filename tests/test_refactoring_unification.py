@@ -1,6 +1,6 @@
 import ast
-import sys
 import os
+import sys
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -10,11 +10,10 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 from core.matcher import MODEL_TITLE_MATCH_THRESHOLD
-from core.sources.lora_manager_archive import _normalize_model_type
 from core.type_utils import (
+    build_model_result,
     normalize_lora_manager_type,
     normalize_model_file_info,
-    build_search_result,
 )
 
 
@@ -50,8 +49,8 @@ class TestRefactoringUnification(unittest.TestCase):
         self.assertEqual(res["model_id"], 10)
         self.assertEqual(res["version_id"], 20)
 
-    def test_build_search_result(self):
-        res = build_search_result(
+    def test_build_model_result(self):
+        res = build_model_result(
             source="civitai",
             model_id=100,
             version_id=200,
@@ -65,6 +64,53 @@ class TestRefactoringUnification(unittest.TestCase):
         self.assertEqual(res["name"], "Test Model")
         self.assertEqual(res["filename"], "test.safetensors")
         self.assertEqual(res["extra_field"], "hello_world")
+
+    def test_build_model_result_custom_url_contract(self):
+        res = build_model_result(
+            "civitai",
+            model_id=100,
+            version_id=200,
+            name="Test Model",
+            filename="test.safetensors",
+            url="https://civitai.com/models/100?modelVersionId=200",
+            download_url="https://civitai.com/api/download/models/200",
+            match_type="custom_url",
+            details_source="civitai",
+            version_url="https://civitai.com/models/100?modelVersionId=200",
+            custom_url=True,
+            result_mode="custom_url",
+        )
+
+        self.assertEqual(res["details_source"], "civitai")
+        self.assertEqual(res["version_url"], res["url"])
+        self.assertTrue(res["custom_url"])
+        self.assertNotIn("confidence", res)
+
+    def test_build_model_result_compact_custom_url_contract(self):
+        res = build_model_result(
+            "civitai",
+            name="CivitAI",
+            filename="test.safetensors",
+            url="https://civitai.com/api/download/models/200",
+            download_url="https://civitai.com/api/download/models/200",
+            details_source="civitai",
+            version_url="https://civitai.com/api/download/models/200",
+            match_type="custom_url",
+            custom_url=True,
+            result_mode="compact_custom_url",
+        )
+
+        self.assertEqual({
+            "source": "civitai",
+            "details_source": "civitai",
+            "name": "CivitAI",
+            "filename": "test.safetensors",
+            "url": "https://civitai.com/api/download/models/200",
+            "version_url": "https://civitai.com/api/download/models/200",
+            "download_url": "https://civitai.com/api/download/models/200",
+            "match_type": "custom_url",
+            "custom_url": True,
+        }, res)
 
     @patch("requests.get")
     def test_request_page_text_success(self, mock_get):
@@ -195,8 +241,8 @@ class TestRefactoringUnification(unittest.TestCase):
 
     def test_alphanumeric_normalizers(self):
         from core.matcher import normalize_base_model
-        from core.path_utils import _normalize_base_model_token
         from core.path_templates import _normalize_token
+        from core.path_utils import _normalize_base_model_token
         from core.settings import _normalize_tag
         from core.type_utils import normalize_alphanumeric_key
 
@@ -254,15 +300,15 @@ class TestRefactoringUnification(unittest.TestCase):
         self.assertNotIn(".", res)
 
     def test_listification(self):
-        from core.type_utils import as_list
         from core.settings import _listify_tags
+        from core.type_utils import as_list
 
         self.assertEqual(as_list("a,b, c"), ["a", "b", "c"])
         self.assertEqual(list(_listify_tags("a,b; c")), ["a", "b", "c"])
         self.assertEqual(as_list(["a", "", None, "b"]), ["a", "b"])
         self.assertEqual(list(_listify_tags(["a", "", None, "b"])), ["a", "b"])
 
-    def test_build_search_result_normalizes_hashes(self):
+    def test_build_model_result_normalizes_hashes(self):
         from core.type_utils import normalize_hashes_dict
 
         valid_sha = "a" * 64
@@ -270,7 +316,7 @@ class TestRefactoringUnification(unittest.TestCase):
         self.assertEqual(norm_hashes["sha256"], valid_sha.lower())
         self.assertEqual(norm_hashes["autoV2"], "1234567890")
 
-        res = build_search_result(
+        res = build_model_result(
             "civitai",
             model_id=123,
             version_id=456,
@@ -279,7 +325,7 @@ class TestRefactoringUnification(unittest.TestCase):
             download_url="https://civitai.com/api/download/123",
             normalize_hashes=True,
         )
-        expected = build_search_result(
+        expected = build_model_result(
             "civitai",
             model_id=123,
             version_id=456,
@@ -361,7 +407,5 @@ class TestRefactoringUnification(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
 
 
