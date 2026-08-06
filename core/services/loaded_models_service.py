@@ -1,5 +1,6 @@
 """Loaded model inspection used by the HTTP route adapter."""
 
+from ..request_utils import validate_workflow_payload
 from ..routes.context import RouteContext
 from ..workflow.traversal import iter_workflow_nodes_with_scope
 
@@ -23,18 +24,17 @@ class LoadedModelsService:
     async def get_loaded_models(self, request):
         """Get all currently loaded models in the workflow."""
         data = await request.json()
-        workflow_json = data.get("workflow")
+        workflow_json, workflow_error = validate_workflow_payload(
+            data.get("workflow"),
+            empty_is_missing=True,
+        )
         loaded_id = str(
             data.get("loaded_id") or data.get("progress_id") or ""
         ).strip()
 
-        if not workflow_json:
+        if workflow_error:
             return self.web.json_response(
-                {"error": "Workflow JSON is required"}, status=400
-            )
-        if not isinstance(workflow_json, dict):
-            return self.web.json_response(
-                {"error": "Workflow JSON must be an object"}, status=400
+                {"error": workflow_error}, status=400
             )
 
         def update_loaded_progress(*args, **kwargs):

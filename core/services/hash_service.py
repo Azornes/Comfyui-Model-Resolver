@@ -6,6 +6,7 @@ import uuid
 
 from .. import path_utils
 from ..local_hash_matches import collect_local_hash_matches_for_result
+from ..request_utils import validate_workflow_payload
 from ..routes.context import RouteContext
 
 
@@ -146,10 +147,13 @@ class HashService:
     async def workflow_model_hashes(self, request):
         """Return hash metadata for existing local models used by a workflow."""
         data = await request.json()
-        workflow_json = data.get("workflow")
-        if not isinstance(workflow_json, dict):
+        workflow_json, workflow_error = validate_workflow_payload(
+            data.get("workflow"),
+            none_is_missing=False,
+        )
+        if workflow_error:
             return self.web.json_response(
-                {"error": "Workflow JSON must be an object"}, status=400
+                {"error": workflow_error}, status=400
             )
 
         settings = await self.asyncio.to_thread(self.load_resolver_settings)
