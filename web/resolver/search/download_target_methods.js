@@ -1,7 +1,10 @@
 import { getSvgIcon } from "../../utils/icon_utils.js";
 import { getCustomNodeModelCategory } from "../custom_nodes/registry.js";
 import { createFloatingTreePicker } from "../utils/tree_picker.js";
-import { normalizeDownloadCategoryValue } from "../utils/category_utils.js";
+import {
+    collectNormalizedCategoryValues,
+    normalizeDownloadCategoryValue,
+} from "../utils/category_utils.js";
 import { safeStorage } from "../utils/html_utils.js";
 import { getSha256Field } from "../utils/hash_utils.js";
 import { joinPathPreservingStyle } from "../utils/path_utils.js";
@@ -112,24 +115,11 @@ export const downloadTargetMethods = {
 
     getMissingSupportedDownloadCategories(missing = {}) {
         const knownCategories = this.getKnownDownloadCategorySet();
-        const collectCategories = (...values) => {
-            const categories = [];
-            const addCategory = (value) => {
-                if (value === undefined || value === null || String(value).trim() === '') return;
-                if (Array.isArray(value)) {
-                    value.forEach(addCategory);
-                    return;
-                }
-                String(value).split(/[,|;]/).forEach(part => {
-                    const normalized = this.normalizeDownloadCategory(part);
-                    if (normalized && knownCategories.has(normalized) && !categories.includes(normalized)) {
-                        categories.push(normalized);
-                    }
-                });
-            };
-            values.forEach(addCategory);
-            return categories;
-        };
+        const collectCategories = (...values) => collectNormalizedCategoryValues(
+            values,
+            value => this.normalizeDownloadCategory(value),
+            { allowedCategories: knownCategories },
+        );
         const chooseSupported = (supported = []) => {
             if (!supported.length) return [];
             const nodeCategory = this.getMissingNodeTypeDownloadCategory(missing);

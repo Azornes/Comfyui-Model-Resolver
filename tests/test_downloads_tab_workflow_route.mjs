@@ -24,7 +24,10 @@ import {
   toResolverContextModel,
 } from '../web/resolver/node_context_menu.js';
 import { startSplitterDrag } from '../web/resolver/utils/splitter_drag.js';
-import { normalizeDownloadCategoryValue } from '../web/resolver/utils/category_utils.js';
+import {
+  collectNormalizedCategoryValues,
+  normalizeDownloadCategoryValue,
+} from '../web/resolver/utils/category_utils.js';
 import {
   CATEGORY_ALIASES,
   normalizeCategoryToken,
@@ -48,6 +51,7 @@ import {
 } from '../web/resolver/custom_nodes/registry.js';
 
 void normalizeDownloadCategoryValue;
+void collectNormalizedCategoryValues;
 void CATEGORY_ALIASES;
 void normalizeCategoryToken;
 void normalizeSha256;
@@ -6624,6 +6628,29 @@ test('missing model categories preserve node priority and fallback order', () =>
       directory: 'vae|loras',
     }),
     ['checkpoints', 'vae', 'loras']
+  );
+});
+
+test('missing browser folder categories normalize, filter, and deduplicate values', () => {
+  const getMissingSupportedFolderCategories = eval(
+    `(${extractMethod(missingBrowserMethodsSource, 'getMissingSupportedFolderCategories')})`
+  );
+  const dialog = {
+    normalizeDownloadCategory(value = '') {
+      const normalized = String(value || '').trim().toLowerCase();
+      return normalized.replace(/\s+/g, '_');
+    },
+    getMissingSupportedDownloadCategories() {
+      return [];
+    },
+  };
+
+  assert.deepEqual(
+    getMissingSupportedFolderCategories.call(dialog, {
+      category_hints: ['Checkpoints, loras', 'unknown'],
+      category: 'vae|loras',
+    }),
+    ['checkpoints', 'loras', 'vae']
   );
 });
 

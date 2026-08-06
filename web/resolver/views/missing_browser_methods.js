@@ -6,6 +6,7 @@ import { safeStorage, normalizePathIdentity } from "../utils/html_utils.js";
 import { matchesWorkflowModelReference } from "../node_context_menu.js";
 import { classifyLocalMatches } from "../utils/local_match_utils.js";
 import { joinPathPreservingStyle } from "../utils/path_utils.js";
+import { collectNormalizedCategoryValues } from "../utils/category_utils.js";
 
 const MISSING_ROW_FALLBACK_HEIGHT = 70;
 const MISSING_VIRTUAL_INITIAL_ROWS = 24;
@@ -96,36 +97,26 @@ export const missingBrowserMethods = {
     },
 
     getMissingSupportedFolderCategories(missing = {}) {
-        const categories = [];
-        const addCategory = (value) => {
-            if (value === undefined || value === null || String(value).trim() === '') return;
-            if (Array.isArray(value)) {
-                value.forEach(addCategory);
-                return;
-            }
-            String(value).split(/[,|;]/).forEach(part => {
-                const normalized = this.normalizeDownloadCategory?.(part) || String(part || '').trim();
-                if (
-                    normalized
-                    && normalized !== 'unknown'
-                    && !categories.includes(normalized)
-                ) {
-                    categories.push(normalized);
-                }
-            });
-        };
+        const normalizeCategory = value => (
+            this.normalizeDownloadCategory?.(value) || String(value || '').trim()
+        );
+        const options = { excludedCategories: ['unknown'] };
+        const supported = collectNormalizedCategoryValues(
+            [this.getMissingSupportedDownloadCategories?.(missing) || []],
+            normalizeCategory,
+            options,
+        );
+        if (supported.length) return supported;
 
-        addCategory(this.getMissingSupportedDownloadCategories?.(missing) || []);
-        if (!categories.length) {
-            addCategory(missing.category_hints);
-            addCategory(missing.categoryHints);
-            addCategory(missing.model_widget_category_hints);
-            addCategory(missing.modelWidgetCategoryHints);
-            addCategory(missing.supported_categories);
-            addCategory(missing.supportedCategories);
-            addCategory(missing.category);
-        }
-        return categories;
+        return collectNormalizedCategoryValues([
+            missing.category_hints,
+            missing.categoryHints,
+            missing.model_widget_category_hints,
+            missing.modelWidgetCategoryHints,
+            missing.supported_categories,
+            missing.supportedCategories,
+            missing.category,
+        ], normalizeCategory, options);
     },
 
     getMissingSupportedFolderKeys(missing = {}) {
