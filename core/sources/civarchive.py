@@ -51,6 +51,7 @@ from .common import (
     build_custom_result_fields,
     collect_download_urls,
     is_remote_link_marked_dead,
+    resolve_file_size,
 )
 
 log = create_module_logger(__name__)
@@ -671,20 +672,16 @@ def _resolve_file_size_bytes(
     file_info: Dict[str, Any],
     download_urls: Optional[List[str]] = None,
 ) -> Optional[int]:
-    size = extract_file_size(file_info)
-    if size:
-        return size
-
     urls = download_urls if download_urls is not None else _collect_archive_download_urls(
         file_info,
         **_NORMALIZED_DOWNLOAD_URL_OPTIONS,
     )
-    for url in sorted(urls, key=_remote_size_probe_priority):
-        size = _fetch_remote_file_size_bytes(url)
-        if size:
-            return size
-
-    return None
+    ordered_urls = sorted(urls, key=_remote_size_probe_priority)
+    return resolve_file_size(
+        file_info,
+        ordered_urls,
+        probe=_fetch_remote_file_size_bytes,
+    )
 
 
 def _mirror_from_top_file(file_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:

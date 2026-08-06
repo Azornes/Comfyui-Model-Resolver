@@ -62,7 +62,11 @@ from core.sources.civitai import (
     search_civitai,
     search_civitai_for_file,
 )
-from core.sources.common import build_custom_result_fields, is_remote_link_marked_dead
+from core.sources.common import (
+    build_custom_result_fields,
+    is_remote_link_marked_dead,
+    resolve_file_size,
+)
 from core.type_utils import prepare_remote_size_probe_url
 
 # ---------------------------------------------------------------------------
@@ -1151,6 +1155,57 @@ class PrepareSizeProbeUrlTests(unittest.TestCase):
 
 
 class CivArchiveMirrorSizeProbeTests(unittest.TestCase):
+
+    def test_shared_file_size_resolver_prefers_metadata(self):
+        probe = MagicMock(return_value=654321)
+
+        size = resolve_file_size(
+            {"size": 123456},
+            ["https://example.com/model.safetensors"],
+            probe=probe,
+        )
+
+        self.assertEqual(size, 123456)
+        probe.assert_not_called()
+
+    def test_shared_file_size_resolver_uses_ordered_probe_until_success(self):
+        probe = MagicMock(side_effect=[None, 654321])
+        urls = [
+            "https://example.com/first.safetensors",
+            "https://example.com/second.safetensors",
+            "https://example.com/third.safetensors",
+        ]
+
+        size = resolve_file_size({}, urls, probe=probe)
+
+        self.assertEqual(size, 654321)
+        probe.assert_has_calls([
+            ((urls[0],), {}),
+            ((urls[1],), {}),
+        ])
+        self.assertEqual(probe.call_count, 2)
+
+    def test_metadata_size_is_preferred_over_remote_probe(self):
+        with patch("core.sources.civarchive._fetch_remote_file_size_bytes") as mock_fetch:
+            size = _resolve_file_size_bytes(
+                {"size": 123456},
+                ["https://huggingface.co/org/repo/resolve/main/model.safetensors"],
+            )
+
+        self.assertEqual(size, 123456)
+        mock_fetch.assert_not_called()
+
+    @patch(
+        "core.sources.civarchive._fetch_remote_file_size_bytes",
+        return_value=654321,
+    )
+    def test_zero_metadata_size_falls_back_to_remote_probe(self, mock_fetch):
+        url = "https://huggingface.co/org/repo/resolve/main/model.safetensors"
+
+        size = _resolve_file_size_bytes({"size": 0}, [url])
+
+        self.assertEqual(size, 654321)
+        mock_fetch.assert_called_once_with(url)
 
     @patch(
         "core.sources.civarchive.fetch_remote_file_size_cached",

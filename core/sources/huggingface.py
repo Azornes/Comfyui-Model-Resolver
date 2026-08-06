@@ -31,6 +31,7 @@ from ..type_utils import (
     normalize_sha256,
     prepare_remote_size_probe_url,
 )
+from .common import resolve_file_size
 
 HF_API_URL = "https://huggingface.co/api"
 HF_AUTHOR_FALLBACKS = ["Comfy-Org", "Kijai"]
@@ -721,9 +722,11 @@ def _build_huggingface_result(
 ) -> Dict[str, Any]:
     sha256 = _extract_huggingface_file_sha256(file_info)
     download_url = get_huggingface_download_url(repo_id, file_path)
-    size = extract_file_size(file_info)
-    if not size:
-        size = _fetch_remote_file_size_bytes(download_url, headers=headers)
+    size = resolve_file_size(
+        file_info,
+        [download_url],
+        probe=lambda url: _fetch_remote_file_size_bytes(url, headers=headers),
+    )
     return build_model_result(
         "huggingface",
         model_id=repo_id,
@@ -1552,13 +1555,15 @@ def build_huggingface_custom_result(
             file_info = candidate
             break
 
-    size = extract_file_size(file_info)
-    if not size:
-        size = fetch_remote_file_size_cached(
-            download_url,
+    size = resolve_file_size(
+        file_info,
+        [download_url],
+        probe=lambda url: fetch_remote_file_size_cached(
+            url,
             headers=headers,
             timeout=10,
-        )
+        ),
+    )
     sha256 = _extract_huggingface_file_sha256(file_info)
 
     def quote_url_path(val):

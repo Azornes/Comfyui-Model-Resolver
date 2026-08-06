@@ -11,6 +11,7 @@ from core.sources.huggingface import (
     HF_AUTHOR_FALLBACKS,
     _build_author_index_from_models,
     _fetch_author_index,
+    _fetch_remote_file_size_bytes,
     _find_matching_file_in_author_index,
     _get_author_index,
     _is_author_index_fresh,
@@ -588,6 +589,23 @@ class HuggingFaceSourceTests(unittest.TestCase):
         url = "https://huggingface.co/user/repo/blob/main/model.safetensors"
         normalized = _normalize_huggingface_size_probe_url(url)
         self.assertEqual(normalized, "https://huggingface.co/user/repo/resolve/main/model.safetensors")
+
+    @patch(
+        "core.sources.huggingface.fetch_remote_file_size_cached",
+        return_value=789,
+    )
+    def test_remote_size_probe_preserves_headers_and_timeout(self, mock_fetch):
+        url = "https://huggingface.co/user/repo/blob/main/model.safetensors"
+        headers = {"Authorization": "Bearer test"}
+
+        size = _fetch_remote_file_size_bytes(url, headers=headers, timeout=7)
+
+        self.assertEqual(size, 789)
+        mock_fetch.assert_called_once_with(
+            "https://huggingface.co/user/repo/resolve/main/model.safetensors",
+            headers=headers,
+            timeout=7,
+        )
 
     def test_custom_result_uses_sha256_from_exact_huggingface_file(self):
         sha256 = "a" * 64

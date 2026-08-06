@@ -2,9 +2,28 @@
 Common utilities for external model metadata sources.
 """
 
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
-from ..type_utils import extract_file_sha256
+from ..type_utils import extract_file_sha256, extract_file_size
+
+
+def resolve_file_size(
+    file_info: Dict[str, Any],
+    candidate_urls: Iterable[str],
+    *,
+    probe: Callable[[str], Optional[int]],
+) -> Optional[int]:
+    """Resolve a model file size from metadata and ordered remote candidates."""
+    size = extract_file_size(file_info)
+    if size:
+        return size
+
+    for url in candidate_urls:
+        size = probe(url)
+        if size:
+            return size
+
+    return None
 
 
 def build_custom_result_fields(
