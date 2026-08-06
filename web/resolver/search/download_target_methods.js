@@ -1218,6 +1218,15 @@ export const downloadTargetMethods = {
         return list[0];
     },
 
+    formatDownloadPathTemplate(template = '', replacements = {}) {
+        let formatted = this.normalizeDownloadPathValue(template);
+        Object.entries(replacements).forEach(([token, value]) => {
+            formatted = formatted.split(token).join(value);
+        });
+        formatted = formatted.replace(/\{[^{}]+\}/g, '');
+        return this.normalizeTemplateSubfolder(formatted);
+    },
+
     getDownloadSourceContext(missing = {}, source = {}, { respectProvenanceBoundary = true } = {}) {
         const sourceData = source && typeof source === 'object' ? source : {};
         const isProvidedUrl = Boolean(
@@ -1482,12 +1491,7 @@ export const downloadTargetMethods = {
             '{model_name}': this.sanitizeDownloadPathSegment(metadata.model_name || metadata.name || metadata.filename?.replace(/\.[^.]+$/, '') || 'Model', 'Model'),
             '{version_name}': this.sanitizeDownloadPathSegment(metadata.version_name || metadata.versionName || metadata.version || '', '')
         };
-        let formatted = template;
-        Object.entries(replacements).forEach(([token, value]) => {
-            formatted = formatted.split(token).join(value);
-        });
-        formatted = formatted.replace(/\{[^{}]+\}/g, '');
-        return this.normalizeTemplateSubfolder(formatted);
+        return this.formatDownloadPathTemplate(template, replacements);
     },
 
     isAutoFillSubfolderEnabled() {

@@ -4038,6 +4038,70 @@ test('download subfolder and path template normalization apply the same segment 
   );
 });
 
+test('download path templates render metadata into the configured subfolder', () => {
+  const formatDownloadPathTemplate = eval(
+    `(${extractMethod(downloadTargetMethodsSource, 'formatDownloadPathTemplate')})`
+  );
+  const calculateDownloadPathTemplateSubfolder = eval(
+    `(${extractMethod(downloadTargetMethodsSource, 'calculateDownloadPathTemplateSubfolder')})`
+  );
+  const dialog = {
+    getDownloadPathTemplates() {
+      return { loras: '{base_model}/{author}/{first_tag}/{model_name}/{version_name}/{unknown}' };
+    },
+    normalizeDownloadCategory(value) {
+      return value;
+    },
+    formatDownloadPathTemplate,
+    normalizeDownloadPathValue(value) {
+      return String(value || '').replace(/\\/g, '/');
+    },
+    getBaseModelPathMappings() {
+      return { Pony: 'SDXL/Pony' };
+    },
+    resolveBaseModelPathMapping(value, mappings) {
+      return mappings[value] || value;
+    },
+    sanitizeDownloadPathValue(value, fallback) {
+      return value || fallback;
+    },
+    sanitizeDownloadPathSegment(value, fallback) {
+      return value || fallback;
+    },
+    getPriorityDownloadTag(tags) {
+      return tags?.[0] || '';
+    },
+    normalizeTemplateSubfolder(value) {
+      return String(value || '')
+        .split('/')
+        .filter(Boolean)
+        .join('/');
+    },
+  };
+
+  assert.equal(
+    calculateDownloadPathTemplateSubfolder.call(dialog, 'loras', {
+      base_model: 'Pony',
+      author: 'Creator',
+      tags: ['Style'],
+      model_name: 'Model',
+      version_name: 'v1',
+    }),
+    'SDXL/Pony/Creator/Style/Model/v1'
+  );
+  assert.equal(
+    formatDownloadPathTemplate.call(dialog, '{base_model}/{unknown}', {
+      '{base_model}': 'SDXL',
+    }),
+    'SDXL'
+  );
+});
+
+test('options path preview delegates token rendering to the shared template formatter', () => {
+  assert.match(optionsMethodsSource, /this\.formatDownloadPathTemplate\(template, replacements\)/);
+  assert.doesNotMatch(optionsMethodsSource, /formatted\.split\(token\)\.join\(value\)/);
+});
+
 test('download subfolder tooltip identifies a folder taken from the workflow model path', () => {
   const getDownloadSubfolderSuggestionReason = eval(`(${extractMethod(downloadTargetMethodsSource, 'getDownloadSubfolderSuggestionReason')})`);
   const dialog = {

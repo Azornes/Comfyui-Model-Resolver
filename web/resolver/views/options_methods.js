@@ -2926,12 +2926,7 @@ export const optionsMethods = {
                 '{model_name}': this.sanitizeDownloadPathSegment(pathPreviewMetadata.model_name, 'Model'),
                 '{version_name}': this.sanitizeDownloadPathSegment(pathPreviewMetadata.version_name, '')
             };
-            let formatted = this.normalizeDownloadPathValue(template);
-            Object.entries(replacements).forEach(([token, value]) => {
-                formatted = formatted.split(token).join(value);
-            });
-            formatted = formatted.replace(/\{[^{}]+\}/g, '');
-            return this.normalizeTemplateSubfolder(formatted) || '(flat folder)';
+            return this.formatDownloadPathTemplate(template, replacements) || '(flat folder)';
         };
 
         const syncTemplateControl = (categoryKey) => {
