@@ -16,21 +16,26 @@ def register_search_support_routes(context: RouteContext):
         operation=service.clear_search_cache,
     )
 
-    @routes.post("/model_resolver/civitai/session-token/check")
-    async def civitai_session_token_check_route(request):
-        return await service.check_civitai_session_token_route(request)
-
-    @routes.post("/model_resolver/civitai/api-key/check")
-    async def civitai_api_key_check_route(request):
-        return await service.check_civitai_api_key_route(request)
-
-    @routes.post("/model_resolver/huggingface/token/check")
-    async def huggingface_token_check_route(request):
-        return await service.check_huggingface_token_route(request)
-
-    @routes.post("/model_resolver/brave/api-key/check")
-    async def brave_api_key_check_route(request):
-        return await service.check_brave_search_api_key_route(request)
+    credential_routes = (
+        (
+            "/model_resolver/civitai/session-token/check",
+            service.check_civitai_session_token_route,
+        ),
+        (
+            "/model_resolver/civitai/api-key/check",
+            service.check_civitai_api_key_route,
+        ),
+        (
+            "/model_resolver/huggingface/token/check",
+            service.check_huggingface_token_route,
+        ),
+        (
+            "/model_resolver/brave/api-key/check",
+            service.check_brave_search_api_key_route,
+        ),
+    )
+    for path, operation in credential_routes:
+        routes.post(path)(operation)
 
     register_service_route(
         context,
