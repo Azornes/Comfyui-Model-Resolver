@@ -110,6 +110,18 @@ def _rewrite_civitai_preview_url(url: str, media_type: str) -> str:
     return urlunparse(parsed._replace(path=parsed.path.replace("/original=true", transform, 1)))
 
 
+def _collect_limited_chunks(chunks: Any, max_bytes: int) -> bytes:
+    """Collect non-empty byte chunks without exceeding the preview size limit."""
+    data = bytearray()
+    for chunk in chunks:
+        if not chunk:
+            continue
+        data.extend(chunk)
+        if len(data) > max_bytes:
+            raise ValueError("Preview media exceeds the download size limit")
+    return bytes(data)
+
+
 def _download_preview_asset(
     url: str,
     media_type: str = "image",
@@ -145,16 +157,10 @@ def _download_preview_asset(
         if content_length > max_bytes:
             raise ValueError("Preview media exceeds the download size limit")
 
-        chunks = []
-        downloaded = 0
-        for chunk in response.iter_content(chunk_size=64 * 1024):
-            if not chunk:
-                continue
-            downloaded += len(chunk)
-            if downloaded > max_bytes:
-                raise ValueError("Preview media exceeds the download size limit")
-            chunks.append(chunk)
-        return b"".join(chunks)
+        return _collect_limited_chunks(
+            response.iter_content(chunk_size=64 * 1024),
+            max_bytes,
+        )
     except requests.exceptions.SSLError:
         if media_type == "image":
             return facade._download_preview_image_with_system_trust(url)
@@ -238,17 +244,14 @@ def _download_preview_asset_with_system_trust(
         if content_length > max_bytes:
             raise ValueError("Preview media exceeds the download size limit")
 
-        chunks = []
-        downloaded = 0
-        while True:
-            chunk = response.read(64 * 1024)
-            if not chunk:
-                break
-            downloaded += len(chunk)
-            if downloaded > max_bytes:
-                raise ValueError("Preview media exceeds the download size limit")
-            chunks.append(chunk)
-        return b"".join(chunks)
+        def response_chunks():
+            while True:
+                chunk = response.read(64 * 1024)
+                if not chunk:
+                    return
+                yield chunk
+
+        return _collect_limited_chunks(response_chunks(), max_bytes)
 
 
 def _download_preview_image_with_system_trust(

@@ -18,10 +18,21 @@ from core.download.metadata import (
     _extract_expected_sha256,
     build_model_resolver_metadata,
 )
+from core.download.previews import _collect_limited_chunks
 from core.path_utils import get_model_resolver_sidecar_path
 
 
 class DownloaderMetadataSidecarTests(unittest.TestCase):
+    def test_collect_limited_preview_chunks_skips_empty_chunks(self):
+        self.assertEqual(
+            b"preview-data",
+            _collect_limited_chunks([b"preview", b"", b"-data"], max_bytes=32),
+        )
+
+    def test_collect_limited_preview_chunks_rejects_oversized_stream(self):
+        with self.assertRaises(ValueError):
+            _collect_limited_chunks([b"1234", b"56"], max_bytes=5)
+
     def test_selected_file_hash_overrides_stale_source_hash(self):
         stale_hash = "1" * 64
         selected_hash = "f" * 64
