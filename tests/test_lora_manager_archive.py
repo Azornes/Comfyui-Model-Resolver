@@ -34,6 +34,51 @@ class LoraManagerArchiveTests(unittest.TestCase):
         self.assertIn("model", tokens_generic["content_terms"])
         self.assertIn("v1", tokens_generic["version_terms"])
 
+    def test_query_candidate_rows_preserves_all_filter_plans(self):
+        class EmptyQueryResult:
+            def fetchall(self):
+                return []
+
+        class RecordingConnection:
+            def __init__(self):
+                self.calls = []
+
+            def execute(self, sql, params):
+                self.calls.append((sql, tuple(params)))
+                return EmptyQueryResult()
+
+        connection = RecordingConnection()
+
+        candidates = _query_candidate_rows(
+            connection,
+            "aurora_style_v2.safetensors",
+            "lora",
+            2,
+        )
+
+        self.assertEqual([], candidates)
+        self.assertEqual(5, len(connection.calls))
+        self.assertTrue(
+            all("m.type = ?" in sql for sql, _params in connection.calls)
+        )
+        self.assertTrue(
+            all(
+                "ORDER BY m.id ASC, COALESCE(v.position, 999999) ASC LIMIT ?"
+                in sql
+                for sql, _params in connection.calls
+            )
+        )
+        self.assertEqual(
+            [
+                ("%aurora%", "%style%", "%v2%", "LORA", 50),
+                ("%aurora%", "%style%", "LORA", 50),
+                ("%aurora%", "%v2%", "LORA", 50),
+                ("%aurora%", "LORA", 50),
+                ("%v2%", "LORA", 50),
+            ],
+            [params for _sql, params in connection.calls],
+        )
+
     def test_database_operations_with_in_memory_sqlite(self):
         # Create an in-memory database
         conn = sqlite3.connect(":memory:")

@@ -44,6 +44,19 @@ DEFAULT_DB_RELATIVE_PATH = os.path.join("civitai", "civitai.sqlite")
 _search_cache: Dict[str, Any] = {}
 _db_path_cache: Optional[str] = None
 GENERIC_FILENAME_TOKENS = get_generic_filename_tokens()
+_CANDIDATE_SELECT_SQL = """
+SELECT
+    m.id AS model_id,
+    m.name AS model_name,
+    m.type AS model_type,
+    v.id AS version_id,
+    v.name AS version_name,
+    v.base_model AS base_model,
+    v.position AS position
+FROM models m
+JOIN model_versions v ON v.model_id = m.id
+WHERE {where_clause}
+"""
 
 
 def clear_search_cache():
@@ -280,21 +293,9 @@ def _query_candidate_rows(
     if first_term and second_term and version_term:
         query_plans.append(
             (
-                """
-                SELECT
-                    m.id AS model_id,
-                    m.name AS model_name,
-                    m.type AS model_type,
-                    v.id AS version_id,
-                    v.name AS version_name,
-                    v.base_model AS base_model,
-                    v.position AS position
-                FROM models m
-                JOIN model_versions v ON v.model_id = m.id
-                WHERE m.name LIKE ? COLLATE NOCASE
-                  AND m.name LIKE ? COLLATE NOCASE
-                  AND v.name LIKE ? COLLATE NOCASE
-                """,
+                "m.name LIKE ? COLLATE NOCASE\n"
+                "  AND m.name LIKE ? COLLATE NOCASE\n"
+                "  AND v.name LIKE ? COLLATE NOCASE",
                 [f"%{first_term}%", f"%{second_term}%", f"%{version_term}%"],
             )
         )
@@ -302,20 +303,8 @@ def _query_candidate_rows(
     if first_term and second_term:
         query_plans.append(
             (
-                """
-                SELECT
-                    m.id AS model_id,
-                    m.name AS model_name,
-                    m.type AS model_type,
-                    v.id AS version_id,
-                    v.name AS version_name,
-                    v.base_model AS base_model,
-                    v.position AS position
-                FROM models m
-                JOIN model_versions v ON v.model_id = m.id
-                WHERE m.name LIKE ? COLLATE NOCASE
-                  AND m.name LIKE ? COLLATE NOCASE
-                """,
+                "m.name LIKE ? COLLATE NOCASE\n"
+                "  AND m.name LIKE ? COLLATE NOCASE",
                 [f"%{first_term}%", f"%{second_term}%"],
             )
         )
@@ -323,20 +312,8 @@ def _query_candidate_rows(
     if first_term and version_term:
         query_plans.append(
             (
-                """
-                SELECT
-                    m.id AS model_id,
-                    m.name AS model_name,
-                    m.type AS model_type,
-                    v.id AS version_id,
-                    v.name AS version_name,
-                    v.base_model AS base_model,
-                    v.position AS position
-                FROM models m
-                JOIN model_versions v ON v.model_id = m.id
-                WHERE m.name LIKE ? COLLATE NOCASE
-                  AND v.name LIKE ? COLLATE NOCASE
-                """,
+                "m.name LIKE ? COLLATE NOCASE\n"
+                "  AND v.name LIKE ? COLLATE NOCASE",
                 [f"%{first_term}%", f"%{version_term}%"],
             )
         )
@@ -344,19 +321,7 @@ def _query_candidate_rows(
     if first_term:
         query_plans.append(
             (
-                """
-                SELECT
-                    m.id AS model_id,
-                    m.name AS model_name,
-                    m.type AS model_type,
-                    v.id AS version_id,
-                    v.name AS version_name,
-                    v.base_model AS base_model,
-                    v.position AS position
-                FROM models m
-                JOIN model_versions v ON v.model_id = m.id
-                WHERE m.name LIKE ? COLLATE NOCASE
-                """,
+                "m.name LIKE ? COLLATE NOCASE",
                 [f"%{first_term}%"],
             )
         )
@@ -364,19 +329,7 @@ def _query_candidate_rows(
     if version_term:
         query_plans.append(
             (
-                """
-                SELECT
-                    m.id AS model_id,
-                    m.name AS model_name,
-                    m.type AS model_type,
-                    v.id AS version_id,
-                    v.name AS version_name,
-                    v.base_model AS base_model,
-                    v.position AS position
-                FROM models m
-                JOIN model_versions v ON v.model_id = m.id
-                WHERE v.name LIKE ? COLLATE NOCASE
-                """,
+                "v.name LIKE ? COLLATE NOCASE",
                 [f"%{version_term}%"],
             )
         )
@@ -384,7 +337,8 @@ def _query_candidate_rows(
     seen_versions = set()
     candidates: List[sqlite3.Row] = []
 
-    for sql, params in query_plans:
+    for where_clause, params in query_plans:
+        sql = _CANDIDATE_SELECT_SQL.format(where_clause=where_clause)
         if model_type:
             sql += " AND m.type = ?"
             params.append(model_type.upper())
