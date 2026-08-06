@@ -4,6 +4,7 @@ import { escapeHtml, escapeJsString, getFilenameFromPath, sanitizeDescriptionHtm
 import { getModelCardUrl } from "../utils/url_utils.js";
 import { extractComfyWorkflow } from "../utils/workflow_metadata.js";
 import { getSha256Field, normalizeSha256 } from "../utils/hash_utils.js";
+import { parseFiniteNumber } from "../utils/size_utils.js";
 import { getSourceDisplayLabel } from "../utils/source_labels.js";
 import { getCivitaiModelUrl } from "../globals.js";
 export const modelInfoMethods = {
@@ -1263,8 +1264,8 @@ export const modelInfoMethods = {
         if (rawSize === null || rawSize === undefined || rawSize === '') return '';
         if (rawSize === 0 || rawSize === '0') return '0 B';
 
-        const numericSize = Number(rawSize);
-        if (Number.isFinite(numericSize)) {
+        const numericSize = parseFiniteNumber(rawSize);
+        if (numericSize !== null) {
             return typeof this.formatBytes === 'function'
                 ? this.formatBytes(numericSize)
                 : `${numericSize} B`;

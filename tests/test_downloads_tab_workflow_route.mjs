@@ -31,6 +31,7 @@ import {
 } from '../web/resolver/utils/category_aliases.generated.js';
 import { getSha256Field, normalizeSha256 } from '../web/resolver/utils/hash_utils.js';
 import { normalizeSearchToken } from '../web/resolver/utils/search_utils.js';
+import { parseFiniteNumber } from '../web/resolver/utils/size_utils.js';
 import { getSourceDisplayLabel, normalizeSourceKey } from '../web/resolver/utils/source_labels.js';
 import { baseModelAliasMethods } from '../web/resolver/search/base_model_alias_methods.js';
 import { searchHashMethods } from '../web/resolver/search/search_hash_methods.js';
@@ -6961,6 +6962,50 @@ test('CivitAI hash search renders sizeKB when byte size is unavailable', () => {
     }),
     '11.5 GB'
   );
+});
+
+test('search result size formatting preserves aliases and fallback values', () => {
+  const formatSearchResultSize = eval(`(${extractMethod(searchPanelMethodsSource, 'formatSearchResultSize')})`);
+  const dialog = {
+    formatBytes(value) {
+      return `${Number(value)} B`;
+    },
+  };
+
+  assert.equal(formatSearchResultSize.call(dialog, { size: 2048 }), '2048 B');
+  assert.equal(formatSearchResultSize.call(dialog, { size: '5.7 GB' }), '5.7 GB');
+  assert.equal(
+    formatSearchResultSize.call(dialog, {
+      size: null,
+      file_info: { sizeBytes: 1024 },
+    }),
+    '1024 B'
+  );
+  assert.equal(formatSearchResultSize.call(dialog, { size: null, sizeKB: '2' }), '2048 B');
+  assert.equal(formatSearchResultSize.call(dialog, { size: 0 }), '0 B');
+  assert.equal(formatSearchResultSize.call(dialog, { size: null, sizeKB: 'invalid' }), '');
+  assert.equal(formatSearchResultSize.call(dialog, { size: null, sizeKB: Number.MAX_VALUE }), '');
+});
+
+test('info dialog size formatting preserves numeric, nested and label values', () => {
+  const formatInfoDialogSize = eval(`(${extractMethod(modelInfoMethodsSource, 'formatInfoDialogSize')})`);
+  const dialog = {
+    formatBytes(value) {
+      return `${Number(value)} B`;
+    },
+  };
+
+  assert.equal(formatInfoDialogSize.call(dialog, { size: 2048 }), '2048 B');
+  assert.equal(formatInfoDialogSize.call(dialog, { size: '2048' }), '2048 B');
+  assert.equal(
+    formatInfoDialogSize.call(dialog, { file: { sizeBytes: 1024 } }),
+    '1024 B'
+  );
+  assert.equal(formatInfoDialogSize.call(dialog, { size: '5.7 GB' }), '5.7 GB');
+  assert.equal(formatInfoDialogSize.call(dialog, { size: 0 }), '0 B');
+  assert.equal(formatInfoDialogSize.call(dialog, { size: '0' }), '0 B');
+  assert.equal(formatInfoDialogSize.call(dialog, { size: 'invalid' }), 'invalid');
+  assert.equal(formatInfoDialogSize.call(dialog, {}), '');
 });
 
 test('link/name controls place the add or search action before the input switch', () => {

@@ -4,6 +4,7 @@ import { getSourceDisplayLabel, normalizeSourceKey } from "../utils/source_label
 import { getCivitaiModelUrl } from "../globals.js";
 import { safeStorage, normalizePathIdentity } from "../utils/html_utils.js";
 import { getSha256Field } from "../utils/hash_utils.js";
+import { parseFiniteNumber } from "../utils/size_utils.js";
 import { bindEventOnce } from "../utils/dom_patch_utils.js";
 import {
     classifyLocalMatches,
@@ -1552,8 +1553,8 @@ export const searchPanelMethods = {
 
             const sizeKb = candidate.sizeKB ?? candidate.size_kb;
             if (sizeKb !== undefined && sizeKb !== null && sizeKb !== '') {
-                const sizeBytes = Number(sizeKb) * 1024;
-                if (Number.isFinite(sizeBytes)) return this.formatBytes(sizeBytes);
+                const sizeBytes = parseFiniteNumber(sizeKb * 1024);
+                if (sizeBytes !== null) return this.formatBytes(sizeBytes);
             }
         }
 
