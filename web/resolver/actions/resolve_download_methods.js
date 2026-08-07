@@ -3704,6 +3704,56 @@ export const resolveDownloadMethods = {
             rowKeys.add(rowKey);
             rows.push({ ...row, __searchResultKey: rowKey });
         };
+        const addArchiveRow = (result, {
+            sourceKey,
+            sourceLabel,
+            fallbackCategory,
+            hashSourceKey = sourceKey,
+            detailsSource = sourceKey,
+            detailsSourceOverride = '',
+            secondaryParts = [],
+            openUrl = '',
+        } = {}) => {
+            if (!result?.download_url) return;
+
+            const filename = result.filename || this.getFilenameFromPath(missing.original_path);
+            const model = result.name || filename || 'Model';
+            const categoryFallback = this.getMissingDownloadCategory?.(missing, fallbackCategory)
+                || fallbackCategory;
+            const category = this.getSourceResultDownloadCategory?.(
+                result,
+                categoryFallback,
+                missing
+            ) || categoryFallback;
+            const secondary = [
+                model && model !== filename ? filename : '',
+                ...secondaryParts,
+            ].filter(Boolean).join(' / ');
+
+            addRow(this.buildSearchResultRow(missing, {
+                result,
+                sourceKey,
+                sourceLabel,
+                model,
+                version: result.version_name || '',
+                filename,
+                secondary,
+                downloadUrl: result.download_url,
+                downloadFilename: filename,
+                category,
+                openUrl,
+                hashSourceKey,
+                hashLabelMap,
+                localHashMatches,
+                detailsContext: {
+                    ...result,
+                    ...(detailsSourceOverride ? { source: detailsSourceOverride } : {}),
+                    details_source: detailsSource,
+                    missing_key: this.getMissingModelKey(missing),
+                    category,
+                },
+            }));
+        };
 
         let statusHtml = '';
         if (!hasActiveProgress && state?.lastAttemptError) {
@@ -3806,72 +3856,28 @@ export const resolveDownloadMethods = {
         }
 
         if (civarchiveResult && civarchiveResult.download_url) {
-            const archiveFilename = civarchiveResult.filename || this.getFilenameFromPath(missing.original_path);
-            const archiveName = civarchiveResult.name || archiveFilename || 'Model';
-            const archiveCategory = this.getSourceResultDownloadCategory?.(
-                civarchiveResult,
-                this.getMissingDownloadCategory?.(missing, 'checkpoints') || 'checkpoints',
-                missing
-            ) || this.getMissingDownloadCategory?.(missing, 'checkpoints') || 'checkpoints';
-            const archiveSecondary = [
-                archiveName && archiveName !== archiveFilename ? archiveFilename : '',
-                civarchiveResult.platform || '',
-                civarchiveResult.base_model || ''
-            ].filter(Boolean).join(' / ');
-            addRow(this.buildSearchResultRow(missing, {
-                result: civarchiveResult,
+            addArchiveRow(civarchiveResult, {
                 sourceKey: 'civarchive',
                 sourceLabel: 'CivArchive',
-                model: archiveName,
-                version: civarchiveResult.version_name || '',
-                filename: archiveFilename,
-                secondary: archiveSecondary,
-                downloadUrl: civarchiveResult.download_url,
-                downloadFilename: archiveFilename,
-                category: archiveCategory,
+                fallbackCategory: 'checkpoints',
+                secondaryParts: [
+                    civarchiveResult.platform || '',
+                    civarchiveResult.base_model || '',
+                ],
                 openUrl: civarchiveResult.url,
-                hashLabelMap,
-                localHashMatches,
-                detailsContext: {
-                    ...civarchiveResult,
-                    details_source: 'civarchive',
-                    missing_key: this.getMissingModelKey(missing),
-                    category: archiveCategory
-                }
-            }));
+            });
         }
 
         if (loraManagerArchiveResult && loraManagerArchiveResult.download_url) {
-            const archiveFilename = loraManagerArchiveResult.filename || this.getFilenameFromPath(missing.original_path);
-            const archiveName = loraManagerArchiveResult.name || archiveFilename;
-            const archiveCategory = this.getSourceResultDownloadCategory?.(
-                loraManagerArchiveResult,
-                this.getMissingDownloadCategory?.(missing, 'loras') || 'loras',
-                missing
-            ) || this.getMissingDownloadCategory?.(missing, 'loras') || 'loras';
-            addRow(this.buildSearchResultRow(missing, {
-                result: loraManagerArchiveResult,
+            addArchiveRow(loraManagerArchiveResult, {
                 sourceKey: 'lora-archive',
                 sourceLabel: 'LoRA Archive',
-                model: archiveName,
-                version: loraManagerArchiveResult.version_name || '',
-                filename: archiveFilename,
-                secondary: archiveName && archiveName !== archiveFilename ? archiveFilename : '',
-                downloadUrl: loraManagerArchiveResult.download_url || '',
-                downloadFilename: archiveFilename,
-                category: archiveCategory,
-                openUrl: loraManagerArchiveResult.url || getModelCardUrl(loraManagerArchiveResult.download_url),
+                fallbackCategory: 'loras',
                 hashSourceKey: 'lora_manager_archive',
-                hashLabelMap,
-                localHashMatches,
-                detailsContext: {
-                    ...loraManagerArchiveResult,
-                    source: 'lora_manager_archive',
-                    details_source: 'lora_manager_archive',
-                    missing_key: this.getMissingModelKey(missing),
-                    category: archiveCategory
-                }
-            }));
+                detailsSource: 'lora_manager_archive',
+                detailsSourceOverride: 'lora_manager_archive',
+                openUrl: loraManagerArchiveResult.url || getModelCardUrl(loraManagerArchiveResult.download_url),
+            });
         }
 
         if (civitaiResult && civitaiResult.download_url) {

@@ -7370,6 +7370,8 @@ test('search provider rows preserve a shared result row contract', () => {
           filename: 'archive.safetensors',
           download_url: 'archive/download',
           url: 'archive/page',
+          platform: 'CivitAI mirror',
+          base_model: 'SDXL 1.0',
         },
         lora_manager_archive: {
           name: 'LoRA model',
@@ -7410,6 +7412,15 @@ test('search provider rows preserve a shared result row contract', () => {
     assert.ok(row.pathMetadata);
     assert.ok(row.downloadMetadata);
   }
+
+  const civarchiveRow = rows.find(row => row.sourceKey === 'civarchive');
+  assert.equal(civarchiveRow.secondary, 'archive.safetensors / CivitAI mirror / SDXL 1.0');
+  assert.equal(civarchiveRow.detailsContext.details_source, 'civarchive');
+
+  const loraArchiveRow = rows.find(row => row.sourceKey === 'lora-archive');
+  assert.equal(loraArchiveRow.secondary, 'lora.safetensors');
+  assert.equal(loraArchiveRow.detailsContext.source, 'lora_manager_archive');
+  assert.equal(loraArchiveRow.detailsContext.details_source, 'lora_manager_archive');
 });
 
 test('source model details file selection includes selected file hash metadata', () => {
