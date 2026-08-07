@@ -1,8 +1,4 @@
-import { getFilenameFromPath } from './utils/html_utils.js';
-
-function normalizeIdentity(value) {
-    return String(value ?? '').trim().replaceAll('\\', '/').toLowerCase();
-}
+import { getFilenameFromPath, normalizePathIdentity } from './utils/html_utils.js';
 
 function getResolvedModelPath(model = {}) {
     return String(model.full_path || model.path || model.resolved_path || '').trim();
@@ -44,7 +40,7 @@ function getWidgetChoiceValue(choice) {
 }
 
 function isCurrentWidgetSelection(widget, value) {
-    const normalizedValue = normalizeIdentity(value);
+    const normalizedValue = normalizePathIdentity(value);
     if (!normalizedValue || ['none', 'null', 'undefined'].includes(normalizedValue)) {
         return false;
     }
@@ -54,7 +50,7 @@ function isCurrentWidgetSelection(widget, value) {
         return true;
     }
     return choices.some(choice => (
-        normalizeIdentity(getWidgetChoiceValue(choice)) === normalizedValue
+        normalizePathIdentity(getWidgetChoiceValue(choice)) === normalizedValue
     ));
 }
 
@@ -108,7 +104,7 @@ export function matchesWorkflowModelReference(model = {}, reference = {}) {
     }
 
     if (reference.original_path) {
-        return normalizeIdentity(model.original_path) === normalizeIdentity(reference.original_path);
+        return normalizePathIdentity(model.original_path) === normalizePathIdentity(reference.original_path);
     }
 
     return true;
@@ -162,7 +158,7 @@ export function getImmediateModelsForNode(data = {}, node = {}, scope = {}) {
         if (typeof currentValue !== 'string') continue;
         if (!isCurrentWidgetSelection(widget, currentValue)) continue;
 
-        if (normalizeIdentity(currentValue) === normalizeIdentity(reference.original_path)) {
+        if (normalizePathIdentity(currentValue) === normalizePathIdentity(reference.original_path)) {
             if (isExistingResolvedModel(reference)) {
                 modelsByWidget.set(widgetIndex, reference);
             }
@@ -201,7 +197,7 @@ function getSubgraphModelReferenceKey(model = {}) {
         model.subgraph_id || '',
         model.node_id ?? '',
         model.widget_index ?? '',
-        normalizeIdentity(model.original_path || model.name || ''),
+        normalizePathIdentity(model.original_path || model.name || ''),
     ].join('|');
 }
 

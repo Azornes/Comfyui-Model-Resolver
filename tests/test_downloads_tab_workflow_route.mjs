@@ -2064,9 +2064,6 @@ test('Power Lora Loader strength updates only its Loaded Models chip and cache',
   const updateLoadedModelStrengthsFromNode = eval(
     `(${extractMethod(tabsLoadedMethodsSource, 'updateLoadedModelStrengthsFromNode')})`
   );
-  const normalizeLoadedModelIdentity = eval(
-    `(${extractMethod(tabsLoadedMethodsSource, 'normalizeLoadedModelIdentity')})`
-  );
   const getLoadedModelDomKey = eval(
     `(${extractMethod(tabsLoadedMethodsSource, 'getLoadedModelDomKey')})`
   );
@@ -2100,7 +2097,6 @@ test('Power Lora Loader strength updates only its Loaded Models chip and cache',
     },
     cachedLoadedModelsSignature: 'old-signature',
     activeWorkflowSignature: 'old-signature',
-    normalizeLoadedModelIdentity,
     getLoadedModelDomKey,
     getMissingModelKey: () => 'model-key',
     updateLoadedModelCopyValues: (_container, models) => {

@@ -3,6 +3,7 @@ import {
     getCustomNodeModelEntries,
     getCustomNodeOriginalIdentity,
 } from "../custom_nodes/registry.js";
+import { normalizePathIdentity } from "../utils/html_utils.js";
 export const tabsLoadedMethods = {
     getTabButton(tab) {
         return {
@@ -203,13 +204,6 @@ export const tabsLoadedMethods = {
         return this.getMissingModelKey(model);
     },
 
-    normalizeLoadedModelIdentity(value) {
-        return String(value || '')
-            .trim()
-            .replace(/\\/g, '/')
-            .toLowerCase();
-    },
-
     updateLoadedModelCopyValues(container, loadedModels = []) {
         if (!container) return;
 
@@ -291,7 +285,7 @@ export const tabsLoadedMethods = {
         const entries = getCustomNodeModelEntries(node)
             .filter(entry => Number.isFinite(entry.strength))
             .map(entry => ({
-                identity: this.normalizeLoadedModelIdentity(entry.identity),
+                identity: normalizePathIdentity(entry.identity),
                 strength: entry.strength,
             }));
         if (!entries.length) return false;
@@ -300,7 +294,7 @@ export const tabsLoadedMethods = {
         const modelBuckets = new Map();
         for (const model of this.cachedLoadedModelsData.loaded_models) {
             if (String(model.node_id ?? '') !== nodeId) continue;
-            const identity = this.normalizeLoadedModelIdentity(
+            const identity = normalizePathIdentity(
                 getCustomNodeOriginalIdentity(model)
                 || model.original_path
                 || model.name
