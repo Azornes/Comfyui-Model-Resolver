@@ -109,6 +109,35 @@ def resolve_aria2_completed_path(status: Dict[str, Any], default_path: str) -> s
     return default_path
 
 
+def _remove_partial_path(
+    facade: Any,
+    path: str,
+    *,
+    attempts: int = 1,
+    retry_delay: float = 0.0,
+    log_prefix: str,
+) -> bool:
+    """Remove one partial path, optionally retrying while it is locked."""
+    if not path:
+        return True
+
+    attempts = max(1, int(attempts or 1))
+    last_error: Optional[Exception] = None
+    for attempt in range(attempts):
+        try:
+            if not facade.os.path.exists(path):
+                return True
+            facade.os.remove(path)
+            return True
+        except Exception as exc:
+            last_error = exc
+            if attempt + 1 < attempts:
+                facade.time.sleep(retry_delay)
+
+    log.warning(f"{log_prefix} {path}: {last_error}")
+    return False
+
+
 def delete_partial_download_files(
     dest_path: str,
     *,
@@ -117,11 +146,11 @@ def delete_partial_download_files(
     """Delete an incomplete model and its aria2 control sidecar."""
     facade = require_download_dependencies(dependencies, "aria2 backend")
     for path in (dest_path, f"{dest_path}.aria2"):
-        try:
-            if path and facade.os.path.exists(path):
-                facade.os.remove(path)
-        except Exception as exc:
-            log.warning(f"Could not delete incomplete download file {path}: {exc}")
+        _remove_partial_path(
+            facade,
+            path,
+            log_prefix="Could not delete incomplete download file",
+        )
 
 
 def delete_python_partial_download_file(
@@ -131,13 +160,11 @@ def delete_python_partial_download_file(
 ) -> None:
     """Remove a partial Python download without touching the final model path."""
     facade = require_download_dependencies(dependencies, "aria2 backend")
-    try:
-        if partial_path and facade.os.path.exists(partial_path):
-            facade.os.remove(partial_path)
-    except Exception as exc:
-        log.warning(
-            f"Could not delete incomplete Python download file {partial_path}: {exc}"
-        )
+    _remove_partial_path(
+        facade,
+        partial_path,
+        log_prefix="Could not delete incomplete Python download file",
+    )
 
 
 def delete_xet_partial_file(
@@ -148,21 +175,13 @@ def delete_xet_partial_file(
 ) -> bool:
     """Delete a stopped Xet partial file, retrying while Windows releases it."""
     facade = require_download_dependencies(dependencies, "aria2 backend")
-    attempts = max(1, int(attempts or 1))
-    last_error: Optional[Exception] = None
-    for attempt in range(attempts):
-        try:
-            if not facade.os.path.exists(partial_path):
-                return True
-            facade.os.remove(partial_path)
-            return True
-        except Exception as exc:
-            last_error = exc
-            if attempt + 1 < attempts:
-                facade.time.sleep(0.25)
-
-    log.warning(f"Could not delete incomplete Xet file {partial_path}: {last_error}")
-    return False
+    return _remove_partial_path(
+        facade,
+        partial_path,
+        attempts=attempts,
+        retry_delay=0.25,
+        log_prefix="Could not delete incomplete Xet file",
+    )
 
 
 def aria2_action_error_is_ok(status: str, message: str) -> bool:
