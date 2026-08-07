@@ -6,6 +6,7 @@ import { Window } from 'happy-dom';
 import {
   html,
   normalizePathIdentity,
+  pollBackgroundTask,
   safeStorage,
 } from '../web/resolver/utils/html_utils.js';
 import { getModelCardUrl, getSourceKeyFromUrl } from '../web/resolver/utils/url_utils.js';
@@ -55,6 +56,7 @@ void collectNormalizedCategoryValues;
 void CATEGORY_ALIASES;
 void normalizeCategoryToken;
 void normalizeSha256;
+void pollBackgroundTask;
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
 const queueMethodsSource = fs.readFileSync(
@@ -2037,6 +2039,7 @@ test('background Loaded Models refresh keeps the current view until new data is 
 });
 
 test('Loaded Models progress patches the stable progress container', () => {
+  const pollWorkflowProgress = extractMethod(renderFormatMethodsSource, 'pollWorkflowProgress');
   const patchLoadedModelsProgress = extractMethod(
     renderFormatMethodsSource,
     'patchLoadedModelsProgress'
@@ -2049,15 +2052,79 @@ test('Loaded Models progress patches the stable progress container', () => {
   const patchAnalysisProgress = extractMethod(renderFormatMethodsSource, 'patchAnalysisProgress');
   const pollAnalysisProgress = extractMethod(renderFormatMethodsSource, 'pollAnalysisProgress');
 
+  assert.match(pollWorkflowProgress, /pollBackgroundTask\(/);
   assert.match(patchLoadedModelsProgress, /mr-download-section/);
   assert.match(patchLoadedModelsProgress, /mr-progress-fill/);
   assert.match(patchLoadedModelsProgress, /currentInfo/);
+  assert.match(pollLoadedModelsProgress, /this\.pollWorkflowProgress\(/);
+  assert.doesNotMatch(pollLoadedModelsProgress, /pollBackgroundTask\(/);
   assert.match(pollLoadedModelsProgress, /patchLoadedModelsProgress\(/);
   assert.doesNotMatch(pollLoadedModelsProgress, /contentElement\.innerHTML\s*=/);
   assert.match(loadLoadedModels, /patchLoadedModelsProgress\(/);
   assert.match(patchAnalysisProgress, /patchLoadedModelsProgress\(/);
+  assert.match(pollAnalysisProgress, /this\.pollWorkflowProgress\(/);
+  assert.doesNotMatch(pollAnalysisProgress, /pollBackgroundTask\(/);
   assert.match(pollAnalysisProgress, /patchAnalysisProgress\(/);
   assert.doesNotMatch(pollAnalysisProgress, /contentElement\.innerHTML\s*=/);
+});
+
+test('workflow progress polling preserves endpoint, rendering, and token cleanup', async () => {
+  const pollWorkflowProgress = eval(`(${extractMethod(renderFormatMethodsSource, 'pollWorkflowProgress')})`);
+  const pollAnalysisProgress = eval(`(${extractMethod(renderFormatMethodsSource, 'pollAnalysisProgress')})`);
+  const pollLoadedModelsProgress = eval(`(${extractMethod(renderFormatMethodsSource, 'pollLoadedModelsProgress')})`);
+  const cases = [
+    {
+      method: pollAnalysisProgress,
+      activeTab: 'missing',
+      tokenProperty: '_analysisProgressToken',
+      id: 'analysis-1',
+      endpoint: '/model_resolver/analyze-progress/analysis-1',
+      responses: [{ status: 'completed' }],
+      renderMethod: 'renderAnalysisProgress',
+      patchMethod: 'patchAnalysisProgress',
+    },
+    {
+      method: pollLoadedModelsProgress,
+      activeTab: 'loaded',
+      tokenProperty: '_loadedModelsProgressToken',
+      id: 'loaded/model',
+      endpoint: '/model_resolver/loaded-progress/loaded%2Fmodel',
+      responses: [{ status: 'unknown' }, { status: 'completed' }],
+      renderMethod: 'renderLoadedModelsProgress',
+      patchMethod: 'patchLoadedModelsProgress',
+    },
+  ];
+
+  for (const testCase of cases) {
+    const requests = [];
+    const rendered = [];
+    const patched = [];
+    let responseIndex = 0;
+    const dialog = {
+      activeTab: testCase.activeTab,
+      contentElement: {},
+      [testCase.tokenProperty]: testCase.id,
+      pollWorkflowProgress,
+      fetchJson: async endpoint => {
+        requests.push(endpoint);
+        return testCase.responses[responseIndex++];
+      },
+      [testCase.renderMethod]: progress => {
+        rendered.push(progress.status);
+        return `<div>${progress.status}</div>`;
+      },
+      [testCase.patchMethod]: (_container, content) => {
+        patched.push(content);
+      },
+    };
+
+    await testCase.method.call(dialog, testCase.id, testCase.id);
+
+    assert.deepEqual(requests, Array(testCase.responses.length).fill(testCase.endpoint));
+    assert.equal(dialog[testCase.tokenProperty], null);
+    assert.deepEqual(rendered, ['completed']);
+    assert.deepEqual(patched, ['<div>completed</div>']);
+  }
 });
 
 test('Power Lora Loader strength updates only its Loaded Models chip and cache', () => {

@@ -280,8 +280,29 @@ export const renderFormatMethods = {
         this.patchLoadedModelsProgress(container, renderedHtml);
     },
 
-    async pollAnalysisProgress(analysisId, token) {
+    async pollWorkflowProgress({
+        endpoint,
+        tokenCheck,
+        onProgress,
+        onTerminal,
+        onError,
+        filterIgnoredStatus,
+    }) {
         await pollBackgroundTask({
+            endpoint,
+            tokenCheck,
+            onProgress,
+            isTerminal: (progress) => progress.status === 'completed' || progress.status === 'error',
+            onTerminal,
+            onError,
+            intervalMs: 250,
+            fetchJson: this.fetchJson.bind(this),
+            filterIgnoredStatus,
+        });
+    },
+
+    async pollAnalysisProgress(analysisId, token) {
+        await this.pollWorkflowProgress({
             endpoint: `/model_resolver/analyze-progress/${analysisId}`,
             tokenCheck: () => this._analysisProgressToken === token,
             onProgress: (progress) => {
@@ -301,13 +322,11 @@ export const renderFormatMethods = {
             onError: (error) => {
                 console.warn('Model Resolver: analysis progress polling failed', error);
             },
-            intervalMs: 250,
-            fetchJson: this.fetchJson.bind(this)
         });
     },
 
     async pollLoadedModelsProgress(loadedId, token) {
-        await pollBackgroundTask({
+        await this.pollWorkflowProgress({
             endpoint: `/model_resolver/loaded-progress/${encodeURIComponent(loadedId)}`,
             tokenCheck: () => this._loadedModelsProgressToken === token,
             filterIgnoredStatus: (progress) => progress?.status === 'unknown',
@@ -328,8 +347,6 @@ export const renderFormatMethods = {
             onError: (error) => {
                 console.warn('Model Resolver: loaded models progress polling failed', error);
             },
-            intervalMs: 250,
-            fetchJson: this.fetchJson.bind(this)
         });
     },
 
