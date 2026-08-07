@@ -122,6 +122,19 @@ def _collect_limited_chunks(chunks: Any, max_bytes: int) -> bytes:
     return bytes(data)
 
 
+def _get_preview_download_config(media_type: str) -> Tuple[int, str]:
+    """Return the size limit and Accept header for a preview media type."""
+    if media_type == "video":
+        return (
+            MODEL_PREVIEW_VIDEO_MAX_DOWNLOAD_BYTES,
+            "video/mp4,video/webm,video/*,*/*;q=0.8",
+        )
+    return (
+        MODEL_PREVIEW_MAX_DOWNLOAD_BYTES,
+        "image/avif,image/webp,image/*,*/*;q=0.8",
+    )
+
+
 def _download_preview_asset(
     url: str,
     media_type: str = "image",
@@ -129,16 +142,7 @@ def _download_preview_asset(
     dependencies: Any = None,
 ) -> bytes:
     facade = require_download_dependencies(dependencies, "preview download")
-    max_bytes = (
-        MODEL_PREVIEW_VIDEO_MAX_DOWNLOAD_BYTES
-        if media_type == "video"
-        else MODEL_PREVIEW_MAX_DOWNLOAD_BYTES
-    )
-    accept_header = (
-        "video/mp4,video/webm,video/*,*/*;q=0.8"
-        if media_type == "video"
-        else "image/avif,image/webp,image/*,*/*;q=0.8"
-    )
+    max_bytes, accept_header = _get_preview_download_config(media_type)
 
     response = None
     try:
@@ -201,16 +205,7 @@ def _download_preview_asset_with_system_trust(
     )
 
     facade = require_download_dependencies(dependencies, "preview download")
-    max_bytes = (
-        MODEL_PREVIEW_VIDEO_MAX_DOWNLOAD_BYTES
-        if media_type == "video"
-        else MODEL_PREVIEW_MAX_DOWNLOAD_BYTES
-    )
-    accept_header = (
-        "video/mp4,video/webm,video/*,*/*;q=0.8"
-        if media_type == "video"
-        else "image/avif,image/webp,image/*,*/*;q=0.8"
-    )
+    max_bytes, accept_header = _get_preview_download_config(media_type)
 
     class ValidatedRedirectHandler(HTTPRedirectHandler):
         max_redirections = 5

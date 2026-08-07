@@ -18,7 +18,12 @@ from core.download.metadata import (
     _extract_expected_sha256,
     build_model_resolver_metadata,
 )
-from core.download.previews import _collect_limited_chunks
+from core.download.previews import (
+    MODEL_PREVIEW_MAX_DOWNLOAD_BYTES,
+    MODEL_PREVIEW_VIDEO_MAX_DOWNLOAD_BYTES,
+    _collect_limited_chunks,
+    _download_preview_asset,
+)
 from core.path_utils import get_model_resolver_sidecar_path
 
 
@@ -32,6 +37,63 @@ class DownloaderMetadataSidecarTests(unittest.TestCase):
     def test_collect_limited_preview_chunks_rejects_oversized_stream(self):
         with self.assertRaises(ValueError):
             _collect_limited_chunks([b"1234", b"56"], max_bytes=5)
+
+    def test_preview_download_uses_media_specific_accept_headers(self):
+        expected_headers = {
+            "image": "image/avif,image/webp,image/*,*/*;q=0.8",
+            "video": "video/mp4,video/webm,video/*,*/*;q=0.8",
+        }
+
+        for media_type, expected_accept in expected_headers.items():
+            with self.subTest(media_type=media_type):
+                response = MagicMock()
+                response.headers = {"Content-Length": "3"}
+                response.iter_content.return_value = [b"abc"]
+
+                with patch.object(
+                    downloader,
+                    "request_public_url",
+                    return_value=(response, "", {}),
+                ) as request_public_url:
+                    result = _download_preview_asset(
+                        "https://example.com/preview",
+                        media_type=media_type,
+                        dependencies=downloader,
+                    )
+
+                self.assertEqual(b"abc", result)
+                self.assertEqual(
+                    expected_accept,
+                    request_public_url.call_args.kwargs["headers"]["Accept"],
+                )
+
+    def test_preview_download_rejects_content_length_above_media_limit(self):
+        limits = {
+            "image": MODEL_PREVIEW_MAX_DOWNLOAD_BYTES,
+            "video": MODEL_PREVIEW_VIDEO_MAX_DOWNLOAD_BYTES,
+        }
+
+        for media_type, max_bytes in limits.items():
+            with self.subTest(media_type=media_type):
+                response = MagicMock()
+                response.headers = {"Content-Length": str(max_bytes + 1)}
+
+                with patch.object(
+                    downloader,
+                    "request_public_url",
+                    return_value=(response, "", {}),
+                ):
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        "Preview media exceeds the download size limit",
+                    ):
+                        _download_preview_asset(
+                            "https://example.com/preview",
+                            media_type=media_type,
+                            dependencies=downloader,
+                        )
+
+                response.iter_content.assert_not_called()
 
     def test_selected_file_hash_overrides_stale_source_hash(self):
         stale_hash = "1" * 64
