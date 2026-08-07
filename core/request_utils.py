@@ -1,6 +1,17 @@
-"""Helpers for validating common request payload fields."""
+"""Helpers for validating and reading common request payload fields."""
 
 from typing import Any, Optional, Tuple
+
+
+async def read_optional_object_payload(request: Any) -> dict[str, Any]:
+    """Read an optional JSON object, returning an empty dict on invalid input."""
+    if not getattr(request, "can_read_body", True):
+        return {}
+    try:
+        payload = await request.json()
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def validate_workflow_payload(

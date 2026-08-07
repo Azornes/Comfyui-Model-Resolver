@@ -2,6 +2,7 @@
 
 import uuid
 
+from ..request_utils import read_optional_object_payload
 from ..routes.context import RouteContext
 
 
@@ -34,18 +35,9 @@ class MetadataService:
     def metadata_builder_progress(self):
         return self.extension.metadata_builder_progress
 
-    async def _read_optional_object_payload(self, request):
-        if not request.can_read_body:
-            return {}
-        try:
-            payload = await request.json()
-        except Exception:
-            return {}
-        return payload if isinstance(payload, dict) else {}
-
     async def metadata_size_audit(self, request):
         """Check local metadata sidecars for stale file-size values."""
-        payload = await self._read_optional_object_payload(request)
+        payload = await read_optional_object_payload(request)
 
         force_rescan = self.to_bool(payload.get("force_rescan"), True)
         result = await self.asyncio.to_thread(
@@ -64,7 +56,7 @@ class MetadataService:
 
     async def metadata_build_start(self, request):
         """Start building missing local metadata sidecars in the background."""
-        payload = await self._read_optional_object_payload(request)
+        payload = await read_optional_object_payload(request)
 
         force_rescan = self.to_bool(payload.get("force_rescan"), True)
         worker_count = self.to_int(payload.get("worker_count"), 0)

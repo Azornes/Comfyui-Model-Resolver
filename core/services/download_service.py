@@ -3,6 +3,7 @@
 import os
 from urllib.parse import unquote, urlparse
 
+from ..request_utils import read_optional_object_payload
 from ..routes.context import RouteContext
 
 
@@ -307,13 +308,8 @@ class DownloadService:
 
     async def aria2_install(self, request):
         """Install aria2 and persist the selected download backend."""
-        try:
-            payload = await request.json()
-        except Exception:
-            payload = {}
-        force = False
-        if isinstance(payload, dict):
-            force = self.to_bool(payload.get("force"), False)
+        payload = await read_optional_object_payload(request)
+        force = self.to_bool(payload.get("force"), False)
         try:
             install_result = await self.asyncio.to_thread(
                 self.install_aria2_engine,

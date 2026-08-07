@@ -4,6 +4,8 @@ import asyncio
 import threading
 from functools import wraps
 
+from ..request_utils import read_optional_object_payload
+
 
 def register_service_route(
     context,
@@ -165,13 +167,10 @@ def create_route_helpers(web, logger, load_settings, hash_calculation_cancelled)
     async def get_override_settings_from_request(request):
         settings = await asyncio.to_thread(load_settings)
         if request.method == "POST":
-            try:
-                payload = await request.json()
-                if isinstance(payload, dict) and "aria2c_path" in payload:
-                    settings = dict(settings)
-                    settings["aria2c_path"] = payload.get("aria2c_path", "")
-            except Exception:
-                pass
+            payload = await read_optional_object_payload(request)
+            if "aria2c_path" in payload:
+                settings = dict(settings)
+                settings["aria2c_path"] = payload.get("aria2c_path", "")
         return settings
 
     return (
