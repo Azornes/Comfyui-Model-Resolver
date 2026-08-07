@@ -218,10 +218,7 @@ def _build_local_hash_match_cache(
             if not normalized_hash:
                 continue
 
-            try:
-                model_identity = get_path_identity(model_path)
-            except (OSError, ValueError):
-                model_identity = os.path.normcase(os.path.abspath(model_path))
+            model_identity = get_path_identity(model_path)
             entry_key = (normalized_hash, model_identity or model_path)
             if entry_key in seen_entries:
                 continue

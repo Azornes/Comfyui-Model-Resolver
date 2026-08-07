@@ -27,16 +27,6 @@ _MODEL_FILES_CACHE_AT: float = 0.0
 _MODEL_FILES_CACHE_TTL_SECONDS = 2.0
 
 
-def _path_identity(path: str) -> str:
-    """Return a stable identity for dedupe across symlinks/junctions."""
-    return get_path_identity(path)
-
-
-def _directory_identity(path: str) -> str:
-    """Return a stable identity for loop detection across symlinks/junctions."""
-    return _path_identity(path)
-
-
 def get_model_directories() -> Dict[str, Tuple[List[str], set]]:
     """
     Get all configured model directories from folder_paths.
@@ -95,10 +85,7 @@ def scan_directory(
 
         # Walk through directory recursively
         for root, dirs, files in os.walk(base_directory, followlinks=True):
-            try:
-                root_identity = _directory_identity(root)
-            except (OSError, ValueError):
-                root_identity = os.path.normcase(os.path.abspath(root))
+            root_identity = get_path_identity(root)
 
             if root_identity in visited_dirs:
                 dirs[:] = []
@@ -113,10 +100,7 @@ def scan_directory(
                     continue
 
                 child_path = os.path.join(root, dirname)
-                try:
-                    child_identity = _directory_identity(child_path)
-                except (OSError, ValueError):
-                    child_identity = os.path.normcase(os.path.abspath(child_path))
+                child_identity = get_path_identity(child_path)
 
                 if child_identity in visited_dirs:
                     continue
@@ -232,10 +216,7 @@ def scan_all_directories() -> List[Dict[str, str]]:
 
         for directory_path in paths:
             try:
-                try:
-                    root_identity = _directory_identity(directory_path)
-                except (OSError, ValueError):
-                    root_identity = os.path.normcase(os.path.abspath(directory_path))
+                root_identity = get_path_identity(directory_path)
 
                 root_key = (category, root_identity)
                 if root_key in seen_scan_roots:

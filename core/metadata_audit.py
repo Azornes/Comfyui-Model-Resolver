@@ -178,15 +178,7 @@ def _format_signed_size(bytes_value: int) -> str:
 
 
 def _model_key(model_path: str, metadata_path: str) -> Tuple[str, str]:
-    try:
-        model_identity = get_path_identity(model_path)
-    except (OSError, ValueError):
-        model_identity = os.path.normcase(os.path.abspath(model_path))
-    try:
-        metadata_identity = get_path_identity(metadata_path)
-    except (OSError, ValueError):
-        metadata_identity = os.path.normcase(os.path.abspath(metadata_path))
-    return model_identity, metadata_identity
+    return get_path_identity(model_path), get_path_identity(metadata_path)
 
 
 def _get_batch_size(

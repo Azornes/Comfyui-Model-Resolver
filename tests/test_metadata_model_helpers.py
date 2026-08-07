@@ -3,8 +3,11 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from core.metadata_audit import _model_key
 from core.metadata_model_utils import dedupe_models, is_model_file_path
 from core.path_utils import get_model_path_identity
+from core.resolver import _build_local_hash_match_cache
+from core.scanner import scan_directory
 
 
 class MetadataModelHelperTests(unittest.TestCase):
@@ -56,6 +59,47 @@ class MetadataModelHelperTests(unittest.TestCase):
 
         with patch("core.path_utils.os.path.realpath", side_effect=OSError):
             self.assertEqual(expected, get_model_path_identity(model_path))
+
+    def test_scanner_audit_and_resolver_share_path_identity_fallback(self):
+        model_path = os.path.join("models", "model.safetensors")
+        metadata_path = os.path.join("models", "model.metadata.json")
+        expected_model = os.path.normcase(os.path.abspath(model_path))
+        expected_metadata = os.path.normcase(os.path.abspath(metadata_path))
+
+        with patch("core.path_utils.os.path.realpath", side_effect=OSError):
+            self.assertEqual(
+                (expected_model, expected_metadata),
+                _model_key(model_path, metadata_path),
+            )
+
+            with patch("core.scanner.os.path.exists", return_value=True), patch(
+                "core.scanner.os.path.isdir", return_value=True
+            ), patch(
+                "core.scanner.os.walk",
+                return_value=[
+                    ("models", [], ["model.safetensors"]),
+                ],
+            ):
+                models = scan_directory("models", {".safetensors"}, "checkpoints")
+
+        self.assertEqual(["model.safetensors"], [model["filename"] for model in models])
+
+        with patch("core.resolver.os.path.isdir", return_value=False), patch(
+                "core.resolver.find_metadata_sidecar_path",
+                return_value=metadata_path,
+            ), patch(
+                "core.resolver.read_merged_model_metadata",
+                return_value={"sha256": "a" * 64},
+            ), patch(
+                "core.resolver._extract_model_sha256_from_metadata",
+                return_value=["a" * 64],
+        ):
+            index = _build_local_hash_match_cache(
+                [{"path": model_path, "filename": "model.safetensors"}]
+            )
+
+        self.assertEqual(1, len(index["a" * 64]))
+        self.assertEqual(model_path, index["a" * 64][0]["model"]["path"])
 
     def test_model_path_identity_rejects_empty_and_whitespace_paths(self):
         self.assertEqual("", get_model_path_identity(None))
