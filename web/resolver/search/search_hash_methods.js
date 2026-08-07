@@ -1,4 +1,4 @@
-import { getSha256Field, normalizeSha256 } from '../utils/hash_utils.js';
+import { firstValidSha256, getSha256Field, normalizeSha256 } from '../utils/hash_utils.js';
 import { normalizeSourceKey } from '../utils/source_labels.js';
 
 export const searchHashMethods = {
@@ -20,11 +20,7 @@ export const searchHashMethods = {
             fileHashes.sha256
         ];
 
-        for (const candidate of candidates) {
-            const hash = normalizeSha256(candidate);
-            if (hash) return hash;
-        }
-        return '';
+        return firstValidSha256(...candidates);
     },
 
     collectHashLabelMapHashes(missing = {}, results = null) {

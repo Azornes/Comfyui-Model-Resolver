@@ -768,11 +768,7 @@ def _same_file(file_info: Dict[str, Any], mirror: Dict[str, Any]) -> bool:
     if file_name and mirror_name and file_name == mirror_name:
         return True
 
-    file_sha = (
-        file_info.get("sha256")
-        or (file_info.get("hashes") or {}).get("SHA256")
-        or (file_info.get("hashes") or {}).get("sha256")
-    )
+    file_sha = extract_file_sha256(file_info)
     mirror_sha = mirror.get("sha256") or mirror.get("hash")
     return bool(file_sha and mirror_sha and str(file_sha).lower() == str(mirror_sha).lower())
 

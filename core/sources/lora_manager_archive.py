@@ -27,6 +27,7 @@ from ..path_utils import get_filename_from_path
 from ..progress import get_progress_reporter
 from ..type_utils import (
     build_model_result,
+    extract_file_sha256,
     extract_file_size,
     get_generic_filename_tokens,
     normalize_alphanumeric_key,
@@ -254,12 +255,7 @@ def _find_hash_match_row(
         file_info = _build_file_info(row["file_data"])
         if not file_info:
             continue
-        hashes = file_info.get("hashes") or {}
-        file_sha256 = normalize_sha256(
-            file_info.get("sha256")
-            or hashes.get("SHA256")
-            or hashes.get("sha256")
-        )
+        file_sha256 = normalize_sha256(extract_file_sha256(file_info))
         if file_sha256 == requested_sha256:
             full_row = _load_full_rows_for_versions(
                 conn, [row["version_id"]]
@@ -405,6 +401,11 @@ def _build_result_from_row(
     version_id = row["version_id"]
     files = _load_version_files(conn, version_id)
     primary_file = select_primary_model_file(files)
+    primary_hashes = (
+        primary_file.get("hashes")
+        if primary_file and isinstance(primary_file.get("hashes"), dict)
+        else {}
+    )
     filename = (
         primary_file.get("name")
         if primary_file
@@ -412,16 +413,11 @@ def _build_result_from_row(
         if isinstance(version_data.get("files"), list) and version_data.get("files")
         else ""
     )
-    primary_hashes = (
-        primary_file.get("hashes")
-        if primary_file and isinstance(primary_file.get("hashes"), dict)
-        else {}
-    )
     primary_sha256 = (
-        primary_file.get("sha256")
+        normalize_sha256(extract_file_sha256(primary_file))
         if primary_file
         else ""
-    ) or primary_hashes.get("SHA256") or primary_hashes.get("sha256")
+    )
 
     tags = model_data.get("tags", [])
     if not isinstance(tags, list):

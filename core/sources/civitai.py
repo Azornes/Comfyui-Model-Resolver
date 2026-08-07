@@ -44,6 +44,7 @@ from ..type_utils import (
     build_model_result,
     check_credential_http,
     check_credential_preconditions,
+    extract_file_sha256,
     extract_file_size,
     extract_trained_words,
     first_non_empty,
@@ -171,7 +172,7 @@ def build_civitai_result_payload(
 ) -> Dict[str, Any]:
     """Build the shared CivitAI result fields used by search entry points."""
     hashes = file_info.get("hashes") if isinstance(file_info.get("hashes"), dict) else {}
-    sha256 = file_info.get("sha256") or hashes.get("SHA256") or hashes.get("sha256")
+    sha256 = extract_file_sha256(file_info)
     payload = {
         "model_id": model_id,
         "version_id": version_id,
@@ -1661,11 +1662,7 @@ def get_model_info_by_hash(
                     file_info
                     for file_info in files
                     if isinstance(file_info, dict)
-                    and normalize_sha256(
-                        file_info.get("sha256")
-                        or (file_info.get("hashes") or {}).get("SHA256")
-                        or (file_info.get("hashes") or {}).get("sha256")
-                    )
+                    and normalize_sha256(extract_file_sha256(file_info))
                     == file_hash.lower()
                 ),
                 None,

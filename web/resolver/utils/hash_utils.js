@@ -13,3 +13,11 @@ export function normalizeSha256(value = '') {
     text = text.replace(/^sha256[:=]/i, '').trim().toLowerCase();
     return /^[a-f0-9]{64}$/.test(text) ? text : '';
 }
+
+export function firstValidSha256(...values) {
+    for (const value of values) {
+        const hash = normalizeSha256(value);
+        if (hash) return hash;
+    }
+    return '';
+}
