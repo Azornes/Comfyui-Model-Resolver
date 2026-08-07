@@ -58,6 +58,40 @@ class UnifiedHelpersTests(unittest.TestCase):
         self.assertEqual("", extract_file_sha256({"hashes": []}))
         self.assertEqual("fallback", extract_file_sha256({"sha256": "", "hash": "fallback"}))
 
+    def test_extract_sha256_from_metadata_uses_first_valid_source(self):
+        preferred = "a" * 64
+        fallback = "b" * 64
+
+        self.assertEqual(
+            preferred,
+            extract_sha256_from_metadata({
+                "sha256": preferred,
+                "hash": fallback,
+                "hashes": {"SHA256": fallback},
+                "file_info": {"sha256": fallback},
+            }),
+        )
+        self.assertEqual(
+            fallback,
+            extract_sha256_from_metadata({
+                "sha256": "invalid",
+                "hash": fallback,
+            }),
+        )
+        self.assertEqual(
+            preferred,
+            extract_sha256_from_metadata({
+                "sha256": "invalid",
+                "hashes": {"SHA256": preferred, "sha256": fallback},
+            }),
+        )
+        self.assertEqual(
+            fallback,
+            extract_sha256_from_metadata({
+                "file_info": {"sha256": "invalid", "hash": fallback},
+            }),
+        )
+
     def test_looks_like_model_file_huggingface(self):
         # Valid HuggingFace URLs
         self.assertTrue(looks_like_model_file("https://huggingface.co/runwayml/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors"))

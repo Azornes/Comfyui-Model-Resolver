@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { searchHashMethods } from '../web/resolver/search/search_hash_methods.js';
-import { getSha256Field, normalizeSha256 } from '../web/resolver/utils/hash_utils.js';
+import { firstValidSha256, getSha256Field, normalizeSha256 } from '../web/resolver/utils/hash_utils.js';
 import { normalizeSourceKey } from '../web/resolver/utils/source_labels.js';
 
 function createDialog(overrides = {}) {
@@ -31,6 +31,11 @@ test('shared SHA-256 normalization preserves the accepted input contract', () =>
   assert.equal(normalizeSha256('short'), '');
   assert.equal(normalizeSha256(hashA + 'x'), '');
   assert.equal(normalizeSha256(null), '');
+});
+
+test('first valid SHA-256 helper preserves candidate order while skipping invalid values', () => {
+  assert.equal(firstValidSha256('invalid', `SHA256:${hashA.toUpperCase()}`, hashB), hashA);
+  assert.equal(firstValidSha256('invalid', '', null), '');
 });
 
 test('search hash normalization accepts SHA-256 prefixes and rejects invalid values', () => {
