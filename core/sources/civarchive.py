@@ -675,6 +675,18 @@ def _resolve_file_size_bytes(
     )
 
 
+def _extract_archive_size_fields(file_data: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "sizeKB": file_data.get("sizeKB") or file_data.get("size_kb"),
+        "sizeBytes": file_data.get("sizeBytes")
+        or file_data.get("size_bytes")
+        or file_data.get("fileSize")
+        or file_data.get("file_size")
+        or file_data.get("bytes"),
+        "size": file_data.get("size"),
+    }
+
+
 def _mirror_from_top_file(file_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     url = _normalize_download_url(file_data.get("url") or file_data.get("downloadUrl"))
     if not url:
@@ -691,13 +703,7 @@ def _mirror_from_top_file(file_data: Dict[str, Any]) -> Optional[Dict[str, Any]]
         "model_id": file_data.get("model_id") or file_data.get("modelId"),
         "model_version_id": file_data.get("model_version_id")
         or file_data.get("modelVersionId"),
-        "sizeKB": file_data.get("sizeKB") or file_data.get("size_kb"),
-        "sizeBytes": file_data.get("sizeBytes")
-        or file_data.get("size_bytes")
-        or file_data.get("fileSize")
-        or file_data.get("file_size")
-        or file_data.get("bytes"),
-        "size": file_data.get("size"),
+        **_extract_archive_size_fields(file_data),
         "deletedAt": file_data.get("deletedAt") or file_data.get("deleted_at"),
         "is_dead": file_data.get("is_dead")
         or file_data.get("isDead")
@@ -743,13 +749,7 @@ def _transform_file_entry(file_data: Dict[str, Any]) -> Dict[str, Any]:
         "id": file_data.get("id"),
         "name": name,
         "type": file_data.get("type"),
-        "sizeKB": file_data.get("sizeKB") or file_data.get("size_kb"),
-        "sizeBytes": file_data.get("sizeBytes")
-        or file_data.get("size_bytes")
-        or file_data.get("fileSize")
-        or file_data.get("file_size")
-        or file_data.get("bytes"),
-        "size": file_data.get("size"),
+        **_extract_archive_size_fields(file_data),
         "downloadUrl": download_url,
         "primary": bool(file_data.get("primary", file_data.get("is_primary", False))),
         "mirrors": transformed_mirrors,
@@ -785,18 +785,13 @@ def _merge_top_file_mirrors(
             mirror = _mirror_from_top_file(top_file)
             if not mirror:
                 continue
+            size_fields = _extract_archive_size_fields(top_file)
             merged.append(
                 {
                     "id": top_file.get("id"),
                     "name": mirror.get("filename"),
                     "type": top_file.get("type") or "Model",
-                    "sizeKB": top_file.get("sizeKB") or top_file.get("size_kb"),
-                    "sizeBytes": top_file.get("sizeBytes")
-                    or top_file.get("size_bytes")
-                    or top_file.get("fileSize")
-                    or top_file.get("file_size")
-                    or top_file.get("bytes"),
-                    "size": top_file.get("size"),
+                    **size_fields,
                     "downloadUrl": mirror.get("url"),
                     "primary": True,
                     "mirrors": [mirror],

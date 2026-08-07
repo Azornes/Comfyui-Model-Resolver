@@ -27,9 +27,13 @@ from core.sources.civarchive import (
     _build_result_from_normalized_version,
     _build_result_from_payload,
     _collect_archive_download_urls,
+    _extract_archive_size_fields,
+    _merge_top_file_mirrors,
+    _mirror_from_top_file,
     _normalize_archive_version,
     _normalize_download_url,
     _resolve_file_size_bytes,
+    _transform_file_entry,
     build_civarchive_custom_result,
     parse_civarchive_url,
 )
@@ -80,6 +84,45 @@ from core.workflow_updater import (
 )
 
 CIVARCHIVE_BASE = "https://civarchive.com"
+
+
+class CivArchiveFileSizeAliasTests(unittest.TestCase):
+    def test_extract_archive_size_fields_preserves_alias_precedence(self):
+        self.assertEqual(
+            {
+                "sizeKB": 12,
+                "sizeBytes": 34,
+                "size": 56,
+            },
+            _extract_archive_size_fields(
+                {
+                    "sizeKB": 0,
+                    "size_kb": 12,
+                    "sizeBytes": 0,
+                    "size_bytes": 0,
+                    "fileSize": 34,
+                    "size": 56,
+                }
+            ),
+        )
+
+    def test_all_archive_file_projections_use_the_same_size_aliases(self):
+        file_data = {
+            "id": 7,
+            "name": "model.safetensors",
+            "url": "https://civarchive.com/api/download/models/7",
+            "size_kb": 12,
+            "file_size": 34,
+        }
+
+        mirror = _mirror_from_top_file(file_data)
+        transformed = _transform_file_entry(file_data)
+        merged = _merge_top_file_mirrors([], [file_data])
+
+        for projection in (mirror, transformed, merged[0]):
+            with self.subTest(projection=projection):
+                self.assertEqual(12, projection["sizeKB"])
+                self.assertEqual(34, projection["sizeBytes"])
 
 
 def write_safetensors_stub(file_path, header):
