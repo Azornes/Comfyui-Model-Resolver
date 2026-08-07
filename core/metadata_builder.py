@@ -14,10 +14,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .log_system import create_module_logger
 from .metadata_model_utils import dedupe_models, is_model_file_path
-from .metadata_utils import merge_counted_payload
+from .metadata_utils import build_sidecar_file_identity, merge_counted_payload
 from .path_utils import (
-    MODEL_RESOLVER_METADATA_SCHEMA,
-    MODEL_RESOLVER_METADATA_SCHEMA_VERSION,
     HashCalculationCancelled,
     calculate_file_sha256,
     extract_safetensors_header_metadata,
@@ -267,20 +265,23 @@ def _build_local_metadata_payload(
         if _set_if_missing(payload, key, value):
             changed_fields.append(key)
 
-    mark_set("schema", MODEL_RESOLVER_METADATA_SCHEMA, force=True)
-    mark_set(
-        "schema_version",
-        MODEL_RESOLVER_METADATA_SCHEMA_VERSION,
-        force=True,
+    identity = build_sidecar_file_identity(
+        model_path,
+        model_name=header_metadata.get("model_name") or stem,
+        size=file_size,
+        modified_at=now,
+        last_checked_at=now,
     )
-    mark_set("managed_by", MODEL_RESOLVER_METADATA_SCHEMA, force=True)
-    mark_set("file_name", stem, force=_is_empty_value(payload.get("file_name")))
-    fill("filename", filename)
-    fill("model_name", header_metadata.get("model_name") or stem)
-    mark_set("file_path", normalize_metadata_file_path(model_path), force=True)
-    mark_set("size", file_size, force=True)
-    mark_set("modified", now, force=True)
-    mark_set("last_checked_at", now, force=True)
+    mark_set("schema", identity["schema"], force=True)
+    mark_set("schema_version", identity["schema_version"], force=True)
+    mark_set("managed_by", identity["managed_by"], force=True)
+    mark_set("file_name", identity["file_name"], force=_is_empty_value(payload.get("file_name")))
+    fill("filename", identity["filename"])
+    fill("model_name", identity["model_name"])
+    mark_set("file_path", identity["file_path"], force=True)
+    mark_set("size", identity["size"], force=True)
+    mark_set("modified", identity["modified"], force=True)
+    mark_set("last_checked_at", identity["last_checked_at"], force=True)
 
     if category:
         fill("category", category)

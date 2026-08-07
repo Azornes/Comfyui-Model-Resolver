@@ -13,11 +13,36 @@ from core.metadata_builder import (
     build_missing_local_metadata,
     normalize_metadata_build_mode,
 )
-from core.metadata_utils import merge_counted_payload
+from core.metadata_utils import build_sidecar_file_identity, merge_counted_payload
 from core.path_utils import get_model_resolver_sidecar_path
 
 
 class MetadataBuilderTests(unittest.TestCase):
+    def test_build_sidecar_file_identity_returns_common_schema_fields(self):
+        identity = build_sidecar_file_identity(
+            r"models\example.safetensors",
+            model_name="Example Model",
+            size=1234,
+            modified_at=10.0,
+            last_checked_at=11.0,
+        )
+
+        self.assertEqual(
+            {
+                "schema": "comfyui-model-resolver",
+                "schema_version": 1,
+                "managed_by": "comfyui-model-resolver",
+                "file_name": "example",
+                "filename": "example.safetensors",
+                "model_name": "Example Model",
+                "file_path": "models/example.safetensors",
+                "size": 1234,
+                "modified": 10.0,
+                "last_checked_at": 11.0,
+            },
+            identity,
+        )
+
     def test_merge_counted_payload_sums_build_numbers_and_preserves_list_order(self):
         target = _empty_build_counts()
         merge_counted_payload(

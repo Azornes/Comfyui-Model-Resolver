@@ -1,18 +1,16 @@
 """Metadata normalization and sidecar payload helpers for downloads."""
 
 import os
-import time
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
 from ..log_system import create_module_logger
+from ..metadata_utils import build_sidecar_file_identity
 from ..network_utils import host_matches_domain
 from ..path_utils import (
-    MODEL_RESOLVER_METADATA_SCHEMA,
-    MODEL_RESOLVER_METADATA_SCHEMA_VERSION,
     find_metadata_sidecar_path,
     get_filename_from_path,
-    normalize_metadata_file_path,
+    normalize_metadata_file_path,  # noqa: F401 - exported through download.api context
     read_merged_model_metadata,
 )
 from ..resolver import normalize_sha256
@@ -487,15 +485,11 @@ def build_model_resolver_metadata(
         size = _coerce_size(_first_present(source.get("size"), file_info.get("size")))
 
     payload: Dict[str, Any] = {
-        "schema": MODEL_RESOLVER_METADATA_SCHEMA,
-        "schema_version": MODEL_RESOLVER_METADATA_SCHEMA_VERSION,
-        "managed_by": MODEL_RESOLVER_METADATA_SCHEMA,
-        "file_name": file_name,
-        "filename": basename,
-        "model_name": str(model_name or file_name),
-        "file_path": normalize_metadata_file_path(dest_path),
-        "size": size,
-        "modified": time.time(),
+        **build_sidecar_file_identity(
+            dest_path,
+            model_name=str(model_name or file_name),
+            size=size,
+        ),
         "sha256": sha256,
         "base_model": str(base_model or "Unknown"),
         "preview_url": str(preview_url or ""),
@@ -517,7 +511,6 @@ def build_model_resolver_metadata(
         "download_url": _strip_sensitive_url_params(str(direct_url or "")),
         "platform_url": _strip_sensitive_url_params(str(platform_url or "")),
         "metadata_source": metadata_source,
-        "last_checked_at": time.time(),
         "hash_status": "completed" if sha256 else "pending",
     }
 
