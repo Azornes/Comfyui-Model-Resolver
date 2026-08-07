@@ -9,13 +9,78 @@ from core import worker_utils
 from core.metadata_builder import (
     METADATA_BUILD_MODE_CALCULATE_FRESH,
     METADATA_BUILD_MODE_IMPORT_EXISTING,
+    _empty_build_counts,
     build_missing_local_metadata,
     normalize_metadata_build_mode,
 )
+from core.metadata_utils import merge_counted_payload
 from core.path_utils import get_model_resolver_sidecar_path
 
 
 class MetadataBuilderTests(unittest.TestCase):
+    def test_merge_counted_payload_sums_build_numbers_and_preserves_list_order(self):
+        target = _empty_build_counts()
+        merge_counted_payload(
+            target,
+            {
+                "scanned_models": 2,
+                "created_metadata": 1,
+                "errors": [{"message": "first"}],
+                "updated": [{"filename": "first.safetensors"}],
+                "history": [{"action": "created"}],
+            },
+            numeric_keys=(
+                "scanned_models",
+                "created_metadata",
+                "updated_metadata",
+                "skipped_complete",
+                "header_hashes",
+                "calculated_hashes",
+                "header_metadata_count",
+                "invalid_metadata",
+            ),
+            list_keys=("errors", "updated", "history"),
+        )
+        merge_counted_payload(
+            target,
+            {
+                "scanned_models": 3,
+                "created_metadata": 2,
+                "errors": [{"message": "second"}],
+                "updated": [{"filename": "second.safetensors"}],
+                "history": [{"action": "updated"}],
+            },
+            numeric_keys=(
+                "scanned_models",
+                "created_metadata",
+                "updated_metadata",
+                "skipped_complete",
+                "header_hashes",
+                "calculated_hashes",
+                "header_metadata_count",
+                "invalid_metadata",
+            ),
+            list_keys=("errors", "updated", "history"),
+        )
+
+        self.assertEqual(5, target["scanned_models"])
+        self.assertEqual(3, target["created_metadata"])
+        self.assertEqual(
+            [{"message": "first"}, {"message": "second"}],
+            target["errors"],
+        )
+        self.assertEqual(
+            [
+                {"filename": "first.safetensors"},
+                {"filename": "second.safetensors"},
+            ],
+            target["updated"],
+        )
+        self.assertEqual(
+            [{"action": "created"}, {"action": "updated"}],
+            target["history"],
+        )
+
     def _write_model(self, directory, filename, content):
         path = os.path.join(directory, filename)
         with open(path, "wb") as handle:

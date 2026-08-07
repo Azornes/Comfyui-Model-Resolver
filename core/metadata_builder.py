@@ -14,6 +14,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .log_system import create_module_logger
 from .metadata_model_utils import dedupe_models, is_model_file_path
+from .metadata_utils import merge_counted_payload
 from .path_utils import (
     MODEL_RESOLVER_METADATA_SCHEMA,
     MODEL_RESOLVER_METADATA_SCHEMA_VERSION,
@@ -406,21 +407,17 @@ def _empty_build_counts() -> Dict[str, Any]:
     }
 
 
-def _merge_build_counts(target: Dict[str, Any], source: Dict[str, Any]) -> None:
-    for key in (
-        "scanned_models",
-        "created_metadata",
-        "updated_metadata",
-        "skipped_complete",
-        "header_hashes",
-        "calculated_hashes",
-        "header_metadata_count",
-        "invalid_metadata",
-    ):
-        target[key] += int(source.get(key) or 0)
-    target["errors"].extend(source.get("errors") or [])
-    target["updated"].extend(source.get("updated") or [])
-    target["history"].extend(source.get("history") or [])
+_BUILD_COUNT_KEYS = (
+    "scanned_models",
+    "created_metadata",
+    "updated_metadata",
+    "skipped_complete",
+    "header_hashes",
+    "calculated_hashes",
+    "header_metadata_count",
+    "invalid_metadata",
+)
+_BUILD_LIST_KEYS = ("errors", "updated", "history")
 
 
 def _build_result_payload(
@@ -685,7 +682,12 @@ def _build_missing_local_metadata_parallel(
                 active_models.pop(model_key, None)
                 if item_result.get("cancelled"):
                     cancelled = True
-                _merge_build_counts(counts, item_result)
+                merge_counted_payload(
+                    counts,
+                    item_result,
+                    numeric_keys=_BUILD_COUNT_KEYS,
+                    list_keys=_BUILD_LIST_KEYS,
+                )
 
             emit_parallel_progress(
                 "model_done",

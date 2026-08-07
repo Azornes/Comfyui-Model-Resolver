@@ -11,6 +11,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from .log_system import create_module_logger
 from .metadata_model_utils import dedupe_models, is_model_file_path
+from .metadata_utils import merge_counted_payload
 from .path_utils import (
     find_metadata_sidecar_path,
     get_filename_from_path,
@@ -27,6 +28,17 @@ MAX_AUDIT_WORKERS = 64
 MIN_AUDIT_WORKERS = 1
 MIN_AUDIT_BATCH_SIZE = 16
 MAX_AUDIT_BATCH_SIZE = 256
+_AUDIT_COUNT_KEYS = (
+    "scanned_models",
+    "metadata_files",
+    "checked_metadata",
+    "missing_metadata",
+    "missing_size",
+    "invalid_metadata",
+    "skipped_directories",
+    "skipped_non_model_files",
+)
+_AUDIT_LIST_KEYS = ("errors", "mismatches")
 
 
 def _empty_audit_counts() -> Dict[str, Any]:
@@ -299,26 +311,15 @@ def _audit_one_model(model: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
-def _merge_audit_counts(target: Dict[str, Any], source: Dict[str, Any]) -> None:
-    for key in (
-        "scanned_models",
-        "metadata_files",
-        "checked_metadata",
-        "missing_metadata",
-        "missing_size",
-        "invalid_metadata",
-        "skipped_directories",
-        "skipped_non_model_files",
-    ):
-        target[key] += int(source.get(key) or 0)
-    target["errors"].extend(source.get("errors") or [])
-    target["mismatches"].extend(source.get("mismatches") or [])
-
-
 def _audit_model_batch(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
     result = _empty_audit_counts()
     for model in batch:
-        _merge_audit_counts(result, _audit_one_model(model))
+        merge_counted_payload(
+            result,
+            _audit_one_model(model),
+            numeric_keys=_AUDIT_COUNT_KEYS,
+            list_keys=_AUDIT_LIST_KEYS,
+        )
     return result
 
 
@@ -357,12 +358,22 @@ def audit_metadata_sizes(
     if batches:
         if active_worker_count <= 1:
             for batch in batches:
-                _merge_audit_counts(aggregate, _audit_model_batch(batch))
+                merge_counted_payload(
+                    aggregate,
+                    _audit_model_batch(batch),
+                    numeric_keys=_AUDIT_COUNT_KEYS,
+                    list_keys=_AUDIT_LIST_KEYS,
+                )
         else:
             with ThreadPoolExecutor(max_workers=active_worker_count) as executor:
                 futures = [executor.submit(_audit_model_batch, batch) for batch in batches]
                 for future in as_completed(futures):
-                    _merge_audit_counts(aggregate, future.result())
+                    merge_counted_payload(
+                        aggregate,
+                        future.result(),
+                        numeric_keys=_AUDIT_COUNT_KEYS,
+                        list_keys=_AUDIT_LIST_KEYS,
+                    )
 
     mismatches = aggregate["mismatches"]
     errors = aggregate["errors"]

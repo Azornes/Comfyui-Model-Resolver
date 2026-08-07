@@ -5,11 +5,72 @@ import unittest
 from unittest.mock import patch
 
 from core import worker_utils
-from core.metadata_audit import audit_metadata_sizes
+from core.metadata_audit import (
+    _empty_audit_counts,
+    audit_metadata_sizes,
+)
+from core.metadata_utils import merge_counted_payload
 from core.path_utils import get_model_resolver_sidecar_path
 
 
 class MetadataSizeAuditTests(unittest.TestCase):
+    def test_merge_counted_payload_sums_audit_numbers_and_preserves_list_order(self):
+        target = _empty_audit_counts()
+        merge_counted_payload(
+            target,
+            {
+                "scanned_models": 2,
+                "checked_metadata": 1,
+                "errors": [{"message": "first"}],
+                "mismatches": [{"filename": "first.safetensors"}],
+            },
+            numeric_keys=(
+                "scanned_models",
+                "metadata_files",
+                "checked_metadata",
+                "missing_metadata",
+                "missing_size",
+                "invalid_metadata",
+                "skipped_directories",
+                "skipped_non_model_files",
+            ),
+            list_keys=("errors", "mismatches"),
+        )
+        merge_counted_payload(
+            target,
+            {
+                "scanned_models": 3,
+                "checked_metadata": 2,
+                "errors": [{"message": "second"}],
+                "mismatches": [{"filename": "second.safetensors"}],
+            },
+            numeric_keys=(
+                "scanned_models",
+                "metadata_files",
+                "checked_metadata",
+                "missing_metadata",
+                "missing_size",
+                "invalid_metadata",
+                "skipped_directories",
+                "skipped_non_model_files",
+            ),
+            list_keys=("errors", "mismatches"),
+        )
+
+        self.assertEqual(5, target["scanned_models"])
+        self.assertEqual(3, target["checked_metadata"])
+        self.assertEqual(
+            [{"message": "first"}, {"message": "second"}],
+            target["errors"],
+        )
+        self.assertEqual(
+            [
+                {"filename": "first.safetensors"},
+                {"filename": "second.safetensors"},
+            ],
+            target["mismatches"],
+        )
+
     def _write_model(self, directory, filename, content):
         path = os.path.join(directory, filename)
         with open(path, "wb") as handle:
