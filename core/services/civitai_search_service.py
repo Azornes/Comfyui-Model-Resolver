@@ -128,6 +128,24 @@ class CivitAISearchService(ModelServiceDependencies):
                 payload[key] = value
             return payload
 
+        def _persist_metadata_sidecar(
+            payload,
+            result,
+            *,
+            source_url="",
+            create_preview=False,
+        ):
+            payload = add_local_metadata_fields(payload, result)
+            write_kwargs = {"create_preview": True} if create_preview else {}
+            metadata_path = write_model_resolver_metadata(
+                file_path,
+                payload,
+                category,
+                source_url,
+                **write_kwargs,
+            ) or ""
+            return metadata_path, bool(metadata_path)
+
         # Get the file path to hash
         file_path = resolved_path if resolved_path else None
         file_location = ""
@@ -515,19 +533,18 @@ class CivitAISearchService(ModelServiceDependencies):
                         },
                     },
                 )
-                add_local_metadata_fields(metadata_payload, result)
-                metadata_path = write_model_resolver_metadata(
-                    file_path,
+                metadata_path, metadata_saved = _persist_metadata_sidecar(
                     metadata_payload,
-                    category,
-                    result.get("version_url")
-                    or result.get("url")
-                    or result.get("platform_url")
-                    or result.get("download_url")
-                    or "",
+                    result,
+                    source_url=(
+                        result.get("version_url")
+                        or result.get("url")
+                        or result.get("platform_url")
+                        or result.get("download_url")
+                        or ""
+                    ),
                     create_preview=True,
-                ) or ""
-                metadata_saved = bool(metadata_path)
+                )
                 if metadata_path:
                     result["metadata_path"] = metadata_path
             except Exception as metadata_error:
@@ -616,18 +633,17 @@ class CivitAISearchService(ModelServiceDependencies):
                                 },
                             },
                         )
-                        add_local_metadata_fields(metadata_payload, result)
-                        metadata_path = write_model_resolver_metadata(
-                            file_path,
+                        metadata_path, metadata_saved = _persist_metadata_sidecar(
                             metadata_payload,
-                            category,
-                            result.get("version_url")
-                            or result.get("url")
-                            or result.get("download_url")
-                            or "",
+                            result,
+                            source_url=(
+                                result.get("version_url")
+                                or result.get("url")
+                                or result.get("download_url")
+                                or ""
+                            ),
                             create_preview=True,
-                        ) or ""
-                        metadata_saved = bool(metadata_path)
+                        )
                         if metadata_path:
                             result["metadata_path"] = metadata_path
                             result["metadata_imported_from"] = source_metadata_path
@@ -864,15 +880,12 @@ class CivitAISearchService(ModelServiceDependencies):
                         "remote_metadata_missing": True,
                     },
                 )
-                add_local_metadata_fields(metadata_payload, response)
-                metadata_path = write_model_resolver_metadata(
-                    file_path,
+                metadata_path, metadata_saved = _persist_metadata_sidecar(
                     metadata_payload,
-                    category,
-                    "",
-                ) or ""
+                    response,
+                )
                 response["metadata_path"] = metadata_path
-                response["metadata_saved"] = bool(metadata_path)
+                response["metadata_saved"] = metadata_saved
             except Exception as metadata_error:
                 self.logger.warning(
                     f"Remote metadata no-match sidecar save failed: {metadata_error}"
