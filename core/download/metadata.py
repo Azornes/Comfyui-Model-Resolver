@@ -1,7 +1,7 @@
 """Metadata normalization and sidecar payload helpers for downloads."""
 
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 from urllib.parse import urlparse
 
 from ..log_system import create_module_logger
@@ -184,6 +184,24 @@ def _find_metadata_file_info(
     return {}
 
 
+def _resolve_metadata_sha256_candidate(
+    source: Dict[str, Any],
+    selected_version: Dict[str, Any],
+    filename: str,
+) -> Tuple[Dict[str, Any], Any]:
+    """Return the selected file metadata and its raw SHA-256 candidate."""
+    file_info = _find_metadata_file_info(source, selected_version, filename)
+    hash_source = file_info or source
+    hashes = _as_dict(hash_source.get("hashes"))
+    candidate = _first_present(
+        hash_source.get("sha256"),
+        hash_source.get("hash"),
+        hashes.get("SHA256"),
+        hashes.get("sha256"),
+    )
+    return file_info, candidate
+
+
 def _extract_expected_sha256(metadata: Optional[Dict[str, Any]]) -> str:
     source = metadata if isinstance(metadata, dict) else {}
     details = _as_dict(source.get("civitai_details") or source.get("details"))
@@ -195,33 +213,12 @@ def _extract_expected_sha256(metadata: Optional[Dict[str, Any]]) -> str:
         source.get("filename"),
         path_metadata.get("filename"),
     )
-    file_info = _find_metadata_file_info(source, selected_version, str(filename))
-    file_hashes = _as_dict(file_info.get("hashes"))
-    file_sha256 = normalize_sha256(
-        _first_present(
-            file_info.get("sha256"),
-            file_info.get("hash"),
-            file_hashes.get("SHA256"),
-            file_hashes.get("sha256"),
-        )
+    _, sha256_candidate = _resolve_metadata_sha256_candidate(
+        source,
+        selected_version,
+        str(filename),
     )
-    if file_info:
-        # An explicit file entry without a hash means this provider did not
-        # declare a checksum for the selected URL.  Do not fall back to a
-        # stale source/workflow hash and reject a user-selected download.
-        return file_sha256
-
-    # Keep the source-level fallback for providers that expose one hash but no
-    # file object.
-    hashes = _as_dict(source.get("hashes"))
-    return normalize_sha256(
-        _first_present(
-            source.get("sha256"),
-            source.get("hash"),
-            hashes.get("SHA256"),
-            hashes.get("sha256"),
-        )
-    )
+    return normalize_sha256(sha256_candidate)
 
 
 def read_completed_metadata_sha256(file_path: str) -> str:
@@ -334,24 +331,12 @@ def build_model_resolver_metadata(
     creator = _as_dict(
         _first_present(source.get("creator"), details.get("creator"), path_metadata.get("creator"))
     )
-    file_info = _find_metadata_file_info(source, selected_version, str(filename))
-    hashes = _as_dict(file_info.get("hashes") if file_info else source.get("hashes"))
-    hash_values = (
-        (
-            file_info.get("sha256"),
-            file_info.get("hash"),
-            hashes.get("SHA256"),
-            hashes.get("sha256"),
-        )
-        if file_info
-        else (
-            source.get("sha256"),
-            source.get("hash"),
-            hashes.get("SHA256"),
-            hashes.get("sha256"),
-        )
+    file_info, sha256_candidate = _resolve_metadata_sha256_candidate(
+        source,
+        selected_version,
+        str(filename),
     )
-    sha256 = str(_first_present(*hash_values) or "").lower()
+    sha256 = str(sha256_candidate or "").lower()
     direct_url = _first_present(
         source.get("download_url"),
         source.get("downloadUrl"),

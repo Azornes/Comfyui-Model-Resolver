@@ -123,6 +123,38 @@ class DownloaderMetadataSidecarTests(unittest.TestCase):
 
         self.assertEqual("", _extract_expected_sha256(metadata))
 
+    def test_sidecar_selected_file_hash_overrides_stale_source_hash(self):
+        stale_hash = "1" * 64
+        selected_hash = "f" * 64
+        with tempfile.TemporaryDirectory() as tmpdir:
+            payload = build_model_resolver_metadata(
+                os.path.join(tmpdir, "model.safetensors"),
+                {
+                    "filename": "model.safetensors",
+                    "sha256": stale_hash,
+                    "selected_file": {
+                        "name": "model.safetensors",
+                        "hashes": {"SHA256": selected_hash},
+                    },
+                },
+            )
+
+        self.assertEqual(selected_hash, payload["sha256"])
+
+    def test_sidecar_selected_file_without_hash_does_not_use_source_hash(self):
+        stale_hash = "1" * 64
+        with tempfile.TemporaryDirectory() as tmpdir:
+            payload = build_model_resolver_metadata(
+                os.path.join(tmpdir, "model.safetensors"),
+                {
+                    "filename": "model.safetensors",
+                    "sha256": stale_hash,
+                    "selected_file": {"name": "model.safetensors"},
+                },
+            )
+
+        self.assertEqual("", payload["sha256"])
+
     def test_keeps_model_description_separate_from_version_notes(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             model_path = os.path.join(tmpdir, "model.safetensors")
