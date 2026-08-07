@@ -6,7 +6,6 @@ from .helpers import register_service_route
 
 
 def register_search_support_routes(context: RouteContext):
-    routes = context.require("routes")
     service = SearchSupportService(context)
 
     register_service_route(
@@ -35,7 +34,12 @@ def register_search_support_routes(context: RouteContext):
         ),
     )
     for path, operation in credential_routes:
-        routes.post(path)(operation)
+        register_service_route(
+            context,
+            path=path,
+            error_prefix="Credential check",
+            operation=operation,
+        )
 
     register_service_route(
         context,
