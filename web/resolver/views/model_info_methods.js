@@ -1,11 +1,15 @@
 import { api } from "../../../../../scripts/api.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
 import { escapeHtml, escapeJsString, getFilenameFromPath, sanitizeDescriptionHtml, pollBackgroundTask, safeStorage, copyTextWithFeedback } from "../utils/html_utils.js";
-import { getModelCardUrl } from "../utils/url_utils.js";
+import { getModelCardUrl, getSourceKeyFromUrl } from "../utils/url_utils.js";
 import { extractComfyWorkflow } from "../utils/workflow_metadata.js";
 import { getSha256Field, normalizeSha256 } from "../utils/hash_utils.js";
 import { parseFiniteNumber } from "../utils/size_utils.js";
-import { getSourceDisplayLabel } from "../utils/source_labels.js";
+import {
+    getSourceDisplayLabel,
+    getSourceKeyFromText,
+    normalizeSourceKey,
+} from "../utils/source_labels.js";
 import { getCivitaiModelUrl } from "../globals.js";
 export const modelInfoMethods = {
     escapeHtml,
@@ -189,50 +193,27 @@ export const modelInfoMethods = {
     },
 
     getContextMenuSourceConfig(key = '') {
-        const normalized = String(key || '').toLowerCase().replace(/[-\s]+/g, '_');
+        const normalized = normalizeSourceKey(key).replace(/\s+/g, '_');
         const configs = {
-            civitai: { key: 'civitai', label: 'CivitAI', icon: 'civitai' },
-            civarchive: { key: 'civarchive', label: 'CivArchive', icon: 'civarchive' },
-            huggingface: { key: 'huggingface', label: 'HuggingFace', icon: 'huggingface' },
-            lora_manager_archive: { key: 'lora_manager_archive', label: 'LoRA Archive', icon: 'loraManager' }
+            civitai: { key: 'civitai', icon: 'civitai' },
+            civarchive: { key: 'civarchive', icon: 'civarchive' },
+            huggingface: { key: 'huggingface', icon: 'huggingface' },
+            lora_manager_archive: { key: 'lora_manager_archive', icon: 'loraManager' }
         };
-        return configs[normalized] || { key: normalized || 'source', label: 'Source', icon: 'externalLink' };
-    },
-
-    getContextMenuSourceKeyFromText(value = '') {
-        const text = String(value || '').toLowerCase();
-        if (!text) return '';
-        if (text.includes('huggingface') || text.includes('hugging face')) return 'huggingface';
-        if (text.includes('civarchive') || text.includes('civ archive')) return 'civarchive';
-        if (text.includes('civitai') || text.includes('civitai.red')) return 'civitai';
-        if (text.includes('lora_manager_archive') || text.includes('lora archive')) return 'lora_manager_archive';
-        return '';
-    },
-
-    getContextMenuSourceKeyFromUrl(value = '') {
-        const url = String(value || '').trim();
-        if (!url) return '';
-
-        try {
-            const parsed = new URL(url, window.location.origin);
-            const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
-            if (host === 'huggingface.co' || host.endsWith('.huggingface.co')) return 'huggingface';
-            if (host === 'civarchive.com' || host.endsWith('.civarchive.com')) return 'civarchive';
-            if (host === 'civitai.com' || host.endsWith('.civitai.com') || host === 'civitai.red' || host.endsWith('.civitai.red')) return 'civitai';
-        } catch (_error) {
-            return this.getContextMenuSourceKeyFromText(url);
-        }
-
-        return this.getContextMenuSourceKeyFromText(url);
+        const config = configs[normalized];
+        const label = getSourceDisplayLabel(normalized, { fallback: 'Source' });
+        return config
+            ? { ...config, label }
+            : { key: normalized || 'source', label, icon: 'externalLink' };
     },
 
     getContextMenuSourceKey(model = {}) {
-        return this.getContextMenuSourceKeyFromText(model?.details_source)
-            || this.getContextMenuSourceKeyFromText(model?.source)
-            || this.getContextMenuSourceKeyFromText(model?.source_name)
-            || this.getContextMenuSourceKeyFromText(model?.sourceName)
-            || this.getContextMenuSourceKeyFromText(model?.metadata_source)
-            || this.getContextMenuSourceKeyFromText(model?.metadataSource)
+        return getSourceKeyFromText(model?.details_source)
+            || getSourceKeyFromText(model?.source)
+            || getSourceKeyFromText(model?.source_name)
+            || getSourceKeyFromText(model?.sourceName)
+            || getSourceKeyFromText(model?.metadata_source)
+            || getSourceKeyFromText(model?.metadataSource)
             || '';
     },
 
@@ -328,13 +309,13 @@ export const modelInfoMethods = {
         const fallbackKey = this.getContextMenuSourceKey(model);
         const candidates = this.getContextMenuSourceUrlCandidates(model);
         const resolveCandidate = (candidate) => {
-            const candidateKey = this.getContextMenuSourceKeyFromUrl(candidate) || fallbackKey;
+            const candidateKey = getSourceKeyFromUrl(candidate, { fallbackToText: true }) || fallbackKey;
             const normalizedUrl = this.normalizeContextMenuSourceUrl(candidate, candidateKey);
             if (!normalizedUrl) return null;
 
             const cardUrl = getModelCardUrl(normalizedUrl) || normalizedUrl;
-            const sourceKey = this.getContextMenuSourceKeyFromUrl(cardUrl)
-                || this.getContextMenuSourceKeyFromUrl(normalizedUrl)
+            const sourceKey = getSourceKeyFromUrl(cardUrl, { fallbackToText: true })
+                || getSourceKeyFromUrl(normalizedUrl, { fallbackToText: true })
                 || candidateKey;
             const config = this.getContextMenuSourceConfig(sourceKey);
             return {
@@ -345,7 +326,7 @@ export const modelInfoMethods = {
 
         const preferredCandidates = fallbackKey
             ? candidates.filter(candidate => {
-                const candidateKey = this.getContextMenuSourceKeyFromUrl(candidate);
+                const candidateKey = getSourceKeyFromUrl(candidate, { fallbackToText: true });
                 return !candidateKey || candidateKey === fallbackKey;
             })
             : candidates;
@@ -1868,7 +1849,7 @@ export const modelInfoMethods = {
         const sourceKey = this.getContextMenuSourceKey(data);
         if (sourceKey) return sourceKey;
         for (const url of this.getContextMenuSourceUrlCandidates(data)) {
-            const key = this.getContextMenuSourceKeyFromUrl(url);
+            const key = getSourceKeyFromUrl(url, { fallbackToText: true });
             if (key) return key;
         }
         return 'metadata';
@@ -3183,8 +3164,10 @@ export const modelInfoMethods = {
         const source = String(mirror.source || '').trim();
         if (source) return source;
         const host = this.getSourceModelMirrorHost(mirror.url || '');
-        if (host.includes('huggingface.co')) return 'HuggingFace';
-        if (host.includes('civitai.com')) return 'CivitAI';
+        const sourceKey = getSourceKeyFromUrl(mirror.url || '');
+        if (sourceKey === 'huggingface' || sourceKey === 'civitai') {
+            return getSourceDisplayLabel(sourceKey);
+        }
         return host || `Mirror ${index + 1}`;
     },
 

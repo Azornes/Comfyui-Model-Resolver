@@ -2,6 +2,32 @@
  * URL Utilities for Model Resolver
  */
 
+import { getSourceKeyFromText } from './source_labels.js';
+
+/**
+ * Resolve a supported provider key from a URL host.
+ * @param {string} value
+ * @param {{fallbackToText?: boolean}} options
+ * @returns {string}
+ */
+export function getSourceKeyFromUrl(value, { fallbackToText = false } = {}) {
+    const url = String(value || '').trim();
+    if (!url) return '';
+
+    try {
+        const baseUrl = globalThis.location?.origin || 'http://localhost';
+        const parsed = new URL(url, baseUrl);
+        const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+        if (host === 'huggingface.co' || host.endsWith('.huggingface.co')) return 'huggingface';
+        if (host === 'civarchive.com' || host.endsWith('.civarchive.com')) return 'civarchive';
+        if (host === 'civitai.com' || host.endsWith('.civitai.com') || host === 'civitai.red' || host.endsWith('.civitai.red')) return 'civitai';
+    } catch {
+        // Preserve the caller's optional text fallback for malformed URLs.
+    }
+
+    return fallbackToText ? getSourceKeyFromText(url) : '';
+}
+
 /**
  * Parse a Hugging Face blob/resolve file URL into repository coordinates.
  * @param {string} value

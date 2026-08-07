@@ -28,6 +28,16 @@ export function normalizeSourceKey(value, { trim = true } = {}) {
     return (trim ? text.trim() : text).toLowerCase().replace(/-/g, '_');
 }
 
+export function getSourceKeyFromText(value = '') {
+    const text = String(value || '').toLowerCase();
+    if (!text) return '';
+    if (text.includes('huggingface') || text.includes('hugging face')) return 'huggingface';
+    if (text.includes('civarchive') || text.includes('civ archive')) return 'civarchive';
+    if (text.includes('civitai') || text.includes('civitai.red')) return 'civitai';
+    if (text.includes('lora_manager_archive') || text.includes('lora archive')) return 'lora_manager_archive';
+    return '';
+}
+
 export function normalizeSourceList(sources = []) {
     return new Set(
         (Array.isArray(sources) ? sources : [sources])

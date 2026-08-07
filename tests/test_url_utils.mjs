@@ -1,7 +1,42 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { getModelCardUrl, parseHuggingFaceFileUrl } from '../web/resolver/utils/url_utils.js';
+import {
+  getModelCardUrl,
+  getSourceKeyFromUrl,
+  parseHuggingFaceFileUrl,
+} from '../web/resolver/utils/url_utils.js';
+import { getSourceKeyFromText } from '../web/resolver/utils/source_labels.js';
+
+test('source URL parsing normalizes supported provider hosts', () => {
+  const cases = [
+    ['https://huggingface.co/owner/repo', 'huggingface'],
+    ['https://www.huggingface.co/owner/repo', 'huggingface'],
+    ['https://cdn.civarchive.com/models/1', 'civarchive'],
+    ['https://civitai.com/models/1', 'civitai'],
+    ['https://www.civitai.red/models/1', 'civitai'],
+    ['https://unknown.example/models/1', ''],
+    ['not a URL', ''],
+  ];
+
+  for (const [value, expected] of cases) {
+    assert.equal(getSourceKeyFromUrl(value), expected, value);
+  }
+});
+
+test('source URL parsing can preserve text fallback semantics', () => {
+  assert.equal(getSourceKeyFromUrl('CivArchive mirror', { fallbackToText: true }), 'civarchive');
+  assert.equal(getSourceKeyFromUrl('LoRA Archive result', { fallbackToText: true }), 'lora_manager_archive');
+  assert.equal(getSourceKeyFromUrl('unknown.example/model', { fallbackToText: true }), '');
+});
+
+test('source text parsing normalizes provider aliases', () => {
+  assert.equal(getSourceKeyFromText('Hugging Face result'), 'huggingface');
+  assert.equal(getSourceKeyFromText('Civ Archive result'), 'civarchive');
+  assert.equal(getSourceKeyFromText('CivitAI result'), 'civitai');
+  assert.equal(getSourceKeyFromText('LoRA Archive result'), 'lora_manager_archive');
+  assert.equal(getSourceKeyFromText('unknown'), '');
+});
 
 test('Hugging Face file URLs expose repository, revision, path, and filename', () => {
   assert.deepEqual(

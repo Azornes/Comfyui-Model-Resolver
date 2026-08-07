@@ -8,7 +8,7 @@ import {
   normalizePathIdentity,
   safeStorage,
 } from '../web/resolver/utils/html_utils.js';
-import { getModelCardUrl } from '../web/resolver/utils/url_utils.js';
+import { getModelCardUrl, getSourceKeyFromUrl } from '../web/resolver/utils/url_utils.js';
 import { joinPathPreservingStyle } from '../web/resolver/utils/path_utils.js';
 import {
   classifyLocalMatches,
@@ -4757,11 +4757,6 @@ test('source link prefers the selected provider page over another provider mirro
         'https://huggingface.co/author/repo/blob/main/model.safetensors',
         civarchivePage
       ];
-    },
-    getContextMenuSourceKeyFromUrl(value = '') {
-      if (value.includes('civarchive.com')) return 'civarchive';
-      if (value.includes('huggingface.co')) return 'huggingface';
-      return '';
     },
     normalizeContextMenuSourceUrl(value = '') {
       return value;
