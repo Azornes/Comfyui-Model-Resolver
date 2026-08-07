@@ -5681,7 +5681,9 @@ test('active download controls are scoped to the workflow that started them', ()
 
 test('download identity and progress slots stay separate for repeated custom-node coordinates', () => {
   const getDownloadMissingIdentity = eval(`(${extractMethod(resolveDownloadMethodsSource, 'getDownloadMissingIdentity')})`);
+  const getDownloadDomKey = eval(`(${extractMethod(resolveDownloadMethodsSource, 'getDownloadDomKey')})`);
   const getDownloadProgressElementId = eval(`(${extractMethod(resolveDownloadMethodsSource, 'getDownloadProgressElementId')})`);
+  const getDownloadButtonElementId = eval(`(${extractMethod(resolveDownloadMethodsSource, 'getDownloadButtonElementId')})`);
   const getActiveDownloadEntriesForMissing = eval(`(${extractMethod(resolveDownloadMethodsSource, 'getActiveDownloadEntriesForMissing')})`);
   const first = {
     node_id: 7,
@@ -5697,6 +5699,7 @@ test('download identity and progress slots stay separate for repeated custom-nod
   };
   const dialog = {
     getDownloadMissingIdentity,
+    getDownloadDomKey,
     getMissingModelKey(value) {
       return [value.node_id, value.widget_index, value.category, value.original_path].join(':');
     },
@@ -5723,6 +5726,22 @@ test('download identity and progress slots stay separate for repeated custom-nod
     getDownloadProgressElementId.call(dialog, first),
     getDownloadProgressElementId.call(dialog, second)
   );
+  assert.equal(
+    getDownloadProgressElementId.call(dialog, first),
+    `download-progress-${getDownloadDomKey.call(dialog, first)}`
+  );
+  assert.equal(
+    getDownloadButtonElementId.call(dialog, first),
+    `download-${getDownloadDomKey.call(dialog, first)}`
+  );
+  const fallbackKey = [
+    first.node_id ?? '',
+    first.widget_index ?? '',
+    first.subgraph_id || '',
+    first.category || '',
+    first.original_path || first.filename || ''
+  ].join(':').replace(/[^A-Za-z0-9_-]+/g, '-');
+  assert.equal(getDownloadDomKey.call({}, first), fallbackKey);
   assert.deepEqual(
     getActiveDownloadEntriesForMissing.call(dialog, first).map(({ downloadId }) => downloadId),
     ['first']

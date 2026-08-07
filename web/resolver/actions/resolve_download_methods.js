@@ -381,8 +381,8 @@ export const resolveDownloadMethods = {
         });
     },
 
-    getDownloadProgressElementId(missing = {}) {
-        const modelDomKey = this.getMissingModelDomKey?.(missing)
+    getDownloadDomKey(missing = {}) {
+        return this.getMissingModelDomKey?.(missing)
             || [
                 missing.node_id ?? '',
                 missing.widget_index ?? '',
@@ -390,19 +390,14 @@ export const resolveDownloadMethods = {
                 missing.category || '',
                 missing.original_path || missing.filename || ''
             ].join(':').replace(/[^A-Za-z0-9_-]+/g, '-');
-        return `download-progress-${modelDomKey}`;
+    },
+
+    getDownloadProgressElementId(missing = {}) {
+        return `download-progress-${this.getDownloadDomKey(missing)}`;
     },
 
     getDownloadButtonElementId(missing = {}) {
-        const modelDomKey = this.getMissingModelDomKey?.(missing)
-            || [
-                missing.node_id ?? '',
-                missing.widget_index ?? '',
-                missing.subgraph_id || '',
-                missing.category || '',
-                missing.original_path || missing.filename || ''
-            ].join(':').replace(/[^A-Za-z0-9_-]+/g, '-');
-        return `download-${modelDomKey}`;
+        return `download-${this.getDownloadDomKey(missing)}`;
     },
 
     getDownloadProgressStore() {
