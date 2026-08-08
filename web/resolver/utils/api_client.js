@@ -8,7 +8,12 @@ export async function fetchJson(
   endpoint,
   options = {},
   errorContext = 'API Request',
-  { apiClient, notify, logError = console.error } = {}
+  {
+    apiClient,
+    notify,
+    logError = console.error,
+    throwOnHttpError = true,
+  } = {}
 ) {
   try {
     const fetchOptions = {
@@ -20,6 +25,7 @@ export async function fetchJson(
     };
     const response = await apiClient.fetchApi(endpoint, fetchOptions);
     if (!response.ok) {
+      if (!throwOnHttpError) return null;
       let errorMsg = `Server returned ${response.status}: ${response.statusText}`;
       try {
         const errData = await response.json();
@@ -39,7 +45,9 @@ export async function fetchJson(
     }
     return await response.json();
   } catch (error) {
-    logError(`Model Resolver: ${errorContext} failed:`, error);
+    if (typeof logError === 'function') {
+      logError(`Model Resolver: ${errorContext} failed:`, error);
+    }
     if (!options.silent && typeof notify === 'function') {
       notify(error.message || 'API request failed', 'error');
     }

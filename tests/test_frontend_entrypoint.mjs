@@ -24,6 +24,19 @@ test('frontend entrypoint registers the ComfyUI extension contract', () => {
     modelResolverSource,
     /import\s+\{\s*isSidebarButtonActive\s*\}\s+from\s+["']\.\/utils\/dom_patch_utils\.js["']/
   );
+  assert.match(
+    modelResolverSource,
+    /import\s+\{\s*fetchJson\s+as\s+fetchJsonRequest\s*\}\s+from\s+["']\.\/utils\/api_client\.js["']/
+  );
+  assert.match(
+    modelResolverSource,
+    /fetchJsonRequest\(\s*["']\/model_resolver\/workflow-model-hashes["']/
+  );
+  assert.match(modelResolverSource, /throwOnHttpError:\s*false/);
+  assert.doesNotMatch(
+    modelResolverSource,
+    /api\.fetchApi\(\s*["']\/model_resolver\/workflow-model-hashes["']/
+  );
   assert.match(resolverSource, /id:\s*MODEL_RESOLVER_OPEN_COMMAND_ID/);
   assert.match(resolverSource, /function:\s*\(\)\s*=>\s*modelResolver\.activateResolverButton\(\)/);
   assert.match(resolverSource, /keybindings:\s*\[\s*MODEL_RESOLVER_OPEN_DEFAULT_KEYBINDING/);

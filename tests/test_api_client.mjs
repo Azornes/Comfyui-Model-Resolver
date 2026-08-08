@@ -95,3 +95,29 @@ test('fetchJson reports server errors and respects silent requests', async () =>
   );
   assert.deepEqual(notifications, [['Backend rejected request', 'error']]);
 });
+
+test('fetchJson can return null for best-effort HTTP errors without logging or notifying', async () => {
+  const notifications = [];
+  const logs = [];
+  const apiClient = {
+    async fetchApi() {
+      return response({
+        ok: false,
+        status: 503,
+        statusText: 'Service unavailable',
+        body: { error: 'Backend temporarily unavailable' },
+      });
+    },
+  };
+
+  const result = await fetchJson('/best-effort-error', { silent: true }, 'Refresh metadata', {
+    apiClient,
+    notify: (message, type) => notifications.push([message, type]),
+    logError: (...args) => logs.push(args),
+    throwOnHttpError: false,
+  });
+
+  assert.equal(result, null);
+  assert.deepEqual(notifications, []);
+  assert.deepEqual(logs, []);
+});

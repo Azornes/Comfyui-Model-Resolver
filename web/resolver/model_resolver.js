@@ -5,6 +5,7 @@ import { createModuleLogger } from "../log_system/log_funcs.js";
 import { logger as frontendLogger } from "../log_system/logger.js";
 import { loadStylesWhenNeeded } from "../utils/css_loader.js";
 import { isSidebarButtonActive } from "./utils/dom_patch_utils.js";
+import { fetchJson as fetchJsonRequest } from "./utils/api_client.js";
 import { ResolverManagerDialog } from "./resolver_dialog.js";
 import { showNotification } from "../utils/notification_utils.js";
 import {
@@ -1428,13 +1429,17 @@ export class ModelResolver {
         this.workflowHashMetadataRefreshing = true;
         this.workflowHashMetadataActiveSignature = signature;
         try {
-            const response = await api.fetchApi('/model_resolver/workflow-model-hashes', {
+            const data = await fetchJsonRequest('/model_resolver/workflow-model-hashes', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ workflow: currentWorkflow })
+                body: JSON.stringify({ workflow: currentWorkflow }),
+                silent: true,
+            }, 'Refresh workflow hash metadata', {
+                apiClient: api,
+                notify: null,
+                logError: null,
+                throwOnHttpError: false,
             });
-            if (!response.ok) return;
-            const data = await response.json();
+            if (!data) return;
             if (!data?.enabled) {
                 this.workflowHashMetadataCache = null;
                 this.workflowHashMetadataSignature = signature;
