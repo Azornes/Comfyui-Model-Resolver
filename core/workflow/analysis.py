@@ -37,24 +37,41 @@ def _normalize_workflow_analysis_value(value: Any) -> Any:
     return value
 
 
+def _hash_normalized_workflow_value(value: Any) -> str:
+    serialized_value = json.dumps(
+        _normalize_workflow_analysis_value(value),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(serialized_value.encode("utf-8")).hexdigest()
+
+
+def _get_workflow_scope_key(
+    node_id: Any,
+    *,
+    subgraph_id: Any = "",
+    is_top_level: bool,
+) -> tuple[str, str, str]:
+    scope = "top" if is_top_level else "subgraph"
+    return (scope, "" if is_top_level else str(subgraph_id or ""), str(node_id))
+
+
 def _get_workflow_node_cache_key(
     node: Dict[str, Any],
     *,
     subgraph_id: Any = "",
     is_top_level: bool,
 ) -> tuple[str, str, str]:
-    scope = "top" if is_top_level else "subgraph"
-    return (scope, "" if is_top_level else str(subgraph_id or ""), str(node.get("id")))
+    return _get_workflow_scope_key(
+        node.get("id"),
+        subgraph_id=subgraph_id,
+        is_top_level=is_top_level,
+    )
 
 
 def _get_workflow_node_fingerprint(node: Dict[str, Any]) -> str:
-    serialized_node = json.dumps(
-        _normalize_workflow_analysis_value(node),
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return hashlib.sha256(serialized_node.encode("utf-8")).hexdigest()
+    return _hash_normalized_workflow_value(node)
 
 
 def _get_workflow_node_fingerprints(
@@ -176,16 +193,12 @@ def _get_promoted_widget_context_cache_key(
                 _normalize_workflow_analysis_value(node)
             )
 
-    serialized_context = json.dumps(
+    return _hash_normalized_workflow_value(
         {
             "subgraphs": context_subgraphs,
             "instances": context_instances,
         },
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
     )
-    return hashlib.sha256(serialized_context.encode("utf-8")).hexdigest()
 
 
 def analyze_workflow_models(

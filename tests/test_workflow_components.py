@@ -57,6 +57,30 @@ def test_workflow_node_traversal_preserves_node_order_and_scope():
     assert contexts[3].subgraph_id == "group-1"
 
 
+def test_workflow_cache_helpers_share_scope_keys_and_normalized_hashing():
+    node = {"id": 2, "type": "Inner", "pos": [10, 20]}
+
+    assert analysis._get_workflow_node_cache_key(
+        node,
+        subgraph_id="group-1",
+        is_top_level=False,
+    ) == analysis._get_workflow_scope_key(
+        2,
+        subgraph_id="group-1",
+        is_top_level=False,
+    )
+    assert analysis._get_workflow_node_cache_key(
+        node,
+        is_top_level=True,
+    ) == ("top", "", "2")
+    assert analysis._get_workflow_node_fingerprint(node) == (
+        analysis._hash_normalized_workflow_value(node)
+    )
+    assert analysis._get_workflow_node_fingerprint(
+        {"type": "Inner", "id": 2, "pos": [999, 999]}
+    ) == analysis._get_workflow_node_fingerprint(node)
+
+
 def test_active_workflow_node_traversal_follows_nested_referenced_subgraphs_only():
     workflow = {
         "nodes": [

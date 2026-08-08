@@ -1,7 +1,5 @@
 """Shared workflow model inventory and incremental cache management."""
 
-import hashlib
-import json
 import threading
 import time
 from collections import OrderedDict
@@ -28,10 +26,10 @@ def _build_workflow_node_cache(
 
     for ref in model_refs:
         is_top_level = ref.get("is_top_level") is not False
-        key = (
-            "top" if is_top_level else "subgraph",
-            "" if is_top_level else str(ref.get("subgraph_id") or ""),
-            str(ref.get("node_id")),
+        key = analysis._get_workflow_scope_key(
+            ref.get("node_id"),
+            subgraph_id=ref.get("subgraph_id"),
+            is_top_level=is_top_level,
         )
         if key in refs_by_node:
             refs_by_node[key].append(ref)
@@ -48,13 +46,7 @@ def _build_workflow_node_cache(
 def _get_workflow_model_inventory_cache_key(
     workflow_json: Dict[str, Any],
 ) -> str:
-    serialized_workflow = json.dumps(
-        analysis._normalize_workflow_analysis_value(workflow_json),
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return hashlib.sha256(serialized_workflow.encode("utf-8")).hexdigest()
+    return analysis._hash_normalized_workflow_value(workflow_json)
 
 
 def _get_analysis_log_context(
