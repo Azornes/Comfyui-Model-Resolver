@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Any
 
+from ..sources.civarchive import build_civarchive_failure_status
 from ..sources.civitai import build_civitai_result_payload
 from ..type_utils import select_primary_model_file
 
@@ -532,16 +533,7 @@ class SearchProviderRunner:
             if callable(status_factory):
                 source_status = status_factory()
             else:
-                source_status = {
-                    "state": "unavailable",
-                    "code": "provider_unavailable",
-                    "retryable": True,
-                    "http_status": None,
-                    "message": (
-                        "CivArchive may be overloaded or temporarily unavailable. "
-                        "Please try again."
-                    ),
-                }
+                source_status = build_civarchive_failure_status()
             http_status = source_status.get("http_status") or "none"
             retryable = "yes" if source_status.get("retryable") else "no"
             error_type = type(error).__name__

@@ -6,6 +6,14 @@ import {
 } from "../utils/source_labels.js";
 
 const localStorage = safeStorage;
+const SEARCH_SOURCE_STATUS_FALLBACKS = Object.freeze({
+    timeout: 'search timed out. Please try again.',
+    network_error: 'could not be reached. Please try again.',
+    provider_unavailable: 'is temporarily unavailable. Please try again.',
+    rate_limited: 'is rate limited. Please try again later.',
+    not_found: 'did not return a matching result.',
+    provider_rejected: 'rejected the search request.',
+});
 
 export const searchSourceMethods = {
     getSearchResultKeysForSources(sources = []) {
@@ -75,31 +83,14 @@ export const searchSourceMethods = {
         }
 
         const message = String(error || '').trim();
-        const normalizedSource = normalizeSourceKey(source);
         const statusCode = String(status?.code || '').trim().toLowerCase();
-        if (normalizedSource === 'civarchive') {
-            const messagesByCode = {
-                timeout: 'CivArchive did not respond in time. It may be temporarily overloaded. Please try again.',
-                network_error: 'CivArchive could not be reached. It may be temporarily unavailable. Please try again.',
-                provider_unavailable: 'CivArchive may be overloaded or temporarily unavailable. Please try again.',
-                rate_limited: 'CivArchive rate limit was reached. Please try again later.',
-                not_found: 'CivArchive did not find a matching page.',
-                provider_rejected: 'CivArchive rejected the search request.'
-            };
-            if (messagesByCode[statusCode]) return messagesByCode[statusCode];
+        const sourceLabel = this.getSearchSourceLabel(source);
+        if (SEARCH_SOURCE_STATUS_FALLBACKS[statusCode]) {
+            return `${sourceLabel} ${SEARCH_SOURCE_STATUS_FALLBACKS[statusCode]}`;
         }
 
         if (!message) {
-            return `${this.getSearchSourceLabel(source)} search failed.`;
-        }
-
-        const indicatesTemporaryUnavailable = (
-            /network error|timeout|timed out|connection (?:error|reset|refused)|temporarily unavailable/i.test(message)
-            || /\bHTTP\s+(?:429|5\d{2})\b/i.test(message)
-        );
-
-        if (normalizedSource === 'civarchive' && indicatesTemporaryUnavailable) {
-            return 'CivArchive may be overloaded or temporarily unavailable. Please try again.';
+            return `${sourceLabel} search failed.`;
         }
 
         return message;

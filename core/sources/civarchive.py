@@ -93,6 +93,35 @@ CIVARCHIVE_FAILURE_MESSAGES = {
     "not_found": "CivArchive did not find a matching page.",
     "provider_rejected": "CivArchive rejected the search request.",
 }
+
+
+def build_civarchive_failure_status(
+    code: str = "provider_unavailable",
+    http_status: Optional[int] = None,
+    retryable: bool = True,
+) -> Dict[str, Any]:
+    """Build the public CivArchive provider status contract."""
+    if code == "rate_limited":
+        state = "rate_limited"
+    elif code == "not_found":
+        state = "not_found"
+    elif retryable:
+        state = "unavailable"
+    else:
+        state = "error"
+
+    return {
+        "state": state,
+        "code": code,
+        "retryable": retryable,
+        "http_status": http_status,
+        "message": CIVARCHIVE_FAILURE_MESSAGES.get(
+            code,
+            "CivArchive search failed. Please try again later.",
+        ),
+    }
+
+
 CIVARCHIVE_SIZE_PROBE_DOMAINS = (
     "huggingface.co",
     "civarchive.com",
@@ -140,25 +169,11 @@ class CivArchiveSearchError(Exception):
 
     def as_status(self) -> Dict[str, Any]:
         """Return a safe provider status payload for search responses."""
-        if self.code == "rate_limited":
-            state = "rate_limited"
-        elif self.code == "not_found":
-            state = "not_found"
-        elif self.retryable:
-            state = "unavailable"
-        else:
-            state = "error"
-
-        return {
-            "state": state,
-            "code": self.code,
-            "retryable": self.retryable,
-            "http_status": self.http_status,
-            "message": CIVARCHIVE_FAILURE_MESSAGES.get(
-                self.code,
-                "CivArchive search failed. Please try again later.",
-            ),
-        }
+        return build_civarchive_failure_status(
+            code=self.code,
+            http_status=self.http_status,
+            retryable=self.retryable,
+        )
 
 
 def _classify_civarchive_http_status(status_code: int) -> Dict[str, Any]:

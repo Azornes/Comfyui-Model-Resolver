@@ -95,6 +95,20 @@ def test_civarchive_failure_exposes_safe_status_payload():
     }
 
 
+def test_civarchive_status_builder_is_the_shared_failure_contract():
+    assert civarchive.build_civarchive_failure_status(
+        code="rate_limited",
+        http_status=429,
+        retryable=True,
+    ) == {
+        "state": "rate_limited",
+        "code": "rate_limited",
+        "retryable": True,
+        "http_status": 429,
+        "message": "CivArchive rate limit was reached. Please try again later.",
+    }
+
+
 def test_request_source_response_can_propagate_transport_errors():
     with patch.object(network_utils.requests, "get", side_effect=requests.Timeout("timeout")), pytest.raises(
         requests.Timeout, match="timeout"
