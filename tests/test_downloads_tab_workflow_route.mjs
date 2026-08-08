@@ -37,6 +37,10 @@ import { getSha256Field, normalizeSha256 } from '../web/resolver/utils/hash_util
 import { normalizeSearchToken } from '../web/resolver/utils/search_utils.js';
 import { parseFiniteNumber } from '../web/resolver/utils/size_utils.js';
 import { getSourceDisplayLabel, normalizeSourceKey } from '../web/resolver/utils/source_labels.js';
+import {
+  buildLoadedModelTokenStrings,
+  groupLoadedModelsByCategory,
+} from '../web/resolver/utils/loaded_model_utils.js';
 import { baseModelAliasMethods } from '../web/resolver/search/base_model_alias_methods.js';
 import { searchHashMethods } from '../web/resolver/search/search_hash_methods.js';
 import { missingModelStateMethods } from '../web/resolver/views/missing_model_state_methods.js';
@@ -57,8 +61,11 @@ void CATEGORY_ALIASES;
 void normalizeCategoryToken;
 void normalizeSha256;
 void pollBackgroundTask;
+void buildLoadedModelTokenStrings;
+void groupLoadedModelsByCategory;
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
+const getSvgIcon = () => '';
 const queueMethodsSource = fs.readFileSync(
   path.join(projectRoot, 'web/resolver/actions/queue_methods.js'),
   'utf8'
@@ -2066,6 +2073,66 @@ test('Loaded Models progress patches the stable progress container', () => {
   assert.doesNotMatch(pollAnalysisProgress, /pollBackgroundTask\(/);
   assert.match(pollAnalysisProgress, /patchAnalysisProgress\(/);
   assert.doesNotMatch(pollAnalysisProgress, /contentElement\.innerHTML\s*=/);
+});
+
+test('loaded model grouping and copy strings stay consistent across render paths', () => {
+  const updateLoadedModelCopyValues = eval(
+    `(${extractMethod(tabsLoadedMethodsSource, 'updateLoadedModelCopyValues')})`
+  );
+  const displayLoadedModels = eval(
+    `(${extractMethod(tabsLoadedMethodsSource, 'displayLoadedModels')})`
+  );
+  const models = [
+    { category: 'loras', name: 'active-lora', active: true, connected: true },
+    { category: 'loras', name: 'inactive-lora', active: false, connected: true },
+    { category: 'checkpoints', name: 'default-checkpoint' },
+    { name: 'unknown-inactive', connected: false },
+  ];
+  const getModelToken = (model, category) => `<${category}:${model.name}>`;
+  const dialog = {
+    getModelToken,
+    escapeJsString: value => JSON.stringify(value),
+    getCategoryDisplayName: category => category,
+    escapeHtml: value => String(value),
+    getModelNameAndStrength: model => ({ name: model.name, strength: null }),
+    getLoadedModelDomKey: model => model.name,
+    getLoadedModelContext: model => model,
+    getContextMenuAttrs: () => '',
+    getModelPreviewTooltipAttrs: () => '',
+  };
+  const expectedUpdate = {
+    active: '<loras:active-lora> <checkpoints:default-checkpoint>',
+    inactive: '<loras:inactive-lora> <unknown:unknown-inactive>',
+    all: '<loras:active-lora> <loras:inactive-lora> '
+      + '<checkpoints:default-checkpoint> <unknown:unknown-inactive>',
+  };
+  const expectedDisplay = {
+    active: '<loras:active-lora> <checkpoints:default-checkpoint> ',
+    inactive: '<loras:inactive-lora>  <unknown:unknown-inactive>',
+    all: expectedUpdate.all,
+  };
+
+  const updateContainer = { dataset: {} };
+  updateLoadedModelCopyValues.call(dialog, updateContainer, models);
+
+  const displayContainer = { dataset: {}, innerHTML: '' };
+  displayLoadedModels.call(dialog, displayContainer, {
+    loaded_models: models,
+    total: models.length,
+  });
+
+  assert.deepEqual({
+    active: updateContainer.dataset.mlActiveString,
+    inactive: updateContainer.dataset.mlInactiveString,
+    all: updateContainer.dataset.mlAllString,
+  }, expectedUpdate);
+  assert.deepEqual({
+    active: displayContainer.dataset.mlActiveString,
+    inactive: displayContainer.dataset.mlInactiveString,
+    all: displayContainer.dataset.mlAllString,
+  }, expectedDisplay);
+  assert.notEqual(displayContainer.innerHTML, '');
+  void getSvgIcon;
 });
 
 test('workflow progress polling preserves endpoint, rendering, and token cleanup', async () => {

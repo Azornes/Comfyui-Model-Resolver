@@ -4,6 +4,10 @@ import {
     getCustomNodeOriginalIdentity,
 } from "../custom_nodes/registry.js";
 import { normalizePathIdentity } from "../utils/html_utils.js";
+import {
+    buildLoadedModelTokenStrings,
+    groupLoadedModelsByCategory,
+} from "../utils/loaded_model_utils.js";
 export const tabsLoadedMethods = {
     getTabButton(tab) {
         return {
@@ -207,31 +211,11 @@ export const tabsLoadedMethods = {
     updateLoadedModelCopyValues(container, loadedModels = []) {
         if (!container) return;
 
-        const byCategory = {};
-        for (const model of loadedModels) {
-            const category = model.category || 'unknown';
-            if (!byCategory[category]) {
-                byCategory[category] = { active: [], inactive: [] };
-            }
-            const filter = model.active !== false && model.connected !== false
-                ? 'active'
-                : 'inactive';
-            byCategory[category][filter].push(model);
-        }
-
-        const buildString = (filter) => Object.entries(byCategory)
-            .flatMap(([category, models]) => {
-                const selected = filter === 'all'
-                    ? [...models.active, ...models.inactive]
-                    : models[filter];
-                return selected.map(model => this.getModelToken(model, category));
-            })
-            .join(' ');
-        const strings = {
-            active: buildString('active'),
-            inactive: buildString('inactive'),
-            all: buildString('all'),
-        };
+        const byCategory = groupLoadedModelsByCategory(loadedModels);
+        const strings = buildLoadedModelTokenStrings(
+            byCategory,
+            (model, category) => this.getModelToken(model, category),
+        );
 
         container.dataset.mlActiveString = strings.active;
         container.dataset.mlInactiveString = strings.inactive;
@@ -353,40 +337,20 @@ export const tabsLoadedMethods = {
             return;
         }
 
-        const byCategory = {};
-
-        for (const model of loadedModels) {
-            const cat = model.category || 'unknown';
-            if (!byCategory[cat]) {
-                byCategory[cat] = { active: [], inactive: [] };
-            }
-
-            // Some loaders expose per-model enablement separately from links.
-            const isActive = model.active !== false && model.connected !== false;
-
-            if (isActive) {
-                byCategory[cat].active.push(model);
-            } else {
-                byCategory[cat].inactive.push(model);
-            }
-        }
+        const byCategory = groupLoadedModelsByCategory(loadedModels);
 
         const activeCount = Object.values(byCategory).reduce((sum, cat) => sum + cat.active.length, 0);
         const inactiveCount = Object.values(byCategory).reduce((sum, cat) => sum + cat.inactive.length, 0);
 
-        const buildCategoryStrings = (filter) => {
-            const result = {};
-            for (const [category, modelsObj] of Object.entries(byCategory)) {
-                const models = filter === 'active' ? modelsObj.active : filter === 'inactive' ? modelsObj.inactive : [...modelsObj.active, ...modelsObj.inactive];
-                const parts = models.map(model => this.getModelToken(model, category));
-                result[category] = parts.join(' ');
-            }
-            return Object.values(result).join(' ');
-        };
-
-        const activeString = buildCategoryStrings('active');
-        const inactiveString = buildCategoryStrings('inactive');
-        const allString = buildCategoryStrings('all');
+        const {
+            active: activeString,
+            inactive: inactiveString,
+            all: allString,
+        } = buildLoadedModelTokenStrings(
+            byCategory,
+            (model, category) => this.getModelToken(model, category),
+            { preserveEmptyCategories: true },
+        );
 
         const copyIcon = getSvgIcon('copy', 'currentColor', 'mr-copy-btn-icon');
         const copyButtonHtml = (text, extraClass = '') => `
