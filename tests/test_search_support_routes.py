@@ -72,8 +72,7 @@ def _build_routes(overrides=None):
         "get_model_list_update_status": MagicMock(
             return_value={"loaded": True}
         ),
-        "invalidate_local_hash_match_cache": MagicMock(),
-        "invalidate_model_files_cache": MagicMock(),
+        "invalidate_model_caches": MagicMock(),
         "json_api_endpoint": _json_api_endpoint,
         "refresh_known_author_fallback_indexes": MagicMock(
             return_value={"refreshed": True}
@@ -106,8 +105,7 @@ async def test_clear_search_cache_route_clears_all_state():
     values["clear_all_search_caches"].assert_called_once_with()
     values["reload_popular_databases"].assert_called_once_with()
     values["reload_model_list"].assert_called_once_with()
-    values["invalidate_model_files_cache"].assert_called_once_with()
-    values["invalidate_local_hash_match_cache"].assert_called_once_with()
+    values["invalidate_model_caches"].assert_called_once_with()
     assert values["self"].search_result_timestamps == {}
 
 

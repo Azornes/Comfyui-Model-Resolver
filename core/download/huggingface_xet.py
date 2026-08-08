@@ -487,8 +487,7 @@ def download_huggingface_xet(
             f"Size: {facade.format_bytes(size)}, Time: {elapsed:.1f}s, "
             f"Avg speed: {facade.format_bytes(int(avg_speed))}/s"
         )
-        facade.invalidate_model_files_cache()
-        facade.invalidate_local_hash_match_cache()
+        facade.invalidate_model_caches()
         return result
     except Exception as exc:
         was_cancelled = (

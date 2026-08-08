@@ -87,10 +87,15 @@ def register_routes(self):
                 apply_resolution,
                 get_local_model_hash_metadata,
                 invalidate_local_hash_match_cache,
+                invalidate_model_caches,
                 search_local_matches,
                 search_local_matches_by_hash,
             )
-            from ..scanner import find_local_file_path, get_model_files, invalidate_model_files_cache
+            from ..scanner import (
+                find_local_file_path,
+                get_model_files,
+                invalidate_model_files_cache,
+            )
             from ..services.model_service import ModelService
             from ..settings import (
                 TEMPLATE_KEY_ALIASES,

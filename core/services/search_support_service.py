@@ -26,12 +26,7 @@ class SearchSupportService:
         self.get_model_list_update_status = context.require(
             "get_model_list_update_status"
         )
-        self.invalidate_local_hash_match_cache = context.require(
-            "invalidate_local_hash_match_cache"
-        )
-        self.invalidate_model_files_cache = context.require(
-            "invalidate_model_files_cache"
-        )
+        self.invalidate_model_caches = context.require("invalidate_model_caches")
         self.refresh_known_author_fallback_indexes = context.require(
             "refresh_known_author_fallback_indexes"
         )
@@ -48,8 +43,7 @@ class SearchSupportService:
         self.clear_all_search_caches()
         self.reload_popular_databases()
         self.reload_model_list()
-        self.invalidate_model_files_cache()
-        self.invalidate_local_hash_match_cache()
+        self.invalidate_model_caches()
         self.extension.search_result_timestamps.clear()
         self.extension.logger.info("Cleared backend search caches")
         return self.web.json_response({"success": True, "cleared": "all"})

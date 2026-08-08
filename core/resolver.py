@@ -22,7 +22,7 @@ log = create_module_logger(__name__)
 
 from .local_hash_matches import collect_local_hash_matches_for_result
 from .matcher import find_matches, strip_known_model_extension
-from .scanner import get_model_files
+from .scanner import get_model_files, invalidate_model_files_cache
 from .type_utils import MODEL_EXTENSIONS as _MODEL_EXTENSIONS
 from .type_utils import (
     as_dict,
@@ -72,6 +72,12 @@ def invalidate_local_hash_match_cache() -> None:
     global _LOCAL_HASH_MATCH_CACHE
     with _LOCAL_HASH_MATCH_CACHE_LOCK:
         _LOCAL_HASH_MATCH_CACHE = None
+
+
+def invalidate_model_caches() -> None:
+    """Clear all in-memory caches that depend on the local model inventory."""
+    invalidate_model_files_cache()
+    invalidate_local_hash_match_cache()
 
 
 def _clone_hash_match(match: Dict[str, Any]) -> Dict[str, Any]:

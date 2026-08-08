@@ -30,10 +30,7 @@ from ..path_utils import (
     is_path_within,
     write_json_atomic,
 )
-from ..resolver import (
-    invalidate_local_hash_match_cache,
-)
-from ..scanner import invalidate_model_files_cache
+from ..resolver import invalidate_model_caches
 from ..settings import (
     load_settings,
     normalize_download_backend,
@@ -144,8 +141,7 @@ context.get_path_identity = get_path_identity
 context.is_path_within = is_path_within
 context.write_json_atomic = write_json_atomic
 context.get_category_folder_keys = get_category_folder_keys
-context.invalidate_model_files_cache = invalidate_model_files_cache
-context.invalidate_local_hash_match_cache = invalidate_local_hash_match_cache
+context.invalidate_model_caches = invalidate_model_caches
 
 context._extract_expected_sha256 = metadata._extract_expected_sha256
 context.normalize_metadata_file_path = metadata.normalize_metadata_file_path

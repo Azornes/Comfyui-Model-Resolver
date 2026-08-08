@@ -3,7 +3,7 @@ import os
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
@@ -25,6 +25,22 @@ class TestRefactoringUnification(unittest.TestCase):
 
     def test_thresholds(self):
         self.assertEqual(MODEL_TITLE_MATCH_THRESHOLD, 82.0)
+
+    def test_invalidate_model_caches_clears_inventory_then_hash_matches(self):
+        from core import resolver
+
+        calls = MagicMock()
+        with patch.object(resolver, "invalidate_model_files_cache") as invalidate_inventory:
+            with patch.object(
+                resolver, "invalidate_local_hash_match_cache"
+            ) as invalidate_hash_matches:
+                calls.attach_mock(invalidate_inventory, "inventory")
+                calls.attach_mock(invalidate_hash_matches, "hash_matches")
+                resolver.invalidate_model_caches()
+
+        calls.assert_has_calls([call.inventory(), call.hash_matches()])
+        invalidate_inventory.assert_called_once_with()
+        invalidate_hash_matches.assert_called_once_with()
 
     def test_normalize_lora_manager_type(self):
         self.assertEqual(normalize_lora_manager_type("loras"), "lora")
