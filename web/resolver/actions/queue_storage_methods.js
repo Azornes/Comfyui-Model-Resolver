@@ -1,3 +1,5 @@
+import { safeStorage } from '../utils/html_utils.js';
+
 export const queueStorageMethods = {
     getActiveDownloadRecoveryStorageKey() {
         return this.activeDownloadsStorageKey || 'model_resolver_active_downloads';
@@ -10,7 +12,7 @@ export const queueStorageMethods = {
 
         this._activeDownloadRecoveryLoaded = true;
         try {
-            const raw = localStorage.getItem(this.getActiveDownloadRecoveryStorageKey());
+            const raw = safeStorage.getItem(this.getActiveDownloadRecoveryStorageKey());
             const parsed = raw ? JSON.parse(raw) : {};
             this._activeDownloadRecovery = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
                 ? parsed
@@ -24,14 +26,10 @@ export const queueStorageMethods = {
 
     saveActiveDownloadRecovery() {
         const recovery = this.loadActiveDownloadRecovery();
-        try {
-            localStorage.setItem(
-                this.getActiveDownloadRecoveryStorageKey(),
-                JSON.stringify(recovery)
-            );
-        } catch (error) {
-            console.warn('Model Resolver: failed to save active download recovery', error);
-        }
+        safeStorage.setItem(
+            this.getActiveDownloadRecoveryStorageKey(),
+            JSON.stringify(recovery)
+        );
     },
 
     persistActiveDownloadRecovery(downloadId, info = {}) {
@@ -88,9 +86,7 @@ export const queueStorageMethods = {
         }
         const writeState = () => {
             this._queueCollapsedPersistTimer = null;
-            try {
-                localStorage.setItem('model_resolver_queue_collapsed', collapsed ? '1' : '0');
-            } catch (_e) { }
+            safeStorage.setItem('model_resolver_queue_collapsed', collapsed ? '1' : '0');
         };
         const delay = Math.max(0, Number(delayMs) || 0);
         if (delay > 0) {
@@ -109,9 +105,7 @@ export const queueStorageMethods = {
         }
         const writeWidth = () => {
             this._queueSplitPersistTimer = null;
-            try {
-                localStorage.setItem('model_resolver_split_w', String(nextWidth));
-            } catch (_e) { }
+            safeStorage.setItem('model_resolver_split_w', String(nextWidth));
         };
         const delay = Math.max(0, Number(delayMs) || 0);
         if (delay > 0) {
@@ -125,7 +119,7 @@ export const queueStorageMethods = {
         if (this._downloadHistoryLoaded) return this.downloadHistory || [];
         this._downloadHistoryLoaded = true;
         try {
-            const raw = localStorage.getItem(this.downloadHistoryStorageKey || 'model_resolver_download_history');
+            const raw = safeStorage.getItem(this.downloadHistoryStorageKey || 'model_resolver_download_history');
             const parsed = raw ? JSON.parse(raw) : [];
             this.downloadHistory = Array.isArray(parsed)
                 ? parsed.filter(item => item && typeof item === 'object')
@@ -147,14 +141,10 @@ export const queueStorageMethods = {
     saveDownloadHistory() {
         const history = this.getDownloadHistory().slice(0, this.downloadHistoryLimit || 200);
         this.downloadHistory = history;
-        try {
-            localStorage.setItem(
-                this.downloadHistoryStorageKey || 'model_resolver_download_history',
-                JSON.stringify(history)
-            );
-        } catch (error) {
-            console.warn('Model Resolver: failed to save download history', error);
-        }
+        safeStorage.setItem(
+            this.downloadHistoryStorageKey || 'model_resolver_download_history',
+            JSON.stringify(history)
+        );
     },
 
     getDownloadHistoryIdentity(entry = {}) {

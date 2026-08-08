@@ -8,6 +8,7 @@ import { isSidebarButtonActive } from "./utils/dom_patch_utils.js";
 import { fetchJson as fetchJsonRequest } from "./utils/api_client.js";
 import { ResolverManagerDialog } from "./resolver_dialog.js";
 import { showNotification } from "../utils/notification_utils.js";
+import { safeStorage } from "./utils/html_utils.js";
 import {
     serializeKeybindingCombo,
     keybindingsEqual,
@@ -60,11 +61,11 @@ function getKeybindingSetting(id) {
 }
 
 function applyStoredFrontendLoggingPreference() {
-    const stored = localStorage.getItem('ModelResolver.frontendLogsEnabled');
+    const stored = safeStorage.getItem('ModelResolver.frontendLogsEnabled');
     if (stored !== null) {
         frontendLogger.setEnabled(stored !== 'false');
     }
-    const storedLevel = localStorage.getItem('ModelResolver.frontendLogLevel');
+    const storedLevel = safeStorage.getItem('ModelResolver.frontendLogLevel');
     if (storedLevel) {
         frontendLogger.setGlobalAndModuleLevel(frontendLogger.normalizeLevel(storedLevel));
     }
@@ -716,11 +717,7 @@ export class ModelResolver {
         this.dialog.showResolvedModels = true;
         this.dialog.missingModelsTypeFilter = 'all';
         this.dialog.missingModelsTypeFilterMenuOpen = false;
-        try {
-            localStorage.setItem(this.dialog.showResolvedModelsStorageKey, '1');
-        } catch (error) {
-            log.debug('Model Resolver: failed to persist resolved-model visibility.', error);
-        }
+        safeStorage.setItem(this.dialog.showResolvedModelsStorageKey, '1');
 
         const selectionRequest = this.dialog.queueWorkflowModelReferenceSelection?.(reference);
         if (!wasVisible) {
@@ -961,11 +958,11 @@ export class ModelResolver {
     }
 
     isWorkflowHashMetadataEnabled() {
-        return localStorage.getItem('ModelResolver.workflowHashMetadataEnabled') !== 'false';
+        return safeStorage.getItem('ModelResolver.workflowHashMetadataEnabled') !== 'false';
     }
 
     isWorkflowDependencyMarkerEnabled() {
-        return localStorage.getItem('ModelResolver.workflowDependencyMarkerEnabled') === 'true';
+        return safeStorage.getItem('ModelResolver.workflowDependencyMarkerEnabled') === 'true';
     }
 
     setupWorkflowHashMetadataInjection() {
@@ -1605,7 +1602,7 @@ export class ModelResolver {
      * Check if auto-open preference is enabled
      */
     isAutoOpenEnabled() {
-        return localStorage.getItem('ModelResolver.autoOpenOnMissing') === 'true';
+        return safeStorage.getItem('ModelResolver.autoOpenOnMissing') === 'true';
     }
 
     openResolverForDetectedMissingModels() {

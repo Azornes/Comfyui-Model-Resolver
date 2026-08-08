@@ -4,6 +4,7 @@ import { getSvgIcon } from "../../utils/icon_utils.js";
 import { startSplitterDrag } from "../utils/splitter_drag.js";
 import { syncElementAttributes } from "../utils/dom_patch_utils.js";
 import { bindDownloadActionHandlers } from "../utils/download_action_handlers.js";
+import { safeStorage } from "../utils/html_utils.js";
 const FOOTER_VERSION_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const FOOTER_VERSION_FAILURE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -36,18 +37,16 @@ export const queueMethods = {
         this.observeQueueSplitContainer(body);
 
         // Restore saved queue width and wire splitter
-        try {
-            const savedSplit = localStorage.getItem('model_resolver_split_w');
-            if (savedSplit) {
-                const w = parseInt(savedSplit, 10);
-                if (!isNaN(w) && w > 0) {
-                    this.queueElement.style.width = `${w}px`;
-                    this.queueElement.style.flexBasis = `${w}px`;
-                    this.queueElement.style.flexGrow = '0';
-                    this.queueElement.style.flexShrink = '0';
-                }
+        const savedSplit = safeStorage.getItem('model_resolver_split_w');
+        if (savedSplit) {
+            const w = parseInt(savedSplit, 10);
+            if (!isNaN(w) && w > 0) {
+                this.queueElement.style.width = `${w}px`;
+                this.queueElement.style.flexBasis = `${w}px`;
+                this.queueElement.style.flexGrow = '0';
+                this.queueElement.style.flexShrink = '0';
             }
-        } catch (_e) { }
+        }
 
         try {
             const onSplitMouseDown = (e) => this.startSplitDrag(e);
@@ -72,10 +71,8 @@ export const queueMethods = {
         } catch (_e) { }
 
         // Restore queue collapsed state
-        try {
-            const col = localStorage.getItem('model_resolver_queue_collapsed');
-            if (col === '1') this.setQueueCollapsed(true, { persist: false, updatePanel: false });
-        } catch (_e) { }
+        const col = safeStorage.getItem('model_resolver_queue_collapsed');
+        if (col === '1') this.setQueueCollapsed(true, { persist: false, updatePanel: false });
 
         return body;
     },
