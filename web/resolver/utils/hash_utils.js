@@ -1,9 +1,14 @@
-export function getSha256Field(value = {}, { lowercase = false } = {}) {
+export function getSha256Candidates(value = {}) {
     const hashes = value.hashes && typeof value.hashes === 'object'
         ? value.hashes
         : {};
+    return [value.sha256, value.hash, hashes.SHA256, hashes.sha256];
+}
+
+export function getSha256Field(value = {}, { lowercase = false } = {}) {
+    const [sha256, hash, upperCaseSha256, lowerCaseSha256] = getSha256Candidates(value);
     const result = String(
-        value.sha256 || value.hash || hashes.SHA256 || hashes.sha256 || ''
+        sha256 || hash || upperCaseSha256 || lowerCaseSha256 || ''
     ).trim();
     return lowercase ? result.toLowerCase() : result;
 }

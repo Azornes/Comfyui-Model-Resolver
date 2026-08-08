@@ -1,26 +1,21 @@
-import { firstValidSha256, getSha256Field, normalizeSha256 } from '../utils/hash_utils.js';
+import {
+    firstValidSha256,
+    getSha256Candidates,
+    getSha256Field,
+    normalizeSha256,
+} from '../utils/hash_utils.js';
 import { normalizeSourceKey } from '../utils/source_labels.js';
 
 export const searchHashMethods = {
     getSearchResultSha256(result = {}) {
         if (!result || typeof result !== 'object') return '';
 
-        const hashes = result.hashes && typeof result.hashes === 'object' ? result.hashes : {};
         const fileInfo = result.file_info && typeof result.file_info === 'object' ? result.file_info : {};
-        const fileHashes = fileInfo.hashes && typeof fileInfo.hashes === 'object' ? fileInfo.hashes : {};
-        const candidates = [
+        return firstValidSha256(
             result.hash_verified_sha256,
-            result.sha256,
-            result.hash,
-            hashes.SHA256,
-            hashes.sha256,
-            fileInfo.sha256,
-            fileInfo.hash,
-            fileHashes.SHA256,
-            fileHashes.sha256
-        ];
-
-        return firstValidSha256(...candidates);
+            ...getSha256Candidates(result),
+            ...getSha256Candidates(fileInfo),
+        );
     },
 
     collectHashLabelMapHashes(missing = {}, results = null) {
