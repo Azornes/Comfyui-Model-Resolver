@@ -7,7 +7,7 @@ Provides audits for local model sidecar metadata files.
 import math
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .log_system import create_module_logger
 from .metadata_model_utils import dedupe_models, is_model_file_path
@@ -18,7 +18,7 @@ from .path_utils import (
     get_path_identity,
     read_merged_model_metadata,
 )
-from .type_utils import FILE_SIZE_BYTE_KEYS, FILE_SIZE_KIB_KEYS, format_size_bytes
+from .type_utils import extract_file_size_detail, format_size_bytes
 from .worker_utils import resolve_worker_count
 
 log = create_module_logger(__name__)
@@ -56,46 +56,15 @@ def _empty_audit_counts() -> Dict[str, Any]:
     }
 
 
-def _coerce_size_bytes(value: Any, multiplier: int = 1) -> Optional[int]:
-    if value is None or value == "" or isinstance(value, bool):
-        return None
-
-    try:
-        if isinstance(value, str):
-            text = value.strip().replace(",", "").replace("_", "")
-            if not text or text.lower() in {"none", "null", "undefined"}:
-                return None
-            number = float(text)
-        else:
-            number = float(value)
-    except (TypeError, ValueError):
-        return None
-
-    if not math.isfinite(number) or number < 0:
-        return None
-
-    return int(number * multiplier)
-
-
-def _iter_size_fields(data: Dict[str, Any], prefix: str = "") -> Iterable[Tuple[str, Any, int]]:
-    for key in FILE_SIZE_BYTE_KEYS:
-        if key in data:
-            yield (f"{prefix}{key}", data.get(key), 1)
-    for key in FILE_SIZE_KIB_KEYS:
-        if key in data:
-            yield (f"{prefix}{key}", data.get(key), 1024)
-
-
 def _extract_size_from_object(data: Any, prefix: str = "") -> Optional[Tuple[int, str]]:
     if not isinstance(data, dict):
         return None
 
-    from .type_utils import extract_file_size
-    size = extract_file_size(data)
-    if size is not None:
-        for field_path, value, multiplier in _iter_size_fields(data, prefix):
-            if _coerce_size_bytes(value, multiplier=multiplier) == size:
-                return size, field_path
+    detail = extract_file_size_detail(data)
+    if detail is not None:
+        size, field_name = detail
+        if field_name:
+            return size, f"{prefix}{field_name}"
         return size, f"{prefix}size"
 
     return None

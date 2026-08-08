@@ -4,6 +4,7 @@ Type Utilities Module
 Unified helper functions for safe data type casting and normalization.
 """
 
+import math
 import re
 from typing import Any, Dict, List
 
@@ -1116,10 +1117,28 @@ def clear_remote_size_cache() -> None:
     _remote_size_cache.clear()
 
 
-def extract_file_size(file_info: Dict[str, Any]) -> Optional[int]:
-    """
-    Extracts file size in bytes from various metadata formats (HuggingFace, CivitAI, CivArchive).
-    """
+def _coerce_size_field(value: Any, multiplier: int = 1) -> Optional[int]:
+    if value is None or value == "" or isinstance(value, bool):
+        return None
+
+    try:
+        if isinstance(value, str):
+            text = value.strip().replace(",", "").replace("_", "")
+            if not text or text.lower() in {"none", "null", "undefined"}:
+                return None
+            number = float(text)
+        else:
+            number = float(value)
+    except (TypeError, ValueError):
+        return None
+
+    if not math.isfinite(number) or number < 0:
+        return None
+
+    return int(number * multiplier)
+
+
+def _extract_file_size_value(file_info: Dict[str, Any]) -> Optional[int]:
     if not isinstance(file_info, dict):
         return None
 
@@ -1155,11 +1174,36 @@ def extract_file_size(file_info: Dict[str, Any]) -> Optional[int]:
             mirrors = [mirrors]
         for mirror in mirrors:
             if isinstance(mirror, dict):
-                size = extract_file_size(mirror)
+                size = _extract_file_size_value(mirror)
                 if size:
                     return size
 
     return None
+
+
+def extract_file_size_detail(
+    file_info: Dict[str, Any],
+) -> Optional[Tuple[int, Optional[str]]]:
+    """Extract a file size and its matching direct metadata field, when available."""
+    size = _extract_file_size_value(file_info)
+    if size is None:
+        return None
+
+    if isinstance(file_info, dict):
+        for key in FILE_SIZE_BYTE_KEYS:
+            if _coerce_size_field(file_info.get(key)) == size:
+                return size, key
+        for key in FILE_SIZE_KIB_KEYS:
+            if _coerce_size_field(file_info.get(key), multiplier=1024) == size:
+                return size, key
+
+    return size, None
+
+
+def extract_file_size(file_info: Dict[str, Any]) -> Optional[int]:
+    """Extract a file size in bytes from supported provider metadata formats."""
+    detail = extract_file_size_detail(file_info)
+    return detail[0] if detail else None
 
 
 def normalize_category_to_model_type(category: str) -> str:

@@ -1,7 +1,7 @@
 import unittest
 
 from core.metadata_audit import extract_metadata_size
-from core.type_utils import extract_file_size
+from core.type_utils import extract_file_size, extract_file_size_detail
 
 
 class FileSizeAliasTests(unittest.TestCase):
@@ -29,7 +29,22 @@ class FileSizeAliasTests(unittest.TestCase):
         metadata = {"size": 1024, "sizeBytes": 2048}
 
         self.assertEqual(2048, extract_file_size(metadata))
+        self.assertEqual((2048, "sizeBytes"), extract_file_size_detail(metadata))
         self.assertEqual((2048, "sizeBytes"), extract_metadata_size(metadata, "model.safetensors"))
+
+    def test_detail_keeps_legacy_direct_field_matching_order(self):
+        self.assertEqual(
+            (2048, "size"),
+            extract_file_size_detail({"size": 2048, "sizeBytes": 2048}),
+        )
+        self.assertEqual(
+            (2048, "sizeBytes"),
+            extract_file_size_detail({"sizeKB": 2, "sizeBytes": 2048}),
+        )
+        self.assertEqual(
+            (300, None),
+            extract_file_size_detail({"lfs": {"size": 300}}),
+        )
 
 
 if __name__ == "__main__":
