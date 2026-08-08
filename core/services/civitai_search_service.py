@@ -1,46 +1,11 @@
 """CivitAI model search service."""
 
 from .. import path_utils
+from ..metadata_utils import build_metadata_source_payload
 from ..request_utils import extract_request_sha256
 from ..routes.context import RouteContext
 from ..sources.common import collect_download_urls
 from .model_utils import CivitAISearchDependencies, ModelServiceDependencies
-
-
-def _build_metadata_sidecar_payload(
-    *,
-    source,
-    details_source,
-    filename,
-    category,
-    model_name,
-    model_type,
-    sha256,
-    size,
-    result,
-    description,
-    version_description,
-    extra_fields=None,
-):
-    payload = {
-        "source": source,
-        "details_source": details_source,
-        "filename": filename,
-        "category": category,
-        "model_name": model_name,
-        "name": model_name,
-        "model_type": model_type,
-        "sha256": sha256,
-        "size": size,
-        "base_model": result.get("base_model"),
-        "base_model_source": result.get("base_model_source"),
-        "base_model_inferred": bool(result.get("base_model_inferred")),
-        "description": description,
-        "model_description": description,
-        "version_description": version_description,
-    }
-    payload.update(extra_fields or {})
-    return payload
 
 
 class CivitAISearchService(ModelServiceDependencies):
@@ -489,7 +454,7 @@ class CivitAISearchService(ModelServiceDependencies):
                 model_type = result.get("model_type", "") or result.get(
                     "type", ""
                 )
-                metadata_payload = _build_metadata_sidecar_payload(
+                metadata_payload = build_metadata_source_payload(
                     source=source_name,
                     details_source=result.get("details_source") or source_name,
                     filename=filename,
@@ -591,7 +556,7 @@ class CivitAISearchService(ModelServiceDependencies):
                             split_result_descriptions(result)
                         )
                         model_type = result.get("model_type", "")
-                        metadata_payload = _build_metadata_sidecar_payload(
+                        metadata_payload = build_metadata_source_payload(
                             source="metadata_import",
                             details_source=result.get("source") or "metadata",
                             filename=filename,
@@ -858,7 +823,7 @@ class CivitAISearchService(ModelServiceDependencies):
                 model_description = response.get("model_description") or response.get(
                     "description"
                 ) or ""
-                metadata_payload = _build_metadata_sidecar_payload(
+                metadata_payload = build_metadata_source_payload(
                     source="local",
                     details_source=response.get("details_source") or "",
                     filename=filename,

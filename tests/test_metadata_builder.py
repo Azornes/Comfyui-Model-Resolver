@@ -13,11 +13,57 @@ from core.metadata_builder import (
     build_missing_local_metadata,
     normalize_metadata_build_mode,
 )
-from core.metadata_utils import build_sidecar_file_identity, merge_counted_payload
+from core.metadata_utils import (
+    build_metadata_source_payload,
+    build_sidecar_file_identity,
+    merge_counted_payload,
+)
 from core.path_utils import get_model_resolver_sidecar_path
 
 
 class MetadataBuilderTests(unittest.TestCase):
+    def test_build_metadata_source_payload_preserves_common_source_fields(self):
+        payload = build_metadata_source_payload(
+            source="civitai",
+            details_source="civitai",
+            filename="model.safetensors",
+            category="checkpoints",
+            model_name="Example Model",
+            model_type="Checkpoint",
+            sha256="a" * 64,
+            size=1234,
+            result={
+                "base_model": "SDXL",
+                "base_model_source": "civitai",
+                "base_model_inferred": 1,
+            },
+            description="Model description",
+            version_description="Version description",
+            extra_fields={"author": "Author", "size": 5678},
+        )
+
+        self.assertEqual(
+            {
+                "source": "civitai",
+                "details_source": "civitai",
+                "filename": "model.safetensors",
+                "category": "checkpoints",
+                "model_name": "Example Model",
+                "name": "Example Model",
+                "model_type": "Checkpoint",
+                "sha256": "a" * 64,
+                "size": 5678,
+                "base_model": "SDXL",
+                "base_model_source": "civitai",
+                "base_model_inferred": True,
+                "description": "Model description",
+                "model_description": "Model description",
+                "version_description": "Version description",
+                "author": "Author",
+            },
+            payload,
+        )
+
     def test_build_sidecar_file_identity_returns_common_schema_fields(self):
         identity = build_sidecar_file_identity(
             r"models\example.safetensors",

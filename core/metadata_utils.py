@@ -11,6 +11,43 @@ from .path_utils import (
 )
 
 
+def build_metadata_source_payload(
+    *,
+    source: str,
+    details_source: str,
+    filename: str,
+    category: str,
+    model_name: str,
+    model_type: str,
+    sha256: str,
+    size: Any,
+    result: Dict[str, Any],
+    description: str,
+    version_description: str,
+    extra_fields: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Build the normalized source payload passed to the sidecar writer."""
+    payload = {
+        "source": source,
+        "details_source": details_source,
+        "filename": filename,
+        "category": category,
+        "model_name": model_name,
+        "name": model_name,
+        "model_type": model_type,
+        "sha256": sha256,
+        "size": size,
+        "base_model": result.get("base_model"),
+        "base_model_source": result.get("base_model_source"),
+        "base_model_inferred": bool(result.get("base_model_inferred")),
+        "description": description,
+        "model_description": description,
+        "version_description": version_description,
+    }
+    payload.update(extra_fields or {})
+    return payload
+
+
 def build_sidecar_file_identity(
     model_path: str,
     *,
