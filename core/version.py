@@ -4,7 +4,7 @@ import os
 import re
 import threading
 import time
-from typing import Any
+from typing import Any, Callable
 
 from .log_system import create_module_logger
 
@@ -46,48 +46,56 @@ def _version_sort_key(version: str) -> tuple[int, ...]:
     return tuple(int(part) for part in re.findall(r"\d+", str(version or "")))
 
 
-def _fetch_github_project_version(request_source_response: Any) -> str:
-    """Fetch the published version from GitHub, retrying every failed attempt."""
-    for attempt in range(1, PROJECT_VERSION_MAX_ATTEMPTS + 1):
+def _fetch_remote_project_version(
+    request_source_response: Any,
+    *,
+    url: str,
+    log_name: str,
+    log_prefix: str,
+    max_attempts: int,
+    parse_response: Callable[[Any], str],
+    invalid_response_message: str,
+) -> str:
+    """Fetch and parse a remote project version with shared response handling."""
+    for attempt in range(1, max_attempts + 1):
         response = None
+        attempt_suffix = (
+            f" attempt {attempt}/{max_attempts}" if max_attempts > 1 else ""
+        )
         try:
             response = request_source_response(
-                PROJECT_GITHUB_PYPROJECT_URL,
+                url,
                 timeout=PROJECT_VERSION_REQUEST_TIMEOUT_SECONDS,
                 max_attempts=1,
-                log_name="GitHub version check",
+                log_name=log_name,
             )
             if response is None:
-                log.warning(
-                    f"GitHub version check attempt {attempt}/{PROJECT_VERSION_MAX_ATTEMPTS} "
-                    "failed: no response"
-                )
+                log.warning(f"{log_prefix}{attempt_suffix} failed: no response")
                 continue
 
             status_code = getattr(response, "status_code", None)
             if status_code != 200:
                 log.warning(
-                    f"GitHub version check attempt {attempt}/{PROJECT_VERSION_MAX_ATTEMPTS} "
-                    f"failed: HTTP {status_code}"
+                    f"{log_prefix}{attempt_suffix} failed: HTTP {status_code}"
                 )
                 continue
 
-            version = _extract_project_version(response.text)
+            version = str(parse_response(response) or "").strip()
             if version:
-                log.debug(
-                    f"GitHub version check succeeded on attempt "
-                    f"{attempt}/{PROJECT_VERSION_MAX_ATTEMPTS}: v{version}"
+                success_suffix = (
+                    f" succeeded on attempt {attempt}/{max_attempts}: v{version}"
+                    if max_attempts > 1
+                    else f" succeeded: v{version}"
                 )
+                log.debug(f"{log_prefix}{success_suffix}")
                 return version
 
             log.warning(
-                f"GitHub version check attempt {attempt}/{PROJECT_VERSION_MAX_ATTEMPTS} "
-                "failed: response did not contain a valid version"
+                f"{log_prefix}{attempt_suffix} failed: {invalid_response_message}"
             )
         except Exception as exc:
             log.warning(
-                f"GitHub version check attempt {attempt}/{PROJECT_VERSION_MAX_ATTEMPTS} "
-                f"failed: {exc}"
+                f"{log_prefix}{attempt_suffix} failed: {exc}"
             )
         finally:
             if response is not None:
@@ -99,47 +107,36 @@ def _fetch_github_project_version(request_source_response: Any) -> str:
     return ""
 
 
+def _parse_registry_project_version(response: Any) -> str:
+    payload = response.json()
+    version = payload.get("version") if isinstance(payload, dict) else ""
+    return str(version or "").strip()
+
+
+def _fetch_github_project_version(request_source_response: Any) -> str:
+    """Fetch the published version from GitHub, retrying every failed attempt."""
+    return _fetch_remote_project_version(
+        request_source_response,
+        url=PROJECT_GITHUB_PYPROJECT_URL,
+        log_name="GitHub version check",
+        log_prefix="GitHub version check",
+        max_attempts=PROJECT_VERSION_MAX_ATTEMPTS,
+        parse_response=lambda response: _extract_project_version(response.text),
+        invalid_response_message="response did not contain a valid version",
+    )
+
+
 def _fetch_registry_project_version(request_source_response: Any) -> str:
     """Fetch the latest installable version from the Comfy Registry fallback."""
-    response = None
-    try:
-        response = request_source_response(
-            PROJECT_REGISTRY_INSTALL_URL,
-            timeout=PROJECT_VERSION_REQUEST_TIMEOUT_SECONDS,
-            max_attempts=1,
-            log_name="Comfy Registry install version check",
-        )
-        if response is None:
-            log.warning("Comfy Registry install version check failed: no response")
-            return ""
-
-        status_code = getattr(response, "status_code", None)
-        if status_code != 200:
-            log.warning(
-                f"Comfy Registry install version check failed: HTTP {status_code}"
-            )
-            return ""
-
-        payload = response.json()
-        version = payload.get("version") if isinstance(payload, dict) else ""
-        version = str(version or "").strip()
-        if version:
-            log.debug(f"Comfy Registry install version check succeeded: v{version}")
-            return version
-
-        log.warning(
-            "Comfy Registry install version check failed: response did not contain version"
-        )
-    except Exception as exc:
-        log.warning(f"Comfy Registry install version check failed: {exc}")
-    finally:
-        if response is not None:
-            try:
-                response.close()
-            except Exception:
-                pass
-
-    return ""
+    return _fetch_remote_project_version(
+        request_source_response,
+        url=PROJECT_REGISTRY_INSTALL_URL,
+        log_name="Comfy Registry install version check",
+        log_prefix="Comfy Registry install version check",
+        max_attempts=1,
+        parse_response=_parse_registry_project_version,
+        invalid_response_message="response did not contain version",
+    )
 
 
 def _get_project_version_info() -> dict[str, Any]:

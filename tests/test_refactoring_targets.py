@@ -316,6 +316,26 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(version_module._version_sort_key("v1.10.2-beta"), (1, 10, 2))
         self.assertEqual(version_module._version_sort_key("unknown"), ())
 
+    def test_project_version_fetch_helper_parses_and_closes_response(self):
+        version_module = importlib.import_module("comfyui-model-resolver.core.version")
+        response = MagicMock(status_code=200, text='version = "2.0.0"')
+        request_source_response = MagicMock(return_value=response)
+
+        result = version_module._fetch_remote_project_version(
+            request_source_response,
+            url="https://example.com/pyproject.toml",
+            log_name="version test",
+            log_prefix="Version test",
+            max_attempts=1,
+            parse_response=lambda current_response: version_module._extract_project_version(
+                current_response.text
+            ),
+            invalid_response_message="response did not contain a valid version",
+        )
+
+        self.assertEqual(result, "2.0.0")
+        response.close.assert_called_once_with()
+
     def test_route_context_merges_namespaces_and_validates_required_values(self):
         context_module = importlib.import_module(
             "comfyui-model-resolver.core.routes.context"
