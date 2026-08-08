@@ -3,7 +3,29 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from core.request_utils import read_optional_object_payload
+from core.request_utils import extract_request_sha256, read_optional_object_payload
+
+
+def test_extract_request_sha256_preserves_alias_precedence_and_normalization():
+    sha256 = "a" * 64
+
+    assert extract_request_sha256(
+        {
+            "sha256": "",
+            "hash": f"sha256:{sha256.upper()}",
+            "file_hash": "b" * 64,
+        },
+        keys=("sha256", "hash", "file_hash"),
+    ) == sha256
+    assert extract_request_sha256(
+        {"sha256": "invalid", "hash": sha256},
+        keys=("sha256", "hash"),
+    ) == ""
+    assert extract_request_sha256(
+        {"SHA256": sha256},
+        keys=("sha256", "hash", "SHA256"),
+    ) == sha256
+    assert extract_request_sha256({}, keys=("sha256", "hash")) == ""
 
 
 @pytest.mark.asyncio

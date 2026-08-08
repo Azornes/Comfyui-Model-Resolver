@@ -6,7 +6,7 @@ import uuid
 
 from .. import path_utils
 from ..local_hash_matches import collect_local_hash_matches_for_result
-from ..request_utils import validate_workflow_payload
+from ..request_utils import extract_request_sha256, validate_workflow_payload
 from ..routes.context import RouteContext
 
 
@@ -254,11 +254,9 @@ class HashService:
     async def local_matches_by_hash(self, request):
         """Search local model metadata sidecars for a remote SHA256."""
         data = await request.json()
-        sha256 = self.normalize_sha256(
-            data.get("sha256")
-            or data.get("hash")
-            or data.get("SHA256")
-            or ""
+        sha256 = extract_request_sha256(
+            data,
+            keys=("sha256", "hash", "SHA256"),
         )
         if not sha256:
             return self.web.json_response(

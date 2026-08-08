@@ -1,6 +1,7 @@
 """CivitAI model search service."""
 
 from .. import path_utils
+from ..request_utils import extract_request_sha256
 from ..routes.context import RouteContext
 from ..sources.common import collect_download_urls
 from .model_utils import CivitAISearchDependencies, ModelServiceDependencies
@@ -61,7 +62,6 @@ class CivitAISearchService(ModelServiceDependencies):
         is_path_in_configured_model_roots = self.is_path_in_configured_model_roots
         looks_like_model_file = self.looks_like_model_file
         normalize_category_to_model_type = self.normalize_category_to_model_type
-        normalize_sha256 = self.normalize_sha256
         read_json_safe = self.read_json_safe
         request_public_url = self.request_public_url
         resolve_civarchive_by_hash = self.resolve_civarchive_by_hash
@@ -77,11 +77,9 @@ class CivitAISearchService(ModelServiceDependencies):
         force_refresh = to_bool(
             data.get("force_refresh") or data.get("force"), False
         )
-        provided_hash = normalize_sha256(
-            data.get("sha256")
-            or data.get("hash")
-            or data.get("file_hash")
-            or ""
+        provided_hash = extract_request_sha256(
+            data,
+            keys=("sha256", "hash", "file_hash"),
         )
         hf_token = data.get("hf_token", "")
         brave_search_api_key = data.get("brave_search_api_key", "")

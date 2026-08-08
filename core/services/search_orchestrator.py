@@ -1,8 +1,8 @@
 """Request orchestration for model source searches."""
 
 from ..local_hash_matches import collect_local_hash_matches_for_result
+from ..request_utils import extract_request_sha256
 from ..routes.context import RouteContext
-from ..type_utils import normalize_sha256
 from .search_cache import SearchResultCache
 from .search_dependencies import SearchDependencies
 from .search_providers import (
@@ -138,8 +138,9 @@ class SearchOrchestrator:
         try:
             data = await request.json()
             filename = str(data.get("filename", "") or "").strip()
-            sha256 = normalize_sha256(
-                data.get("sha256") or data.get("hash") or data.get("file_hash")
+            sha256 = extract_request_sha256(
+                data,
+                keys=("sha256", "hash", "file_hash"),
             )
             category = data.get("category", "")
             base_model_context = data.get("base_model_context", "")
