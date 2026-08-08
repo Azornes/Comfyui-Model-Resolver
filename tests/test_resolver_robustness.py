@@ -29,10 +29,18 @@ from core.settings import (
     _resolve_base_model_mapping,
 )
 
-from core.progress import JobProgressTracker
+from core.progress import JobProgressTracker, generate_progress_id
 
 
 class ModelResolverRobustnessTests(unittest.TestCase):
+
+    def test_progress_id_generation_preserves_prefix_and_uuid_shape(self):
+        metadata_id = generate_progress_id("metadata_build")
+        hash_id = generate_progress_id("hash")
+
+        self.assertRegex(metadata_id, r"^metadata_build_[0-9a-f]{32}$")
+        self.assertRegex(hash_id, r"^hash_[0-9a-f]{32}$")
+        self.assertNotEqual(metadata_id, hash_id)
 
     def test_download_match_paths_use_a_normalized_absolute_comparison_key(self):
         raw_path = "  models{}..{}checkpoints{}model.safetensors  ".format(

@@ -1,7 +1,6 @@
 """Metadata audit and build orchestration used by HTTP route adapters."""
 
-import uuid
-
+from ..progress import generate_progress_id
 from ..request_utils import read_optional_object_payload
 from ..routes.context import RouteContext
 
@@ -64,7 +63,7 @@ class MetadataService:
             payload.get("metadata_mode")
         )
         self.metadata_builder_progress.cleanup()
-        progress_id = f"metadata_build_{uuid.uuid4().hex}"
+        progress_id = generate_progress_id("metadata_build")
         self.metadata_builder_progress.update(
             progress_id,
             status="queued",

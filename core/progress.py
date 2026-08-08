@@ -2,11 +2,17 @@
 
 import threading
 import time
+import uuid
 from typing import Any, Callable, Dict, Optional
 
 from .log_system import create_module_logger
 
 log = create_module_logger(__name__)
+
+
+def generate_progress_id(prefix: str) -> str:
+    """Generate an opaque progress ID with a stable caller-provided prefix."""
+    return f"{prefix}_{uuid.uuid4().hex}"
 
 
 class JobProgressTracker:

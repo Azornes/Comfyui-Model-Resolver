@@ -2,10 +2,10 @@
 
 import os
 import time
-import uuid
 
 from .. import path_utils
 from ..local_hash_matches import collect_local_hash_matches_for_result
+from ..progress import generate_progress_id
 from ..request_utils import extract_request_sha256, validate_workflow_payload
 from ..routes.context import RouteContext
 
@@ -608,7 +608,7 @@ class HashService:
             return error_response
 
         self.hash_tracker.cleanup()
-        progress_id = f"hash_{uuid.uuid4().hex}"
+        progress_id = generate_progress_id("hash")
         self.hash_tracker.update(
             progress_id,
             status="queued",
