@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { Window } from 'happy-dom';
 import {
   html,
+  getFilenameFromPath,
   normalizePathIdentity,
   pollBackgroundTask,
   safeStorage,
@@ -63,6 +64,7 @@ void normalizeSha256;
 void pollBackgroundTask;
 void buildLoadedModelTokenStrings;
 void groupLoadedModelsByCategory;
+void getFilenameFromPath;
 
 const projectRoot = path.resolve(import.meta.dirname, '..');
 const getSvgIcon = () => '';
@@ -3615,6 +3617,23 @@ test('model info hash readers preserve field precedence and casing', () => {
   assert.equal(getInfoDialogHash({ hashes: { sha256: ' NestedHash ' } }), 'NestedHash');
   assert.equal(getSourceModelFileHash({}), '');
   assert.equal(getSourceModelDisplayHash({}), '');
+});
+
+test('source model comparable filenames preserve basename and trailing separator behavior', () => {
+  const getSourceModelComparableFilename = eval(
+    `(${extractMethod(modelInfoMethodsSource, 'getSourceModelComparableFilename')})`
+  );
+
+  assert.equal(
+    getSourceModelComparableFilename('Models\\Checkpoints\\Model.SAFE TENSORS'),
+    'model.safe tensors',
+  );
+  assert.equal(
+    getSourceModelComparableFilename('models/checkpoints/model.safetensors/'),
+    '',
+  );
+  assert.equal(getSourceModelComparableFilename('  model.safetensors  '), 'model.safetensors');
+  assert.equal(getSourceModelComparableFilename(''), '');
 });
 
 test('model info metadata source labels match the shared source label contract', () => {

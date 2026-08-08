@@ -2961,9 +2961,9 @@ export const modelInfoMethods = {
     },
 
     getSourceModelComparableFilename(value = '') {
-        return String(value || '')
-            .split(/[\\/]+/)
-            .pop()
+        const normalizedValue = String(value || '');
+        if (/[\\/]+$/.test(normalizedValue)) return '';
+        return getFilenameFromPath(normalizedValue)
             .trim()
             .toLowerCase();
     },
