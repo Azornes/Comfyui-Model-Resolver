@@ -1087,6 +1087,7 @@ export const modelInfoMethods = {
                 <div class="mr-info-dialog-footer">
                     <button class="mr-btn mr-btn-secondary mr-info-dialog-close-btn">Close</button>
                 </div>
+                <div class="mr-info-dialog-resize-handle" aria-hidden="true"></div>
             </div>
         `;
 
@@ -1623,7 +1624,179 @@ export const modelInfoMethods = {
 
     bindInfoDialogResizePersistence(dialog) {
         const panel = this.getInfoDialogElement(dialog);
-        if (!panel || typeof ResizeObserver === 'undefined') return;
+        const resizeHandle = panel?.querySelector('.mr-info-dialog-resize-handle');
+        if (!panel || !resizeHandle || dialog._infoDialogResizeStartHandler) return;
+
+        const resizeStartEventName = typeof PointerEvent === 'function' ? 'pointerdown' : 'mousedown';
+        const resizeEndEventName = typeof PointerEvent === 'function' ? 'pointerup' : 'mouseup';
+        const resizeCancelEventName = typeof PointerEvent === 'function' ? 'pointercancel' : null;
+        const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+        const getCssNumber = (value, fallback = 0) => {
+            const parsed = Number.parseFloat(value);
+            return Number.isFinite(parsed) ? parsed : fallback;
+        };
+        const toCssSize = (outerSize, borderSize, boxSizing) => (
+            boxSizing === 'border-box'
+                ? outerSize
+                : Math.max(1, outerSize - borderSize)
+        );
+        const getResizeMetrics = () => {
+            const rect = panel.getBoundingClientRect();
+            const computed = typeof getComputedStyle === 'function' ? getComputedStyle(panel) : null;
+            const boxSizing = computed?.boxSizing || 'content-box';
+            const borderWidth = getCssNumber(computed?.borderLeftWidth) + getCssNumber(computed?.borderRightWidth);
+            const borderHeight = getCssNumber(computed?.borderTopWidth) + getCssNumber(computed?.borderBottomWidth);
+            const minWidth = Math.max(
+                1,
+                getCssNumber(computed?.minWidth, 420) + (boxSizing === 'border-box' ? 0 : borderWidth)
+            );
+            const minHeight = Math.max(
+                1,
+                getCssNumber(computed?.minHeight, 320) + (boxSizing === 'border-box' ? 0 : borderHeight)
+            );
+            const viewportWidth = window.innerWidth || document.documentElement.clientWidth || rect.right;
+            const viewportHeight = window.innerHeight || document.documentElement.clientHeight || rect.bottom;
+            const centerX = rect.left + (rect.width / 2);
+            const centerY = rect.top + (rect.height / 2);
+
+            return {
+                rect,
+                boxSizing,
+                borderWidth,
+                borderHeight,
+                minWidth,
+                minHeight,
+                maxWidth: Math.max(minWidth, 2 * Math.min(centerX, Math.max(0, viewportWidth - centerX))),
+                maxHeight: Math.max(minHeight, 2 * Math.min(centerY, Math.max(0, viewportHeight - centerY)))
+            };
+        };
+        const updateViewportLimits = () => {
+            if (!dialog._infoDialogResizeHasCustomLimits) return;
+
+            const metrics = getResizeMetrics();
+            panel.style.maxWidth = `${Math.round(toCssSize(metrics.maxWidth, metrics.borderWidth, metrics.boxSizing))}px`;
+            panel.style.maxHeight = `${Math.round(toCssSize(metrics.maxHeight, metrics.borderHeight, metrics.boxSizing))}px`;
+            if (dialog._infoDialogResizeState) {
+                dialog._infoDialogResizeState.maxWidth = metrics.maxWidth;
+                dialog._infoDialogResizeState.maxHeight = metrics.maxHeight;
+            }
+        };
+
+        const applyResize = (state) => {
+            if (!state || dialog._infoDialogResizeState !== state) return;
+            panel.style.width = `${Math.round(toCssSize(state.pendingWidth, state.borderWidth, state.boxSizing))}px`;
+            panel.style.height = `${Math.round(toCssSize(state.pendingHeight, state.borderHeight, state.boxSizing))}px`;
+        };
+
+        const finishResize = ({ flush = false } = {}) => {
+            const state = dialog._infoDialogResizeState;
+            if (!state) return false;
+            if (state.animationFrame) {
+                cancelAnimationFrame(state.animationFrame);
+                state.animationFrame = null;
+            }
+            if (flush) applyResize(state);
+
+            document.removeEventListener(state.moveEventName, state.moveHandler, true);
+            document.removeEventListener(state.endEventName, state.endHandler, true);
+            if (state.cancelEventName) {
+                document.removeEventListener(state.cancelEventName, state.cancelHandler, true);
+            }
+            window.removeEventListener('blur', state.blurHandler);
+            dialog._infoDialogResizeState = null;
+            panel.classList.remove('is-resizing');
+            this.saveInfoDialogSize(dialog);
+            return true;
+        };
+
+        const startResize = (event) => {
+            if (event.button !== undefined && event.button !== 0) return;
+            if (event.isPrimary === false) return;
+
+            const clientX = Number(event.clientX);
+            const clientY = Number(event.clientY);
+            if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return;
+
+            finishResize({ flush: true });
+            event.preventDefault?.();
+            event.stopPropagation?.();
+
+            const metrics = getResizeMetrics();
+            const {
+                rect,
+                boxSizing,
+                borderWidth,
+                borderHeight,
+                minWidth,
+                minHeight,
+                maxWidth,
+                maxHeight
+            } = metrics;
+            dialog._infoDialogResizeHasCustomLimits = true;
+            updateViewportLimits();
+            const state = {
+                startX: clientX,
+                startY: clientY,
+                startWidth: rect.width,
+                startHeight: rect.height,
+                minWidth,
+                minHeight,
+                maxWidth,
+                maxHeight,
+                borderWidth,
+                borderHeight,
+                boxSizing,
+                pendingWidth: rect.width,
+                pendingHeight: rect.height,
+                pointerId: event.pointerId,
+                moveEventName: typeof PointerEvent === 'function' ? 'pointermove' : 'mousemove',
+                endEventName: resizeEndEventName,
+                cancelEventName: resizeCancelEventName,
+                animationFrame: null,
+                moveHandler: null,
+                endHandler: null,
+                cancelHandler: null,
+                blurHandler: null
+            };
+
+            panel.classList.add('is-resizing');
+            state.moveHandler = (moveEvent) => {
+                if (state.pointerId !== undefined && moveEvent.pointerId !== state.pointerId) return;
+                const moveX = Number(moveEvent.clientX);
+                const moveY = Number(moveEvent.clientY);
+                const deltaX = (Number.isFinite(moveX) ? moveX : state.startX) - state.startX;
+                const deltaY = (Number.isFinite(moveY) ? moveY : state.startY) - state.startY;
+                state.pendingWidth = clamp(state.startWidth + (deltaX * 2), state.minWidth, state.maxWidth);
+                state.pendingHeight = clamp(state.startHeight + (deltaY * 2), state.minHeight, state.maxHeight);
+                if (state.animationFrame) return;
+                state.animationFrame = requestAnimationFrame(() => {
+                    state.animationFrame = null;
+                    applyResize(state);
+                });
+            };
+            state.endHandler = () => finishResize({ flush: true });
+            state.cancelHandler = state.endHandler;
+            state.blurHandler = state.endHandler;
+            dialog._infoDialogResizeState = state;
+
+            document.addEventListener(state.moveEventName, state.moveHandler, true);
+            document.addEventListener(state.endEventName, state.endHandler, true);
+            if (state.cancelEventName) {
+                document.addEventListener(state.cancelEventName, state.cancelHandler, true);
+            }
+            window.addEventListener('blur', state.blurHandler, { once: true });
+        };
+
+        resizeHandle.addEventListener(resizeStartEventName, startResize, true);
+
+        dialog._infoDialogResizeStartHandler = startResize;
+        dialog._infoDialogResizeHandle = resizeHandle;
+        dialog._infoDialogResizeStartEventName = resizeStartEventName;
+        dialog._infoDialogResizeFinishHandler = finishResize;
+        dialog._infoDialogResizeViewportHandler = updateViewportLimits;
+        window.addEventListener('resize', updateViewportLimits);
+
+        if (typeof ResizeObserver === 'undefined') return;
         if (dialog._infoDialogResizeObserver) return;
 
         let resizeSaveTimer = null;
@@ -3464,6 +3637,22 @@ export const modelInfoMethods = {
      * Close the info dialog
      */
     closeInfoDialog(dialog) {
+        if (dialog?._infoDialogResizeStartHandler) {
+            dialog._infoDialogResizeFinishHandler?.({ flush: true });
+            dialog._infoDialogResizeHandle?.removeEventListener(
+                dialog._infoDialogResizeStartEventName,
+                dialog._infoDialogResizeStartHandler,
+                true
+            );
+            dialog._infoDialogResizeStartHandler = null;
+            dialog._infoDialogResizeHandle = null;
+            dialog._infoDialogResizeFinishHandler = null;
+        }
+        if (dialog?._infoDialogResizeViewportHandler) {
+            window.removeEventListener('resize', dialog._infoDialogResizeViewportHandler);
+            dialog._infoDialogResizeViewportHandler = null;
+        }
+        dialog._infoDialogResizeHasCustomLimits = false;
         if (dialog?._infoDialogResizeObserver) {
             dialog._infoDialogResizeObserver.disconnect();
             dialog._infoDialogResizeObserver = null;
