@@ -1,10 +1,10 @@
 {
-  "updated_at": "2026-08-04T12:47:49+00:00",
-  "last_checked_at": "2026-08-04T12:47:49+00:00",
-  "local_count": 99,
+  "updated_at": "2026-08-09T21:02:51+00:00",
+  "last_checked_at": "2026-08-09T21:02:51+00:00",
+  "local_count": 101,
   "new_models_added": 2,
   "new_models_added_list": [
-    "MageFlow",
-    "MiniMax H3"
+    "Flux 3 Video",
+    "Qwen 3"
   ]
 }

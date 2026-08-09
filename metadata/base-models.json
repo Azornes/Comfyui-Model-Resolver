@@ -673,6 +673,18 @@
         "minimax",
         "minimax h3"
       ]
+    },
+    {
+      "name": "Flux 3 Video",
+      "aliases": [
+        "flux 3 video"
+      ]
+    },
+    {
+      "name": "Qwen 3",
+      "aliases": [
+        "qwen 3"
+      ]
     }
   ]
 }
