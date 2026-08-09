@@ -1136,7 +1136,6 @@
 .mr-missing-detail-pane {
     flex: 0 0 var(--mr-missing-detail-track, 42%);
     overflow-y: auto;
-    scrollbar-gutter: stable;
     background: var(--mr-missing-bg);
 }
 
