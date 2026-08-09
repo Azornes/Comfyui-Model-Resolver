@@ -106,6 +106,7 @@ export class ResolverManagerDialog extends ComfyDialog {
         this.dockButton = null;
         this.undockButton = null;
         this._floatingRectBeforeDock = null;
+        this._modalResizeHandles = [];
         this._dragging = false;
         this._dragStart = null;
         this._dragBounds = null;

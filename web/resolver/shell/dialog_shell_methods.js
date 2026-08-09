@@ -3,6 +3,10 @@ import { $el } from "../../../../../scripts/ui.js";
 import { getSvgIcon } from "../../utils/icon_utils.js";
 import { isSidebarButtonActive } from "../utils/dom_patch_utils.js";
 import { safeStorage } from "../utils/html_utils.js";
+
+const MODAL_RESIZE_EDGES = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'];
+const MODAL_RESIZE_EDGE_SET = new Set(MODAL_RESIZE_EDGES);
+
 export const dialogShellMethods = {
     createHeader() {
         // Create tabs
@@ -162,24 +166,34 @@ export const dialogShellMethods = {
     },
 
     installModalResizeHandle() {
-        if (!this.element || this._modalResizeHandle?.isConnected) return;
+        if (!this.element) return;
+        if (this._modalResizeHandles?.some((handle) => handle?.isConnected)) return;
 
-        const handle = $el("div.mr-modal-resize-handle", {
-            id: "model-resolver-resize-handle",
-            ariaHidden: "true"
-        });
         const eventName = typeof PointerEvent === 'function' ? 'pointerdown' : 'mousedown';
-        this._modalResizeStartHandler = (event) => this.startModalResize(event);
-        handle.addEventListener(eventName, this._modalResizeStartHandler, true);
-        this._modalResizeHandle = handle;
+        const handles = MODAL_RESIZE_EDGES.map((edge) => {
+            const handle = $el(`div.mr-modal-resize-handle.mr-modal-resize-handle--${edge}`, {
+                id: `model-resolver-resize-handle-${edge}`,
+                ariaHidden: "true"
+            });
+            handle.addEventListener(eventName, (event) => this.startModalResize(event, edge), true);
+            this.element.appendChild(handle);
+            return handle;
+        });
+
+        this._modalResizeHandles = handles;
         this._modalResizeStartEventName = eventName;
-        this.element.appendChild(handle);
     },
 
-    startModalResize(event) {
+    startModalResize(event, edge = 'se') {
         if (!this.element || this.docked || this.fullscreen) return;
         if (event.button !== undefined && event.button !== 0) return;
         if (event.isPrimary === false) return;
+
+        const resizeEdge = MODAL_RESIZE_EDGE_SET.has(edge) ? edge : 'se';
+        const resizesLeft = resizeEdge.includes('w');
+        const resizesRight = resizeEdge.includes('e');
+        const resizesTop = resizeEdge.includes('n');
+        const resizesBottom = resizeEdge.includes('s');
 
         this.finishModalResize({ flush: true });
         event.preventDefault?.();
@@ -195,21 +209,41 @@ export const dialogShellMethods = {
         const minHeight = Math.max(1, Number.parseFloat(computed?.minHeight) || 420);
         const startWidth = Math.max(minWidth, Number(rect.width) || this.element.offsetWidth || minWidth);
         const startHeight = Math.max(minHeight, Number(rect.height) || this.element.offsetHeight || minHeight);
+        const startLeft = Number.isFinite(Number(rect.left)) ? Number(rect.left) : 0;
+        const startTop = Number.isFinite(Number(rect.top)) ? Number(rect.top) : 0;
+        const startRight = startLeft + startWidth;
+        const startBottom = startTop + startHeight;
+        const viewportPadding = 4;
         const state = {
+            edge: resizeEdge,
             startX: Number(event.clientX) || 0,
             startY: Number(event.clientY) || 0,
+            startLeft,
+            startTop,
+            startRight,
+            startBottom,
             startWidth,
             startHeight,
             minWidth,
             minHeight,
-            maxWidth: Math.max(minWidth, startWidth, viewportWidth - rect.left),
-            maxHeight: Math.max(minHeight, startHeight, viewportHeight - rect.top),
+            maxWidth: resizesLeft
+                ? Math.max(minWidth, startWidth, startRight - viewportPadding)
+                : resizesRight
+                    ? Math.max(minWidth, startWidth, viewportWidth - startLeft - viewportPadding)
+                    : startWidth,
+            maxHeight: resizesTop
+                ? Math.max(minHeight, startHeight, startBottom - viewportPadding)
+                : resizesBottom
+                    ? Math.max(minHeight, startHeight, viewportHeight - startTop - viewportPadding)
+                    : startHeight,
             pointerId: event.pointerId,
             moveEventName: typeof PointerEvent === 'function' ? 'pointermove' : 'mousemove',
             endEventName: typeof PointerEvent === 'function' ? 'pointerup' : 'mouseup',
             cancelEventName: typeof PointerEvent === 'function' ? 'pointercancel' : null,
-            pendingWidth: Number(rect.width) || minWidth,
-            pendingHeight: Number(rect.height) || minHeight,
+            pendingLeft: startLeft,
+            pendingTop: startTop,
+            pendingWidth: startWidth,
+            pendingHeight: startHeight,
             animationFrame: null,
             moveHandler: null,
             endHandler: null,
@@ -221,15 +255,42 @@ export const dialogShellMethods = {
         this.element.style.left = `${Math.round(rect.left)}px`;
         this.element.style.transform = 'none';
         this.element.style.resize = 'none';
-        this.element.style.willChange = 'width, height';
+        this.element.style.willChange = 'top, left, width, height';
         this.element.classList.add('is-resizing');
 
         state.moveHandler = (moveEvent) => {
             if (state.pointerId !== undefined && moveEvent.pointerId !== state.pointerId) return;
-            const nextWidth = state.startWidth + ((Number(moveEvent.clientX) || state.startX) - state.startX);
-            const nextHeight = state.startHeight + ((Number(moveEvent.clientY) || state.startY) - state.startY);
-            state.pendingWidth = Math.min(state.maxWidth, Math.max(state.minWidth, nextWidth));
-            state.pendingHeight = Math.min(state.maxHeight, Math.max(state.minHeight, nextHeight));
+            const clientX = Number(moveEvent.clientX);
+            const clientY = Number(moveEvent.clientY);
+            const deltaX = (Number.isFinite(clientX) ? clientX : state.startX) - state.startX;
+            const deltaY = (Number.isFinite(clientY) ? clientY : state.startY) - state.startY;
+            let nextLeft = state.startLeft;
+            let nextTop = state.startTop;
+            let nextWidth = state.startWidth;
+            let nextHeight = state.startHeight;
+
+            if (resizesLeft) {
+                nextWidth = state.startWidth - deltaX;
+            } else if (resizesRight) {
+                nextWidth = state.startWidth + deltaX;
+            }
+            if (resizesTop) {
+                nextHeight = state.startHeight - deltaY;
+            } else if (resizesBottom) {
+                nextHeight = state.startHeight + deltaY;
+            }
+
+            if (resizesLeft || resizesRight) {
+                state.pendingWidth = Math.min(state.maxWidth, Math.max(state.minWidth, nextWidth));
+                nextLeft = resizesLeft ? state.startRight - state.pendingWidth : state.startLeft;
+            }
+            if (resizesTop || resizesBottom) {
+                state.pendingHeight = Math.min(state.maxHeight, Math.max(state.minHeight, nextHeight));
+                nextTop = resizesTop ? state.startBottom - state.pendingHeight : state.startTop;
+            }
+
+            state.pendingLeft = nextLeft;
+            state.pendingTop = nextTop;
             if (state.animationFrame) return;
             state.animationFrame = requestAnimationFrame(() => {
                 state.animationFrame = null;
@@ -251,6 +312,8 @@ export const dialogShellMethods = {
 
     applyModalResize(state) {
         if (!state || this._modalResizeState !== state || !this.element) return;
+        this.element.style.left = `${Math.round(state.pendingLeft)}px`;
+        this.element.style.top = `${Math.round(state.pendingTop)}px`;
         this.element.style.width = `${Math.round(state.pendingWidth)}px`;
         this.element.style.height = `${Math.round(state.pendingHeight)}px`;
     },
@@ -743,7 +806,7 @@ export const dialogShellMethods = {
             el.style.maxHeight = '100vh';
             el.style.borderRadius = '0';
             el.style.resize = 'none';
-            this._modalResizeHandle?.style.setProperty('display', 'none');
+            this._modalResizeHandles?.forEach((handle) => handle.style.setProperty('display', 'none'));
             if (btn) {
                 btn.innerHTML = getSvgIcon('windowRestore', 'currentColor', 'mr-window-btn-icon');
                 btn.setAttribute('aria-label', 'Exit full screen');
@@ -757,7 +820,7 @@ export const dialogShellMethods = {
             el.style.maxHeight = '100vh';
             el.style.borderRadius = '8px';
             el.style.resize = 'none';
-            this._modalResizeHandle?.style.removeProperty('display');
+            this._modalResizeHandles?.forEach((handle) => handle.style.removeProperty('display'));
             // Restore saved pre-FS size if available
             let wh = null;
             try { wh = JSON.parse(safeStorage.getItem('model_resolver_modal_size_before_fs') || 'null'); } catch (_e) {}

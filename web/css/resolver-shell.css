@@ -122,17 +122,76 @@
 
 .mr-modal-resize-handle {
     position: absolute;
-    right: 0;
-    bottom: 0;
     z-index: 2;
-    width: 18px;
-    height: 18px;
-    cursor: nwse-resize;
     touch-action: none;
     user-select: none;
 }
 
-.mr-modal-resize-handle::after {
+.mr-modal-resize-handle--n,
+.mr-modal-resize-handle--s {
+    left: 12px;
+    right: 12px;
+    height: 10px;
+    cursor: ns-resize;
+}
+
+.mr-modal-resize-handle--n {
+    top: 0;
+}
+
+.mr-modal-resize-handle--s {
+    bottom: 0;
+}
+
+.mr-modal-resize-handle--e,
+.mr-modal-resize-handle--w {
+    top: 12px;
+    bottom: 12px;
+    width: 10px;
+    cursor: ew-resize;
+}
+
+.mr-modal-resize-handle--e {
+    right: 0;
+}
+
+.mr-modal-resize-handle--w {
+    left: 0;
+}
+
+.mr-modal-resize-handle--ne,
+.mr-modal-resize-handle--se,
+.mr-modal-resize-handle--sw,
+.mr-modal-resize-handle--nw {
+    width: 18px;
+    height: 18px;
+}
+
+.mr-modal-resize-handle--ne {
+    top: 0;
+    right: 0;
+    cursor: nesw-resize;
+}
+
+.mr-modal-resize-handle--se {
+    right: 0;
+    bottom: 0;
+    cursor: nwse-resize;
+}
+
+.mr-modal-resize-handle--sw {
+    left: 0;
+    bottom: 0;
+    cursor: nesw-resize;
+}
+
+.mr-modal-resize-handle--nw {
+    top: 0;
+    left: 0;
+    cursor: nwse-resize;
+}
+
+.mr-modal-resize-handle--se::after {
     content: "";
     position: absolute;
     right: 4px;
@@ -147,7 +206,7 @@
     user-select: none;
 }
 
-.model-resolver-modal.is-resizing .mr-modal-resize-handle::after {
+.model-resolver-modal.is-resizing .mr-modal-resize-handle--se::after {
     opacity: 1;
 }
 
