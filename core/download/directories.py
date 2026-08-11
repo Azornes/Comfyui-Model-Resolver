@@ -87,11 +87,35 @@ def get_download_directory(
 
         return paths[0]
 
+    def _get_folder_paths(folder_name: str) -> List[str]:
+        """Return paths for one key without rejecting the other aliases."""
+        try:
+            return list(folder_paths.get_folder_paths(folder_name) or [])
+        except Exception as exc:
+            facade.log.debug(
+                f"Could not get folder path for {folder_name}: {exc}"
+            )
+            return []
+
+    def _get_folder_names() -> List[str]:
+        """Read folder names across ComfyUI versions."""
+        get_folder_names = getattr(folder_paths, "get_folder_names", None)
+        if callable(get_folder_names):
+            try:
+                return list(get_folder_names() or [])
+            except Exception as exc:
+                facade.log.debug(f"Could not get folder names: {exc}")
+
+        folder_registry = getattr(folder_paths, "folder_names_and_paths", {})
+        if isinstance(folder_registry, dict):
+            return list(folder_registry.keys())
+        return []
+
     try:
         paths = []
         seen_paths = set()
         for candidate_key in folder_keys:
-            for path in folder_paths.get_folder_paths(candidate_key) or []:
+            for path in _get_folder_paths(candidate_key):
                 path_key = _normalize(path)
                 if path_key in seen_paths:
                     continue
@@ -106,11 +130,11 @@ def get_download_directory(
             return _choose_preferred_path(paths, folder_key)
 
         # If category not found, try to get any models directory as fallback.
-        all_names = folder_paths.get_folder_names()
-        if all_names:
-            fallback_paths = folder_paths.get_folder_paths(all_names[0])
+        all_names = _get_folder_names()
+        for fallback_key in all_names:
+            fallback_paths = _get_folder_paths(fallback_key)
             if fallback_paths:
-                return _choose_preferred_path(fallback_paths, all_names[0])
+                return _choose_preferred_path(fallback_paths, fallback_key)
     except Exception as e:
         facade.log.debug(f"Could not get folder path for {folder_key}: {e}")
 
