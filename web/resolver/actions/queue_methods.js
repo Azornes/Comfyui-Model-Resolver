@@ -107,6 +107,11 @@ export const queueMethods = {
             this.queueQueuedTabButton,
             this.queueDownloadsTabButton
         ]);
+        this.queueDownloadsTabs = $el("div.mr-tabs.mr-queue-tabs.mr-downloads-subtabs", {
+            role: "tablist",
+            "aria-label": "Downloads views"
+        });
+        this.queueDownloadsTabs.style.display = 'none';
 
         this.queueHeader = $el("div.mr-queue-header", {}, [
             this.queueClearButton
@@ -127,7 +132,7 @@ export const queueMethods = {
         });
 
         const panel = $el("div.mr-queue-panel", {}, [
-            $el("div.mr-queue-stack", {}, [this.queueTabs, this.queueHeader, this.queueList])
+            $el("div.mr-queue-stack", {}, [this.queueTabs, this.queueDownloadsTabs, this.queueHeader, this.queueList])
         ]);
         return panel;
     },
@@ -164,6 +169,9 @@ export const queueMethods = {
         const clearBtn = this.queueClearButton || this.queueHeader.querySelector('#queue-clear');
         const showActions = activeTab === 'queued';
         this.queueHeader.style.display = showActions ? '' : 'none';
+        if (this.queueDownloadsTabs) {
+            this.queueDownloadsTabs.style.display = activeTab === 'downloads' ? '' : 'none';
+        }
         if (clearBtn) clearBtn.style.display = showActions ? '' : 'none';
         this.updateQueuePanelTabs(list.length, downloads.length, activeTab);
 
@@ -1019,11 +1027,16 @@ export const queueMethods = {
     renderDownloadsPanel(downloads = [], history = this.getDownloadHistory()) {
         const activeSubTab = this.queueDownloadsActiveTab === 'history' ? 'history' : 'active';
         const activeSelected = activeSubTab === 'active';
+        let tabsHtml = '<div class="mr-tabs mr-queue-tabs mr-downloads-subtabs" role="tablist" aria-label="Downloads views">';
+        tabsHtml += `<button type="button" class="mr-tab mr-queue-tab mr-downloads-subtab${activeSelected ? ' mr-tab-active' : ''}" data-downloads-tab="active" aria-selected="${activeSelected ? 'true' : 'false'}"><span class="mr-tab-label">Active (${downloads.length})</span></button>`;
+        tabsHtml += `<button type="button" class="mr-tab mr-queue-tab mr-downloads-subtab${!activeSelected ? ' mr-tab-active' : ''}" data-downloads-tab="history" aria-selected="${!activeSelected ? 'true' : 'false'}"><span class="mr-tab-label">History (${history.length})</span></button>`;
+        tabsHtml += '</div>';
+        if (this.queueDownloadsTabs) {
+            this.queueDownloadsTabs.innerHTML = tabsHtml;
+            this.queueDownloadsTabs.style.display = '';
+        }
         let html = `<div class="mr-downloads-panel" data-downloads-view="${activeSubTab}">`;
-        html += '<div class="mr-tabs mr-queue-tabs mr-downloads-subtabs" role="tablist" aria-label="Downloads views">';
-        html += `<button type="button" class="mr-tab mr-queue-tab mr-downloads-subtab${activeSelected ? ' mr-tab-active' : ''}" data-downloads-tab="active" aria-selected="${activeSelected ? 'true' : 'false'}"><span class="mr-tab-label">Active (${downloads.length})</span></button>`;
-        html += `<button type="button" class="mr-tab mr-queue-tab mr-downloads-subtab${!activeSelected ? ' mr-tab-active' : ''}" data-downloads-tab="history" aria-selected="${!activeSelected ? 'true' : 'false'}"><span class="mr-tab-label">History (${history.length})</span></button>`;
-        html += '</div>';
+        if (!this.queueDownloadsTabs) html += tabsHtml;
         html += activeSelected
             ? this.renderQueueDownloadsHtml(downloads)
             : this.renderDownloadHistoryHtml(history);
@@ -1125,7 +1138,8 @@ export const queueMethods = {
             return this.getDownloadQueueContext?.(progress, info, workflowLabel, downloadId) || null;
         };
 
-        this.queueList.querySelectorAll('.mr-downloads-subtab').forEach(button => {
+        const downloadsTabs = this.queueDownloadsTabs || this.queueList;
+        downloadsTabs.querySelectorAll('.mr-downloads-subtab').forEach(button => {
             if (button._hasListener) return;
             button._hasListener = true;
             button.addEventListener('click', () => {

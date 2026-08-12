@@ -621,6 +621,8 @@
 }
 
 .mr-downloads-subtabs {
+    width: 100%;
+    box-sizing: border-box;
     margin: 0 0 -1px;
 }
 
