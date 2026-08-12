@@ -685,6 +685,13 @@
       "aliases": [
         "qwen 3"
       ]
+    },
+    {
+      "name": "LTXV 2.5",
+      "aliases": [
+        "LTXV 2.5",
+        "ltxv 2 5"
+      ]
     }
   ]
 }

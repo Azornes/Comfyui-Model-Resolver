@@ -1,10 +1,9 @@
 {
-  "updated_at": "2026-08-09T21:02:51+00:00",
-  "last_checked_at": "2026-08-09T21:02:51+00:00",
-  "local_count": 101,
-  "new_models_added": 2,
+  "updated_at": "2026-08-12T18:29:23+00:00",
+  "last_checked_at": "2026-08-12T18:29:23+00:00",
+  "local_count": 102,
+  "new_models_added": 1,
   "new_models_added_list": [
-    "Flux 3 Video",
-    "Qwen 3"
+    "LTXV 2.5"
   ]
 }
