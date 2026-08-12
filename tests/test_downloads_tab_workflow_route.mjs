@@ -5525,12 +5525,85 @@ test('automatic opening for missing models is disabled by default', () => {
 });
 
 test('automatic opening remains conditional on unresolved models', () => {
-  assert.match(
-    modelResolverSource,
-    /if \(data\.total_missing > 0\) \{[\s\S]*?this\.openResolverForDetectedMissingModels\(\);/
-  );
+  assert.match(modelResolverSource, /recordNativeWorkflowWarnings\(workflow\)/);
+  assert.match(modelResolverSource, /nativeMissingModelsPending/);
+  assert.match(modelResolverSource, /maybeAutoOpenForNativeMissingModels\(\)/);
+  assert.match(modelResolverSource, /if \(!this\.nativeMissingModelsPending \|\| !this\.isAutoOpenEnabled\(\)\)/);
+  assert.match(modelResolverSource, /scheduleAutoOpenWorkflowAnalysis\(\)/);
+  assert.match(modelResolverSource, /async runAutoOpenWorkflowAnalysis\(\)/);
+  assert.match(modelResolverSource, /getWorkflowAnalysisRequest\?\.\(workflow, \{[\s\S]*?silent: true/);
+  assert.match(modelResolverSource, /Number\(normalizedData\.total_missing \|\| 0\) <= 0/);
+  assert.doesNotMatch(modelResolverSource, /checkAndOpenForMissingModels/);
   assert.match(optionsMethodsSource, /id="mr-options-auto-open-on-missing"/);
   assert.match(optionsMethodsSource, /auto_open_on_missing: Boolean\(autoOpenOnMissingInput\?\.checked\)/);
+});
+
+test('auto-open preference gates the custom workflow analysis', async () => {
+  const scheduleAutoOpenWorkflowAnalysis = eval(
+    `(${extractMethod(modelResolverSource, 'scheduleAutoOpenWorkflowAnalysis')})`
+  );
+  const runAutoOpenWorkflowAnalysis = eval(
+    `(${extractMethod(modelResolverSource, 'runAutoOpenWorkflowAnalysis')})`
+  );
+  const previousSetTimeout = globalThis.setTimeout;
+  const previousClearTimeout = globalThis.clearTimeout;
+  const timers = [];
+
+  globalThis.setTimeout = (callback, delay) => {
+    timers.push({ callback, delay });
+    return timers.length;
+  };
+  globalThis.clearTimeout = id => {
+    if (timers[id - 1]) timers[id - 1].cleared = true;
+  };
+
+  try {
+    const disabledResolver = {
+      autoOpenWorkflowAnalysisTimer: null,
+      isAutoOpenEnabled: () => false,
+    };
+    scheduleAutoOpenWorkflowAnalysis.call(disabledResolver);
+    assert.equal(timers.length, 0);
+
+    const enabledResolver = {
+      autoOpenWorkflowAnalysisTimer: null,
+      isAutoOpenEnabled: () => true,
+      runAutoOpenWorkflowAnalysis: () => Promise.resolve(),
+    };
+    scheduleAutoOpenWorkflowAnalysis.call(enabledResolver, 500);
+    assert.equal(timers.length, 1);
+    assert.equal(timers[0].delay, 500);
+
+    let requestCount = 0;
+    let handledData = null;
+    const analysisResolver = {
+      autoOpenWorkflowAnalysisPromise: null,
+      autoOpenWorkflowAnalysisKey: null,
+      isAutoOpenEnabled: () => true,
+      getNodeContextWorkflowState: () => ({
+        workflow: { nodes: [{ id: 1 }] },
+        signature: 'workflow-signature',
+      }),
+      dialog: {
+        getActiveWorkflowRouteKey: () => '#workflow',
+        getWorkflowAnalysisRequest: () => {
+          requestCount += 1;
+          return { promise: Promise.resolve({ total_missing: 2 }) };
+        },
+      },
+      getCurrentNodeContextAnalysis: () => null,
+      handleAutoOpenWorkflowAnalysisResult: data => {
+        handledData = data;
+      },
+    };
+
+    await runAutoOpenWorkflowAnalysis.call(analysisResolver);
+    assert.equal(requestCount, 1);
+    assert.deepEqual(handledData, { total_missing: 2 });
+  } finally {
+    globalThis.setTimeout = previousSetTimeout;
+    globalThis.clearTimeout = previousClearTimeout;
+  }
 });
 
 test('options credential checks preserve every endpoint contract', () => {

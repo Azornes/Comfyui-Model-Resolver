@@ -39,7 +39,6 @@ app.registerExtension({
         queueMicrotask(() => modelResolver.configureNodeContextMenu(node));
         modelResolver.configureWorkflowDependencyMarkerNode(node);
         modelResolver.configureCustomNodeModelAdapter(node);
-        modelResolver.scheduleNodeContextMenuAnalysis();
     },
     loadedGraphNode(node) {
         modelResolver.configureNodeContextMenu(node?.constructor);
@@ -47,11 +46,9 @@ app.registerExtension({
         queueMicrotask(() => modelResolver.configureNodeContextMenu(node));
         modelResolver.configureWorkflowDependencyMarkerNode(node);
         modelResolver.configureCustomNodeModelAdapter(node);
-        modelResolver.scheduleNodeContextMenuAnalysis();
     },
     afterConfigureGraph() {
+        modelResolver.handleGraphConfigured();
         modelResolver.configureWorkflowDependencyMarkerNodes();
-        modelResolver.checkAndOpenForMissingModels();
-        modelResolver.scheduleNodeContextMenuAnalysis(500);
     },
 });

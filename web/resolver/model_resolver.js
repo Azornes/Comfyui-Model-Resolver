@@ -50,6 +50,14 @@ const WORKFLOW_DEPENDENCY_MARKER_BUTTON_NAME = "Open Model Resolver";
 const WORKFLOW_DEPENDENCY_MARKER_AUTO_ID = -918273646;
 const WORKFLOW_DEPENDENCY_MARKER_DEFAULT_SIZE = Object.freeze([160, 40]);
 const WORKFLOW_DEPENDENCY_MARKER_MIN_SIZE = Object.freeze([160, 40]);
+const ERROR_OVERLAY_SELECTOR = '[data-testid="error-overlay"]';
+const ERROR_OVERLAY_MESSAGES_SELECTOR = '[data-testid="error-overlay-messages"]';
+const ERROR_OVERLAY_DETAILS_BUTTON_SELECTOR = '[data-testid="error-overlay-see-errors"]';
+const ERROR_OVERLAY_RESOLVER_BUTTON_SELECTOR = '[data-model-resolver-error-action="open"]';
+const NATIVE_MISSING_MODEL_GROUP_SELECTOR = '[data-testid="error-group-missing-model"]';
+const NATIVE_MISSING_MODEL_ITEM_SELECTOR = '[data-testid^="missing-model-"]';
+const NATIVE_MISSING_MODEL_TEXT_PATTERN = /\bmissing\s+models?\b/i;
+const NATIVE_ERROR_CHUNK_PATTERN = /(?:^|\/)\b(?:dialogService|settingStore)-[^/]+\.js(?:[?#]|$)/;
 
 function getKeybindingSetting(id) {
     try {
@@ -83,8 +91,6 @@ export class ModelResolver {
         this.openTooltip = this.buildOpenTooltip();
         this.openTooltipRefreshFrame = null;
         this.dialog = null;
-        this.isCheckingMissing = false;  // Prevent multiple simultaneous checks
-        this.lastCheckedWorkflow = null;  // Track to avoid duplicate checks
         this.workflowHashMetadataCache = null;
         this.workflowHashMetadataSignature = null;
         this.workflowHashMetadataRefreshTimer = null;
@@ -99,6 +105,16 @@ export class ModelResolver {
         this.nodeContextAnalysisPromise = null;
         this.nodeContextAnalysisTimer = null;
         this.customNodeModelAdapterStates = new WeakMap();
+        this.missingModelsPopupObserver = null;
+        this.nativeMissingModelsPending = false;
+        this.nativeMissingModelsAutoOpened = false;
+        this.nativeMissingModelStorePromise = null;
+        this.nativeMissingModelStore = null;
+        this.nativeMissingModelStoreUnsubscribe = null;
+        this.nativeMissingModelStoreRetryAttempts = new WeakMap();
+        this.autoOpenWorkflowAnalysisTimer = null;
+        this.autoOpenWorkflowAnalysisPromise = null;
+        this.autoOpenWorkflowAnalysisKey = null;
     }
 
     setup = async () => {
@@ -859,14 +875,18 @@ export class ModelResolver {
             window.__ModelResolverHistoryPatched = true;
         }
 
+        window.__ModelResolverWorkflowChangeOwner = this;
+
         if (!window.__ModelResolverLoadGraphDataPatched && typeof app.loadGraphData === 'function') {
             const originalLoadGraphData = app.loadGraphData;
             app.loadGraphData = function(...args) {
                 if (args[0] && typeof args[0] === 'object') {
                     window.__ModelResolverWorkflowHashMetadataOwner?.removeLegacyWorkflowHashMarkerNode(args[0]);
                 }
+                window.__ModelResolverWorkflowChangeOwner?.recordNativeWorkflowWarningsFromArguments(args);
                 const result = originalLoadGraphData.apply(this, args);
                 Promise.resolve(result).then(() => {
+                    window.__ModelResolverWorkflowChangeOwner?.recordNativeWorkflowWarningsFromArguments(args);
                     setTimeout(() => {
                         window.dispatchEvent(new Event('model-resolver-active-workflowchange'));
                     }, 0);
@@ -879,8 +899,6 @@ export class ModelResolver {
             };
             window.__ModelResolverLoadGraphDataPatched = true;
         }
-
-        window.__ModelResolverWorkflowChangeOwner = this;
 
         const routeHandler = () => {
             window.__ModelResolverWorkflowChangeOwner?.handleActiveWorkflowRouteChange('route-change');
@@ -1464,24 +1482,397 @@ export class ModelResolver {
     }
 
     /**
-     * Setup MutationObserver to detect ComfyUI's Missing Models popup and inject our button
+     * Setup one lightweight observer for ComfyUI error surfaces.
      */
     setupMissingModelsPopupObserver() {
+        this.missingModelsPopupObserver?.disconnect();
+
         const observer = new MutationObserver((mutations) => {
             for (const mutation of mutations) {
                 for (const node of mutation.addedNodes) {
-                    if (node.nodeType === Node.ELEMENT_NODE) {
-                        this.checkAndInjectButton(node);
-                    }
+                    if (node.nodeType !== Node.ELEMENT_NODE) continue;
+
+                    this.checkAndInjectErrorOverlayButton(node);
+                    this.checkAndInjectButton(node);
                 }
             }
         });
 
-        // Observe the entire document for added nodes
+        this.missingModelsPopupObserver = observer;
         observer.observe(document.body, {
             childList: true,
             subtree: true
         });
+        this.checkAndInjectErrorOverlayButton(document.body);
+    }
+
+    /**
+     * Reset native missing-model state after ComfyUI finishes configuring a graph.
+     * The result itself is read from ComfyUI's native missing-model store.
+     */
+    handleNativeGraphConfigured() {
+        this.nativeMissingModelsAutoOpened = false;
+
+        // ComfyUI can finish its asynchronous model pipeline before it calls
+        // this hook. Preserve that native result instead of clearing it when
+        // the graph configuration hook runs afterwards.
+        if (this.nativeMissingModelStore) {
+            this.handleNativeMissingModelStoreChange(this.nativeMissingModelStore);
+        } else {
+            this.nativeMissingModelsPending = false;
+        }
+    }
+
+    handleGraphConfigured() {
+        this.handleNativeGraphConfigured();
+        this.scheduleAutoOpenWorkflowAnalysis();
+    }
+
+    scheduleAutoOpenWorkflowAnalysis(delay = 500) {
+        if (this.autoOpenWorkflowAnalysisTimer) {
+            clearTimeout(this.autoOpenWorkflowAnalysisTimer);
+            this.autoOpenWorkflowAnalysisTimer = null;
+        }
+        if (!this.isAutoOpenEnabled()) return;
+
+        this.autoOpenWorkflowAnalysisTimer = setTimeout(() => {
+            this.autoOpenWorkflowAnalysisTimer = null;
+            void this.runAutoOpenWorkflowAnalysis();
+        }, delay);
+    }
+
+    async runAutoOpenWorkflowAnalysis() {
+        if (!this.isAutoOpenEnabled()) return null;
+        if (this.autoOpenWorkflowAnalysisPromise) {
+            return this.autoOpenWorkflowAnalysisPromise;
+        }
+
+        const { workflow, signature } = this.getNodeContextWorkflowState();
+        if (!workflow || !signature) return null;
+
+        const route = this.dialog?.getActiveWorkflowRouteKey?.() || '';
+        const analysisKey = `${route}\n${signature}`;
+        if (this.autoOpenWorkflowAnalysisKey === analysisKey) return null;
+
+        const cachedData = this.getCurrentNodeContextAnalysis(signature);
+        if (cachedData) {
+            this.autoOpenWorkflowAnalysisKey = analysisKey;
+            this.handleAutoOpenWorkflowAnalysisResult(cachedData, signature, analysisKey);
+            return cachedData;
+        }
+
+        const analysisRequest = this.dialog?.getWorkflowAnalysisRequest?.(workflow, {
+            silent: true,
+        });
+        if (!analysisRequest?.promise) return null;
+
+        this.autoOpenWorkflowAnalysisKey = analysisKey;
+        const analysisPromise = analysisRequest.promise
+            .then((data) => {
+                this.handleAutoOpenWorkflowAnalysisResult(data, signature, analysisKey);
+                return data;
+            })
+            .catch((error) => {
+                log.debug('Model Resolver: automatic missing-model analysis failed.', error);
+                return null;
+            })
+            .finally(() => {
+                if (this.autoOpenWorkflowAnalysisPromise === analysisPromise) {
+                    this.autoOpenWorkflowAnalysisPromise = null;
+                }
+
+                const currentState = this.getNodeContextWorkflowState();
+                const currentRoute = this.dialog?.getActiveWorkflowRouteKey?.() || '';
+                const currentKey = currentState.signature
+                    ? `${currentRoute}\n${currentState.signature}`
+                    : '';
+                if (
+                    this.isAutoOpenEnabled()
+                    && currentKey
+                    && currentKey !== analysisKey
+                ) {
+                    this.scheduleAutoOpenWorkflowAnalysis(0);
+                }
+            });
+
+        this.autoOpenWorkflowAnalysisPromise = analysisPromise;
+        return analysisPromise;
+    }
+
+    handleAutoOpenWorkflowAnalysisResult(data, signature, analysisKey) {
+        if (!data) return;
+
+        const currentState = this.getNodeContextWorkflowState();
+        const currentRoute = this.dialog?.getActiveWorkflowRouteKey?.() || '';
+        const currentKey = currentState.signature
+            ? `${currentRoute}\n${currentState.signature}`
+            : '';
+        if (currentKey !== analysisKey) return;
+
+        const normalizedData = this.dialog?.applyResolvedSelectionAliasesToAnalysisData?.(data) || data;
+        this.nodeContextAnalysisSignature = signature;
+        this.nodeContextAnalysisData = normalizedData;
+
+        if (this.dialog) {
+            this.dialog.cachedWorkflowSignature = signature;
+            this.dialog.cachedAnalysisData = this.dialog.cloneAnalysisData?.(normalizedData) || normalizedData;
+        }
+
+        if (!this.isAutoOpenEnabled() || Number(normalizedData.total_missing || 0) <= 0) return;
+
+        log.debug(
+            `Model Resolver: Found ${normalizedData.total_missing} missing model(s), opening dialog...`
+        );
+        this.openResolverForDetectedMissingModels();
+    }
+
+    /**
+     * Store the missing-model result that ComfyUI attached to the workflow
+     * after running its own native asset pipeline.
+     */
+    recordNativeWorkflowWarnings(workflow) {
+        const pendingWarnings = workflow?.pendingWarnings;
+        if (!pendingWarnings || typeof pendingWarnings !== 'object') {
+            return;
+        }
+        if (!Object.prototype.hasOwnProperty.call(pendingWarnings, 'missingModelCandidates')) {
+            return;
+        }
+
+        const missingModels = pendingWarnings.missingModelCandidates;
+        this.nativeMissingModelsPending = Array.isArray(missingModels)
+            && missingModels.length > 0;
+        this.nativeMissingModelsAutoOpened = false;
+        this.maybeAutoOpenForNativeMissingModels();
+    }
+
+    recordNativeWorkflowWarningsFromArguments(args = []) {
+        if (!Array.isArray(args)) return;
+
+        for (const arg of args) {
+            if (arg && typeof arg === 'object' && arg.pendingWarnings) {
+                this.recordNativeWorkflowWarnings(arg);
+            }
+        }
+    }
+
+    findNativeErrorChunkUrls() {
+        const candidates = new Map();
+        if (typeof performance !== 'undefined' && typeof performance.getEntriesByType === 'function') {
+            for (const entry of performance.getEntriesByType('resource')) {
+                const url = entry.name;
+                if (typeof url !== 'string') continue;
+                if (!NATIVE_ERROR_CHUNK_PATTERN.test(url)) continue;
+
+                const size = Number(entry.decodedBodySize || entry.transferSize || 0);
+                candidates.set(url, Math.max(candidates.get(url) || 0, size));
+            }
+        }
+        if (typeof document !== 'undefined') {
+            for (const element of document.querySelectorAll('script[src], link[href]')) {
+                const url = element.src || element.href;
+                if (typeof url !== 'string') continue;
+                if (!NATIVE_ERROR_CHUNK_PATTERN.test(url)) continue;
+                if (!candidates.has(url)) candidates.set(url, 0);
+            }
+        }
+
+        return Array.from(candidates.entries())
+            .sort(([, sizeA], [, sizeB]) => sizeB - sizeA)
+            .map(([url]) => url);
+    }
+
+    getNativeMissingModelStore() {
+        if (this.nativeMissingModelStorePromise) {
+            return this.nativeMissingModelStorePromise;
+        }
+
+        if (!this.findNativeErrorChunkUrls().length) {
+            return Promise.resolve(null);
+        }
+
+        const lookupPromise = (async () => {
+            const attemptedChunks = new Set();
+            while (true) {
+                const chunkUrl = this.findNativeErrorChunkUrls()
+                    .find(url => !attemptedChunks.has(url));
+                if (!chunkUrl) return null;
+                attemptedChunks.add(chunkUrl);
+
+                try {
+                    const module = await import(chunkUrl);
+                    const useMissingModelStore = Object.values(module).find(candidate => (
+                        typeof candidate === 'function'
+                        && candidate.$id === 'missingModel'
+                    ));
+                    if (typeof useMissingModelStore === 'function') {
+                        return useMissingModelStore();
+                    }
+                } catch (_error) {
+                    // Try the next ComfyUI dialog chunk if this one is only a loader.
+                }
+            }
+        })();
+
+        this.nativeMissingModelStorePromise = lookupPromise.then(store => {
+            if (!store) this.nativeMissingModelStorePromise = null;
+            return store;
+        });
+
+        return this.nativeMissingModelStorePromise;
+    }
+
+    getNativeMissingModelCandidates(store) {
+        const candidates = store?.missingModelCandidates?.value
+            ?? store?.missingModelCandidates;
+        return Array.isArray(candidates) ? candidates : [];
+    }
+
+    handleNativeMissingModelStoreChange(store) {
+        const hasMissingModels = this.getNativeMissingModelCandidates(store).length > 0;
+        const wasPending = this.nativeMissingModelsPending;
+        this.nativeMissingModelsPending = hasMissingModels;
+
+        if (!hasMissingModels) {
+            this.nativeMissingModelsAutoOpened = false;
+            return;
+        }
+
+        if (!wasPending) {
+            this.nativeMissingModelsAutoOpened = false;
+        }
+        this.maybeAutoOpenForNativeMissingModels();
+
+        const root = document.body || document.documentElement;
+        if (root) {
+            this.checkAndInjectErrorOverlayButton(root);
+        }
+    }
+
+    async subscribeToNativeMissingModelStore() {
+        const store = await this.getNativeMissingModelStore();
+        if (!store) return null;
+
+        if (this.nativeMissingModelStore !== store) {
+            this.nativeMissingModelStoreUnsubscribe?.();
+            this.nativeMissingModelStore = store;
+            this.nativeMissingModelStoreUnsubscribe = typeof store.$subscribe === 'function'
+                ? store.$subscribe(() => {
+                    this.handleNativeMissingModelStoreChange(store);
+                }, { detached: true })
+                : null;
+        }
+
+        this.handleNativeMissingModelStoreChange(store);
+        return store;
+    }
+
+    async checkNativeStoreForMissingModels(overlay) {
+        const store = await this.subscribeToNativeMissingModelStore();
+        if (!store) {
+            this.retryNativeStoreLookup(overlay);
+            return;
+        }
+        if (!overlay.isConnected) return;
+
+        // Re-enter the same synchronous path after the native store has been
+        // read. The store subscription handles candidates that arrive later.
+        this.checkAndInjectErrorOverlayButton(overlay);
+    }
+
+    retryNativeStoreLookup(overlay) {
+        if (!overlay?.isConnected) return;
+
+        const previousAttempt = this.nativeMissingModelStoreRetryAttempts.get(overlay) ?? 0;
+        if (previousAttempt >= 6) return;
+
+        const attempt = previousAttempt + 1;
+        this.nativeMissingModelStoreRetryAttempts.set(overlay, attempt);
+        const delay = Math.min(500, 25 * (2 ** (attempt - 1)));
+        setTimeout(() => {
+            if (overlay.isConnected) {
+                void this.checkNativeStoreForMissingModels(overlay);
+            }
+        }, delay);
+    }
+
+    hasNativeMissingModelEvidence(overlay, detailsButton) {
+        const detailsLabel = detailsButton?.textContent?.trim() || '';
+        if (NATIVE_MISSING_MODEL_TEXT_PATTERN.test(detailsLabel)) {
+            return true;
+        }
+
+        if (overlay.querySelector(NATIVE_MISSING_MODEL_ITEM_SELECTOR)) {
+            return true;
+        }
+
+        if (document.querySelector(NATIVE_MISSING_MODEL_GROUP_SELECTOR)) {
+            return true;
+        }
+
+        const overlayMessage = overlay.querySelector(ERROR_OVERLAY_MESSAGES_SELECTOR)?.textContent || '';
+        if (/\b(?:required\s+)?models?\s+(?:is|are)\s+missing\b/i.test(overlayMessage)) {
+            return true;
+        }
+
+        return this.nativeMissingModelsPending;
+    }
+
+    maybeAutoOpenForNativeMissingModels() {
+        if (!this.nativeMissingModelsPending || !this.isAutoOpenEnabled()) {
+            return;
+        }
+        if (this.nativeMissingModelsAutoOpened) {
+            return;
+        }
+
+        this.nativeMissingModelsAutoOpened = true;
+        this.openResolverForDetectedMissingModels();
+    }
+
+    /**
+     * Add a Model Resolver action next to ComfyUI's native error details button.
+     * The observer only reaches this method for newly added DOM nodes, so no
+     * polling or workflow analysis is performed while the UI is idle.
+     */
+    checkAndInjectErrorOverlayButton(node) {
+        const overlays = new Set();
+        const addOverlay = (candidate) => {
+            if (candidate) overlays.add(candidate);
+        };
+
+        addOverlay(node.matches?.(ERROR_OVERLAY_SELECTOR) ? node : null);
+        addOverlay(node.closest?.(ERROR_OVERLAY_SELECTOR));
+        node.querySelectorAll?.(ERROR_OVERLAY_SELECTOR).forEach(addOverlay);
+
+        for (const overlay of overlays) {
+            const detailsButton = overlay.querySelector(ERROR_OVERLAY_DETAILS_BUTTON_SELECTOR);
+            if (!detailsButton?.parentElement) continue;
+            if (overlay.querySelector(ERROR_OVERLAY_RESOLVER_BUTTON_SELECTOR)) continue;
+            if (!this.hasNativeMissingModelEvidence(overlay, detailsButton)) {
+                if (!this.nativeMissingModelStore) {
+                    void this.checkNativeStoreForMissingModels(overlay);
+                }
+                continue;
+            }
+
+            this.maybeAutoOpenForNativeMissingModels();
+
+            const resolverButton = document.createElement('button');
+            resolverButton.type = 'button';
+            resolverButton.setAttribute('data-model-resolver-error-action', 'open');
+            resolverButton.className = detailsButton.className || '';
+            resolverButton.textContent = 'Open Model Resolver';
+            resolverButton.title = 'Open Model Resolver to resolve missing models.';
+            resolverButton.style.marginLeft = '0.5rem';
+            resolverButton.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                this.activateResolverButton();
+            });
+
+            detailsButton.parentElement.insertBefore(resolverButton, detailsButton.nextSibling);
+        }
     }
 
     /**
@@ -1614,61 +2005,6 @@ export class ModelResolver {
         this.activateResolverButton();
     }
 
-
-    /**
-     * Check for missing models and auto-open dialog if any are found
-     */
-    async checkAndOpenForMissingModels() {
-        // Check if auto-open is enabled
-        if (!this.isAutoOpenEnabled()) {
-            return;
-        }
-
-        // Prevent multiple simultaneous checks
-        if (this.isCheckingMissing) {
-            return;
-        }
-
-        this.isCheckingMissing = true;
-
-        try {
-            // Small delay to let workflow fully load
-            await new Promise(r => setTimeout(r, 500));
-
-            // Get current workflow
-            const workflow = app?.graph?.serialize();
-            if (!workflow) {
-                return;
-            }
-
-            // Create a simple hash to detect if workflow changed
-            const workflowHash = JSON.stringify(workflow.nodes?.map(n => n.type + ':' + JSON.stringify(n.widgets_values || [])));
-            
-            // Skip if we already checked this exact workflow
-            if (this.lastCheckedWorkflow === workflowHash) {
-                return;
-            }
-            this.lastCheckedWorkflow = workflowHash;
-
-            // Reuse the background context-menu analysis to avoid scanning twice.
-            const data = await this.refreshNodeContextMenuAnalysis();
-            if (!data) {
-                console.warn('Model Resolver: Failed to analyze workflow for missing models');
-                return;
-            }
-            
-            // Auto-open dialog if there are missing models
-            if (data.total_missing > 0) {
-                log.debug(`Model Resolver: Found ${data.total_missing} missing model(s), opening dialog...`);
-                this.openResolverForDetectedMissingModels();
-            }
-
-        } catch (error) {
-            console.error('Model Resolver: Error checking for missing models:', error);
-        } finally {
-            this.isCheckingMissing = false;
-        }
-    }
 
     removeExistingButton() {
         // Remove any existing button by ID
