@@ -1268,11 +1268,25 @@ export const missingBrowserMethods = {
 
         this.cancelMissingBrowserExternalResizeRestore();
         this._missingBrowserResizeObserver?.disconnect?.();
+        const resizeHost = browser.parentElement instanceof HTMLElement
+            ? browser.parentElement
+            : browser;
+        this._missingBrowserObservedHostWidth = null;
+
+        // Apply the saved split before the browser can paint its first frame.
+        // The HTML already contains the saved detail track, but a docked panel
+        // may be narrower than the last layout. In that case the list-pinned
+        // state must be set synchronously instead of one animation frame later.
+        const initialWidth = this.getFastMissingBrowserWidthEstimate(resizeHost, { allowMeasure: true });
+        if (Number.isFinite(initialWidth) && initialWidth > 0) {
+            this.rememberMissingBrowserWidth(initialWidth);
+            this.restoreMissingBrowserSplitWidth(browser, {
+                browserWidth: initialWidth,
+                useDefault: false
+            });
+        }
+
         if (typeof ResizeObserver === 'function') {
-            const resizeHost = browser.parentElement instanceof HTMLElement
-                ? browser.parentElement
-                : browser;
-            this._missingBrowserObservedHostWidth = null;
             this._missingBrowserResizeObserver = new ResizeObserver((entries) => {
                 const observedWidth = Number(entries?.[0]?.contentRect?.width);
                 if (!Number.isFinite(observedWidth) || observedWidth <= 0) return;
@@ -1282,7 +1296,10 @@ export const missingBrowserMethods = {
                 this.rememberMissingBrowserWidth(observedWidth);
 
                 if (!Number.isFinite(previousHostWidth) || previousHostWidth <= 0) {
-                    this.scheduleMissingBrowserSplitRestore(browser, observedWidth, { useDefault: false });
+                    this.restoreMissingBrowserSplitWidth(browser, {
+                        browserWidth: observedWidth,
+                        useDefault: false
+                    });
                     return;
                 }
                 if (Math.abs(previousHostWidth - observedWidth) < 0.5) return;
@@ -1305,7 +1322,7 @@ export const missingBrowserMethods = {
                 this._missingBrowserPrewarmFrame = null;
                 if (!browser.isConnected) return;
                 if (this._missingBrowserSplitDragging) return;
-                const measuredWidth = Number(browser.clientWidth || browser.getBoundingClientRect().width);
+                const measuredWidth = Number(resizeHost.clientWidth || resizeHost.getBoundingClientRect().width);
                 this.rememberMissingBrowserWidth(measuredWidth);
                 this.scheduleMissingBrowserSplitRestore(browser, measuredWidth, { useDefault: false });
             });
@@ -1382,19 +1399,25 @@ export const missingBrowserMethods = {
     },
 
     getFastMissingBrowserWidthEstimate(browser = null, { allowMeasure = false } = {}) {
-        const observedWidth = Number(this._missingBrowserObservedWidth);
-        if (Number.isFinite(observedWidth) && observedWidth > 0) return observedWidth;
-
-        const lastWidth = Number(this._missingBrowserLastBrowserWidth);
-        if (Number.isFinite(lastWidth) && lastWidth > 0) return lastWidth;
-
         if (allowMeasure && browser instanceof HTMLElement) {
             const clientWidth = Number(browser.clientWidth || browser.offsetWidth);
             if (Number.isFinite(clientWidth) && clientWidth > 0) {
                 this.rememberMissingBrowserWidth(clientWidth);
                 return clientWidth;
             }
+
+            const rectWidth = Number(browser.getBoundingClientRect?.().width);
+            if (Number.isFinite(rectWidth) && rectWidth > 0) {
+                this.rememberMissingBrowserWidth(rectWidth);
+                return rectWidth;
+            }
         }
+
+        const observedWidth = Number(this._missingBrowserObservedWidth);
+        if (Number.isFinite(observedWidth) && observedWidth > 0) return observedWidth;
+
+        const lastWidth = Number(this._missingBrowserLastBrowserWidth);
+        if (Number.isFinite(lastWidth) && lastWidth > 0) return lastWidth;
 
         const fallbackWidth = Number(this._queueSplitLastContainerWidth || window.innerWidth || 720);
         return Number.isFinite(fallbackWidth) && fallbackWidth > 0 ? fallbackWidth : 720;
