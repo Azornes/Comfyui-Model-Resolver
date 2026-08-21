@@ -1,16 +1,19 @@
-import unittest
-import sqlite3
 import json
+import sqlite3
+import unittest
 from unittest.mock import patch
+
+from core.contracts import SearchResult
 from core.sources.lora_manager_archive import (
-    _normalize_model_type,
-    _extract_search_tokens,
-    _query_candidate_rows,
-    _load_full_rows_for_versions,
     _build_result_from_row,
+    _extract_search_tokens,
     _find_hash_match_row,
+    _load_full_rows_for_versions,
+    _normalize_model_type,
+    _query_candidate_rows,
     search_lora_manager_archive_for_file,
 )
+
 
 class LoraManagerArchiveTests(unittest.TestCase):
 
@@ -146,12 +149,12 @@ class LoraManagerArchiveTests(unittest.TestCase):
         # Test building result from row
         result = _build_result_from_row(conn, row, "ghost_checkpoint")
         self.assertIsNotNone(result)
-        self.assertEqual(result["filename"], "ghost_v1.safetensors")
-        self.assertEqual(result["name"], "ghost_checkpoint")
-        self.assertEqual(result["trained_words"], ["ghost_word"])
-        self.assertEqual(result["size"], 3 * 1024)
-        self.assertEqual(result["sha256"], archive_hash)
-        self.assertEqual(result["hashes"], {"SHA256": archive_hash})
+        self.assertEqual(result.filename, "ghost_v1.safetensors")
+        self.assertEqual(result.name, "ghost_checkpoint")
+        self.assertEqual(list(result.trained_words), ["ghost_word"])
+        self.assertEqual(result.size, 3 * 1024)
+        self.assertEqual(result.sha256, archive_hash)
+        self.assertEqual(dict(result.hashes), {"SHA256": archive_hash})
 
         hash_match = _find_hash_match_row(conn, archive_hash)
         self.assertIsNotNone(hash_match)
@@ -168,6 +171,27 @@ class LoraManagerArchiveTests(unittest.TestCase):
             )
 
         self.assertIsNotNone(hash_result)
-        self.assertEqual(hash_result["match_type"], "hash")
-        self.assertEqual(hash_result["confidence"], 100.0)
-        self.assertEqual(hash_result["sha256"], archive_hash)
+        self.assertEqual(hash_result.match_type, "hash")
+        self.assertEqual(hash_result.confidence, 100.0)
+        self.assertEqual(hash_result.sha256, archive_hash)
+
+    def test_filename_search_keeps_typed_candidates(self):
+        filename = "typed-lora-archive-model.safetensors"
+        candidate = SearchResult(
+            source="lora_manager_archive",
+            name="typed-lora-archive-model",
+            version_name="v1",
+            filename=filename,
+            download_url="https://example.com/typed-lora-archive-model.safetensors",
+        )
+
+        with patch(
+            "core.sources.lora_manager_archive.search_lora_manager_archive",
+            return_value=[candidate],
+        ):
+            result = search_lora_manager_archive_for_file(filename)
+
+        self.assertIsInstance(result, SearchResult)
+        self.assertEqual(filename, result.filename)
+        self.assertEqual(100.0, result.confidence)
+        self.assertEqual("exact", result.match_type)

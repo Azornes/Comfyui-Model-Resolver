@@ -9,8 +9,9 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional, Tuple
 
+from .contracts import ResolvedModel
 from .log_system import create_module_logger
-from .metadata_model_utils import dedupe_models, is_model_file_path
+from .metadata_model_utils import ModelRecord, dedupe_models, is_model_file_path
 from .metadata_utils import merge_counted_payload
 from .path_utils import (
     find_metadata_sidecar_path,
@@ -171,7 +172,7 @@ def _get_batch_size(
     return max(MIN_AUDIT_BATCH_SIZE, min(MAX_AUDIT_BATCH_SIZE, batch_size))
 
 
-def _make_batches(models: List[Dict[str, Any]], batch_size: int) -> List[List[Dict[str, Any]]]:
+def _make_batches(models: List[ResolvedModel], batch_size: int) -> List[List[ResolvedModel]]:
     if not models:
         return []
     safe_batch_size = max(1, int(batch_size or 1))
@@ -181,9 +182,9 @@ def _make_batches(models: List[Dict[str, Any]], batch_size: int) -> List[List[Di
     ]
 
 
-def _audit_one_model(model: Dict[str, Any]) -> Dict[str, Any]:
+def _audit_one_model(model: ResolvedModel) -> Dict[str, Any]:
     result = _empty_audit_counts()
-    model_path = str(model.get("path") or "").strip()
+    model_path = model.path.strip()
     if not model_path:
         return result
 
@@ -254,9 +255,9 @@ def _audit_one_model(model: Dict[str, Any]) -> Dict[str, Any]:
         result["mismatches"].append(
             {
                 "filename": model_filename,
-                "relative_path": model.get("relative_path") or model_filename,
-                "category": model.get("category") or "",
-                "base_directory": model.get("base_directory") or "",
+                "relative_path": model.relative_path or model_filename,
+                "category": model.category,
+                "base_directory": model.base_directory,
                 "model_path": model_path,
                 "metadata_path": metadata_path,
                 "metadata_size": metadata_size,
@@ -272,7 +273,7 @@ def _audit_one_model(model: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
-def _audit_model_batch(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _audit_model_batch(batch: List[ResolvedModel]) -> Dict[str, Any]:
     result = _empty_audit_counts()
     for model in batch:
         merge_counted_payload(
@@ -285,7 +286,7 @@ def _audit_model_batch(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def audit_metadata_sizes(
-    models: Optional[List[Dict[str, Any]]] = None,
+    models: Optional[List[ModelRecord]] = None,
     *,
     force_rescan: bool = True,
     worker_count: Optional[int] = None,
@@ -299,7 +300,7 @@ def audit_metadata_sizes(
 
         models = get_model_files(force_rescan=force_rescan)
 
-    audit_models = dedupe_models(models or [])
+    audit_models = dedupe_models(models)
     total_models = len(audit_models)
     resolved_worker_count, cpu_count = resolve_worker_count(
         total_models,

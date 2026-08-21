@@ -7,11 +7,17 @@ Updates workflow JSON by replacing model paths in nodes.
 import os
 from typing import Any, Dict, List, Optional
 
+from .contracts import Resolution, ResolvedModel
 from .custom_nodes import update_custom_node_model_path
 from .log_system import create_module_logger
 
 log = create_module_logger(__name__)
-from .path_utils import get_filename_from_path, is_path_within
+from .path_utils import (
+    get_filename_from_path,
+    is_path_within,
+    normalize_folder_path_values,
+    normalize_string_values,
+)
 
 
 def convert_to_relative_path(
@@ -45,7 +51,9 @@ def convert_to_relative_path(
 
         # Get all available filenames for this category
         # This returns paths with OS-native separators (backslashes on Windows)
-        available_filenames = folder_paths.get_filename_list(category)
+        available_filenames = normalize_string_values(
+            folder_paths.get_filename_list(category)
+        )
 
         # Try to find a matching entry in ComfyUI's list
         # Compare by finding the file that resolves to our absolute path
@@ -83,31 +91,32 @@ def convert_to_relative_path(
 
 
 def get_base_directory_for_model(
-    model_dict: Dict[str, str], category: str
+    model: ResolvedModel, category: str
 ) -> Optional[str]:
     """
     Get the base directory for a model based on its metadata.
 
     Args:
-        model_dict: Model dictionary with 'base_directory' or 'path' key
+        model: Typed local model with optional base directory and path
         category: Model category
 
     Returns:
         Base directory path if found, None otherwise
     """
-    # Try to get base_directory from model dict
-    if "base_directory" in model_dict:
-        return model_dict["base_directory"]
+    if model.base_directory:
+        return model.base_directory
 
     # If we have the full path, try to find the category base directory
-    if "path" in model_dict:
-        full_path = model_dict["path"]
+    if model.path:
+        full_path = model.path
         # Import here to avoid circular dependency
         import folder_paths
 
         # Try to get category directories
         if category in folder_paths.folder_names_and_paths:
-            category_paths = folder_paths.get_folder_paths(category)
+            category_paths = normalize_folder_path_values(
+                folder_paths.get_folder_paths(category)
+            )
             # Find which base directory this path belongs to
             for base_dir in category_paths:
                 if is_path_within(full_path, base_dir):
@@ -116,37 +125,35 @@ def get_base_directory_for_model(
     return None
 
 
-def update_model_path(
-    workflow: Dict[str, Any],
-    node_id: int,
-    widget_index: int,
-    resolved_path: str,
-    category: str = None,
-    base_directory: str = None,
-    resolved_model: Dict[str, Any] = None,
-    subgraph_id: str = None,
-    is_top_level: bool = None,
-    mapping: Dict[str, Any] = None,
-) -> bool:
+def update_model_path(workflow: Dict[str, Any], resolution: Resolution) -> bool:
     """
         Update a single model path in a workflow node, supporting both top-level and subgraph nodes.
 
         Args:
             workflow: Workflow JSON dictionary
-            node_id: ID of the node to update
-            widget_index: Widget index to update
-            resolved_path: Absolute path to resolved model
-            category: Model category
-            base_directory: Base directory for category
-            resolved_model: Model dict from scanner
-            subgraph_id: Subgraph ID (if node is in subgraph)
-            is_top_level: Whether node is in top-level (not subgraph definition)
-            mapping: Full mapping dictionary for standard or custom node updates
+            resolution: Validated typed workflow resolution
 
     Returns:
             True if update was successful, False otherwise
     """
+    try:
+        resolution.validate()
+    except ValueError as exc:
+        log.warning(f"Invalid workflow resolution: {exc}")
+        return False
+
     node = None
+    node_id = resolution.node_id
+    widget_index = resolution.widget_index
+    resolved_path = resolution.resolved_path or (
+        resolution.resolved_model.path if resolution.resolved_model else ""
+    )
+    category = resolution.category
+    base_directory = resolution.base_directory
+    subgraph_id = resolution.subgraph_id
+    is_top_level = resolution.is_top_level
+    resolved_model_contract = resolution.resolved_model
+    metadata = resolution.custom_node_metadata
 
     # Determine if this is a top-level node or inside a subgraph definition
     # - If is_top_level is True, it's a top-level node (even if it's a subgraph instance)
@@ -211,8 +218,7 @@ def update_model_path(
     if widget_index >= len(widgets_values):
         can_extend_promoted_input = bool(
             is_top_level is True
-            and mapping
-            and mapping.get("promoted_widget_name")
+            and resolution.promoted_widget_name
         )
         if can_extend_promoted_input:
             widgets_values.extend([None] * (widget_index + 1 - len(widgets_values)))
@@ -225,14 +231,14 @@ def update_model_path(
         return False
 
     # Get category from resolved_model if not provided
-    if not category and resolved_model:
-        category = resolved_model.get("category")
+    if not category and resolved_model_contract:
+        category = resolved_model_contract.category
 
     custom_update_result = update_custom_node_model_path(
         node,
         widget_index,
-        resolved_model,
-        mapping,
+        resolved_model_contract,
+        metadata,
     )
     if custom_update_result is not None:
         return custom_update_result
@@ -243,8 +249,8 @@ def update_model_path(
     if os.path.isabs(resolved_path):
         # Use category from resolved_model for path conversion
         effective_category = category
-        if resolved_model:
-            effective_category = resolved_model.get("category", category)
+        if resolved_model_contract and resolved_model_contract.category:
+            effective_category = resolved_model_contract.category
 
         relative_path = convert_to_relative_path(
             resolved_path, effective_category, base_directory
@@ -254,7 +260,7 @@ def update_model_path(
 
     # Update the widget value
     # Handle model references stored inside dictionary widget values.
-    nested_key = mapping.get("nested_key") if mapping else None
+    nested_key = resolution.nested_key
     if nested_key and isinstance(widgets_values[widget_index], dict):
         widgets_values[widget_index][nested_key] = relative_path
         log.debug(
@@ -267,63 +273,36 @@ def update_model_path(
 
 
 def update_workflow_nodes(
-    workflow: Dict[str, Any], mappings: List[Dict[str, Any]]
+    workflow: Dict[str, Any], resolutions: List[Resolution]
 ) -> Dict[str, Any]:
     """
     Apply multiple model path changes to a workflow.
 
     Args:
         workflow: Workflow JSON dictionary (will be modified in place)
-        mappings: List of mapping dictionaries:
-            {
-                'node_id': node ID,
-                'widget_index': widget index,
-                'resolved_path': absolute path to resolved model,
-                'category': model category (optional),
-                'base_directory': base directory for category (optional),
-                'resolved_model': model dict from scanner (optional, for base_directory)
-            }
+        resolutions: Validated typed workflow resolutions.
 
     Returns:
         Updated workflow dictionary (same reference, modified in place)
     """
     updated_count = 0
 
-    for mapping in mappings:
-        node_id = mapping.get("node_id")
-        widget_index = mapping.get("widget_index")
-        resolved_path = mapping.get("resolved_path")
-
-        if not all([node_id is not None, widget_index is not None, resolved_path]):
-            log.warning(f"Invalid mapping: {mapping}")
+    for resolution in resolutions:
+        try:
+            resolution.validate()
+        except ValueError as exc:
+            log.warning(f"Skipping invalid workflow resolution: {exc}")
             continue
 
-        # Try to get base_directory from resolved_model if provided
-        base_directory = mapping.get("base_directory")
-        if not base_directory and "resolved_model" in mapping:
-            resolved_model = mapping["resolved_model"]
-            category = mapping.get("category", "")
-            base_directory = get_base_directory_for_model(resolved_model, category)
+        # Try to get base_directory from the typed local model if not explicit.
+        if not resolution.base_directory and resolution.resolved_model:
+            base_directory = get_base_directory_for_model(
+                resolution.resolved_model,
+                resolution.category or "",
+            )
+            resolution = resolution.with_base_directory(base_directory)
 
-        category = mapping.get("category")
-        resolved_model = mapping.get("resolved_model")
-        subgraph_id = mapping.get("subgraph_id")
-        is_top_level = mapping.get(
-            "is_top_level"
-        )  # True for top-level nodes, False for nodes in subgraph definitions
-
-        success = update_model_path(
-            workflow,
-            node_id,
-            widget_index,
-            resolved_path,
-            category,
-            base_directory,
-            resolved_model,
-            subgraph_id,
-            is_top_level,
-            mapping,
-        )
+        success = update_model_path(workflow, resolution)
 
         if success:
             updated_count += 1

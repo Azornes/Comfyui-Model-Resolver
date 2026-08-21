@@ -3,7 +3,15 @@
 import os
 from urllib.parse import unquote, urlparse
 
-from ..request_utils import read_optional_object_payload
+from ..contracts import DownloadSpec
+from ..request_utils import (
+    coerce_integer_identifier,
+    read_bool_field,
+    read_first_identifier_field,
+    read_first_text_field,
+    read_optional_object_payload,
+    read_text_field,
+)
 from ..routes.context import RouteContext
 
 
@@ -18,7 +26,6 @@ class DownloadService:
         self.clear_completed_downloads_fn = context.require(
             "clear_completed_downloads"
         )
-        self.first_non_empty = context.require("first_non_empty")
         self.get_all_progress_fn = context.require("get_all_progress")
         self.get_aria2_status_fn = context.require("get_aria2_status")
         self.get_civarchive_model_details = context.require(
@@ -57,8 +64,6 @@ class DownloadService:
         self.start_aria2_daemon = context.require("start_aria2_daemon")
         self.start_background_download = context.require("start_background_download")
         self.stop_aria2_daemon = context.require("stop_aria2_daemon")
-        self.to_bool = context.require("to_bool")
-        self.to_int = context.require("to_int")
         self.validate_public_http_url = context.require("validate_public_http_url")
         self.web = context.require("web")
 
@@ -68,23 +73,122 @@ class DownloadService:
 
     async def download_model(self, request):
         """Validate and start a background model download."""
-        data = await request.json()
-        url = data.get("url", "")
-        filename = data.get("filename", "")
+        data = await read_optional_object_payload(request)
+        try:
+            url = read_text_field(
+                data,
+                "url",
+                contract_name="Download request",
+            )
+            filename = read_text_field(
+                data,
+                "filename",
+                contract_name="Download request",
+            )
+            category_value = read_text_field(
+                data,
+                "category",
+                default="checkpoints",
+                contract_name="Download request",
+            )
+            subfolder = read_text_field(
+                data,
+                "subfolder",
+                contract_name="Download request",
+            )
+            base_directory = read_text_field(
+                data,
+                "base_directory",
+                contract_name="Download request",
+            )
+            hf_token = read_text_field(
+                data,
+                "hf_token",
+                contract_name="Download request",
+            )
+            civitai_key = read_text_field(
+                data,
+                "civitai_key",
+                contract_name="Download request",
+            )
+            civitai_session_token = read_text_field(
+                data,
+                "civitai_session_token",
+                contract_name="Download request",
+            )
+        except TypeError as exc:
+            return self.web.json_response({"error": str(exc)}, status=400)
+
         category = self.normalize_download_category(
-            data.get("category", "checkpoints")
+            category_value
         )
-        subfolder = data.get("subfolder", "")
-        base_directory = data.get("base_directory", "")
         path_metadata = data.get("path_metadata", {})
-        if not isinstance(path_metadata, dict):
+        if path_metadata is None:
             path_metadata = {}
-        download_metadata = data.get("download_metadata") or data.get(
-            "metadata", {}
-        )
-        if not isinstance(download_metadata, dict):
+        elif not isinstance(path_metadata, dict):
+            return self.web.json_response(
+                {"error": "Download path metadata must be an object"},
+                status=400,
+            )
+        download_metadata = data.get("download_metadata")
+        if download_metadata is None:
+            download_metadata = data.get("metadata")
+        if download_metadata is None:
             download_metadata = {}
+        if not isinstance(download_metadata, dict):
+            return self.web.json_response(
+                {"error": "Download metadata must be an object"},
+                status=400,
+            )
         download_metadata = dict(download_metadata)
+        try:
+            metadata_source = read_first_text_field(
+                download_metadata,
+                ("details_source", "source"),
+                contract_name="Download metadata",
+            )
+            if not metadata_source:
+                metadata_source = read_first_text_field(
+                    path_metadata,
+                    ("source",),
+                    contract_name="Download path metadata",
+                )
+
+            raw_model_id = read_first_identifier_field(
+                download_metadata,
+                ("model_id", "modelId"),
+                contract_name="Download metadata",
+            )
+            if raw_model_id is None:
+                raw_model_id = read_first_identifier_field(
+                    path_metadata,
+                    ("model_id",),
+                    contract_name="Download path metadata",
+                )
+            raw_version_id = read_first_identifier_field(
+                download_metadata,
+                ("version_id", "versionId"),
+                contract_name="Download metadata",
+            )
+            if raw_version_id is None:
+                raw_version_id = read_first_identifier_field(
+                    path_metadata,
+                    ("version_id",),
+                    contract_name="Download path metadata",
+                )
+
+            model_id = coerce_integer_identifier(
+                raw_model_id,
+                "model_id",
+                contract_name="Download metadata",
+            )
+            version_id = coerce_integer_identifier(
+                raw_version_id,
+                "version_id",
+                contract_name="Download metadata",
+            )
+        except (TypeError, ValueError) as exc:
+            return self.web.json_response({"error": str(exc)}, status=400)
         settings = self.load_resolver_settings()
         if not base_directory:
             base_directory = self.get_default_root_for_category(category, settings)
@@ -119,7 +223,6 @@ class DownloadService:
 
         headers = {}
         if self.host_matches_domain(download_host, "huggingface.co"):
-            hf_token = data.get("hf_token", "")
             if hf_token:
                 headers["Authorization"] = f"Bearer {hf_token}"
         elif self.host_matches_domain(
@@ -127,12 +230,8 @@ class DownloadService:
             "civitai.com",
             "civitai.red",
         ):
-            civitai_key = data.get("civitai_key", "")
             if civitai_key and "token=" not in url:
                 url += f"{'&' if '?' in url else '?'}token={civitai_key}"
-            civitai_session_token = str(
-                data.get("civitai_session_token", "") or ""
-            ).strip()
             if civitai_session_token:
                 headers["Cookie"] = (
                     f"__Secure-civitai-token={civitai_session_token}"
@@ -151,33 +250,9 @@ class DownloadService:
         download_metadata.setdefault("path_metadata", path_metadata)
         download_metadata.setdefault(
             "source",
-            self.first_non_empty(
-                download_metadata.get("details_source"),
-                path_metadata.get("source"),
-                inferred_source,
-            ),
+            metadata_source or inferred_source,
         )
-
-        model_id = self.to_int(
-            self.first_non_empty(
-                download_metadata.get("model_id"),
-                download_metadata.get("modelId"),
-                path_metadata.get("model_id"),
-            )
-        )
-        version_id = self.to_int(
-            self.first_non_empty(
-                download_metadata.get("version_id"),
-                download_metadata.get("versionId"),
-                path_metadata.get("version_id"),
-            )
-        )
-        source_name = str(
-            self.first_non_empty(
-                download_metadata.get("details_source"),
-                download_metadata.get("source"),
-            )
-        ).lower()
+        source_name = (metadata_source or inferred_source).lower()
         try:
             if (
                 source_name == "civitai"
@@ -188,7 +263,7 @@ class DownloadService:
                     self.get_civitai_model_details,
                     model_id,
                     version_id,
-                    data.get("civitai_key", ""),
+                    civitai_key,
                 )
                 if details:
                     download_metadata["civitai_details"] = details
@@ -227,15 +302,21 @@ class DownloadService:
             target_directory = ""
             target_path = ""
 
-        download_id = self.start_background_download(
-            url=url,
-            filename=filename,
-            category=category,
-            headers=headers if headers else None,
-            subfolder=subfolder,
-            base_directory=base_directory,
-            metadata=download_metadata,
-        )
+        try:
+            download_spec = DownloadSpec(
+                url=url,
+                filename=filename,
+                category=category,
+                headers=headers,
+                subfolder=subfolder,
+                base_directory=base_directory,
+                metadata=download_metadata,
+                expected_sha256=download_metadata.get("sha256"),
+            )
+        except (TypeError, ValueError) as exc:
+            return self.web.json_response({"error": str(exc)}, status=400)
+
+        download_id = self.start_background_download(**download_spec.to_kwargs())
 
         return self.web.json_response(
             {
@@ -291,13 +372,19 @@ class DownloadService:
 
     async def aria2_status(self, request):
         """Report aria2 availability using optional request settings."""
-        settings = await self.get_override_settings_from_request(request)
+        try:
+            settings = await self.get_override_settings_from_request(request)
+        except TypeError as exc:
+            return self.web.json_response({"error": str(exc)}, status=400)
         result = await self.asyncio.to_thread(self.get_aria2_status_fn, settings)
         return self.web.json_response(result)
 
     async def aria2_start(self, request):
         """Start the aria2 daemon without starting a download."""
-        settings = await self.get_override_settings_from_request(request)
+        try:
+            settings = await self.get_override_settings_from_request(request)
+        except TypeError as exc:
+            return self.web.json_response({"error": str(exc)}, status=400)
         result = await self.asyncio.to_thread(self.start_aria2_daemon, settings)
         return self._json_result_with_success_status(result)
 
@@ -309,7 +396,14 @@ class DownloadService:
     async def aria2_install(self, request):
         """Install aria2 and persist the selected download backend."""
         payload = await read_optional_object_payload(request)
-        force = self.to_bool(payload.get("force"), False)
+        try:
+            force = read_bool_field(
+                payload,
+                "force",
+                contract_name="Aria2 install request",
+            )
+        except TypeError as exc:
+            return self.web.json_response({"error": str(exc)}, status=400)
         try:
             install_result = await self.asyncio.to_thread(
                 self.install_aria2_engine,

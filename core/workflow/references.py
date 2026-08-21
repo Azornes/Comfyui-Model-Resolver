@@ -4,11 +4,14 @@ import os
 import re
 from typing import Any, Dict, List, Optional
 
+from ..contracts import ModelReference, ResolvedModel
 from ..custom_nodes import (
     analyze_custom_node_references,
     get_custom_node_model_adapter,
 )
 from ..log_system import create_module_logger
+from ..metadata_model_utils import normalize_models
+from ..path_utils import normalize_string_values
 from ..type_utils import MODEL_EXTENSIONS, URN_TYPE_MAP, normalize_download_category
 from . import dynamic_widgets
 from .widgets import (
@@ -209,7 +212,7 @@ def _normalize_model_path_for_lookup(value: str) -> str:
 def _resolve_from_available_models(
     filename: str,
     categories: Optional[List[str]],
-    available_models: Optional[List[Dict[str, Any]]],
+    available_models: Optional[List[ResolvedModel]],
 ) -> Optional[tuple[str, str]]:
     """Resolve using scanner data with case-sensitive relative path matching."""
     if not available_models:
@@ -223,11 +226,13 @@ def _resolve_from_available_models(
     if requested_is_absolute:
         requested_key = _normalize_model_path_for_lookup(os.path.abspath(filename))
 
+    normalized_models = normalize_models(available_models)
+
     if categories is None:
         category_order = []
         seen_categories = set()
-        for model in available_models:
-            category = model.get("category")
+        for model in normalized_models:
+            category = model.category
             if category and category not in seen_categories:
                 seen_categories.add(category)
                 category_order.append(category)
@@ -239,8 +244,8 @@ def _resolve_from_available_models(
 
     for category in category_order:
         normalized_category = normalize_download_category(category)
-        for model in available_models:
-            model_category = model.get("category")
+        for model in normalized_models:
+            model_category = model.category
             if (
                 model_category != category
                 and normalize_download_category(model_category) != normalized_category
@@ -248,14 +253,14 @@ def _resolve_from_available_models(
                 continue
 
             if requested_is_absolute:
-                model_path = model.get("path") or ""
+                model_path = model.path or ""
             else:
-                model_path = model.get("relative_path") or model.get("filename") or ""
+                model_path = model.relative_path or model.filename or ""
 
             if _normalize_model_path_for_lookup(model_path) != requested_key:
                 continue
 
-            full_path = model.get("path")
+            full_path = model.path
             if full_path and os.path.exists(full_path):
                 return (category, full_path)
 
@@ -272,7 +277,9 @@ def _category_has_exact_filename(category: str, filename: str) -> Optional[bool]
         return False
 
     try:
-        available_filenames = folder_paths.get_filename_list(category) or []
+        available_filenames = normalize_string_values(
+            folder_paths.get_filename_list(category)
+        )
     except Exception:
         return None
 
@@ -286,7 +293,7 @@ def _category_has_exact_filename(category: str, filename: str) -> Optional[bool]
 def try_resolve_model_path(
     value: str,
     categories: List[str] = None,
-    available_models: Optional[List[Dict[str, Any]]] = None,
+    available_models: Optional[List[ResolvedModel]] = None,
 ) -> Optional[tuple[str, str]]:
     """Resolve a workflow model value using scanner data or ComfyUI paths."""
     if not isinstance(value, str) or not value.strip():
@@ -336,8 +343,8 @@ def try_resolve_model_path(
     return None
 
 def get_node_model_info(
-    node: Dict[str, Any], available_models: Optional[List[Dict[str, Any]]] = None
-) -> List[Dict[str, Any]]:
+    node: Dict[str, Any], available_models: Optional[List[ResolvedModel]] = None
+) -> List[ModelReference]:
     """
     Extract model references from a single node.
 
@@ -348,16 +355,8 @@ def get_node_model_info(
         node: Node dictionary from workflow JSON
 
     Returns:
-        List of model reference dictionaries:
-        {
-            'node_id': node id,
-            'node_type': node type,
-            'widget_index': index in widgets_values,
-            'original_path': original path from workflow,
-            'category': model category (if found),
-            'exists': True if model exists,
-            'connected': True if node has any connected inputs/outputs
-        }
+        Typed model references. Provider/custom-node-specific fields are kept
+        in ``ModelReference.extra``.
     """
     model_refs = []
     node_id = node.get("id")
@@ -380,7 +379,7 @@ def get_node_model_info(
     is_active = is_connected and not is_bypassed
 
     if not widgets_values:
-        return model_refs
+        return []
 
     custom_model_refs = analyze_custom_node_references(
         node,
@@ -389,7 +388,10 @@ def get_node_model_info(
         get_widget_name_hint=get_widget_name_hint,
     )
     if custom_model_refs is not None:
-        return custom_model_refs
+        return [
+            ref if isinstance(ref, ModelReference) else ModelReference.from_mapping(ref)
+            for ref in custom_model_refs
+        ]
 
     # For each widget value, check if it looks like a model file or URN
     for idx, value in enumerate(widgets_values):
@@ -646,4 +648,7 @@ def get_node_model_info(
             }
         )
 
-    return model_refs
+    return [
+        ref if isinstance(ref, ModelReference) else ModelReference.from_mapping(ref)
+        for ref in model_refs
+    ]

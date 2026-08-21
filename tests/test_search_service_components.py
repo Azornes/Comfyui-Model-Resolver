@@ -4,11 +4,17 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from core.contracts import ModelCatalogEntry, ModelMatch, SearchResult
 from core.routes.context import RouteContext
 from core.services.search_cache import SearchResultCache
 from core.services.search_dependencies import SearchDependencies
 from core.services.search_orchestrator import SearchOrchestrator
-from core.services.search_providers import SearchCancelled, SearchProviderRunner
+from core.services.search_providers import (
+    SearchCancelled,
+    SearchProviderRunner,
+    SearchRequest,
+)
+from core.type_utils import build_model_result
 
 
 def _request(**overrides):
@@ -21,7 +27,126 @@ def _request(**overrides):
         "force_search": False,
     }
     values.update(overrides)
+    request_data = values.get("data")
+    if isinstance(request_data, dict):
+        values.setdefault("model_id", request_data.get("model_id"))
+        values.setdefault("version_id", request_data.get("version_id"))
     return SimpleNamespace(**values)
+
+
+def _typed_search_request(**overrides):
+    values = {
+        "filename": "model.safetensors",
+        "category": "checkpoints",
+        "base_model_context": "SDXL",
+        "progress_id": "search-1",
+        "progress_source": "civitai",
+        "civitai_candidate_limit": 5,
+        "civarchive_candidate_limit": 10,
+        "is_urn": False,
+        "civitai_key": "",
+        "civitai_session_token": "",
+        "hf_token": "",
+        "brave_search_api_key": "",
+        "civitai_use_trpc_search": True,
+        "civitai_use_api_search": True,
+        "civitai_use_html_fallback": True,
+        "hf_use_api_search": True,
+        "hf_use_comfy_org_fallback": True,
+        "hf_use_brave_fallback": True,
+        "force_search": False,
+        "normalized_sources": frozenset({"civitai"}),
+        "sha256": "",
+    }
+    values.update(overrides)
+    return SearchRequest(**values)
+
+
+def test_search_request_from_mapping_adapts_http_payload_once():
+    request = SearchRequest.from_mapping(
+        {
+            "filename": " model.safetensors ",
+            "sources": ["CivitAI"],
+            "civitai_candidate_limit": 100,
+            "is_urn": "true",
+            "model_id": " 12 ",
+            "version_id": 34,
+            "sha256": "A" * 64,
+        },
+    )
+
+    assert request.filename == "model.safetensors"
+    assert request.normalized_sources == frozenset({"civitai"})
+    assert request.civitai_candidate_limit == 20
+    assert request.is_urn is True
+    assert request.model_id == "12"
+    assert request.version_id == 34
+    assert request.sha256 == "a" * 64
+
+
+def test_search_request_from_mapping_rejects_non_object_payloads():
+    with pytest.raises(TypeError, match="Search request must be an object"):
+        SearchRequest.from_mapping(
+            [],
+        )
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ({"filename": 123}, "SearchRequest filename must be a string"),
+        (
+            {"filename": "model.safetensors", "category": 123},
+            "SearchRequest category must be a string",
+        ),
+        (
+            {"filename": "model.safetensors", "sources": {"civitai": True}},
+            "SearchRequest sources must be a string or array",
+        ),
+        (
+            {"filename": "model.safetensors", "sources": ["civitai", 1]},
+            "SearchRequest sources must contain only strings",
+        ),
+        (
+            {"filename": "model.safetensors", "sources": None},
+            "SearchRequest sources must be a string or array",
+        ),
+    ],
+)
+def test_search_request_from_mapping_rejects_malformed_http_fields(payload, message):
+    with pytest.raises(TypeError, match=message):
+        SearchRequest.from_mapping(
+            payload,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    [
+        ("category", 123),
+        ("civitai_key", 123),
+        ("is_urn", "false"),
+        ("force_search", {"enabled": True}),
+        ("civitai_candidate_limit", "5"),
+        ("normalized_sources", {"civitai"}),
+        ("model_id", 1.5),
+        ("version_id", False),
+    ],
+)
+def test_search_request_rejects_invalid_normalized_field_types(field_name, value):
+    with pytest.raises((TypeError, ValueError), match=field_name):
+        _typed_search_request(**{field_name: value})
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    ["civitai_candidate_limit", "civarchive_candidate_limit"],
+)
+def test_search_request_from_mapping_rejects_invalid_limit_types(field_name):
+    with pytest.raises((TypeError, ValueError), match=field_name):
+        SearchRequest.from_mapping(
+            {"filename": "model.safetensors", field_name: "invalid"},
+        )
 
 
 def _build_search_orchestrator():
@@ -33,19 +158,6 @@ def _build_search_orchestrator():
         logger=MagicMock(),
     )
 
-    def to_bool(value, default=False):
-        if value is None:
-            return default
-        if isinstance(value, str):
-            return value.strip().lower() in {"1", "true", "yes", "on"}
-        return bool(value)
-
-    def to_int(value, default=0):
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return default
-
     def extract_sha256(metadata):
         return metadata.get("sha256") or (
             metadata.get("hashes") or {}
@@ -55,10 +167,7 @@ def _build_search_orchestrator():
         "self": extension,
         "asyncio": asyncio,
         "CivArchiveSearchError": Exception,
-        "build_model_result": lambda source, **fields: {
-            "source": source,
-            **fields,
-        },
+        "build_model_result": build_model_result,
         "clear_civarchive_search_cache": MagicMock(),
         "clear_civitai_search_cache": MagicMock(),
         "clear_huggingface_search_cache": MagicMock(),
@@ -78,8 +187,6 @@ def _build_search_orchestrator():
         "search_local_matches_by_hash": MagicMock(return_value=[]),
         "search_lora_manager_archive_for_file": MagicMock(),
         "search_model_list": MagicMock(),
-        "to_bool": to_bool,
-        "to_int": to_int,
         "web": SimpleNamespace(
             json_response=lambda payload, status=200: SimpleNamespace(
                 payload=payload,
@@ -200,7 +307,7 @@ def test_search_provider_runner_retries_without_base_model_context():
         calls.append((base_model_context, progress_callback))
         if len(calls) == 1:
             return None
-        return {"name": "Fallback model"}
+        return SearchResult(source="civitai", name="Fallback model")
 
     result = runner.execute_search_with_fallback(
         _request(),
@@ -210,9 +317,9 @@ def test_search_provider_runner_retries_without_base_model_context():
     )
 
     assert [call[0] for call in calls] == ["SDXL", None]
-    assert result["any_model_match"] is True
-    assert result["base_model_fallback"] is True
-    assert result["requested_base_model"] == "SDXL"
+    assert result.extra_value("any_model_match") is True
+    assert result.extra_value("base_model_fallback") is True
+    assert result.extra_value("requested_base_model") == "SDXL"
 
 
 def test_search_provider_runner_searches_local_sources():
@@ -220,15 +327,20 @@ def test_search_provider_runner_searches_local_sources():
         logger=MagicMock(),
         search_tracker=MagicMock(),
         format_log_fields=MagicMock(return_value="file=model.safetensors"),
+        build_model_result=build_model_result,
         get_popular_model_url=MagicMock(
-            return_value={"download_url": "https://example.test/model"}
+            return_value=ModelCatalogEntry(
+                filename="model.safetensors",
+                download_url="https://example.test/model",
+            )
         ),
         search_model_list=MagicMock(
-            return_value={
-                "filename": "model.safetensors",
-                "size": 123,
-                "confidence": 95,
-            }
+            return_value=SearchResult(
+                source="model_list",
+                filename="model.safetensors",
+                size=123,
+                confidence=95,
+            )
         ),
         log_search_result=MagicMock(),
     )
@@ -238,9 +350,9 @@ def test_search_provider_runner_searches_local_sources():
     result, found = runner.search_local_sources(_request(is_urn=False))
 
     assert found is True
-    assert result["popular"]["size"] == 123
-    assert result["popular"]["download_url"] == "https://example.test/model"
-    assert result["model_list"]["confidence"] == 95
+    assert result["popular"].size == 123
+    assert result["popular"].download_url == "https://example.test/model"
+    assert result["model_list"].confidence == 95
 
 
 def test_search_provider_runner_scales_provider_progress():
@@ -358,7 +470,7 @@ def test_search_provider_runner_resolves_civitai_urn():
             }
         ),
         get_civitai_download_url=MagicMock(return_value="https://example.test/download"),
-        build_model_result=MagicMock(side_effect=lambda source, **fields: {"source": source, **fields}),
+        build_model_result=MagicMock(side_effect=build_model_result),
     )
     owner.search_tracker.is_cancelled.return_value = False
     owner.log_search_result = MagicMock()
@@ -373,20 +485,20 @@ def test_search_provider_runner_resolves_civitai_urn():
     )
 
     assert found is True
-    assert result["civitai"]["model_id"] == 10
-    assert result["civitai"]["version_id"] == 20
-    assert result["civitai"]["name"] == "URN Model"
-    assert result["civitai"]["version_name"] == "v1"
-    assert result["civitai"]["filename"] == "urn.safetensors"
-    assert result["civitai"]["type"] == "checkpoints"
-    assert result["civitai"]["download_url"] == "https://example.test/download"
-    assert result["civitai"]["url"] == "https://civitai.com/models/10?modelVersionId=20"
-    assert result["civitai"]["size"] is None
-    assert result["civitai"]["base_model"] == "SDXL"
-    assert result["civitai"]["match_type"] == "exact"
-    assert result["civitai"]["confidence"] == 100.0
-    assert result["civitai"]["sha256"] == "a" * 64
-    assert result["civitai"]["hashes"] == {}
+    assert result["civitai"].model_id == 10
+    assert result["civitai"].version_id == 20
+    assert result["civitai"].name == "URN Model"
+    assert result["civitai"].version_name == "v1"
+    assert result["civitai"].filename == "urn.safetensors"
+    assert result["civitai"].model_type == "checkpoints"
+    assert result["civitai"].download_url == "https://example.test/download"
+    assert result["civitai"].url == "https://civitai.com/models/10?modelVersionId=20"
+    assert result["civitai"].size is None
+    assert result["civitai"].base_model == "SDXL"
+    assert result["civitai"].match_type == "exact"
+    assert result["civitai"].confidence == 100.0
+    assert result["civitai"].sha256 == "a" * 64
+    assert result["civitai"].hashes == {}
 
 
 def test_search_provider_runner_keeps_first_file_when_expected_name_is_missing():
@@ -413,7 +525,7 @@ def test_search_provider_runner_keeps_first_file_when_expected_name_is_missing()
             }
         ),
         get_civitai_download_url=MagicMock(return_value="https://example.test/download"),
-        build_model_result=MagicMock(side_effect=lambda source, **fields: {"source": source, **fields}),
+        build_model_result=MagicMock(side_effect=build_model_result),
     )
     owner.search_tracker.is_cancelled.return_value = False
     owner.log_search_result = MagicMock()
@@ -428,7 +540,7 @@ def test_search_provider_runner_keeps_first_file_when_expected_name_is_missing()
     )
 
     assert found is True
-    assert result["civitai"]["sha256"] == "a" * 64
+    assert result["civitai"].sha256 == "a" * 64
 
 
 def test_search_provider_runner_falls_back_for_civitai_urn_without_ids():
@@ -438,18 +550,19 @@ def test_search_provider_runner_falls_back_for_civitai_urn_without_ids():
         format_log_fields=MagicMock(return_value="file=model.safetensors"),
         search_civitai=MagicMock(
             return_value=[
-                {
-                    "model_id": 30,
-                    "version_id": 40,
-                    "name": "Fallback model",
-                    "filename": "model.safetensors",
-                    "type": "Checkpoint",
-                    "download_url": "https://example.test/fallback",
-                    "url": "https://example.test/model/30",
-                    "size": 456,
-                    "base_model": "SDXL",
-                    "tags": ["fallback"],
-                }
+                SearchResult(
+                    source="civitai",
+                    model_id=30,
+                    version_id=40,
+                    name="Fallback model",
+                    filename="model.safetensors",
+                    model_type="Checkpoint",
+                    download_url="https://example.test/fallback",
+                    url="https://example.test/model/30",
+                    size=456,
+                    base_model="SDXL",
+                    tags=["fallback"],
+                )
             ]
         ),
         build_model_result=MagicMock(
@@ -465,8 +578,9 @@ def test_search_provider_runner_falls_back_for_civitai_urn_without_ids():
     )
 
     assert found is True
-    assert result["civitai"]["model_id"] == 30
-    assert result["civitai"]["download_url"] == "https://example.test/fallback"
+    assert isinstance(result["civitai"], SearchResult)
+    assert result["civitai"].model_id == 30
+    assert result["civitai"].download_url == "https://example.test/fallback"
     owner.search_civitai.assert_called_once_with(
         "model.safetensors",
         model_type="checkpoints",
@@ -480,7 +594,11 @@ def test_search_provider_runner_resolves_civarchive_urn():
         search_tracker=MagicMock(),
         format_log_fields=MagicMock(return_value="ids=10@20"),
         resolve_civarchive_model_version=MagicMock(
-            return_value={"name": "Archived model", "version_id": 20}
+        return_value=SearchResult(
+            source="civarchive",
+            name="Archived model",
+            version_id=20,
+        )
         ),
         log_search_result=MagicMock(),
     )
@@ -495,7 +613,8 @@ def test_search_provider_runner_resolves_civarchive_urn():
     )
 
     assert found is True
-    assert result["civarchive"] == {"name": "Archived model", "version_id": 20}
+    assert result["civarchive"].name == "Archived model"
+    assert result["civarchive"].version_id == 20
     owner.resolve_civarchive_model_version.assert_called_once_with(
         10,
         20,
@@ -509,7 +628,7 @@ def test_search_provider_runner_searches_lora_manager_archive():
         search_tracker=MagicMock(),
         format_log_fields=MagicMock(return_value="file=model.safetensors"),
         search_lora_manager_archive_for_file=MagicMock(
-            return_value={"name": "Archived LoRA"}
+            return_value=SearchResult(source="lora_manager_archive", name="Archived LoRA")
         ),
         log_search_result=MagicMock(),
     )
@@ -521,7 +640,7 @@ def test_search_provider_runner_searches_lora_manager_archive():
     )
 
     assert found is True
-    assert result == {"lora_manager_archive": {"name": "Archived LoRA"}}
+    assert result["lora_manager_archive"].name == "Archived LoRA"
     owner.search_lora_manager_archive_for_file.assert_called_once()
 
 
@@ -710,7 +829,7 @@ async def test_search_orchestrator_returns_cancelled_response():
 
 
 @pytest.mark.asyncio
-async def test_search_orchestrator_returns_error_response_for_unexpected_failure():
+async def test_search_orchestrator_rejects_invalid_request_payload():
     orchestrator, dependencies = _build_search_orchestrator()
     request = SimpleNamespace(
         json=AsyncMock(side_effect=ValueError("invalid request"))
@@ -718,12 +837,32 @@ async def test_search_orchestrator_returns_error_response_for_unexpected_failure
 
     response = await orchestrator.search_sources(request)
 
-    assert response.status == 500
-    assert response.payload == {"error": "invalid request"}
-    error_update = dependencies["self"].search_tracker.update.call_args
-    assert error_update.args[:5] == ("", "", "error", "invalid request", 100)
-    assert error_update.kwargs == {"status": "error"}
-    dependencies["self"].logger.exception.assert_called_once()
+    assert response.status == 400
+    assert response.payload == {
+        "error": "Filename is required for non-URN, or model_id+version_id for URN"
+    }
+    dependencies["self"].search_tracker.update.assert_not_called()
+    dependencies["self"].logger.exception.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"filename": "model.safetensors", "category": 123},
+        {"filename": "model.safetensors", "sources": {"civitai": True}},
+    ],
+)
+async def test_search_orchestrator_returns_bad_request_for_contract_errors(payload):
+    orchestrator, dependencies = _build_search_orchestrator()
+    request = SimpleNamespace(json=AsyncMock(return_value=payload))
+
+    response = await orchestrator.search_sources(request)
+
+    assert response.status == 400
+    assert response.payload["error"]
+    dependencies["self"].search_tracker.update.assert_not_called()
+    dependencies["self"].logger.exception.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -735,8 +874,18 @@ async def test_search_orchestrator_deduplicates_local_hash_matches_and_keeps_err
     def lookup_by_hash(sha256, **kwargs):
         if sha256 == first_hash:
             return [
-                {"model": {"path": r"C:\\Models\\Local.safetensors"}},
-                {"path": r"c:\\models\\local.safetensors"},
+                ModelMatch.from_mapping(
+                    {
+                        "model": {"path": r"C:\\Models\\Local.safetensors"},
+                        "filename": "Local.safetensors",
+                    }
+                ),
+                ModelMatch.from_mapping(
+                    {
+                        "model": {"path": r"c:\\models\\local.safetensors"},
+                        "filename": "local.safetensors",
+                    }
+                ),
             ]
         raise RuntimeError("local index unavailable")
 
@@ -744,12 +893,20 @@ async def test_search_orchestrator_deduplicates_local_hash_matches_and_keeps_err
     orchestrator.provider_runner = _StaticSearchRunner(
         {
             "civitai": [
-                {
-                    "filename": "remote.safetensors",
-                    "hashes": {"SHA256": first_hash},
-                },
-                {"filename": "without-hash.safetensors"},
-                {"filename": "failing.safetensors", "sha256": failing_hash},
+                SearchResult(
+                    source="civitai",
+                    filename="remote.safetensors",
+                    hashes={"SHA256": first_hash},
+                ),
+                SearchResult(
+                    source="civitai",
+                    filename="without-hash.safetensors",
+                ),
+                SearchResult(
+                    source="civitai",
+                    filename="failing.safetensors",
+                    sha256=failing_hash,
+                ),
             ],
             "source_errors": {"civarchive": "provider unavailable"},
         },

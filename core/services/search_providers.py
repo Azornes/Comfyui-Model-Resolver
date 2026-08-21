@@ -1,8 +1,17 @@
 """Provider-specific search execution and progress handling."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from ..contracts import SearchResult
+from ..request_utils import (
+    extract_request_sha256,
+    read_bool_field,
+    read_identifier_field,
+    read_int_field,
+    read_text_field,
+)
 from ..sources.civarchive import build_civarchive_failure_status
 from ..sources.civitai import build_civitai_result_payload
 from ..type_utils import select_primary_model_file
@@ -16,7 +25,6 @@ class SearchCancelled(BaseException):
 class SearchRequest:
     """Normalized values shared by the provider search tasks."""
 
-    data: dict[str, Any]
     filename: str
     category: str
     base_model_context: str
@@ -38,6 +46,240 @@ class SearchRequest:
     force_search: bool
     normalized_sources: frozenset[str]
     sha256: str = ""
+    model_id: int | str | None = None
+    version_id: int | str | None = None
+
+    _TEXT_FIELDS = (
+        "filename",
+        "category",
+        "base_model_context",
+        "progress_id",
+        "progress_source",
+        "civitai_key",
+        "civitai_session_token",
+        "hf_token",
+        "brave_search_api_key",
+        "sha256",
+    )
+    _BOOLEAN_FIELDS = (
+        "is_urn",
+        "civitai_use_trpc_search",
+        "civitai_use_api_search",
+        "civitai_use_html_fallback",
+        "hf_use_api_search",
+        "hf_use_comfy_org_fallback",
+        "hf_use_brave_fallback",
+        "force_search",
+    )
+
+    @classmethod
+    def from_mapping(
+        cls,
+        value: Mapping[str, Any],
+    ) -> "SearchRequest":
+        """Adapt one HTTP payload into the typed provider request."""
+        if not isinstance(value, Mapping):
+            raise TypeError("Search request must be an object")
+        data = dict(value)
+
+        filename = read_text_field(
+            data,
+            "filename",
+            contract_name="SearchRequest",
+        )
+        sha256 = extract_request_sha256(
+            data,
+            keys=("sha256", "hash", "file_hash"),
+        )
+        category = read_text_field(
+            data,
+            "category",
+            contract_name="SearchRequest",
+        )
+        base_model_context = read_text_field(
+            data,
+            "base_model_context",
+            contract_name="SearchRequest",
+        )
+        progress_id = read_text_field(
+            data,
+            "progress_id",
+            contract_name="SearchRequest",
+        )
+        progress_source = read_text_field(
+            data,
+            "progress_source",
+            contract_name="SearchRequest",
+        )
+
+        civitai_candidate_limit = read_int_field(
+            data,
+            "civitai_candidate_limit",
+            default=5,
+            contract_name="SearchRequest",
+        )
+        civarchive_candidate_limit = read_int_field(
+            data,
+            "civarchive_candidate_limit",
+            default=10,
+            contract_name="SearchRequest",
+        )
+        civitai_candidate_limit = max(1, min(civitai_candidate_limit, 20))
+        civarchive_candidate_limit = max(1, min(civarchive_candidate_limit, 30))
+
+        def read_request_bool(field_name: str, default: bool) -> bool:
+            return read_bool_field(
+                data,
+                field_name,
+                default=default,
+                contract_name="SearchRequest",
+            )
+
+        is_urn = read_request_bool("is_urn", False)
+        raw_sources = data.get("sources", ["all"])
+        if isinstance(raw_sources, str):
+            raw_sources = [raw_sources]
+        elif raw_sources is None or not isinstance(raw_sources, list):
+            raise TypeError("SearchRequest sources must be a string or array")
+        if any(not isinstance(source, str) for source in raw_sources):
+            raise TypeError("SearchRequest sources must contain only strings")
+
+        normalized_sources = frozenset(
+            source.strip().lower()
+            for source in raw_sources
+            if source.strip()
+        )
+        if not normalized_sources:
+            normalized_sources = frozenset({"all"})
+        if "all" in normalized_sources:
+            normalized_sources = frozenset(
+                {
+                    "local",
+                    "huggingface",
+                    "civitai",
+                    "civarchive",
+                    "lora_manager_archive",
+                }
+            )
+
+        if not progress_source:
+            progress_source = (
+                next(iter(normalized_sources))
+                if len(normalized_sources) == 1
+                else "all"
+            )
+
+        return cls(
+            filename=filename,
+            category=category,
+            base_model_context=base_model_context,
+            progress_id=progress_id,
+            progress_source=progress_source,
+            civitai_candidate_limit=civitai_candidate_limit,
+            civarchive_candidate_limit=civarchive_candidate_limit,
+            is_urn=is_urn,
+            civitai_key=read_text_field(
+                data,
+                "civitai_key",
+                contract_name="SearchRequest",
+            ),
+            civitai_session_token=read_text_field(
+                data,
+                "civitai_session_token",
+                contract_name="SearchRequest",
+            ),
+            hf_token=read_text_field(
+                data,
+                "hf_token",
+                contract_name="SearchRequest",
+            ),
+            brave_search_api_key=read_text_field(
+                data,
+                "brave_search_api_key",
+                contract_name="SearchRequest",
+            ),
+            civitai_use_trpc_search=read_request_bool(
+                "civitai_use_trpc_search",
+                True,
+            ),
+            civitai_use_api_search=read_request_bool(
+                "civitai_use_api_search",
+                True,
+            ),
+            civitai_use_html_fallback=read_request_bool(
+                "civitai_use_html_fallback",
+                True,
+            ),
+            hf_use_api_search=read_request_bool("hf_use_api_search", True),
+            hf_use_comfy_org_fallback=read_request_bool(
+                "hf_use_comfy_org_fallback",
+                True,
+            ),
+            hf_use_brave_fallback=read_request_bool(
+                "hf_use_brave_fallback",
+                True,
+            ),
+            force_search=read_request_bool("force_search", False),
+            normalized_sources=normalized_sources,
+            sha256=sha256,
+            model_id=read_identifier_field(
+                data,
+                "model_id",
+                contract_name="SearchRequest",
+            ),
+            version_id=read_identifier_field(
+                data,
+                "version_id",
+                contract_name="SearchRequest",
+            ),
+        )
+
+    def __post_init__(self) -> None:
+        """Validate the normalized request before provider execution."""
+        for field_name in self._TEXT_FIELDS:
+            value = getattr(self, field_name)
+            if value is None:
+                value = ""
+            if not isinstance(value, str):
+                raise TypeError(f"SearchRequest {field_name} must be a string")
+            object.__setattr__(self, field_name, value)
+
+        for field_name in self._BOOLEAN_FIELDS:
+            value = getattr(self, field_name)
+            if not isinstance(value, bool):
+                raise TypeError(f"SearchRequest {field_name} must be a boolean")
+
+        for field_name in (
+            "civitai_candidate_limit",
+            "civarchive_candidate_limit",
+        ):
+            value = getattr(self, field_name)
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(
+                    f"SearchRequest {field_name} must be a positive integer"
+                )
+            if value < 1:
+                raise ValueError(
+                    f"SearchRequest {field_name} must be a positive integer"
+                )
+
+        for field_name in ("model_id", "version_id"):
+            value = getattr(self, field_name)
+            if value is None:
+                continue
+            if isinstance(value, bool) or not isinstance(value, (int, str)):
+                raise TypeError(
+                    f"SearchRequest {field_name} must be an integer or string"
+                )
+            if isinstance(value, str):
+                object.__setattr__(self, field_name, value.strip() or None)
+
+        if not isinstance(self.normalized_sources, frozenset):
+            raise TypeError("SearchRequest normalized_sources must be a frozenset")
+        if any(not isinstance(source, str) for source in self.normalized_sources):
+            raise TypeError(
+                "SearchRequest normalized_sources must contain only strings"
+            )
 
     @property
     def search_local(self):
@@ -171,19 +413,22 @@ class SearchProviderRunner:
             raise
 
     def mark_any_model_fallback(self, request: SearchRequest, result):
+        if result is None:
+            return None
         if isinstance(result, list):
             return [
                 self.mark_any_model_fallback(request, item)
                 for item in result
             ]
-        if not isinstance(result, dict):
-            return result
-
-        marked = dict(result)
-        marked["any_model_match"] = True
-        marked["base_model_fallback"] = True
-        marked["requested_base_model"] = request.base_model_context
-        return marked
+        if isinstance(result, SearchResult):
+            return result.with_extra(
+                any_model_match=True,
+                base_model_fallback=True,
+                requested_base_model=request.base_model_context,
+            )
+        raise TypeError(
+            f"{type(result).__name__} is not a typed search result"
+        )
 
     def execute_search_with_fallback(
         self,
@@ -248,7 +493,6 @@ class SearchProviderRunner:
                 return source_results, source_found
 
             popular_info = self.owner.get_popular_model_url(request.filename)
-            self.owner.log_search_result("popular", popular_info)
             self.owner.search_tracker.update(
                 request.progress_id,
                 "local",
@@ -262,30 +506,44 @@ class SearchProviderRunner:
                 model_list_result,
                 {
                     "confidence": (
-                        model_list_result.get("confidence")
+                        model_list_result.confidence
                         if model_list_result
                         else None
                     )
                 },
             )
             if popular_info:
-                popular_result = {
-                    "source": "popular",
-                    "filename": request.filename,
-                    **popular_info,
-                }
+                popular_result = self.owner.build_model_result(
+                    "popular",
+                    filename=request.filename,
+                    name=popular_info.name or request.filename,
+                    type=popular_info.model_type,
+                    url=(
+                        popular_info.url
+                        or popular_info.download_url
+                        or ""
+                    ),
+                    download_url=popular_info.download_url,
+                    size=popular_info.size,
+                    match_type="exact",
+                    directory=popular_info.directory,
+                    **dict(popular_info.extra),
+                )
                 if (
                     model_list_result
-                    and model_list_result.get("filename", "").lower()
+                    and model_list_result.filename.lower()
                     == request.filename.lower()
-                    and model_list_result.get("size")
+                    and model_list_result.size is not None
                 ):
-                    popular_result["size"] = model_list_result.get("size")
+                    popular_result = popular_result.with_updates(
+                        size=model_list_result.size
+                    )
                 source_results["popular"] = popular_result
+                self.owner.log_search_result("popular", popular_result)
                 source_found = True
 
             if model_list_result:
-                confidence = model_list_result.get("confidence", 0)
+                confidence = model_list_result.confidence
                 if (request.is_urn and confidence >= 70) or not request.is_urn:
                     source_results["model_list"] = model_list_result
                     source_found = True
@@ -340,8 +598,8 @@ class SearchProviderRunner:
             source_found = False
 
             if request.is_urn:
-                model_id = request.data.get("model_id")
-                version_id = request.data.get("version_id")
+                model_id = request.model_id
+                version_id = request.version_id
 
                 if model_id and version_id:
                     self.owner.search_tracker.update(
@@ -418,20 +676,7 @@ class SearchProviderRunner:
                         {"results_count": len(civitai_results)},
                     )
                     if civitai_results:
-                        first_result = civitai_results[0]
-                        source_results["civitai"] = self.owner.build_model_result(
-                            "civitai",
-                            model_id=first_result.get("model_id"),
-                            version_id=first_result.get("version_id"),
-                            name=first_result.get("name"),
-                            filename=first_result.get("filename"),
-                            type=first_result.get("type"),
-                            download_url=first_result.get("download_url"),
-                            url=first_result.get("url"),
-                            size=first_result.get("size"),
-                            base_model=first_result.get("base_model"),
-                            tags=first_result.get("tags", []),
-                        )
+                        source_results["civitai"] = civitai_results[0]
                         source_found = True
             else:
                 civitai_result = self.execute_search_with_fallback(
@@ -478,8 +723,8 @@ class SearchProviderRunner:
             source_found = False
 
             if request.is_urn:
-                model_id = request.data.get("model_id")
-                version_id = request.data.get("version_id")
+                model_id = request.model_id
+                version_id = request.version_id
                 if model_id and version_id:
                     self.owner.search_tracker.update(
                         request.progress_id,
@@ -628,8 +873,8 @@ class SearchProviderRunner:
             or getattr(request, "sha256", "")
             or (
                 request.is_urn
-                and request.data.get("model_id")
-                and request.data.get("version_id")
+                and request.model_id
+                and request.version_id
             )
         ):
             tasks.append(

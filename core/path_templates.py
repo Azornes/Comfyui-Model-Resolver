@@ -6,6 +6,7 @@ import re
 from collections import Counter, defaultdict
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
+from .contracts import ResolvedModel
 from .settings import (
     normalize_download_category,
     normalize_relative_subfolder,
@@ -251,7 +252,7 @@ def _infer_category_template(records: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def infer_download_path_templates(
-    models: Iterable[Mapping[str, Any]],
+    models: Iterable[ResolvedModel],
     base_models_config: Any,
 ) -> Dict[str, Any]:
     """Return template and base-model mapping suggestions for local model folders."""
@@ -261,15 +262,24 @@ def infer_download_path_templates(
     mapping_votes: Dict[str, Counter] = defaultdict(Counter)
     seen = set()
 
-    for model in models or []:
-        category = normalize_download_category(str(model.get("category") or ""))
+    if models is None:
+        model_values = ()
+    elif isinstance(models, (str, bytes)):
+        raise TypeError("models must be an iterable of ResolvedModel values")
+    else:
+        model_values = models
+
+    for model in model_values:
+        if not isinstance(model, ResolvedModel):
+            raise TypeError("models must contain ResolvedModel values")
+        category = normalize_download_category(str(model.category or ""))
         if category not in TEMPLATE_CATEGORIES:
             continue
 
-        relative_path = str(model.get("relative_path") or model.get("filename") or "")
+        relative_path = str(model.relative_path or model.filename or "")
         model_key = (
             category,
-            str(model.get("path") or ""),
+            str(model.path or ""),
             relative_path,
         )
         if model_key in seen:

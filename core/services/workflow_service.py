@@ -1,6 +1,13 @@
 """Workflow analysis service."""
 
-from ..request_utils import validate_workflow_payload
+from ..contracts import MissingModel, Resolution, WorkflowAnalysisResult
+from ..custom_nodes import get_custom_node_resolution_metadata
+from ..request_utils import (
+    read_bool_field,
+    read_optional_object_payload,
+    read_text_field,
+    validate_workflow_payload,
+)
 from ..routes.context import RouteContext
 
 
@@ -25,7 +32,6 @@ class WorkflowService:
         self.should_skip_existing_custom_node_reference = context.require(
             "should_skip_existing_custom_node_reference"
         )
-        self.to_bool = context.require("to_bool")
         self.web = context.require("web")
 
     async def analyze_workflow(self, request):
@@ -39,15 +45,25 @@ class WorkflowService:
         invalidate_local_hash_match_cache = self.invalidate_local_hash_match_cache
         search_model_list = self.search_model_list
         should_skip_existing_custom_node_reference = self.should_skip_existing_custom_node_reference
-        to_bool = self.to_bool
         web = self.web
         try:
-            data = await request.json()
+            data = await read_optional_object_payload(request)
             workflow_json, workflow_error = validate_workflow_payload(
                 data.get("workflow")
             )
-            analysis_id = str(data.get("analysis_id") or "").strip()
-            force_rescan = to_bool(data.get("force_rescan"), False)
+            try:
+                analysis_id = read_text_field(
+                    data,
+                    "analysis_id",
+                    contract_name="Workflow analysis request",
+                )
+                force_rescan = read_bool_field(
+                    data,
+                    "force_rescan",
+                    contract_name="Workflow analysis request",
+                )
+            except TypeError as exc:
+                return web.json_response({"error": str(exc)}, status=400)
             if force_rescan:
                 invalidate_local_hash_match_cache()
 
@@ -72,7 +88,7 @@ class WorkflowService:
                 self._update_analysis_progress(analysis_id, payload)
 
             # Analyze and find matches
-            result = await asyncio.to_thread(
+            analysis_result = await asyncio.to_thread(
                 analyze_and_find_matches,
                 workflow_json,
                 0.0,
@@ -82,38 +98,36 @@ class WorkflowService:
                 analysis_id=analysis_id,
             )
 
-            missing_models = result.get("missing_models", [])
-            filtered_missing = []
-            for missing in missing_models:
-                name = missing.get("name") or missing.get("original_path", "")
-                if should_skip_existing_custom_node_reference(missing):
+            filtered_missing: list[MissingModel] = []
+            for missing in analysis_result.missing_models:
+                name = (
+                    missing.extra_value("name")
+                    or missing.reference.original_path
+                )
+                if should_skip_existing_custom_node_reference(missing.reference):
                     self.logger.info(
                         "Filtered existing custom-node model "
                         f"reference: {name}"
                     )
                     continue
                 filtered_missing.append(missing)
-            result["missing_models"] = filtered_missing
-            result["total_missing"] = len(filtered_missing)
 
             # If download available, check for download sources only from LOCAL sources
             # (workflow_url, popular, model-list.json) - skip automatic online search
             # Online search is now only triggered on-demand via search button
             if download_available:
-                for missing in result.get("missing_models", []):
+                for index, missing in enumerate(filtered_missing):
                     # Check if there's a 100% local match
-                    matches = missing.get("matches", [])
-                    has_perfect_match = any(
-                        m.get("confidence", 0) == 100 for m in matches
-                    )
+                    matches = missing.matches or ()
+                    has_perfect_match = any(match.confidence == 100 for match in matches)
 
                     if not has_perfect_match:
                         filename = get_filename_from_path(
-                            missing.get("original_path", "")
+                            missing.reference.original_path
                         )
 
                         # 0. Check workflow URL first (highest priority - directly from workflow)
-                        workflow_url = missing.get("workflow_url", "")
+                        workflow_url = missing.extra_value("workflow_url", "")
                         if workflow_url:
                             # Determine source from URL
                             if "huggingface.co" in workflow_url:
@@ -126,21 +140,24 @@ class WorkflowService:
                             # Try to get file size using cached remote helper
                             file_size = fetch_remote_file_size_cached(workflow_url, timeout=5)
 
-                            missing["download_source"] = {
-                                "source": source,
-                                "url": workflow_url,
-                                "model_url": missing.get(
-                                    "workflow_model_url", workflow_url
-                                ),
-                                "filename": filename,
-                                "directory": missing.get(
-                                    "workflow_directory", ""
-                                )
-                                or missing.get("category", "checkpoints"),
-                                "match_type": "exact",
-                                "url_source": "workflow",
-                                "size": file_size,
-                            }
+                            filtered_missing[index] = missing.with_extra(
+                                download_source={
+                                    "source": source,
+                                    "url": workflow_url,
+                                    "model_url": missing.extra_value(
+                                        "workflow_model_url", workflow_url
+                                    ),
+                                    "filename": filename,
+                                    "directory": missing.extra_value(
+                                        "workflow_directory", ""
+                                    )
+                                    or missing.reference.category
+                                    or "checkpoints",
+                                    "match_type": "exact",
+                                    "url_source": "workflow",
+                                    "size": file_size,
+                                }
+                            )
                             continue
 
                         # 1. Check popular models (always exact match)
@@ -149,20 +166,27 @@ class WorkflowService:
                             popular_model_list_result = search_model_list(
                                 filename, exact_only=True
                             )
-                            missing["download_source"] = {
-                                "source": "popular",
-                                "url": popular_info.get("url"),
-                                "filename": filename,
-                                "type": popular_info.get("type"),
-                                "directory": popular_info.get("directory"),
-                                "size": (
-                                    popular_model_list_result.get("size")
+                            filtered_missing[index] = missing.with_extra(
+                                download_source={
+                                    "source": "popular",
+                                    "url": popular_info.url
+                                    or popular_info.download_url,
+                                    "filename": popular_info.filename or filename,
+                                    "type": popular_info.model_type,
+                                    "directory": popular_info.directory,
+                                    "size": (
+                                        popular_model_list_result.size
+                                        if popular_model_list_result
+                                        and popular_model_list_result.size
+                                        is not None
+                                        else None
+                                    )
                                     if popular_model_list_result
-                                    else None
-                                )
-                                or popular_info.get("size"),
-                                "match_type": "exact",
-                            }
+                                    and popular_model_list_result.size is not None
+                                    else popular_info.size,
+                                    "match_type": "exact",
+                                }
+                            )
                             continue
 
                         # 2. Check model list (ComfyUI Manager database)
@@ -171,26 +195,34 @@ class WorkflowService:
                             filename, exact_only=True
                         )
                         if model_list_result:
-                            missing["download_source"] = {
-                                "source": "model_list",
-                                "url": model_list_result.get("url"),
-                                "filename": model_list_result.get("filename"),
-                                "name": model_list_result.get("name"),
-                                "type": model_list_result.get("type"),
-                                "directory": model_list_result.get("directory"),
-                                "size": model_list_result.get("size"),
-                                "match_type": model_list_result.get(
-                                    "match_type"
-                                ),
-                                "confidence": model_list_result.get(
-                                    "confidence"
-                                ),
-                            }
+                            filtered_missing[index] = missing.with_extra(
+                                download_source={
+                                    "source": "model_list",
+                                    "url": model_list_result.url,
+                                    "filename": model_list_result.filename,
+                                    "name": model_list_result.name,
+                                    "type": model_list_result.model_type,
+                                    "directory": model_list_result.extra_value(
+                                        "directory"
+                                    ),
+                                    "size": model_list_result.size,
+                                    "match_type": model_list_result.match_type,
+                                    "confidence": model_list_result.confidence,
+                                }
+                            )
                             continue
 
                         # NOTE: Search for online sources (HuggingFace, CivitAI) is
                         # now done on-demand via /model_resolver/search endpoint
                         # when user clicks "Search Online" button, not automatically
+
+            result = WorkflowAnalysisResult(
+                missing_models=tuple(filtered_missing),
+                resolved_models=analysis_result.resolved_models,
+                total_resolved=analysis_result.total_resolved,
+                total_missing=len(filtered_missing),
+                total_models_analyzed=analysis_result.total_models_analyzed,
+            )
 
             if analysis_id:
                 self.analysis_progress.update(
@@ -198,11 +230,11 @@ class WorkflowService:
                     status="completed",
                     stage="completed",
                     message="Analysis complete",
-                    current=result.get("total_missing", 0),
-                    total=result.get("total_missing", 0),
+                    current=result.total_missing,
+                    total=result.total_missing,
                 )
 
-            return web.json_response(result)
+            return web.json_response(result.to_dict())
         except Exception as e:
             if "analysis_id" in locals() and analysis_id:
                 self.analysis_progress.update(
@@ -220,22 +252,40 @@ class WorkflowService:
         """Apply model resolution and return updated workflow."""
         apply_resolution = self.apply_resolution
         web = self.web
-        data = await request.json()
+        data = await read_optional_object_payload(request)
         workflow_json, workflow_error = validate_workflow_payload(
             data.get("workflow"),
             empty_is_missing=True,
             require_object=False,
         )
-        resolutions = data.get("resolutions", [])
+        raw_resolutions = data.get("resolutions", [])
 
         if workflow_error:
             return web.json_response(
                 {"error": workflow_error}, status=400
             )
 
-        if not resolutions:
+        if not isinstance(raw_resolutions, list) or not raw_resolutions:
             return web.json_response(
                 {"error": "Resolutions array is required"}, status=400
+            )
+
+        try:
+            resolutions = []
+            for raw_resolution in raw_resolutions:
+                if not isinstance(raw_resolution, dict):
+                    raise ValueError("Each resolution must be an object")
+                resolution = Resolution.from_mapping(raw_resolution)
+                resolution.validate()
+                resolutions.append(
+                    resolution.with_custom_node_metadata(
+                        get_custom_node_resolution_metadata(resolution.reference)
+                    )
+                )
+        except (TypeError, ValueError) as exc:
+            return web.json_response(
+                {"error": f"Invalid resolution: {exc}"},
+                status=400,
             )
 
         # Apply resolutions
@@ -249,12 +299,26 @@ class WorkflowService:
         """Search local model files by filename/path."""
         invalidate_local_hash_match_cache = self.invalidate_local_hash_match_cache
         search_local_matches = self.search_local_matches
-        to_bool = self.to_bool
         web = self.web
-        data = await request.json()
-        filename = data.get("filename", "")
-        category = data.get("category", "")
-        force_rescan = to_bool(data.get("force_rescan"), False)
+        data = await read_optional_object_payload(request)
+        try:
+            filename = read_text_field(
+                data,
+                "filename",
+                contract_name="Local matches request",
+            )
+            category = read_text_field(
+                data,
+                "category",
+                contract_name="Local matches request",
+            )
+            force_rescan = read_bool_field(
+                data,
+                "force_rescan",
+                contract_name="Local matches request",
+            )
+        except TypeError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
         if force_rescan:
             invalidate_local_hash_match_cache()
 
@@ -270,4 +334,6 @@ class WorkflowService:
             max_matches_per_model=10,
             force_rescan=force_rescan,
         )
-        return web.json_response({"matches": matches})
+        return web.json_response(
+            {"matches": [match.to_dict() for match in matches]}
+        )

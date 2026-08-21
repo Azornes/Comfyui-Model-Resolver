@@ -7,6 +7,14 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from aiohttp import web
 
+from core.contracts import (
+    MissingModel,
+    ModelCatalogEntry,
+    ModelMatch,
+    Resolution,
+    SearchResult,
+    WorkflowAnalysisResult,
+)
 from core.path_utils import get_filename_from_path
 from core.routes.context import RouteContext
 from core.routes.workflow_analysis import register_workflow_analysis_routes
@@ -40,6 +48,21 @@ def _request(payload):
     return SimpleNamespace(json=AsyncMock(return_value=payload))
 
 
+def _analysis_result(missing_models=(), **counts):
+    typed_missing = tuple(
+        item
+        if isinstance(item, MissingModel)
+        else MissingModel.from_mapping(item)
+        for item in missing_models
+    )
+    return WorkflowAnalysisResult(
+        missing_models=typed_missing,
+        total_resolved=counts.get("total_resolved", 0),
+        total_missing=counts.get("total_missing", len(typed_missing)),
+        total_models_analyzed=counts.get("total_models_analyzed", len(typed_missing)),
+    )
+
+
 def _build_routes(overrides=None):
     routes = _Routes()
     extension = SimpleNamespace(
@@ -49,7 +72,7 @@ def _build_routes(overrides=None):
     )
     values = {
         "analyze_and_find_matches": MagicMock(
-            return_value={"missing_models": [], "total_missing": 0}
+            return_value=WorkflowAnalysisResult()
         ),
         "apply_resolution": MagicMock(side_effect=lambda workflow, _resolutions: workflow),
         "asyncio": asyncio,
@@ -95,6 +118,20 @@ async def test_analyze_route_validates_workflow_payload(payload, message):
 
 
 @pytest.mark.asyncio
+async def test_analyze_route_rejects_non_text_analysis_id():
+    handlers, values = _build_routes()
+    response = await handlers[("POST", "/model_resolver/analyze")](
+        _request({"workflow": {"nodes": []}, "analysis_id": 123})
+    )
+
+    assert response.status == 400
+    assert "Workflow analysis request analysis_id must be a string" in (
+        json.loads(response.text)["error"]
+    )
+    values["analyze_and_find_matches"].assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_analyze_route_filters_references_and_uses_local_download_sources():
     missing_models = [
         {
@@ -114,7 +151,16 @@ async def test_analyze_route_filters_references_and_uses_local_download_sources(
         },
         {
             "original_path": "already-local.safetensors",
-            "matches": [{"confidence": 100}],
+            "matches": [
+                {
+                    "model": {
+                        "path": "models/already-local.safetensors",
+                        "filename": "already-local.safetensors",
+                        "category": "checkpoints",
+                    },
+                    "confidence": 100,
+                }
+            ],
         },
         {
             "original_path": "installed-custom-node.safetensors",
@@ -124,33 +170,39 @@ async def test_analyze_route_filters_references_and_uses_local_download_sources(
 
     def analyze(_workflow, _threshold, _limit, progress_callback, **_kwargs):
         progress_callback({"stage": "matching", "current": 1, "total": 5})
-        return {"missing_models": missing_models}
+        return _analysis_result(missing_models)
 
     def popular_url(filename):
         if filename == "popular.safetensors":
-            return {
-                "url": "https://example.com/popular.safetensors",
-                "type": "checkpoint",
-                "directory": "checkpoints",
-                "size": 100,
-            }
+            return ModelCatalogEntry(
+                filename=filename,
+                url="https://example.com/popular.safetensors",
+                model_type="checkpoint",
+                directory="checkpoints",
+                size=100,
+            )
         return None
 
     def model_list(filename, exact_only=False):
         assert exact_only is True
         if filename == "popular.safetensors":
-            return {"size": 200}
+            return SearchResult(
+                source="model_list",
+                filename=filename,
+                size=200,
+            )
         if filename == "listed.safetensors":
-            return {
-                "url": "https://example.com/listed.safetensors",
-                "filename": "listed.safetensors",
-                "name": "Listed model",
-                "type": "checkpoint",
-                "directory": "checkpoints",
-                "size": 300,
-                "match_type": "exact",
-                "confidence": 100,
-            }
+            return SearchResult(
+                source="model_list",
+                url="https://example.com/listed.safetensors",
+                filename="listed.safetensors",
+                name="Listed model",
+                model_type="checkpoint",
+                size=300,
+                match_type="exact",
+                confidence=100,
+                extra={"directory": "checkpoints"},
+            )
         return None
 
     handlers, values = _build_routes(
@@ -160,7 +212,7 @@ async def test_analyze_route_filters_references_and_uses_local_download_sources(
             "get_popular_model_url": MagicMock(side_effect=popular_url),
             "search_model_list": MagicMock(side_effect=model_list),
             "should_skip_existing_custom_node_reference": MagicMock(
-                side_effect=lambda item: item["original_path"].startswith(
+                side_effect=lambda item: item.original_path.startswith(
                     "installed-custom"
                 )
             ),
@@ -244,7 +296,14 @@ async def test_workflow_resolution_route_returns_updated_workflow():
         _request(
             {
                 "workflow": workflow,
-                "resolutions": [{"node_id": 1, "widget_index": 0}],
+                "resolutions": [
+                    {
+                        "node_id": 1,
+                        "widget_index": 0,
+                        "resolved_path": "resolved.safetensors",
+                        "category": "checkpoints",
+                    }
+                ],
             }
         )
     )
@@ -252,13 +311,68 @@ async def test_workflow_resolution_route_returns_updated_workflow():
     assert response.status == 200
     assert json.loads(response.text) == {"workflow": updated, "success": True}
     values["apply_resolution"].assert_called_once_with(
-        workflow, [{"node_id": 1, "widget_index": 0}]
+        workflow,
+        [
+            Resolution.from_mapping(
+                {
+                    "node_id": 1,
+                    "widget_index": 0,
+                    "resolved_path": "resolved.safetensors",
+                    "category": "checkpoints",
+                }
+            )
+        ],
     )
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "resolution",
+    [
+        {
+            "node_id": 1,
+            "widget_index": "0",
+            "resolved_path": "resolved.safetensors",
+        },
+        {
+            "node_id": 1,
+            "widget_index": -1,
+            "resolved_path": "resolved.safetensors",
+        },
+        {
+            "node_id": 1,
+            "widget_index": 0,
+            "resolved_path": 123,
+        },
+    ],
+)
+async def test_workflow_resolution_route_rejects_invalid_resolution_types(resolution):
+    handlers, values = _build_routes()
+    response = await handlers[("POST", "/model_resolver/resolve")](
+        _request(
+            {
+                "workflow": {"nodes": []},
+                "resolutions": [resolution],
+            }
+        )
+    )
+
+    assert response.status == 400
+    assert json.loads(response.text)["error"].startswith("Invalid resolution:")
+    values["apply_resolution"].assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_local_matches_route_rescans_and_passes_search_options():
-    matches = [{"path": os.path.join("models", "model.safetensors")}]
+    matches = [
+        ModelMatch.from_mapping(
+            {
+                "model": {
+                    "path": os.path.join("models", "model.safetensors")
+                }
+            }
+        )
+    ]
     handlers, values = _build_routes(
         {"search_local_matches": MagicMock(return_value=matches)}
     )
@@ -273,7 +387,9 @@ async def test_local_matches_route_rescans_and_passes_search_options():
     )
 
     assert response.status == 200
-    assert json.loads(response.text) == {"matches": matches}
+    assert json.loads(response.text) == {
+        "matches": [match.to_dict() for match in matches]
+    }
     values["invalidate_local_hash_match_cache"].assert_called_once_with()
     values["search_local_matches"].assert_called_once_with(
         "model.safetensors",
@@ -282,6 +398,20 @@ async def test_local_matches_route_rescans_and_passes_search_options():
         max_matches_per_model=10,
         force_rescan=True,
     )
+
+
+@pytest.mark.asyncio
+async def test_local_matches_route_rejects_non_text_fields():
+    handlers, values = _build_routes()
+    response = await handlers[("POST", "/model_resolver/local-matches")](
+        _request({"filename": 123, "category": "checkpoints"})
+    )
+
+    assert response.status == 400
+    assert json.loads(response.text) == {
+        "error": "Local matches request filename must be a string"
+    }
+    values["search_local_matches"].assert_not_called()
 
 
 @pytest.mark.asyncio

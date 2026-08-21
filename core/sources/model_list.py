@@ -8,8 +8,10 @@ import hashlib
 import os
 from typing import Any, Dict, List, Optional
 
+from ..contracts import SearchResult
 from ..log_system import create_module_logger
 from ..matcher import calculate_similarity, normalize_filename
+from ..type_utils import build_model_result
 
 log = create_module_logger(__name__)
 
@@ -177,21 +179,28 @@ def update_model_list_from_remote() -> Dict[str, Any]:
 
 
 
-def _build_model_list_result(model: Dict[str, Any]) -> Dict[str, Any]:
-    return {
-        "source": "model_list",
-        "filename": model.get("filename", ""),
-        "url": model.get("url", ""),
-        "name": model.get("name", ""),
-        "type": model.get("type", ""),
-        "directory": model.get("save_path", "checkpoints"),
-        "size": model.get("size", ""),
-    }
+def _build_model_list_result(
+    model: Dict[str, Any],
+    *,
+    match_type: str = "similar",
+    confidence: float = 0.0,
+) -> SearchResult:
+    return build_model_result(
+        "model_list",
+        filename=model.get("filename", ""),
+        name=model.get("name", ""),
+        url=model.get("url", ""),
+        type=model.get("type", ""),
+        directory=model.get("save_path", "checkpoints"),
+        size=model.get("size"),
+        match_type=match_type,
+        confidence=confidence,
+    )
 
 
 def search_model_list(
     filename: str, exact_only: bool = False
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchResult]:
     """
     Search model-list.json for a model by filename.
     Uses exact match first, then fuzzy matching (unless exact_only=True).
@@ -202,7 +211,7 @@ def search_model_list(
                    If False, also try fuzzy matching (for local file resolution).
 
     Returns:
-        Dict with url, filename, type, etc. if found, None otherwise
+        Typed search result with URL, filename, type, etc. if found.
     """
     models = _load_model_list()
     if not models:
@@ -218,10 +227,7 @@ def search_model_list(
         if model_filename.lower() == filename_lower:
             url = model.get("url", "")
             if url:
-                return {
-                    **_build_model_list_result(model),
-                    "match_type": "exact",
-                }
+                return _build_model_list_result(model, match_type="exact")
 
     # If exact_only is True, don't try fuzzy matching - prevents confusing
     # users with wrong model suggestions for downloads
@@ -242,11 +248,11 @@ def search_model_list(
             url = model.get("url", "")
             if url:
                 score = calculate_similarity(filename_norm, normalize_filename(model_filename))
-                return {
-                    **_build_model_list_result(model),
-                    "match_type": "fuzzy",
-                    "confidence": round(score * 100, 1),
-                }
+                return _build_model_list_result(
+                    model,
+                    match_type="fuzzy",
+                    confidence=round(score * 100, 1),
+                )
 
     # 3. Try normalized similarity matching on all models (fallback)
     best_match = None
@@ -264,16 +270,19 @@ def search_model_list(
             url = model.get("url", "")
             if url:
                 best_score = score
-                best_match = {
-                    **_build_model_list_result(model),
-                    "match_type": "similar",
-                    "confidence": round(score * 100, 1),
-                }
+                best_match = _build_model_list_result(
+                    model,
+                    match_type="similar",
+                    confidence=round(score * 100, 1),
+                )
 
     return best_match
 
 
-def search_model_list_multiple(filename: str, limit: int = 5) -> List[Dict[str, Any]]:
+def search_model_list_multiple(
+    filename: str,
+    limit: int = 5,
+) -> List[SearchResult]:
     """
     Search model-list.json and return multiple fuzzy matches.
 
@@ -303,14 +312,14 @@ def search_model_list_multiple(filename: str, limit: int = 5) -> List[Dict[str, 
             url = model.get("url", "")
             if url:
                 results.append(
-                    {
-                        **_build_model_list_result(model),
-                        "confidence": round(score * 100, 1),
-                    }
+                    _build_model_list_result(
+                        model,
+                        confidence=round(score * 100, 1),
+                    )
                 )
 
     # Sort by confidence descending
-    results.sort(key=lambda x: x["confidence"], reverse=True)
+    results.sort(key=lambda x: x.confidence, reverse=True)
 
     return results[:limit]
 

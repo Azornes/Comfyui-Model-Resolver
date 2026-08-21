@@ -9,6 +9,7 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
+from core.contracts import SearchResult
 from core.matcher import MODEL_TITLE_MATCH_THRESHOLD
 from core.type_utils import (
     build_model_result,
@@ -30,13 +31,17 @@ class TestRefactoringUnification(unittest.TestCase):
         from core import resolver
 
         calls = MagicMock()
-        with patch.object(resolver, "invalidate_model_files_cache") as invalidate_inventory:
-            with patch.object(
+        with (
+            patch.object(
+                resolver, "invalidate_model_files_cache"
+            ) as invalidate_inventory,
+            patch.object(
                 resolver, "invalidate_local_hash_match_cache"
-            ) as invalidate_hash_matches:
-                calls.attach_mock(invalidate_inventory, "inventory")
-                calls.attach_mock(invalidate_hash_matches, "hash_matches")
-                resolver.invalidate_model_caches()
+            ) as invalidate_hash_matches,
+        ):
+            calls.attach_mock(invalidate_inventory, "inventory")
+            calls.attach_mock(invalidate_hash_matches, "hash_matches")
+            resolver.invalidate_model_caches()
 
         calls.assert_has_calls([call.inventory(), call.hash_matches()])
         invalidate_inventory.assert_called_once_with()
@@ -74,12 +79,14 @@ class TestRefactoringUnification(unittest.TestCase):
             filename="test.safetensors",
             extra_field="hello_world",
         )
-        self.assertEqual(res["source"], "civitai")
-        self.assertEqual(res["model_id"], 100)
-        self.assertEqual(res["version_id"], 200)
-        self.assertEqual(res["name"], "Test Model")
-        self.assertEqual(res["filename"], "test.safetensors")
-        self.assertEqual(res["extra_field"], "hello_world")
+        self.assertIsInstance(res, SearchResult)
+        serialized = res.to_dict()
+        self.assertEqual(serialized["source"], "civitai")
+        self.assertEqual(serialized["model_id"], 100)
+        self.assertEqual(serialized["version_id"], 200)
+        self.assertEqual(serialized["name"], "Test Model")
+        self.assertEqual(serialized["filename"], "test.safetensors")
+        self.assertEqual(serialized["extra_field"], "hello_world")
 
     def test_build_model_result_custom_url_contract(self):
         res = build_model_result(
@@ -97,10 +104,11 @@ class TestRefactoringUnification(unittest.TestCase):
             result_mode="custom_url",
         )
 
-        self.assertEqual(res["details_source"], "civitai")
-        self.assertEqual(res["version_url"], res["url"])
-        self.assertTrue(res["custom_url"])
-        self.assertNotIn("confidence", res)
+        serialized = res.to_dict()
+        self.assertEqual(serialized["details_source"], "civitai")
+        self.assertEqual(serialized["version_url"], serialized["url"])
+        self.assertTrue(serialized["custom_url"])
+        self.assertNotIn("confidence", serialized)
 
     def test_build_model_result_compact_custom_url_contract(self):
         res = build_model_result(
@@ -126,7 +134,7 @@ class TestRefactoringUnification(unittest.TestCase):
             "download_url": "https://civitai.com/api/download/models/200",
             "match_type": "custom_url",
             "custom_url": True,
-        }, res)
+        }, res.to_dict())
 
     @patch("requests.get")
     def test_request_page_text_success(self, mock_get):
@@ -409,11 +417,12 @@ class TestRefactoringUnification(unittest.TestCase):
             hashes={"sha256": valid_sha.lower()},
         )
         self.assertEqual(expected, res)
-        self.assertEqual(res["source"], "civitai")
-        self.assertEqual(res["model_id"], 123)
-        self.assertEqual(res["version_id"], 456)
-        self.assertEqual(res["sha256"], valid_sha.lower())
-        self.assertEqual(res["hashes"]["sha256"], valid_sha.lower())
+        serialized = res.to_dict()
+        self.assertEqual(serialized["source"], "civitai")
+        self.assertEqual(serialized["model_id"], 123)
+        self.assertEqual(serialized["version_id"], 456)
+        self.assertEqual(serialized["sha256"], valid_sha.lower())
+        self.assertEqual(serialized["hashes"]["sha256"], valid_sha.lower())
 
     def test_job_progress_tracker_update_from_payload(self):
         from core.progress import JobProgressTracker

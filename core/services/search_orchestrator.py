@@ -1,7 +1,8 @@
 """Request orchestration for model source searches."""
 
+from ..contracts import SearchResult
 from ..local_hash_matches import collect_local_hash_matches_for_result
-from ..request_utils import extract_request_sha256
+from ..request_utils import read_optional_object_payload
 from ..routes.context import RouteContext
 from .search_cache import SearchResultCache
 from .search_dependencies import SearchDependencies
@@ -53,8 +54,6 @@ class SearchOrchestrator:
             dependencies.search_lora_manager_archive_for_file
         )
         self.search_model_list = dependencies.search_model_list
-        self.to_bool = dependencies.to_bool
-        self.to_int = dependencies.to_int
         self.web = dependencies.web
         self.search_cache = SearchResultCache(self.search_result_timestamps)
         self.provider_runner = SearchProviderRunner(self)
@@ -83,6 +82,35 @@ class SearchOrchestrator:
                 parts.append(f"{key}={formatted}")
         return " ".join(parts)
 
+    @staticmethod
+    def normalize_search_result(source_key, result):
+        """Validate that a provider returned the shared result contract."""
+        if result is None or isinstance(result, SearchResult):
+            return result
+        if isinstance(result, list) and all(
+            isinstance(item, SearchResult) for item in result
+        ):
+            return result
+        raise TypeError(
+            f"Search source '{source_key}' returned an untyped result: "
+            f"{type(result).__name__}"
+        )
+
+    @staticmethod
+    def serialize_search_result(result):
+        """Serialize canonical results at the HTTP/cache boundary."""
+        if result is None:
+            return None
+        if isinstance(result, SearchResult):
+            return result.to_dict()
+        if isinstance(result, list) and all(
+            isinstance(item, SearchResult) for item in result
+        ):
+            return [item.to_dict() for item in result]
+        raise TypeError(
+            f"Cannot serialize untyped search result: {type(result).__name__}"
+        )
+
     def normalize_result_extra(self, extra):
         if not extra:
             return {}
@@ -100,6 +128,8 @@ class SearchOrchestrator:
         return normalized
 
     def format_result_details(self, result, extra=None):
+        if isinstance(result, SearchResult):
+            result = result.to_dict()
         if isinstance(result, list):
             return self.format_log_fields(count=len(result))
         if not isinstance(result, dict):
@@ -136,62 +166,27 @@ class SearchOrchestrator:
     async def search_sources(self, request):
         """Execute all requested sources and return a JSON response."""
         try:
-            data = await request.json()
-            filename = str(data.get("filename", "") or "").strip()
-            sha256 = extract_request_sha256(
-                data,
-                keys=("sha256", "hash", "file_hash"),
-            )
-            category = data.get("category", "")
-            base_model_context = data.get("base_model_context", "")
-            progress_id = str(data.get("progress_id") or "").strip()
-            progress_source = str(data.get("progress_source") or "").strip()
-            civitai_candidate_limit = self.to_int(
-                data.get("civitai_candidate_limit"),
-                5,
-            )
-            civitai_candidate_limit = max(1, min(civitai_candidate_limit, 20))
-            civarchive_candidate_limit = self.to_int(
-                data.get("civarchive_candidate_limit"),
-                10,
-            )
-            civarchive_candidate_limit = max(
-                1,
-                min(civarchive_candidate_limit, 30),
-            )
-
-            is_urn = self.to_bool(data.get("is_urn", False), False)
-            civitai_key = data.get("civitai_key", "")
-            civitai_session_token = data.get("civitai_session_token", "")
-            hf_token = data.get("hf_token", "")
-            brave_search_api_key = data.get("brave_search_api_key", "")
-            civitai_use_trpc_search = self.to_bool(
-                data.get("civitai_use_trpc_search", True),
-                True,
-            )
-            civitai_use_api_search = self.to_bool(
-                data.get("civitai_use_api_search", True),
-                True,
-            )
-            civitai_use_html_fallback = self.to_bool(
-                data.get("civitai_use_html_fallback", True),
-                True,
-            )
-            hf_use_api_search = self.to_bool(
-                data.get("hf_use_api_search", True),
-                True,
-            )
-            hf_use_comfy_org_fallback = self.to_bool(
-                data.get("hf_use_comfy_org_fallback", True),
-                True,
-            )
-            hf_use_brave_fallback = self.to_bool(
-                data.get("hf_use_brave_fallback", True),
-                True,
-            )
-
-            model_id = data.get("model_id")
-            version_id = data.get("version_id")
+            data = await read_optional_object_payload(request)
+            try:
+                search_request = SearchRequest.from_mapping(
+                    data,
+                )
+            except (TypeError, ValueError) as exc:
+                return self.web.json_response(
+                    {"error": str(exc)},
+                    status=400,
+                )
+            filename = search_request.filename
+            sha256 = search_request.sha256
+            category = search_request.category
+            base_model_context = search_request.base_model_context
+            progress_id = search_request.progress_id
+            progress_source = search_request.progress_source
+            model_id = search_request.model_id
+            version_id = search_request.version_id
+            is_urn = search_request.is_urn
+            normalized_sources = search_request.normalized_sources
+            force_search = search_request.force_search
             if not filename and not sha256 and not (is_urn and model_id and version_id):
                 return self.web.json_response(
                     {
@@ -203,61 +198,6 @@ class SearchOrchestrator:
                     status=400,
                 )
 
-            raw_sources = data.get("sources", ["all"])
-            if isinstance(raw_sources, str):
-                raw_sources = [raw_sources]
-            elif not isinstance(raw_sources, list):
-                raw_sources = ["all"]
-
-            normalized_sources = frozenset(
-                str(source).strip().lower()
-                for source in raw_sources
-                if str(source).strip()
-            )
-            if not normalized_sources:
-                normalized_sources = frozenset({"all"})
-            if "all" in normalized_sources:
-                normalized_sources = frozenset(
-                    {
-                        "local",
-                        "huggingface",
-                        "civitai",
-                        "civarchive",
-                        "lora_manager_archive",
-                    }
-                )
-
-            if not progress_source:
-                progress_source = (
-                    next(iter(normalized_sources))
-                    if len(normalized_sources) == 1
-                    else "all"
-                )
-            force_search = self.to_bool(data.get("force_search"), False)
-            search_request = SearchRequest(
-                data=data,
-                filename=filename,
-                category=category,
-                base_model_context=base_model_context,
-                progress_id=progress_id,
-                progress_source=progress_source,
-                civitai_candidate_limit=civitai_candidate_limit,
-                civarchive_candidate_limit=civarchive_candidate_limit,
-                is_urn=is_urn,
-                civitai_key=civitai_key,
-                civitai_session_token=civitai_session_token,
-                hf_token=hf_token,
-                brave_search_api_key=brave_search_api_key,
-                civitai_use_trpc_search=civitai_use_trpc_search,
-                civitai_use_api_search=civitai_use_api_search,
-                civitai_use_html_fallback=civitai_use_html_fallback,
-                hf_use_api_search=hf_use_api_search,
-                hf_use_comfy_org_fallback=hf_use_comfy_org_fallback,
-                hf_use_brave_fallback=hf_use_brave_fallback,
-                force_search=force_search,
-                normalized_sources=normalized_sources,
-                sha256=sha256,
-            )
             raise_if_search_cancelled = (
                 self.provider_runner.raise_if_search_cancelled
             )
@@ -334,10 +274,17 @@ class SearchOrchestrator:
             def iter_result_items(result):
                 if isinstance(result, list):
                     for item in result:
-                        if isinstance(item, dict):
-                            yield item
-                elif isinstance(result, dict):
-                    yield result
+                        if not isinstance(item, SearchResult):
+                            raise TypeError(
+                                "Search result lists must contain SearchResult values"
+                            )
+                        yield item.to_dict()
+                elif isinstance(result, SearchResult):
+                    yield result.to_dict()
+                elif result is not None:
+                    raise TypeError(
+                        "Search result sources must contain SearchResult values"
+                    )
 
             def collect_local_hash_matches(payload):
                 matches = []
@@ -405,12 +352,10 @@ class SearchOrchestrator:
                         continue
 
                     for match in hash_matches:
-                        model_path = (
-                            match.get("model", {}).get("path")
-                            or match.get("path")
-                            or ""
+                        model_path = match.model.path or str(
+                            match.extra_value("path") or ""
                         )
-                        path_key = model_path.lower()
+                        path_key = model_path.casefold()
                         if path_key and path_key in seen_match_paths:
                             continue
                         if path_key:
@@ -451,14 +396,20 @@ class SearchOrchestrator:
                     elif source_key == "source_status":
                         results["source_status"].update(source_result or {})
                     elif source_result:
-                        results[source_key] = source_result
+                        results[source_key] = self.normalize_search_result(
+                            source_key,
+                            source_result,
+                        )
                 if source_found:
                     results["found"] = True
 
             raise_if_search_cancelled(search_request, progress_source)
-            results["local_hash_matches"] = collect_local_hash_matches(results)
-            if results["local_hash_matches"]:
+            local_hash_matches = collect_local_hash_matches(results)
+            if local_hash_matches:
                 results["found"] = True
+            results["local_hash_matches"] = [
+                match.to_dict() for match in local_hash_matches
+            ]
             raise_if_search_cancelled(search_request, progress_source)
 
             self.logger.info(
@@ -473,6 +424,17 @@ class SearchOrchestrator:
                 100,
                 status="completed",
             )
+            for source_key in (
+                "popular",
+                "model_list",
+                "huggingface",
+                "civitai",
+                "civarchive",
+                "lora_manager_archive",
+            ):
+                results[source_key] = self.serialize_search_result(
+                    results[source_key]
+                )
             self.search_cache.stamp_results(
                 results,
                 force_search=force_search,

@@ -1,10 +1,33 @@
 import unittest
 from unittest.mock import patch
 
-from core.scanner import find_local_file_path, scan_directory
+from core.contracts import ResolvedModel
+from core.scanner import find_local_file_path, scan_all_directories, scan_directory
 
 
 class ScannerTests(unittest.TestCase):
+
+    @patch("core.scanner.get_model_directories")
+    @patch("core.scanner.scan_directory")
+    def test_scan_all_directories_normalizes_scalar_registry_paths(
+        self, mock_scan_directory, mock_get_model_directories
+    ):
+        mock_get_model_directories.return_value = {
+            "checkpoints": (r"C:\\models\\checkpoints", {".safetensors"})
+        }
+        model = ResolvedModel(
+            path=r"C:\\models\\checkpoints\\model.safetensors",
+            filename="model.safetensors",
+            category="checkpoints",
+        )
+        mock_scan_directory.return_value = [model]
+
+        assert scan_all_directories() == [model]
+        mock_scan_directory.assert_called_once_with(
+            r"C:\\models\\checkpoints",
+            {".safetensors"},
+            "checkpoints",
+        )
 
     def test_model_path_identity_empty_and_valid(self):
         from core.path_utils import get_model_path_identity
@@ -37,17 +60,18 @@ class ScannerTests(unittest.TestCase):
         
         # Verify that we found the two models and ignored readme.txt
         self.assertEqual(len(models), 2)
+        self.assertTrue(all(isinstance(model, ResolvedModel) for model in models))
         
         # First model check
-        m1 = next(m for m in models if m["filename"] == "root_model.safetensors")
-        self.assertEqual(m1["relative_path"].replace("\\", "/"), "root_model.safetensors")
-        self.assertEqual(m1["category"], "checkpoints")
+        m1 = next(m for m in models if m.filename == "root_model.safetensors")
+        self.assertEqual(m1.relative_path.replace("\\", "/"), "root_model.safetensors")
+        self.assertEqual(m1.category, "checkpoints")
         import os
-        self.assertEqual(m1["base_directory"], os.path.abspath("/models/checkpoints"))
+        self.assertEqual(m1.base_directory, os.path.abspath("/models/checkpoints"))
 
         # Second model check
-        m2 = next(m for m in models if m["filename"] == "nested_model.ckpt")
-        self.assertEqual(m2["relative_path"].replace("\\", "/"), "subdir/nested_model.ckpt")
+        m2 = next(m for m in models if m.filename == "nested_model.ckpt")
+        self.assertEqual(m2.relative_path.replace("\\", "/"), "subdir/nested_model.ckpt")
 
     @patch("os.walk")
     @patch("os.path.exists")
@@ -69,7 +93,7 @@ class ScannerTests(unittest.TestCase):
             "/models/diffusion_models", {".gguf"}, "model_gguf"
         )
 
-        self.assertEqual([model["filename"] for model in models], ["quantized.gguf"])
+        self.assertEqual([model.filename for model in models], ["quantized.gguf"])
 
     @patch("core.scanner.folder_paths")
     @patch("core.scanner.get_model_files")
@@ -89,7 +113,10 @@ class ScannerTests(unittest.TestCase):
         # 3. Test found via local scanner fallback
         mock_folder_paths.get_full_path.return_value = None
         mock_get_files.return_value = [
-            {"filename": "fallback.safetensors", "path": "/models/other/fallback.safetensors"}
+            ResolvedModel(
+                filename="fallback.safetensors",
+                path="/models/other/fallback.safetensors",
+            )
         ]
         self.assertEqual(
             find_local_file_path("fallback.safetensors", "checkpoints"),

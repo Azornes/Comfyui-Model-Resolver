@@ -1,5 +1,11 @@
 """Model details service."""
 
+from ..request_utils import (
+    coerce_integer_identifier,
+    read_identifier_field,
+    read_optional_object_payload,
+    read_text_field,
+)
 from ..routes.context import RouteContext
 from .model_utils import ModelDetailsDependencies, ModelServiceDependencies
 
@@ -18,14 +24,45 @@ class ModelDetailsService(ModelServiceDependencies):
         get_civitai_model_details = self.get_civitai_model_details
         get_huggingface_model_details = self.get_huggingface_model_details
         web = self.web
-        data = await request.json()
-        source = str(data.get("source", "")).strip().lower()
-        model_id = data.get("model_id")
-        version_id = data.get("version_id")
-        civitai_key = data.get("civitai_key", "")
-        hf_token = data.get("hf_token", "")
-        file_path = data.get("file_path", "")
-        branch = data.get("branch", "")
+        data = await read_optional_object_payload(request)
+        try:
+            source = read_text_field(
+                data,
+                "source",
+                contract_name="Model details request",
+            ).lower()
+            model_id = read_identifier_field(
+                data,
+                "model_id",
+                contract_name="Model details request",
+            )
+            version_id = read_identifier_field(
+                data,
+                "version_id",
+                contract_name="Model details request",
+            )
+            civitai_key = read_text_field(
+                data,
+                "civitai_key",
+                contract_name="Model details request",
+            )
+            hf_token = read_text_field(
+                data,
+                "hf_token",
+                contract_name="Model details request",
+            )
+            file_path = read_text_field(
+                data,
+                "file_path",
+                contract_name="Model details request",
+            )
+            branch = read_text_field(
+                data,
+                "branch",
+                contract_name="Model details request",
+            )
+        except TypeError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
 
         if not download_available:
             return web.json_response(
@@ -41,27 +78,33 @@ class ModelDetailsService(ModelServiceDependencies):
             )
 
         if source == "huggingface":
-            model_id = str(model_id or "").strip()
-            branch = str(branch or version_id or "main").strip() or "main"
+            if model_id is not None and not isinstance(model_id, str):
+                return web.json_response(
+                    {"error": "Model details model_id must be a string for Hugging Face"},
+                    status=400,
+                )
+            if version_id is not None and not isinstance(version_id, str):
+                return web.json_response(
+                    {"error": "Model details version_id must be a string for Hugging Face"},
+                    status=400,
+                )
+            model_id = model_id.strip() if isinstance(model_id, str) else ""
+            branch = branch or version_id or "main"
             version_id = branch
         else:
             try:
-                model_id = (
-                    int(model_id)
-                    if model_id is not None and str(model_id).strip()
-                    else None
+                model_id = coerce_integer_identifier(
+                    model_id,
+                    "model_id",
+                    contract_name="Model details request",
                 )
-            except (TypeError, ValueError):
-                model_id = None
-
-            try:
-                version_id = (
-                    int(version_id)
-                    if version_id is not None and str(version_id).strip()
-                    else None
+                version_id = coerce_integer_identifier(
+                    version_id,
+                    "version_id",
+                    contract_name="Model details request",
                 )
-            except (TypeError, ValueError):
-                version_id = None
+            except (TypeError, ValueError) as exc:
+                return web.json_response({"error": str(exc)}, status=400)
 
         if not model_id:
             return web.json_response(

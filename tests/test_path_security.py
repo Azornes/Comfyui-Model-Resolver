@@ -33,10 +33,13 @@ from core.network_utils import (
     validate_public_http_url,
 )
 from core.path_utils import (
+    dedupe_local_base_directories,
     get_safe_metadata_sidecar_path,
     get_safe_model_resolver_sidecar_path,
     is_path_in_configured_model_roots,
     is_path_within,
+    normalize_folder_path_values,
+    normalize_string_values,
 )
 
 
@@ -52,6 +55,33 @@ class DummyFolderPaths:
 
 
 class PathSecurityTests(unittest.TestCase):
+    def test_external_string_collections_do_not_iterate_scalar_text(self):
+        self.assertEqual(
+            [r"C:\\models\\checkpoints"],
+            normalize_folder_path_values(r"C:\\models\\checkpoints"),
+        )
+        self.assertEqual(
+            [r"C:\\models\\checkpoints"],
+            normalize_folder_path_values(
+                (r"C:\\models\\checkpoints", {".safetensors"})
+            ),
+        )
+        self.assertEqual(
+            ["model.safetensors"],
+            normalize_string_values("model.safetensors"),
+        )
+        self.assertEqual(
+            ["model.safetensors"],
+            normalize_string_values([None, "model.safetensors", 123]),
+        )
+
+    def test_dedupe_local_base_directories_rejects_scalar_payloads(self):
+        self.assertEqual([], dedupe_local_base_directories(None))
+        with self.assertRaises(TypeError):
+            dedupe_local_base_directories(0)
+        with self.assertRaises(TypeError):
+            dedupe_local_base_directories("models")
+
     def test_is_path_within_rejects_sibling_directory_with_shared_prefix(self):
         with tempfile.TemporaryDirectory() as temp_root:
             model_root = os.path.join(temp_root, "models")

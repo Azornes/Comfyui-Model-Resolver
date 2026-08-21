@@ -186,7 +186,16 @@ class DirectConsoleHandler(logging.Handler):
             stream = self.stream or _get_console_output_stream()
             if stream is None:
                 return
-            stream.write(self.format(record) + self.terminator)
+            message = self.format(record) + self.terminator
+            try:
+                stream.write(message)
+            except UnicodeEncodeError:
+                encoding = getattr(stream, "encoding", None) or "utf-8"
+                safe_message = message.encode(
+                    encoding,
+                    errors="replace",
+                ).decode(encoding, errors="replace")
+                stream.write(safe_message)
             stream.flush()
         except Exception:
             self.handleError(record)

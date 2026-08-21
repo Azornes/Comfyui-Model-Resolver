@@ -1,6 +1,13 @@
 """Loaded model inspection used by the HTTP route adapter."""
 
-from ..request_utils import validate_workflow_payload
+from ..contracts import ModelReference
+from ..metadata_model_utils import normalize_models
+from ..path_utils import normalize_string_values
+from ..request_utils import (
+    read_first_text_field,
+    read_optional_object_payload,
+    validate_workflow_payload,
+)
 from ..routes.context import RouteContext
 from ..workflow.traversal import iter_workflow_nodes_with_scope
 
@@ -23,14 +30,19 @@ class LoadedModelsService:
 
     async def get_loaded_models(self, request):
         """Get all currently loaded models in the workflow."""
-        data = await request.json()
+        data = await read_optional_object_payload(request)
         workflow_json, workflow_error = validate_workflow_payload(
             data.get("workflow"),
             empty_is_missing=True,
         )
-        loaded_id = str(
-            data.get("loaded_id") or data.get("progress_id") or ""
-        ).strip()
+        try:
+            loaded_id = read_first_text_field(
+                data,
+                ("loaded_id", "progress_id"),
+                contract_name="Loaded models request",
+            )
+        except TypeError as exc:
+            return self.web.json_response({"error": str(exc)}, status=400)
 
         if workflow_error:
             return self.web.json_response(
@@ -80,8 +92,15 @@ class LoadedModelsService:
                 workflow_json,
                 progress_callback=update_workflow_analysis_progress,
             )
-            available_models = inventory["available_models"]
-            all_model_refs = inventory["model_refs"]
+            available_models = inventory.available_models
+            all_model_refs = inventory.model_refs
+            available_models = normalize_models(available_models)
+            all_model_refs = [
+                ref
+                if isinstance(ref, ModelReference)
+                else ModelReference.from_mapping(ref)
+                for ref in all_model_refs
+            ]
 
             # Create lookup for full paths by filename (with and without extension)
             path_by_filename = {}
@@ -94,19 +113,17 @@ class LoadedModelsService:
                 total=total_local_models,
             )
             for index, model_info in enumerate(available_models, start=1):
-                rel_path = model_info.get("relative_path", "")
+                rel_path = model_info.relative_path
                 if rel_path:
                     filename = self.get_filename_from_path(rel_path)
-                    path_by_filename[filename] = model_info.get("path")
+                    path_by_filename[filename] = model_info.path
                     # Also add without extension for matching (simple approach)
                     if "." in filename:
                         filename_no_ext = filename.rsplit(".", 1)[0]
                         if filename_no_ext not in path_by_filename:
-                            path_by_filename[filename_no_ext] = model_info.get(
-                                "path"
-                            )
+                            path_by_filename[filename_no_ext] = model_info.path
                     # Add the full relative path as key too
-                    path_by_filename[rel_path] = model_info.get("path")
+                    path_by_filename[rel_path] = model_info.path
 
                 if (
                     total_local_models
@@ -147,7 +164,9 @@ class LoadedModelsService:
                         total=len(folder_categories),
                     )
                     try:
-                        filenames = folder_paths.get_filename_list(category_name)
+                        filenames = normalize_string_values(
+                            folder_paths.get_filename_list(category_name)
+                        )
                         for filename in filenames:
                             full_path = folder_paths.get_full_path(
                                 category_name, filename
@@ -192,20 +211,18 @@ class LoadedModelsService:
                     },
                 )
 
-            def node_matches_ref(node, ref):
+            def node_matches_ref(node, ref: ModelReference):
                 if not isinstance(node, dict):
                     return False
-                if str(node.get("id")) != str(ref.get("node_id")):
+                if str(node.get("id")) != str(ref.node_id):
                     return False
                 scope = get_node_scope(node)
                 if scope["is_top_level"] != (
-                    ref.get("is_top_level") is not False
+                    ref.is_top_level is not False
                 ):
                     return False
                 if not scope["is_top_level"]:
-                    return str(scope["subgraph_id"]) == str(
-                        ref.get("subgraph_id") or ""
-                    )
+                    return str(scope["subgraph_id"]) == str(ref.subgraph_id or "")
                 return True
 
             # Collect all loaded models with their values
@@ -232,18 +249,18 @@ class LoadedModelsService:
                         total=total_refs,
                     )
 
-                original_path = ref.get("original_path", "")
-                node_id = ref.get("node_id")
-                widget_index = ref.get("widget_index")
-                node_type = ref.get("node_type", "")
-                category = ref.get("category", "unknown")
+                original_path = ref.original_path
+                node_id = ref.node_id
+                widget_index = ref.widget_index
+                node_type = ref.node_type
+                category = ref.category or "unknown"
 
                 # Determine model name and strength
                 model_name = self.get_filename_from_path(original_path)
                 strength = None
 
                 if (
-                    ref.get("strength") is None
+                    ref.extra_value("strength") is None
                     and category in {"lora", "loras"}
                 ):
                     for node in nodes:
@@ -254,8 +271,8 @@ class LoadedModelsService:
                             )
                             break
 
-                if ref.get("strength") is not None:
-                    strength = ref.get("strength")
+                if ref.extra_value("strength") is not None:
+                    strength = ref.extra_value("strength")
 
                 model_name, strength = self.adapt_custom_node_loaded_model(
                     ref,
@@ -264,11 +281,11 @@ class LoadedModelsService:
                 )
 
                 # Check if model exists locally
-                exists = ref.get("exists", False)
+                exists = ref.exists
 
                 # If URN, resolve to display name
-                if ref.get("is_urn"):
-                    urn = ref.get("urn", {})
+                if ref.extra_value("is_urn"):
+                    urn = ref.extra_value("urn") or {}
                     # Use model name from URN as display name
                     model_name = (
                         f"urn:{urn.get('type', 'model')}:{urn.get('model_id')}"
@@ -284,34 +301,34 @@ class LoadedModelsService:
                         "node_id": node_id,
                         "widget_index": widget_index,
                         "node_type": node_type,
-                        "node_title": ref.get("node_title", ""),
-                        "subgraph_id": ref.get("subgraph_id") or "",
-                        "subgraph_name": ref.get("subgraph_name") or "",
-                        "is_top_level": ref.get("is_top_level") is not False,
-                        "locate_node_id": ref.get("locate_node_id"),
-                        "locate_node_type": ref.get("locate_node_type", ""),
-                        "locate_node_title": ref.get("locate_node_title", ""),
+                        "node_title": ref.extra_value("node_title", ""),
+                        "subgraph_id": ref.subgraph_id or "",
+                        "subgraph_name": ref.extra_value("subgraph_name") or "",
+                        "is_top_level": ref.is_top_level is not False,
+                        "locate_node_id": ref.extra_value("locate_node_id"),
+                        "locate_node_type": ref.extra_value("locate_node_type", ""),
+                        "locate_node_title": ref.extra_value("locate_node_title", ""),
                         "locate_subgraph_id": (
-                            ref.get("locate_subgraph_id") or ""
+                            ref.extra_value("locate_subgraph_id") or ""
                         ),
                         "locate_subgraph_name": (
-                            ref.get("locate_subgraph_name") or ""
+                            ref.extra_value("locate_subgraph_name") or ""
                         ),
                         "locate_is_top_level": (
-                            ref.get("locate_is_top_level") is not False
+                            ref.extra_value("locate_is_top_level") is not False
                         ),
-                        "locate_via_promoted_widget": ref.get(
+                        "locate_via_promoted_widget": ref.extra_value(
                             "locate_via_promoted_widget", False
                         ),
                         "exists": exists,
                         "strength": strength,
                         "original_path": original_path,
-                        "is_urn": ref.get("is_urn", False),
-                        "custom_node_adapter": ref.get(
+                        "is_urn": ref.extra_value("is_urn", False),
+                        "custom_node_adapter": ref.extra_value(
                             "custom_node_adapter"
                         ),
-                        "active": ref.get("active"),
-                        "connected": ref.get("connected", True),
+                        "active": ref.extra_value("active"),
+                        "connected": ref.extra_value("connected", True),
                         "resolved_path": (
                             path_by_filename.get(model_name)
                             or path_by_filename.get(original_path)

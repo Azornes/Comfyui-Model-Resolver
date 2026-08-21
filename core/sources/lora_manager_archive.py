@@ -11,6 +11,7 @@ import sqlite3
 import time
 from typing import Any, Callable, Dict, List, Optional
 
+from ..contracts import SearchResult
 from ..log_system import create_module_logger
 from ..matcher import (
     base_model_matches as _base_model_matches,
@@ -386,7 +387,7 @@ def _load_full_rows_for_versions(
 
 def _build_result_from_row(
     conn: sqlite3.Connection, row: sqlite3.Row, query: str
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchResult]:
     try:
         model_data = json.loads(row["model_data"] or "{}")
     except Exception:
@@ -469,7 +470,7 @@ def search_lora_manager_archive(
     base_model_context: Optional[str] = None,
     limit: int = 10,
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
-) -> List[Dict[str, Any]]:
+) -> List[SearchResult]:
     """
     Search the local comfyui-lora-manager CivitAI archive by model name.
 
@@ -613,19 +614,19 @@ def search_lora_manager_archive(
             if not full_row:
                 continue
             result = _build_result_from_row(conn, full_row, normalized_query)
-            if not result or result["confidence"] < 40:
+            if not result or result.confidence < 40:
                 continue
             if base_model_context and not _base_model_matches(
-                result.get("base_model"), base_model_context
+                result.base_model, base_model_context
             ):
                 continue
             results.append(result)
 
         results.sort(
             key=lambda item: (
-                _base_model_score(item.get("base_model"), base_model_context),
-                item.get("confidence", 0),
-                1 if item.get("match_type") == "exact" else 0,
+                _base_model_score(item.base_model, base_model_context),
+                item.confidence,
+                1 if item.match_type == "exact" else 0,
             ),
             reverse=True,
         )
@@ -666,7 +667,7 @@ def search_lora_manager_archive_for_file(
     limit: int = 10,
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     sha256: Optional[str] = None,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchResult]:
     """
     Search the archive for the best model/version match for a filename.
     """
@@ -696,16 +697,16 @@ def search_lora_manager_archive_for_file(
                 matching_size = extract_file_size(matching_file)
                 if matching_size is None:
                     matching_size = matching_file.get("size")
-                result.update(
-                    {
-                        "filename": matching_file.get("name") or result.get("filename", ""),
-                        "download_url": matching_file.get("downloadUrl") or result.get("download_url"),
-                        "size": matching_size if matching_size is not None else result.get("size"),
-                        "sha256": requested_sha256,
-                        "hashes": matching_file.get("hashes") or {"SHA256": requested_sha256},
-                        "match_type": "hash",
-                        "confidence": 100.0,
-                    }
+                result = result.with_updates(
+                    filename=matching_file.get("name") or result.filename,
+                    download_url=matching_file.get("downloadUrl")
+                    or result.download_url,
+                    size=matching_size if matching_size is not None else result.size,
+                    sha256=requested_sha256,
+                    hashes=matching_file.get("hashes")
+                    or {"SHA256": requested_sha256},
+                    match_type="hash",
+                    confidence=100.0,
                 )
                 _report_progress(
                     progress_callback,
@@ -774,19 +775,29 @@ def search_lora_manager_archive_for_file(
             candidate_index=candidate_index,
             candidate_count=total_candidates,
         )
-        candidate_filename = candidate.get("filename", "")
-        confidence = calculate_archived_model_confidence(filename, candidate.get("name", ""), candidate.get("version_name", ""), candidate_filename)
+        candidate_filename = candidate.filename
+        confidence = calculate_archived_model_confidence(
+            filename,
+            candidate.name,
+            candidate.version_name,
+            candidate_filename,
+        )
         should_update, rank, base_model_matches = should_update_best_match(
-            confidence, candidate.get("base_model"), base_model_context, best_rank, exact_only
+            confidence,
+            candidate.base_model,
+            base_model_context,
+            best_rank,
+            exact_only,
         )
         if base_model_context and not base_model_matches:
             continue
         if should_update:
             best_rank = rank
             best_confidence = confidence
-            best_match = dict(candidate)
-            best_match["confidence"] = confidence
-            best_match["match_type"] = "exact" if confidence == 100.0 else "similar"
+            best_match = candidate.with_updates(
+                confidence=confidence,
+                match_type="exact" if confidence == 100.0 else "similar",
+            )
         if confidence == 100.0 and base_model_matches:
             _report_progress(
                 progress_callback,

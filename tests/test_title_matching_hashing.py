@@ -1,15 +1,16 @@
-import sys
 import os
+import sys
 import unittest
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import MagicMock
 
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-from core.sources.civitai import _find_model_title_match_in_model
-from core.sources.civarchive import _find_model_title_match_in_model_details
 from core.path_utils import calculate_file_sha256
+from core.sources.civarchive import _find_model_title_match_in_model_details
+from core.sources.civitai import _find_model_title_match_in_model
+
 
 class TestTitleMatchingAndHashing(unittest.IsolatedAsyncioTestCase):
 
@@ -44,11 +45,11 @@ class TestTitleMatchingAndHashing(unittest.IsolatedAsyncioTestCase):
             base_model_context="SDXL 1.0"
         )
         self.assertIsNotNone(result)
-        self.assertEqual(result["model_id"], 1)
-        self.assertEqual(result["version_id"], 123)
-        self.assertEqual(result["filename"], "sdxl_base.safetensors")
-        self.assertEqual(result["base_model"], "SDXL 1.0")
-        self.assertIn("anime", result["tags"])
+        self.assertEqual(result.model_id, 1)
+        self.assertEqual(result.version_id, 123)
+        self.assertEqual(result.filename, "sdxl_base.safetensors")
+        self.assertEqual(result.base_model, "SDXL 1.0")
+        self.assertIn("anime", result.tags)
 
     def test_civitai_find_model_title_match_rejected_confidence(self):
         model_data = {
@@ -92,10 +93,10 @@ class TestTitleMatchingAndHashing(unittest.IsolatedAsyncioTestCase):
             base_model_context="SD 1.5"
         )
         self.assertIsNotNone(result)
-        self.assertEqual(result["model_id"], 10)
-        self.assertEqual(result["version_id"], 999)
-        self.assertEqual(result["filename"], "v1-5-pruned.safetensors")
-        self.assertEqual(result["base_model"], "SD 1.5")
+        self.assertEqual(result.model_id, 10)
+        self.assertEqual(result.version_id, 999)
+        self.assertEqual(result.filename, "v1-5-pruned.safetensors")
+        self.assertEqual(result.base_model, "SD 1.5")
 
     async def test_calculate_file_sha256_with_mock_progress(self):
         import tempfile

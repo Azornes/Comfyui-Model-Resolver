@@ -1,7 +1,12 @@
 """Registry and dispatch helpers for backend custom-node model adapters."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
+from ..contracts import (
+    CustomNodeMetadata,
+    ModelReference,
+    ResolvedModel,
+)
 from .base import CustomNodeModelAdapter
 from .lora_manager import ADAPTER as LORA_MANAGER_ADAPTER
 from .rgthree_power_lora_loader import (
@@ -35,16 +40,18 @@ def get_custom_node_model_adapter(
 
 
 def get_custom_node_adapter_for_reference(
-    reference: Dict[str, Any],
+    reference: Optional[ModelReference],
 ) -> Optional[CustomNodeModelAdapter]:
     """Resolve an adapter from normalized or legacy reference metadata."""
-    adapter_id = reference.get("custom_node_adapter")
+    if reference is None:
+        return None
+    adapter_id = reference.extra_value("custom_node_adapter")
     if adapter_id in _ADAPTERS_BY_ID:
         return _ADAPTERS_BY_ID[adapter_id]
-    adapter = get_custom_node_model_adapter(reference.get("node_type"))
+    adapter = get_custom_node_model_adapter(reference.node_type)
     if adapter:
         return adapter
-    if reference.get("is_lora_v2"):
+    if CustomNodeMetadata.from_mapping(reference.extra).is_legacy_lora_manager:
         return LORA_MANAGER_ADAPTER
     return None
 
@@ -70,38 +77,55 @@ def get_custom_node_widget_categories() -> Dict[str, Dict[int, str]]:
 
 
 def get_custom_node_resolution_metadata(
-    reference: Dict[str, Any],
-) -> Dict[str, Any]:
-    """Normalize adapter metadata carried into workflow update mappings."""
+    reference: Optional[ModelReference],
+) -> CustomNodeMetadata:
+    """Normalize adapter metadata carried into workflow update resolutions."""
     adapter = get_custom_node_adapter_for_reference(reference)
-    if not adapter:
-        return {}
-    original_identity = (
-        reference.get("custom_node_original_identity")
-        or reference.get("original_lora_name")
-        or reference.get("name")
-        or reference.get("original_path")
-    )
-    return {
+    if not adapter or reference is None:
+        return CustomNodeMetadata()
+    metadata = {
         "custom_node_adapter": adapter.adapter_id,
-        "custom_node_original_identity": original_identity,
+        "custom_node_original_identity": (
+            reference.extra_value("custom_node_original_identity")
+            or reference.extra_value("original_lora_name")
+            or reference.extra_value("name")
+            or reference.original_path
+        ),
     }
+    legacy_v2_flag = reference.extra_value("is_lora_v2")
+    if legacy_v2_flag is not None:
+        metadata["is_lora_v2"] = legacy_v2_flag
+    legacy_flag = reference.extra_value("is_legacy_lora_manager")
+    if legacy_flag is not None:
+        metadata["is_legacy_lora_manager"] = legacy_flag
+    return CustomNodeMetadata.from_mapping(metadata)
 
 
 def analyze_custom_node_references(
     node: Dict[str, Any],
-    available_models: Optional[List[Dict[str, Any]]] = None,
-    **context: Any,
-) -> Optional[List[Dict[str, Any]]]:
+    available_models: Optional[List[ResolvedModel]] = None,
+    *,
+    is_active: bool,
+    get_widget_name_hint: Callable[[Dict[str, Any], int], str],
+) -> Optional[List[ModelReference]]:
     """Dispatch custom serialized model extraction when an adapter handles it."""
     adapter = get_custom_node_model_adapter(node)
     if not adapter or not adapter.analyze_references:
         return None
-    return adapter.analyze_references(
+    raw_references = adapter.analyze_references(
         node,
         available_models,
-        **context,
+        is_active=is_active,
+        get_widget_name_hint=get_widget_name_hint,
     )
+    if raw_references is None:
+        return None
+    return [
+        reference
+        if isinstance(reference, ModelReference)
+        else ModelReference.from_mapping(reference)
+        for reference in raw_references
+    ]
 
 
 def custom_node_has_potential_model_reference(
@@ -119,8 +143,8 @@ def custom_node_has_potential_model_reference(
 def update_custom_node_model_path(
     node: Dict[str, Any],
     widget_index: int,
-    resolved_model: Optional[Dict[str, Any]],
-    mapping: Optional[Dict[str, Any]],
+    resolved_model: Optional[ResolvedModel],
+    metadata: CustomNodeMetadata,
 ) -> Optional[bool]:
     """Dispatch a custom workflow update, returning None when not handled."""
     adapter = get_custom_node_model_adapter(node)
@@ -130,12 +154,12 @@ def update_custom_node_model_path(
         node,
         widget_index,
         resolved_model,
-        mapping,
+        metadata,
     )
 
 
 def should_skip_existing_custom_node_reference(
-    reference: Dict[str, Any],
+    reference: ModelReference,
 ) -> bool:
     """Return whether an existing adapter reference needs no resolution."""
     adapter = get_custom_node_adapter_for_reference(reference)
@@ -147,7 +171,7 @@ def should_skip_existing_custom_node_reference(
 
 
 def adapt_custom_node_loaded_model(
-    reference: Dict[str, Any],
+    reference: ModelReference,
     model_name: str,
     strength: Any,
 ) -> tuple[str, Any]:

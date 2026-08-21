@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import quote, unquote, urlparse
 
+from ..contracts import HuggingFaceFileReference, SearchResult
 from ..log_system import create_module_logger
 from ..progress import get_progress_reporter
 
@@ -443,7 +444,7 @@ def refresh_known_author_fallback_indexes(
     return status
 
 
-def parse_huggingface_url(url: str) -> Optional[Dict[str, str]]:
+def parse_huggingface_url(url: str) -> Optional[HuggingFaceFileReference]:
     """
     Parse a HuggingFace URL to extract repo and filename.
 
@@ -453,12 +454,15 @@ def parse_huggingface_url(url: str) -> Optional[Dict[str, str]]:
     - hf://user/repo/file.safetensors
 
     Returns:
-        Dictionary with 'repo' and 'filename' keys, or None if not HF URL
+        Typed repository-file identity, or None if not an HF URL
     """
     if url.startswith("hf://"):
         parts = url[5:].split("/", 2)
         if len(parts) >= 3:
-            return {"repo": f"{parts[0]}/{parts[1]}", "filename": parts[2]}
+            return HuggingFaceFileReference(
+                repo=f"{parts[0]}/{parts[1]}",
+                filename=parts[2],
+            )
         return None
 
     parsed = urlparse(url)
@@ -467,11 +471,11 @@ def parse_huggingface_url(url: str) -> Optional[Dict[str, str]]:
 
     match = re.match(r"^/([^/]+/[^/]+)/(resolve|blob)/([^/]+)/(.+)$", parsed.path)
     if match:
-        return {
-            "repo": match.group(1),
-            "branch": match.group(3),
-            "filename": match.group(4),
-        }
+        return HuggingFaceFileReference(
+            repo=match.group(1),
+            branch=match.group(3),
+            filename=match.group(4),
+        )
 
     return None
 
@@ -700,7 +704,7 @@ def _build_huggingface_result(
     file_info: Dict[str, Any],
     match_type: str,
     headers: Optional[Dict[str, str]] = None,
-) -> Dict[str, Any]:
+) -> SearchResult:
     sha256 = _extract_huggingface_file_sha256(file_info)
     download_url = get_huggingface_download_url(repo_id, file_path)
     size = resolve_file_size(
@@ -765,10 +769,10 @@ def get_huggingface_file_sha256(
     if not parsed:
         return ""
 
-    repo_id = str(parsed.get("repo") or "").strip()
-    branch = str(parsed.get("branch") or "main").strip() or "main"
+    repo_id = parsed.repo
+    branch = parsed.branch
     target_path = _normalize_huggingface_path(
-        unquote(str(parsed.get("filename") or ""))
+        unquote(parsed.filename)
     )
     if not repo_id or not target_path:
         return ""
@@ -787,7 +791,7 @@ def _find_matching_file_in_repo(
     filename: str,
     exact_only: bool = False,
     headers: Optional[Dict[str, str]] = None,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchResult]:
     filename_lower = filename.lower()
     filename_base = os.path.splitext(filename_lower)[0]
     partial_match = None
@@ -845,7 +849,7 @@ def _find_matching_file_in_author_index(
     exact_only: bool = False,
     headers: Optional[Dict[str, str]] = None,
     sha256: Optional[str] = None,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchResult]:
     files = index.get("files") or []
     requested_sha256 = normalize_sha256(sha256)
 
@@ -988,9 +992,9 @@ def _search_brave_for_huggingface_candidates(
 
             parsed = parse_huggingface_url(candidate_url)
             if parsed:
-                repo_id = parsed.get("repo", "")
-                file_path = parsed.get("filename", "")
-                branch = parsed.get("branch", "main")
+                repo_id = parsed.repo
+                file_path = parsed.filename
+                branch = parsed.branch
             else:
                 parsed_url = urlparse(candidate_url)
                 if "huggingface.co" not in parsed_url.netloc:
@@ -1032,7 +1036,7 @@ def search_huggingface_for_file(
     force_refresh: bool = False,
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     sha256: Optional[str] = None,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchResult]:
     """
     Search HuggingFace for a specific model file.
     Returns the first repo that contains a matching file.
@@ -1044,7 +1048,7 @@ def search_huggingface_for_file(
                    If False, also try partial matching (for local file resolution).
 
     Returns:
-        Dict with url, repo, filename if found, None otherwise
+        A typed SearchResult if a matching file is found, otherwise None.
     """
     global _search_cache
 
@@ -1069,14 +1073,14 @@ def search_huggingface_for_file(
         return _search_cache[cache_key]
 
     try:
-        def result_matches_requested_hash(result: Optional[Dict[str, Any]]) -> bool:
+        def result_matches_requested_hash(result: Optional[SearchResult]) -> bool:
             if not requested_sha256:
                 return True
             return normalize_sha256(
-                result.get("sha256")
-                or result.get("hash")
-                or (result.get("hashes") or {}).get("SHA256")
-                or (result.get("hashes") or {}).get("sha256")
+                result.sha256
+                or result.extra_value("hash")
+                or (result.hashes or {}).get("SHA256")
+                or (result.hashes or {}).get("sha256")
             ) == requested_sha256
 
         headers = {}
@@ -1087,7 +1091,7 @@ def search_huggingface_for_file(
 
         def find_author_index_result(
             author: str,
-        ) -> tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+        ) -> tuple[Optional[Dict[str, Any]], Optional[SearchResult]]:
             index = _get_author_index(
                 author,
                 headers={},
@@ -1155,13 +1159,13 @@ def search_huggingface_for_file(
                         "found",
                         "Found HuggingFace SHA-256 match",
                         92,
-                        repo=result.get("repo_id"),
-                        match_type=result.get("match_type"),
+                        repo=result.extra_value("repo_id"),
+                        match_type=result.match_type,
                     )
                     log.info(
                         f"HuggingFace found source=author_index "
-                        f"match=hash file={result['filename']} "
-                        f"repo={result['repo_id']} path={result['path']}"
+                        f"match=hash file={result.filename} "
+                        f"repo={result.extra_value('repo_id')} path={result.extra_value('path')}"
                     )
                     return result
 
@@ -1250,10 +1254,10 @@ def search_huggingface_for_file(
                     "Found HuggingFace match",
                     92,
                     repo=repo_id,
-                    match_type=result.get("match_type"),
+                    match_type=result.match_type,
                 )
                 log.info(
-                    f"HuggingFace found match={result['match_type']} file={filename} repo={repo_id} path={result['path']}"
+                    f"HuggingFace found match={result.match_type} file={filename} repo={repo_id} path={result.extra_value('path')}"
                 )
                 return result
 
@@ -1295,11 +1299,11 @@ def search_huggingface_for_file(
                             "found",
                             "Found HuggingFace fallback match",
                             92,
-                            repo=result.get("repo_id"),
-                            match_type=result.get("match_type"),
+                            repo=result.extra_value("repo_id"),
+                            match_type=result.match_type,
                         )
                         log.info(
-                            f"HuggingFace found source=author_index match={result['match_type']} file={filename} repo={result['repo_id']} path={result['path']}"
+                            f"HuggingFace found source=author_index match={result.match_type} file={filename} repo={result.extra_value('repo_id')} path={result.extra_value('path')}"
                         )
                         return result
 
@@ -1356,10 +1360,10 @@ def search_huggingface_for_file(
                     "Found HuggingFace fallback match",
                     92,
                     repo=repo_id,
-                    match_type=result.get("match_type"),
+                    match_type=result.match_type,
                 )
                 log.info(
-                    f"HuggingFace found source=author_fallback match={result['match_type']} file={filename} repo={repo_id} path={result['path']}"
+                    f"HuggingFace found source=author_fallback match={result.match_type} file={filename} repo={repo_id} path={result.extra_value('path')}"
                 )
                 return result
 
@@ -1411,7 +1415,7 @@ def search_huggingface_for_file(
             )
             if (
                 result
-                and result.get("filename", "").lower() == filename.lower()
+                and result.filename.lower() == filename.lower()
                 and result_matches_requested_hash(result)
             ):
                 _search_cache[cache_key] = result
@@ -1421,10 +1425,10 @@ def search_huggingface_for_file(
                     "Found HuggingFace Brave match",
                     92,
                     repo=repo_id,
-                    match_type=result.get("match_type"),
+                    match_type=result.match_type,
                 )
                 log.info(
-                    f"HuggingFace found source=brave_fallback match=exact file={filename} repo={repo_id} path={result['path']}"
+                    f"HuggingFace found source=brave_fallback match=exact file={filename} repo={repo_id} path={result.extra_value('path')}"
                 )
                 return result
 
@@ -1461,7 +1465,7 @@ def search_huggingface(
     model_type: Optional[str] = None,
     limit: int = 10,
     token: Optional[str] = None,
-) -> List[Dict[str, Any]]:
+) -> List[SearchResult]:
     """
     Search HuggingFace Hub for models (general search).
     Returns repos that might be relevant, not guaranteed to have exact file.
@@ -1486,14 +1490,14 @@ def search_huggingface(
                 repo_id = model.get("id", "")
 
                 results.append(
-                    {
-                        "source": "huggingface",
-                        "repo": repo_id,
-                        "name": model.get("modelId", repo_id),
-                        "downloads": model.get("downloads", 0),
-                        "likes": model.get("likes", 0),
-                        "url": f"https://huggingface.co/{repo_id}",
-                    }
+                    build_model_result(
+                        "huggingface",
+                        name=model.get("modelId", repo_id),
+                        url=f"https://huggingface.co/{repo_id}",
+                        repo=repo_id,
+                        downloads=model.get("downloads", 0),
+                        likes=model.get("likes", 0),
+                    )
                 )
 
     except Exception as e:
@@ -1506,16 +1510,16 @@ def build_huggingface_custom_result(
     url: str,
     expected_filename: str = "",
     token: Optional[str] = None,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchResult]:
     from urllib.parse import quote, unquote
 
     parsed = parse_huggingface_url(url)
     if not parsed:
         return None
 
-    repo_id = parsed.get("repo") or ""
-    branch = parsed.get("branch") or "main"
-    file_path = unquote(parsed.get("filename") or "")
+    repo_id = parsed.repo
+    branch = parsed.branch
+    file_path = unquote(parsed.filename)
     if not repo_id or not file_path:
         return None
 

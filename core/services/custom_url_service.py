@@ -1,6 +1,12 @@
 """Custom model URL service."""
 
+from ..contracts import SearchResult
 from ..local_hash_matches import collect_local_hash_matches_for_result
+from ..request_utils import (
+    read_first_text_field,
+    read_optional_object_payload,
+    read_text_field,
+)
 from ..routes.context import RouteContext
 from .model_utils import CustomUrlDependencies, ModelServiceDependencies
 
@@ -40,6 +46,10 @@ class CustomUrlService(ModelServiceDependencies):
         def _custom_result_timestamp():
             return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
+        def _as_search_result(value, source=""):
+            if isinstance(value, SearchResult):
+                return value
+            return None
 
 
 
@@ -80,8 +90,11 @@ class CustomUrlService(ModelServiceDependencies):
             )
 
         def _collect_custom_url_local_hash_matches(result, category):
-            source_key = str(result.get("source") or "custom").strip().lower()
-            sha256 = normalize_sha256(extract_sha256_from_metadata(result))
+            result_mapping = result.to_dict()
+            source_key = str(result.source or "custom").strip().lower()
+            sha256 = normalize_sha256(
+                extract_sha256_from_metadata(result_mapping)
+            )
             if not sha256:
                 return []
 
@@ -92,8 +105,8 @@ class CustomUrlService(ModelServiceDependencies):
                     category=category or None,
                     max_matches=20,
                     source=source_key,
-                    filename=result.get("filename")
-                    or result.get("path")
+                    filename=result.filename
+                    or result.extra_value("path")
                     or "",
                 )
             except Exception as hash_error:
@@ -102,8 +115,40 @@ class CustomUrlService(ModelServiceDependencies):
                 )
                 return []
 
-        data = await request.json()
-        raw_url = str(data.get("url") or data.get("custom_url") or "").strip()
+        data = await read_optional_object_payload(request)
+        try:
+            raw_url = read_first_text_field(
+                data,
+                ("url", "custom_url"),
+                contract_name="Custom URL request",
+            )
+            category = read_text_field(
+                data,
+                "category",
+                contract_name="Custom URL request",
+            )
+            filename = read_text_field(
+                data,
+                "filename",
+                contract_name="Custom URL request",
+            )
+            original_path = read_text_field(
+                data,
+                "original_path",
+                contract_name="Custom URL request",
+            )
+            civitai_key = read_text_field(
+                data,
+                "civitai_key",
+                contract_name="Custom URL request",
+            )
+            hf_token = read_text_field(
+                data,
+                "hf_token",
+                contract_name="Custom URL request",
+            )
+        except TypeError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
         if not raw_url:
             return web.json_response(
                 {"error": "URL is required"}, status=400
@@ -123,14 +168,11 @@ class CustomUrlService(ModelServiceDependencies):
                     status=400,
                 )
 
-        category = data.get("category") or ""
         expected_filename = (
-            data.get("filename")
-            or get_filename_from_path(data.get("original_path") or "")
+            filename
+            or get_filename_from_path(original_path)
             or ""
         )
-        civitai_key = data.get("civitai_key", "")
-        hf_token = data.get("hf_token", "")
 
         result = None
         source = ""
@@ -145,8 +187,8 @@ class CustomUrlService(ModelServiceDependencies):
 
         if civitai_parsed:
             source = "civitai"
-            model_id = civitai_parsed.get("model_id")
-            version_id = civitai_parsed.get("version_id")
+            model_id = civitai_parsed.model_id
+            version_id = civitai_parsed.version_id
             if model_id:
                 details = await asyncio.to_thread(
                     get_civitai_model_details,
@@ -185,17 +227,17 @@ class CustomUrlService(ModelServiceDependencies):
                 )
         elif civarchive_parsed:
             source = "civarchive"
-            if civarchive_parsed.get("sha256"):
+            if civarchive_parsed.sha256:
                 result = await asyncio.to_thread(
                     resolve_civarchive_by_hash,
-                    civarchive_parsed.get("sha256"),
+                    civarchive_parsed.sha256,
                     expected_filename,
                     False,
                     normalize_category_to_model_type(category),
                 )
             else:
-                model_id = civarchive_parsed.get("model_id")
-                version_id = civarchive_parsed.get("version_id")
+                model_id = civarchive_parsed.model_id
+                version_id = civarchive_parsed.version_id
                 if model_id:
                     result = await asyncio.to_thread(
                         resolve_civarchive_model_version,
@@ -217,11 +259,14 @@ class CustomUrlService(ModelServiceDependencies):
                             expected_filename=expected_filename,
                         )
             if result:
-                result = dict(result)
-                result["source"] = "civarchive"
-                result["details_source"] = "civarchive"
-                result["match_type"] = "custom_url"
-                result["custom_url"] = True
+                result = _as_search_result(result, source="civarchive")
+                if result is not None:
+                    result = result.with_updates(
+                        source="civarchive",
+                        details_source="civarchive",
+                        match_type="custom_url",
+                        custom_url=True,
+                    )
         else:
             from urllib.parse import urlparse
 
@@ -258,32 +303,44 @@ class CustomUrlService(ModelServiceDependencies):
                 status=400,
             )
 
-        result = dict(result)
-        result["provided_url"] = normalized_url
-        result["url_source"] = "custom"
-        result["searched_at"] = result.get("searched_at") or _custom_result_timestamp()
-        result.setdefault("category", category)
-        if expected_filename and not result.get("filename"):
-            result["filename"] = expected_filename
+        result = _as_search_result(result, source=source)
+        if result is None:
+            return web.json_response(
+                {"error": "The URL resolved to an invalid model result"},
+                status=400,
+            )
 
-        if not (result.get("download_url") or result.get("url")):
+        result = result.with_extra(
+            provided_url=normalized_url,
+            url_source="custom",
+            searched_at=result.extra_value("searched_at")
+            or _custom_result_timestamp(),
+            category=result.extra_value("category") or category,
+        )
+        if expected_filename and not result.filename:
+            result = result.with_updates(filename=expected_filename)
+
+        if not (result.download_url or result.url):
             return web.json_response(
                 {"error": "The URL resolved, but no download URL was found"},
                 status=400,
             )
 
-        source = source or result.get("source") or "custom"
+        source = source or result.source or "custom"
         local_hash_matches = _collect_custom_url_local_hash_matches(
             result,
             category,
         )
+        result_mapping = result.to_dict()
         response = {
             "success": True,
             "source": source,
-            "result": result,
-            "custom": [result],
+            "result": result_mapping,
+            "custom": [result_mapping],
             "searched_sources": ["custom"],
-            "local_hash_matches": local_hash_matches,
+            "local_hash_matches": [
+                match.to_dict() for match in local_hash_matches
+            ],
         }
-        response[source] = result
+        response[source] = result_mapping
         return web.json_response(response)

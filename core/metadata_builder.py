@@ -12,8 +12,9 @@ from collections.abc import Iterable
 from concurrent.futures import CancelledError, ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .contracts import ResolvedModel
 from .log_system import create_module_logger
-from .metadata_model_utils import dedupe_models, is_model_file_path
+from .metadata_model_utils import ModelRecord, dedupe_models, is_model_file_path
 from .metadata_utils import build_sidecar_file_identity, merge_counted_payload
 from .path_utils import (
     HashCalculationCancelled,
@@ -89,9 +90,11 @@ def get_metadata_build_capabilities() -> Dict[str, Any]:
     }
 
 
-def normalize_metadata_build_mode(value: Any) -> str:
+def normalize_metadata_build_mode(value: Optional[str]) -> str:
     """Return a supported metadata builder source mode."""
-    normalized = str(value or "").strip().lower()
+    if value is not None and not isinstance(value, str):
+        raise TypeError("Metadata build mode must be a string")
+    normalized = (value or "").strip().lower()
     if normalized in METADATA_BUILD_MODES:
         return normalized
     return METADATA_BUILD_MODE_CALCULATE_FRESH
@@ -106,7 +109,7 @@ def _trusted_external_sha256(metadata: Dict[str, Any]) -> str:
 
 def _build_external_metadata_seed(
     model_path: str,
-    model: Dict[str, Any],
+    model: ResolvedModel,
 ) -> Tuple[Dict[str, Any], str, str]:
     external_path = find_external_metadata_sidecar_path(model_path)
     if not external_path:
@@ -122,7 +125,7 @@ def _build_external_metadata_seed(
     seed = build_model_resolver_metadata(
         model_path,
         external_raw,
-        str(model.get("category") or ""),
+        model.category,
     )
     if trusted_sha256:
         seed["sha256"] = trusted_sha256
@@ -238,7 +241,7 @@ def _model_type_for_category(category: str) -> str:
 def _build_local_metadata_payload(
     *,
     existing: Dict[str, Any],
-    model: Dict[str, Any],
+    model: ResolvedModel,
     model_path: str,
     metadata_path: str,
     file_size: int,
@@ -249,7 +252,7 @@ def _build_local_metadata_payload(
 ) -> Tuple[Dict[str, Any], List[str]]:
     filename = get_filename_from_path(model_path)
     stem = os.path.splitext(filename)[0]
-    category = str(model.get("category") or "")
+    category = model.category
     now = time.time()
     payload = dict(existing or {})
     changed_fields: List[str] = []
@@ -460,7 +463,7 @@ def _build_result_payload(
 
 
 def _build_metadata_history_item(
-    model: Dict[str, Any],
+    model: ResolvedModel,
     *,
     action: str,
     filename: str,
@@ -479,8 +482,8 @@ def _build_metadata_history_item(
         "action": action,
         "filename": filename,
         "relative_path": relative_path,
-        "category": model.get("category") or "",
-        "base_directory": model.get("base_directory") or "",
+        "category": model.category,
+        "base_directory": model.base_directory,
         "model_path": model_path,
         "metadata_path": metadata_path,
         "size": file_size,
@@ -498,19 +501,19 @@ def _build_metadata_history_item(
     return item
 
 
-def _history_items_for_model(model: Dict[str, Any], result: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _history_items_for_model(model: ResolvedModel, result: Dict[str, Any]) -> List[Dict[str, Any]]:
     updated_items = result.get("updated") or []
     if updated_items:
         return [dict(item) for item in updated_items if isinstance(item, dict)]
 
-    filename = get_filename_from_path(str(model.get("path") or "")) or str(model.get("filename") or "Model")
-    model_path = str(model.get("path") or "").strip()
+    filename = get_filename_from_path(model.path) or model.filename or "Model"
+    model_path = model.path.strip()
     metadata_path = get_model_resolver_sidecar_path(model_path) if model_path else ""
     base_item = {
         "filename": filename,
-        "relative_path": model.get("relative_path") or filename,
-        "category": model.get("category") or "",
-        "base_directory": model.get("base_directory") or "",
+        "relative_path": model.relative_path or filename,
+        "category": model.category,
+        "base_directory": model.base_directory,
         "model_path": model_path,
         "metadata_path": metadata_path,
     }
@@ -538,7 +541,7 @@ def _history_items_for_model(model: Dict[str, Any], result: Dict[str, Any]) -> L
 
 
 def _build_missing_local_metadata_parallel(
-    model_items: List[Dict[str, Any]],
+    model_items: List[ResolvedModel],
     *,
     worker_count: int,
     cpu_count: int,
@@ -599,10 +602,10 @@ def _build_missing_local_metadata_parallel(
             snapshot.update(data)
         _emit(progress_callback, snapshot)
 
-    def run_one_model(model: Dict[str, Any]) -> Dict[str, Any]:
-        model_path = str(model.get("path") or "").strip()
+    def run_one_model(model: ResolvedModel) -> Dict[str, Any]:
+        model_path = model.path.strip()
         filename = get_filename_from_path(model_path)
-        model_key = get_model_path_identity(model.get("path")) or model_path
+        model_key = get_model_path_identity(model.path) or model_path
 
         def child_progress(data: Dict[str, Any]) -> None:
             if not isinstance(data, dict):
@@ -653,9 +656,9 @@ def _build_missing_local_metadata_parallel(
     try:
         for future in as_completed(futures):
             model = futures[future]
-            model_path = str(model.get("path") or "").strip()
+            model_path = model.path.strip()
             filename = get_filename_from_path(model_path)
-            model_key = get_model_path_identity(model.get("path")) or model_path
+            model_key = get_model_path_identity(model.path) or model_path
             try:
                 item_result = future.result()
             except CancelledError:
@@ -667,7 +670,7 @@ def _build_missing_local_metadata_parallel(
                     "errors": [
                         {
                             "filename": filename,
-                            "relative_path": model.get("relative_path") or filename,
+                            "relative_path": model.relative_path or filename,
                             "model_path": model_path,
                             "metadata_path": get_model_resolver_sidecar_path(model_path),
                             "message": str(exc) or "Metadata build failed.",
@@ -740,7 +743,7 @@ def _build_missing_local_metadata_parallel(
 
 
 def build_missing_local_metadata(
-    models: Optional[List[Dict[str, Any]]] = None,
+    models: Optional[List[ModelRecord]] = None,
     *,
     force_rescan: bool = True,
     worker_count: Optional[int] = None,
@@ -762,10 +765,10 @@ def build_missing_local_metadata(
 
         models = get_model_files(force_rescan=force_rescan)
 
-    all_models = dedupe_models(models or [])
+    all_models = dedupe_models(models)
     model_items = [
         model for model in all_models
-        if is_model_file_path(str(model.get("path") or "").strip())
+        if is_model_file_path(model.path.strip())
     ]
     total = len(model_items)
     resolved_worker_count, cpu_count = resolve_worker_count(
@@ -861,9 +864,9 @@ def build_missing_local_metadata(
                 include_updated_count=False,
             )
 
-        model_path = str(model.get("path") or "").strip()
+        model_path = model.path.strip()
         filename = get_filename_from_path(model_path)
-        relative_path = model.get("relative_path") or filename
+        relative_path = model.relative_path or filename
         metadata_path, existing_metadata_path, metadata_exists = _select_metadata_path(model_path)
         scanned_models += 1
 
@@ -1154,8 +1157,8 @@ def build_missing_local_metadata(
             history_item = {
                 **error_item,
                 "action": "error",
-                "category": model.get("category") or "",
-                "base_directory": model.get("base_directory") or "",
+                "category": model.category,
+                "base_directory": model.base_directory,
             }
             history.append(history_item)
             _emit(

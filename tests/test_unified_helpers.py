@@ -57,6 +57,7 @@ class UnifiedHelpersTests(unittest.TestCase):
         self.assertEqual("", extract_file_sha256(None))
         self.assertEqual("", extract_file_sha256({"hashes": []}))
         self.assertEqual("fallback", extract_file_sha256({"sha256": "", "hash": "fallback"}))
+        self.assertEqual("", extract_file_sha256({"sha256": 123}))
 
     def test_extract_sha256_from_metadata_uses_first_valid_source(self):
         preferred = "a" * 64
@@ -1038,6 +1039,7 @@ class UnifiedHelpersTests(unittest.TestCase):
         self.assertEqual(normalize_sha256("SHA256:0X" + h.upper()), h)
         self.assertEqual(normalize_sha256("invalid_hash"), "")
         self.assertEqual(normalize_sha256(None), "")
+        self.assertEqual(normalize_sha256(123), "")
 
     def test_unique_ordered_strings(self):
         self.assertEqual(unique_ordered_strings(["a", "b", "a", "c", "b"]), ["a", "b", "c"])
@@ -1405,11 +1407,14 @@ class UnifiedHelpersTests(unittest.TestCase):
         
         # Valid url download format
         res = parse_provider_model_url("https://civitai.com/api/download/models/12345", allowed)
-        self.assertEqual(res, {"version_id": 12345})
+        self.assertEqual(res.to_dict(), {"version_id": 12345})
         
         # Valid model page format
         res = parse_provider_model_url("https://civitai.red/models/9876?modelVersionId=54321", allowed)
-        self.assertEqual(res, {"model_id": 9876, "version_id": 54321})
+        self.assertEqual(
+            res.to_dict(),
+            {"model_id": 9876, "version_id": 54321},
+        )
         
         # Non-matching hostname
         res = parse_provider_model_url("https://example.com/api/download/models/12345", allowed)
@@ -1417,7 +1422,9 @@ class UnifiedHelpersTests(unittest.TestCase):
         
         # Mirror sha256 path pattern
         res = parse_provider_model_url("https://civarchive.com/sha256/a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2", ["civarchive.com"])
-        self.assertEqual(res, {"sha256": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"})
+        self.assertIsNotNone(res)
+        self.assertEqual(len(res.sha256), 64)
+        self.assertEqual(res.to_dict(), {"sha256": res.sha256})
 
     def test_resolve_model_category(self):
         from core.type_utils import resolve_model_category

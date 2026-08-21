@@ -5,6 +5,13 @@ from types import SimpleNamespace
 from unittest.mock import ANY, patch
 
 from core import resolver as resolver_core
+from core.contracts import (
+    ModelMatch,
+    ModelReference,
+    ResolvedModel,
+    WorkflowAnalysisResult,
+    WorkflowModelInventory,
+)
 from core.scanner import invalidate_model_files_cache, scan_directory
 from core.workflow import analysis, dynamic_widgets, references
 from core.workflow.analysis import analyze_workflow_models, identify_missing_models
@@ -54,10 +61,10 @@ class WorkflowAnalyzerCaseSensitivityTests(unittest.TestCase):
             )
             missing = identify_missing_models(refs, available_models)
 
-            self.assertFalse(refs[0]["exists"])
+            self.assertFalse(refs[0].exists)
             self.assertEqual(1, len(missing))
             self.assertEqual(
-                r"Qwen\qwen_3_4b.safetensors", missing[0]["original_path"]
+                r"Qwen\qwen_3_4b.safetensors", missing[0].reference.original_path
             )
 
     def test_exact_folder_case_is_not_reported_missing(self):
@@ -84,7 +91,7 @@ class WorkflowAnalyzerCaseSensitivityTests(unittest.TestCase):
             )
             missing = identify_missing_models(refs, available_models)
 
-            self.assertTrue(refs[0]["exists"])
+            self.assertTrue(refs[0].exists)
             self.assertEqual([], missing)
 
 
@@ -348,10 +355,10 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
             refs = analyze_workflow_models(workflow, available_models=[])
 
         self.assertEqual(1, len(refs))
-        self.assertEqual(3, refs[0]["widget_index"])
-        self.assertEqual("start_ckpt_name", refs[0]["widget_name"])
-        self.assertEqual(r"LTXV\model.safetensors", refs[0]["original_path"])
-        self.assertEqual("checkpoints", refs[0]["category"])
+        self.assertEqual(3, refs[0].widget_index)
+        self.assertEqual("start_ckpt_name", refs[0].extra_value("widget_name"))
+        self.assertEqual(r"LTXV\model.safetensors", refs[0].original_path)
+        self.assertEqual("checkpoints", refs[0].category)
 
     def test_implicit_seed_control_keeps_following_model_aligned(self):
         dynamic_hints = {
@@ -415,14 +422,14 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
             refs = analyze_workflow_models(workflow, available_models=[])
 
         self.assertEqual(1, len(refs))
-        self.assertEqual(2, refs[0]["widget_index"])
-        self.assertEqual("clip_name", refs[0]["widget_name"])
+        self.assertEqual(2, refs[0].widget_index)
+        self.assertEqual("clip_name", refs[0].extra_value("widget_name"))
         self.assertEqual(
             "clip-vit-large-patch14.safetensors",
-            refs[0]["original_path"],
+            refs[0].original_path,
         )
-        self.assertEqual("clip_vision", refs[0]["category"])
-        self.assertFalse(refs[0]["exists"])
+        self.assertEqual("clip_vision", refs[0].category)
+        self.assertFalse(refs[0].exists)
 
     def test_non_model_static_choices_in_hybrid_model_dropdowns_are_skipped(self):
         cases = [
@@ -546,7 +553,7 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
             refs = analyze_workflow_models(workflow, available_models=[])
 
         self.assertEqual(1, len(refs))
-        self.assertEqual("diffusion_models", refs[0]["category"])
+        self.assertEqual("diffusion_models", refs[0].category)
 
     def test_show_anything_cached_model_text_is_not_a_model_reference(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -605,7 +612,7 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
         refs = analyze_workflow_models(workflow, available_models=[])
 
         self.assertEqual(1, len(refs))
-        self.assertEqual("custom_model.safetensors", refs[0]["original_path"])
+        self.assertEqual("custom_model.safetensors", refs[0].original_path)
 
     def test_set_node_model_slot_name_does_not_turn_constant_into_model(self):
         workflow = {
@@ -740,7 +747,7 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
         refs = analyze_workflow_models(workflow, available_models=[])
 
         self.assertEqual(1, len(refs))
-        self.assertEqual("upscale_models", refs[0]["category"])
+        self.assertEqual("upscale_models", refs[0].category)
 
     def test_upscale_output_hint_does_not_mark_every_text_widget_as_model(self):
         workflow = {
@@ -758,8 +765,8 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
         refs = analyze_workflow_models(workflow, available_models=[])
 
         self.assertEqual(1, len(refs))
-        self.assertEqual("4x_NMKD-Siax_200k.pth", refs[0]["original_path"])
-        self.assertEqual("upscale_models", refs[0]["category"])
+        self.assertEqual("4x_NMKD-Siax_200k.pth", refs[0].original_path)
+        self.assertEqual("upscale_models", refs[0].category)
 
     def test_impact_sam_loader_uses_sams_category(self):
         workflow = {
@@ -778,8 +785,8 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
         refs = analyze_workflow_models(workflow, available_models=[])
 
         self.assertEqual(1, len(refs))
-        self.assertEqual("sam_vit_b_01ec64.pth", refs[0]["original_path"])
-        self.assertEqual("sams", refs[0]["category"])
+        self.assertEqual("sam_vit_b_01ec64.pth", refs[0].original_path)
+        self.assertEqual("sams", refs[0].category)
 
     def test_impact_sam_loader_esam_option_is_not_missing_model(self):
         workflow = {
@@ -819,8 +826,8 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
         refs = analyze_workflow_models(workflow, available_models=[])
 
         self.assertEqual(1, len(refs))
-        self.assertEqual("segm/person_yolov8m-seg.pt", refs[0]["original_path"])
-        self.assertEqual("ultralytics", refs[0]["category"])
+        self.assertEqual("segm/person_yolov8m-seg.pt", refs[0].original_path)
+        self.assertEqual("ultralytics", refs[0].category)
 
     def test_core_extra_loader_categories_match_comfyui_folder_paths(self):
         cases = [
@@ -855,7 +862,7 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
                 )
 
                 self.assertEqual(1, len(refs))
-                self.assertEqual(expected_category, refs[0]["category"])
+                self.assertEqual(expected_category, refs[0].category)
 
     def test_multi_clip_loader_indexes_are_text_encoders(self):
         refs = analyze_workflow_models(
@@ -878,7 +885,7 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
         )
 
         self.assertEqual(4, len(refs))
-        self.assertEqual({"text_encoders"}, {ref["category"] for ref in refs})
+        self.assertEqual({"text_encoders"}, {ref.category for ref in refs})
 
     def test_gguf_unet_loader_keeps_diffusion_badge_and_raw_folder_hint(self):
         for node_type in (
@@ -910,9 +917,15 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
                     )
 
                 self.assertEqual(1, len(refs))
-                self.assertEqual("diffusion_models", refs[0]["category"])
-                self.assertEqual(["diffusion_models"], refs[0]["category_hints"])
-                self.assertEqual(["model_gguf"], refs[0]["folder_key_hints"])
+                self.assertEqual("diffusion_models", refs[0].category)
+                self.assertEqual(
+                    ("diffusion_models",),
+                    refs[0].extra_value("category_hints"),
+                )
+                self.assertEqual(
+                    ("model_gguf",),
+                    refs[0].extra_value("folder_key_hints"),
+                )
 
     def test_gguf_loader_resolves_scanner_category_alias(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -953,9 +966,9 @@ class WorkflowAnalyzerCategoryHintTests(unittest.TestCase):
                 )
 
         self.assertEqual(1, len(refs))
-        self.assertTrue(refs[0]["exists"])
-        self.assertEqual(model_path, refs[0]["full_path"])
-        self.assertEqual("diffusion_models", refs[0]["category"])
+        self.assertTrue(refs[0].exists)
+        self.assertEqual(model_path, refs[0].extra_value("full_path"))
+        self.assertEqual("diffusion_models", refs[0].category)
 
 
 class ScannerFolderModelTests(unittest.TestCase):
@@ -971,8 +984,8 @@ class ScannerFolderModelTests(unittest.TestCase):
             models = scan_directory(tmpdir, {"folder"}, "diffusers")
 
             self.assertEqual(1, len(models))
-            self.assertEqual("wan_diffusers", models[0]["relative_path"])
-            self.assertEqual(model_dir, models[0]["path"])
+            self.assertEqual("wan_diffusers", models[0].relative_path)
+            self.assertEqual(model_dir, models[0].path)
 
 
 class WorkflowCategoryHintsTests(unittest.TestCase):
@@ -1007,8 +1020,8 @@ class WorkflowCategoryHintsTests(unittest.TestCase):
             refs = analyze_workflow_models(workflow, available_models=[])
 
         self.assertEqual(1, len(refs))
-        self.assertEqual("model.safetensors", refs[0]["original_path"])
-        self.assertEqual("checkpoints", refs[0]["category"])
+        self.assertEqual("model.safetensors", refs[0].original_path)
+        self.assertEqual("checkpoints", refs[0].category)
 
     def test_node_type_to_category_hints_is_populated(self):
         from core.workflow.widgets import NODE_TYPE_TO_CATEGORY_HINTS
@@ -1186,10 +1199,12 @@ class WorkflowCustomNodeAdapterTests(unittest.TestCase):
         refs = analyze_workflow_models(workflow, available_models=[])
 
         self.assertEqual(1, len(refs))
-        self.assertEqual("lora-manager", refs[0]["custom_node_adapter"])
-        self.assertEqual("missing_style", refs[0]["original_path"])
-        self.assertEqual(0.65, refs[0]["strength"])
-        self.assertTrue(refs[0]["active"])
+        self.assertEqual(
+            "lora-manager", refs[0].extra_value("custom_node_adapter")
+        )
+        self.assertEqual("missing_style", refs[0].original_path)
+        self.assertEqual(0.65, refs[0].extra_value("strength"))
+        self.assertTrue(refs[0].extra_value("active"))
 
 
 class WorkflowMissingReferenceGroupingTests(unittest.TestCase):
@@ -1219,17 +1234,17 @@ class WorkflowMissingReferenceGroupingTests(unittest.TestCase):
         self.assertEqual(2, len(refs))
         self.assertEqual(
             ["rgthree-power-lora-loader", "rgthree-power-lora-loader"],
-            [ref["custom_node_adapter"] for ref in refs],
+            [ref.extra_value("custom_node_adapter") for ref in refs],
         )
         self.assertEqual(1, len(missing))
-        self.assertEqual(2, missing[0]["reference_count"])
+        self.assertEqual(2, missing[0].reference_count)
         self.assertEqual(
             [401, 402],
-            [ref["node_id"] for ref in missing[0]["all_node_refs"]],
+            [ref.node_id for ref in missing[0].all_node_refs],
         )
         self.assertEqual(
             ["lora", "lora"],
-            [ref["nested_key"] for ref in missing[0]["all_node_refs"]],
+            [ref.extra["nested_key"] for ref in missing[0].all_node_refs],
         )
 
     def test_same_filename_different_categories_are_not_merged(self):
@@ -1255,7 +1270,7 @@ class WorkflowMissingReferenceGroupingTests(unittest.TestCase):
         self.assertEqual(2, len(missing))
         self.assertEqual(
             {"checkpoints", "loras"},
-            {item["category"] for item in missing},
+            {item.reference.category for item in missing},
         )
 
 
@@ -1263,22 +1278,26 @@ class WorkflowResolverMatchingTests(unittest.TestCase):
     def test_missing_model_matches_keep_highest_confidence_for_same_path(self):
         shared_path = os.path.join(os.getcwd(), "models", "shared.safetensors")
         matches = [
-            {
-                "model": {
-                    "path": shared_path,
-                    "relative_path": "models/shared.safetensors",
-                },
-                "filename": "shared.safetensors",
-                "confidence": 0.35,
-            },
-            {
-                "model": {
-                    "path": shared_path,
-                    "relative_path": "models/shared.safetensors",
-                },
-                "filename": "shared.safetensors",
-                "confidence": 0.88,
-            },
+            ModelMatch.from_mapping(
+                {
+                    "model": {
+                        "path": shared_path,
+                        "relative_path": "models/shared.safetensors",
+                    },
+                    "filename": "shared.safetensors",
+                    "confidence": 0.35,
+                }
+            ),
+            ModelMatch.from_mapping(
+                {
+                    "model": {
+                        "path": shared_path,
+                        "relative_path": "models/shared.safetensors",
+                    },
+                    "filename": "shared.safetensors",
+                    "confidence": 0.88,
+                }
+            ),
         ]
         workflow_ref = {
             "node_id": 1,
@@ -1293,10 +1312,9 @@ class WorkflowResolverMatchingTests(unittest.TestCase):
             patch.object(
                 resolver_core,
                 "get_workflow_model_inventory",
-                return_value={
-                    "available_models": [],
-                    "model_refs": [workflow_ref],
-                },
+                return_value=WorkflowModelInventory(
+                    model_refs=(ModelReference.from_mapping(workflow_ref),)
+                ),
             ),
             patch.object(resolver_core, "find_matches", return_value=matches),
             patch.object(resolver_core, "_get_active_downloads_by_path", return_value={}),
@@ -1305,8 +1323,13 @@ class WorkflowResolverMatchingTests(unittest.TestCase):
                 _workflow_with_model("shared.safetensors")
             )
 
+        self.assertIsInstance(result, WorkflowAnalysisResult)
+        serialized = result.to_dict()
         self.assertEqual(
-            [match["confidence"] for match in result["missing_models"][0]["matches"]],
+            [
+                match["confidence"]
+                for match in serialized["missing_models"][0]["matches"]
+            ],
             [0.88],
         )
 
@@ -1335,10 +1358,13 @@ class WorkflowResolverMatchingTests(unittest.TestCase):
             patch.object(
                 resolver_core,
                 "get_workflow_model_inventory",
-                return_value={
-                    "available_models": available_models,
-                    "model_refs": [resolved_ref],
-                },
+                return_value=WorkflowModelInventory(
+                    available_models=tuple(
+                        ResolvedModel.from_mapping(model)
+                        for model in available_models
+                    ),
+                    model_refs=(ModelReference.from_mapping(resolved_ref),),
+                ),
             ),
             patch.object(resolver_core, "find_matches") as find_matches,
         ):
@@ -1347,9 +1373,10 @@ class WorkflowResolverMatchingTests(unittest.TestCase):
                 progress_callback=progress.append,
             )
 
+        self.assertIsInstance(result, WorkflowAnalysisResult)
         find_matches.assert_not_called()
-        self.assertEqual(1, result["total_resolved"])
-        self.assertEqual([], result["resolved_models"][0]["matches"])
+        self.assertEqual(1, result.total_resolved)
+        self.assertEqual([], result.to_dict()["resolved_models"][0]["matches"])
         self.assertFalse(
             any(
                 "Analyzing resolved model" in str(update.get("message") or "")
@@ -1384,8 +1411,15 @@ class WorkflowModelInventoryCacheTests(unittest.TestCase):
             first = get_workflow_model_inventory(workflow)
             second = get_workflow_model_inventory({"nodes": workflow["nodes"]})
 
-        self.assertIs(first["available_models"], available_models)
-        self.assertIs(second["model_refs"], model_refs)
+        self.assertEqual(
+            ("shared.safetensors",),
+            tuple(model.filename for model in first.available_models),
+        )
+        self.assertIsInstance(second.model_refs[0], ModelReference)
+        self.assertEqual(
+            [ref.to_dict() for ref in first.model_refs],
+            [ref.to_dict() for ref in second.model_refs],
+        )
         get_models.assert_called_once_with(force_rescan=False)
         analyze_models.assert_called_once_with(
             workflow,
@@ -1503,7 +1537,7 @@ class WorkflowModelInventoryCacheTests(unittest.TestCase):
         self.assertEqual(3, get_node_info.call_count)
         self.assertEqual(
             {"second.safetensors", "unchanged.safetensors"},
-            {ref["original_path"] for ref in result["model_refs"]},
+            {ref.original_path for ref in result.model_refs},
         )
 
     def test_changed_loader_keeps_previous_result_position(self):
@@ -1555,7 +1589,7 @@ class WorkflowModelInventoryCacheTests(unittest.TestCase):
                 "middle-updated.safetensors",
                 "last.safetensors",
             ],
-            [ref["original_path"] for ref in result["model_refs"]],
+            [ref.original_path for ref in result.model_refs],
         )
 
     def test_new_loader_does_not_reanalyze_existing_loader(self):

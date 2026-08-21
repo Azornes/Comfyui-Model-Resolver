@@ -1,11 +1,12 @@
 import asyncio
 import json
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from aiohttp import web
 
+from core.contracts import ResolvedModel
 from core.path_utils import is_path_within
 from core.routes.context import RouteContext
 from core.routes.directories import register_directory_routes
@@ -113,6 +114,15 @@ def _request(query=None):
     return SimpleNamespace(query=query or {}, match_info={})
 
 
+def _body_request(payload):
+    return SimpleNamespace(
+        can_read_body=True,
+        json=AsyncMock(return_value=payload),
+        query={},
+        match_info={},
+    )
+
+
 @pytest.mark.asyncio
 async def test_models_route_forwards_force_rescan_and_invalidates_hash_cache():
     handlers, values = _build_metadata_routes()
@@ -123,6 +133,20 @@ async def test_models_route_forwards_force_rescan_and_invalidates_hash_cache():
     assert json.loads(response.text) == [{"filename": "model.safetensors"}]
     values["invalidate_local_hash_match_cache"].assert_called_once_with()
     values["get_model_files"].assert_called_once_with(force_rescan=True)
+
+
+@pytest.mark.asyncio
+async def test_models_route_rejects_malformed_force_flag():
+    handlers, values = _build_metadata_routes()
+    handler = handlers[("GET", "/model_resolver/models")]
+
+    response = await handler(_request({"force": {"enabled": True}}))
+
+    assert response.status == 400
+    assert json.loads(response.text) == {
+        "error": "Models request force must be a boolean"
+    }
+    values["get_model_files"].assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -140,6 +164,36 @@ async def test_path_suggestions_route_scans_and_infers_in_background():
     assert json.loads(response.text) == [{"category": "checkpoints"}]
     values["get_model_files"].assert_called_once_with(True)
     values["infer_download_path_templates"].assert_called_once_with(
-        [{"filename": "model.safetensors"}],
+        [ResolvedModel(filename="model.safetensors")],
         base_models,
     )
+
+
+@pytest.mark.asyncio
+async def test_metadata_size_audit_rejects_malformed_numeric_options():
+    handlers, values = _build_metadata_routes()
+    handler = handlers[("POST", "/model_resolver/metadata-size-audit")]
+
+    response = await handler(_body_request({"worker_count": {"value": 4}}))
+
+    assert response.status == 400
+    assert json.loads(response.text) == {
+        "error": "Metadata size audit request worker_count must be an integer"
+    }
+    values["audit_metadata_sizes"].assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_metadata_build_start_rejects_malformed_options():
+    handlers, values = _build_metadata_routes()
+    handler = handlers[("POST", "/model_resolver/metadata-build/start")]
+
+    response = await handler(
+        _body_request({"force_rescan": [], "worker_count": 2})
+    )
+
+    assert response.status == 400
+    assert json.loads(response.text) == {
+        "error": "Metadata build request force_rescan must be a boolean"
+    }
+    values["run_in_background_thread"].assert_not_called()

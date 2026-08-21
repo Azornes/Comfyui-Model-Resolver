@@ -1,12 +1,13 @@
 import json
-import re
 import tempfile
 import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from core.contracts import SearchResult
 from core.matcher import build_filename_search_queries
+from core.sources.common import probe_remote_file_size
 from core.sources.huggingface import (
     HF_AUTHOR_FALLBACKS,
     _build_author_index_from_models,
@@ -23,13 +24,38 @@ from core.sources.huggingface import (
     get_huggingface_model_details,
     get_known_author_fallback_indexes_status,
     parse_huggingface_url,
+    search_huggingface,
     search_huggingface_for_file,
 )
-from core.sources.common import probe_remote_file_size
 from core.type_utils import extract_file_size
 
 
+def _result_dict(result):
+    assert isinstance(result, SearchResult)
+    return result.to_dict()
+
+
 class HuggingFaceSourceTests(unittest.TestCase):
+
+    @patch("core.sources.huggingface.execute_provider_json_request")
+    def test_general_search_returns_typed_results(self, request_json):
+        request_json.return_value = [
+            {
+                "id": "Comfy-Org/example",
+                "modelId": "Comfy-Org/example",
+                "downloads": 12,
+                "likes": 3,
+            }
+        ]
+
+        results = search_huggingface("example", limit=1)
+
+        self.assertEqual(1, len(results))
+        self.assertIsInstance(results[0], SearchResult)
+        self.assertEqual("Comfy-Org/example", results[0].name)
+        self.assertEqual("Comfy-Org/example", results[0].extra_value("repo"))
+        self.assertEqual(12, results[0].extra_value("downloads"))
+        self.assertEqual("https://huggingface.co/Comfy-Org/example", results[0].url)
 
     def test_known_author_fallbacks_include_comfy_org_and_kijai(self):
         self.assertEqual(["Comfy-Org", "Kijai"], HF_AUTHOR_FALLBACKS)
@@ -142,6 +168,7 @@ class HuggingFaceSourceTests(unittest.TestCase):
         )
 
         self.assertIsNotNone(result)
+        result = _result_dict(result)
         self.assertEqual("hash", result["match_type"])
         self.assertEqual(sha256, result["sha256"])
         self.assertEqual("models/example.safetensors", result["path"])
@@ -180,6 +207,7 @@ class HuggingFaceSourceTests(unittest.TestCase):
             )
 
         self.assertIsNotNone(result)
+        result = _result_dict(result)
         self.assertEqual("hash", result["match_type"])
         self.assertEqual(sha256, result["sha256"])
         get_index.assert_called_once()
@@ -434,6 +462,7 @@ class HuggingFaceSourceTests(unittest.TestCase):
                 )
 
         self.assertIsNotNone(result)
+        result = _result_dict(result)
         self.assertEqual("hash", result["match_type"])
         fetch_index.assert_called_once_with("Comfy-Org", headers={})
 
@@ -482,6 +511,7 @@ class HuggingFaceSourceTests(unittest.TestCase):
                 )
 
         self.assertIsNotNone(result)
+        result = _result_dict(result)
         self.assertEqual("hash", result["match_type"])
         fetch_index.assert_not_called()
 
@@ -521,16 +551,16 @@ class HuggingFaceSourceTests(unittest.TestCase):
         url = "https://huggingface.co/runwayml/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors"
         result = parse_huggingface_url(url)
         self.assertIsNotNone(result)
-        self.assertEqual(result["repo"], "runwayml/stable-diffusion-v1-5")
-        self.assertEqual(result["branch"], "main")
-        self.assertEqual(result["filename"], "v1-5-pruned-emaonly.safetensors")
+        self.assertEqual(result.repo, "runwayml/stable-diffusion-v1-5")
+        self.assertEqual(result.branch, "main")
+        self.assertEqual(result.filename, "v1-5-pruned-emaonly.safetensors")
 
     def test_parse_huggingface_url_valid_hf_protocol(self):
         url = "hf://stabilityai/stable-diffusion-xl-base-1.0/sd_xl_base_1.0.safetensors"
         result = parse_huggingface_url(url)
         self.assertIsNotNone(result)
-        self.assertEqual(result["repo"], "stabilityai/stable-diffusion-xl-base-1.0")
-        self.assertEqual(result["filename"], "sd_xl_base_1.0.safetensors")
+        self.assertEqual(result.repo, "stabilityai/stable-diffusion-xl-base-1.0")
+        self.assertEqual(result.filename, "sd_xl_base_1.0.safetensors")
 
     def test_parse_huggingface_url_invalid(self):
         self.assertIsNone(parse_huggingface_url("https://example.com/not-hf"))
@@ -633,6 +663,7 @@ class HuggingFaceSourceTests(unittest.TestCase):
             result = build_huggingface_custom_result(url)
 
         self.assertIsNotNone(result)
+        result = _result_dict(result)
         self.assertEqual(sha256, result["sha256"])
         self.assertEqual({"SHA256": sha256}, result["hashes"])
         self.assertEqual(123, result["size"])
@@ -641,14 +672,17 @@ class HuggingFaceSourceTests(unittest.TestCase):
 
     def test_custom_result_leaves_hash_empty_when_huggingface_does_not_provide_it(self):
         url = "https://huggingface.co/user/repo/blob/main/model.safetensors"
-        with patch("core.sources.huggingface._get_repo_tree", return_value=None):
-            with patch(
+        with (
+            patch("core.sources.huggingface._get_repo_tree", return_value=None),
+            patch(
                 "core.sources.common.fetch_remote_file_size_cached",
                 return_value=456,
-            ):
-                result = build_huggingface_custom_result(url)
+            ),
+        ):
+            result = build_huggingface_custom_result(url)
 
         self.assertIsNotNone(result)
+        result = _result_dict(result)
         self.assertEqual("", result["sha256"])
         self.assertEqual({}, result["hashes"])
         self.assertEqual(456, result["size"])
@@ -676,8 +710,9 @@ class HuggingFaceSourceTests(unittest.TestCase):
             },
             {"path": "diffusion_models/README.md", "size": 10},
         ]
-        with patch("core.sources.huggingface._get_repo_tree", return_value=tree):
-            with patch(
+        with (
+            patch("core.sources.huggingface._get_repo_tree", return_value=tree),
+            patch(
                 "core.sources.huggingface.execute_provider_json_request",
                 return_value={
                     "modelId": "Comfy-Org/example",
@@ -686,11 +721,12 @@ class HuggingFaceSourceTests(unittest.TestCase):
                     "likes": 4,
                     "tags": ["comfyui"],
                 },
-            ):
-                details = get_huggingface_model_details(
-                    "Comfy-Org/example",
-                    "diffusion_models/model_fp8_scaled.safetensors",
-                )
+            ),
+        ):
+            details = get_huggingface_model_details(
+                "Comfy-Org/example",
+                "diffusion_models/model_fp8_scaled.safetensors",
+            )
 
         self.assertIsNotNone(details)
         self.assertEqual("huggingface", details["source"])
@@ -710,19 +746,21 @@ class HuggingFaceSourceTests(unittest.TestCase):
 
     def test_model_details_passes_huggingface_token_to_tree_and_metadata(self):
         tree = [{"path": "model.safetensors", "size": 100}]
-        with patch(
-            "core.sources.huggingface._get_repo_tree",
-            return_value=tree,
-        ) as mock_tree:
-            with patch(
+        with (
+            patch(
+                "core.sources.huggingface._get_repo_tree",
+                return_value=tree,
+            ) as mock_tree,
+            patch(
                 "core.sources.huggingface.execute_provider_json_request",
                 return_value={},
-            ) as mock_request:
-                details = get_huggingface_model_details(
-                    "private/repo",
-                    "model.safetensors",
-                    token="hf_secret",
-                )
+            ) as mock_request,
+        ):
+            details = get_huggingface_model_details(
+                "private/repo",
+                "model.safetensors",
+                token="hf_secret",
+            )
 
         self.assertIsNotNone(details)
         expected_headers = {"Authorization": "Bearer hf_secret"}

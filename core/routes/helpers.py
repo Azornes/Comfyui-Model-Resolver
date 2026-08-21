@@ -4,7 +4,7 @@ import asyncio
 import threading
 from functools import wraps
 
-from ..request_utils import read_optional_object_payload
+from ..request_utils import read_optional_object_payload, read_text_field
 
 
 def register_service_route(
@@ -170,7 +170,11 @@ def create_route_helpers(web, logger, load_settings, hash_calculation_cancelled)
             payload = await read_optional_object_payload(request)
             if "aria2c_path" in payload:
                 settings = dict(settings)
-                settings["aria2c_path"] = payload.get("aria2c_path", "")
+                settings["aria2c_path"] = read_text_field(
+                    payload,
+                    "aria2c_path",
+                    contract_name="Aria2 settings request",
+                )
         return settings
 
     return (

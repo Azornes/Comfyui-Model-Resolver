@@ -8,6 +8,8 @@ import math
 import re
 from typing import Any, Dict, List
 
+from .contracts import ProviderUrlReference, SearchResult
+
 
 def as_dict(value: Any) -> Dict[str, Any]:
     """
@@ -706,7 +708,10 @@ def extract_response_file_size(response: Any) -> Optional[int]:
     return None
 
 
-def parse_civitai_model_path(path: str, query_string: str) -> Optional[Dict[str, int]]:
+def parse_civitai_model_path(
+    path: str,
+    query_string: str,
+) -> Optional[ProviderUrlReference]:
     """
     Common helper to parse `/models/{model_id}?modelVersionId={version_id}` URLs
     for CivitAI and CivArchive.
@@ -716,15 +721,17 @@ def parse_civitai_model_path(path: str, query_string: str) -> Optional[Dict[str,
 
     model_match = re.search(r"/models/(\d+)", path)
     if model_match:
-        result = {"model_id": int(model_match.group(1))}
+        model_id = int(model_match.group(1))
         query = parse_qs(query_string)
         version_id_list = query.get("modelVersionId")
         if version_id_list:
             try:
-                result["version_id"] = int(version_id_list[0])
+                version_id = int(version_id_list[0])
             except (ValueError, TypeError):
-                pass
-        return result
+                version_id = None
+        else:
+            version_id = None
+        return ProviderUrlReference(model_id=model_id, version_id=version_id)
     return None
 
 
@@ -887,8 +894,10 @@ def normalize_sha256(value: Any) -> str:
     """Return a normalized SHA256 hex string or an empty string."""
     if value is None:
         return ""
+    if not isinstance(value, str):
+        return ""
 
-    text = str(value).strip()
+    text = value.strip()
     for prefix in ("sha256:", "sha256="):
         if text.lower().startswith(prefix):
             text = text[len(prefix):].strip()
@@ -899,19 +908,19 @@ def normalize_sha256(value: Any) -> str:
     return text.lower() if SHA256_PATTERN.match(text) else ""
 
 
-def extract_file_sha256(file_info: Any) -> Any:
+def extract_file_sha256(file_info: Any) -> str:
     """Extract a provider file's SHA256 value using the common field precedence."""
     if not isinstance(file_info, dict):
         return ""
 
     hashes = file_info.get("hashes") if isinstance(file_info.get("hashes"), dict) else {}
-    return (
-        file_info.get("sha256")
-        or file_info.get("hash")
-        or hashes.get("SHA256")
-        or hashes.get("sha256")
-        or ""
+    value = first_non_empty(
+        file_info.get("sha256"),
+        file_info.get("hash"),
+        hashes.get("SHA256"),
+        hashes.get("sha256"),
     )
+    return value if isinstance(value, str) else ""
 
 
 def normalize_hashes_dict(hashes: Optional[Dict[str, Any]]) -> Dict[str, str]:
@@ -1310,7 +1319,7 @@ def normalize_model_file_info(
 ) -> Dict[str, Any]:
     """Normalize a single model file dictionary to a unified schema."""
     hashes = raw.get("hashes") if isinstance(raw.get("hashes"), dict) else {}
-    sha256 = raw.get("sha256") or hashes.get("SHA256") or hashes.get("sha256") or ""
+    sha256 = extract_file_sha256(raw)
 
     size = raw.get("size")
     if size is None and raw.get("sizeKB") is not None:
@@ -1331,16 +1340,20 @@ def normalize_model_file_info(
         "sha256": sha256,
         "hashes": hashes,
         "metadata": raw.get("metadata") if isinstance(raw.get("metadata"), dict) else {},
-        "model_id": model_id or raw.get("modelId"),
-        "version_id": version_id or raw.get("modelVersionId"),
+        "model_id": model_id if model_id is not None else raw.get("modelId"),
+        "version_id": (
+            version_id
+            if version_id is not None
+            else raw.get("modelVersionId")
+        ),
     }
 
 
 def build_model_result(
     source: str,
     *,
-    model_id: Any = None,
-    version_id: Any = None,
+    model_id: int | str | None = None,
+    version_id: int | str | None = None,
     name: str = "",
     version_name: str = "",
     type: str = "",
@@ -1362,79 +1375,46 @@ def build_model_result(
     custom_url: bool = False,
     result_mode: str = "search",
     **extra: Any,
-) -> Dict[str, Any]:
+) -> SearchResult:
     """Build the shared model-result contract for search and custom URL results."""
     if normalize_hashes:
         hashes = normalize_hashes_dict(hashes)
         if not sha256 and "sha256" in hashes:
             sha256 = hashes["sha256"]
 
-    if result_mode not in {"search", "custom_url", "compact_custom_url"}:
-        raise ValueError(f"Unsupported model result mode: {result_mode}")
-
-    if result_mode == "compact_custom_url":
-        result = {
+    result = SearchResult.from_mapping(
+        {
             "source": source,
-            "details_source": details_source or source,
+            "model_id": model_id,
+            "version_id": version_id,
             "name": name,
+            "version_name": version_name,
+            "type": type,
             "filename": filename,
             "url": url,
-            "version_url": version_url or url,
             "download_url": download_url,
+            "size": size,
+            "base_model": base_model,
+            "tags": tags,
             "match_type": match_type,
+            "confidence": confidence,
+            "sha256": sha256,
+            "hashes": hashes,
+            "trained_words": trained_words,
+            "images": images,
+            "details_source": details_source,
+            "version_url": version_url,
             "custom_url": custom_url,
+            "result_mode": result_mode,
         }
-        if model_id is not None:
-            result["model_id"] = model_id
-        if version_id is not None:
-            result["version_id"] = version_id
-        result.update(extra)
-        return result
-
-    result = {
-        "source": source,
-        "model_id": model_id,
-        "version_id": version_id,
-        "name": name,
-        "version_name": version_name,
-        "type": type,
-        "filename": filename,
-        "url": url,
-        "download_url": download_url,
-        "size": size,
-        "base_model": base_model,
-        "tags": tags or [],
-        "match_type": match_type,
-        "confidence": confidence,
-        "sha256": sha256,
-        "hashes": hashes or {},
-        "trained_words": trained_words or [],
-        "images": images or [],
-    }
-
-    if result_mode == "custom_url":
-        result.pop("confidence", None)
-        result.update(
-            {
-                "details_source": details_source or source,
-                "version_url": version_url or url,
-                "match_type": "custom_url",
-                "custom_url": custom_url,
-            }
-        )
-    else:
-        if details_source is not None:
-            result["details_source"] = details_source
-        if version_url is not None:
-            result["version_url"] = version_url
-        if custom_url:
-            result["custom_url"] = True
-
-    result.update(extra)
-    return result
+    )
+    return result.with_extra(**extra)
 
 
-def parse_provider_model_url(url: str, allowed_domains: list[str]) -> Optional[Dict[str, Any]]:
+def parse_provider_model_url(
+    url: str,
+    allowed_domains: list[str],
+) -> Optional[ProviderUrlReference]:
     """Parse a provider model URL (e.g. CivitAI or mirror site) to extract model/version info."""
     import re
     from urllib.parse import urlparse
@@ -1457,13 +1437,13 @@ def parse_provider_model_url(url: str, allowed_domains: list[str]) -> Optional[D
     # Standard CivArchive sha256 mirrors pattern
     sha_match = re.search(r"/sha256/([a-fA-F0-9]{64})", parsed.path)
     if sha_match:
-        return {"sha256": sha_match.group(1).lower()}
+        return ProviderUrlReference(sha256=sha_match.group(1).lower())
 
     # Standard CivitAI download pattern
     if "/api/download/models/" in parsed.path:
         match = re.search(r"/api/download/models/(\d+)", parsed.path)
         if match:
-            return {"version_id": int(match.group(1))}
+            return ProviderUrlReference(version_id=int(match.group(1)))
 
     return parse_civitai_model_path(parsed.path, parsed.query)
 

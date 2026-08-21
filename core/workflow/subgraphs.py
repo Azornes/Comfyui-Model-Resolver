@@ -3,6 +3,7 @@
 import os
 from typing import Any, Dict, List, Optional
 
+from ..contracts import ModelReference, ResolvedModel
 from . import references
 from .widgets import (
     _has_widget_input,
@@ -330,46 +331,50 @@ def _build_promoted_widget_contexts(
 
 
 def _apply_instance_promoted_widget_context(
-    ref: Dict[str, Any],
+    ref: ModelReference,
     context: Optional[Dict[str, Any]],
-    available_models: Optional[List[Dict[str, Any]]],
-) -> None:
+    available_models: Optional[List[ResolvedModel]],
+) -> ModelReference:
     if not context:
-        return
+        return ref
 
-    ref["promoted_widget_name"] = context.get("proxy_widget_name", "")
-    ref["promoted_inner_node_id"] = context.get("node_id")
-    ref["promoted_inner_node_type"] = context.get("node_type", "")
-    ref["promoted_inner_node_title"] = context.get("node_title", "")
-    ref["promoted_inner_widget_index"] = context.get("widget_index")
-    ref["promoted_inner_widget_name"] = context.get("widget_name", "")
+    updates = {
+        "promoted_widget_name": context.get("proxy_widget_name", ""),
+        "promoted_inner_node_id": context.get("node_id"),
+        "promoted_inner_node_type": context.get("node_type", ""),
+        "promoted_inner_node_title": context.get("node_title", ""),
+        "promoted_inner_widget_index": context.get("widget_index"),
+        "promoted_inner_widget_name": context.get("widget_name", ""),
+    }
 
     promoted_value = context.get("promoted_value")
-    nested_key = ref.get("nested_key")
+    nested_key = ref.extra_value("nested_key")
     if nested_key and isinstance(promoted_value, dict):
         promoted_value = promoted_value.get(nested_key)
     if _has_promoted_value(promoted_value):
-        ref["original_path"] = str(promoted_value).strip()
-        ref["is_urn"] = bool(references.URN_REGEX.match(ref["original_path"]))
+        original_path = str(promoted_value).strip()
+        updates["original_path"] = original_path
+        updates["is_urn"] = bool(references.URN_REGEX.match(original_path))
 
     category = context.get("category")
-    original_path = ref.get("original_path", "")
+    original_path = updates.get("original_path", ref.original_path)
     if not category or not original_path:
-        return
+        return ref.with_updates(**updates)
 
     resolved = references.try_resolve_model_path(
         original_path,
         [category],
         available_models=available_models,
     )
-    ref["category"] = category
+    updates["category"] = category
     if resolved:
         _, full_path = resolved
-        ref["full_path"] = full_path
-        ref["exists"] = os.path.exists(full_path)
+        updates["full_path"] = full_path
+        updates["exists"] = os.path.exists(full_path)
     else:
-        ref["full_path"] = None
-        ref["exists"] = False
+        updates["full_path"] = None
+        updates["exists"] = False
+    return ref.with_updates(**updates)
 
 
 def _select_promoted_locator(
@@ -385,37 +390,37 @@ def _select_promoted_locator(
 
 
 def _get_promoted_widget_locators(
-    ref: Dict[str, Any], contexts: Dict[str, Dict[Any, Any]]
+    ref: ModelReference, contexts: Dict[str, Dict[Any, Any]]
 ) -> List[Dict[str, Any]]:
-    subgraph_id = str(ref.get("subgraph_id") or "")
+    subgraph_id = str(ref.subgraph_id or "")
     if not subgraph_id:
         return []
 
-    exact_key = (subgraph_id, str(ref.get("node_id")), ref.get("widget_index"))
+    exact_key = (subgraph_id, str(ref.node_id), ref.widget_index)
     locators = contexts.get("inner_widgets", {}).get(exact_key, [])
-    if not locators and ref.get("widget_name"):
+    if not locators and ref.extra_value("widget_name"):
         name_key = (
             subgraph_id,
-            str(ref.get("node_id")),
-            normalize_widget_name(ref.get("widget_name")),
+            str(ref.node_id),
+            normalize_widget_name(ref.extra_value("widget_name")),
         )
         locators = contexts.get("inner_widget_names", {}).get(name_key, [])
     return locators
 
 
 def _promote_model_reference_to_instances(
-    ref: Dict[str, Any],
+    ref: ModelReference,
     contexts: Dict[str, Dict[Any, Any]],
-    available_models: Optional[List[Dict[str, Any]]] = None,
+    available_models: Optional[List[ResolvedModel]] = None,
     existing_instance_slots: Optional[set] = None,
-) -> Optional[List[Dict[str, Any]]]:
+) -> Optional[List[ModelReference]]:
     locators = _get_promoted_widget_locators(ref, contexts)
     if not locators:
         return None
 
     if existing_instance_slots is None:
         existing_instance_slots = set()
-    promoted_refs = []
+    promoted_refs: List[ModelReference] = []
     for locator in locators:
         instance_slot = (
             str(locator.get("node_id")),
@@ -427,46 +432,43 @@ def _promote_model_reference_to_instances(
             continue
 
         value = locator.get("promoted_value")
-        nested_key = ref.get("nested_key")
+        nested_key = ref.extra_value("nested_key")
         if nested_key and isinstance(value, dict):
             value = value.get(nested_key)
         if not _has_promoted_value(value):
             continue
 
         value_str = str(value).strip()
-        promoted = dict(ref)
-        promoted.update(
-            {
-                "node_id": locator.get("node_id"),
-                "node_type": locator.get("node_type", ""),
-                "node_title": locator.get("node_title", ""),
-                "widget_index": locator.get("proxy_widget_index"),
-                "widget_name": locator.get("proxy_widget_name", ""),
-                "original_path": value_str,
-                "subgraph_id": locator.get("subgraph_id", ""),
-                "subgraph_name": locator.get("subgraph_name", ""),
-                "subgraph_path": None,
-                "is_top_level": True,
-                "promoted_widget_name": locator.get("proxy_widget_name", ""),
-                "promoted_inner_node_id": ref.get("node_id"),
-                "promoted_inner_node_type": ref.get("node_type", ""),
-                "promoted_inner_node_title": ref.get("node_title", ""),
-                "promoted_inner_widget_index": ref.get("widget_index"),
-                "promoted_inner_widget_name": ref.get("widget_name", ""),
-                "locate_node_id": locator.get("node_id"),
-                "locate_node_type": locator.get("node_type", ""),
-                "locate_node_title": locator.get("node_title", ""),
-                "locate_subgraph_id": "",
-                "locate_subgraph_name": locator.get("subgraph_name", ""),
-                "locate_is_top_level": True,
-                "locate_via_promoted_widget": True,
-                "is_urn": bool(references.URN_REGEX.match(value_str)),
-            }
+        promoted = ref.with_updates(
+            node_id=locator.get("node_id"),
+            node_type=locator.get("node_type", ""),
+            widget_index=locator.get("proxy_widget_index"),
+            original_path=value_str,
+            subgraph_id=locator.get("subgraph_id", ""),
+            is_top_level=True,
+            node_title=locator.get("node_title", ""),
+            widget_name=locator.get("proxy_widget_name", ""),
+            subgraph_name=locator.get("subgraph_name", ""),
+            subgraph_path=None,
+            promoted_widget_name=locator.get("proxy_widget_name", ""),
+            promoted_inner_node_id=ref.node_id,
+            promoted_inner_node_type=ref.node_type,
+            promoted_inner_node_title=ref.extra_value("node_title", ""),
+            promoted_inner_widget_index=ref.widget_index,
+            promoted_inner_widget_name=ref.extra_value("widget_name", ""),
+            locate_node_id=locator.get("node_id"),
+            locate_node_type=locator.get("node_type", ""),
+            locate_node_title=locator.get("node_title", ""),
+            locate_subgraph_id="",
+            locate_subgraph_name=locator.get("subgraph_name", ""),
+            locate_is_top_level=True,
+            locate_via_promoted_widget=True,
+            is_urn=bool(references.URN_REGEX.match(value_str)),
         )
 
-        category_hints = promoted.get("category_hints") or []
-        if not category_hints and promoted.get("category"):
-            category_hints = [promoted["category"]]
+        category_hints = promoted.extra_value("category_hints") or []
+        if not category_hints and promoted.category:
+            category_hints = [promoted.category]
         resolved = references.try_resolve_model_path(
             value_str,
             category_hints or None,
@@ -474,12 +476,13 @@ def _promote_model_reference_to_instances(
         )
         if resolved:
             category, full_path = resolved
-            promoted["category"] = category
-            promoted["full_path"] = full_path
-            promoted["exists"] = os.path.exists(full_path)
+            promoted = promoted.with_updates(
+                category=category,
+                full_path=full_path,
+                exists=os.path.exists(full_path),
+            )
         else:
-            promoted["full_path"] = None
-            promoted["exists"] = False
+            promoted = promoted.with_updates(full_path=None, exists=False)
 
         promoted_refs.append(promoted)
         existing_instance_slots.add(instance_slot)
@@ -488,17 +491,19 @@ def _promote_model_reference_to_instances(
 
 
 def _apply_promoted_widget_locator(
-    ref: Dict[str, Any], contexts: Dict[str, Dict[Any, Any]]
-) -> None:
+    ref: ModelReference, contexts: Dict[str, Dict[Any, Any]]
+) -> ModelReference:
     locators = _get_promoted_widget_locators(ref, contexts)
-    locator = _select_promoted_locator(locators, ref.get("original_path", ""))
+    locator = _select_promoted_locator(locators, ref.original_path)
     if not locator:
-        return
+        return ref
 
-    ref["locate_node_id"] = locator.get("node_id")
-    ref["locate_node_type"] = locator.get("node_type", "")
-    ref["locate_node_title"] = locator.get("node_title", "")
-    ref["locate_subgraph_id"] = ""
-    ref["locate_subgraph_name"] = locator.get("subgraph_name", "")
-    ref["locate_is_top_level"] = True
-    ref["locate_via_promoted_widget"] = True
+    return ref.with_updates(
+        locate_node_id=locator.get("node_id"),
+        locate_node_type=locator.get("node_type", ""),
+        locate_node_title=locator.get("node_title", ""),
+        locate_subgraph_id="",
+        locate_subgraph_name=locator.get("subgraph_name", ""),
+        locate_is_top_level=True,
+        locate_via_promoted_widget=True,
+    )

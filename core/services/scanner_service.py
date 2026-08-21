@@ -1,5 +1,7 @@
 """Local model scanning orchestration used by HTTP route adapters."""
 
+from ..metadata_model_utils import normalize_models
+from ..request_utils import read_first_bool_field
 from ..routes.context import RouteContext
 
 
@@ -15,29 +17,44 @@ class ScannerService:
         self.invalidate_local_hash_match_cache = context.require(
             "invalidate_local_hash_match_cache"
         )
-        self.to_bool = context.require("to_bool")
         self.web = context.require("web")
 
     async def get_models(self, request):
         """Return the locally available models, optionally forcing a rescan."""
-        force_rescan = self.to_bool(
-            request.query.get("force") or request.query.get("force_rescan"),
-            False,
-        )
+        try:
+            force_rescan = read_first_bool_field(
+                request.query,
+                ("force", "force_rescan"),
+                contract_name="Models request",
+            )
+        except TypeError as exc:
+            return self.web.json_response({"error": str(exc)}, status=400)
         if force_rescan:
             self.invalidate_local_hash_match_cache()
-        models = self.get_model_files(force_rescan=force_rescan)
-        return self.web.json_response(models)
+        models = normalize_models(
+            self.get_model_files(force_rescan=force_rescan)
+        )
+        return self.web.json_response(
+            [model.to_dict() for model in models]
+        )
 
     async def get_path_template_suggestions(self, request):
         """Infer download path templates from locally available models."""
         from ..sources.popular import get_base_models_config
 
-        force_rescan = request.query.get("force") == "1"
+        try:
+            force_rescan = read_first_bool_field(
+                request.query,
+                ("force", "force_rescan"),
+                contract_name="Path template suggestions request",
+            )
+        except TypeError as exc:
+            return self.web.json_response({"error": str(exc)}, status=400)
         models = await self.asyncio.to_thread(
             self.get_model_files,
             force_rescan,
         )
+        models = normalize_models(models)
         base_models_config = get_base_models_config()
         suggestions = await self.asyncio.to_thread(
             self.infer_download_path_templates,

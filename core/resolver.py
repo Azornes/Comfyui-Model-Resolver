@@ -8,12 +8,20 @@ import json
 import os
 import re
 import threading
+from dataclasses import replace
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import unquote
 
+from .contracts import (
+    MissingModel,
+    ModelMatch,
+    ModelReference,
+    Resolution,
+    ResolvedModel,
+    WorkflowAnalysisResult,
+)
 from .custom_nodes import (
     custom_node_has_potential_model_reference,
-    get_custom_node_resolution_metadata,
     should_skip_existing_custom_node_reference,
 )
 from .log_system import create_module_logger
@@ -22,6 +30,7 @@ log = create_module_logger(__name__)
 
 from .local_hash_matches import collect_local_hash_matches_for_result
 from .matcher import find_matches, strip_known_model_extension
+from .metadata_model_utils import normalize_models
 from .scanner import get_model_files, invalidate_model_files_cache
 from .type_utils import MODEL_EXTENSIONS as _MODEL_EXTENSIONS
 from .type_utils import (
@@ -63,7 +72,7 @@ from .path_utils import (
 # Imported from .matcher
 
 _LOCAL_HASH_MATCH_CACHE_LOCK = threading.Lock()
-_LOCAL_HASH_MATCH_CACHE: Optional[Dict[str, List[Dict[str, Any]]]] = None
+_LOCAL_HASH_MATCH_CACHE: Optional[Dict[str, List[ModelMatch]]] = None
 _ACTIVE_DOWNLOAD_STATUSES = {"starting", "downloading", "paused", "cancelling"}
 
 
@@ -78,13 +87,6 @@ def invalidate_model_caches() -> None:
     """Clear all in-memory caches that depend on the local model inventory."""
     invalidate_model_files_cache()
     invalidate_local_hash_match_cache()
-
-
-def _clone_hash_match(match: Dict[str, Any]) -> Dict[str, Any]:
-    cloned = dict(match)
-    if isinstance(cloned.get("model"), dict):
-        cloned["model"] = dict(cloned["model"])
-    return cloned
 
 
 def _get_active_downloads_by_path() -> Dict[str, Dict[str, Any]]:
@@ -124,9 +126,9 @@ def _get_active_downloads_by_path() -> Dict[str, Dict[str, Any]]:
 
 
 def annotate_local_matches_with_download_state(
-    matches: List[Dict[str, Any]],
+    matches: List[ModelMatch],
     active_downloads_by_path: Optional[Dict[str, Dict[str, Any]]] = None,
-) -> List[Dict[str, Any]]:
+) -> List[ModelMatch]:
     active_downloads = (
         active_downloads_by_path
         if active_downloads_by_path is not None
@@ -135,18 +137,14 @@ def annotate_local_matches_with_download_state(
     if not active_downloads:
         return matches
 
-    enriched_matches: List[Dict[str, Any]] = []
+    enriched_matches: List[ModelMatch] = []
     for match in matches:
-        if not isinstance(match, dict):
-            enriched_matches.append(match)
-            continue
-
-        model = match.get("model") if isinstance(match.get("model"), dict) else {}
+        model = match.model
         candidate_paths = [
-            model.get("path"),
-            model.get("resolved_path"),
-            match.get("path"),
-            match.get("resolved_path"),
+            model.path,
+            model.extra_value("resolved_path"),
+            match.extra_value("path"),
+            match.extra_value("resolved_path"),
         ]
         download_info = None
         for candidate_path in candidate_paths:
@@ -159,24 +157,21 @@ def annotate_local_matches_with_download_state(
             enriched_matches.append(match)
             continue
 
-        enriched_match = dict(match)
-        enriched_model = dict(model)
         download_fields = {
             **download_info,
             "is_downloading": True,
             "downloading": True,
         }
-        enriched_match.update(download_fields)
-        if enriched_model:
-            enriched_model.update(download_fields)
-            enriched_match["model"] = enriched_model
-        enriched_matches.append(enriched_match)
+        enriched_model = model.with_extra(**download_fields)
+        enriched_matches.append(
+            replace(match, model=enriched_model).with_extra(**download_fields)
+        )
 
     return enriched_matches
 
 
-def _is_local_hash_match_candidate(model: Dict[str, Any]) -> bool:
-    model_path = str(model.get("path") or "").strip()
+def _is_local_hash_match_candidate(model: ResolvedModel) -> bool:
+    model_path = str(model.path or "").strip()
     if not model_path:
         return False
 
@@ -192,16 +187,18 @@ def _is_local_hash_match_candidate(model: Dict[str, Any]) -> bool:
 
 
 def _build_local_hash_match_cache(
-    available_models: List[Dict[str, Any]],
-) -> Dict[str, List[Dict[str, Any]]]:
-    index: Dict[str, List[Dict[str, Any]]] = {}
+    available_models: List[ResolvedModel],
+) -> Dict[str, List[ModelMatch]]:
+    index: Dict[str, List[ModelMatch]] = {}
     seen_entries = set()
 
-    for model in available_models:
+    normalized_models = normalize_models(available_models)
+
+    for model in normalized_models:
         if not _is_local_hash_match_candidate(model):
             continue
 
-        model_path = model.get("path", "")
+        model_path = model.path
         if not model_path:
             continue
 
@@ -218,7 +215,7 @@ def _build_local_hash_match_cache(
         if not metadata_hashes:
             continue
 
-        model_filename = model.get("filename") or get_filename_from_path(model_path)
+        model_filename = model.filename or get_filename_from_path(model_path)
         for metadata_hash in metadata_hashes:
             normalized_hash = normalize_sha256(metadata_hash)
             if not normalized_hash:
@@ -230,29 +227,32 @@ def _build_local_hash_match_cache(
                 continue
             seen_entries.add(entry_key)
 
-            model_with_metadata = {
-                **model,
-                "sha256": normalized_hash,
-                "metadata_path": metadata_path,
-            }
+            model_with_metadata = model.with_extra(
+                sha256=normalized_hash,
+                metadata_path=metadata_path,
+            )
             index.setdefault(normalized_hash, []).append(
-                {
-                    "model": model_with_metadata,
-                    "filename": model_filename,
-                    "similarity": 1.0,
-                    "confidence": 100.0,
-                    "match_type": "hash",
-                    "hash_match": True,
-                    "hash_source": "metadata",
-                    "sha256": normalized_hash,
-                    "metadata_path": metadata_path,
-                }
+                ModelMatch.from_mapping(
+                    {
+                        "model": model_with_metadata,
+                        "filename": model_filename,
+                        "similarity": 1.0,
+                        "confidence": 100.0,
+                        "match_type": "hash",
+                        "hash_match": True,
+                        "hash_source": "metadata",
+                        "sha256": normalized_hash,
+                        "metadata_path": metadata_path,
+                    }
+                )
             )
 
     return index
 
 
-def _get_local_hash_match_cache(force_rescan: bool = False) -> Dict[str, List[Dict[str, Any]]]:
+def _get_local_hash_match_cache(
+    force_rescan: bool = False,
+) -> Dict[str, List[ModelMatch]]:
     global _LOCAL_HASH_MATCH_CACHE
     if force_rescan:
         invalidate_local_hash_match_cache()
@@ -364,17 +364,17 @@ def extract_workflow_hash_metadata(workflow_json: Dict[str, Any]) -> Dict[str, D
 
 
 def get_workflow_hash_info_for_ref(
-    workflow_hashes: Dict[str, Dict[str, Any]], model_ref: Dict[str, Any]
+    workflow_hashes: Dict[str, Dict[str, Any]], model_ref: ModelReference
 ) -> Optional[Dict[str, Any]]:
     if not workflow_hashes:
         return None
-    original_path = str(model_ref.get("original_path") or "")
+    original_path = model_ref.original_path
     candidates = [
-        f"{model_ref.get('node_id')}:{model_ref.get('widget_index')}",
+        f"{model_ref.node_id}:{model_ref.widget_index}",
         original_path,
         get_filename_from_path(original_path),
-        model_ref.get("filename") or "",
-        model_ref.get("name") or "",
+        model_ref.extra_value("filename", "") or "",
+        model_ref.extra_value("name", "") or "",
     ]
     for candidate in candidates:
         if candidate and candidate in workflow_hashes:
@@ -452,16 +452,16 @@ def workflow_url_points_to_file(url: str, filename: str) -> bool:
     return filename in decoded_url or unquote(filename) in decoded_url
 
 
-def _deduplicate_local_matches(matches: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _deduplicate_local_matches(matches: List[ModelMatch]) -> List[ModelMatch]:
     """Keep one highest-confidence match for each local model path."""
     seen_absolute_paths = {}
     deduplicated_matches = []
     for match in matches:
-        model_dict = match["model"]
-        absolute_path = model_dict.get("path", "")
+        model = match.model
+        absolute_path = model.path
         path_identity = get_path_identity(absolute_path) if absolute_path else ""
         dedupe_key = path_identity or os.path.normcase(
-            model_dict.get("relative_path", "") or match.get("filename", "")
+            model.relative_path or match.filename
         )
 
         if dedupe_key not in seen_absolute_paths:
@@ -469,7 +469,7 @@ def _deduplicate_local_matches(matches: List[Dict[str, Any]]) -> List[Dict[str, 
             deduplicated_matches.append(match)
         else:
             existing_match = seen_absolute_paths[dedupe_key]
-            if match["confidence"] > existing_match["confidence"]:
+            if match.confidence > existing_match.confidence:
                 idx = deduplicated_matches.index(existing_match)
                 deduplicated_matches[idx] = match
                 seen_absolute_paths[dedupe_key] = match
@@ -483,7 +483,7 @@ def search_local_matches(
     similarity_threshold: float = 0.0,
     max_matches_per_model: int = 10,
     force_rescan: bool = False,
-) -> List[Dict[str, Any]]:
+) -> List[ModelMatch]:
     """
     Search local model files using the same matcher as workflow analysis.
 
@@ -497,12 +497,13 @@ def search_local_matches(
         Deduplicated list of local matches sorted by similarity
     """
     available_models = get_model_files(force_rescan=force_rescan)
+    available_models = normalize_models(available_models)
 
     candidates = available_models
     if category and category != "unknown":
-        candidates = [m for m in available_models if m.get("category") == category]
+        candidates = [m for m in available_models if m.category == category]
         candidates.extend(
-            [m for m in available_models if m.get("category") != category]
+            [m for m in available_models if m.category != category]
         )
 
     matches = find_matches(
@@ -521,9 +522,13 @@ def _collect_hashes_from_container(value: Any) -> List[str]:
     return [h] if h else []
 
 
-def _metadata_file_matches_model(file_info: Dict[str, Any], model: Dict[str, Any]) -> bool:
-    model_filename = str(model.get("filename") or get_filename_from_path(model.get("path", ""))).lower()
-    model_relative = str(model.get("relative_path") or "").replace("\\", "/").lower()
+def _metadata_file_matches_model(
+    file_info: Dict[str, Any], model: ResolvedModel
+) -> bool:
+    model_filename = str(
+        model.filename or get_filename_from_path(model.path)
+    ).lower()
+    model_relative = str(model.relative_path or "").replace("\\", "/").lower()
     model_stem = strip_known_model_extension(get_filename_from_path(model_filename)).lower()
 
     candidates = [
@@ -546,7 +551,7 @@ def _metadata_file_matches_model(file_info: Dict[str, Any], model: Dict[str, Any
 
 
 def _extract_model_sha256_from_metadata(
-    metadata: Dict[str, Any], model: Dict[str, Any]
+    metadata: Dict[str, Any], model: ResolvedModel
 ) -> List[str]:
     if not isinstance(metadata, dict):
         return []
@@ -580,7 +585,7 @@ def search_local_matches_by_hash(
     category: Optional[str] = None,
     max_matches: int = 20,
     force_rescan: bool = False,
-) -> List[Dict[str, Any]]:
+) -> List[ModelMatch]:
     """
     Find local models whose sidecar .metadata.json contains the given SHA256.
 
@@ -592,12 +597,12 @@ def search_local_matches_by_hash(
         return []
 
     index = _get_local_hash_match_cache(force_rescan=force_rescan)
-    matches = [_clone_hash_match(match) for match in index.get(normalized_hash, [])]
+    matches = list(index.get(normalized_hash, []))
 
     if category and category != "unknown":
         matches.sort(
             key=lambda match: 0
-            if match.get("model", {}).get("category") == category
+            if match.model.category == category
             else 1
         )
 
@@ -609,7 +614,7 @@ def search_local_matches_by_hash(
 
 def get_local_model_hash_metadata(
     model_path: str,
-    model: Optional[Dict[str, Any]] = None,
+    model: Optional[ResolvedModel] = None,
 ) -> Dict[str, Any]:
     """
     Return SHA256 hashes already stored in sidecar metadata for a local model.
@@ -629,12 +634,20 @@ def get_local_model_hash_metadata(
             file_size = os.path.getsize(normalized_path)
         except OSError:
             file_size = 0
-    model_info: Dict[str, Any] = {
-        **(model if isinstance(model, dict) else {}),
-        "path": normalized_path,
-    }
-    model_info.setdefault("filename", get_filename_from_path(normalized_path))
-    model_info.setdefault("relative_path", model_info.get("filename", ""))
+    filename = get_filename_from_path(normalized_path)
+    model_info = (
+        model.with_updates(
+            path=normalized_path,
+            filename=model.filename or filename,
+            relative_path=model.relative_path or model.filename or filename,
+        )
+        if model is not None
+        else ResolvedModel(
+            path=normalized_path,
+            filename=filename,
+            relative_path=filename,
+        )
+    )
 
     metadata_path = find_metadata_sidecar_path(normalized_path)
     last_hash_status = ""
@@ -821,7 +834,7 @@ def analyze_and_find_matches(
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     force_rescan: bool = False,
     analysis_id: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> WorkflowAnalysisResult:
     """
     Main entry point: analyze workflow and find matches for missing models.
 
@@ -833,32 +846,8 @@ def analyze_and_find_matches(
         analysis_id: Optional identifier used to correlate logs for one request
 
     Returns:
-        Dictionary with analysis results:
-        {
-            'missing_models': [
-                {
-                    'node_id': node ID,
-                    'node_type': node type,
-                    'widget_index': widget index,
-                    'original_path': original path from workflow,
-                    'category': model category,
-                    'workflow_url': URL from workflow if found,
-                    'workflow_directory': directory from workflow if found,
-                    'matches': [
-                        {
-                            'model': model dict from scanner,
-                            'filename': model filename,
-                            'similarity': similarity score (0.0-1.0),
-                            'confidence': confidence percentage (0-100)
-                        },
-                        ...
-                    ]
-                },
-                ...
-            ],
-            'total_missing': count of missing models,
-            'total_models_analyzed': count of all models in workflow
-        }
+        Typed workflow analysis result. The HTTP route serializes it only after
+        applying route-level filtering and local download-source enrichment.
     """
     if progress_callback:
         progress_callback(
@@ -883,13 +872,7 @@ def analyze_and_find_matches(
                     "total": 0,
                 }
             )
-        return {
-            "missing_models": [],
-            "resolved_models": [],
-            "total_resolved": 0,
-            "total_missing": 0,
-            "total_models_analyzed": 0,
-        }
+        return WorkflowAnalysisResult()
 
     # Extract URLs from workflow (node.properties.models + regex)
     analysis_context = f" (analysis_id={analysis_id})" if analysis_id else ""
@@ -919,16 +902,23 @@ def analyze_and_find_matches(
         progress_callback=progress_callback,
         analysis_id=analysis_id,
     )
-    available_models = inventory["available_models"]
-    all_model_refs = inventory["model_refs"]
+    available_models = inventory.available_models
+    all_model_refs = inventory.model_refs
+    available_models = normalize_models(available_models)
+    all_model_refs = [
+        ref
+        if isinstance(ref, ModelReference)
+        else ModelReference.from_mapping(ref)
+        for ref in all_model_refs
+    ]
     available_models_by_category = {}
     for model in available_models:
-        model_category = model.get("category", "")
+        model_category = model.category
         if model_category not in available_models_by_category:
             available_models_by_category[model_category] = []
         available_models_by_category[model_category].append(model)
 
-    ordered_candidates_cache: Dict[str, List[Dict[str, Any]]] = {}
+    ordered_candidates_cache: Dict[str, List[ResolvedModel]] = {}
 
     if progress_callback:
         progress_callback(
@@ -943,35 +933,57 @@ def analyze_and_find_matches(
     # Identify missing models
     missing_models = identify_missing_models(all_model_refs, available_models)
     resolved_model_refs = [
-        model_ref for model_ref in all_model_refs if model_ref.get("exists", False)
+        model_ref for model_ref in all_model_refs if model_ref.exists
     ]
 
-    # Enrich missing models with workflow URLs
+    # Enrich typed missing models with workflow URLs, hash metadata, and URN
+    # hints. Raw mappings are created only for helpers that still consume
+    # external workflow/custom-node metadata.
+    enriched_missing_models = []
     for missing in missing_models:
-        original_path = missing.get("original_path", "")
+        updates: Dict[str, Any] = {}
+        original_path = missing.reference.original_path
         filename = get_filename_from_path(original_path)
 
         url_info = get_workflow_url_info_for_filename(workflow_urls, filename)
         if url_info:
-            missing["workflow_url"] = url_info.get("url", "")
-            missing["workflow_model_url"] = url_info.get("model_url", "")
-            missing["workflow_directory"] = url_info.get("directory", "")
-            missing["url_source"] = url_info.get("source", "")
-        hash_info = get_workflow_hash_info_for_ref(workflow_hashes, missing)
+            updates.update(
+                {
+                    "workflow_url": url_info.get("url", ""),
+                    "workflow_model_url": url_info.get("model_url", ""),
+                    "workflow_directory": url_info.get("directory", ""),
+                    "url_source": url_info.get("source", ""),
+                }
+            )
+        hash_info = get_workflow_hash_info_for_ref(
+            workflow_hashes,
+            missing.reference,
+        )
         if hash_info:
-            missing["workflow_sha256"] = normalize_sha256(hash_info.get("sha256"))
-            missing["hash_lookup_source"] = hash_info.get("source") or "workflow_metadata"
+            updates.update(
+                {
+                    "workflow_sha256": normalize_sha256(hash_info.get("sha256")),
+                    "hash_lookup_source": hash_info.get("source")
+                    or "workflow_metadata",
+                }
+            )
 
-    # Handle URNs: mark for async resolution by frontend
-    # No sync CivitAI calls here - frontend will fetch asynchronously
-    for missing in missing_models:
-        if missing.get("is_urn"):
-            missing["needs_urn_resolve"] = True
-            urn = missing.get("urn")
+        # Handle URNs: mark for async resolution by frontend. No sync CivitAI
+        # calls happen here; the frontend resolves them asynchronously.
+        if missing.extra_value("is_urn", False):
+            updates["needs_urn_resolve"] = True
+            urn = missing.extra_value("urn")
             if urn:
-                missing["urn_model_id"] = urn.get("model_id")
-                missing["urn_version_id"] = urn.get("version_id")
-                missing["urn_type"] = urn.get("type", "")
+                updates.update(
+                    {
+                        "urn_model_id": urn.get("model_id"),
+                        "urn_version_id": urn.get("version_id"),
+                        "urn_type": urn.get("type", ""),
+                    }
+                )
+
+        enriched_missing_models.append(missing.with_extra(**updates))
+    missing_models = enriched_missing_models
 
     total_matching_models = len(missing_models)
     if progress_callback:
@@ -984,22 +996,24 @@ def analyze_and_find_matches(
             }
         )
 
-    local_match_cache: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
+    local_match_cache: Dict[Tuple[str, str], List[ModelMatch]] = {}
     active_downloads_by_path = _get_active_downloads_by_path()
 
-    def get_match_target(model_ref: Dict[str, Any]) -> Optional[str]:
+    def get_match_target(model_ref: MissingModel) -> Optional[str]:
+        reference = model_ref.reference
         target_for_matching = (
-            model_ref.get("original_path")
-            or model_ref.get("expected_filename")
-            or model_ref.get("name")
-            or model_ref.get("filename")
-            or model_ref.get("full_path")
+            reference.original_path
+            or model_ref.extra_value("expected_filename")
+            or model_ref.extra_value("name")
+            or model_ref.extra_value("filename")
+            or model_ref.extra_value("full_path")
             or ""
         )
 
         # For URNs, prefer expected_filename for matching
-        if model_ref.get("is_urn") and model_ref.get("expected_filename"):
-            return model_ref["expected_filename"]
+        expected_filename = model_ref.extra_value("expected_filename")
+        if model_ref.extra_value("is_urn") and expected_filename:
+            return expected_filename
 
         if isinstance(target_for_matching, str) and target_for_matching.startswith(
             "urn:air:"
@@ -1019,14 +1033,14 @@ def analyze_and_find_matches(
 
         return target_for_matching
 
-    def get_match_category(model_ref: Dict[str, Any]) -> str:
-        category = model_ref.get("category")
+    def get_match_category(model_ref: MissingModel) -> str:
+        category = model_ref.reference.category
         if not category or category == "unknown":
-            node_type = model_ref.get("node_type", "")
+            node_type = model_ref.reference.node_type
             category = NODE_TYPE_TO_CATEGORY_HINTS.get(node_type, "unknown")
         return category or "unknown"
 
-    def get_candidates_for_category(category: str) -> List[Dict[str, Any]]:
+    def get_candidates_for_category(category: str) -> List[ResolvedModel]:
         if not category or category == "unknown":
             return available_models
 
@@ -1034,18 +1048,20 @@ def analyze_and_find_matches(
         if candidates is None:
             preferred = available_models_by_category.get(category, [])
             others = [
-                m for m in available_models if m.get("category") != category
+                m for m in available_models if m.category != category
             ]
             candidates = preferred + others
             ordered_candidates_cache[category] = candidates
 
         return candidates
 
-    def find_local_matches_for_ref(model_ref: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def find_local_matches_for_ref(model_ref: MissingModel) -> List[ModelMatch]:
         target_for_matching = get_match_target(model_ref)
         category = get_match_category(model_ref)
-        workflow_sha256 = normalize_sha256(model_ref.get("workflow_sha256"))
-        hash_matches = []
+        workflow_sha256 = normalize_sha256(
+            model_ref.extra_value("workflow_sha256")
+        )
+        hash_matches: List[ModelMatch] = []
         if workflow_sha256:
             hash_matches = collect_local_hash_matches_for_result(
                 workflow_sha256,
@@ -1053,8 +1069,11 @@ def analyze_and_find_matches(
                 category=category,
                 max_matches=max_matches_per_model,
                 force_rescan=False,
-                source=model_ref.get("hash_lookup_source") or "workflow_metadata",
-                filename=get_filename_from_path(model_ref.get("original_path") or ""),
+                source=model_ref.extra_value("hash_lookup_source")
+                or "workflow_metadata",
+                filename=get_filename_from_path(
+                    model_ref.reference.original_path or ""
+                ),
             )
 
         if not target_for_matching:
@@ -1088,41 +1107,35 @@ def analyze_and_find_matches(
                     "message": f"Analyzing model {index} of {total_missing}",
                     "current": index,
                     "total": total_matching_models,
-                    "model_name": missing.get("name")
-                    or missing.get("original_path", ""),
+                    "model_name": missing.extra_value("name")
+                    or missing.reference.original_path,
                 }
             )
 
-        name = missing.get("name") or missing.get("original_path", "")
-        if should_skip_existing_custom_node_reference(missing):
+        name = missing.extra_value("name") or missing.reference.original_path
+        if should_skip_existing_custom_node_reference(missing.reference):
             log.info(
                 f"Skipping existing custom-node model reference: {name}"
             )
             continue
 
-        missing_with_matches.append({
-            **missing,
-            "matches": find_local_matches_for_ref(missing),
-        })
+        missing_with_matches.append(
+            missing.with_matches(
+                find_local_matches_for_ref(missing)
+            )
+        )
 
     # Existing models already have an exact local path. Fuzzy-matching every
     # resolved reference against the full local model index is redundant and
     # makes small workflow edits unnecessarily expensive.
-    resolved_with_matches = [
-        {
-            **resolved,
-            "matches": [],
-        }
-        for resolved in resolved_model_refs
-    ]
-
-    result = {
-        "missing_models": missing_with_matches,
-        "resolved_models": resolved_with_matches,
-        "total_resolved": len(resolved_with_matches),
-        "total_missing": len(missing_with_matches),
-        "total_models_analyzed": len(all_model_refs),
-    }
+    resolved_references = tuple(resolved_model_refs)
+    result = WorkflowAnalysisResult(
+        missing_models=tuple(missing_with_matches),
+        resolved_models=resolved_references,
+        total_resolved=len(resolved_references),
+        total_missing=len(missing_with_matches),
+        total_models_analyzed=len(all_model_refs),
+    )
 
     if progress_callback:
         progress_callback(
@@ -1138,59 +1151,30 @@ def analyze_and_find_matches(
 
 
 def apply_resolution(
-    workflow_json: Dict[str, Any], resolutions: List[Dict[str, Any]]
+    workflow_json: Dict[str, Any],
+    resolutions: List[Resolution],
 ) -> Dict[str, Any]:
     """
     Apply model resolutions to workflow.
 
     Args:
         workflow_json: Workflow JSON dictionary (will be modified)
-        resolutions: List of resolution dictionaries:
-            {
-                'node_id': node ID,
-                'widget_index': widget index,
-                'resolved_path': absolute path to resolved model,
-                'category': model category (optional),
-                'resolved_model': model dict from scanner (optional),
-                'nested_key': nested key for dict-type widgets (optional)
-            }
+        resolutions: Validated ``Resolution`` objects.
 
     Returns:
         Updated workflow JSON dictionary
     """
-    # Prepare mappings for workflow_updater
-    mappings = []
+    typed_resolutions = []
     for resolution in resolutions:
-        mapping = {
-            "node_id": resolution.get("node_id"),
-            "widget_index": resolution.get("widget_index"),
-            "resolved_path": resolution.get("resolved_path"),
-            "category": resolution.get("category"),
-            "resolved_model": resolution.get("resolved_model"),
-            "subgraph_id": resolution.get(
-                "subgraph_id"
-            ),  # Include subgraph_id for subgraph nodes
-            "is_top_level": resolution.get(
-                "is_top_level"
-            ),  # True for top-level nodes, False for nodes in subgraph definitions
-            "nested_key": resolution.get(
-                "nested_key"
-            ),  # For dict-type widget values
-            "promoted_widget_name": resolution.get("promoted_widget_name"),
-            **get_custom_node_resolution_metadata(resolution),
-        }
+        try:
+            resolution.validate()
+        except (TypeError, ValueError) as exc:
+            log.warning(f"Skipping invalid workflow resolution: {exc}")
+            continue
 
-        # If resolved_model provided, extract path if needed
-        if resolution.get("resolved_model"):
-            resolved_model = resolution["resolved_model"]
-            if "path" in resolved_model and not mapping.get("resolved_path"):
-                mapping["resolved_path"] = resolved_model["path"]
-            if "base_directory" in resolved_model:
-                mapping["base_directory"] = resolved_model["base_directory"]
-
-        mappings.append(mapping)
+        typed_resolutions.append(resolution)
 
     # Update workflow
-    updated_workflow = update_workflow_nodes(workflow_json, mappings)
+    updated_workflow = update_workflow_nodes(workflow_json, typed_resolutions)
 
     return updated_workflow

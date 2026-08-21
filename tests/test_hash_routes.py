@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from aiohttp import web
 
+from core.contracts import ModelMatch, ModelReference, WorkflowModelInventory
 from core.path_utils import HashCalculationCancelled, normalize_absolute_path
 from core.routes.context import RouteContext
 from core.routes.hashes import register_hash_routes
@@ -83,7 +84,7 @@ def _build_hash_routes(overrides=None):
             f"{path}.modelresolver.json"
         ),
         "get_workflow_model_inventory": MagicMock(
-            return_value={"model_refs": []}
+            return_value=WorkflowModelInventory()
         ),
         "is_path_in_configured_model_roots": MagicMock(return_value=True),
         "json_api_endpoint": lambda _name: lambda handler: handler,
@@ -163,6 +164,9 @@ async def test_hash_routes_validate_local_metadata_and_preview_paths():
     assert response.status == 403
 
     response = await preview_handler(SimpleNamespace(query={}))
+    assert response.status == 400
+
+    response = await preview_handler(SimpleNamespace(query={"path": 123}))
     assert response.status == 400
 
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -267,7 +271,13 @@ async def test_workflow_model_hashes_skips_invalid_refs_and_deduplicates_models(
     handlers, values = _build_hash_routes(
         {
             "get_workflow_model_inventory": MagicMock(
-                return_value={"model_refs": refs}
+                return_value=WorkflowModelInventory(
+                    model_refs=tuple(
+                        ModelReference.from_mapping(ref)
+                        for ref in refs
+                        if ref.get("full_path")
+                    )
+                )
             ),
             "get_local_model_hash_metadata": get_metadata,
         }
@@ -287,7 +297,11 @@ async def test_workflow_model_hashes_skips_invalid_refs_and_deduplicates_models(
 
 @pytest.mark.asyncio
 async def test_local_matches_by_hash_normalizes_and_enriches_results():
-    matches = [{"path": r"C:\models\local.safetensors"}]
+    matches = [
+        ModelMatch.from_mapping(
+            {"model": {"path": r"C:\models\local.safetensors"}}
+        )
+    ]
     search_matches = MagicMock(return_value=matches)
     handlers, values = _build_hash_routes(
         {"search_local_matches_by_hash": search_matches}
@@ -310,20 +324,34 @@ async def test_local_matches_by_hash_normalizes_and_enriches_results():
 
     body = json.loads(response.text)
     assert body["sha256"] == sha256
-    assert body["local_hash_matches"] == [
-        {
-            "path": r"C:\models\local.safetensors",
-            "hash_lookup_source": "civit_ai",
-            "hash_lookup_filename": "remote.safetensors",
-            "hash_lookup_sha256": sha256,
-        }
-    ]
+    assert len(body["local_hash_matches"]) == 1
+    match = body["local_hash_matches"][0]
+    assert match["model"]["path"] == r"C:\models\local.safetensors"
+    assert match["hash_lookup_source"] == "civit_ai"
+    assert match["hash_lookup_filename"] == "remote.safetensors"
+    assert match["hash_lookup_sha256"] == sha256
     values["search_local_matches_by_hash"].assert_called_once_with(
         sha256,
         category="checkpoints",
         max_matches=3,
         force_rescan=True,
     )
+
+
+@pytest.mark.asyncio
+async def test_local_matches_by_hash_rejects_malformed_limit():
+    handlers, values = _build_hash_routes()
+    handler = handlers[("POST", "/model_resolver/local-matches-by-hash")]
+
+    response = await handler(
+        _request({"sha256": "a" * 64, "max_matches": {"value": 20}})
+    )
+
+    assert response.status == 400
+    assert json.loads(response.text) == {
+        "error": "Local hash matches request max_matches must be an integer"
+    }
+    values["search_local_matches_by_hash"].assert_not_called()
 
 
 @pytest.mark.asyncio

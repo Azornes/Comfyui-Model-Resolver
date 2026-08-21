@@ -3,9 +3,11 @@
 from dataclasses import dataclass, fields
 from typing import Any, Dict, Iterable, Optional, Protocol, Tuple
 
+from ..contracts import ModelMatch, ProviderUrlReference, SearchResult
 from ..routes.context import RouteContext
 
 ModelResult = Optional[Dict[str, Any]]
+SearchResultValue = Optional[SearchResult]
 
 
 class ExtractSha256Protocol(Protocol):
@@ -47,7 +49,7 @@ class NormalizeSha256Protocol(Protocol):
 
 
 class ModelResultBuilderProtocol(Protocol):
-    def __call__(self, source: str, **fields: Any) -> Dict[str, Any]: ...
+    def __call__(self, source: str, **fields: Any) -> SearchResult: ...
 
 
 class ReadJsonProtocol(Protocol):
@@ -76,7 +78,7 @@ class ResolveCivarchiveByHashProtocol(Protocol):
         query: str = "",
         exact_only: bool = False,
         model_type: Optional[str] = None,
-    ) -> ModelResult: ...
+    ) -> SearchResultValue: ...
 
 
 class SearchHuggingFaceProtocol(Protocol):
@@ -91,11 +93,7 @@ class SearchHuggingFaceProtocol(Protocol):
         use_brave_fallback: bool = True,
         force_refresh: bool = False,
         progress_callback: Any = None,
-    ) -> ModelResult: ...
-
-
-class ToBoolProtocol(Protocol):
-    def __call__(self, value: Any, default: bool = False) -> bool: ...
+    ) -> SearchResultValue: ...
 
 
 class WriteMetadataProtocol(Protocol):
@@ -112,7 +110,7 @@ class WriteMetadataProtocol(Protocol):
 class BuildCivarchiveCustomResultProtocol(Protocol):
     def __call__(
         self, details: Dict[str, Any], expected_filename: str = ""
-    ) -> ModelResult: ...
+    ) -> SearchResultValue: ...
 
 
 class BuildCivitaiCustomResultProtocol(Protocol):
@@ -121,7 +119,7 @@ class BuildCivitaiCustomResultProtocol(Protocol):
         details: Dict[str, Any],
         expected_filename: str = "",
         api_key: Optional[str] = None,
-    ) -> ModelResult: ...
+    ) -> SearchResultValue: ...
 
 
 class BuildHuggingFaceCustomResultProtocol(Protocol):
@@ -130,7 +128,7 @@ class BuildHuggingFaceCustomResultProtocol(Protocol):
         url: str,
         expected_filename: str = "",
         token: Optional[str] = None,
-    ) -> ModelResult: ...
+    ) -> SearchResultValue: ...
 
 
 class GetCivarchiveModelDetailsProtocol(Protocol):
@@ -170,7 +168,7 @@ class HostMatchesDomainProtocol(Protocol):
 
 
 class ParseProviderUrlProtocol(Protocol):
-    def __call__(self, url: str) -> Optional[Dict[str, Any]]: ...
+    def __call__(self, url: str) -> Optional[ProviderUrlReference]: ...
 
 
 class ResolveCivarchiveModelVersionProtocol(Protocol):
@@ -181,7 +179,7 @@ class ResolveCivarchiveModelVersionProtocol(Protocol):
         query: str = "",
         exact_only: bool = False,
         prefer_page: bool = False,
-    ) -> ModelResult: ...
+    ) -> SearchResultValue: ...
 
 
 class ResolveCivitaiVersionProtocol(Protocol):
@@ -190,7 +188,7 @@ class ResolveCivitaiVersionProtocol(Protocol):
         version_id: int,
         expected_filename: str = "",
         api_key: Optional[str] = None,
-    ) -> ModelResult: ...
+    ) -> SearchResultValue: ...
 
 
 class SearchLocalMatchesByHashProtocol(Protocol):
@@ -200,7 +198,7 @@ class SearchLocalMatchesByHashProtocol(Protocol):
         category: Optional[str] = None,
         max_matches: int = 20,
         force_rescan: bool = False,
-    ) -> list[Dict[str, Any]]: ...
+    ) -> list[ModelMatch]: ...
 
 
 class ValidatePublicHttpUrlProtocol(Protocol):
@@ -227,7 +225,6 @@ class CivitAISearchDependencies:
     request_public_url: RequestPublicUrlProtocol
     resolve_civarchive_by_hash: Optional[ResolveCivarchiveByHashProtocol]
     search_huggingface_for_file: Optional[SearchHuggingFaceProtocol]
-    to_bool: ToBoolProtocol
     web: Any
     write_model_resolver_metadata: Optional[WriteMetadataProtocol]
 
@@ -265,7 +262,6 @@ class CivitAISearchDependencies:
             search_huggingface_for_file=context.get(
                 "search_huggingface_for_file"
             ),
-            to_bool=context.require("to_bool"),
             web=context.require("web"),
             write_model_resolver_metadata=context.get(
                 "write_model_resolver_metadata"

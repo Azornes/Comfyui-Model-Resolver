@@ -12,6 +12,7 @@ from urllib.parse import quote, urlencode
 
 import requests
 
+from ..contracts import ProviderUrlReference, SearchResult
 from ..log_system import create_module_logger
 from ..matcher import (
     base_model_matches as _base_model_matches,
@@ -203,7 +204,7 @@ def _build_civitai_result_from_version(
     file_info: Dict[str, Any],
     tags: Optional[List[str]] = None,
     match_type: str = "exact",
-) -> Dict[str, Any]:
+) -> SearchResult:
     """Normalize CivitAI model/version/file data into the search result format."""
     version_id = version.get("id")
     size = extract_file_size(file_info)
@@ -238,7 +239,7 @@ def _find_model_title_match_in_model(
     title_query: str,
     api_key: Optional[str] = None,
     base_model_context: Optional[str] = None,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchResult]:
     """For extensionless workflow values, resolve by CivitAI model page title."""
     from ..matcher import match_model_by_title_generic
 
@@ -266,7 +267,7 @@ def _find_model_title_match_in_model(
             match_type="model_title",
         )
         if res:
-            res["version_name"] = v.get("name", "")
+            res = res.with_updates(version_name=v.get("name", ""))
         return res
 
     return match_model_by_title_generic(
@@ -733,7 +734,7 @@ def _find_civitai_file_in_model(
     exact_only: bool = False,
     preferred_version_id: Optional[int] = None,
     base_model_context: Optional[str] = None,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchResult]:
     """Load one CivitAI model and search all its versions for the requested file."""
     filename_lower = filename.lower()
     filename_base = os.path.splitext(filename_lower)[0]
@@ -743,7 +744,7 @@ def _find_civitai_file_in_model(
 
     def build_result_from_resolved_version(
         resolved: Dict[str, Any], version_id: int
-    ) -> Dict[str, Any]:
+    ) -> SearchResult:
         expected_filename = resolved.get("expected_filename", "")
         primary_file = select_primary_model_file(
             resolved.get("files") or [],
@@ -751,8 +752,8 @@ def _find_civitai_file_in_model(
             fallback_to_first=True,
         ) or {}
 
-        return {
-            "source": "civitai",
+        return build_model_result(
+            "civitai",
             **build_civitai_result_payload(
                 model_id=model_id,
                 version_id=version_id,
@@ -769,7 +770,8 @@ def _find_civitai_file_in_model(
                     filename, expected_filename
                 ),
             ),
-        }
+            normalize_hashes=True,
+        )
 
     def resolved_version_matches(resolved: Dict[str, Any]) -> bool:
         expected_filename = str(resolved.get("expected_filename", "")).lower()
@@ -849,9 +851,10 @@ def _find_civitai_file_in_model(
                     best_resolved_confidence = ranking_score
                     best_resolved_result = build_result_from_resolved_version(
                         resolved, version_id
+                    ).with_updates(
+                        match_type="similar",
+                        confidence=confidence,
                     )
-                    best_resolved_result["match_type"] = "similar"
-                    best_resolved_result["confidence"] = confidence
 
         files = version.get("files", [])
         file_names = [f.get("name", "") for f in files if isinstance(f, dict)]
@@ -861,7 +864,7 @@ def _find_civitai_file_in_model(
 
     if best_resolved_result and best_resolved_confidence >= 50.0:
         log.info(
-            f"CivitAI best probable match: model_id={model_id}, version_id={best_resolved_result.get('version_id')}, filename={best_resolved_result.get('filename')}, confidence={best_resolved_confidence}"
+            f"CivitAI best probable match: model_id={model_id}, version_id={best_resolved_result.version_id}, filename={best_resolved_result.filename}, confidence={best_resolved_confidence}"
         )
         return best_resolved_result
 
@@ -878,15 +881,17 @@ def _find_civitai_file_in_model(
             tags=data.get("tags", []),
             match_type=match["match_type"],
         )
-        result["confidence"] = match.get(
-            "confidence",
-            calculate_filename_confidence(filename, result.get("filename", "")),
+        result = result.with_updates(
+            confidence=match.get(
+                "confidence",
+                calculate_filename_confidence(filename, result.filename),
+            )
         )
         if match["match_type"] == "similar":
             log.info(
-                f"CivitAI version-list probable match: model_id={model_id}, version_id={result.get('version_id')}, filename={result.get('filename')}, confidence={result['confidence']}"
+                f"CivitAI version-list probable match: model_id={model_id}, version_id={result.version_id}, filename={result.filename}, confidence={result.confidence}"
             )
-        if _base_model_matches(result.get("base_model"), base_model_context):
+        if _base_model_matches(result.base_model, base_model_context):
             return result
         if not base_model_context:
             return result
@@ -895,7 +900,7 @@ def _find_civitai_file_in_model(
 
 
 
-def parse_civitai_url(url: str) -> Optional[Dict[str, Any]]:
+def parse_civitai_url(url: str) -> Optional[ProviderUrlReference]:
     """
     Parse a CivitAI URL to extract model/version info.
     """
@@ -924,7 +929,7 @@ def search_civitai_for_file(
     use_html_fallback: bool = True,
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     sha256: Optional[str] = None,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchResult]:
     """
     Search CivitAI for a specific model file.
     Returns the first model that actually has this exact filename.
@@ -936,7 +941,7 @@ def search_civitai_for_file(
                    If False, also try partial matching (for local file resolution).
 
     Returns:
-        Dict with download info if found, None otherwise
+        A typed SearchResult if a matching model is found, otherwise None.
     """
     global _search_cache
 
@@ -1146,7 +1151,7 @@ def search_civitai_for_file(
                 base_model_context=base_model_context,
             )
             if result:
-                confidence = float(result.get("confidence") or 0.0)
+                confidence = result.confidence
                 if confidence >= 100.0:
                     _search_cache[cache_key] = result
                     _report_progress(
@@ -1154,12 +1159,12 @@ def search_civitai_for_file(
                         "found",
                         "Found exact CivitAI match",
                         92,
-                        model_id=result.get("model_id"),
-                        version_id=result.get("version_id"),
+                        model_id=result.model_id,
+                        version_id=result.version_id,
                         confidence=confidence,
                     )
                     log.info(
-                        f"Found exact CivitAI match for {filename}: model_id={result.get('model_id')}, version_id={result.get('version_id')}, candidate_limit={candidate_limit}"
+                        f"Found exact CivitAI match for {filename}: model_id={result.model_id}, version_id={result.version_id}, candidate_limit={candidate_limit}"
                     )
                     return result
                 if confidence > best_confidence:
@@ -1173,12 +1178,12 @@ def search_civitai_for_file(
                 "found",
                 "Found CivitAI match",
                 92,
-                model_id=best_result.get("model_id"),
-                version_id=best_result.get("version_id"),
+                model_id=best_result.model_id,
+                version_id=best_result.version_id,
                 confidence=best_confidence,
             )
             log.info(
-                f"Found best CivitAI match for {filename}: model_id={best_result.get('model_id')}, version_id={best_result.get('version_id')}, confidence={best_confidence}, candidate_limit={candidate_limit}"
+                f"Found best CivitAI match for {filename}: model_id={best_result.model_id}, version_id={best_result.version_id}, confidence={best_confidence}, candidate_limit={candidate_limit}"
             )
             return best_result
 
@@ -1217,7 +1222,7 @@ def search_civitai(
     model_type: Optional[str] = None,
     limit: int = 10,
     api_key: Optional[str] = None,
-) -> List[Dict[str, Any]]:
+) -> List[SearchResult]:
     """
     Search CivitAI for models (general search).
     Returns models that might be relevant.
@@ -1245,7 +1250,7 @@ def search_civitai(
             for model in data.get("items", []):
                 model_id = model.get("id")
                 model_name = model.get("name", "")
-                model_type = model.get("type", "")
+                civitai_model_type = model.get("type", "")
 
                 versions = model.get("modelVersions", [])
                 if versions:
@@ -1258,24 +1263,24 @@ def search_civitai(
                         prefer_first_marked=True,
                     )
 
-                    result = {
-                        "source": "civitai",
-                        "model_id": model_id,
-                        "version_id": version_id,
-                        "name": model_name,
-                        "type": model_type,
-                        "url": f"https://civitai.com/models/{model_id}",
-                        "download_url": get_civitai_download_url(version_id, api_key),
-                        "downloads": model.get("stats", {}).get("downloadCount", 0),
-                        "base_model": latest.get("baseModel"),
-                        "tags": model.get("tags", []),
-                    }
-
-                    if primary_file:
-                        result["filename"] = primary_file.get("name", "")
-                        result["size"] = extract_file_size(primary_file) or 0
-
-                    results.append(result)
+                    results.append(
+                        build_model_result(
+                            "civitai",
+                            model_id=model_id,
+                            version_id=version_id,
+                            name=model_name,
+                            type=civitai_model_type,
+                            filename=(primary_file or {}).get("name") or model_name,
+                            url=f"https://civitai.com/models/{model_id}",
+                            download_url=get_civitai_download_url(version_id, api_key),
+                            size=(extract_file_size(primary_file) or 0)
+                            if primary_file
+                            else None,
+                            base_model=latest.get("baseModel"),
+                            tags=model.get("tags", []),
+                            downloads=model.get("stats", {}).get("downloadCount", 0),
+                        )
+                    )
 
     except Exception as e:
         log.error(f"CivitAI search error: {e}")
@@ -2337,7 +2342,7 @@ def build_civitai_custom_result(
     details: Dict[str, Any],
     expected_filename: str = "",
     api_key: Optional[str] = None,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchResult]:
     if not isinstance(details, dict):
         return None
 
@@ -2394,7 +2399,7 @@ def resolve_civitai_version_custom_result(
     version_id: int,
     expected_filename: str = "",
     api_key: Optional[str] = None,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchResult]:
     if not version_id:
         return None
 

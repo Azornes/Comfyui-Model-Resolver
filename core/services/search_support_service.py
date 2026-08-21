@@ -1,5 +1,10 @@
 """Search cache, credentials, and index operations for HTTP routes."""
 
+from ..request_utils import (
+    read_bool_field,
+    read_optional_object_payload,
+    read_text_field,
+)
 from ..routes.context import RouteContext
 
 
@@ -56,10 +61,16 @@ class SearchSupportService:
         log_name,
     ):
         try:
-            data = await request.json()
-            value = data.get(payload_key, "")
+            data = await read_optional_object_payload(request)
+            value = read_text_field(
+                data,
+                payload_key,
+                contract_name=f"{log_name} request",
+            )
             result = await self.asyncio.to_thread(check_func, value)
             return self.web.json_response(result)
+        except TypeError as error:
+            return self.web.json_response({"error": str(error)}, status=400)
         except Exception as error:
             self.extension.logger.exception(f"{log_name} check error: {error}")
             return self.web.json_response({"error": str(error)}, status=500)
@@ -108,8 +119,15 @@ class SearchSupportService:
 
     async def refresh_author_index(self, request):
         """Refresh HuggingFace author fallback index."""
-        data = await request.json()
-        hf_token = data.get("hf_token", "")
+        data = await read_optional_object_payload(request)
+        try:
+            hf_token = read_text_field(
+                data,
+                "hf_token",
+                contract_name="Author index refresh request",
+            )
+        except TypeError as error:
+            return self.web.json_response({"error": str(error)}, status=400)
         result = await self.asyncio.to_thread(
             self.refresh_known_author_fallback_indexes,
             hf_token or None,
@@ -119,11 +137,14 @@ class SearchSupportService:
 
     async def model_list_status(self, request):
         """Return local model-list status and optionally compare with GitHub."""
-        check_remote = str(request.query.get("check_remote", "")).lower() in {
-            "1",
-            "true",
-            "yes",
-        }
+        try:
+            check_remote = read_bool_field(
+                request.query,
+                "check_remote",
+                contract_name="Model list status request",
+            )
+        except TypeError as exc:
+            return self.web.json_response({"error": str(exc)}, status=400)
         return self.web.json_response(
             self.get_model_list_update_status(check_remote=check_remote)
         )

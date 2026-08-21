@@ -2,8 +2,9 @@
 
 import hashlib
 import json
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Sequence
 
+from ..contracts import MissingModel, ModelReference, ResolvedModel
 from ..log_system import create_module_logger
 from . import references
 from . import subgraphs as subgraph_utils
@@ -203,7 +204,7 @@ def _get_promoted_widget_context_cache_key(
 
 def analyze_workflow_models(
     workflow_json: Dict[str, Any],
-    available_models: Optional[List[Dict[str, Any]]] = None,
+    available_models: Optional[List[ResolvedModel]] = None,
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     *,
     previous_node_cache: Optional[
@@ -214,7 +215,7 @@ def analyze_workflow_models(
     ] = None,
     analysis_stats: Optional[Dict[str, int]] = None,
     analysis_context: Optional[str] = None,
-) -> List[Dict[str, Any]]:
+) -> List[ModelReference]:
     """
     Extract all model references from a workflow, including nested subgraphs.
 
@@ -224,10 +225,10 @@ def analyze_workflow_models(
         progress_callback: Optional callback called while workflow nodes are scanned
 
     Returns:
-        List of model reference dictionaries (same format as get_node_model_info)
-        Each dict includes 'subgraph_id' if the model is in a subgraph
+        Typed model references. Each reference includes ``subgraph_id`` when
+        the model is in a subgraph.
     """
-    all_model_refs = []
+    all_model_refs: List[ModelReference] = []
     reused_nodes = 0
     analyzed_nodes = 0
     log_context = f" ({analysis_context})" if analysis_context else ""
@@ -315,7 +316,12 @@ def analyze_workflow_models(
                 and cached_node.get("fingerprint") == node_fingerprint
             )
             if reused:
-                base_model_refs = cached_node.get("refs", [])
+                base_model_refs = [
+                    ref
+                    if isinstance(ref, ModelReference)
+                    else ModelReference.from_mapping(ref)
+                    for ref in cached_node.get("refs", [])
+                ]
                 reused_nodes += 1
             else:
                 base_model_refs = references.get_node_model_info(
@@ -323,10 +329,9 @@ def analyze_workflow_models(
                     available_models=available_models,
                 )
                 analyzed_nodes += 1
-            # Keep cached node references as raw extraction results. Subgraph
-            # instance context is workflow-level state and must be reapplied
-            # when a cached node is reused.
-            model_refs = [dict(ref) for ref in base_model_refs]
+            # Subgraph instance context is workflow-level state and must be
+            # reapplied when a cached node is reused.
+            model_refs = list(base_model_refs)
             node_type = node.get("type", "")
 
             # Check if node type is a subgraph UUID
@@ -340,26 +345,32 @@ def analyze_workflow_models(
             # For top-level subgraph instance nodes, subgraph_path is None
             # This distinguishes them from nodes within subgraph definitions
             if subgraph_id:
-                for ref in model_refs:
+                for index, ref in enumerate(model_refs):
                     context = promoted_widget_contexts.get(
                         "instance_widgets", {}
-                    ).get((str(node.get("id")), ref.get("widget_index")))
+                    ).get((str(node.get("id")), ref.widget_index))
                     if context:
                         promoted_instance_slots.add(
-                            (str(node.get("id")), ref.get("widget_index"))
+                            (str(node.get("id")), ref.widget_index)
                         )
-                        subgraph_utils._apply_instance_promoted_widget_context(
-                            ref, context, available_models
+                        model_refs[index] = (
+                            subgraph_utils._apply_instance_promoted_widget_context(
+                                ref,
+                                context,
+                                available_models,
+                            )
                         )
-            for ref in model_refs:
-                ref["subgraph_id"] = subgraph_id
-                ref["subgraph_name"] = subgraph_name
-                ref["subgraph_path"] = None
-                ref["is_top_level"] = True
+            for index, ref in enumerate(model_refs):
+                model_refs[index] = ref.with_updates(
+                    subgraph_id=subgraph_id,
+                    subgraph_name=subgraph_name,
+                    subgraph_path=None,
+                    is_top_level=True,
+                )
             if node_cache_out is not None:
                 node_cache_out[node_cache_key] = {
                     "fingerprint": node_fingerprint,
-                    "refs": base_model_refs,
+                    "refs": list(base_model_refs),
                 }
             report_node_progress(node, reused=reused)
             all_model_refs.extend(model_refs)
@@ -404,7 +415,12 @@ def analyze_workflow_models(
                     and cached_node.get("fingerprint") == node_fingerprint
                 )
                 if reused:
-                    base_model_refs = cached_node.get("refs", [])
+                    base_model_refs = [
+                        ref
+                        if isinstance(ref, ModelReference)
+                        else ModelReference.from_mapping(ref)
+                        for ref in cached_node.get("refs", [])
+                    ]
                     reused_nodes += 1
                     reused_subgraph_nodes += 1
                 else:
@@ -414,18 +430,19 @@ def analyze_workflow_models(
                     )
                     analyzed_nodes += 1
                     analyzed_subgraph_nodes += 1
-                model_refs = []
+                model_refs: List[ModelReference] = []
                 for base_ref in base_model_refs:
-                    scoped_ref = dict(base_ref)
-                    scoped_ref["subgraph_id"] = subgraph_id
-                    scoped_ref["subgraph_name"] = subgraph_name
-                    scoped_ref["subgraph_path"] = [
-                        "definitions",
-                        "subgraphs",
-                        subgraph_id,
-                        "nodes",
-                    ]
-                    scoped_ref["is_top_level"] = False
+                    scoped_ref = base_ref.with_updates(
+                        subgraph_id=subgraph_id,
+                        subgraph_name=subgraph_name,
+                        subgraph_path=[
+                            "definitions",
+                            "subgraphs",
+                            subgraph_id,
+                            "nodes",
+                        ],
+                        is_top_level=False,
+                    )
                     promoted_refs = subgraph_utils._promote_model_reference_to_instances(
                         scoped_ref,
                         promoted_widget_contexts,
@@ -437,15 +454,14 @@ def analyze_workflow_models(
                         continue
 
                     ref = scoped_ref
-                    subgraph_utils._apply_promoted_widget_locator(
-                        ref,
-                        promoted_widget_contexts,
+                    ref = subgraph_utils._apply_promoted_widget_locator(
+                        ref, promoted_widget_contexts
                     )
                     model_refs.append(ref)
                 if node_cache_out is not None:
                     node_cache_out[node_cache_key] = {
                         "fingerprint": node_fingerprint,
-                        "refs": base_model_refs,
+                        "refs": list(base_model_refs),
                     }
                 report_node_progress(
                     node,
@@ -484,8 +500,9 @@ def analyze_workflow_models(
     return all_model_refs
 
 def identify_missing_models(
-    workflow_models: List[Dict[str, Any]], available_models: List[Dict[str, str]] = None
-) -> List[Dict[str, Any]]:
+    workflow_models: Sequence[ModelReference],
+    available_models: Optional[Sequence[ResolvedModel]] = None,
+) -> List[MissingModel]:
     """
     Identify which models from the workflow are missing.
     Deduplicates by category and filename - same model file only appears once even if
@@ -496,48 +513,57 @@ def identify_missing_models(
         available_models: Optional list of available models (if None, checks via folder_paths)
 
     Returns:
-        List of missing model references (deduplicated by category and filename).
-        Each entry has 'all_node_refs' containing all node references for that model.
+        Typed missing model references (deduplicated by category and filename).
+        Each entry retains 'all_node_refs' for HTTP compatibility.
     """
     # Group missing models by category and filename to deduplicate workflow
     # references without merging unrelated model folders that happen to share a name.
-    missing_by_model: Dict[tuple[str, str], Dict[str, Any]] = {}
+    missing_by_model: Dict[tuple[str, str], MissingModel] = {}
 
-    for model_ref in workflow_models:
+    for raw_model_ref in workflow_models:
+        model_ref = (
+            raw_model_ref
+            if isinstance(raw_model_ref, ModelReference)
+            else ModelReference.from_mapping(raw_model_ref)
+        )
         # If exists is False, it's missing
-        if not model_ref.get("exists", False):
-            filename = model_ref.get("original_path", "")
-            category = model_ref.get("category", "")
+        if not model_ref.exists:
+            filename = model_ref.original_path
+            category = model_ref.category
             group_key = (str(category or ""), str(filename or ""))
 
             if group_key not in missing_by_model:
                 # First occurrence - use this as the primary entry
-                missing_by_model[group_key] = {
-                    **model_ref,
-                    "reference_count": 1,
-                    "all_node_refs": [
-                        model_ref.copy()
-                    ],  # Track all nodes needing this model
-                }
+                missing_by_model[group_key] = MissingModel(
+                    reference=model_ref,
+                    all_node_refs=(model_ref,),
+                    extra=dict(model_ref.extra),
+                )
             else:
                 # Duplicate - just add to the node refs list
                 existing = missing_by_model[group_key]
-                existing["all_node_refs"].append(model_ref.copy())
-                existing["reference_count"] = len(existing["all_node_refs"])
-                if model_ref.get("auto_download_capable"):
-                    existing["auto_download_capable"] = True
-                if model_ref.get("auto_download_candidate"):
-                    existing["auto_download_candidate"] = True
-                if model_ref.get("input_choice_matches_value"):
-                    existing["input_choice_matches_value"] = True
-                existing_source = str(existing.get("input_choice_source") or "").lower()
-                model_source = str(model_ref.get("input_choice_source") or "").lower()
+                updates = {}
+                for key in (
+                    "auto_download_capable",
+                    "auto_download_candidate",
+                    "input_choice_matches_value",
+                ):
+                    if model_ref.extra_value(key):
+                        updates[key] = True
+                existing_source = str(
+                    existing.extra_value("input_choice_source") or ""
+                ).lower()
+                model_source = str(
+                    model_ref.extra_value("input_choice_source") or ""
+                ).lower()
                 if existing_source != "hybrid" and model_source in {
                     "static",
                     "hybrid",
                     "workflow_schema",
                 }:
-                    existing["input_choice_source"] = model_source
+                    updates["input_choice_source"] = model_source
+                missing_by_model[group_key] = existing.with_references(
+                    (*existing.all_node_refs, model_ref)
+                ).with_extra(**updates)
 
-    # Return deduplicated list
     return list(missing_by_model.values())

@@ -2,6 +2,7 @@
 
 import asyncio
 
+from ..request_utils import read_bool_field
 from ..sources.popular import (
     get_base_models_config,
     get_base_models_status,
@@ -23,7 +24,14 @@ def register_base_model_routes(routes, web, json_api_endpoint):
     @json_api_endpoint("base-models status")
     async def get_base_models_status_route(request):
         """Get local and optional remote base-model status."""
-        check_remote = request.query.get("check_remote") == "1"
+        try:
+            check_remote = read_bool_field(
+                request.query,
+                "check_remote",
+                contract_name="Base models status request",
+            )
+        except TypeError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
         status = await asyncio.to_thread(get_base_models_status, check_remote)
         return web.json_response(status)
 

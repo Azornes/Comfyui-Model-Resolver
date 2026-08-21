@@ -2,6 +2,7 @@
 
 import os
 
+from ..path_utils import normalize_folder_path_values, normalize_string_values
 from ..routes.context import RouteContext
 
 
@@ -99,7 +100,11 @@ class DirectoryService:
                     candidate_keys.append(candidate_key)
             paths = []
             for candidate_key in candidate_keys:
-                paths.extend(folder_paths.get_folder_paths(candidate_key) or [])
+                paths.extend(
+                    normalize_folder_path_values(
+                        folder_paths.get_folder_paths(candidate_key)
+                    )
+                )
             if folder_key == "ultralytics":
                 normalized_ultralytics_paths = []
                 for path in paths:
@@ -134,7 +139,9 @@ class DirectoryService:
                 or raw_key in roots
             ):
                 continue
-            raw_paths = folder_paths.get_folder_paths(raw_key) or []
+            raw_paths = normalize_folder_path_values(
+                folder_paths.get_folder_paths(raw_key)
+            )
             roots[raw_key] = self.dedupe_local_base_directories(
                 raw_paths,
                 comfy_root=comfy_root,
@@ -220,7 +227,9 @@ class DirectoryService:
 
         raw_base_dirs = []
         for folder_key in available_folder_keys:
-            for base_dir in folder_paths.get_folder_paths(folder_key) or []:
+            for base_dir in normalize_folder_path_values(
+                folder_paths.get_folder_paths(folder_key)
+            ):
                 if not base_dir or not os.path.isdir(base_dir):
                     continue
                 raw_base_dirs.append(base_dir)
@@ -239,7 +248,9 @@ class DirectoryService:
             return ""
 
         for folder_key in available_folder_keys:
-            filenames = folder_paths.get_filename_list(folder_key) or []
+            filenames = normalize_string_values(
+                folder_paths.get_filename_list(folder_key)
+            )
             for rel_path in filenames:
                 if not isinstance(rel_path, str):
                     continue

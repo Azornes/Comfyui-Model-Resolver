@@ -1,8 +1,8 @@
 import unittest
 
+from core.contracts import ResolvedModel
 from core.path_templates import infer_download_path_templates
 from core.settings import calculate_template_subfolder
-
 
 BASE_MODELS = {
     "base_models": [
@@ -42,26 +42,36 @@ BASE_MODELS = {
 }
 
 
+def _typed_models(items):
+    return [ResolvedModel.from_mapping(item) for item in items]
+
+
 class PathTemplateInferenceTests(unittest.TestCase):
+    def test_rejects_non_model_collections(self):
+        with self.assertRaises(TypeError):
+            infer_download_path_templates(0, BASE_MODELS)
+
     def test_detects_base_model_and_first_tag_layout(self):
         result = infer_download_path_templates(
-            [
-                {
-                    "category": "loras",
-                    "relative_path": r"ponyxl\style\model-a.safetensors",
-                    "path": r"C:\models\loras\ponyxl\style\model-a.safetensors",
-                },
-                {
-                    "category": "lora",
-                    "relative_path": r"ponyxl\character\model-b.safetensors",
-                    "path": r"C:\models\loras\ponyxl\character\model-b.safetensors",
-                },
-                {
-                    "category": "loras",
-                    "relative_path": r"sdxl\style\model-c.safetensors",
-                    "path": r"C:\models\loras\sdxl\style\model-c.safetensors",
-                },
-            ],
+            _typed_models(
+                [
+                    {
+                        "category": "loras",
+                        "relative_path": r"ponyxl\style\model-a.safetensors",
+                        "path": r"C:\models\loras\ponyxl\style\model-a.safetensors",
+                    },
+                    {
+                        "category": "lora",
+                        "relative_path": r"ponyxl\character\model-b.safetensors",
+                        "path": r"C:\models\loras\ponyxl\character\model-b.safetensors",
+                    },
+                    {
+                        "category": "loras",
+                        "relative_path": r"sdxl\style\model-c.safetensors",
+                        "path": r"C:\models\loras\sdxl\style\model-c.safetensors",
+                    },
+                ]
+            ),
             BASE_MODELS,
         )
 
@@ -72,18 +82,20 @@ class PathTemplateInferenceTests(unittest.TestCase):
 
     def test_detects_flat_layout(self):
         result = infer_download_path_templates(
-            [
-                {
-                    "category": "vae",
-                    "relative_path": "vae-a.safetensors",
-                    "path": r"C:\models\vae\vae-a.safetensors",
-                },
-                {
-                    "category": "vae",
-                    "relative_path": "vae-b.safetensors",
-                    "path": r"C:\models\vae\vae-b.safetensors",
-                },
-            ],
+            _typed_models(
+                [
+                    {
+                        "category": "vae",
+                        "relative_path": "vae-a.safetensors",
+                        "path": r"C:\models\vae\vae-a.safetensors",
+                    },
+                    {
+                        "category": "vae",
+                        "relative_path": "vae-b.safetensors",
+                        "path": r"C:\models\vae\vae-b.safetensors",
+                    },
+                ]
+            ),
             BASE_MODELS,
         )
 
@@ -92,28 +104,30 @@ class PathTemplateInferenceTests(unittest.TestCase):
 
     def test_detects_nested_checkpoint_base_model_mappings(self):
         result = infer_download_path_templates(
-            [
-                {
-                    "category": "checkpoints",
-                    "relative_path": r"SDXL\Pony\pony-realism.safetensors",
-                    "path": r"C:\models\checkpoints\SDXL\Pony\pony-realism.safetensors",
-                },
-                {
-                    "category": "checkpoints",
-                    "relative_path": r"SDXL\Illustrious\wai.safetensors",
-                    "path": r"C:\models\checkpoints\SDXL\Illustrious\wai.safetensors",
-                },
-                {
-                    "category": "checkpoints",
-                    "relative_path": r"SDXL\Illustrious\realistic\real.safetensors",
-                    "path": r"C:\models\checkpoints\SDXL\Illustrious\realistic\real.safetensors",
-                },
-                {
-                    "category": "checkpoints",
-                    "relative_path": r"SDXL\SDXL\juggernaut.safetensors",
-                    "path": r"C:\models\checkpoints\SDXL\SDXL\juggernaut.safetensors",
-                },
-            ],
+            _typed_models(
+                [
+                    {
+                        "category": "checkpoints",
+                        "relative_path": r"SDXL\Pony\pony-realism.safetensors",
+                        "path": r"C:\models\checkpoints\SDXL\Pony\pony-realism.safetensors",
+                    },
+                    {
+                        "category": "checkpoints",
+                        "relative_path": r"SDXL\Illustrious\wai.safetensors",
+                        "path": r"C:\models\checkpoints\SDXL\Illustrious\wai.safetensors",
+                    },
+                    {
+                        "category": "checkpoints",
+                        "relative_path": r"SDXL\Illustrious\realistic\real.safetensors",
+                        "path": r"C:\models\checkpoints\SDXL\Illustrious\realistic\real.safetensors",
+                    },
+                    {
+                        "category": "checkpoints",
+                        "relative_path": r"SDXL\SDXL\juggernaut.safetensors",
+                        "path": r"C:\models\checkpoints\SDXL\SDXL\juggernaut.safetensors",
+                    },
+                ]
+            ),
             BASE_MODELS,
         )
 
@@ -142,18 +156,20 @@ class PathTemplateInferenceTests(unittest.TestCase):
 
     def test_detect_does_not_map_krea2_to_flux_krea_folder(self):
         result = infer_download_path_templates(
-            [
-                {
-                    "category": "loras",
-                    "relative_path": r"FLUX\KREA\concept\snofs_krea_v1.safetensors",
-                    "path": r"C:\models\loras\FLUX\KREA\concept\snofs_krea_v1.safetensors",
-                },
-                {
-                    "category": "loras",
-                    "relative_path": r"FLUX\KREA\style\another_flux_krea.safetensors",
-                    "path": r"C:\models\loras\FLUX\KREA\style\another_flux_krea.safetensors",
-                },
-            ],
+            _typed_models(
+                [
+                    {
+                        "category": "loras",
+                        "relative_path": r"FLUX\KREA\concept\snofs_krea_v1.safetensors",
+                        "path": r"C:\models\loras\FLUX\KREA\concept\snofs_krea_v1.safetensors",
+                    },
+                    {
+                        "category": "loras",
+                        "relative_path": r"FLUX\KREA\style\another_flux_krea.safetensors",
+                        "path": r"C:\models\loras\FLUX\KREA\style\another_flux_krea.safetensors",
+                    },
+                ]
+            ),
             BASE_MODELS,
         )
 
@@ -165,18 +181,20 @@ class PathTemplateInferenceTests(unittest.TestCase):
 
     def test_detect_does_not_map_anima_to_wan_animate_folder(self):
         result = infer_download_path_templates(
-            [
-                {
-                    "category": "checkpoints",
-                    "relative_path": r"WAN\WAN2.2ANIMATE\model-a.safetensors",
-                    "path": r"C:\models\checkpoints\WAN\WAN2.2ANIMATE\model-a.safetensors",
-                },
-                {
-                    "category": "checkpoints",
-                    "relative_path": r"WAN\WAN2.2ANIMATE\model-b.safetensors",
-                    "path": r"C:\models\checkpoints\WAN\WAN2.2ANIMATE\model-b.safetensors",
-                },
-            ],
+            _typed_models(
+                [
+                    {
+                        "category": "checkpoints",
+                        "relative_path": r"WAN\WAN2.2ANIMATE\model-a.safetensors",
+                        "path": r"C:\models\checkpoints\WAN\WAN2.2ANIMATE\model-a.safetensors",
+                    },
+                    {
+                        "category": "checkpoints",
+                        "relative_path": r"WAN\WAN2.2ANIMATE\model-b.safetensors",
+                        "path": r"C:\models\checkpoints\WAN\WAN2.2ANIMATE\model-b.safetensors",
+                    },
+                ]
+            ),
             BASE_MODELS,
         )
 
@@ -184,18 +202,20 @@ class PathTemplateInferenceTests(unittest.TestCase):
 
     def test_detect_accepts_version_and_plural_alias_suffixes(self):
         result = infer_download_path_templates(
-            [
-                {
-                    "category": "diffusion_models",
-                    "relative_path": r"IDEOGRAM4\model-a.safetensors",
-                    "path": r"C:\models\diffusion_models\IDEOGRAM4\model-a.safetensors",
-                },
-                {
-                    "category": "upscale_models",
-                    "relative_path": r"ESRGAN\Upscalers\photo\model-a.pth",
-                    "path": r"C:\models\upscale_models\ESRGAN\Upscalers\photo\model-a.pth",
-                },
-            ],
+            _typed_models(
+                [
+                    {
+                        "category": "diffusion_models",
+                        "relative_path": r"IDEOGRAM4\model-a.safetensors",
+                        "path": r"C:\models\diffusion_models\IDEOGRAM4\model-a.safetensors",
+                    },
+                    {
+                        "category": "upscale_models",
+                        "relative_path": r"ESRGAN\Upscalers\photo\model-a.pth",
+                        "path": r"C:\models\upscale_models\ESRGAN\Upscalers\photo\model-a.pth",
+                    },
+                ]
+            ),
             BASE_MODELS,
         )
 

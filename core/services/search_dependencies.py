@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from ..contracts import ModelCatalogEntry, ModelMatch, SearchResult
 from ..routes.context import RouteContext
 
 
@@ -22,16 +23,8 @@ class SearchTrackerProtocol(Protocol):
     def update(self, *args: Any, **kwargs: Any) -> Any: ...
 
 
-class BoolParserProtocol(Protocol):
-    def __call__(self, value: Any, default: bool = False) -> bool: ...
-
-
-class IntParserProtocol(Protocol):
-    def __call__(self, value: Any, default: int = 0) -> int: ...
-
-
 class ModelResultBuilderProtocol(Protocol):
-    def __call__(self, source: str, **fields: Any) -> dict[str, Any]: ...
+    def __call__(self, source: str, **fields: Any) -> SearchResult: ...
 
 
 class ClearCacheProtocol(Protocol):
@@ -51,15 +44,19 @@ class FormatSizeProtocol(Protocol):
 
 
 class SearchProviderProtocol(Protocol):
-    def __call__(self, filename: str, **options: Any) -> Any: ...
+    def __call__(
+        self,
+        filename: str,
+        **options: Any,
+    ) -> SearchResult | list[SearchResult] | None: ...
 
 
 class PopularModelUrlProtocol(Protocol):
-    def __call__(self, filename: str) -> dict[str, Any] | None: ...
+    def __call__(self, filename: str) -> ModelCatalogEntry | None: ...
 
 
 class ModelListSearchProtocol(Protocol):
-    def __call__(self, filename: str) -> dict[str, Any] | None: ...
+    def __call__(self, filename: str) -> SearchResult | None: ...
 
 
 class LocalHashSearchProtocol(Protocol):
@@ -70,25 +67,29 @@ class LocalHashSearchProtocol(Protocol):
         category: str | None,
         max_matches: int,
         force_rescan: bool,
-    ) -> list[dict[str, Any]]: ...
+    ) -> list[ModelMatch]: ...
 
 
 class ResolveUrnProtocol(Protocol):
-    def __call__(self, model_id: Any, version_id: Any) -> dict[str, Any] | None: ...
+    def __call__(
+        self,
+        model_id: int | str,
+        version_id: int | str,
+    ) -> dict[str, Any] | None: ...
 
 
 class ResolveArchiveVersionProtocol(Protocol):
     def __call__(
         self,
-        model_id: Any,
-        version_id: Any,
+        model_id: int | str,
+        version_id: int | str,
         *,
         query: str,
-    ) -> dict[str, Any] | None: ...
+    ) -> SearchResult | None: ...
 
 
 class GetDownloadUrlProtocol(Protocol):
-    def __call__(self, version_id: Any) -> str | None: ...
+    def __call__(self, version_id: int | str) -> str | None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,8 +121,6 @@ class SearchDependencies:
     search_local_matches_by_hash: LocalHashSearchProtocol
     search_lora_manager_archive_for_file: SearchProviderProtocol
     search_model_list: ModelListSearchProtocol
-    to_bool: BoolParserProtocol
-    to_int: IntParserProtocol
     web: Any
 
     @staticmethod
@@ -184,7 +183,5 @@ class SearchDependencies:
                 "search_lora_manager_archive_for_file"
             ),
             search_model_list=context.require("search_model_list"),
-            to_bool=context.require("to_bool"),
-            to_int=context.require("to_int"),
             web=context.require("web"),
         )

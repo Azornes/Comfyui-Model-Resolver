@@ -1,11 +1,21 @@
 from unittest.mock import Mock
 
+from core.contracts import ModelMatch
 from core.local_hash_matches import collect_local_hash_matches_for_result
 
 
 def test_collect_local_hash_matches_forwards_lookup_options_and_enriches_results():
     sha256 = "a" * 64
-    lookup = Mock(return_value=[{"path": r"C:\models\local.safetensors"}])
+    lookup = Mock(
+        return_value=[
+            ModelMatch.from_mapping(
+                {
+                    "model": {"path": r"C:\models\local.safetensors"},
+                    "filename": "local.safetensors",
+                }
+            )
+        ]
+    )
 
     matches = collect_local_hash_matches_for_result(
         sha256,
@@ -23,14 +33,11 @@ def test_collect_local_hash_matches_forwards_lookup_options_and_enriches_results
         max_matches=7,
         force_rescan=True,
     )
-    assert matches == [
-        {
-            "path": r"C:\models\local.safetensors",
-            "hash_lookup_source": "civitai",
-            "hash_lookup_filename": "remote.safetensors",
-            "hash_lookup_sha256": sha256,
-        }
-    ]
+    assert len(matches) == 1
+    assert matches[0].model.path == r"C:\models\local.safetensors"
+    assert matches[0].extra_value("hash_lookup_source") == "civitai"
+    assert matches[0].extra_value("hash_lookup_filename") == "remote.safetensors"
+    assert matches[0].extra_value("hash_lookup_sha256") == sha256
 
 
 def test_collect_local_hash_matches_skips_empty_hash_without_lookup():

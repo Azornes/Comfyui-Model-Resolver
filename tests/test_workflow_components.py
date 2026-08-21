@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from core import resolver as resolver_core
+from core.contracts import ModelReference, Resolution
 from core.workflow import analysis, references, subgraphs, traversal
 from core.workflow_updater import update_workflow_nodes
 
@@ -274,7 +275,9 @@ def test_apply_instance_promoted_context_resolves_existing_model(tmp_path):
             "path": str(model_path),
         }
     ]
-    reference = {"original_path": "promoted.safetensors", "exists": False}
+    reference = ModelReference.from_mapping(
+        {"original_path": "promoted.safetensors", "exists": False}
+    )
     context = {
         "proxy_widget_name": "ckpt_name",
         "node_id": 10,
@@ -285,16 +288,16 @@ def test_apply_instance_promoted_context_resolves_existing_model(tmp_path):
         "category": "checkpoints",
     }
 
-    subgraphs._apply_instance_promoted_widget_context(
+    reference = subgraphs._apply_instance_promoted_widget_context(
         reference,
         context,
         available_models,
     )
 
-    assert reference["promoted_inner_node_id"] == 10
-    assert reference["category"] == "checkpoints"
-    assert reference["full_path"] == str(model_path)
-    assert reference["exists"] is True
+    assert reference.extra_value("promoted_inner_node_id") == 10
+    assert reference.category == "checkpoints"
+    assert reference.extra_value("full_path") == str(model_path)
+    assert reference.exists is True
 
 
 def test_apply_promoted_locator_supports_name_fallback_and_value_selection():
@@ -307,20 +310,22 @@ def test_apply_promoted_locator_supports_name_fallback_and_value_selection():
             ]
         },
     }
-    reference = {
-        "subgraph_id": "subgraph-1",
-        "node_id": 10,
-        "widget_index": 99,
-        "widget_name": "ckpt_name",
-        "original_path": "second",
-    }
+    reference = ModelReference.from_mapping(
+        {
+            "subgraph_id": "subgraph-1",
+            "node_id": 10,
+            "widget_index": 99,
+            "widget_name": "ckpt_name",
+            "original_path": "second",
+        }
+    )
 
-    subgraphs._apply_promoted_widget_locator(reference, contexts)
+    reference = subgraphs._apply_promoted_widget_locator(reference, contexts)
 
-    assert reference["locate_node_id"] == 2
-    assert reference["locate_subgraph_name"] == "Two"
-    assert reference["locate_is_top_level"] is True
-    assert reference["locate_via_promoted_widget"] is True
+    assert reference.extra_value("locate_node_id") == 2
+    assert reference.extra_value("locate_subgraph_name") == "Two"
+    assert reference.extra_value("locate_is_top_level") is True
+    assert reference.extra_value("locate_via_promoted_widget") is True
 
 
 def test_subgraph_input_reference_targets_instance_for_update_and_location():
@@ -377,14 +382,14 @@ def test_subgraph_input_reference_targets_instance_for_update_and_location():
     refs = analysis.analyze_workflow_models(workflow, available_models=[])
 
     assert len(refs) == 1
-    assert refs[0]["node_id"] == 1
-    assert refs[0]["widget_index"] == 0
-    assert refs[0]["subgraph_id"] == "subgraph-1"
-    assert refs[0]["is_top_level"] is True
-    assert refs[0]["subgraph_path"] is None
-    assert refs[0]["locate_node_id"] == 1
-    assert refs[0]["locate_subgraph_id"] == ""
-    assert refs[0]["promoted_inner_node_id"] == 10
+    assert refs[0].node_id == 1
+    assert refs[0].widget_index == 0
+    assert refs[0].subgraph_id == "subgraph-1"
+    assert refs[0].is_top_level is True
+    assert refs[0].extra_value("subgraph_path") is None
+    assert refs[0].extra_value("locate_node_id") == 1
+    assert refs[0].extra_value("locate_subgraph_id") == ""
+    assert refs[0].extra_value("promoted_inner_node_id") == 10
 
     no_proxy_workflow = {
         **workflow,
@@ -398,23 +403,21 @@ def test_subgraph_input_reference_targets_instance_for_update_and_location():
     no_proxy_refs = analysis.analyze_workflow_models(
         no_proxy_workflow, available_models=[]
     )
-    assert no_proxy_refs[0]["node_id"] == 1
-    assert no_proxy_refs[0]["promoted_inner_node_id"] == 10
+    assert no_proxy_refs[0].node_id == 1
+    assert no_proxy_refs[0].extra_value("promoted_inner_node_id") == 10
 
-    update_workflow_nodes(
-        workflow,
-        [
-            {
-                "node_id": refs[0]["node_id"],
-                "widget_index": refs[0]["widget_index"],
-                "resolved_path": "replacement.safetensors",
-                "category": "checkpoints",
-                "subgraph_id": refs[0]["subgraph_id"],
-                "is_top_level": refs[0]["is_top_level"],
-                "promoted_widget_name": refs[0]["promoted_widget_name"],
-            }
-        ],
+    resolution = Resolution.from_mapping(
+        {
+            "node_id": refs[0].node_id,
+            "widget_index": refs[0].widget_index,
+            "resolved_path": "replacement.safetensors",
+            "category": "checkpoints",
+            "subgraph_id": refs[0].subgraph_id,
+            "is_top_level": refs[0].is_top_level,
+            "promoted_widget_name": refs[0].extra_value("promoted_widget_name"),
+        }
     )
+    update_workflow_nodes(workflow, [resolution])
 
     assert workflow["nodes"][0]["widgets_values"] == ["replacement.safetensors"]
     assert workflow["definitions"]["subgraphs"][0]["nodes"][0]["widgets_values"] == [
@@ -479,9 +482,9 @@ def test_reused_subgraph_instance_refreshes_promoted_model_context():
     )
 
     assert len(refs) == 1
-    assert refs[0]["node_id"] == 1
-    assert refs[0]["original_path"] == "new.safetensors"
-    assert refs[0]["promoted_inner_node_id"] == 10
+    assert refs[0].node_id == 1
+    assert refs[0].original_path == "new.safetensors"
+    assert refs[0].extra_value("promoted_inner_node_id") == 10
 
 
 def test_reference_matching_handles_placeholders_paths_and_scanner_records(tmp_path):

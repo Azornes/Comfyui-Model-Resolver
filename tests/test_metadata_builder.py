@@ -497,6 +497,10 @@ class MetadataBuilderTests(unittest.TestCase):
             normalize_metadata_build_mode("unsupported"),
         )
 
+    def test_invalid_metadata_mode_type_is_rejected(self):
+        with self.assertRaises(TypeError):
+            normalize_metadata_build_mode(123)
+
     def test_exact_sidecar_remains_canonical_after_sibling_is_removed(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             bin_path = self._write_model(tmpdir, "adapter.bin", b"bin")

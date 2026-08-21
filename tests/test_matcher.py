@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import patch
 
+from core.contracts import SearchResult
 from core.matcher import (
     build_filename_search_queries,
     calculate_archived_model_confidence,
@@ -12,6 +13,7 @@ from core.matcher import (
 )
 from core.progress import report_progress
 from core.sources.model_list import search_model_list, search_model_list_multiple
+from core.sources.popular import search_popular_models
 from core.type_utils import (
     MODEL_CONTAINER_SUFFIXES,
     MODEL_VARIANT_SUFFIXES,
@@ -47,8 +49,8 @@ class MatcherTests(unittest.TestCase):
         ]
         matches = find_matches("sd_xl_base_1.0.safetensors", candidates)
         self.assertEqual(2, len(matches))
-        self.assertEqual("sd_xl_base_1.0.safetensors", matches[0]["filename"])
-        self.assertEqual(1.0, matches[0]["similarity"])
+        self.assertEqual("sd_xl_base_1.0.safetensors", matches[0].filename)
+        self.assertEqual(1.0, matches[0].similarity)
 
         # With higher threshold, only the best match should be returned
         matches_filtered = find_matches("sd_xl_base_1.0.safetensors", candidates, threshold=0.7)
@@ -165,8 +167,20 @@ class MatcherTests(unittest.TestCase):
                 "qwen3vl-4b-heretic_int8.safetensors",
                 "qwen_image_fp8_e4m3fn.safetensors",
             ],
-            [match["filename"] for match in matches],
+            [match.filename for match in matches],
         )
+
+    def test_find_matches_does_not_mutate_candidate_mappings(self):
+        candidate = {"filename": "model.safetensors", "category": "checkpoints"}
+
+        matches = find_matches("model.safetensors", [candidate])
+
+        self.assertEqual(1, len(matches))
+        self.assertEqual(
+            {"filename": "model.safetensors", "category": "checkpoints"},
+            candidate,
+        )
+        self.assertEqual("checkpoints", matches[0].model.category)
 
     def test_search_model_list_unification(self):
         try:
@@ -200,25 +214,43 @@ class MatcherTests(unittest.TestCase):
             fuzzy = search_model_list("target-model-extra.safetensors")
             multiple = search_model_list_multiple("exact", limit=1)
 
-        self.assertEqual(
-            exact,
-            {
-                "source": "model_list",
-                "filename": "exact.safetensors",
-                "url": "https://example.test/exact",
-                "name": "Exact model",
-                "type": "checkpoints",
-                "directory": "checkpoints",
-                "size": "12 MB",
-                "match_type": "exact",
+        self.assertIsInstance(exact, SearchResult)
+        self.assertEqual(exact.source, "model_list")
+        self.assertEqual(exact.filename, "exact.safetensors")
+        self.assertEqual(exact.url, "https://example.test/exact")
+        self.assertEqual(exact.name, "Exact model")
+        self.assertEqual(exact.model_type, "checkpoints")
+        self.assertEqual(exact.extra_value("directory"), "checkpoints")
+        self.assertEqual(exact.size, 12 * 1024**2)
+        self.assertEqual(exact.match_type, "exact")
+        self.assertEqual(fuzzy.filename, "target-model.safetensors")
+        self.assertEqual(fuzzy.match_type, "fuzzy")
+        self.assertGreater(fuzzy.confidence, 0)
+        self.assertEqual(multiple[0].filename, "exact.safetensors")
+        self.assertGreater(multiple[0].confidence, 0)
+        self.assertEqual(multiple[0].match_type, "similar")
+
+    def test_popular_search_returns_typed_search_results(self):
+        with patch(
+            "core.sources.popular._load_popular_models",
+            return_value={
+                "popular-model.safetensors": {
+                    "url": "https://example.test/popular",
+                    "type": "checkpoints",
+                    "directory": "checkpoints",
+                    "canonical_name": "popular-model",
+                }
             },
-        )
-        self.assertEqual(fuzzy["filename"], "target-model.safetensors")
-        self.assertEqual(fuzzy["match_type"], "fuzzy")
-        self.assertIn("confidence", fuzzy)
-        self.assertEqual(multiple[0]["filename"], "exact.safetensors")
-        self.assertIn("confidence", multiple[0])
-        self.assertNotIn("match_type", multiple[0])
+        ):
+            results = search_popular_models("popular-model", limit=1)
+
+        self.assertEqual(1, len(results))
+        self.assertIsInstance(results[0], SearchResult)
+        self.assertEqual("popular-model.safetensors", results[0].filename)
+        self.assertEqual("https://example.test/popular", results[0].url)
+        self.assertEqual("checkpoints", results[0].model_type)
+        self.assertEqual("checkpoints", results[0].extra_value("directory"))
+        self.assertEqual("popular-model", results[0].extra_value("canonical_name"))
 
     def test_build_filename_search_queries(self):
         # Verify that common precisions are extracted correctly

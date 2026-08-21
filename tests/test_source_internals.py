@@ -18,6 +18,8 @@ from unittest.mock import MagicMock, patch
 
 import requests
 
+from core.contracts import ResolvedModel, SearchResult
+
 # ---------------------------------------------------------------------------
 # civarchive internals
 # ---------------------------------------------------------------------------
@@ -35,7 +37,10 @@ from core.sources.civarchive import (
     _resolve_file_size_bytes,
     _transform_file_entry,
     build_civarchive_custom_result,
+    get_civarchive_model_details,
     parse_civarchive_url,
+    search_civarchive,
+    search_civarchive_for_file,
 )
 
 # ---------------------------------------------------------------------------
@@ -62,8 +67,8 @@ from core.sources.civitai import (
     get_model_info_by_hash,
     get_model_info_for_file,
     parse_civitai_url,
-    resolve_urn,
     resolve_civitai_version_custom_result,
+    resolve_urn,
     search_civitai,
     search_civitai_for_file,
 )
@@ -174,6 +179,8 @@ class CivitaiResultBuilderTests(unittest.TestCase):
             tags=["character"],
         )
 
+        self.assertIsInstance(result, SearchResult)
+        result = result.to_dict()
         self.assertEqual("civitai", result["source"])
         self.assertEqual(123, result["model_id"])
         self.assertEqual(456, result["version_id"])
@@ -196,7 +203,10 @@ class CivitaiCustomVersionLookupTests(unittest.TestCase):
             ) as get_details,
             patch(
                 "core.sources.civitai.build_civitai_custom_result",
-                return_value={"source": "civitai", "version_id": 456},
+                return_value=SearchResult(
+                    source="civitai",
+                    version_id=456,
+                ),
             ),
         ):
             result = resolve_civitai_version_custom_result(
@@ -205,7 +215,9 @@ class CivitaiCustomVersionLookupTests(unittest.TestCase):
                 api_key="secret",
             )
 
-        self.assertEqual({"source": "civitai", "version_id": 456}, result)
+        self.assertIsInstance(result, SearchResult)
+        self.assertEqual("civitai", result.source)
+        self.assertEqual(456, result.version_id)
         request_json.assert_called_once_with(
             "CivitAI custom URL version lookup",
             "https://civitai.com/api/v1/model-versions/456",
@@ -242,6 +254,113 @@ class CivitaiCustomVersionLookupTests(unittest.TestCase):
 
 class CivarchiveResultBuilderTests(unittest.TestCase):
 
+    def test_name_search_sorts_typed_results(self):
+        lower_result = SearchResult(
+            source="civarchive",
+            name="typed-civarchive-lower",
+            filename="typed-civarchive-lower.safetensors",
+            confidence=55.0,
+            match_type="similar",
+        )
+        higher_result = SearchResult(
+            source="civarchive",
+            name="typed-civarchive-higher",
+            filename="typed-civarchive-higher.safetensors",
+            confidence=90.0,
+            match_type="exact",
+        )
+
+        with (
+            patch(
+                "core.sources.civarchive._search_page",
+                return_value=[
+                    {"id": 1, "url": "/models/1", "name": "lower"},
+                    {"id": 2, "url": "/models/2", "name": "higher"},
+                ],
+            ),
+            patch(
+                "core.sources.civarchive._resolve_search_candidate",
+                side_effect=[lower_result, higher_result],
+            ),
+        ):
+            results = search_civarchive(
+                "typed-civarchive-sort-regression",
+                limit=2,
+            )
+
+        self.assertEqual(
+            [higher_result, lower_result],
+            results,
+        )
+
+    def test_details_fallback_serializes_typed_version_result(self):
+        resolved = SearchResult(
+            source="civarchive",
+            model_id=123,
+            version_id=456,
+            name="Typed fallback model",
+            version_name="v1",
+            model_type="LORA",
+            filename="typed-fallback.safetensors",
+            download_url="https://civarchive.com/download/456",
+            base_model="SDXL",
+        )
+
+        with (
+            patch(
+                "core.sources.civarchive._request_model_payload",
+                return_value=None,
+            ),
+            patch(
+                "core.sources.civarchive.resolve_civarchive_model_version",
+                return_value=resolved,
+            ),
+            patch(
+                "core.sources.civarchive._normalize_archive_version",
+                return_value={
+                    "id": 456,
+                    "url": "https://civarchive.com/models/123?modelVersionId=456",
+                },
+            ),
+        ):
+            result = get_civarchive_model_details(123, version_id=456)
+
+        self.assertEqual("civarchive", result["source"])
+        self.assertEqual(456, result["version_id"])
+        self.assertEqual("Typed fallback model", result["name"])
+
+    def test_filename_search_keeps_typed_resolved_result(self):
+        filename = "typed-civarchive-model.safetensors"
+        resolved = SearchResult(
+            source="civarchive",
+            name="typed-civarchive-model",
+            version_name="v1",
+            filename=filename,
+            download_url="https://civarchive.com/api/download/models/456",
+        )
+
+        with (
+            patch(
+                "core.sources.civarchive._search_page",
+                return_value=[
+                    {
+                        "name": "typed-civarchive-model",
+                        "url": "/models/123?modelVersionId=456",
+                    }
+                ],
+            ),
+            patch(
+                "core.sources.civarchive._resolve_search_candidate",
+                return_value=resolved,
+            ),
+        ):
+            result = search_civarchive_for_file(filename, limit=1)
+
+        self.assertIsInstance(result, SearchResult)
+        self.assertEqual(filename, result.filename)
+        self.assertEqual(100.0, result.confidence)
+        self.assertEqual("exact", result.match_type)
+
     def test_normalized_version_builder_preserves_search_result_contract(self):
         result = _build_result_from_normalized_version(
             model_details={
@@ -268,6 +387,8 @@ class CivarchiveResultBuilderTests(unittest.TestCase):
             match_type="similar",
         )
 
+        self.assertIsInstance(result, SearchResult)
+        result = result.to_dict()
         self.assertEqual("civarchive", result["source"])
         self.assertEqual(123, result["model_id"])
         self.assertEqual(456, result["version_id"])
@@ -310,6 +431,8 @@ class CivarchiveResultBuilderTests(unittest.TestCase):
             preferred_filename="archive.safetensors",
         )
 
+        self.assertIsInstance(result, SearchResult)
+        result = result.to_dict()
         self.assertEqual("civarchive", result["source"])
         self.assertEqual(123, result["model_id"])
         self.assertEqual(456, result["version_id"])
@@ -448,8 +571,9 @@ class CivitaiPrimaryFileSelectionTests(unittest.TestCase):
 
         results = search_civitai("example", limit=1)
 
-        self.assertEqual("first.safetensors", results[0]["filename"])
-        self.assertEqual(1024, results[0]["size"])
+        self.assertIsInstance(results[0], SearchResult)
+        self.assertEqual("first.safetensors", results[0].filename)
+        self.assertEqual(1024, results[0].size)
         clear_search_cache()
 
 
@@ -542,7 +666,7 @@ class CustomUrlResultBuilderTests(unittest.TestCase):
             "hashes": {"SHA256": "abc123"},
             "match_type": "custom_url",
             "custom_url": True,
-        }, result)
+        }, result.to_dict())
 
     def test_civarchive_custom_result_preserves_provider_fields(self):
         result = build_civarchive_custom_result({
@@ -606,7 +730,7 @@ class CustomUrlResultBuilderTests(unittest.TestCase):
             "platform": "civitai",
             "match_type": "custom_url",
             "custom_url": True,
-        }, result)
+        }, result.to_dict())
 
 
 class CivitaiModelDetailsTests(unittest.TestCase):
@@ -1153,13 +1277,13 @@ class ParseCivarchiveUrlTests(unittest.TestCase):
     def test_model_url_parsed(self):
         result = parse_civarchive_url("https://civarchive.com/models/123")
         self.assertIsNotNone(result)
-        self.assertEqual(result.get("model_id"), 123)
+        self.assertEqual(result.model_id, 123)
 
     def test_model_version_url_parsed(self):
         result = parse_civarchive_url("https://civarchive.com/models/123?modelVersionId=456")
         self.assertIsNotNone(result)
-        self.assertEqual(result.get("model_id"), 123)
-        self.assertEqual(result.get("version_id"), 456)
+        self.assertEqual(result.model_id, 123)
+        self.assertEqual(result.version_id, 456)
 
     def test_non_civarchive_url_returns_none(self):
         self.assertIsNone(parse_civarchive_url("https://huggingface.co/user/repo"))
@@ -1339,24 +1463,24 @@ class ParseCivitaiUrlTests(unittest.TestCase):
     def test_standard_model_url(self):
         result = parse_civitai_url("https://civitai.com/models/123456")
         self.assertIsNotNone(result)
-        self.assertEqual(result.get("model_id"), 123456)
+        self.assertEqual(result.model_id, 123456)
 
     def test_model_url_with_version(self):
         result = parse_civitai_url("https://civitai.com/models/123456?modelVersionId=789")
         self.assertIsNotNone(result)
-        self.assertEqual(result.get("model_id"), 123456)
-        self.assertEqual(result.get("version_id"), 789)
+        self.assertEqual(result.model_id, 123456)
+        self.assertEqual(result.version_id, 789)
 
     def test_civitai_red_model_url_with_version(self):
         result = parse_civitai_url("https://civitai.red/models/123456?modelVersionId=789")
         self.assertIsNotNone(result)
-        self.assertEqual(result.get("model_id"), 123456)
-        self.assertEqual(result.get("version_id"), 789)
+        self.assertEqual(result.model_id, 123456)
+        self.assertEqual(result.version_id, 789)
 
     def test_civitai_red_download_url(self):
         result = parse_civitai_url("https://civitai.red/api/download/models/789")
         self.assertIsNotNone(result)
-        self.assertEqual(result.get("version_id"), 789)
+        self.assertEqual(result.version_id, 789)
 
     def test_non_civitai_url_returns_none(self):
         self.assertIsNone(parse_civitai_url("https://civarchive.com/models/123"))
@@ -1539,13 +1663,13 @@ class CivitaiTrpcSearchTests(unittest.TestCase):
 
     def test_public_api_candidates_used_when_trpc_disabled_and_html_empty(self):
         clear_search_cache()
-        expected = {
-            "source": "civitai",
-            "model_id": 2676616,
-            "version_id": 3005748,
-            "filename": "sickOllie_v1.safetensors",
-            "confidence": 100.0,
-        }
+        expected = SearchResult(
+            source="civitai",
+            model_id=2676616,
+            version_id=3005748,
+            filename="sickOllie_v1.safetensors",
+            confidence=100.0,
+        )
         with patch(
             "core.sources.civitai._search_civitai_red_candidates",
             return_value=[],
@@ -1564,7 +1688,12 @@ class CivitaiTrpcSearchTests(unittest.TestCase):
                 use_html_fallback=True,
             )
 
-        self.assertEqual(result, expected)
+        self.assertIsInstance(result, SearchResult)
+        self.assertEqual(expected.source, result.source)
+        self.assertEqual(expected.model_id, result.model_id)
+        self.assertEqual(expected.version_id, result.version_id)
+        self.assertEqual(expected.filename, result.filename)
+        self.assertEqual(expected.confidence, result.confidence)
         html_search.assert_called_once()
         api_search.assert_called_once()
         clear_search_cache()
@@ -1906,12 +2035,12 @@ class ConvertToRelativePathTests(unittest.TestCase):
 class GetBaseDirectoryForModelTests(unittest.TestCase):
 
     def test_returns_base_directory_if_provided(self):
-        model = {"base_directory": "/some/path/models"}
+        model = ResolvedModel(base_directory="/some/path/models")
         result = get_base_directory_for_model(model, "checkpoints")
         self.assertEqual(result, "/some/path/models")
 
     def test_returns_none_without_path_or_base_directory(self):
-        result = get_base_directory_for_model({}, "checkpoints")
+        result = get_base_directory_for_model(ResolvedModel(), "checkpoints")
         self.assertIsNone(result)
 
 

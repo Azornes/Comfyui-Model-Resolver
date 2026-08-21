@@ -8,12 +8,19 @@ import os
 import time
 from typing import Dict, List, Optional, Tuple
 
+from .contracts import ResolvedModel
 from .log_system import create_module_logger
 
 log = create_module_logger(__name__)
 
 
-from .path_utils import get_filename_from_path, get_model_path_identity, get_path_identity
+from .path_utils import (
+    get_filename_from_path,
+    get_model_path_identity,
+    get_path_identity,
+    normalize_folder_path_values,
+    normalize_string_values,
+)
 
 # Import folder_paths lazily - it may not be available until ComfyUI is initialized
 try:
@@ -22,7 +29,7 @@ except ImportError:
     folder_paths = None
     log.warning("Model Resolver: folder_paths not available yet - will retry later")
 
-_MODEL_FILES_CACHE: Optional[List[Dict[str, str]]] = None
+_MODEL_FILES_CACHE: Optional[List[ResolvedModel]] = None
 _MODEL_FILES_CACHE_AT: float = 0.0
 _MODEL_FILES_CACHE_TTL_SECONDS = 2.0
 
@@ -53,7 +60,7 @@ def get_model_directories() -> Dict[str, Tuple[List[str], set]]:
 
 def scan_directory(
     directory: str, extensions: set, category: str
-) -> List[Dict[str, str]]:
+) -> List[ResolvedModel]:
     """
     Recursively scan a single directory for model files.
 
@@ -63,16 +70,12 @@ def scan_directory(
         category: Model category name (e.g., 'checkpoints', 'loras')
 
     Returns:
-        List of dictionaries with model information:
-        {
-            'filename': 'model.safetensors',
-            'path': 'absolute/path/to/model.safetensors',
-            'relative_path': 'subfolder/model.safetensors' or 'model.safetensors',
-            'category': 'checkpoints',
-            'base_directory': 'absolute/path/to/base'
-        }
+        Typed local model records with path, category and directory metadata.
     """
     models = []
+    if not isinstance(directory, str) or not isinstance(category, str):
+        return models
+    extensions = set(normalize_string_values(extensions))
 
     if not os.path.exists(directory) or not os.path.isdir(directory):
         # log.debug(f"Directory does not exist or is not accessible: {directory}")
@@ -120,13 +123,13 @@ def scan_directory(
                     relative_path = get_filename_from_path(root)
 
                 models.append(
-                    {
-                        "filename": get_filename_from_path(root),
-                        "path": root,
-                        "relative_path": relative_path,
-                        "category": category,
-                        "base_directory": base_directory,
-                    }
+                    ResolvedModel(
+                        filename=get_filename_from_path(root),
+                        path=root,
+                        relative_path=relative_path,
+                        category=category,
+                        base_directory=base_directory,
+                    )
                 )
 
             for filename in files:
@@ -152,13 +155,13 @@ def scan_directory(
                         relative_path = filename
 
                     models.append(
-                        {
-                            "filename": filename,
-                            "path": full_path,
-                            "relative_path": relative_path,
-                            "category": category,
-                            "base_directory": base_directory,
-                        }
+                        ResolvedModel(
+                            filename=filename,
+                            path=full_path,
+                            relative_path=relative_path,
+                            category=category,
+                            base_directory=base_directory,
+                        )
                     )
     except (OSError, PermissionError) as e:
         log.warning(f"Error scanning directory {directory}: {e}")
@@ -166,12 +169,12 @@ def scan_directory(
     return models
 
 
-def scan_all_directories() -> List[Dict[str, str]]:
+def scan_all_directories() -> List[ResolvedModel]:
     """
     Scan all configured model directories and return list of available models.
 
     Returns:
-        List of dictionaries with model information (same format as scan_directory)
+        Typed local model records (same fields as scan_directory)
     """
     all_models = []
     directories = get_model_directories()
@@ -188,15 +191,22 @@ def scan_all_directories() -> List[Dict[str, str]]:
         extensions = set()
         try:
             if isinstance(value, (list, tuple)):
-                if len(value) >= 2:
-                    paths = value[0] or []
-                    raw_exts = value[1]
+                if len(value) >= 2 and (
+                    isinstance(value[0], (list, tuple, set, frozenset))
+                    or isinstance(value[1], (list, tuple, set, frozenset))
+                ):
+                    paths = normalize_folder_path_values(value[0])
+                    raw_exts = value[1] if len(value) >= 2 else []
                 else:
-                    # Unexpected format; treat value as paths
-                    paths = list(value)
+                    # Unexpected registry format; retain only string paths.
+                    paths = normalize_folder_path_values(value)
                     raw_exts = []
             elif isinstance(value, dict):
-                paths = value.get("paths") or value.get("path") or []
+                paths = normalize_folder_path_values(
+                    value.get("paths")
+                    if "paths" in value
+                    else value.get("path")
+                )
                 raw_exts = value.get("extensions") or []
             else:
                 # Unknown format; skip category
@@ -206,10 +216,10 @@ def scan_all_directories() -> List[Dict[str, str]]:
                 continue
 
             # Normalize extensions to a set[str]
-            if isinstance(raw_exts, (list, tuple, set)):
-                extensions = {str(e).lower() for e in raw_exts}
-            elif raw_exts:
-                extensions = {str(raw_exts).lower()}
+            extensions = {
+                extension.lower()
+                for extension in normalize_string_values(raw_exts)
+            }
         except Exception as e:
             log.warning(f"Error interpreting folder_paths entry for {category}: {e}")
             continue
@@ -225,8 +235,8 @@ def scan_all_directories() -> List[Dict[str, str]]:
 
                 models = scan_directory(directory_path, extensions, category)
                 for model in models:
-                    identity = get_model_path_identity(model.get("path"))
-                    model_key = (model.get("category", category), identity)
+                    identity = get_model_path_identity(model.path)
+                    model_key = (model.category or category, identity)
                     if identity and model_key in seen_models:
                         continue
                     if identity:
@@ -252,7 +262,7 @@ def invalidate_model_files_cache() -> None:
         pass
 
 
-def get_model_files(force_rescan: bool = False) -> List[Dict[str, str]]:
+def get_model_files(force_rescan: bool = False) -> List[ResolvedModel]:
     """
     Get list of all available model files with metadata.
 
@@ -262,7 +272,7 @@ def get_model_files(force_rescan: bool = False) -> List[Dict[str, str]]:
         force_rescan: If True, bypass the short-lived cache and rescan directories
 
     Returns:
-        List of model dictionaries (same format as scan_directory)
+        Typed local model records (same fields as scan_directory)
     """
     global _MODEL_FILES_CACHE, _MODEL_FILES_CACHE_AT
 
@@ -309,10 +319,10 @@ def find_local_file_path(filename: str, category: Optional[str] = None) -> Optio
             available_models = get_model_files()
             for m in available_models:
                 if (
-                    m.get("relative_path", "").endswith(filename)
-                    or m.get("filename", "") == filename
+                    m.relative_path.endswith(filename)
+                    or m.filename == filename
                 ):
-                    file_path = m.get("path")
+                    file_path = m.path
                     break
         except Exception:
             pass

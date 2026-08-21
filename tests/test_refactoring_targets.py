@@ -7,6 +7,8 @@ import unittest
 from typing import ClassVar
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from core.contracts import MissingModel, WorkflowAnalysisResult, WorkflowModelInventory
+
 # Make sure parent package directory is in sys.path
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
@@ -58,6 +60,9 @@ mock_routes.post = post_decorator
 
 # Import the module so that routes register
 node_mod = importlib.import_module("comfyui-model-resolver")
+TypedSearchResult = importlib.import_module(
+    "comfyui-model-resolver.core.contracts"
+).SearchResult
 
 # Force setup_routes to run to populate routes_registered mock registry
 node_mod.extension.routes_setup = False
@@ -506,12 +511,12 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
             if function_name == "build_huggingface_custom_result":
                 self.assertEqual(args, (url, "model.safetensors", None))
                 self.assertEqual(kwargs, {})
-                return {
-                    "source": "huggingface",
-                    "filename": "model.safetensors",
-                    "url": url,
-                    "download_url": url,
-                }
+                return TypedSearchResult(
+                    source="huggingface",
+                    filename="model.safetensors",
+                    url=url,
+                    download_url=url,
+                )
             self.fail(f"Unexpected threaded function: {function_name}")
 
         with (
@@ -551,14 +556,27 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(getattr(func, "__name__", ""), "analyze_and_find_matches")
             self.assertEqual(args[:3], (workflow, 0.0, 10))
             self.assertEqual(kwargs["force_rescan"], False)
-            return {
-                "missing_models": [
-                    {
-                        "name": "already-matched.safetensors",
-                        "matches": [{"confidence": 100}],
-                    }
-                ]
-            }
+            return WorkflowAnalysisResult(
+                missing_models=(
+                    MissingModel.from_mapping(
+                        {
+                            "name": "already-matched.safetensors",
+                            "matches": [
+                                {
+                                    "model": {
+                                        "path": "models/already-matched.safetensors",
+                                        "filename": "already-matched.safetensors",
+                                        "category": "checkpoints",
+                                    },
+                                    "confidence": 100,
+                                }
+                            ],
+                        }
+                    ),
+                ),
+                total_missing=1,
+                total_models_analyzed=1,
+            )
 
         with (
             patch("asyncio.to_thread", side_effect=fake_to_thread),
@@ -602,7 +620,14 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
         request = AsyncMock()
         request.json.return_value = {
             "workflow": workflow,
-            "resolutions": [{"node_id": 1, "widget_index": 0}],
+            "resolutions": [
+                {
+                    "node_id": 1,
+                    "widget_index": 0,
+                    "resolved_path": "resolved.safetensors",
+                    "category": "checkpoints",
+                }
+            ],
         }
 
         with patch("aiohttp.web.json_response") as mock_json_response:
@@ -648,6 +673,22 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
 
         mock_json_response.assert_called_once_with(
             {"loaded_models": [], "total": 0}
+        )
+
+    async def test_loaded_models_route_rejects_non_text_progress_id(self):
+        post_handler = routes_registered[("POST", "/model_resolver/loaded")]
+        request = AsyncMock()
+        request.json.return_value = {
+            "workflow": {"nodes": []},
+            "loaded_id": 123,
+        }
+
+        with patch("aiohttp.web.json_response") as mock_json_response:
+            await post_handler(request)
+
+        mock_json_response.assert_called_once_with(
+            {"error": "Loaded models request loaded_id must be a string"},
+            status=400,
         )
 
     async def test_loaded_models_route_rejects_non_object_workflow(self):
@@ -796,6 +837,38 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
             status=400,
         )
 
+    async def test_model_details_route_rejects_non_numeric_provider_ids(self):
+        post_handler = routes_registered[("POST", "/model_resolver/model-details")]
+        request = AsyncMock()
+        request.json.return_value = {
+            "source": "civitai",
+            "model_id": "not-a-number",
+        }
+
+        with patch("aiohttp.web.json_response") as mock_json_response:
+            await post_handler(request)
+
+        mock_json_response.assert_called_once_with(
+            {"error": "Model details request model_id must be an integer"},
+            status=400,
+        )
+
+    async def test_model_details_route_keeps_huggingface_ids_textual(self):
+        post_handler = routes_registered[("POST", "/model_resolver/model-details")]
+        request = AsyncMock()
+        request.json.return_value = {
+            "source": "huggingface",
+            "model_id": 123,
+        }
+
+        with patch("aiohttp.web.json_response") as mock_json_response:
+            await post_handler(request)
+
+        mock_json_response.assert_called_once_with(
+            {"error": "Model details model_id must be a string for Hugging Face"},
+            status=400,
+        )
+
     async def test_civitai_search_route_rejects_missing_filename(self):
         post_handler = routes_registered[("POST", "/model_resolver/civitai-search")]
         request = AsyncMock()
@@ -912,7 +985,7 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
             if function_name == "get_workflow_model_inventory":
                 self.assertEqual((workflow,), args)
                 self.assertEqual({}, kwargs)
-                return {"available_models": [], "model_refs": []}
+                return WorkflowModelInventory()
             self.fail(f"Unexpected threaded function: {function_name}")
 
         with (
@@ -1238,7 +1311,6 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
                 "request_public_url",
                 "resolve_civarchive_by_hash",
                 "search_huggingface_for_file",
-                "to_bool",
                 "web",
                 "write_model_resolver_metadata",
             },
@@ -1356,7 +1428,9 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
 
         response = MagicMock(status_code=200)
         request_public_url = MagicMock(return_value=(response, mirror_url, {}))
-        resolve_civarchive_by_hash = MagicMock(return_value=result)
+        resolve_civarchive_by_hash = MagicMock(
+            return_value=TypedSearchResult.from_mapping(result, source="civarchive")
+        )
         service = self._build_model_service_for_unit_test(
             service_module="civitai_search_service",
             service_class="CivitAISearchService",
@@ -1389,8 +1463,12 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
         }
 
         try:
-            with patch(
-                "core.sources.civitai.get_model_info_by_hash",
+            civitai_module = importlib.import_module(
+                "comfyui-model-resolver.core.sources.civitai"
+            )
+            with patch.object(
+                civitai_module,
+                "get_model_info_by_hash",
                 return_value=None,
             ):
                 api_response = await service.civitai_search(request)
@@ -1403,6 +1481,100 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(request_public_url.call_args.args[1], mirror_url)
         payload = json.loads(api_response.text)
         self.assertEqual(payload["download_url"], mirror_url)
+
+    async def test_civitai_service_accepts_typed_huggingface_result(self):
+        expected_hash = "c" * 64
+        hf_result = TypedSearchResult(
+            source="huggingface",
+            name="Typed HuggingFace model",
+            filename="model.safetensors",
+            url=(
+                "https://huggingface.co/example/repo/blob/main/model.safetensors"
+            ),
+            download_url=(
+                "https://huggingface.co/example/repo/resolve/main/model.safetensors"
+            ),
+            sha256=expected_hash,
+            extra={
+                "repo_id": "example/repo",
+                "path": "model.safetensors",
+                "from_metadata": True,
+            },
+        )
+
+        def to_bool(value, default=False):
+            return default if value is None else bool(value)
+
+        search_huggingface_for_file = MagicMock(return_value=hf_result)
+        service = self._build_model_service_for_unit_test(
+            service_module="civitai_search_service",
+            service_class="CivitAISearchService",
+            download_available=True,
+            extract_sha256_from_metadata=lambda value: value.get("sha256", ""),
+            get_filename_from_path=lambda value: str(value or "").replace(
+                "\\", "/"
+            ).rsplit("/", 1)[-1],
+            normalize_category_to_model_type=lambda value: "Checkpoint",
+            normalize_sha256=lambda value: str(value or ""),
+            resolve_civarchive_by_hash=MagicMock(return_value=None),
+            search_huggingface_for_file=search_huggingface_for_file,
+            to_bool=to_bool,
+        )
+        request = AsyncMock()
+        with tempfile.NamedTemporaryFile(
+            suffix=".safetensors", delete=False
+        ) as handle:
+            model_path = handle.name
+        request.json.return_value = {
+            "filename": "model.safetensors",
+            "category": "checkpoints",
+            "resolved_path": model_path,
+            "sha256": expected_hash,
+        }
+
+        civitai_module = importlib.import_module(
+            "comfyui-model-resolver.core.sources.civitai"
+        )
+        try:
+            with patch.object(
+                civitai_module,
+                "get_model_info_by_hash",
+                return_value=None,
+            ):
+                response = await service.civitai_search(request)
+        finally:
+            os.unlink(model_path)
+
+        self.assertEqual(response.status, 200)
+        payload = json.loads(response.text)
+        self.assertEqual("huggingface", payload["source"])
+        self.assertEqual(expected_hash, payload["sha256"])
+        self.assertEqual(
+            hf_result.download_url,
+            payload["download_url"],
+        )
+        self.assertEqual(
+            "https://huggingface.co/example/repo/blob/main/model.safetensors",
+            payload["url"],
+        )
+        search_huggingface_for_file.assert_called_once()
+
+    async def test_civitai_service_rejects_malformed_text_fields(self):
+        service = self._build_model_service_for_unit_test(
+            service_module="civitai_search_service",
+            service_class="CivitAISearchService",
+            download_available=True,
+        )
+        request = AsyncMock()
+        request.json.return_value = {"filename": 123}
+
+        response = await service.civitai_search(request)
+
+        self.assertEqual(response.status, 400)
+        self.assertEqual(
+            json.loads(response.text)["error"],
+            "CivitAI search request filename must be a string",
+        )
 
     async def test_civitai_service_preserves_remote_sidecar_payload_fields(self):
         expected_hash = "b" * 64
@@ -1667,6 +1839,22 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 400)
         self.assertEqual(json.loads(response.text)["error"], "Unsafe URL")
 
+    async def test_custom_url_service_rejects_malformed_text_fields(self):
+        service = self._build_model_service_for_unit_test(
+            service_module="custom_url_service",
+            service_class="CustomUrlService",
+        )
+        request = AsyncMock()
+        request.json.return_value = {"url": 123}
+
+        response = await service.custom_url(request)
+
+        self.assertEqual(response.status, 400)
+        self.assertEqual(
+            json.loads(response.text)["error"],
+            "Custom URL request url must be a string",
+        )
+
     async def test_model_details_service_returns_unavailable_when_providers_are_missing(self):
         service = self._build_model_service_for_unit_test(
             service_module="model_details_service",
@@ -1702,4 +1890,24 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             json.loads(response.text)["error"],
             "Model details not found",
+        )
+
+    async def test_model_details_service_rejects_malformed_identifiers(self):
+        service = self._build_model_service_for_unit_test(
+            service_module="model_details_service",
+            service_class="ModelDetailsService",
+            download_available=True,
+        )
+        request = AsyncMock()
+        request.json.return_value = {
+            "source": "civitai",
+            "model_id": True,
+        }
+
+        response = await service.model_details(request)
+
+        self.assertEqual(response.status, 400)
+        self.assertEqual(
+            json.loads(response.text)["error"],
+            "Model details request model_id must be an integer or string",
         )

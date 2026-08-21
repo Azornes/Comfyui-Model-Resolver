@@ -8,9 +8,11 @@ import heapq
 import os
 import re
 from difflib import SequenceMatcher
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .contracts import ModelMatch, ResolvedModel, SearchResult
 from .log_system import create_module_logger
+from .metadata_model_utils import normalize_models
 
 log = create_module_logger(__name__)
 
@@ -92,10 +94,10 @@ def calculate_similarity_with_normalization(str1: str, str2: str) -> float:
 
 def find_matches(
     target_model: str,
-    candidate_models: List[Dict[str, str]],
+    candidate_models: List[ResolvedModel],
     threshold: float = 0.0,
     max_results: int = 10,
-) -> List[Dict[str, any]]:
+) -> List[ModelMatch]:
     """
     Find similar models using fuzzy matching.
 
@@ -106,13 +108,7 @@ def find_matches(
         max_results: Maximum number of results to return
 
     Returns:
-        List of match dictionaries sorted by similarity (highest first):
-        {
-            'model': original model dict from candidates,
-            'filename': model filename,
-            'similarity': similarity score (0.0 to 1.0),
-            'confidence': confidence percentage (0 to 100)
-        }
+        Typed local matches sorted by similarity (highest first).
     """
     # Keep only the best N matches instead of collecting and sorting everything.
     best_matches = []
@@ -129,10 +125,12 @@ def find_matches(
     # Normalize target filename once for exact match comparisons
     target_norm = normalize_filename(target_filename)
 
-    for candidate in candidate_models:
+    normalized_candidates = normalize_models(candidate_models)
+
+    for candidate in normalized_candidates:
         # Get filename from candidate (prefer 'filename' key, fallback to extracting from 'path' or 'relative_path')
-        candidate_filename = candidate.get("filename")
-        candidate_path = candidate.get("path", "") or candidate.get("relative_path", "")
+        candidate_filename = candidate.filename
+        candidate_path = candidate.path or candidate.relative_path
 
         # If no filename key, try to extract from path or relative_path
         if not candidate_filename and candidate_path:
@@ -143,20 +141,16 @@ def find_matches(
 
         # Normalize candidate path separators based on current OS
         # This ensures paths with \ vs / separators are treated as identical
-        candidate_path_normalized = candidate.get("_match_path_norm")
-        if candidate_path_normalized is None:
-            candidate_path_normalized = (
-                os.path.normpath(candidate_path) if candidate_path else ""
-            )
-            candidate["_match_path_norm"] = candidate_path_normalized
+        candidate_path_normalized = (
+            os.path.normpath(candidate_path) if candidate_path else ""
+        )
 
-        candidate_relative_path = candidate.get("relative_path", "")
-        candidate_relative_path_normalized = candidate.get("_match_relative_path_norm")
-        if candidate_relative_path_normalized is None:
-            candidate_relative_path_normalized = (
-                os.path.normpath(candidate_relative_path) if candidate_relative_path else ""
-            )
-            candidate["_match_relative_path_norm"] = candidate_relative_path_normalized
+        candidate_relative_path = candidate.relative_path
+        candidate_relative_path_normalized = (
+            os.path.normpath(candidate_relative_path)
+            if candidate_relative_path
+            else ""
+        )
 
         # Check if normalized paths are identical (100% match)
         # This handles cases where paths differ only by separator (e.g., path/to/model vs path\to\model)
@@ -176,12 +170,14 @@ def find_matches(
         if path_match:
             # Exact path match after normalization = 100% confidence
             similarity = 1.0
-            match = {
-                "model": candidate,
-                "filename": candidate_filename,
-                "similarity": similarity,
-                "confidence": round(similarity * 100, 1),
-            }
+            match = ModelMatch.from_mapping(
+                {
+                    "model": candidate,
+                    "filename": candidate_filename,
+                    "similarity": similarity,
+                    "confidence": round(similarity * 100, 1),
+                }
+            )
             if max_results <= 0:
                 return []
             entry = (similarity, match_counter, match)
@@ -197,10 +193,7 @@ def find_matches(
 
         # First check for exact match (after normalization) - should be 100%
         # Only exact matches should get 100% confidence
-        candidate_norm = candidate.get("_match_filename_norm")
-        if candidate_norm is None:
-            candidate_norm = normalize_filename(candidate_filename)
-            candidate["_match_filename_norm"] = candidate_norm
+        candidate_norm = normalize_filename(candidate_filename)
 
         if target_norm == candidate_norm:
             similarity = 1.0
@@ -211,12 +204,14 @@ def find_matches(
 
         # Only include if above threshold
         if similarity >= threshold:
-            match = {
-                "model": candidate,
-                "filename": candidate_filename,
-                "similarity": similarity,
-                "confidence": confidence,
-            }
+            match = ModelMatch.from_mapping(
+                {
+                    "model": candidate,
+                    "filename": candidate_filename,
+                    "similarity": similarity,
+                    "confidence": confidence,
+                }
+            )
             if max_results <= 0:
                 return []
             entry = (similarity, match_counter, match)
@@ -226,7 +221,10 @@ def find_matches(
             elif similarity > best_matches[0][0]:
                 heapq.heapreplace(best_matches, entry)
 
-    return [match for _, _, match in sorted(best_matches, key=lambda x: x[0], reverse=True)]
+    return [
+        match
+        for _, _, match in sorted(best_matches, key=lambda x: x[0], reverse=True)
+    ]
 
 
 def normalize_base_model(value: str) -> str:
@@ -577,14 +575,14 @@ def match_model_by_title_generic(
     model_id: int,
     title_query: str,
     model_name: str,
-    versions: list,
+    versions: list[Dict[str, Any]],
     base_model_context: Optional[str],
-    get_base_model_fn,
-    select_file_fn,
-    build_result_fn,
-    hydrate_version_fn=None,
+    get_base_model_fn: Callable[[Any], Optional[str]],
+    select_file_fn: Callable[[Any], Optional[Dict[str, Any]]],
+    build_result_fn: Callable[[Any, Any, float], Optional[SearchResult]],
+    hydrate_version_fn: Optional[Callable[[Any], Any]] = None,
     log_prefix: str = "ModelResolver",
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchResult]:
     """Generic helper to resolve extensionless workflow values by model title across CivitAI and CivArchive."""
 
     title_confidence = calculate_model_title_confidence(title_query, model_name)
@@ -621,11 +619,20 @@ def match_model_by_title_generic(
         if not result:
             continue
 
-        result["confidence"] = title_confidence
-        result["title_confidence"] = title_confidence
+        if not isinstance(result, SearchResult):
+            raise TypeError(
+                "Model title matcher builders must return SearchResult"
+            )
+
+        result = result.with_updates(confidence=title_confidence).with_extra(
+            title_confidence=title_confidence
+        )
+        result_version_id = result.version_id
+        result_filename = result.filename
+        result_base_model = result.base_model
 
         log.info(
-            f"{log_prefix} model-title match: query={title_query}, model_id={model_id}, model_name={model_name}, version_id={result.get('version_id')}, filename={result.get('filename')}, confidence={title_confidence}, base={result.get('base_model')}"
+            f"{log_prefix} model-title match: query={title_query}, model_id={model_id}, model_name={model_name}, version_id={result_version_id}, filename={result_filename}, confidence={title_confidence}, base={result_base_model}"
         )
         return result
 

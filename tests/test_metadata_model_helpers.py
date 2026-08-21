@@ -3,8 +3,13 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from core.contracts import ResolvedModel
 from core.metadata_audit import _model_key
-from core.metadata_model_utils import dedupe_models, is_model_file_path
+from core.metadata_model_utils import (
+    dedupe_models,
+    is_model_file_path,
+    normalize_models,
+)
 from core.path_utils import get_model_path_identity
 from core.resolver import _build_local_hash_match_cache
 from core.scanner import scan_directory
@@ -51,7 +56,16 @@ class MetadataModelHelperTests(unittest.TestCase):
                 get_model_path_identity(duplicate["path"]),
             )
             self.assertEqual("", get_model_path_identity(empty["path"]))
-            self.assertEqual([first], dedupe_models(models))
+            deduped = dedupe_models(models)
+            self.assertEqual(1, len(deduped))
+            self.assertIsInstance(deduped[0], ResolvedModel)
+        self.assertEqual(model_path, deduped[0].path)
+
+    def test_normalize_models_rejects_invalid_collection_payloads(self):
+        with self.assertRaises(TypeError):
+            normalize_models(0)
+        with self.assertRaises(TypeError):
+            normalize_models({"path": "model.safetensors"})
 
     def test_scanner_and_metadata_identity_share_path_fallback(self):
         model_path = os.path.join("models", "model.safetensors")
@@ -82,7 +96,7 @@ class MetadataModelHelperTests(unittest.TestCase):
             ):
                 models = scan_directory("models", {".safetensors"}, "checkpoints")
 
-        self.assertEqual(["model.safetensors"], [model["filename"] for model in models])
+        self.assertEqual(["model.safetensors"], [model.filename for model in models])
 
         with patch("core.resolver.os.path.isdir", return_value=False), patch(
                 "core.resolver.find_metadata_sidecar_path",
@@ -99,7 +113,7 @@ class MetadataModelHelperTests(unittest.TestCase):
             )
 
         self.assertEqual(1, len(index["a" * 64]))
-        self.assertEqual(model_path, index["a" * 64][0]["model"]["path"])
+        self.assertEqual(model_path, index["a" * 64][0].model.path)
 
     def test_model_path_identity_rejects_empty_and_whitespace_paths(self):
         self.assertEqual("", get_model_path_identity(None))

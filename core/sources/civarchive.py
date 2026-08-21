@@ -13,6 +13,7 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 
+from ..contracts import ProviderUrlReference, SearchResult
 from ..log_system import create_module_logger
 from ..matcher import (
     base_model_matches as _base_model_matches,
@@ -588,7 +589,7 @@ def _search_page(
     return [result for result in results if isinstance(result, dict)]
 
 
-def parse_civarchive_url(url: str) -> Optional[Dict[str, Any]]:
+def parse_civarchive_url(url: str) -> Optional[ProviderUrlReference]:
     """Parse CivArchive URLs into sha256 or model/version identifiers."""
     from ..type_utils import parse_provider_model_url
     if not url:
@@ -604,7 +605,7 @@ def _extract_sha256(value: str) -> Optional[str]:
     if normalized:
         return normalized
     parsed = parse_civarchive_url(value)
-    return parsed.get("sha256") if parsed else None
+    return parsed.sha256 if parsed else None
 
 
 
@@ -1024,29 +1025,34 @@ def get_civarchive_model_details(
         resolved = resolve_civarchive_model_version(model_id, version_id)
         if not resolved:
             return None
+        resolved_mapping = resolved.to_dict()
         fallback_version = {
-            "id": resolved.get("version_id"),
-            "name": resolved.get("version_name"),
-            "baseModel": resolved.get("base_model"),
-            "trainedWords": resolved.get("trained_words", []),
-            "images": resolved.get("images", []),
+            "id": resolved_mapping.get("version_id"),
+            "name": resolved_mapping.get("version_name"),
+            "baseModel": resolved_mapping.get("base_model"),
+            "trainedWords": resolved_mapping.get("trained_words", []),
+            "images": resolved_mapping.get("images", []),
             "files": [
                 {
-                    "name": resolved.get("filename"),
-                    "type": resolved.get("type"),
-                    "downloadUrl": resolved.get("download_url"),
-                    "sizeKB": (resolved.get("size") or 0) / 1024 if resolved.get("size") else None,
+                    "name": resolved_mapping.get("filename"),
+                    "type": resolved_mapping.get("type"),
+                    "downloadUrl": resolved_mapping.get("download_url"),
+                    "sizeKB": (
+                        (resolved_mapping.get("size") or 0) / 1024
+                        if resolved_mapping.get("size")
+                        else None
+                    ),
                     "primary": True,
                 }
             ],
         }
         context = {
             "id": model_id,
-            "name": resolved.get("name"),
-            "type": resolved.get("type"),
-            "tags": resolved.get("tags", []),
-            "creator": resolved.get("creator", {}),
-            "platform": resolved.get("platform"),
+            "name": resolved_mapping.get("name"),
+            "type": resolved_mapping.get("type"),
+            "tags": resolved_mapping.get("tags", []),
+            "creator": resolved_mapping.get("creator", {}),
+            "platform": resolved_mapping.get("platform"),
         }
         selected = _normalize_archive_version(fallback_version, context)
         return {
@@ -1189,7 +1195,7 @@ def _build_civarchive_result(
     sha256: Optional[str] = None,
     hashes: Optional[Dict[str, Any]] = None,
     hash_value: Any = _RESULT_HASH_UNSET,
-) -> Dict[str, Any]:
+) -> SearchResult:
     extra_fields = {
         "civitai_model_id": civitai_model_id,
         "civitai_model_version_id": civitai_model_version_id,
@@ -1231,7 +1237,7 @@ def _build_result_from_normalized_version(
     version: Dict[str, Any],
     file_info: Dict[str, Any],
     match_type: str,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchResult]:
     download_urls = _collect_archive_download_urls(
         file_info,
         **_NORMALIZED_DOWNLOAD_URL_OPTIONS,
@@ -1313,7 +1319,7 @@ def _find_model_title_match_in_model_details(
     model_details: Dict[str, Any],
     title_query: str,
     base_model_context: Optional[str] = None,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchResult]:
     """For extensionless workflow values, resolve by CivArchive model page title."""
     from ..matcher import match_model_by_title_generic
 
@@ -1366,7 +1372,7 @@ def _build_result_from_model_details(
     model_details: Dict[str, Any],
     query: str = "",
     exact_only: bool = False,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchResult]:
     selected_version = model_details.get("selected_version")
     if not isinstance(selected_version, dict):
         return None
@@ -1417,11 +1423,12 @@ def _build_result_from_model_details(
 
     hashes = selected_file.get("hashes") if isinstance(selected_file.get("hashes"), dict) else {}
     sha256 = extract_file_sha256(selected_file)
-    result["confidence"] = best_confidence
-    result["sha256"] = sha256
-    result["hash"] = sha256
-    result["hashes"] = hashes
-    return result
+    result = result.with_updates(
+        confidence=best_confidence,
+        sha256=sha256,
+        hashes=hashes,
+    )
+    return result.with_extra(hash=sha256)
 
 
 def _extract_hash_page_files(html_text: str) -> List[Dict[str, Any]]:
@@ -1580,7 +1587,7 @@ def _build_result_from_hash_page_file(
     file_info: Dict[str, Any],
     query: str,
     sha256: str = "",
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchResult]:
     model_id = to_int(model_details.get("model_id") or file_info.get("model_id"))
     version_id = to_int(version.get("id") or file_info.get("model_version_id"))
     normalized_file = _normalize_archive_file(file_info, model_id, version_id)
@@ -1599,13 +1606,15 @@ def _build_result_from_hash_page_file(
     if not result:
         return None
 
-    result["confidence"] = confidence
+    result = result.with_updates(confidence=confidence)
     if sha256:
-        result["sha256"] = sha256
-        result["hash"] = sha256
-        hashes = result.get("hashes") if isinstance(result.get("hashes"), dict) else {}
+        result = result.with_updates(sha256=sha256)
+        result = result.with_extra(hash=sha256)
+        hashes = dict(result.hashes or {})
         if not hashes.get("SHA256") and not hashes.get("sha256"):
-            result["hashes"] = {**hashes, "SHA256": sha256}
+            result = result.with_updates(
+                hashes={**hashes, "SHA256": sha256}
+            )
     return result
 
 
@@ -1614,7 +1623,7 @@ def _build_result_from_payload(
     query: str = "",
     preferred_filename: str = "",
     exact_only: bool = False,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchResult]:
     context, version, top_files = _extract_model_context(payload)
     if not version:
         return None
@@ -1728,7 +1737,7 @@ def resolve_civarchive_by_hash(
     query: str = "",
     exact_only: bool = False,
     model_type: Optional[str] = None,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchResult]:
     """Resolve a model by SHA256 hash through CivArchive."""
     if not sha256:
         return None
@@ -1760,7 +1769,7 @@ def resolve_civarchive_model_version(
     query: str = "",
     exact_only: bool = False,
     prefer_page: bool = False,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchResult]:
     """Resolve a model/version through CivArchive."""
     if model_id is None:
         return None
@@ -1796,9 +1805,9 @@ def _candidate_identity(candidate: Dict[str, Any]) -> Tuple[Any, Any, Any]:
     parsed = parse_civarchive_url(candidate.get("url", ""))
     if parsed:
         return (
-            parsed.get("sha256"),
-            parsed.get("model_id"),
-            parsed.get("version_id"),
+            parsed.sha256,
+            parsed.model_id,
+            parsed.version_id,
         )
     return (candidate.get("id"), candidate.get("url"), None)
 
@@ -1816,7 +1825,7 @@ def _build_result_from_search_candidate(
     query: str,
     page_text: str = "",
     parsed: Optional[Dict[str, Any]] = None,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchResult]:
     candidate_name = _candidate_display_name(candidate)
     query_basename = get_filename_from_path(query or "").strip()
     filename = (
@@ -1881,7 +1890,7 @@ def _resolve_civarchive_model_link(
     exact_only: bool = False,
     base_model_context: Optional[str] = None,
     allow_model_title_match: bool = False,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchResult]:
     details = get_civarchive_model_details(
         model_id,
         version_id,
@@ -1915,7 +1924,7 @@ def _resolve_hash_search_candidate_from_page(
     base_model_context: Optional[str] = None,
     allow_model_title_match: bool = False,
     expected_model_type: Optional[str] = None,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchResult]:
     page_text = _request_page_text(f"/sha256/{sha256.lower()}")
     hash_page_files = _extract_hash_page_files(page_text or "")
     model_links = _prefer_model_links_for_expected_type(
@@ -1969,7 +1978,7 @@ def _resolve_hash_search_candidate_from_page(
                     match_type="exact" if confidence == 100.0 else "similar",
                 )
                 if result:
-                    result["confidence"] = confidence
+                    result = result.with_updates(confidence=confidence)
 
             selected_file = None
             if not result:
@@ -1998,14 +2007,16 @@ def _resolve_hash_search_candidate_from_page(
             )
 
         if result:
-            if exact_only and float(result.get("confidence") or 0) < 100.0:
+            if exact_only and result.confidence < 100.0:
                 continue
-            result.setdefault("sha256", sha256)
-            result.setdefault("hash", sha256)
-            hashes = result.get("hashes") if isinstance(result.get("hashes"), dict) else {}
+            if not result.sha256:
+                result = result.with_updates(sha256=sha256)
+            if not result.extra_value("hash"):
+                result = result.with_extra(hash=sha256)
+            hashes = dict(result.hashes or {})
             if sha256 and not hashes.get("SHA256") and not hashes.get("sha256"):
                 hashes = {**hashes, "SHA256": sha256}
-                result["hashes"] = hashes
+                result = result.with_updates(hashes=hashes)
             return result
 
     return _build_result_from_search_candidate(
@@ -2023,25 +2034,25 @@ def _resolve_search_candidate(
     base_model_context: Optional[str] = None,
     allow_model_title_match: bool = False,
     model_type: Optional[str] = None,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchResult]:
     parsed = parse_civarchive_url(candidate.get("url", ""))
     if not parsed:
         return None
 
-    if parsed.get("sha256"):
+    if parsed.sha256:
         result = _resolve_hash_search_candidate_from_page(
             candidate,
-            parsed["sha256"],
+            parsed.sha256,
             query=query,
             exact_only=exact_only,
             base_model_context=base_model_context,
             allow_model_title_match=allow_model_title_match,
             expected_model_type=model_type,
         )
-    elif parsed.get("model_id"):
+    elif parsed.model_id:
         result = _resolve_civarchive_model_link(
-            parsed["model_id"],
-            parsed.get("version_id"),
+            parsed.model_id,
+            parsed.version_id,
             query=query,
             exact_only=exact_only,
             base_model_context=base_model_context,
@@ -2050,27 +2061,29 @@ def _resolve_search_candidate(
     else:
         result = None
 
-    if result and not result.get("confidence"):
-        result["confidence"] = calculate_archived_model_confidence(
+    if result and not result.confidence:
+        result = result.with_updates(
+            confidence=calculate_archived_model_confidence(
             query,
             candidate.get("name", ""),
             "",
-            result.get("filename", ""),
+            result.filename,
+            )
         )
     return result
 
 
-def _is_hash_verified_exact_match(result: Optional[Dict[str, Any]], confidence: float) -> bool:
+def _is_hash_verified_exact_match(result: Optional[SearchResult], confidence: float) -> bool:
     if not result or confidence < 100.0:
         return False
-    return bool(result.get("sha256") or result.get("hash"))
+    return bool(result.sha256 or result.extra_value("hash"))
 
 
 def search_civarchive(
     query: str,
     model_type: Optional[str] = None,
     limit: int = DEFAULT_CIVARCHIVE_CANDIDATE_LIMIT,
-) -> List[Dict[str, Any]]:
+) -> List[SearchResult]:
     """
     Search CivArchive by model name or filename.
     """
@@ -2104,7 +2117,7 @@ def search_civarchive(
         if not resolved:
             continue
 
-        if resolved.get("confidence", 0) < 40:
+        if resolved.confidence < 40:
             continue
         results.append(resolved)
         if len(results) >= detail_limit:
@@ -2112,8 +2125,8 @@ def search_civarchive(
 
     results.sort(
         key=lambda item: (
-            item.get("confidence", 0),
-            1 if item.get("match_type") == "exact" else 0,
+            item.confidence,
+            1 if item.match_type == "exact" else 0,
         ),
         reverse=True,
     )
@@ -2129,7 +2142,7 @@ def search_civarchive_for_file(
     limit: int = DEFAULT_CIVARCHIVE_CANDIDATE_LIMIT,
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     sha256: Optional[str] = None,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchResult]:
     """
     Search CivArchive for the best downloadable match for a model filename.
     """
@@ -2264,30 +2277,37 @@ def search_civarchive_for_file(
                 if not resolved:
                     continue
 
-                if resolved.get("match_type") == "model_title":
+                if resolved.match_type == "model_title":
+                    title_confidence = resolved.extra_value("title_confidence")
                     confidence = float(
-                        resolved.get("title_confidence")
-                        or resolved.get("confidence")
+                        title_confidence
+                        or resolved.confidence
                         or calculate_model_title_confidence(
                             normalized_filename,
-                            resolved.get("name", ""),
+                            resolved.name,
                         )
                     )
                 else:
                     confidence = calculate_archived_model_confidence(
                         normalized_filename,
-                        resolved.get("name", ""),
-                        resolved.get("version_name", ""),
-                        resolved.get("filename", ""),
+                        resolved.name,
+                        resolved.version_name,
+                        resolved.filename,
                     )
                     if exact_only and confidence < 100.0:
                         continue
 
-                    resolved["confidence"] = confidence
-                    resolved["match_type"] = "exact" if confidence == 100.0 else "similar"
+                    resolved = resolved.with_updates(
+                        confidence=confidence,
+                        match_type="exact" if confidence == 100.0 else "similar",
+                    )
 
                 should_update, rank, base_model_matches = should_update_best_match(
-                    confidence, resolved.get("base_model"), base_model_context, best_rank, exact_only
+                    confidence,
+                    resolved.base_model,
+                    base_model_context,
+                    best_rank,
+                    exact_only,
                 )
                 if exact_only and confidence < 100.0:
                     continue
@@ -2320,7 +2340,7 @@ def search_civarchive_for_file(
 
             if best_match and (
                 not base_model_context
-                or _base_model_matches(best_match.get("base_model"), base_model_context)
+                or _base_model_matches(best_match.base_model, base_model_context)
             ):
                 break
     except CivArchiveSearchError:
@@ -2341,7 +2361,7 @@ def search_civarchive_for_file(
     if (
         best_match
         and base_model_context
-        and not _base_model_matches(best_match.get("base_model"), base_model_context)
+        and not _base_model_matches(best_match.base_model, base_model_context)
         and not _is_hash_verified_exact_match(best_match, best_confidence)
     ):
         best_match = None
@@ -2363,7 +2383,7 @@ def search_civarchive_for_file(
 def build_civarchive_custom_result(
     details: Dict[str, Any],
     expected_filename: str = "",
-) -> Optional[Dict[str, Any]]:
+) -> Optional[SearchResult]:
     if not isinstance(details, dict):
         return None
 

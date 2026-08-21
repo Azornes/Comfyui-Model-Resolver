@@ -1,7 +1,7 @@
 import asyncio
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from aiohttp import web
@@ -204,6 +204,29 @@ async def test_download_route_rejects_missing_unsafe_and_unsupported_inputs():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"url": 123},
+        {"url": "https://example.com/model.safetensors", "filename": 123},
+        {
+            "url": "https://example.com/model.safetensors",
+            "civitai_session_token": {"token": "invalid"},
+        },
+    ],
+)
+async def test_download_route_rejects_malformed_text_fields(payload):
+    handlers, values = _build_download_routes()
+    handler = handlers[("POST", "/model_resolver/download")]
+
+    response = await handler(_request(payload))
+
+    assert response.status == 400
+    assert json.loads(response.text)["error"].startswith("Download request")
+    values["start_background_download"].assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_download_route_supports_huggingface_headers_and_optional_inputs():
     handlers, values = _build_download_routes()
     handler = handlers[("POST", "/model_resolver/download")]
@@ -212,8 +235,7 @@ async def test_download_route_supports_huggingface_headers_and_optional_inputs()
         _request(
             {
                 "url": "https://huggingface.co/org/repo/resolve/main/model.safetensors",
-                "path_metadata": ["invalid"],
-                "metadata": ["invalid"],
+                "metadata": {},
                 "base_directory": r"C:\custom",
                 "hf_token": "hf-token",
             }
@@ -228,6 +250,106 @@ async def test_download_route_supports_huggingface_headers_and_optional_inputs()
     assert download_call["headers"] == {"Authorization": "Bearer hf-token"}
     assert download_call["metadata"]["source"] == "huggingface"
     values["get_default_root_for_category"].assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_download_route_rejects_invalid_download_metadata():
+    handlers, values = _build_download_routes()
+    handler = handlers[("POST", "/model_resolver/download")]
+
+    response = await handler(
+        _request(
+            {
+                "url": "https://example.com/model.safetensors",
+                "metadata": [],
+            }
+        )
+    )
+
+    assert response.status == 400
+    assert json.loads(response.text) == {
+        "error": "Download metadata must be an object"
+    }
+    values["start_background_download"].assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_download_route_rejects_invalid_path_metadata_and_identifiers():
+    handlers, values = _build_download_routes()
+    handler = handlers[("POST", "/model_resolver/download")]
+
+    response = await handler(
+        _request(
+            {
+                "url": "https://example.com/model.safetensors",
+                "path_metadata": ["invalid"],
+            }
+        )
+    )
+
+    assert response.status == 400
+    assert json.loads(response.text) == {
+        "error": "Download path metadata must be an object"
+    }
+
+    response = await handler(
+        _request(
+            {
+                "url": "https://example.com/model.safetensors",
+                "download_metadata": {"model_id": {"value": 123}},
+            }
+        )
+    )
+
+    assert response.status == 400
+    assert json.loads(response.text) == {
+        "error": "Download metadata model_id must be an integer or string"
+    }
+    values["start_background_download"].assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_download_route_rejects_invalid_expected_sha256():
+    handlers, values = _build_download_routes()
+    handler = handlers[("POST", "/model_resolver/download")]
+
+    response = await handler(
+        _request(
+            {
+                "url": "https://example.com/model.safetensors",
+                "metadata": {"sha256": 123},
+            }
+        )
+    )
+
+    assert response.status == 400
+    assert json.loads(response.text) == {
+        "error": "DownloadSpec expected_sha256 must be a string"
+    }
+    values["start_background_download"].assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_download_route_handles_download_spec_type_errors():
+    handlers, _values = _build_download_routes()
+    handler = handlers[("POST", "/model_resolver/download")]
+
+    with patch(
+        "core.services.download_service.DownloadSpec",
+        side_effect=TypeError("invalid download specification"),
+    ):
+        response = await handler(
+            _request(
+                {
+                    "url": "https://example.com/model.safetensors",
+                }
+            )
+        )
+
+    assert response.status == 400
+    assert json.loads(response.text) == {
+        "error": "invalid download specification"
+    }
 
 
 @pytest.mark.asyncio
@@ -329,6 +451,20 @@ async def test_aria2_install_handles_invalid_and_non_mapping_payloads():
     assert response.status == 200
     assert values["install_aria2_engine"].call_args_list[-2].args == (False,)
     assert values["install_aria2_engine"].call_args_list[-1].args == (False,)
+
+
+@pytest.mark.asyncio
+async def test_aria2_install_rejects_malformed_force_flag():
+    handlers, values = _build_download_routes()
+    handler = handlers[("POST", "/model_resolver/aria2/install")]
+
+    response = await handler(_request({"force": {"enabled": True}}))
+
+    assert response.status == 400
+    assert json.loads(response.text) == {
+        "error": "Aria2 install request force must be a boolean"
+    }
+    values["install_aria2_engine"].assert_not_called()
 
 
 @pytest.mark.asyncio

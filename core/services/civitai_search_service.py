@@ -1,8 +1,16 @@
 """CivitAI model search service."""
 
+from typing import Any, Dict
+
 from .. import path_utils
+from ..contracts import SearchResult
 from ..metadata_utils import build_metadata_source_payload
-from ..request_utils import extract_request_sha256
+from ..request_utils import (
+    extract_request_sha256,
+    read_bool_field,
+    read_optional_object_payload,
+    read_text_field,
+)
 from ..routes.context import RouteContext
 from ..sources.common import collect_download_urls
 from .model_utils import CivitAISearchDependencies, ModelServiceDependencies
@@ -31,27 +39,60 @@ class CivitAISearchService(ModelServiceDependencies):
         request_public_url = self.request_public_url
         resolve_civarchive_by_hash = self.resolve_civarchive_by_hash
         search_huggingface_for_file = self.search_huggingface_for_file
-        to_bool = self.to_bool
         web = self.web
         write_model_resolver_metadata = self.write_model_resolver_metadata
-        data = await request.json()
-        filename = data.get("filename", "")
-        category = data.get("category", "")
-        resolved_path = data.get("resolved_path", "")
-        local_only = to_bool(data.get("local_only"), False)
-        force_refresh = to_bool(
-            data.get("force_refresh") or data.get("force"), False
-        )
-        provided_hash = extract_request_sha256(
-            data,
-            keys=("sha256", "hash", "file_hash"),
-        )
-        hf_token = data.get("hf_token", "")
-        brave_search_api_key = data.get("brave_search_api_key", "")
-        hf_use_brave_fallback = to_bool(
-            data.get("hf_use_brave_fallback", True),
-            True,
-        )
+        data = await read_optional_object_payload(request)
+        try:
+            filename = read_text_field(
+                data,
+                "filename",
+                contract_name="CivitAI search request",
+            )
+            category = read_text_field(
+                data,
+                "category",
+                contract_name="CivitAI search request",
+            )
+            resolved_path = read_text_field(
+                data,
+                "resolved_path",
+                contract_name="CivitAI search request",
+            )
+            hf_token = read_text_field(
+                data,
+                "hf_token",
+                contract_name="CivitAI search request",
+            )
+            brave_search_api_key = read_text_field(
+                data,
+                "brave_search_api_key",
+                contract_name="CivitAI search request",
+            )
+            local_only = read_bool_field(
+                data,
+                "local_only",
+                contract_name="CivitAI search request",
+            )
+            force_value = dict(data)
+            if force_value.get("force_refresh") is None:
+                force_value["force_refresh"] = force_value.get("force")
+            force_refresh = read_bool_field(
+                force_value,
+                "force_refresh",
+                contract_name="CivitAI search request",
+            )
+            hf_use_brave_fallback = read_bool_field(
+                data,
+                "hf_use_brave_fallback",
+                default=True,
+                contract_name="CivitAI search request",
+            )
+            provided_hash = extract_request_sha256(
+                data,
+                keys=("sha256", "hash", "file_hash"),
+            )
+        except TypeError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
 
         if not filename:
             return web.json_response(
@@ -292,6 +333,18 @@ class CivitAISearchService(ModelServiceDependencies):
                 return False
             return not require_filename or result_filename_matches(result)
 
+        def serialize_provider_result(
+            result: SearchResult | None,
+        ) -> Dict[str, Any]:
+            """Cross from typed provider results into metadata response data."""
+            if isinstance(result, SearchResult):
+                return result.to_dict()
+            if result is not None:
+                raise TypeError(
+                    f"{type(result).__name__} is not a typed provider result"
+                )
+            return {}
+
         def huggingface_page_url(result):
             try:
                 from urllib.parse import quote as _quote
@@ -310,7 +363,12 @@ class CivitAISearchService(ModelServiceDependencies):
             return f"https://huggingface.co/{repo_id}/blob/main/{hf_path}"
 
         def prepare_remote_result(result, source_name):
-            result = dict(result or {})
+            if isinstance(result, SearchResult):
+                result = result.to_dict()
+            elif not isinstance(result, dict):
+                raise TypeError(
+                    f"{type(result).__name__} is not a remote result payload"
+                )
             source_name = str(source_name or result.get("source") or "").lower()
             if source_name == "huggingface":
                 download_url = result.get("download_url") or result.get("url")
@@ -690,11 +748,13 @@ class CivitAISearchService(ModelServiceDependencies):
 
             if provided_hash:
                 try:
-                    result = resolve_civarchive_by_hash(
-                        provided_hash,
-                        query=filename,
-                        exact_only=False,
-                        model_type=infer_model_type_from_category(category),
+                    result = serialize_provider_result(
+                        resolve_civarchive_by_hash(
+                            provided_hash,
+                            query=filename,
+                            exact_only=False,
+                            model_type=infer_model_type_from_category(category),
+                        )
                     )
                     if result:
                         if not extract_result_sha256(result):
@@ -742,19 +802,21 @@ class CivitAISearchService(ModelServiceDependencies):
 
                 for hf_attempt in hf_attempts:
                     try:
-                        result = search_huggingface_for_file(
-                            filename,
-                            token=hf_token or None,
-                            exact_only=True,
-                            brave_api_key=brave_search_api_key or None,
-                            use_api_search=hf_attempt["use_api_search"],
-                            use_comfy_org_fallback=hf_attempt[
-                                "use_comfy_org_fallback"
-                            ],
-                            use_brave_fallback=hf_attempt[
-                                "use_brave_fallback"
-                            ],
-                            force_refresh=force_refresh,
+                        result = serialize_provider_result(
+                            search_huggingface_for_file(
+                                filename,
+                                token=hf_token or None,
+                                exact_only=True,
+                                brave_api_key=brave_search_api_key or None,
+                                use_api_search=hf_attempt["use_api_search"],
+                                use_comfy_org_fallback=hf_attempt[
+                                    "use_comfy_org_fallback"
+                                ],
+                                use_brave_fallback=hf_attempt[
+                                    "use_brave_fallback"
+                                ],
+                                force_refresh=force_refresh,
+                            )
                         )
                         if result and result_hash_matches(
                             result,

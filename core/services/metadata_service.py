@@ -1,7 +1,12 @@
 """Metadata audit and build orchestration used by HTTP route adapters."""
 
 from ..progress import generate_progress_id
-from ..request_utils import read_optional_object_payload
+from ..request_utils import (
+    read_bool_field,
+    read_int_field,
+    read_optional_object_payload,
+    read_optional_text_field,
+)
 from ..routes.context import RouteContext
 
 
@@ -26,8 +31,6 @@ class MetadataService:
         )
         self.run_in_background_thread = context.require("run_in_background_thread")
         self.extension = context.require("self")
-        self.to_bool = context.require("to_bool")
-        self.to_int = context.require("to_int")
         self.web = context.require("web")
 
     @property
@@ -37,13 +40,32 @@ class MetadataService:
     async def metadata_size_audit(self, request):
         """Check local metadata sidecars for stale file-size values."""
         payload = await read_optional_object_payload(request)
-
-        force_rescan = self.to_bool(payload.get("force_rescan"), True)
+        try:
+            force_rescan = read_bool_field(
+                payload,
+                "force_rescan",
+                default=True,
+                contract_name="Metadata size audit request",
+            )
+            worker_count = read_int_field(
+                payload,
+                "worker_count",
+                default=None,
+                contract_name="Metadata size audit request",
+            )
+            batch_size = read_int_field(
+                payload,
+                "batch_size",
+                default=None,
+                contract_name="Metadata size audit request",
+            )
+        except (TypeError, ValueError) as exc:
+            return self.web.json_response({"error": str(exc)}, status=400)
         result = await self.asyncio.to_thread(
             self.audit_metadata_sizes_fn,
             force_rescan=force_rescan,
-            worker_count=payload.get("worker_count"),
-            batch_size=payload.get("batch_size"),
+            worker_count=worker_count,
+            batch_size=batch_size,
         )
         return self.web.json_response(result)
 
@@ -56,12 +78,28 @@ class MetadataService:
     async def metadata_build_start(self, request):
         """Start building missing local metadata sidecars in the background."""
         payload = await read_optional_object_payload(request)
-
-        force_rescan = self.to_bool(payload.get("force_rescan"), True)
-        worker_count = self.to_int(payload.get("worker_count"), 0)
-        metadata_mode = self.normalize_metadata_build_mode(
-            payload.get("metadata_mode")
-        )
+        try:
+            force_rescan = read_bool_field(
+                payload,
+                "force_rescan",
+                default=True,
+                contract_name="Metadata build request",
+            )
+            worker_count = read_int_field(
+                payload,
+                "worker_count",
+                default=0,
+                contract_name="Metadata build request",
+            )
+            metadata_mode = self.normalize_metadata_build_mode(
+                read_optional_text_field(
+                    payload,
+                    "metadata_mode",
+                    contract_name="Metadata build request",
+                )
+            )
+        except (TypeError, ValueError) as exc:
+            return self.web.json_response({"error": str(exc)}, status=400)
         self.metadata_builder_progress.cleanup()
         progress_id = generate_progress_id("metadata_build")
         self.metadata_builder_progress.update(

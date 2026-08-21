@@ -8,6 +8,7 @@ import os
 import re
 from typing import Any, Dict, List, Optional, Set
 
+from ..contracts import ModelCatalogEntry, SearchResult
 from ..log_system import create_module_logger
 
 log = create_module_logger(__name__)
@@ -16,7 +17,7 @@ log = create_module_logger(__name__)
 from ..catalog_manager import CatalogManager
 from ..network_utils import request_source_json
 from ..path_utils import METADATA_DIR, read_json_safe
-from ..type_utils import normalize_alphanumeric_key
+from ..type_utils import build_model_result, normalize_alphanumeric_key
 
 POPULAR_MODELS_FILE = os.path.join(METADATA_DIR, "popular-models.json")
 MODEL_ALIASES_FILE = os.path.join(METADATA_DIR, "model-aliases.json")
@@ -129,7 +130,7 @@ def load_base_model_aliases() -> Dict[str, List[str]]:
     return _base_models_aliases_cache
 
 
-def get_popular_model_url(filename: str) -> Optional[Dict[str, Any]]:
+def get_popular_model_url(filename: str) -> Optional[ModelCatalogEntry]:
     """
     Look up a model filename in the popular models database.
 
@@ -137,19 +138,30 @@ def get_popular_model_url(filename: str) -> Optional[Dict[str, Any]]:
         filename: Model filename to look up
 
     Returns:
-        Dictionary with url, type, directory if found, None otherwise
+        Typed catalog entry with URL, type and directory if found
     """
     models = _load_popular_models()
 
     # Direct lookup
     if filename in models:
-        return models[filename].copy()
+        try:
+            return ModelCatalogEntry.from_mapping(
+                models[filename],
+                filename=filename,
+            )
+        except (TypeError, ValueError) as exc:
+            log.warning(f"Invalid popular model entry for {filename}: {exc}")
+            return None
 
     # Try lowercase
     filename_lower = filename.lower()
     for name, info in models.items():
         if name.lower() == filename_lower:
-            return info.copy()
+            try:
+                return ModelCatalogEntry.from_mapping(info, filename=name)
+            except (TypeError, ValueError) as exc:
+                log.warning(f"Invalid popular model entry for {name}: {exc}")
+                return None
 
     # Try aliases
     aliases = _load_model_aliases()
@@ -158,14 +170,21 @@ def get_popular_model_url(filename: str) -> Optional[Dict[str, Any]]:
             filename in alias_list
             or filename_lower in [a.lower() for a in alias_list]
         ) and canonical in models:
-            result = models[canonical].copy()
-            result["canonical_name"] = canonical
-            return result
+            try:
+                return ModelCatalogEntry.from_mapping(
+                    models[canonical],
+                    filename=canonical,
+                ).with_extra(canonical_name=canonical)
+            except (TypeError, ValueError) as exc:
+                log.warning(
+                    f"Invalid popular model entry for {canonical}: {exc}"
+                )
+                return None
 
     return None
 
 
-def search_popular_models(query: str, limit: int = 10) -> List[Dict[str, Any]]:
+def search_popular_models(query: str, limit: int = 10) -> List[SearchResult]:
     """
     Search popular models database by filename pattern.
 
@@ -174,7 +193,7 @@ def search_popular_models(query: str, limit: int = 10) -> List[Dict[str, Any]]:
         limit: Maximum results to return
 
     Returns:
-        List of matching models with url info
+        Typed search results with URL information
     """
     models = _load_popular_models()
     query_lower = query.lower()
@@ -182,9 +201,29 @@ def search_popular_models(query: str, limit: int = 10) -> List[Dict[str, Any]]:
     results = []
     for name, info in models.items():
         if query_lower in name.lower():
-            result = info.copy()
-            result["filename"] = name
-            results.append(result)
+            try:
+                catalog_entry = ModelCatalogEntry.from_mapping(
+                    info,
+                    filename=name,
+                )
+            except (TypeError, ValueError) as exc:
+                log.warning(f"Invalid popular model entry for {name}: {exc}")
+                continue
+            results.append(
+                build_model_result(
+                    "popular",
+                    filename=catalog_entry.filename or name,
+                    name=catalog_entry.name or name,
+                    url=catalog_entry.url or catalog_entry.download_url or "",
+                    download_url=catalog_entry.download_url,
+                    type=catalog_entry.model_type,
+                    size=catalog_entry.size,
+                    match_type=catalog_entry.match_type or "similar",
+                    confidence=catalog_entry.confidence,
+                    directory=catalog_entry.directory,
+                    **dict(catalog_entry.extra),
+                )
+            )
 
             if len(results) >= limit:
                 break

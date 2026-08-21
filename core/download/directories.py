@@ -3,6 +3,7 @@
 import os
 from typing import Any, List, Optional
 
+from ..path_utils import normalize_folder_path_values
 from .dependencies import require_download_dependencies
 
 
@@ -90,7 +91,9 @@ def get_download_directory(
     def _get_folder_paths(folder_name: str) -> List[str]:
         """Return paths for one key without rejecting the other aliases."""
         try:
-            return list(folder_paths.get_folder_paths(folder_name) or [])
+            return normalize_folder_path_values(
+                folder_paths.get_folder_paths(folder_name)
+            )
         except Exception as exc:
             facade.log.debug(
                 f"Could not get folder path for {folder_name}: {exc}"

@@ -18,6 +18,7 @@ from core.download.api import (
 from core.download.api import context as downloader_context
 from core.download.metadata import read_completed_metadata_sha256
 from core.download.state import download_lock, download_progress
+from core.contracts import Resolution, ResolvedModel
 from core.path_utils import get_metadata_sidecar_path, get_path_key
 from core.workflow_updater import (
     convert_to_relative_path,
@@ -179,12 +180,14 @@ class ModelResolverRobustnessTests(unittest.TestCase):
         # Act
         success = update_model_path(
             workflow=workflow,
-            node_id=15,
-            widget_index=2,
-            resolved_path="new_lora_name.safetensors",
-            category="loras",
-            resolved_model=resolved_model,
-            mapping=mapping
+            resolution=Resolution(
+                node_id=15,
+                widget_index=2,
+                resolved_path="new_lora_name.safetensors",
+                category="loras",
+                resolved_model=ResolvedModel.from_mapping(resolved_model),
+                custom_node_metadata=mapping,
+            ),
         )
 
         # Assert
@@ -229,12 +232,14 @@ class ModelResolverRobustnessTests(unittest.TestCase):
         # Act
         success = update_model_path(
             workflow=workflow,
-            node_id=99,
-            widget_index=0,
-            resolved_path="new_model.safetensors",
-            category="checkpoints",
-            subgraph_id="subgraph_a",
-            is_top_level=False
+            resolution=Resolution(
+                node_id=99,
+                widget_index=0,
+                resolved_path="new_model.safetensors",
+                category="checkpoints",
+                subgraph_id="subgraph_a",
+                is_top_level=False,
+            ),
         )
 
         # Assert
@@ -582,12 +587,14 @@ class ModelResolverRobustnessTests(unittest.TestCase):
         # Act
         success = update_model_path(
             workflow=workflow,
-            node_id=1,
-            widget_index=0,
-            resolved_path="model.safetensors",
-            category="checkpoints",
-            subgraph_id="nonexistent_subgraph",
-            is_top_level=False
+            resolution=Resolution(
+                node_id=1,
+                widget_index=0,
+                resolved_path="model.safetensors",
+                category="checkpoints",
+                subgraph_id="nonexistent_subgraph",
+                is_top_level=False,
+            ),
         )
 
         # Assert

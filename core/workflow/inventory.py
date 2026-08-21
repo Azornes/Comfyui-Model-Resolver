@@ -5,6 +5,7 @@ import time
 from collections import OrderedDict
 from typing import Any, Callable, Dict, List, Optional
 
+from ..contracts import ModelReference, WorkflowModelInventory
 from ..log_system import create_module_logger
 from . import analysis
 
@@ -17,18 +18,18 @@ _WORKFLOW_MODEL_INVENTORY_CACHE: OrderedDict[str, Dict[str, Any]] = OrderedDict(
 
 def _build_workflow_node_cache(
     workflow_json: Dict[str, Any],
-    model_refs: List[Dict[str, Any]],
+    model_refs: List[ModelReference],
 ) -> Dict[tuple[str, str, str], Dict[str, Any]]:
     fingerprints = analysis._get_workflow_node_fingerprints(workflow_json)
-    refs_by_node: Dict[tuple[str, str, str], List[Dict[str, Any]]] = {
+    refs_by_node: Dict[tuple[str, str, str], List[ModelReference]] = {
         key: [] for key in fingerprints
     }
 
     for ref in model_refs:
-        is_top_level = ref.get("is_top_level") is not False
+        is_top_level = ref.is_top_level is not False
         key = analysis._get_workflow_scope_key(
-            ref.get("node_id"),
-            subgraph_id=ref.get("subgraph_id"),
+            ref.node_id,
+            subgraph_id=ref.subgraph_id,
             is_top_level=is_top_level,
         )
         if key in refs_by_node:
@@ -71,15 +72,25 @@ def get_workflow_model_inventory(
     force_rescan: bool = False,
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     analysis_id: Optional[str] = None,
-) -> Dict[str, List[Dict[str, Any]]]:
+) -> WorkflowModelInventory:
     """
     Return the shared base model inventory for a workflow.
 
     Missing Models and Loaded Models use this snapshot so the same unchanged
     workflow is not parsed separately by both endpoints. Callers must treat the
-    returned lists as read-only.
+    returned tuples as read-only.
     """
     from ..scanner import get_model_files
+
+    def normalize_model_refs(values: List[Any]) -> List[ModelReference]:
+        if not isinstance(values, (list, tuple)):
+            raise TypeError("workflow model references must be an array")
+        return [
+            value
+            if isinstance(value, ModelReference)
+            else ModelReference.from_mapping(value)
+            for value in values
+        ]
 
     cache_key = _get_workflow_model_inventory_cache_key(workflow_json)
     analysis_context = _get_analysis_log_context(cache_key, analysis_id)
@@ -124,7 +135,7 @@ def get_workflow_model_inventory(
                         previous_inventory = entry
 
     if cached is not None:
-        model_refs = cached["model_refs"]
+        model_refs = normalize_model_refs(cached["model_refs"])
         if progress_callback:
             progress_callback(
                 {
@@ -138,15 +149,15 @@ def get_workflow_model_inventory(
         log.debug(
             f"Reusing shared workflow model analysis ({analysis_context})"
         )
-        return {
-            "available_models": cached["available_models"],
-            "model_refs": model_refs,
-        }
+        return WorkflowModelInventory(
+            available_models=tuple(cached["available_models"]),
+            model_refs=tuple(model_refs),
+        )
 
     node_cache = {}
     analysis_stats = {}
     if previous_inventory is not None:
-        available_models = previous_inventory["available_models"]
+        available_models = list(previous_inventory["available_models"])
         model_refs = analysis.analyze_workflow_models(
             workflow_json,
             available_models=available_models,
@@ -156,6 +167,7 @@ def get_workflow_model_inventory(
             analysis_stats=analysis_stats,
             analysis_context=analysis_context,
         )
+        model_refs = normalize_model_refs(model_refs)
     else:
         available_models = get_model_files(force_rescan=force_rescan)
         model_refs = analysis.analyze_workflow_models(
@@ -164,6 +176,7 @@ def get_workflow_model_inventory(
             progress_callback=progress_callback,
             analysis_context=analysis_context,
         )
+        model_refs = normalize_model_refs(model_refs)
         node_cache = _build_workflow_node_cache(workflow_json, model_refs)
         analysis_stats = {
             "total_nodes": len(node_cache),
@@ -196,7 +209,7 @@ def get_workflow_model_inventory(
         ):
             _WORKFLOW_MODEL_INVENTORY_CACHE.popitem(last=False)
 
-    return {
-        "available_models": available_models,
-        "model_refs": model_refs,
-    }
+    return WorkflowModelInventory(
+        available_models=tuple(available_models),
+        model_refs=tuple(model_refs),
+    )

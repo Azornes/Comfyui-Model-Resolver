@@ -4,9 +4,18 @@ import os
 import time
 
 from .. import path_utils
+from ..contracts import ModelReference, ResolvedModel
 from ..local_hash_matches import collect_local_hash_matches_for_result
 from ..progress import generate_progress_id
-from ..request_utils import extract_request_sha256, validate_workflow_payload
+from ..request_utils import (
+    extract_request_sha256,
+    read_bool_field,
+    read_first_text_field,
+    read_int_field,
+    read_optional_object_payload,
+    read_text_field,
+    validate_workflow_payload,
+)
 from ..routes.context import RouteContext
 
 
@@ -59,8 +68,6 @@ class HashService:
         )
         self.extension = context.require("self")
         self.time = context.get("time") or time
-        self.to_bool = context.require("to_bool")
-        self.to_int = context.require("to_int")
         self.web = context.require("web")
         self.write_json_atomic = context.require("write_json_atomic")
 
@@ -84,16 +91,22 @@ class HashService:
 
     async def local_model_hashes(self, request):
         """Return SHA256 hashes already stored in local sidecar metadata."""
-        data = await request.json()
+        data = await read_optional_object_payload(request)
         model = data.get("model") if isinstance(data.get("model"), dict) else {}
-        path = (
-            data.get("path")
-            or data.get("file_path")
-            or data.get("resolved_path")
-            or model.get("path")
-            or model.get("resolved_path")
-            or ""
-        )
+        try:
+            path = read_first_text_field(
+                data,
+                ("path", "file_path", "resolved_path"),
+                contract_name="Local model hashes request",
+            )
+            if not path:
+                path = read_first_text_field(
+                    model,
+                    ("path", "resolved_path"),
+                    contract_name="Local model hashes model",
+                )
+        except TypeError as exc:
+            return self.web.json_response({"error": str(exc)}, status=400)
 
         if not path:
             return self.web.json_response(
@@ -113,7 +126,14 @@ class HashService:
 
     async def get_model_preview(self, request):
         """Serve an adjacent model preview from a configured model directory."""
-        model_path = str(request.query.get("path") or "").strip()
+        try:
+            model_path = read_text_field(
+                request.query,
+                "path",
+                contract_name="Model preview request",
+            )
+        except TypeError as exc:
+            return self.web.Response(text=str(exc), status=400)
         is_preview_probe = str(getattr(request, "method", "")).upper() == "HEAD"
         if not model_path:
             return self.web.Response(text="path is required", status=400)
@@ -153,7 +173,7 @@ class HashService:
 
     async def workflow_model_hashes(self, request):
         """Return hash metadata for existing local models used by a workflow."""
-        data = await request.json()
+        data = await read_optional_object_payload(request)
         workflow_json, workflow_error = validate_workflow_payload(
             data.get("workflow"),
             none_is_missing=False,
@@ -182,7 +202,16 @@ class HashService:
             self.get_workflow_model_inventory,
             workflow_json,
         )
-        refs = inventory["model_refs"]
+        refs = []
+        for raw_ref in inventory.model_refs:
+            try:
+                refs.append(
+                    raw_ref
+                    if isinstance(raw_ref, ModelReference)
+                    else ModelReference.from_mapping(raw_ref)
+                )
+            except (TypeError, ValueError):
+                continue
 
         by_node = {}
         by_path = {}
@@ -190,17 +219,17 @@ class HashService:
         seen = set()
 
         for ref in refs:
-            if not isinstance(ref, dict) or not ref.get("exists"):
+            if not ref.exists:
                 continue
-            full_path = str(ref.get("full_path") or "").strip()
+            full_path = ref.extra_value("full_path") or ""
             if not full_path:
                 continue
-            model_info = {
-                "path": full_path,
-                "filename": self.get_filename_from_path(full_path),
-                "relative_path": ref.get("original_path") or "",
-                "category": ref.get("category") or "",
-            }
+            model_info = ResolvedModel(
+                path=full_path,
+                filename=self.get_filename_from_path(full_path),
+                relative_path=ref.original_path or "",
+                category=ref.category or "",
+            )
             metadata = self.get_local_model_hash_metadata(
                 full_path,
                 model=model_info,
@@ -210,15 +239,15 @@ class HashService:
                 continue
 
             entry = {
-                "node_id": ref.get("node_id"),
-                "node_type": ref.get("node_type") or "",
-                "widget_index": ref.get("widget_index"),
-                "widget_name": ref.get("widget_name") or "",
-                "path": ref.get("original_path") or "",
+                "node_id": ref.node_id,
+                "node_type": ref.node_type or "",
+                "widget_index": ref.widget_index,
+                "widget_name": ref.extra_value("widget_name") or "",
+                "path": ref.original_path or "",
                 "filename": self.get_filename_from_path(
-                    ref.get("original_path") or full_path
+                    ref.original_path or full_path
                 ),
-                "category": ref.get("category") or "",
+                "category": ref.category or "",
                 "sha256": sha256,
                 "size": metadata.get("size") or 0,
             }
@@ -253,30 +282,52 @@ class HashService:
 
     async def local_matches_by_hash(self, request):
         """Search local model metadata sidecars for a remote SHA256."""
-        data = await request.json()
-        sha256 = extract_request_sha256(
-            data,
-            keys=("sha256", "hash", "SHA256"),
-        )
+        data = await read_optional_object_payload(request)
+        try:
+            sha256 = extract_request_sha256(
+                data,
+                keys=("sha256", "hash", "SHA256"),
+            )
+        except TypeError as exc:
+            return self.web.json_response({"error": str(exc)}, status=400)
         if not sha256:
             return self.web.json_response(
                 {"error": "sha256 is required"}, status=400
             )
 
-        category = data.get("category", "")
-        source = str(
-            data.get("source")
-            or data.get("hash_lookup_source")
-            or "download_source"
-        ).strip().lower().replace("-", "_")
-        filename = (
-            data.get("filename")
-            or data.get("path")
-            or data.get("model_name")
-            or ""
-        )
-        max_matches = self.to_int(data.get("max_matches"), 20)
-        force_rescan = self.to_bool(data.get("force_rescan"), False)
+        try:
+            category = read_text_field(
+                data,
+                "category",
+                contract_name="Local hash matches request",
+            )
+            source = read_first_text_field(
+                data,
+                ("source", "hash_lookup_source"),
+                default="download_source",
+                contract_name="Local hash matches request",
+            ).lower().replace("-", "_")
+            filename = read_first_text_field(
+                data,
+                ("filename", "path", "model_name"),
+                contract_name="Local hash matches request",
+            )
+        except TypeError as exc:
+            return self.web.json_response({"error": str(exc)}, status=400)
+        try:
+            max_matches = read_int_field(
+                data,
+                "max_matches",
+                default=20,
+                contract_name="Local hash matches request",
+            )
+            force_rescan = read_bool_field(
+                data,
+                "force_rescan",
+                contract_name="Local hash matches request",
+            )
+        except (TypeError, ValueError) as exc:
+            return self.web.json_response({"error": str(exc)}, status=400)
 
         enriched_matches = collect_local_hash_matches_for_result(
             sha256,
@@ -290,8 +341,10 @@ class HashService:
         return self.web.json_response(
             {
                 "sha256": sha256,
-                "local_hash_matches": enriched_matches,
-                "matches": enriched_matches,
+                "local_hash_matches": [
+                    match.to_dict() for match in enriched_matches
+                ],
+                "matches": [match.to_dict() for match in enriched_matches],
             }
         )
 
@@ -309,7 +362,17 @@ class HashService:
                 {"success": False, "error": "JSON body must be an object"},
                 status=400,
             )
-        target_path = data.get("path", "")
+        try:
+            target_path = read_text_field(
+                data,
+                "path",
+                contract_name="Open containing folder request",
+            )
+        except TypeError as exc:
+            return self.web.json_response(
+                {"success": False, "error": str(exc)},
+                status=400,
+            )
 
         try:
             normalized_path = self.normalize_file_manager_path(target_path)
@@ -366,11 +429,10 @@ class HashService:
 
     def resolve_hash_file_request(self, data):
         """Validate and normalize a file path accepted by hash endpoints."""
-        file_path = (
-            data.get("file_path")
-            or data.get("resolved_path")
-            or data.get("path")
-            or ""
+        file_path = read_first_text_field(
+            data,
+            ("file_path", "resolved_path", "path"),
+            contract_name="Hash file request",
         )
         if not file_path:
             return "", "file_path is required"
@@ -387,7 +449,7 @@ class HashService:
 
     async def _get_validated_hash_file_request(self, request):
         """Read and validate the file request shared by hash endpoints."""
-        data = await request.json()
+        data = await read_optional_object_payload(request)
         normalized_path, error = self.resolve_hash_file_request(data)
         if not error:
             return normalized_path, None

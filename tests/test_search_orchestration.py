@@ -63,6 +63,7 @@ civitai_sources = importlib.import_module("comfyui-model-resolver.core.sources.c
 huggingface_sources = importlib.import_module("comfyui-model-resolver.core.sources.huggingface")
 civarchive_sources = importlib.import_module("comfyui-model-resolver.core.sources.civarchive")
 resolver_core = importlib.import_module("comfyui-model-resolver.core.resolver")
+typed_contracts = importlib.import_module("comfyui-model-resolver.core.contracts")
 
 
 @contextmanager
@@ -88,30 +89,36 @@ class LocalMatchDeduplicationTests(unittest.TestCase):
     def test_search_local_matches_keeps_highest_confidence_for_same_path(self):
         shared_path = os.path.join(os.getcwd(), "models", "shared.safetensors")
         matches = [
-            {
-                "model": {
-                    "path": shared_path,
-                    "relative_path": "models/shared.safetensors",
-                },
-                "filename": "shared.safetensors",
-                "confidence": 0.42,
-            },
-            {
-                "model": {
-                    "path": shared_path,
-                    "relative_path": "models/shared.safetensors",
-                },
-                "filename": "shared.safetensors",
-                "confidence": 0.91,
-            },
-            {
-                "model": {
-                    "path": os.path.join(os.getcwd(), "models", "other.safetensors"),
-                    "relative_path": "models/other.safetensors",
-                },
-                "filename": "other.safetensors",
-                "confidence": 0.73,
-            },
+            resolver_core.ModelMatch.from_mapping(
+                {
+                    "model": {
+                        "path": shared_path,
+                        "relative_path": "models/shared.safetensors",
+                    },
+                    "filename": "shared.safetensors",
+                    "confidence": 0.42,
+                }
+            ),
+            resolver_core.ModelMatch.from_mapping(
+                {
+                    "model": {
+                        "path": shared_path,
+                        "relative_path": "models/shared.safetensors",
+                    },
+                    "filename": "shared.safetensors",
+                    "confidence": 0.91,
+                }
+            ),
+            resolver_core.ModelMatch.from_mapping(
+                {
+                    "model": {
+                        "path": os.path.join(os.getcwd(), "models", "other.safetensors"),
+                        "relative_path": "models/other.safetensors",
+                    },
+                    "filename": "other.safetensors",
+                    "confidence": 0.73,
+                }
+            ),
         ]
 
         with (
@@ -126,7 +133,7 @@ class LocalMatchDeduplicationTests(unittest.TestCase):
             result = resolver_core.search_local_matches("shared.safetensors")
 
         self.assertEqual(
-            [match["confidence"] for match in result],
+            [match.confidence for match in result],
             [0.91, 0.73],
         )
 
@@ -157,8 +164,15 @@ class SearchOrchestrationTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_search_sources_orchestrator_success(self):
         # Setup mocks
-        self.mock_civitai_search.return_value = {"name": "CivitAI Match", "confidence": 100.0}
-        self.mock_hf_search.return_value = {"name": "HF Match"}
+        self.mock_civitai_search.return_value = typed_contracts.SearchResult(
+            source="civitai",
+            name="CivitAI Match",
+            confidence=100.0,
+        )
+        self.mock_hf_search.return_value = typed_contracts.SearchResult(
+            source="huggingface",
+            name="HF Match",
+        )
 
         # Construct a mock request
         payload = {
@@ -270,7 +284,11 @@ class SearchOrchestrationTests(unittest.IsolatedAsyncioTestCase):
         def side_effect(filename, base_model_context=None, **kwargs):
             if base_model_context is not None:
                 return None
-            return {"name": "Fallback Match", "confidence": 90.0}
+            return typed_contracts.SearchResult(
+                source="civitai",
+                name="Fallback Match",
+                confidence=90.0,
+            )
         
         self.mock_civitai_search.side_effect = side_effect
 
@@ -300,17 +318,16 @@ class SearchOrchestrationTests(unittest.IsolatedAsyncioTestCase):
                 "resolved_path": model_path,
                 "sha256": file_hash,
             }
-            civarchive_result = {
-                "source": "civarchive",
-                "filename": os.path.basename(model_path),
-                "model_name": "Archive Match",
-                "name": "Archive Match",
-                "sha256": file_hash,
-                "hashes": {"SHA256": file_hash},
-                "download_url": "https://civarchive.com/api/download/models/123.safetensors",
-                "url": "https://civarchive.com/models/123",
-                "version_url": "https://civarchive.com/models/123?modelVersionId=456",
-            }
+            civarchive_result = typed_contracts.SearchResult(
+                source="civarchive",
+                filename=os.path.basename(model_path),
+                name="Archive Match",
+                sha256=file_hash,
+                hashes={"SHA256": file_hash},
+                download_url="https://civarchive.com/api/download/models/123.safetensors",
+                url="https://civarchive.com/models/123",
+                version_url="https://civarchive.com/models/123?modelVersionId=456",
+            )
 
             mock_response = MagicMock()
             mock_response.status_code = 200
@@ -477,14 +494,14 @@ class SearchOrchestrationTests(unittest.IsolatedAsyncioTestCase):
             with open(metadata_path, "w", encoding="utf-8") as metadata_file:
                 json.dump({"hashes": {"SHA256": file_hash}}, metadata_file)
 
-            self.mock_civitai_search.return_value = {
-                "source": "civitai",
-                "name": "Remote Match",
-                "filename": "remote.safetensors",
-                "download_url": "https://example.test/remote.safetensors",
-                "confidence": 52.0,
-                "hashes": {"SHA256": file_hash},
-            }
+            self.mock_civitai_search.return_value = typed_contracts.SearchResult(
+                source="civitai",
+                name="Remote Match",
+                filename="remote.safetensors",
+                download_url="https://example.test/remote.safetensors",
+                confidence=52.0,
+                hashes={"SHA256": file_hash},
+            )
             mock_request = MagicMock()
             mock_request.json = AsyncMock(return_value={
                 "filename": "remote.safetensors",
@@ -569,4 +586,4 @@ class SearchOrchestrationTests(unittest.IsolatedAsyncioTestCase):
                     category="checkpoints",
                 )
 
-        self.assertEqual([match["filename"] for match in matches], ["cached.safetensors"])
+        self.assertEqual([match.filename for match in matches], ["cached.safetensors"])

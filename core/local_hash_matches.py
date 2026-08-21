@@ -1,8 +1,10 @@
 """Shared helpers for enriching local model matches found by SHA-256."""
 
-from typing import Any, Callable, Dict, List, Optional
+from typing import Callable, List, Optional
 
-SearchLocalMatchesByHash = Callable[..., List[Dict[str, Any]]]
+from .contracts import ModelMatch
+
+SearchLocalMatchesByHash = Callable[..., List[ModelMatch]]
 
 
 def collect_local_hash_matches_for_result(
@@ -14,7 +16,7 @@ def collect_local_hash_matches_for_result(
     force_rescan: bool = False,
     source: str = "download_source",
     filename: str = "",
-) -> List[Dict[str, Any]]:
+) -> List[ModelMatch]:
     """Find local matches and add the shared hash-lookup result fields."""
     if not sha256:
         return []
@@ -26,11 +28,10 @@ def collect_local_hash_matches_for_result(
         force_rescan=force_rescan,
     )
     return [
-        {
-            **match,
-            "hash_lookup_source": source,
-            "hash_lookup_filename": filename,
-            "hash_lookup_sha256": sha256,
-        }
+        match.with_extra(
+            hash_lookup_source=source,
+            hash_lookup_filename=filename,
+            hash_lookup_sha256=sha256,
+        )
         for match in matches
     ]

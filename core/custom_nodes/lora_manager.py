@@ -1,9 +1,11 @@
 """Backend adapter for ComfyUI-Lora-Manager loader nodes."""
 
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
+from ..contracts import CustomNodeMetadata, ModelReference, ResolvedModel
 from ..log_system import create_module_logger
+from ..type_utils import to_bool
 from .base import CustomNodeModelAdapter
 
 log = create_module_logger(__name__)
@@ -20,11 +22,11 @@ TEXT_WIDGET_INDEX = 1
 
 def analyze_references(
     node: Dict[str, Any],
-    available_models: Optional[List[Dict[str, Any]]] = None,
+    available_models: Optional[List[ResolvedModel]] = None,
     *,
     is_active: bool,
-    get_widget_name_hint: Any,
-) -> Optional[List[Dict[str, Any]]]:
+    get_widget_name_hint: Callable[[Dict[str, Any], int], str],
+) -> Optional[List[ModelReference]]:
     """Extract LoRA references stored in Lora Manager's list widget."""
     widgets_values = node.get("widgets_values", [])
     if len(widgets_values) < 3:
@@ -36,11 +38,11 @@ def analyze_references(
         available_models if available_models is not None else get_model_files()
     )
     lora_files = [
-        model for model in all_loras if model.get("category") == "loras"
+        model for model in all_loras if model.category == "loras"
     ]
-    lora_lookup: Dict[str, List[Dict[str, Any]]] = {}
+    lora_lookup: Dict[str, List[ResolvedModel]] = {}
     for lora_file in lora_files:
-        filename = lora_file.get("filename", "")
+        filename = lora_file.filename
         if not filename:
             continue
         base_name = os.path.splitext(filename)[0]
@@ -53,7 +55,7 @@ def analyze_references(
     node_id = node.get("id")
     node_type = node.get("type", "")
     node_title = str(node.get("title", "") or "").strip()
-    model_refs: List[Dict[str, Any]] = []
+    model_refs: List[ModelReference] = []
     for lora_item in lora_list:
         if not isinstance(lora_item, dict):
             continue
@@ -65,7 +67,7 @@ def analyze_references(
         lora_exists = False
         lora_full_path = None
         if name in lora_lookup:
-            lora_full_path = lora_lookup[name][0].get("path")
+            lora_full_path = lora_lookup[name][0].path
             lora_exists = (
                 os.path.exists(lora_full_path) if lora_full_path else False
             )
@@ -74,7 +76,7 @@ def analyze_references(
                 test_name = name + extension
                 if test_name not in lora_lookup:
                     continue
-                lora_full_path = lora_lookup[test_name][0].get("path")
+                lora_full_path = lora_lookup[test_name][0].path
                 lora_exists = (
                     os.path.exists(lora_full_path) if lora_full_path else False
                 )
@@ -83,27 +85,29 @@ def analyze_references(
 
         log.debug(f"Lora {name}: exists={lora_exists}, path={lora_full_path}")
         model_refs.append(
-            {
-                "node_id": node_id,
-                "node_type": node_type,
-                "widget_index": LORA_LIST_WIDGET_INDEX,
-                "widget_name": get_widget_name_hint(
-                    node, LORA_LIST_WIDGET_INDEX
-                ),
-                "original_path": name,
-                "name": name,
-                "strength": float(lora_item.get("strength", 1.0)),
-                "active": lora_item.get("active", True),
-                "node_title": node_title,
-                "category": "loras",
-                "category_hints": ["loras"],
-                "folder_key_hints": ["loras"],
-                "full_path": lora_full_path,
-                "exists": lora_exists,
-                "is_urn": False,
-                "custom_node_adapter": ADAPTER_ID,
-                "connected": is_active,
-            }
+            ModelReference.from_mapping(
+                {
+                    "node_id": node_id,
+                    "node_type": node_type,
+                    "widget_index": LORA_LIST_WIDGET_INDEX,
+                    "widget_name": get_widget_name_hint(
+                        node, LORA_LIST_WIDGET_INDEX
+                    ),
+                    "original_path": name,
+                    "name": name,
+                    "strength": float(lora_item.get("strength", 1.0)),
+                    "active": to_bool(lora_item.get("active", True), True),
+                    "node_title": node_title,
+                    "category": "loras",
+                    "category_hints": ["loras"],
+                    "folder_key_hints": ["loras"],
+                    "full_path": lora_full_path,
+                    "exists": lora_exists,
+                    "is_urn": False,
+                    "custom_node_adapter": ADAPTER_ID,
+                    "connected": bool(is_active),
+                }
+            )
         )
     return model_refs
 
@@ -125,20 +129,16 @@ def has_potential_reference(node: Dict[str, Any]) -> bool:
 def update_model_path(
     node: Dict[str, Any],
     widget_index: int,
-    resolved_model: Optional[Dict[str, Any]],
-    mapping: Optional[Dict[str, Any]],
+    resolved_model: Optional[ResolvedModel],
+    metadata: CustomNodeMetadata,
 ) -> Optional[bool]:
     """Update one LoRA name in both the list and formatted text widgets."""
-    mapping = mapping or {}
-    adapter_id = mapping.get("custom_node_adapter")
-    is_legacy_mapping = mapping.get("is_lora_v2") is True
+    adapter_id = metadata.adapter_id
+    is_legacy_mapping = metadata.is_legacy_lora_manager
     if adapter_id != ADAPTER_ID and not is_legacy_mapping:
         return None
 
-    original_name = (
-        mapping.get("custom_node_original_identity")
-        or mapping.get("original_lora_name")
-    )
+    original_name = metadata.original_identity
     if not original_name or widget_index != LORA_LIST_WIDGET_INDEX:
         return None
 
@@ -153,9 +153,7 @@ def update_model_path(
 
     new_name = None
     if resolved_model:
-        new_name = resolved_model.get("filename") or resolved_model.get(
-            "name", ""
-        )
+        new_name = resolved_model.filename
         if new_name and "." in new_name:
             new_name = new_name.rsplit(".", 1)[0]
     if not new_name:
@@ -204,20 +202,20 @@ def update_model_path(
     return True
 
 
-def should_skip_existing(reference: Dict[str, Any]) -> bool:
+def should_skip_existing(reference: ModelReference) -> bool:
     """Existing list entries do not require matching or relinking."""
-    return reference.get("exists") is True
+    return reference.exists is True
 
 
 def adapt_loaded_model(
-    reference: Dict[str, Any],
+    reference: ModelReference,
     model_name: str,
     strength: Any,
 ) -> tuple[str, Any]:
     """Use the list entry's display name and strength."""
     return (
-        reference.get("name", model_name),
-        reference.get("strength", strength),
+        reference.extra_value("name", model_name),
+        reference.extra_value("strength", strength),
     )
 
 

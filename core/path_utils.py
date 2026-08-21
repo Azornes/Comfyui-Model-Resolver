@@ -116,14 +116,22 @@ def _get_folder_paths_module(folder_paths_module: Optional[Any] = None) -> Optio
         return None
 
 
-def _coerce_folder_paths(value: Any) -> List[str]:
+def normalize_string_values(value: Any) -> List[str]:
+    """Normalize an external string collection without iterating scalar text."""
     if isinstance(value, str):
-        return [value]
-    if not isinstance(value, (list, tuple)):
+        return [value] if value else []
+    if not isinstance(value, (list, tuple, set, frozenset)):
         return []
-    if value and isinstance(value[0], (list, tuple, set)):
-        return [str(path) for path in value[0] if path]
-    return [str(path) for path in value if isinstance(path, str) and path]
+    return [item for item in value if isinstance(item, str) and item]
+
+
+def normalize_folder_path_values(value: Any) -> List[str]:
+    """Normalize ComfyUI folder-path values across supported registry shapes."""
+    if isinstance(value, (list, tuple)) and value:
+        first_item = value[0]
+        if isinstance(first_item, (list, tuple, set, frozenset)):
+            value = first_item
+    return normalize_string_values(value)
 
 
 def get_configured_model_roots(
@@ -160,12 +168,12 @@ def get_configured_model_roots(
         try:
             get_folder_paths = getattr(fp, "get_folder_paths", None)
             if callable(get_folder_paths):
-                paths = list(get_folder_paths(name) or [])
+                paths = normalize_folder_path_values(get_folder_paths(name))
         except Exception:
             paths = []
 
         if not paths and isinstance(folder_names_and_paths, dict):
-            paths = _coerce_folder_paths(folder_names_and_paths.get(name))
+            paths = normalize_folder_path_values(folder_names_and_paths.get(name))
 
         for path in paths:
             if not path:
@@ -229,14 +237,21 @@ def prefer_local_base_directory(
 
 
 def dedupe_local_base_directories(
-    paths: list,
+    paths: Optional[list | tuple] = None,
     preferred_directory: str = "",
     comfy_root: str = "",
 ) -> list:
     """Deduplicate a list of directory paths, resolving symlinks/junctions."""
+    if paths is None:
+        path_values = ()
+    elif isinstance(paths, (list, tuple)):
+        path_values = paths
+    else:
+        raise TypeError("paths must be a list or tuple")
+
     by_identity = {}
     ordered_identities = []
-    for path in paths or []:
+    for path in path_values:
         if not path or not os.path.isdir(path):
             continue
         path_abs = get_path_abs(path)

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from aiohttp import web
 
+from core.contracts import WorkflowModelInventory
 from core.path_utils import get_filename_from_path
 from core.routes.context import RouteContext
 from core.routes.loaded_models import register_loaded_model_routes
@@ -35,7 +36,17 @@ def _json_api_endpoint(_name, **_kwargs):
     return lambda handler: handler
 
 
+def _as_inventory(inventory=None):
+    if not isinstance(inventory, WorkflowModelInventory):
+        inventory = WorkflowModelInventory(
+            available_models=(inventory or {}).get("available_models", []),
+            model_refs=(inventory or {}).get("model_refs", []),
+        )
+    return inventory
+
+
 def _build_routes(inventory=None):
+    inventory = _as_inventory(inventory)
     routes = _Routes()
     extension = SimpleNamespace(
         loaded_progress=MagicMock(),
@@ -54,7 +65,6 @@ def _build_routes(inventory=None):
         ),
         "get_workflow_model_inventory": MagicMock(
             return_value=inventory
-            or {"available_models": [], "model_refs": []}
         ),
         "json_api_endpoint": _json_api_endpoint,
         "routes": routes,
@@ -247,7 +257,7 @@ async def test_loaded_models_progress_counts_top_level_and_subgraph_nodes():
                 "total": 5,
             }
         )
-        return {"available_models": [], "model_refs": []}
+        return WorkflowModelInventory()
 
     values["get_workflow_model_inventory"].side_effect = inventory_with_progress
     workflow = {
@@ -415,7 +425,7 @@ async def test_loaded_models_route_uses_adapter_name_and_original_path_fallback(
 
     def inventory_with_progress(_workflow, progress_callback):
         progress_callback(progress_payload)
-        return inventory
+        return _as_inventory(inventory)
 
     values["get_workflow_model_inventory"].side_effect = inventory_with_progress
 
