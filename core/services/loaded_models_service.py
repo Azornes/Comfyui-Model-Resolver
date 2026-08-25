@@ -225,6 +225,15 @@ class LoadedModelsService:
                     return str(scope["subgraph_id"]) == str(ref.subgraph_id or "")
                 return True
 
+            def has_explicit_model_widget_ref(node):
+                """Return whether the node already exposes a normal model widget."""
+                return any(
+                    node_matches_ref(node, ref)
+                    and ref.widget_index is not None
+                    and not ref.extra_value("is_urn", False)
+                    for ref in all_model_refs
+                )
+
             # Collect all loaded models with their values
             loaded_models = []
             total_refs = len(all_model_refs)
@@ -353,6 +362,14 @@ class LoadedModelsService:
                     )
 
                 node_type = node.get("type", "")
+                if has_explicit_model_widget_ref(node):
+                    # Standard loaders persist stale/default entries in
+                    # properties.models. The analyzed widget reference is the
+                    # authoritative active model for nodes with an explicit
+                    # model widget; keep properties.models as a fallback for
+                    # nodes that do not expose one.
+                    continue
+
                 properties = node.get("properties", {})
                 if not isinstance(properties, dict):
                     properties = {}

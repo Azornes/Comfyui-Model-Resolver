@@ -178,6 +178,57 @@ async def test_loaded_models_route_includes_urn_and_embedded_models():
 
 
 @pytest.mark.asyncio
+async def test_loaded_models_route_ignores_stale_embedded_metadata_for_widget_loader():
+    handlers, _ = _build_routes(
+        {
+            "available_models": [],
+            "model_refs": [
+                {
+                    "original_path": (
+                        r"KREA2\Krea2_Turbo_convrot_int8mixed.safetensors"
+                    ),
+                    "node_id": 761,
+                    "widget_index": 0,
+                    "node_type": "UNETLoader",
+                    "category": "diffusion_models",
+                }
+            ],
+        }
+    )
+    handler = handlers[("POST", "/model_resolver/loaded")]
+    workflow = {
+        "nodes": [
+            {
+                "id": 761,
+                "type": "UNETLoader",
+                "widgets_values": [
+                    r"KREA2\Krea2_Turbo_convrot_int8mixed.safetensors",
+                    "default",
+                ],
+                "properties": {
+                    "models": [
+                        {
+                            "name": "z_image_turbo_bf16.safetensors",
+                            "directory": "diffusion_models",
+                        }
+                    ]
+                },
+            }
+        ]
+    }
+
+    with patch.dict(sys.modules, {"folder_paths": None}):
+        response = await handler(_request({"workflow": workflow}))
+
+    body = json.loads(response.text)
+    assert response.status == 200
+    assert body["total"] == 1
+    assert [model["name"] for model in body["loaded_models"]] == [
+        "Krea2_Turbo_convrot_int8mixed.safetensors"
+    ]
+
+
+@pytest.mark.asyncio
 async def test_loaded_models_route_returns_error_when_inventory_fails():
     handlers, values = _build_routes()
     values["get_workflow_model_inventory"].side_effect = RuntimeError(
