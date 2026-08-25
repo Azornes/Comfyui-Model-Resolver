@@ -4120,7 +4120,7 @@ test('base model alias resolves FLUX KREA as Flux.1 Krea', () => {
   assert.equal(resolveBaseModelAlias.call(dialog, 'KREA'), 'Krea 2');
 });
 
-test('auto base model uses Any model for standalone SAM and Ultralytics models', () => {
+test('auto base model uses Any model for standalone and upscale models', () => {
   const getBaseModelIndependentSearchType = eval(`(${extractMethod(searchPanelMethodsSource, 'getBaseModelIndependentSearchType')})`);
   const getMissingAutoBaseModelInfo = eval(`(${extractMethod(searchPanelMethodsSource, 'getMissingAutoBaseModelInfo')})`);
   const getMissingAutoBaseModel = eval(`(${extractMethod(searchPanelMethodsSource, 'getMissingAutoBaseModel')})`);
@@ -4146,7 +4146,8 @@ test('auto base model uses Any model for standalone SAM and Ultralytics models',
 
   for (const missing of [
     { category: 'sams', node_type: 'SAMLoader' },
-    { category: 'ultralytics', node_type: 'UltralyticsDetectorProvider' }
+    { category: 'ultralytics', node_type: 'UltralyticsDetectorProvider' },
+    { category: 'UPSCALE_MODELS', node_type: 'UpscaleModelLoader' }
   ]) {
     assert.equal(getMissingAutoBaseModel.call(dialog, missing), '');
     assert.equal(getSearchBaseModelLabel.call(dialog, 'auto', missing), 'Auto (Any model)');

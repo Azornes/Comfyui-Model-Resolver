@@ -84,7 +84,13 @@ export const searchPanelMethods = {
             ultralytics: 'Ultralytics',
             ultralytics_bbox: 'Ultralytics',
             ultralytics_segm: 'Ultralytics',
-            yolo: 'Ultralytics'
+            yolo: 'Ultralytics',
+            upscale: 'Upscaler',
+            upscaler: 'Upscaler',
+            upscale_model: 'Upscaler',
+            upscale_models: 'Upscaler',
+            latent_upscale_model: 'Upscaler',
+            latent_upscale_models: 'Upscaler'
         };
         const candidates = [
             missing?.category,
