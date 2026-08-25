@@ -283,6 +283,51 @@ def _find_model_title_match_in_model(
     )
 
 
+def _build_civitai_title_search_queries(
+    filename: str,
+    model_type: Optional[str] = None,
+) -> List[str]:
+    """Build conservative model-title queries from a workflow filename.
+
+    Workflow filenames and provider model titles often differ. Moving the
+    final filename token to the front helps names such as
+    ``Text Refusal Reduction Krea2`` find a provider title beginning with
+    ``Krea2``. For LoRAs, adding the provider type also removes unrelated
+    text-focused models from the candidate set.
+    """
+    basename = get_filename_from_path(filename).strip()
+    if not basename:
+        return []
+
+    stem = os.path.splitext(basename)[0].strip()
+    tokens = re.findall(r"[A-Za-z0-9]+", stem)
+    if len(tokens) < 3:
+        return []
+
+    title_queries: List[str] = []
+
+    def add_query(parts: List[str]) -> None:
+        query = " ".join(part for part in parts if part).strip()
+        if query and query not in title_queries:
+            title_queries.append(query)
+
+    civitai_type = CIVITAI_API_TYPE_MAP.get(str(model_type or "").lower())
+    type_label = "LoRA" if civitai_type == "LORA" else ""
+    final_token = tokens[-1]
+    without_first = [final_token, *tokens[1:-1]]
+    rotated = [final_token, *tokens[:-1]]
+
+    if type_label:
+        add_query([*without_first, type_label])
+    add_query(without_first)
+    if type_label:
+        add_query([*rotated, type_label])
+    add_query(rotated)
+    add_query(tokens)
+
+    return title_queries[:5]
+
+
 def _filename_base_partial_match(target_base: str, candidate_base: str) -> bool:
     """Return True for meaningful filename-base containment matches.
 
@@ -1213,6 +1258,84 @@ def search_civitai_for_file(
                 f"Found best CivitAI match for {filename}: model_id={best_result.model_id}, version_id={best_result.version_id}, confidence={best_confidence}, candidate_limit={candidate_limit}"
             )
             return best_result
+
+        if not exact_only:
+            title_queries = _build_civitai_title_search_queries(
+                filename,
+                model_type=model_type,
+            )
+            title_candidate_limit = min(
+                MAX_CIVITAI_CANDIDATE_LIMIT,
+                max(candidate_limit, 10),
+            )
+
+            for title_index, title_query in enumerate(title_queries, start=1):
+                _report_progress(
+                    progress_callback,
+                    "title_fallback",
+                    f"Searching CivitAI model title {title_index}/{len(title_queries)}",
+                    72 + (title_index / max(1, len(title_queries))) * 16,
+                    title_query=title_query,
+                )
+
+                title_candidates: List[Dict[str, Optional[int]]] = []
+                if use_trpc_search:
+                    title_candidates = _search_civitai_trpc_candidates(
+                        title_query,
+                        model_type=model_type,
+                        session_token=session_token,
+                        limit=title_candidate_limit,
+                    )
+                if not title_candidates and use_api_search:
+                    title_candidates = _search_civitai_public_api_candidates(
+                        title_query,
+                        model_type=model_type,
+                        api_key=api_key,
+                        session_token=session_token,
+                        limit=title_candidate_limit,
+                    )
+                if not title_candidates and use_html_fallback:
+                    title_candidates = _search_civitai_red_candidates(
+                        title_query,
+                        model_type=model_type,
+                        session_token=session_token,
+                        limit=title_candidate_limit,
+                    )
+
+                for candidate in title_candidates:
+                    model_id = candidate.get("model_id")
+                    if not isinstance(model_id, int):
+                        continue
+
+                    title_result = _find_civitai_file_in_model(
+                        model_id=model_id,
+                        filename=title_query,
+                        api_key=api_key,
+                        exact_only=False,
+                        preferred_version_id=candidate.get("version_id"),
+                        base_model_context=base_model_context,
+                    )
+                    if not title_result or title_result.match_type != "model_title":
+                        continue
+
+                    title_result = title_result.with_extra(
+                        title_fallback=True,
+                        title_query=title_query,
+                    )
+                    _search_cache[cache_key] = title_result
+                    _report_progress(
+                        progress_callback,
+                        "found",
+                        "Found CivitAI model-title match",
+                        92,
+                        model_id=title_result.model_id,
+                        version_id=title_result.version_id,
+                        confidence=title_result.confidence,
+                    )
+                    log.info(
+                        f"Found CivitAI model-title match for {filename}: model_id={title_result.model_id}, version_id={title_result.version_id}, title_query={title_query}, confidence={title_result.confidence}"
+                    )
+                    return title_result
 
         # Not found
         _search_cache[cache_key] = None

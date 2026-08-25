@@ -48,6 +48,7 @@ from core.sources.civarchive import (
 # ---------------------------------------------------------------------------
 from core.sources.civitai import (
     _build_civitai_result_from_version,
+    _build_civitai_title_search_queries,
     _enrich_model_info_with_details,
     _extract_model_images,
     _extract_public_api_model_candidates,
@@ -2038,6 +2039,74 @@ class CivitaiFilenameMatchTests(unittest.TestCase):
         )
 
         self.assertIsNone(result)
+        clear_search_cache()
+
+
+class CivitaiTitleFallbackTests(unittest.TestCase):
+
+    def test_title_queries_reorder_filename_and_add_lora_type(self):
+        queries = _build_civitai_title_search_queries(
+            "Text Refusal Reduction Krea2.safetensors",
+            model_type="loras",
+        )
+
+        self.assertEqual(
+            [
+                "Krea2 Refusal Reduction LoRA",
+                "Krea2 Refusal Reduction",
+                "Krea2 Text Refusal Reduction LoRA",
+                "Krea2 Text Refusal Reduction",
+                "Text Refusal Reduction Krea2",
+            ],
+            queries,
+        )
+
+    @patch("core.sources.civitai._search_civitai_trpc_candidates")
+    @patch("core.sources.civitai._find_civitai_file_in_model")
+    def test_title_fallback_finds_model_when_filename_differs(
+        self,
+        mock_find_model,
+        mock_search_candidates,
+    ):
+        clear_search_cache()
+        expected = SearchResult(
+            source="civitai",
+            model_id=2775340,
+            version_id=3125118,
+            name="Krea2 TextFusion Refusal-Reduction LoRA",
+            filename="Krea2_TextFusion_Refusal_Reduction.safetensors",
+            match_type="model_title",
+            confidence=83.6,
+        )
+
+        def search_candidates(query, **kwargs):
+            if query == "Krea2 Refusal Reduction LoRA":
+                return [{"model_id": 2775340, "version_id": 3125118}]
+            return []
+
+        def find_model(model_id, filename, **kwargs):
+            if filename == "Krea2 Refusal Reduction LoRA":
+                return expected
+            return None
+
+        mock_search_candidates.side_effect = search_candidates
+        mock_find_model.side_effect = find_model
+
+        result = search_civitai_for_file(
+            "Text Refusal Reduction Krea2.safetensors",
+            model_type="loras",
+            use_api_search=False,
+            use_html_fallback=False,
+        )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(2775340, result.model_id)
+        self.assertEqual("model_title", result.match_type)
+        self.assertTrue(result.extra_value("title_fallback"))
+        self.assertEqual(
+            "Krea2 Refusal Reduction LoRA",
+            result.extra_value("title_query"),
+        )
         clear_search_cache()
 
 
