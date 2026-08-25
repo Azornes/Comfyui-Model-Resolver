@@ -177,16 +177,6 @@ class DownloadService:
                     contract_name="Download path metadata",
                 )
 
-            model_id = coerce_integer_identifier(
-                raw_model_id,
-                "model_id",
-                contract_name="Download metadata",
-            )
-            version_id = coerce_integer_identifier(
-                raw_version_id,
-                "version_id",
-                contract_name="Download metadata",
-            )
         except (TypeError, ValueError) as exc:
             return self.web.json_response({"error": str(exc)}, status=400)
         settings = self.load_resolver_settings()
@@ -243,6 +233,29 @@ class DownloadService:
         elif self.host_matches_domain(download_host, "huggingface.co"):
             inferred_source = "huggingface"
 
+        source_name = str(metadata_source or inferred_source).strip().lower()
+        source_token = source_name.replace("-", "_").replace(" ", "_")
+        try:
+            if source_token in {"huggingface", "hugging_face"}:
+                # Hugging Face identifies repositories and revisions with
+                # strings such as "owner/repo" and "main".  Civitai-style
+                # numeric coercion would reject valid HF download metadata.
+                model_id = raw_model_id
+                version_id = raw_version_id
+            else:
+                model_id = coerce_integer_identifier(
+                    raw_model_id,
+                    "model_id",
+                    contract_name="Download metadata",
+                )
+                version_id = coerce_integer_identifier(
+                    raw_version_id,
+                    "version_id",
+                    contract_name="Download metadata",
+                )
+        except (TypeError, ValueError) as exc:
+            return self.web.json_response({"error": str(exc)}, status=400)
+
         download_metadata.setdefault("filename", filename)
         download_metadata.setdefault("category", category)
         download_metadata.setdefault("download_url", url)
@@ -252,7 +265,6 @@ class DownloadService:
             "source",
             metadata_source or inferred_source,
         )
-        source_name = (metadata_source or inferred_source).lower()
         try:
             if (
                 source_name == "civitai"

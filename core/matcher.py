@@ -300,7 +300,7 @@ _TECHNICAL_VARIANT_TOKENS = {
     *TECHNICAL_MODEL_SUFFIXES,
 }
 _TECHNICAL_VARIANT_TOKEN_RE = re.compile(
-    r"^(?:(?:bf|bfloat|fp|float|int|uint|f|i)\d+|"
+    r"^(?:(?:bf|bfloat|fp|float|int|uint|f|i)\d+(?:mixed|scaled)?|"
     r"(?:i?q|tq)\d+|(?:mxfp|nvfp)\d+|e\d+m\d+(?:fnuz|fn)?|bnb\d+)$",
     re.IGNORECASE,
 )
@@ -544,7 +544,7 @@ def build_filename_search_queries(filename: str) -> List[str]:
         + "|".join(
             [
                 *literal_suffixes,
-                r"(?:bf|bfloat|fp|float|int|uint|f|i)\d+",
+                r"(?:bf|bfloat|fp|float|int|uint|f|i)\d+(?:mixed|scaled)?",
                 r"(?:i?q|tq)\d+",
                 r"(?:mxfp|nvfp)\d+",
                 r"e\d+m\d+(?:fnuz|fn)?",

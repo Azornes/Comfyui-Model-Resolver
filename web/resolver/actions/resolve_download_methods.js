@@ -245,7 +245,7 @@ export const resolveDownloadMethods = {
         if (hasBatchError) {
             throw batchError;
         }
-        this.showNotification(`Finished search for ${completed} model${completed === 1 ? '' : 's'}${suffix}.`, failed ? 'error' : 'success');
+        this.showNotification(`Finished search for ${completed} model${completed === 1 ? '' : 's'}${suffix}.`, failed ? 'info' : 'success');
     },
 
     stopBatchSearch() {

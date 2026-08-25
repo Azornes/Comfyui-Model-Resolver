@@ -253,6 +253,33 @@ async def test_download_route_supports_huggingface_headers_and_optional_inputs()
 
 
 @pytest.mark.asyncio
+async def test_download_route_preserves_huggingface_textual_identifiers():
+    handlers, values = _build_download_routes()
+    handler = handlers[("POST", "/model_resolver/download")]
+
+    response = await handler(
+        _request(
+            {
+                "url": "https://huggingface.co/org/repo/resolve/main/model.safetensors",
+                "filename": "model.safetensors",
+                "download_metadata": {
+                    "details_source": "huggingface",
+                    "model_id": "org/repo",
+                    "version_id": "main",
+                },
+            }
+        )
+    )
+
+    assert response.status == 200
+    download_call = values["start_background_download"].call_args.kwargs
+    assert download_call["metadata"]["model_id"] == "org/repo"
+    assert download_call["metadata"]["version_id"] == "main"
+    values["get_civitai_model_details"].assert_not_called()
+    values["get_civarchive_model_details"].assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_download_route_rejects_invalid_download_metadata():
     handlers, values = _build_download_routes()
     handler = handlers[("POST", "/model_resolver/download")]

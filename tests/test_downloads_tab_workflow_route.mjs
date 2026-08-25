@@ -3601,6 +3601,41 @@ function extractMethod(source, methodName, paramsPattern = '[^)]*') {
   throw new Error(`Could not parse ${methodName}`);
 }
 
+test('completed batch search with failed items uses an informational notification', async () => {
+  const searchMissingBatch = eval(`(${extractMethod(resolveDownloadMethodsSource, 'searchMissingBatch')})`);
+  const targets = [{ id: 1 }, { id: 2 }];
+  const notifications = [];
+  const dialog = {
+    batchSearchRunning: false,
+    batchSearchCancelRequested: false,
+    getBatchSearchTargets() {
+      return targets;
+    },
+    getWorkflowScopedQueueKey() {
+      return 'workflow-1';
+    },
+    getSearchStateForWorkflow() {
+      return {};
+    },
+    async searchOnline(target) {
+      if (target === targets[0]) throw new Error('search unavailable');
+    },
+    showNotification(message, type) {
+      notifications.push([message, type]);
+    },
+    updateBatchFooterButtons() {},
+    closeFooterMenus() {},
+    persistSearchStateForActiveWorkflow() {}
+  };
+
+  await searchMissingBatch.call(dialog, 'all', 'all');
+
+  assert.deepEqual(notifications, [
+    ['Searching 2 missing models...', 'info'],
+    ['Finished search for 2 models, 1 failed.', 'info']
+  ]);
+});
+
 test('model info hash readers preserve field precedence and casing', () => {
   const getInfoDialogHash = eval(`(${extractMethod(modelInfoMethodsSource, 'getInfoDialogHash')})`);
   const getSourceModelFileHash = eval(`(${extractMethod(modelInfoMethodsSource, 'getSourceModelFileHash')})`);

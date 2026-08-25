@@ -155,6 +155,7 @@ MODEL_VARIANT_SUFFIXES = (
     "conversion",
     "compressed",
     "conv",
+    "convrot",
 )
 
 

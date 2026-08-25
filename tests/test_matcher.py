@@ -97,6 +97,7 @@ class MatcherTests(unittest.TestCase):
             "bnb4",
             "ema-only",
             "pruned",
+            "convrot",
         ]
 
         for suffix in suffixes:
@@ -107,6 +108,45 @@ class MatcherTests(unittest.TestCase):
                         f"qwen3vl_4b_{suffix}.safetensors"
                     ),
                 )
+
+    def test_model_family_normalization_handles_compact_precision_variants(self):
+        self.assertIn(
+            "Krea2_Turbo",
+            build_filename_search_queries(
+                "Krea2_Turbo_convrot_int8mixed.safetensors"
+            ),
+        )
+        self.assertEqual(
+            "krea2 turbo",
+            normalize_model_family_filename(
+                "Krea2_Turbo_convrot_int8mixed.safetensors"
+            ),
+        )
+        self.assertEqual(
+            "krea2 raw",
+            normalize_model_family_filename(
+                "Krea2_Raw_convrot_int8mixed.safetensors"
+            ),
+        )
+
+    def test_find_matches_includes_krea2_conversion_variants(self):
+        target = "krea2_turbo_bf16.safetensors"
+        candidates = [
+            {"filename": "Krea2_Raw_convrot_int8mixed.safetensors"},
+            {"filename": "Krea2_Turbo_convrot_int8mixed.safetensors"},
+        ]
+
+        matches = find_matches(target, candidates, threshold=0.7)
+
+        self.assertEqual(
+            [
+                "Krea2_Turbo_convrot_int8mixed.safetensors",
+                "Krea2_Raw_convrot_int8mixed.safetensors",
+            ],
+            [match.filename for match in matches],
+        )
+        self.assertEqual(94.0, matches[0].confidence)
+        self.assertEqual(70.0, matches[1].confidence)
 
     def test_filename_confidence_prioritizes_family_and_size_over_precision(self):
         target = "qwen3vl-4b-abliterated_fp8_e4m3fn.safetensors"
