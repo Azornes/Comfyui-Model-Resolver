@@ -4825,6 +4825,80 @@ test('search suggestion metadata prefers exact matching base model over weaker a
   assert.equal(merged.filename, 'snofs_krea_v1.safetensors');
 });
 
+test('automatic workflow base model filters incompatible archive metadata', () => {
+  const getCachedSearchSuggestionData = eval(`(${extractMethod(downloadTargetMethodsSource, 'getCachedSearchSuggestionData')})`);
+  const getFirstSearchResult = eval(`(${extractMethod(downloadTargetMethodsSource, 'getFirstSearchResult')})`);
+  const getSearchSuggestionPreferredBaseModel = eval(`(${extractMethod(downloadTargetMethodsSource, 'getSearchSuggestionPreferredBaseModel')})`);
+  const baseModelMatchesSearchSuggestionPreference = eval(`(${extractMethod(downloadTargetMethodsSource, 'baseModelMatchesSearchSuggestionPreference')})`);
+  const getSearchSuggestionResultScore = eval(`(${extractMethod(downloadTargetMethodsSource, 'getSearchSuggestionResultScore')})`);
+  const state = {
+    selectedBaseModel: 'auto',
+    results: {
+      civitai: {
+        base_model: 'Krea 2',
+        tags: ['concept'],
+        filename: 'Text_Refusal_Reduction_Krea2.safetensors',
+        name: 'Krea2 TextFusion Refusal-Reduction LoRA v1.0',
+        match_type: 'model_title'
+      },
+      civarchive: {
+        base_model: 'SDXL 1.0',
+        tags: ['concept'],
+        filename: 'text.safetensors',
+        name: 'Text Aid SDXL v1.0',
+        match_type: 'similar',
+        confidence: 85
+      }
+    }
+  };
+  const dialog = {
+    searchResultCache: new Map([['missing-key', state]]),
+    getCachedSearchSuggestionData,
+    getFirstSearchResult,
+    getSearchSuggestionPreferredBaseModel,
+    baseModelMatchesSearchSuggestionPreference,
+    getSearchSuggestionResultScore,
+    getMissingSearchKey() {
+      return 'missing-key';
+    },
+    getMissingLocalBaseModel() {
+      return '';
+    },
+    getSavedDownloadTargetSelection() {
+      return null;
+    },
+    getBaseModelIndependentSearchType() {
+      return '';
+    },
+    getDominantWorkflowBaseModel() {
+      return 'Krea 2';
+    },
+    normalizeBaseModelToken(value = '') {
+      return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    },
+    resolveBaseModelAlias(value = '') {
+      const token = this.normalizeBaseModelToken(value);
+      if (token === 'krea2') return 'Krea 2';
+      if (token === 'sdxl10') return 'SDXL 1.0';
+      return '';
+    },
+    resolveBaseModelAliasExact(value = '') {
+      return this.resolveBaseModelAlias(value);
+    },
+    getSourceResultDownloadCategory() {
+      return 'loras';
+    }
+  };
+
+  const missing = { category: 'loras' };
+  assert.equal(getSearchSuggestionPreferredBaseModel.call(dialog, missing), 'Krea 2');
+
+  const merged = getCachedSearchSuggestionData.call(dialog, missing);
+  assert.equal(merged.base_model, 'Krea 2');
+  assert.equal(merged.name, 'Krea2 TextFusion Refusal-Reduction LoRA v1.0');
+  assert.equal(merged.filename, 'Text_Refusal_Reduction_Krea2.safetensors');
+});
+
 test('download path metadata preserves source precedence and workflow fallbacks', () => {
   const getDownloadSourceContext = eval(`(${extractMethod(downloadTargetMethodsSource, 'getDownloadSourceContext')})`);
   const getDownloadPathMetadata = eval(`(${extractMethod(downloadTargetMethodsSource, 'getDownloadPathMetadata')})`);

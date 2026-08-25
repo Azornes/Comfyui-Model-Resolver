@@ -1540,6 +1540,7 @@ export const downloadTargetMethods = {
     getSearchSuggestionPreferredBaseModel(missing = {}) {
         const state = this.searchResultCache?.get(this.getMissingSearchKey?.(missing));
         const selectedBaseModel = state?.selectedBaseModel || '';
+        const usesAutomaticBaseModel = !selectedBaseModel || selectedBaseModel === 'auto';
         const candidates = [];
         const addCandidate = (value) => {
             if (value !== undefined && value !== null && String(value).trim()) {
@@ -1561,6 +1562,14 @@ export const downloadTargetMethods = {
         }
         addCandidate(this.resolveBaseModelAliasFromPath?.(missing?.original_path));
         addCandidate(this.resolveBaseModelAliasFromPath?.(missing?.name));
+
+        // Keep search-result metadata aligned with the model shown by the
+        // Auto selector. Without this fallback, a high-confidence result from
+        // another base model could supply the subfolder template metadata
+        // before the compatible result is considered.
+        if (usesAutomaticBaseModel && !this.getBaseModelIndependentSearchType?.(missing)) {
+            addCandidate(this.getDominantWorkflowBaseModel?.());
+        }
 
         for (const candidate of candidates) {
             const canonical = this.resolveBaseModelAlias?.(candidate)
