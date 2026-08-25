@@ -251,26 +251,77 @@ export const searchPanelMethods = {
     getWorkflowModelReferenceText() {
         const workflow = this.getCurrentWorkflow?.();
         if (!workflow) return '';
+
         const values = [];
-        const visit = (value, key = '') => {
+        const visitValue = (value) => {
             if (typeof value === 'string') {
                 if (/^urn:/i.test(value.trim())) {
                     return;
                 }
-                if (this.hasModelExtension(value) || /model|checkpoint|unet|diffusion/i.test(key)) {
-                    values.push(value);
-                }
+                values.push(value);
                 return;
             }
             if (Array.isArray(value)) {
-                value.forEach(item => visit(item, key));
+                value.forEach(visitValue);
                 return;
             }
             if (value && typeof value === 'object') {
-                Object.entries(value).forEach(([childKey, childValue]) => visit(childValue, childKey));
+                Object.values(value).forEach(visitValue);
             }
         };
-        visit(workflow);
+
+        const collectNormalizedNodes = (nodes = []) => {
+            if (!Array.isArray(nodes)) return;
+            nodes.forEach(node => {
+                if (!node || node.bypassed) return;
+                const widgetValues = Array.isArray(node.widgets_values)
+                    ? node.widgets_values
+                    : [];
+                widgetValues.forEach(widget => {
+                    if (widget && typeof widget === 'object' && 'value' in widget) {
+                        visitValue(widget.value);
+                    }
+                });
+            });
+        };
+
+        const signatureData = this.getWorkflowSignatureData?.(workflow);
+        if (signatureData && typeof signatureData === 'object') {
+            collectNormalizedNodes(signatureData.nodes);
+            Object.values(signatureData.definitions || {}).forEach(definition => {
+                if (Array.isArray(definition)) {
+                    definition.forEach(item => collectNormalizedNodes(item?.nodes));
+                } else {
+                    collectNormalizedNodes(definition?.nodes);
+                }
+            });
+        }
+
+        // Older workflow snapshots may only expose named widget values. Keep
+        // this fallback limited to model-like keys so node metadata and URLs
+        // from properties.models cannot affect the base-model inference.
+        if (!values.length) {
+            const modelKeyPattern = /model|lora|checkpoint|unet|vae|clip|encoder|control|upscale|embedding|gligen|sam/i;
+            const collectNamedValues = (nodes = []) => {
+                if (!Array.isArray(nodes)) return;
+                nodes.forEach(node => {
+                    if (!node || node.mode === 4 || !node.widgets_values_named) return;
+                    Object.entries(node.widgets_values_named).forEach(([key, value]) => {
+                        if (modelKeyPattern.test(key)) visitValue(value);
+                    });
+                });
+            };
+            collectNamedValues(workflow.nodes);
+            const definitions = workflow.definitions;
+            Object.values(definitions || {}).forEach(definition => {
+                if (Array.isArray(definition)) {
+                    definition.forEach(item => collectNamedValues(item?.nodes));
+                } else {
+                    collectNamedValues(definition?.nodes);
+                }
+            });
+        }
+
         return values.join(' ');
     },
 

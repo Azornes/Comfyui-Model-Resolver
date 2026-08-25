@@ -4211,6 +4211,99 @@ test('auto base model keeps workflow path context when a delayed search result d
   assert.match(info.message, /To change: Choose a different option in the Model field/);
 });
 
+test('auto base model uses active widgets instead of workflow model metadata', () => {
+  const getWorkflowModelReferenceText = eval(`(${extractMethod(searchPanelMethodsSource, 'getWorkflowModelReferenceText')})`);
+  const getDominantWorkflowBaseModel = eval(`(${extractMethod(searchPanelMethodsSource, 'getDominantWorkflowBaseModel')})`);
+  const getBaseModelIndependentSearchType = eval(`(${extractMethod(searchPanelMethodsSource, 'getBaseModelIndependentSearchType')})`);
+  const getMissingAutoBaseModelInfo = eval(`(${extractMethod(searchPanelMethodsSource, 'getMissingAutoBaseModelInfo')})`);
+  const workflow = {
+    nodes: [
+      {
+        id: 761,
+        type: 'UNETLoader',
+        widgets_values: [
+          'KREA2\\Krea2_Turbo_convrot_int8mixed.safetensors',
+          'default'
+        ],
+        widgets_values_named: {
+          unet_name: 'KREA2\\Krea2_Turbo_convrot_int8mixed.safetensors',
+          weight_dtype: 'default'
+        },
+        properties: {
+          models: [{
+            name: 'z_image_turbo_bf16.safetensors',
+            url: 'https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/diffusion_models/z_image_turbo_bf16.safetensors',
+            directory: 'diffusion_models'
+          }]
+        }
+      }
+    ],
+    extra: {
+      z_image_url: 'https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/config.json'
+    }
+  };
+  const dialog = {
+    getCurrentWorkflow() {
+      return workflow;
+    },
+    getWorkflowSignatureData() {
+      return {
+        nodes: [{
+          bypassed: false,
+          widgets_values: [{
+            index: 0,
+            value: 'KREA2\\Krea2_Turbo_convrot_int8mixed.safetensors'
+          }]
+        }],
+        definitions: {}
+      };
+    },
+    getResolvedWorkflowBaseModelScores() {
+      return new Map();
+    },
+    getBaseModelIndependentSearchType,
+    getMissingLocalBaseModel() {
+      return '';
+    },
+    resolveBaseModelAlias() {
+      return '';
+    },
+    resolveBaseModelAliasExact() {
+      return '';
+    },
+    resolveBaseModelAliasFromPath() {
+      return '';
+    },
+    getBaseModelAliases() {
+      return [
+        {
+          value: 'Z-Image',
+          aliases: ['zimage', 'z image', 'z-image', 'z_image', 'zImageTurbo', 'z image turbo']
+        },
+        { value: 'Krea 2', aliases: ['krea', 'krea 2'] }
+      ];
+    },
+    normalizeBaseModelToken(value = '') {
+      return normalizeSearchToken(value);
+    },
+    getWorkflowModelReferenceText,
+    getDominantWorkflowBaseModel,
+    getMissingAutoBaseModelInfo
+  };
+
+  const referenceText = getWorkflowModelReferenceText.call(dialog);
+  assert.match(referenceText, /Krea2_Turbo/);
+  assert.doesNotMatch(referenceText, /z_image/);
+  assert.equal(getDominantWorkflowBaseModel.call(dialog), 'Krea 2');
+
+  const info = getMissingAutoBaseModelInfo.call(dialog, {
+    name: 'Text Refusal Reduction Krea2.safetensors',
+    category: 'loras'
+  });
+  assert.equal(info.value, 'Krea 2');
+  assert.equal(info.source, 'workflow fallback');
+});
+
 test('base model path mapping ignores conflicting full-path base model', () => {
   const {
     normalizeBaseModelToken,
