@@ -284,15 +284,28 @@ def _find_model_title_match_in_model(
 
 
 def _filename_base_partial_match(target_base: str, candidate_base: str) -> bool:
-    """Return True for meaningful filename-base containment matches."""
+    """Return True for meaningful filename-base containment matches.
+
+    A short generic prefix such as ``text`` is not enough evidence that it
+    identifies a longer model filename. Require a reasonable length ratio and
+    token boundaries so broad provider search results do not become matches.
+    """
     target_base = str(target_base or "").strip().lower()
     candidate_base = str(candidate_base or "").strip().lower()
     if not target_base or not candidate_base:
         return False
-    shorter = min(target_base, candidate_base, key=len)
-    if len(shorter) < 4:
+    shorter, longer = sorted(
+        (target_base, candidate_base),
+        key=len,
+    )
+    if len(shorter) < 4 or len(shorter) / len(longer) < 0.4:
         return False
-    return target_base in candidate_base or candidate_base in target_base
+    return bool(
+        re.search(
+            rf"(?<![a-z0-9]){re.escape(shorter)}(?![a-z0-9])",
+            longer,
+        )
+    )
 
 
 
@@ -743,7 +756,7 @@ def _find_civitai_file_in_model(
     )
 
     def build_result_from_resolved_version(
-        resolved: Dict[str, Any], version_id: int
+        resolved: Dict[str, Any], version_id: int, match_type: str = "exact"
     ) -> SearchResult:
         expected_filename = resolved.get("expected_filename", "")
         primary_file = select_primary_model_file(
@@ -765,7 +778,7 @@ def _find_civitai_file_in_model(
                 size=primary_file.get("size"),
                 base_model=resolved.get("base_model"),
                 tags=resolved.get("tags", []),
-                match_type="exact",
+                match_type=match_type,
                 confidence=calculate_filename_confidence(
                     filename, expected_filename
                 ),
@@ -773,26 +786,33 @@ def _find_civitai_file_in_model(
             normalize_hashes=True,
         )
 
-    def resolved_version_matches(resolved: Dict[str, Any]) -> bool:
+    def resolved_version_match_type(resolved: Dict[str, Any]) -> Optional[str]:
         expected_filename = str(resolved.get("expected_filename", "")).lower()
         expected_base = os.path.splitext(expected_filename)[0]
         log.debug(
             f"CivitAI resolved version filename check: expected_filename={resolved.get('expected_filename')}, target_filename={filename}"
         )
         if expected_filename == filename_lower:
-            return True
-        return not exact_only and _filename_base_partial_match(
-            filename_base, expected_base
-        )
+            return "exact"
+        if not exact_only and _filename_base_partial_match(filename_base, expected_base):
+            return "partial"
+        return None
 
     if preferred_version_id is not None:
         resolved = resolve_urn(model_id, preferred_version_id, api_key)
+        resolved_match_type = (
+            resolved_version_match_type(resolved) if resolved else None
+        )
         if (
             resolved
-            and resolved_version_matches(resolved)
+            and resolved_match_type
             and _base_model_matches(resolved.get("base_model"), base_model_context)
         ):
-            return build_result_from_resolved_version(resolved, preferred_version_id)
+            return build_result_from_resolved_version(
+                resolved,
+                preferred_version_id,
+                match_type=resolved_match_type,
+            )
 
     best_resolved_result = None
     best_resolved_confidence = 0.0
@@ -833,10 +853,15 @@ def _find_civitai_file_in_model(
 
         resolved = resolve_urn(model_id, version_id, api_key)
         if resolved:
-            if resolved_version_matches(resolved) and _base_model_matches(
+            resolved_match_type = resolved_version_match_type(resolved)
+            if resolved_match_type and _base_model_matches(
                 resolved.get("base_model"), base_model_context
             ):
-                return build_result_from_resolved_version(resolved, version_id)
+                return build_result_from_resolved_version(
+                    resolved,
+                    version_id,
+                    match_type=resolved_match_type,
+                )
 
             if not exact_only:
                 expected_filename = resolved.get("expected_filename", "")
@@ -847,6 +872,8 @@ def _find_civitai_file_in_model(
                 log.debug(
                     f"CivitAI resolved version confidence: model_id={model_id}, version_id={version_id}, expected_filename={expected_filename}, confidence={confidence}"
                 )
+                if confidence < 50.0:
+                    continue
                 if ranking_score > best_resolved_confidence:
                     best_resolved_confidence = ranking_score
                     best_resolved_result = build_result_from_resolved_version(

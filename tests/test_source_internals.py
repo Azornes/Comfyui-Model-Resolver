@@ -52,6 +52,7 @@ from core.sources.civitai import (
     _extract_model_images,
     _extract_public_api_model_candidates,
     _extract_trpc_model_candidates,
+    _find_civitai_file_in_model,
     _find_matching_file_in_versions,
     _normalize_civitai_file,
     _search_civitai_public_api_candidates,
@@ -1930,6 +1931,23 @@ class NormalizeCivitaiFileTests(unittest.TestCase):
 
 class CivitaiFilenameMatchTests(unittest.TestCase):
 
+    def test_short_generic_prefix_does_not_match_longer_model_filename(self):
+        versions = [
+            {
+                "id": 1,
+                "files": [
+                    {"name": "text.safetensors"},
+                ],
+            }
+        ]
+
+        result = _find_matching_file_in_versions(
+            versions,
+            "Text Refusal Reduction Krea2.safetensors",
+        )
+
+        self.assertIsNone(result)
+
     def test_short_filename_base_does_not_partial_match_longer_name(self):
         versions = [
             {
@@ -1958,6 +1976,69 @@ class CivitaiFilenameMatchTests(unittest.TestCase):
 
         self.assertIsNotNone(result)
         self.assertEqual(result["match_type"], "exact")
+
+    @patch("core.sources.civitai.resolve_urn")
+    def test_resolved_meaningful_partial_filename_keeps_partial_type(
+        self,
+        mock_resolve_urn,
+    ):
+        mock_resolve_urn.return_value = {
+            "model_name": "Example model",
+            "version_name": "v1",
+            "expected_filename": "model.safetensors",
+            "base_model": None,
+            "tags": [],
+            "files": [{"name": "model.safetensors", "size": 1024}],
+        }
+
+        result = _find_civitai_file_in_model(
+            model_id=1,
+            filename="model_v2.safetensors",
+            preferred_version_id=2,
+        )
+
+        self.assertIsNotNone(result)
+        self.assertEqual("partial", result.match_type)
+
+    @patch("core.sources.civitai.resolve_urn")
+    @patch("core.sources.civitai.execute_provider_json_request")
+    def test_resolved_partial_filename_is_not_returned_as_exact(
+        self,
+        mock_request,
+        mock_resolve_urn,
+    ):
+        clear_search_cache()
+        target_filename = "Text Refusal Reduction Krea2.safetensors"
+        resolved = {
+            "model_name": "Text Aid SDXL",
+            "version_name": "v1",
+            "expected_filename": "text.safetensors",
+            "base_model": "SDXL 1.0",
+            "tags": [],
+            "files": [{"name": "text.safetensors", "size": 1024}],
+        }
+        mock_resolve_urn.return_value = resolved
+        mock_request.return_value = {
+            "name": "Text Aid SDXL",
+            "type": "LORA",
+            "tags": [],
+            "modelVersions": [
+                {
+                    "id": 467355,
+                    "files": [{"name": "text.safetensors"}],
+                }
+            ],
+        }
+
+        result = _find_civitai_file_in_model(
+            model_id=419492,
+            filename=target_filename,
+            preferred_version_id=467355,
+            base_model_context="SDXL 1.0",
+        )
+
+        self.assertIsNone(result)
+        clear_search_cache()
 
 
 # ===========================================================================
