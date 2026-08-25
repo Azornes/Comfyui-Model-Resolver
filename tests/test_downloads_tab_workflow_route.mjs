@@ -4540,6 +4540,63 @@ test('post-search subfolder suggestion can prefer path template metadata', () =>
   assert.equal(searchSuggestion.value, 'SDXL\\style');
 });
 
+test('manual subfolder suggestion respects the configured folder rule', async () => {
+  const forceSuggestedDownloadSubfolder = eval(`(${extractMethod(downloadTargetMethodsSource, 'forceSuggestedDownloadSubfolder')})`);
+  const calls = [];
+  const categoryEl = { dataset: { value: 'loras' } };
+  const subfolderEl = { value: '', dataset: {} };
+  const dialog = {
+    getSavedDownloadTargetSelection() {
+      return null;
+    },
+    normalizeDownloadCategory(value) {
+      return String(value || '');
+    },
+    getDropdownValue(element) {
+      return element.dataset.value;
+    },
+    getSuggestedDownloadCategory() {
+      return 'loras';
+    },
+    shouldPreserveSavedDownloadCategory() {
+      return false;
+    },
+    async ensureDownloadSubfoldersLoaded() {},
+    getAvailableSubfolders() {
+      return [];
+    },
+    getSuggestedDownloadSubfolder(...args) {
+      calls.push(args[3]);
+      return {
+        value: 'KREA2/krea 2 turbo',
+        baseDirectory: '',
+        suggestionSource: 'template',
+        template: '{base_model}/{first_tag}'
+      };
+    },
+    setDropdownValue(element, value) {
+      element.dataset.value = value;
+    },
+    getCategoryDisplayName(value) {
+      return value;
+    },
+    normalizeDownloadPathValue(value) {
+      return String(value || '').replace(/\\/g, '/');
+    },
+    saveDownloadTargetSelection() {},
+    getSubfolderSuggestionTrackingPatch() {
+      return {};
+    },
+    syncDownloadTargetFolderContext() {}
+  };
+
+  const result = await forceSuggestedDownloadSubfolder.call(dialog, {}, categoryEl, subfolderEl);
+
+  assert.deepEqual(calls, [{ preferTemplate: true }]);
+  assert.equal(result.subfolder, 'KREA2/krea 2 turbo');
+  assert.equal(subfolderEl.value, 'KREA2/krea 2 turbo');
+});
+
 test('post-search auto-fill can refresh earlier suggested subfolder', async () => {
   const applySuggestedDownloadSubfolder = eval(`(${extractMethod(downloadTargetMethodsSource, 'applySuggestedDownloadSubfolder')})`);
   const getSubfolderSuggestionTrackingPatch = eval(`(${extractMethod(downloadTargetMethodsSource, 'getSubfolderSuggestionTrackingPatch')})`);

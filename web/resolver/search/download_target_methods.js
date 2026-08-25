@@ -2075,7 +2075,7 @@ export const downloadTargetMethods = {
         }
     },
 
-    async forceSuggestedDownloadSubfolder(missing, categoryEl, subfolderEl) {
+    async forceSuggestedDownloadSubfolder(missing, categoryEl, subfolderEl, options = {}) {
         if (!categoryEl || !subfolderEl) return null;
 
         const saved = this.getSavedDownloadTargetSelection(missing);
@@ -2088,13 +2088,17 @@ export const downloadTargetMethods = {
         }
         await this.ensureDownloadSubfoldersLoaded(category);
         let folders = this.getAvailableSubfolders(category);
-        let suggestion = this.getSuggestedDownloadSubfolder(missing, category, folders);
+        const suggestionOptions = {
+            // Manual Suggest must use the same configured folder rule as post-search autofill.
+            preferTemplate: options.preferTemplate !== false
+        };
+        let suggestion = this.getSuggestedDownloadSubfolder(missing, category, folders, suggestionOptions);
 
         if (!suggestion && suggestedCategory && suggestedCategory !== category) {
             category = suggestedCategory;
             await this.ensureDownloadSubfoldersLoaded(category);
             folders = this.getAvailableSubfolders(category);
-            suggestion = this.getSuggestedDownloadSubfolder(missing, category, folders);
+            suggestion = this.getSuggestedDownloadSubfolder(missing, category, folders, suggestionOptions);
         }
 
         if (!suggestion) {
