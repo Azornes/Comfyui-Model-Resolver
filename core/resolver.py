@@ -8,8 +8,9 @@ import json
 import os
 import re
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from urllib.parse import unquote
 
 from .contracts import (
@@ -63,6 +64,7 @@ MODEL_EXTENSIONS = tuple(_MODEL_EXTENSIONS)
 
 from .path_utils import (
     find_metadata_sidecar_path,
+    get_directory_entry_set,
     get_filename_from_path,
     get_path_identity,
     get_path_key,
@@ -193,36 +195,73 @@ def _build_local_hash_match_cache(
     seen_entries = set()
 
     normalized_models = normalize_models(available_models)
+    candidates = [
+        model
+        for model in normalized_models
+        if model.path and _is_local_hash_match_candidate(model)
+    ]
+    if not candidates:
+        return index
 
-    for model in normalized_models:
-        if not _is_local_hash_match_candidate(model):
-            continue
+    dir_cache: Dict[str, Set[str]] = {}
+    for model in candidates:
+        model_path = model.path
+        if model_path:
+            directory = os.path.dirname(model_path)
+            if directory:
+                get_directory_entry_set(directory, cache=dir_cache)
 
+    def _inspect_model_metadata(
+        model: ResolvedModel,
+    ) -> List[Tuple[str, str, ResolvedModel, str, str]]:
         model_path = model.path
         if not model_path:
-            continue
+            return []
 
-        metadata_path = find_metadata_sidecar_path(model_path)
+        directory = os.path.dirname(model_path)
+        dir_entries = dir_cache.get(os.path.normcase(os.path.abspath(directory))) if directory else None
+        metadata_path = find_metadata_sidecar_path(model_path, dir_entries=dir_entries)
         if not metadata_path:
-            continue
+            return []
 
         metadata = read_merged_model_metadata(model_path, None)
         if not isinstance(metadata, dict) or not metadata:
             log.debug(f"Could not read metadata sidecar for hash match: {metadata_path}")
-            continue
+            return []
 
         metadata_hashes = _extract_model_sha256_from_metadata(metadata, model)
         if not metadata_hashes:
-            continue
+            return []
 
         model_filename = model.filename or get_filename_from_path(model_path)
+        model_identity = get_path_identity(model_path) or model_path
+        results: List[Tuple[str, str, ResolvedModel, str, str]] = []
         for metadata_hash in metadata_hashes:
             normalized_hash = normalize_sha256(metadata_hash)
             if not normalized_hash:
                 continue
+            results.append(
+                (
+                    normalized_hash,
+                    model_identity,
+                    model,
+                    model_filename,
+                    metadata_path,
+                )
+            )
+        return results
 
-            model_identity = get_path_identity(model_path)
-            entry_key = (normalized_hash, model_identity or model_path)
+    if len(candidates) <= 1:
+        inspected_results = [_inspect_model_metadata(candidates[0])]
+    else:
+        cpu_cores = os.cpu_count() or 2
+        max_workers = min(8, max(2, cpu_cores))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            inspected_results = list(executor.map(_inspect_model_metadata, candidates))
+
+    for item_list in inspected_results:
+        for normalized_hash, model_identity, model, model_filename, metadata_path in item_list:
+            entry_key = (normalized_hash, model_identity)
             if entry_key in seen_entries:
                 continue
             seen_entries.add(entry_key)

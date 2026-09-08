@@ -120,6 +120,65 @@ class MetadataModelHelperTests(unittest.TestCase):
         self.assertEqual("", get_model_path_identity(""))
         self.assertEqual("", get_model_path_identity("   "))
 
+    def test_build_local_hash_match_cache_parallel_execution(self):
+        model1 = os.path.normpath("e:/models/checkpoints/model1.safetensors")
+        model2 = os.path.normpath("e:/models/loras/model2.safetensors")
+
+        def mock_sidecar(path, dir_entries=None):
+            if "model1" in path:
+                return path + ".metadata.json"
+            if "model2" in path:
+                return path + ".metadata.json"
+            return ""
+
+        def mock_read(path, default=None):
+            if "model1" in path:
+                return {"sha256": "1" * 64}
+            if "model2" in path:
+                return {"sha256": "2" * 64}
+            return default
+
+        def mock_extract(metadata, model):
+            return [metadata.get("sha256")] if metadata.get("sha256") else []
+
+        with patch("core.resolver.os.path.isdir", return_value=False), patch(
+            "core.resolver.find_metadata_sidecar_path", side_effect=mock_sidecar
+        ), patch(
+            "core.resolver.read_merged_model_metadata", side_effect=mock_read
+        ), patch(
+            "core.resolver._extract_model_sha256_from_metadata", side_effect=mock_extract
+        ):
+            index = _build_local_hash_match_cache(
+                [
+                    {"path": model1, "filename": "model1.safetensors"},
+                    {"path": model2, "filename": "model2.safetensors"},
+                ]
+            )
+
+        self.assertIn("1" * 64, index)
+        self.assertIn("2" * 64, index)
+        self.assertEqual(model1, index["1" * 64][0].model.path)
+        self.assertEqual(model2, index["2" * 64][0].model.path)
+
+    def test_sidecar_lookup_with_dir_entries(self):
+        from core.path_utils import (
+            find_metadata_sidecar_path,
+            has_model_sidecar_name_collision,
+        )
+
+        model_path = "e:/models/test_model.safetensors"
+        dir_entries = {"test_model.safetensors", "test_model.safetensors.modelresolver.json"}
+
+        with patch("os.path.isfile", return_value=True):
+            sidecar = find_metadata_sidecar_path(model_path, dir_entries=dir_entries)
+        self.assertTrue(sidecar.endswith("test_model.safetensors.modelresolver.json"))
+
+        collision_entries = {"test_model.safetensors", "test_model.ckpt"}
+        self.assertTrue(has_model_sidecar_name_collision(model_path, dir_entries=collision_entries))
+
+        no_collision_entries = {"test_model.safetensors", "other_model.ckpt"}
+        self.assertFalse(has_model_sidecar_name_collision(model_path, dir_entries=no_collision_entries))
+
 
 if __name__ == "__main__":
     unittest.main()

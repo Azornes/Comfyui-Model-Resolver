@@ -9,7 +9,7 @@ import hashlib
 import json
 import os
 import re
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 from .type_utils import normalize_alphanumeric_key
 
@@ -1080,7 +1080,34 @@ def get_comfy_root_path(folder_paths_module: Optional[Any] = None) -> str:
     return ""
 
 
-def find_external_metadata_sidecar_path(model_path: str) -> str:
+def get_directory_entry_set(
+    directory: str,
+    cache: Optional[Dict[str, Set[str]]] = None,
+) -> Set[str]:
+    """
+    Return the set of case-normalized filenames in a directory.
+
+    If ``cache`` is provided, it will be checked and updated with the result
+    keyed by normalized directory path.
+    """
+    if not directory:
+        return set()
+    normalized_dir = os.path.normcase(os.path.abspath(directory))
+    if cache is not None and normalized_dir in cache:
+        return cache[normalized_dir]
+    try:
+        entries = {os.path.normcase(name) for name in os.listdir(normalized_dir)}
+    except OSError:
+        entries = set()
+    if cache is not None:
+        cache[normalized_dir] = entries
+    return entries
+
+
+def find_external_metadata_sidecar_path(
+    model_path: str,
+    dir_entries: Optional[Set[str]] = None,
+) -> str:
     """
     Find metadata owned by another tool (for example .metadata.json,
     .civitai.info, or .json). These files are read-only to Model Resolver.
@@ -1094,7 +1121,10 @@ def find_external_metadata_sidecar_path(model_path: str) -> str:
 
     # Base name without extension
     base_name = filename.rsplit(".", 1)[0] if "." in filename else filename
-    has_stem_collision = has_model_sidecar_name_collision(model_path)
+    has_stem_collision = has_model_sidecar_name_collision(
+        model_path,
+        dir_entries=dir_entries,
+    )
 
     # Name patterns based on civitai.py and resolver.py.
     exact_names = [
@@ -1113,14 +1143,17 @@ def find_external_metadata_sidecar_path(model_path: str) -> str:
         exact_names,
         legacy_names,
         has_stem_collision=has_stem_collision,
+        dir_entries=dir_entries,
     )
 
     for name in possible_names:
         if name:
+            if dir_entries is not None and os.path.normcase(name) not in dir_entries:
+                continue
             path = os.path.join(directory, name)
             if os.path.normcase(os.path.abspath(path)) == normalized_model_path:
                 continue
-            if not os.path.exists(path):
+            if dir_entries is None and not os.path.exists(path):
                 continue
             if (
                 has_stem_collision
@@ -1140,9 +1173,16 @@ def get_model_resolver_sidecar_path(model_path: str) -> str:
     return os.path.join(directory, f"{filename}{MODEL_RESOLVER_METADATA_SUFFIX}")
 
 
-def find_model_resolver_sidecar_path(model_path: str) -> str:
+def find_model_resolver_sidecar_path(
+    model_path: str,
+    dir_entries: Optional[Set[str]] = None,
+) -> str:
     """Return the existing Model Resolver sidecar path, if present."""
     if not model_path:
+        return ""
+    filename = get_filename_from_path(model_path)
+    expected_name = f"{filename}{MODEL_RESOLVER_METADATA_SUFFIX}"
+    if dir_entries is not None and os.path.normcase(expected_name) not in dir_entries:
         return ""
     metadata_path = get_model_resolver_sidecar_path(model_path)
     normalized_model_path = os.path.normcase(os.path.abspath(model_path))
@@ -1154,7 +1194,10 @@ def find_model_resolver_sidecar_path(model_path: str) -> str:
     return ""
 
 
-def find_metadata_sidecar_path(model_path: str) -> str:
+def find_metadata_sidecar_path(
+    model_path: str,
+    dir_entries: Optional[Set[str]] = None,
+) -> str:
     """
     Return the preferred readable sidecar path.
 
@@ -1162,8 +1205,8 @@ def find_metadata_sidecar_path(model_path: str) -> str:
     available as a read-only fallback.
     """
     return (
-        find_model_resolver_sidecar_path(model_path)
-        or find_external_metadata_sidecar_path(model_path)
+        find_model_resolver_sidecar_path(model_path, dir_entries=dir_entries)
+        or find_external_metadata_sidecar_path(model_path, dir_entries=dir_entries)
     )
 
 
@@ -1242,7 +1285,10 @@ def split_path_segments(path_value: Any, filter_dots: bool = True) -> list[str]:
     return parts
 
 
-def has_model_sidecar_name_collision(model_path: str) -> bool:
+def has_model_sidecar_name_collision(
+    model_path: str,
+    dir_entries: Optional[Set[str]] = None,
+) -> bool:
     """Return whether another model file shares this file's stem."""
     if not model_path:
         return False
@@ -1256,12 +1302,20 @@ def has_model_sidecar_name_collision(model_path: str) -> bool:
     from .type_utils import MODEL_EXTENSIONS
 
     normalized_model_path = os.path.normcase(os.path.abspath(model_path))
+    normalized_filename = os.path.normcase(filename)
     for candidate_extension in MODEL_EXTENSIONS:
-        candidate_path = os.path.join(directory, f"{base_name}{candidate_extension}")
-        if os.path.normcase(os.path.abspath(candidate_path)) == normalized_model_path:
+        candidate_filename = f"{base_name}{candidate_extension}"
+        if os.path.normcase(candidate_filename) == normalized_filename:
             continue
-        if os.path.isfile(candidate_path):
-            return True
+        if dir_entries is not None:
+            if os.path.normcase(candidate_filename) in dir_entries:
+                return True
+        else:
+            candidate_path = os.path.join(directory, candidate_filename)
+            if os.path.normcase(os.path.abspath(candidate_path)) == normalized_model_path:
+                continue
+            if os.path.isfile(candidate_path):
+                return True
     return False
 
 
@@ -1329,18 +1383,27 @@ def _ordered_sidecar_names(
     legacy_names: List[Optional[str]],
     *,
     has_stem_collision: Optional[bool] = None,
+    dir_entries: Optional[Set[str]] = None,
 ) -> List[str]:
     """Return sidecar names in the established exact/legacy preference order."""
     directory = os.path.dirname(model_path)
     exact_names = [name for name in exact_names if name]
     legacy_names = [name for name in legacy_names if name]
     if has_stem_collision is None:
-        has_stem_collision = has_model_sidecar_name_collision(model_path)
+        has_stem_collision = has_model_sidecar_name_collision(
+            model_path,
+            dir_entries=dir_entries,
+        )
 
-    exact_path = os.path.join(directory, exact_names[0]) if exact_names else ""
-    prefer_exact_names = has_stem_collision or (
-        bool(exact_path) and os.path.isfile(exact_path)
-    )
+    exact_exists = False
+    if exact_names:
+        if dir_entries is not None:
+            exact_exists = os.path.normcase(exact_names[0]) in dir_entries
+        else:
+            exact_path = os.path.join(directory, exact_names[0])
+            exact_exists = bool(exact_path) and os.path.isfile(exact_path)
+
+    prefer_exact_names = has_stem_collision or exact_exists
     if prefer_exact_names:
         return exact_names + legacy_names
 
