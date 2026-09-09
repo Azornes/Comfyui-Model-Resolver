@@ -1177,10 +1177,26 @@ export const optionsMethods = {
 
         const shortSha = (value) => value ? String(value).slice(0, 8) : '';
 
+        const refreshButtons = new Set([
+            modelListCheckBtn, baseModelsCheckBtn, hfIndexRefreshBtn,
+            metadataSizeAuditBtn, aria2CheckBtn, civitaiKeyCheckBtn,
+            civitaiSessionCheckBtn, hfTokenCheckBtn, braveKeyCheckBtn,
+            clearAllCacheBtn
+        ]);
+        const refreshAnimations = new Map();
+
         const setControlsBusyState = (buttons, busy, cancelBtn = null) => {
             const btnList = Array.isArray(buttons) ? buttons : [buttons];
             btnList.forEach(btn => {
-                if (btn) btn.disabled = busy;
+                if (!btn) return;
+                btn.disabled = busy;
+                if (!refreshButtons.has(btn)) return;
+                refreshAnimations.get(btn)?.cancel();
+                refreshAnimations.delete(btn);
+                btn.classList.toggle('mr-is-refreshing', busy);
+                if (busy) {
+                    refreshAnimations.set(btn, this.startRefreshButtonAnimation(btn));
+                }
             });
             if (cancelBtn) {
                 cancelBtn.hidden = !busy;
@@ -2244,7 +2260,7 @@ export const optionsMethods = {
         };
 
         const checkAria2Status = async ({ useUnsavedPath = true } = {}) => {
-            if (aria2CheckBtn) aria2CheckBtn.disabled = true;
+            setControlsBusyState(aria2CheckBtn, true);
             setAria2Status('');
             renderAria2Summary({ backend: 'aria2' }, 'checking');
             try {
@@ -2276,7 +2292,7 @@ export const optionsMethods = {
                     running: false
                 });
             } finally {
-                if (aria2CheckBtn) aria2CheckBtn.disabled = false;
+                setControlsBusyState(aria2CheckBtn, false);
             }
         };
 
@@ -2405,7 +2421,7 @@ export const optionsMethods = {
             }
 
             try {
-                if (button) button.disabled = true;
+                setControlsBusyState(button, true);
                 setElementStatusText(statusEl, 'Checking...', 'is-pending');
                 const data = await this.fetchJson(endpoint, {
                     method: 'POST',
@@ -2420,7 +2436,7 @@ export const optionsMethods = {
                 console.error('Model Resolver: Credential check error:', error);
                 setElementStatusText(statusEl, error.message || 'Check failed', 'is-invalid');
             } finally {
-                if (button) button.disabled = false;
+                setControlsBusyState(button, false);
             }
         };
 
@@ -2699,7 +2715,7 @@ export const optionsMethods = {
 
         const clearAllCachesFromOptions = async () => {
             try {
-                if (clearAllCacheBtn) clearAllCacheBtn.disabled = true;
+                setControlsBusyState(clearAllCacheBtn, true);
                 if (clearAllCacheStatus) clearAllCacheStatus.textContent = 'Clearing frontend and backend cache...';
                 await this.clearAllResolverCaches();
                 if (clearAllCacheStatus) clearAllCacheStatus.textContent = 'Frontend and backend cache cleared.';
@@ -2712,7 +2728,7 @@ export const optionsMethods = {
                 if (clearAllCacheStatus) clearAllCacheStatus.textContent = error.message || 'Failed to clear cache.';
                 this.showNotification('Cache clear failed', 'error');
             } finally {
-                if (clearAllCacheBtn) clearAllCacheBtn.disabled = false;
+                setControlsBusyState(clearAllCacheBtn, false);
             }
         };
 

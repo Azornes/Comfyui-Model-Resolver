@@ -1277,18 +1277,24 @@ export const searchPanelMethods = {
         container.querySelectorAll?.('.mr-search-progress-retry').forEach(button => {
             if (button.dataset.mlRetrySearchBound === '1') return;
             button.dataset.mlRetrySearchBound = '1';
-            button.addEventListener('click', (event) => {
+            button.addEventListener('click', async (event) => {
                 event.preventDefault();
                 event.stopPropagation();
                 const source = button.dataset.source || '';
                 const progress = state?.sourceProgress?.[source];
                 if (!source || !progress?.retryable || state?.activeSearchRunId) return;
                 button.disabled = true;
-                this.searchOnline(missing, {
-                    workflowKey,
-                    source,
-                    forceSearch: true
-                });
+                const refreshAnimation = this.startRefreshButtonAnimation(button);
+                try {
+                    await this.searchOnline(missing, {
+                        workflowKey,
+                        source,
+                        forceSearch: true
+                    });
+                } finally {
+                    refreshAnimation?.cancel();
+                    button.disabled = false;
+                }
             });
         });
     },
