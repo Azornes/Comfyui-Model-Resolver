@@ -692,6 +692,40 @@
         "LTXV 2.5",
         "ltxv 2 5"
       ]
+    },
+    {
+      "name": "Muse Image",
+      "aliases": [
+        "muse",
+        "muse image"
+      ]
+    },
+    {
+      "name": "Wan Video 3.0",
+      "aliases": [
+        "Wan Video 3.0",
+        "wan video 3",
+        "wan video 3 0"
+      ]
+    },
+    {
+      "name": "MiniMax Music 3",
+      "aliases": [
+        "minimax music 3"
+      ]
+    },
+    {
+      "name": "Pixal3D",
+      "aliases": [
+        "pixal3d"
+      ]
+    },
+    {
+      "name": "Trellis.2",
+      "aliases": [
+        "Trellis.2",
+        "trellis 2"
+      ]
     }
   ]
 }
