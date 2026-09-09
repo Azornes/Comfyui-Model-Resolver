@@ -450,9 +450,8 @@ export const resolveDownloadMethods = {
 
     getDownloadStateKey(missing, context = null) {
         const missingKey = this.getDownloadMissingIdentity(missing);
-        const workflowScope = context
-            ? this.getDownloadWorkflowScopeIdentity(context)
-            : this.getCurrentDownloadWorkflowScopeIdentity();
+        const workflowScope = (context && this.getDownloadWorkflowScopeIdentity(context))
+            || this.getCurrentDownloadWorkflowScopeIdentity();
         return workflowScope ? `${workflowScope}::${missingKey}` : missingKey;
     },
 
@@ -1464,15 +1463,16 @@ export const resolveDownloadMethods = {
         nextDomChildren.forEach(child => container.appendChild(child));
     },
 
-    async refreshLocalMatchesForDownloadedMissing(missing, downloadedFilename, { progressDiv = null, category = '', downloadPath = '', downloadDirectory = '' } = {}) {
+    async refreshLocalMatchesForDownloadedMissing(missing, downloadedFilename, { progressDiv = null, category = '', downloadPath = '', downloadDirectory = '', workflowScope = null } = {}) {
         if (!missing) return [];
+        workflowScope ??= this.getCurrentDownloadWorkflowScopeIdentity();
+        if (workflowScope !== this.getCurrentDownloadWorkflowScopeIdentity()) return null;
 
         const targetFilename = this.getDownloadedLocalMatchTarget(missing, downloadedFilename);
         if (!targetFilename) return [];
 
         const missingKey = this.getMissingModelKey(missing);
         const refreshToken = this.beginLocalMatchRefresh(missing);
-        const currentMissing = (this.missingModels || []).find(item => this.getMissingModelKey(item) === missingKey) || missing;
 
         try {
             if (progressDiv) {
@@ -1492,8 +1492,11 @@ export const resolveDownloadMethods = {
             }
 
             const data = await this.fetchLocalMatches(targetFilename, category || missing.category || '', true);
+            if (workflowScope !== this.getCurrentDownloadWorkflowScopeIdentity()) return null;
+            // Linking can replace the model list while the scan is in flight.
+            const currentMissing = (this.missingModels || []).find(item => this.getMissingModelKey(item) === missingKey) || missing;
             if (!this.isCurrentLocalMatchRefresh(refreshToken.key, refreshToken.token)) {
-                return currentMissing.matches || [];
+                return null;
             }
 
             const matches = Array.isArray(data.matches) ? data.matches : [];
@@ -1625,14 +1628,17 @@ export const resolveDownloadMethods = {
         }
     },
 
-    async refreshAfterDownload(missing, downloadedFilename, { progressDiv = null, downloadBtn = null, category = '', downloadPath = '', downloadDirectory = '', alreadyExists = false } = {}) {
+    async refreshAfterDownload(missing, downloadedFilename, { progressDiv = null, downloadBtn = null, category = '', downloadPath = '', downloadDirectory = '', alreadyExists = false, workflowScope = null } = {}) {
+        workflowScope ??= this.getCurrentDownloadWorkflowScopeIdentity();
         try {
             const matches = await this.refreshLocalMatchesForDownloadedMissing(missing, downloadedFilename, {
                 progressDiv,
                 category,
                 downloadPath,
-                downloadDirectory
+                downloadDirectory,
+                workflowScope
             });
+            if (matches === null || workflowScope !== this.getCurrentDownloadWorkflowScopeIdentity()) return;
             const downloadedLower = String(downloadedFilename || '').toLowerCase();
             const perfectMatch = matches.find(match => {
                 const matchFilename = match.filename || match.model?.filename || '';
@@ -1668,6 +1674,7 @@ export const resolveDownloadMethods = {
             );
 
         } catch (error) {
+            if (workflowScope !== this.getCurrentDownloadWorkflowScopeIdentity()) return;
             console.error('Model Resolver: Error refreshing after download:', error);
             const snapshot = this.rememberDownloadSnapshotForMissing(missing, {
                 downloadId: null,
@@ -2218,6 +2225,7 @@ export const resolveDownloadMethods = {
                         category,
                         downloadPath: progress.path || info.downloadPath || '',
                         downloadDirectory: progress.directory || info.downloadDirectory || '',
+                        workflowScope: this.getDownloadWorkflowScopeIdentity(info),
                         alreadyExists
                     });
                 }, 500);

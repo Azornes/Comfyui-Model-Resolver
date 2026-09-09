@@ -6265,6 +6265,77 @@ test('download snapshots with identical model keys remain separated by workflow'
   );
 });
 
+function createLocalRefreshRaceDialog() {
+  const dialog = {
+    scope: 'workflow-a',
+    missingModels: [],
+    getCurrentDownloadWorkflowScopeIdentity() { return this.scope; },
+    getMissingModelKey(missing) { return missing.key; },
+    getDownloadedLocalMatchTarget(missing, filename) { return filename; },
+    getMissingModelDomKey(missing) { return missing.key; },
+    getWorkflowScopedQueueKey() { return this.scope; },
+    mergeLocalMatches(previous, next) { return [...next, ...previous]; },
+    refreshLocalMatchesUiForMissing(missing) { this.rendered = missing; }
+  };
+  for (const name of [
+    'getDownloadWorkflowScopeIdentity', 'getDownloadMissingIdentity',
+    'getDownloadStateKey', 'getDownloadProgressStore', 'cloneLocalMatches',
+    'rememberDownloadSnapshotForMissing', 'rememberDownloadedLocalMatchesForMissing',
+    'persistLocalMatchesInAnalysisCache', 'restoreDownloadedLocalMatchesForMissing',
+    'getLocalMatchRefreshKey', 'beginLocalMatchRefresh', 'isCurrentLocalMatchRefresh',
+    'finishLocalMatchRefresh', 'refreshLocalMatchesForDownloadedMissing'
+  ]) {
+    dialog[name] = eval(`(${extractMethod(resolveDownloadMethodsSource, name)})`);
+  }
+  return dialog;
+}
+
+test('completed local matches survive a later workflow analysis', () => {
+  const dialog = createLocalRefreshRaceDialog();
+  const missing = { key: 'krea2', matches: [] };
+  const exact = { confidence: 100 };
+  dialog.rememberDownloadedLocalMatchesForMissing(missing, [exact]);
+  const replacement = { key: 'krea2', matches: [] };
+  dialog.restoreDownloadedLocalMatchesForMissing(replacement, dialog.scope);
+  assert.deepEqual(replacement.matches, [exact]);
+  dialog.scope = 'workflow-b';
+  const unrelated = { key: 'krea2', matches: [] };
+  dialog.restoreDownloadedLocalMatchesForMissing(unrelated, dialog.scope);
+  assert.deepEqual(unrelated.matches, []);
+});
+
+test('download local refresh updates the model replaced while scanning', async () => {
+  const dialog = createLocalRefreshRaceDialog();
+  const original = { key: 'krea2', matches: [{ confidence: 80 }] };
+  dialog.missingModels = [original];
+  let complete;
+  dialog.fetchLocalMatches = () => new Promise(resolve => { complete = resolve; });
+  const pending = dialog.refreshLocalMatchesForDownloadedMissing(original, 'krea2.safetensors');
+  const replacement = { key: 'krea2', matches: [{ confidence: 80 }] };
+  dialog.missingModels = [replacement];
+  complete({ matches: [{ confidence: 100 }] });
+  await pending;
+  assert.equal(replacement.matches[0].confidence, 100);
+  assert.equal(dialog.rendered, replacement);
+});
+
+test('download local refresh ignores a response after switching workflows', async () => {
+  const dialog = createLocalRefreshRaceDialog();
+  const original = { key: 'krea2', matches: [] };
+  dialog.missingModels = [original];
+  let complete;
+  dialog.fetchLocalMatches = () => new Promise(resolve => { complete = resolve; });
+  const pending = dialog.refreshLocalMatchesForDownloadedMissing(original, 'krea2.safetensors');
+  dialog.scope = 'workflow-b';
+  const unrelated = { key: 'krea2', matches: [] };
+  dialog.missingModels = [unrelated];
+  complete({ matches: [{ confidence: 100 }] });
+  assert.equal(await pending, null);
+  assert.deepEqual(unrelated.matches, []);
+  assert.equal(dialog.rendered, undefined);
+  assert.equal(dialog.downloadProgressByMissingKey, undefined);
+});
+
 test('pending cancelling state cannot be overwritten by stale downloading progress', () => {
   const applyPendingDownloadStatus = eval(`(${extractMethod(resolveDownloadMethodsSource, 'applyPendingDownloadStatus')})`);
   const info = {
