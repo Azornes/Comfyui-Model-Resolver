@@ -2441,6 +2441,9 @@ export const optionsMethods = {
         };
 
         const renderModelListStatus = (data = {}, checkedRemote = false) => {
+            const statusMode = checkedRemote && data.can_compare && !data.update_available ? 'is-valid' : '';
+            setStatusMode(modelListStateEl, statusMode);
+            setStatusMode(modelListMessageEl, statusMode);
             if (modelListCountEl) {
                 modelListCountEl.textContent = Number.isFinite(Number(data.local_count))
                     ? Number(data.local_count).toLocaleString()
@@ -2491,8 +2494,8 @@ export const optionsMethods = {
         }) => {
             try {
                 setBusy(true);
-                if (stateEl) stateEl.textContent = loadingText;
-                if (messageEl && startingMessageText) messageEl.textContent = startingMessageText;
+                setElementStatusText(stateEl, loadingText, 'is-pending');
+                if (messageEl) setElementStatusText(messageEl, startingMessageText || '', 'is-pending');
                 const data = await this.fetchJson(endpoint, fetchOptions, errorContext);
                 if (successAction) {
                     await successAction(data);
@@ -2501,8 +2504,8 @@ export const optionsMethods = {
                 return data;
             } catch (error) {
                 console.error(`Model Resolver: ${errorContext} error:`, error);
-                if (stateEl) stateEl.textContent = 'Error';
-                if (messageEl) messageEl.textContent = error.message || errorFallbackText;
+                setElementStatusText(stateEl, 'Error', 'is-invalid');
+                setElementStatusText(messageEl, error.message || errorFallbackText, 'is-invalid');
                 if (notificationErrorText) {
                     this.showNotification(notificationErrorText, 'error');
                 }
@@ -2536,8 +2539,9 @@ export const optionsMethods = {
             },
             successCallback: (data) => {
                 renderModelListStatus(data, false);
-                if (modelListStateEl) modelListStateEl.textContent = 'Updated';
+                setElementStatusText(modelListStateEl, 'Updated', 'is-valid');
                 if (modelListMessageEl) modelListMessageEl.textContent = `Local Database updated. ${Number(data.local_count || 0).toLocaleString()} models loaded.`;
+                setStatusMode(modelListMessageEl, 'is-valid');
                 this.showNotification('Local Database updated', 'success');
             },
             errorFallbackText: 'Failed to update Local Database.',
@@ -2545,6 +2549,9 @@ export const optionsMethods = {
         });
 
         const renderBaseModelsStatus = (data = {}, checkedRemote = false) => {
+            const statusMode = checkedRemote && !data.update_available ? 'is-valid' : '';
+            setStatusMode(baseModelsStateEl, statusMode);
+            setStatusMode(baseModelsMessageEl, statusMode);
             if (baseModelsCountEl) {
                 baseModelsCountEl.textContent = Number.isFinite(Number(data.local_count))
                     ? Number(data.local_count).toLocaleString()
@@ -2611,13 +2618,14 @@ export const optionsMethods = {
             },
             successCallback: (data) => {
                 renderBaseModelsStatus(data, false);
-                if (baseModelsStateEl) baseModelsStateEl.textContent = 'Updated';
+                setElementStatusText(baseModelsStateEl, 'Updated', 'is-valid');
                 const newModelsSummary = formatNewBaseModelsSummary(data.new_models_added_list);
                 const addedCount = Number(data.new_models_added || 0);
                 const addedText = addedCount > 0
                     ? ` Added ${addedCount.toLocaleString()} new model${addedCount === 1 ? '' : 's'}${newModelsSummary ? `: ${newModelsSummary}` : ''}.`
                     : ' No new base models were added.';
                 if (baseModelsMessageEl) baseModelsMessageEl.textContent = `Base Models updated. ${Number(data.local_count || 0).toLocaleString()} base models loaded.${addedText}`;
+                setStatusMode(baseModelsMessageEl, 'is-valid');
                 this.showNotification(
                     addedCount > 0
                         ? `Base Models updated${newModelsSummary ? `: ${newModelsSummary}` : ''}`
@@ -2706,7 +2714,8 @@ export const optionsMethods = {
             },
             successCallback: (data) => {
                 renderHfIndexStatus(data);
-                if (hfIndexStateEl) hfIndexStateEl.textContent = 'Refreshed';
+                setElementStatusText(hfIndexStateEl, 'Refreshed', 'is-valid');
+                setStatusMode(hfIndexMessageEl, 'is-valid');
                 this.showNotification('Known HuggingFace indexes refreshed', 'success');
             },
             errorFallbackText: 'Failed to refresh HuggingFace index.',
@@ -2716,16 +2725,16 @@ export const optionsMethods = {
         const clearAllCachesFromOptions = async () => {
             try {
                 setControlsBusyState(clearAllCacheBtn, true);
-                if (clearAllCacheStatus) clearAllCacheStatus.textContent = 'Clearing frontend and backend cache...';
+                setElementStatusText(clearAllCacheStatus, 'Clearing frontend and backend cache...', 'is-pending');
                 await this.clearAllResolverCaches();
-                if (clearAllCacheStatus) clearAllCacheStatus.textContent = 'Frontend and backend cache cleared.';
+                setElementStatusText(clearAllCacheStatus, 'Frontend and backend cache cleared.', 'is-valid');
                 this.showNotification('Resolver cache cleared', 'success');
                 if (this.activeTab === 'options') {
                     this.displayOptions();
                 }
             } catch (error) {
                 console.error('Model Resolver: clear all cache error:', error);
-                if (clearAllCacheStatus) clearAllCacheStatus.textContent = error.message || 'Failed to clear cache.';
+                setElementStatusText(clearAllCacheStatus, error.message || 'Failed to clear cache.', 'is-invalid');
                 this.showNotification('Cache clear failed', 'error');
             } finally {
                 setControlsBusyState(clearAllCacheBtn, false);
