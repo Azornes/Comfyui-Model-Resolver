@@ -2096,6 +2096,7 @@ export const queueMethods = {
      * Apply one queued resolution from the selected bar.
      */
     async applyQueuedByKey(key, button = null) {
+        if (button?.disabled) return;
         if (!key || !this.pendingIndex.has(key)) {
             this.showNotification('Selected match is no longer queued.', 'error');
             return;
@@ -2117,7 +2118,9 @@ export const queueMethods = {
         try {
             await this.applyPendingResolutionList([selection], { clearAll: false });
         } finally {
-            if (button?.isConnected) {
+            // A successful link removes the selection before the background
+            // analysis replaces this card. Keep it busy until that render.
+            if (button?.isConnected && this.pendingIndex.has(key)) {
                 button.disabled = false;
                 button.classList.remove('mr-btn-is-disabled');
                 button.textContent = 'Apply';

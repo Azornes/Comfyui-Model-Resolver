@@ -1952,6 +1952,55 @@ test('Apply reuses the content-preserving workflow analysis path', () => {
   assert.doesNotMatch(applyPendingResolutionList, /refreshAnalysisInBackground\(/);
 });
 
+test('Apply stays busy after linking until the old card is removed', async () => {
+  const applyQueuedByKey = eval(`(${extractMethod(queueMethodsSource, 'applyQueuedByKey')})`);
+  const window = new Window();
+  const button = window.document.createElement('button');
+  button.textContent = 'Apply';
+  window.document.body.append(button);
+  let finishApply;
+  let calls = 0;
+  const dialog = {
+    pendingIndex: new Map([['model', 0]]),
+    pendingResolutions: [{}],
+    async applyPendingResolutionList() {
+      calls += 1;
+      await new Promise(resolve => { finishApply = resolve; });
+      this.pendingIndex.delete('model');
+    }
+  };
+  const pending = applyQueuedByKey.call(dialog, 'model', button);
+  assert.equal(button.textContent, 'Applying...');
+  assert.equal(button.disabled, true);
+  await applyQueuedByKey.call(dialog, 'model', button);
+  assert.equal(calls, 1);
+  finishApply();
+  await pending;
+  assert.equal(button.isConnected, true);
+  assert.equal(button.textContent, 'Applying...');
+  assert.equal(button.disabled, true);
+  assert.equal(button.classList.contains('mr-btn-is-disabled'), true);
+  button.remove();
+  await window.happyDOM.close();
+});
+
+test('Apply becomes available again when linking fails and selection stays queued', async () => {
+  const applyQueuedByKey = eval(`(${extractMethod(queueMethodsSource, 'applyQueuedByKey')})`);
+  const window = new Window();
+  const button = window.document.createElement('button');
+  window.document.body.append(button);
+  const dialog = {
+    pendingIndex: new Map([['model', 0]]),
+    pendingResolutions: [{}],
+    async applyPendingResolutionList() { return null; }
+  };
+  await applyQueuedByKey.call(dialog, 'model', button);
+  assert.equal(button.textContent, 'Apply');
+  assert.equal(button.disabled, false);
+  assert.equal(button.classList.contains('mr-btn-is-disabled'), false);
+  await window.happyDOM.close();
+});
+
 test('Apply keeps the workflow slot key when resolved path identity changes', () => {
   const doesResolvedModelMatchAlias = eval(
     `(${extractMethod(queueMethodsSource, 'doesResolvedModelMatchAlias')})`
