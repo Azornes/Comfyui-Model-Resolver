@@ -239,6 +239,26 @@ def download_file(
                 error_msg = f"SHA256 mismatch: expected {expected_sha256}, got {actual_sha256}"
                 if bad_path:
                     error_msg += f"; file kept at {bad_path}"
+                    # Use the intended filename so removing .badsha also makes
+                    # the already computed hash available to local model info.
+                    # Never attach the rejected file's hash to an existing model.
+                    sidecar_model_path = bad_path if os.path.exists(dest_path) else dest_path
+                    try:
+                        payload = facade.build_model_resolver_metadata(
+                            sidecar_model_path,
+                            {"sha256": actual_sha256, "size": downloaded},
+                            category,
+                        )
+                        payload.update({
+                            "expected_sha256": expected_sha256,
+                            "sha256_verified": False,
+                        })
+                        metadata_path = facade.get_model_resolver_sidecar_path(sidecar_model_path)
+                        facade.write_json_atomic(metadata_path, payload, indent=2)
+                        result["metadata_path"] = metadata_path
+                        log.info(f"Metadata saved for SHA256-mismatched download: {metadata_path}")
+                    except Exception as exc:
+                        log.warning(f"Could not save metadata for {bad_path}: {exc}")
                 with download_lock:
                     download_progress[download_id]["status"] = "error"
                     download_progress[download_id]["error"] = error_msg

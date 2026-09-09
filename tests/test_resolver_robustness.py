@@ -371,7 +371,6 @@ class ModelResolverRobustnessTests(unittest.TestCase):
                         {},
                     ),
                 ),
-                patch("core.download.api.context.write_model_resolver_metadata") as write_metadata,
             ):
                 result = download_model(
                     "https://example.com/mismatched.safetensors",
@@ -391,7 +390,23 @@ class ModelResolverRobustnessTests(unittest.TestCase):
             self.assertTrue(os.path.isfile(bad_path))
             with open(bad_path, "rb") as bad_handle:
                 self.assertEqual(payload, bad_handle.read())
-            write_metadata.assert_not_called()
+            with open(result["metadata_path"], encoding="utf-8") as handle:
+                saved = json.load(handle)
+            actual_sha256 = hashlib.sha256(payload).hexdigest()
+            self.assertEqual(actual_sha256, saved["sha256"])
+            self.assertEqual(expected_sha256, saved["expected_sha256"])
+            self.assertFalse(saved["sha256_verified"])
+            self.assertEqual("completed", saved["hash_status"])
+            self.assertEqual(len(payload), saved["size"])
+            self.assertFalse(saved["from_civitai"])
+            os.replace(bad_path, model_path)
+            with patch("core.path_utils.hashlib.sha256", side_effect=AssertionError("must reuse saved hash")):
+                self.assertEqual(actual_sha256, read_completed_metadata_sha256(model_path))
+            from core.sources.civitai import get_model_info_for_file
+
+            with patch("core.sources.civitai.calculate_file_sha256", side_effect=AssertionError("must reuse saved hash")):
+                info = get_model_info_for_file(model_path, local_only=True)
+            self.assertEqual(actual_sha256, info["sha256"])
             response.close.assert_called_once_with()
 
     def test_base_model_mapping_fuzzy_resolution(self):
