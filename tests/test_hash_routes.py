@@ -14,6 +14,38 @@ from core.routes.context import RouteContext
 from core.routes.hashes import register_hash_routes
 from core.services.hash_service import HashService
 from core.type_utils import normalize_sha256, to_bool, to_int
+from core.resolver import extract_workflow_hash_metadata, get_workflow_hash_info_for_ref
+
+
+def test_workflow_hash_does_not_follow_replaced_model_in_same_widget():
+    hashes = extract_workflow_hash_metadata({"extra": {"model_resolver_hashes": {
+        "models": [{"node_id": 232, "widget_index": 0,
+                    "path": "KREA2/detailer/Detailer-KREA2.safetensors", "sha256": "a" * 64}]
+    }}})
+    for name in ("AbbigaylK2", "KNPV4.1_pre", "real_3d_krea2_loraholic"):
+        ref = ModelReference(node_id=232, widget_index=0, original_path=name, category="loras")
+        assert get_workflow_hash_info_for_ref(hashes, ref) is None
+
+
+def test_workflow_hashes_distinguish_models_sharing_a_widget():
+    entries = [
+        {"node_id": 232, "widget_index": 0, "path": name, "sha256": value * 64}
+        for name, value in (("first.safetensors", "a"), ("second.safetensors", "b"))
+    ]
+    hashes = extract_workflow_hash_metadata({"extra": {"model_resolver_hashes": {"models": entries}}})
+    for entry in entries:
+        ref = ModelReference(node_id=232, widget_index=0, original_path=entry["path"], category="loras")
+        assert get_workflow_hash_info_for_ref(hashes, ref)["sha256"] == entry["sha256"]
+
+
+def test_workflow_hash_survives_node_reordering_and_local_file_rename():
+    hashes = extract_workflow_hash_metadata({"extra": {"model_resolver_hashes": {"models": [
+        {"node_id": 232, "widget_index": 0, "path": "original.safetensors", "sha256": "a" * 64}
+    ]}}})
+    # The workflow still requests its original name; the local hash lookup
+    # can resolve a differently named file without trusting the widget slot.
+    ref = ModelReference(node_id=900, widget_index=2, original_path="original.safetensors", category="loras")
+    assert get_workflow_hash_info_for_ref(hashes, ref)["sha256"] == "a" * 64
 
 
 class _Routes:

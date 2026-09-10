@@ -408,8 +408,9 @@ def get_workflow_hash_info_for_ref(
     if not workflow_hashes:
         return None
     original_path = model_ref.original_path
+    # Node/widget positions are reused after edits, and multi-model widgets
+    # share one position. Only model names/paths can identify a saved hash.
     candidates = [
-        f"{model_ref.node_id}:{model_ref.widget_index}",
         original_path,
         get_filename_from_path(original_path),
         model_ref.extra_value("filename", "") or "",
