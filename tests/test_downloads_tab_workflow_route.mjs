@@ -8262,3 +8262,42 @@ test('batch source queue survives errors and skips waiting requests on stop', as
   assert.deepEqual(calls, [1, 2]);
   assert.equal(dialog.batchSearchRunning, false);
 });
+
+test('LoRA workflow fallback ignores Qwen CLIP and VAE and follows Krea diffusion', () => {
+  const dialog = {
+    missingModels: [
+      { category: 'clip', civitai_info: { base_model: 'Qwen Image' } },
+      { category: 'vae', civitai_info: { base_model: 'Qwen Image' } }
+    ],
+    getCurrentWorkflow: () => ({}),
+    getWorkflowSignatureData: () => ({
+      nodes: [
+        { type: 'CLIPLoader', widgets_values: [{ index: 0, value: 'qwen_image_encoder.safetensors' }] },
+        { type: 'VAELoader', widgets_values: [{ index: 0, value: 'qwen_image_vae.safetensors' }] }
+      ],
+      definitions: { subgraphs: [{ nodes: [
+        { type: 'UNETLoader', widgets_values: [{ index: 0, value: 'KREA2/main.safetensors' }] }
+      ] }] }
+    }),
+    resolveBaseModelAlias: value => value || '',
+    resolveBaseModelAliasFromPath: () => '',
+    normalizeBaseModelToken: value => String(value).toLowerCase().replace(/[^a-z0-9]/g, ''),
+    getBaseModelAliases: () => [
+      { value: 'Qwen Image', aliases: ['qwen', 'qwen image', 'qwen_image'] },
+      { value: 'Krea 2', aliases: ['krea2'] }
+    ]
+  };
+  for (const name of ['getWorkflowModelReferenceText', 'getMissingBaseModelWeight',
+    'getResolvedWorkflowBaseModelScores', 'getDominantWorkflowBaseModel']) {
+    dialog[name] = eval(`(${extractMethod(searchPanelMethodsSource, name)})`);
+  }
+  assert.equal(dialog.getDominantWorkflowBaseModel({ category: 'loras' }), 'Krea 2');
+  assert.equal(dialog.getDominantWorkflowBaseModel({ category: 'vae' }), 'Qwen Image');
+  assert.doesNotMatch(dialog.getWorkflowModelReferenceText({ primaryOnly: true }), /qwen/i);
+  dialog.getWorkflowSignatureData = () => ({
+    nodes: [{ type: 'VAELoader', widgets_values: [{ index: 0, value: 'qwen_image_vae.safetensors' }] }]
+  });
+  assert.equal(dialog.getDominantWorkflowBaseModel({ category: 'loras' }), '');
+  dialog.missingModels.push({ category: 'diffusion_models', civitai_info: { base_model: 'Krea 2' } });
+  assert.equal(dialog.getDominantWorkflowBaseModel({ category: 'loras' }), 'Krea 2');
+});

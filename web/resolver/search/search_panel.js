@@ -218,14 +218,16 @@ export const searchPanelMethods = {
             }
         }
 
-        const workflowFallback = this.getDominantWorkflowBaseModel();
+        const workflowFallback = this.getDominantWorkflowBaseModel(missing);
         if (workflowFallback) {
             return {
                 value: workflowFallback,
                 source: 'workflow fallback',
                 message: formatAutoMessage(
                     workflowFallback,
-                    `This model could not be identified directly, so Model Resolver used the most common model type in this workflow.`,
+                    /lora/i.test(String(missing.category || missing.node_type || ''))
+                        ? 'This LoRA could not be identified directly, so Model Resolver used the main diffusion/checkpoint model family. CLIP and VAE are excluded.'
+                        : 'This model could not be identified directly, so Model Resolver used the most common model type in this workflow.',
                     'Choose another model here, or update the Base Models list in Options.'
                 )
             };
@@ -254,11 +256,17 @@ export const searchPanelMethods = {
         return this.getMissingAutoBaseModelInfo(missing).message;
     },
 
-    getWorkflowModelReferenceText() {
+    getWorkflowModelReferenceText({ primaryOnly = false } = {}) {
         const workflow = this.getCurrentWorkflow?.();
         if (!workflow) return '';
 
         const values = [];
+        const isPrimaryNode = (node) => {
+            const type = String(node.type || '');
+            const category = this.getNodeTypeDownloadCategory?.(type) || '';
+            return /checkpoint|diffusion|unet/i.test(category || type);
+        };
+        const isAuxiliaryWidget = (name) => /vae|clip|text.?encoder/i.test(String(name || ''));
         const visitValue = (value) => {
             if (typeof value === 'string') {
                 if (/^urn:/i.test(value.trim())) {
@@ -279,12 +287,14 @@ export const searchPanelMethods = {
         const collectNormalizedNodes = (nodes = []) => {
             if (!Array.isArray(nodes)) return;
             nodes.forEach(node => {
-                if (!node || node.bypassed) return;
+                if (!node || node.bypassed || (primaryOnly && !isPrimaryNode(node))) return;
                 const widgetValues = Array.isArray(node.widgets_values)
                     ? node.widgets_values
                     : [];
                 widgetValues.forEach(widget => {
                     if (widget && typeof widget === 'object' && 'value' in widget) {
+                        const descriptor = node.widgets?.[widget.index] || node.inputs?.[widget.index];
+                        if (primaryOnly && isAuxiliaryWidget(descriptor?.name || descriptor?.widget?.name)) return;
                         visitValue(widget.value);
                     }
                 });
@@ -311,9 +321,9 @@ export const searchPanelMethods = {
             const collectNamedValues = (nodes = []) => {
                 if (!Array.isArray(nodes)) return;
                 nodes.forEach(node => {
-                    if (!node || node.mode === 4 || !node.widgets_values_named) return;
+                    if (!node || node.mode === 4 || !node.widgets_values_named || (primaryOnly && !isPrimaryNode(node))) return;
                     Object.entries(node.widgets_values_named).forEach(([key, value]) => {
-                        if (modelKeyPattern.test(key)) visitValue(value);
+                        if (modelKeyPattern.test(key) && (!primaryOnly || !isAuxiliaryWidget(key))) visitValue(value);
                     });
                 });
             };
@@ -340,6 +350,7 @@ export const searchPanelMethods = {
             || category.includes('unet')
             || nodeType.includes('checkpoint')
             || nodeType.includes('unet')
+            || nodeType.includes('diffusion')
         ) {
             return 8;
         }
@@ -349,10 +360,11 @@ export const searchPanelMethods = {
         return 1;
     },
 
-    getResolvedWorkflowBaseModelScores() {
+    getResolvedWorkflowBaseModelScores({ primaryOnly = false } = {}) {
         const primaryScores = new Map();
         const secondaryScores = new Map();
         for (const missing of this.missingModels || []) {
+            if (primaryOnly && this.getMissingBaseModelWeight(missing) < 8) continue;
             const baseModel = missing?.civitai_info?.base_model || '';
             const bestMatch = this.getBestLocalMatch?.(missing, 95);
             const matchPath = bestMatch?.model?.relative_path
@@ -374,8 +386,9 @@ export const searchPanelMethods = {
         return primaryScores.size ? primaryScores : secondaryScores;
     },
 
-    getDominantWorkflowBaseModel() {
-        const resolvedScores = this.getResolvedWorkflowBaseModelScores();
+    getDominantWorkflowBaseModel(missing = {}) {
+        const primaryOnly = /lora/i.test(String(missing.category || missing.node_type || ''));
+        const resolvedScores = this.getResolvedWorkflowBaseModelScores({ primaryOnly });
         if (resolvedScores.size) {
             let bestResolved = null;
             for (const [value, score] of resolvedScores.entries()) {
@@ -386,7 +399,7 @@ export const searchPanelMethods = {
             if (bestResolved) return bestResolved.value;
         }
 
-        const text = this.getWorkflowModelReferenceText();
+        const text = this.getWorkflowModelReferenceText({ primaryOnly });
         if (!text) return '';
         const normalizedText = this.normalizeBaseModelToken(text);
         let best = null;

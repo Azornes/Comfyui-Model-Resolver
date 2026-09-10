@@ -1568,7 +1568,7 @@ export const downloadTargetMethods = {
         // another base model could supply the subfolder template metadata
         // before the compatible result is considered.
         if (usesAutomaticBaseModel && !this.getBaseModelIndependentSearchType?.(missing)) {
-            addCandidate(this.getDominantWorkflowBaseModel?.());
+            addCandidate(this.getDominantWorkflowBaseModel?.(missing));
         }
 
         for (const candidate of candidates) {
