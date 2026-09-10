@@ -2645,13 +2645,13 @@ export const resolveDownloadMethods = {
         }
 
         const isUrn = Boolean(missing.is_urn && !requestedSearchQuery && !searchSha256);
-        const resultsId = `search-results-${missing.node_id}-${missing.widget_index}`;
+        const resultsId = `search-results-${this.getMissingModelDomKey(missing)}`;
         const canUpdateCurrentWorkflow = workflowKey === this.getWorkflowScopedQueueKey();
         const resultsDiv = canUpdateCurrentWorkflow
             ? this.contentElement?.querySelector(`#${resultsId}`)
             : null;
         const searchBtn = canUpdateCurrentWorkflow
-            ? this.contentElement?.querySelector(`#search-${missing.node_id}-${missing.widget_index}`)
+            ? this.contentElement?.querySelector(`#search-${this.getMissingModelDomKey(missing)}`)
             : null;
         let searchRunId = null;
         let completedSearchRun = false;
@@ -3192,13 +3192,13 @@ export const resolveDownloadMethods = {
     wireDownloadSearchPanel(container, missing) {
         if (!container) return;
 
-        const searchResultsId = `search-results-${missing.node_id}-${missing.widget_index}`;
+        const searchResultsId = `search-results-${this.getMissingModelDomKey(missing)}`;
         const searchResultsDiv = container.querySelector(`#${searchResultsId}`);
         if (searchResultsDiv) {
             this.wireSearchDownloadButtons(searchResultsDiv, missing);
         }
 
-        const searchBtn = container.querySelector(`#search-${missing.node_id}-${missing.widget_index}`);
+        const searchBtn = container.querySelector(`#search-${this.getMissingModelDomKey(missing)}`);
         if (searchBtn && searchBtn.dataset.mlSearchBound !== 'true') {
             searchBtn.dataset.mlSearchBound = 'true';
             searchBtn.addEventListener('click', () => {

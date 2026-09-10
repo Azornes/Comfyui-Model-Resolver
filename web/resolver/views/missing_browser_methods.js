@@ -2260,7 +2260,7 @@ export const missingBrowserMethods = {
         }
 
         const state = this.searchResultCache.get(this.getMissingSearchKey(missing));
-        const searchResultsDiv = container.querySelector(`#search-results-${missing.node_id}-${missing.widget_index}`);
+        const searchResultsDiv = container.querySelector(`#search-results-${this.getMissingModelDomKey(missing)}`);
         if (state && searchResultsDiv && this.hasRenderableSearchState(state)) {
             searchResultsDiv.classList.remove('mr-is-hidden');
             searchResultsDiv.classList.add('mr-is-visible');
@@ -2732,7 +2732,7 @@ export const missingBrowserMethods = {
             });
             html += this.renderDownloadTargetControls(missing, missing.category || 'checkpoints');
             html += `</div>`;
-            html += `<div id="search-results-${missing.node_id}-${missing.widget_index}" class="mr-search-results"></div>`;
+            html += `<div id="search-results-${this.getMissingModelDomKey(missing)}" class="mr-search-results"></div>`;
         } else if (missing.is_urn) {
             html += `<div id="${urnDownloadId}" class="mr-download-section">`;
             html += `<div class="mr-download-info">Resolving CivitAI download for this URN...</div>`;
@@ -2743,7 +2743,7 @@ export const missingBrowserMethods = {
             html += this.renderSearchControls(missing);
             html += this.renderDownloadTargetControls(missing, missing.category || 'checkpoints');
             html += `</div>`;
-            html += `<div id="search-results-${missing.node_id}-${missing.widget_index}" class="mr-search-results"></div>`;
+            html += `<div id="search-results-${this.getMissingModelDomKey(missing)}" class="mr-search-results"></div>`;
         }
 
         // Progress container (for downloads). Use the complete model identity,

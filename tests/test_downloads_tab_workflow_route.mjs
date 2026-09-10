@@ -7785,6 +7785,7 @@ test('info dialog size formatting preserves numeric, nested and label values', (
 test('link/name controls place the add or search action before the input switch', () => {
   const renderSearchControls = eval(`(${extractMethod(searchPanelMethodsSource, 'renderSearchControls')})`);
   const dialog = {
+    getMissingModelDomKey() { return 'model-key'; },
     getSearchState() {
       return {
         selectedSource: 'all',
@@ -7836,6 +7837,42 @@ test('link/name controls place the add or search action before the input switch'
   assert.ok(actionIndex >= 0);
   assert.ok(inputIndex > actionIndex);
   assert.ok(modeIndex > inputIndex);
+});
+
+test('search progress stays with its model when switching a shared widget', async () => {
+  const refresh = eval(`(${extractMethod(searchPanelMethodsSource.replaceAll('workflowKey = this.getWorkflowScopedQueueKey()', "workflowKey = 'workflow'"), 'refreshSearchUiForMissingNow')})`);
+  const window = new Window();
+  const root = window.document.createElement('div');
+  window.document.body.append(root);
+  const first = { node_id: 232, widget_index: 0, original_path: 'first' };
+  const second = { ...first, original_path: 'second' };
+  const state = { activeSearchRunId: 'run-a' };
+  const dialog = {
+    ...workflowIdentityMethods,
+    contentElement: root,
+    activeTab: 'missing',
+    getWorkflowScopedQueueKey: () => 'workflow',
+    getMissingSearchKey: model => model.original_path,
+    refreshMissingSourcesSummary() {},
+    hasRenderableSearchState: () => true,
+    displaySearchResults(model, currentState, container) { container.textContent = model.original_path; },
+    renderSearchButtonContent: text => text,
+  };
+  const mount = model => {
+    dialog.selectedMissingModelKey = dialog.getMissingModelKey(model);
+    const key = dialog.getMissingModelDomKey(model);
+    root.innerHTML = `<div id="search-results-${key}"></div><button id="search-${key}">Search</button>`;
+  };
+  mount(second);
+  refresh.call(dialog, first, state, { workflowKey: 'workflow' });
+  assert.equal(root.querySelector('div').textContent, '');
+  assert.equal(root.querySelector('button').disabled, false);
+  mount(first);
+  refresh.call(dialog, first, state, { workflowKey: 'workflow' });
+  assert.equal(root.querySelector('div').textContent, 'first');
+  assert.equal(root.querySelector('button').disabled, true);
+  assert.notEqual(dialog.getMissingModelDomKey(first), dialog.getMissingModelDomKey(second));
+  await window.happyDOM.close();
 });
 
 test('search result refreshes preserve keyed progress and result DOM', () => {

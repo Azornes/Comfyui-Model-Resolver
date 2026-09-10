@@ -596,8 +596,9 @@ export const searchPanelMethods = {
         this.updateBatchFooterButtons?.();
 
         if (!this.contentElement || this.activeTab !== 'missing') return;
+        if (this.selectedMissingModelKey && this.getMissingModelKey(missing) !== this.selectedMissingModelKey) return;
 
-        const resultsId = `search-results-${missing.node_id}-${missing.widget_index}`;
+        const resultsId = `search-results-${this.getMissingModelDomKey(missing)}`;
         const resultsDiv = this.contentElement.querySelector(`#${resultsId}`);
         if (resultsDiv && currentState && this.hasRenderableSearchState(currentState)) {
             resultsDiv.classList.remove('mr-is-hidden');
@@ -605,7 +606,7 @@ export const searchPanelMethods = {
             this.displaySearchResults(missing, currentState, resultsDiv);
         }
 
-        const searchBtn = this.contentElement.querySelector(`#search-${missing.node_id}-${missing.widget_index}`);
+        const searchBtn = this.contentElement.querySelector(`#search-${this.getMissingModelDomKey(missing)}`);
         if (searchBtn && currentState) {
             const isRunning = Boolean(currentState.activeSearchRunId);
             const hasSearchAttempt = this.hasRenderableSearchState(currentState);
@@ -1915,7 +1916,7 @@ export const searchPanelMethods = {
         html += `</div>`;
 
         const downloadSourceRow = this.getDownloadSourceTableRow(missing, downloadSource);
-        html += `<div id="search-results-${missing.node_id}-${missing.widget_index}" class="mr-search-results mr-is-visible">`;
+        html += `<div id="search-results-${this.getMissingModelDomKey(missing)}" class="mr-search-results mr-is-visible">`;
         html += this.renderSearchResultsTable(downloadSourceRow ? [downloadSourceRow] : []);
         html += `</div>`;
         return html;
@@ -2082,8 +2083,8 @@ export const searchPanelMethods = {
 
         let html = `<div id="${searchSourcesId}" class="mr-search-source-bar">`;
         html += `<div class="mr-search-source-picker mr-search-button-picker">`;
-        html += `<label class="mr-search-source-picker-label" for="search-${missing.node_id}-${missing.widget_index}">Search</label>`;
-        html += `<button id="search-${missing.node_id}-${missing.widget_index}" class="mr-btn mr-btn-link" type="button">`;
+        html += `<label class="mr-search-source-picker-label" for="search-${this.getMissingModelDomKey(missing)}">Search</label>`;
+        html += `<button id="search-${this.getMissingModelDomKey(missing)}" class="mr-btn mr-btn-link" type="button">`;
         html += this.renderSearchButtonContent(buttonText);
         html += `</button>`;
         html += `</div>`;
