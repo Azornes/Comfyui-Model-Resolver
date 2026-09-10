@@ -1103,12 +1103,18 @@
     --mr-source-border-alpha: 0.22;
 }
 
-.mr-missing-source-running,
-.mr-missing-source-pending {
+.mr-missing-source-running {
     --mr-source-rgb: 96, 190, 255;
     --mr-source-fill-alpha: 0.16;
     --mr-source-border-hi-alpha: 0.78;
     --mr-source-border-alpha: 0.6;
+}
+
+.mr-missing-source-pending {
+    --mr-source-rgb: 175, 180, 188;
+    --mr-source-fill-alpha: 0.10;
+    --mr-source-border-hi-alpha: 0.52;
+    --mr-source-border-alpha: 0.38;
 }
 
 .mr-missing-source-error {
@@ -3673,6 +3679,10 @@
 
 .mr-footer:not(.mr-footer-is-missing) .mr-footer-actions {
     display: none;
+}
+
+.mr-search-progress-pending .mr-search-progress-fill {
+    background: var(--mr-text-muted);
 }
 
 .mr-footer:not(.mr-footer-is-missing) .mr-footer-star-link {

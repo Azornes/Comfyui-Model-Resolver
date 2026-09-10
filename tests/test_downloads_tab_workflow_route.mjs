@@ -7058,7 +7058,7 @@ test('search and URN completion ignore stale UI runs', () => {
   assert.match(searchOnline, /isCurrentSearchRun/);
   assert.match(searchOnline, /currentSearchRun/);
   assert.match(searchOnline, /if \(searchRunId && !isCurrentSearchRun\(\)\) return/);
-  assert.match(searchOnline, /currentSearchRun && searchBtn\?\.isConnected !== false/);
+  assert.match(searchOnline, /currentSearchRun && searchBtn && searchBtn\.isConnected !== false/);
   assert.match(resolveUrnAsync, /urnResolveUiTokens/);
   assert.match(resolveUrnAsync, /isCurrentUrnUi/);
   assert.match(resolveUrnAsync, /else if \(data\) \{\s*return;/);
@@ -8194,4 +8194,71 @@ test('applying source model details selection updates current download source ha
   assert.equal(state.results.civitai.sha256, sha256);
   assert.equal(state.results.civitai.file_info.hashes.SHA256, sha256);
   assert.equal(refreshCalls.length, 1);
+});
+
+test('batch sources advance independently while each source stays sequential', async () => {
+  const runBatch = eval(`(${extractMethod(resolveDownloadMethodsSource, 'searchMissingBatch')})`);
+  const started = [];
+  const releases = new Map();
+  const dialog = {
+    getBatchSearchTargets: () => [{ id: 1 }, { id: 2 }],
+    getWorkflowScopedQueueKey: () => 'workflow-a',
+    getSearchStateForWorkflow: () => ({}),
+    showNotification() {},
+    updateBatchFooterButtons() {},
+    closeFooterMenus() {},
+    persistSearchStateForActiveWorkflow() {},
+    async searchOnline(model, { scheduleSource }) {
+      await Promise.all(['fast', 'slow'].map(source => scheduleSource(source, async () => {
+        const key = source + model.id;
+        started.push(key);
+        await new Promise(resolve => releases.set(key, resolve));
+      })));
+    }
+  };
+  const flush = async () => { for (let i = 0; i < 15; i++) await Promise.resolve(); };
+  const pending = runBatch.call(dialog, 'all');
+  await flush();
+  assert.deepEqual(started, ['fast1', 'slow1']);
+  releases.get('fast1')();
+  await flush();
+  assert.deepEqual(started, ['fast1', 'slow1', 'fast2']);
+  assert.equal(dialog.batchSearchRunning, true);
+  releases.get('fast2')();
+  releases.get('slow1')();
+  await flush();
+  assert.deepEqual(started, ['fast1', 'slow1', 'fast2', 'slow2']);
+  releases.get('slow2')();
+  await pending;
+  assert.equal(dialog.batchSearchRunning, false);
+});
+
+test('batch source queue survives errors and skips waiting requests on stop', async () => {
+  const runBatch = eval(`(${extractMethod(resolveDownloadMethodsSource, 'searchMissingBatch')})`);
+  const calls = [];
+  let release;
+  const dialog = {
+    getBatchSearchTargets: () => [{ id: 1 }, { id: 2 }, { id: 3 }],
+    getWorkflowScopedQueueKey: () => 'workflow-a',
+    getSearchStateForWorkflow: () => ({}),
+    showNotification() {},
+    updateBatchFooterButtons() {},
+    closeFooterMenus() {},
+    persistSearchStateForActiveWorkflow() {},
+    async searchOnline(model, { scheduleSource }) {
+      await scheduleSource('civitai', async () => {
+        calls.push(model.id);
+        if (model.id === 1) throw new Error('provider failed');
+        await new Promise(resolve => { release = resolve; });
+      });
+    }
+  };
+  const pending = runBatch.call(dialog, 'all');
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+  assert.deepEqual(calls, [1, 2]);
+  dialog.batchSearchCancelRequested = true;
+  release();
+  await pending;
+  assert.deepEqual(calls, [1, 2]);
+  assert.equal(dialog.batchSearchRunning, false);
 });

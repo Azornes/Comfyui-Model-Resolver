@@ -210,22 +210,36 @@ export const resolveDownloadMethods = {
         let cancelled;
         let batchError;
         let hasBatchError = false;
+        const sourceTails = new Map();
+        const scheduleSource = (sourceId, task) => {
+            const previous = sourceTails.get(sourceId) || Promise.resolve();
+            const next = previous.then(() => this.batchSearchCancelRequested
+                ? { source: sourceId, cancelled: true }
+                : task());
+            // One failed request must not block the remaining models.
+            sourceTails.set(sourceId, next.catch(() => {}));
+            return next;
+        };
         try {
-            for (const missing of targets) {
-                if (this.batchSearchCancelRequested) {
-                    break;
-                }
+            const outcomes = await Promise.allSettled(targets.map(async missing => {
+                if (this.batchSearchCancelRequested) return;
                 const state = this.getSearchStateForWorkflow(batchWorkflowKey, missing);
                 state.selectedSource = source || 'all';
                 try {
-                    await this.searchOnline(missing, { workflowKey: batchWorkflowKey, forceSearch });
+                    await this.searchOnline(missing, {
+                        workflowKey: batchWorkflowKey,
+                        forceSearch,
+                        scheduleSource
+                    });
                 } catch (error) {
                     failed += 1;
                     console.error('Model Resolver: batch search item failed:', error);
                 }
-                completed += 1;
+                if (!this.batchSearchCancelRequested) completed += 1;
                 this.updateBatchFooterButtons();
-            }
+            }));
+            const rejected = outcomes.find(outcome => outcome.status === 'rejected');
+            if (rejected) throw rejected.reason;
         } catch (error) {
             batchError = error;
             hasBatchError = true;
@@ -2581,7 +2595,7 @@ export const resolveDownloadMethods = {
     /**
      * Search online for a model
      */
-    async searchOnline(missing, { workflowKey = this.getWorkflowScopedQueueKey(), forceSearch = false, source = null, searchQuery = '' } = {}) {
+    async searchOnline(missing, { workflowKey = this.getWorkflowScopedQueueKey(), forceSearch = false, source = null, searchQuery = '', scheduleSource = null } = {}) {
         const providedSearchQuery = String(searchQuery || '').trim();
         const searchSha256 = normalizeSha256(providedSearchQuery);
         const state = this.getSearchStateForWorkflow(workflowKey, missing);
@@ -2646,7 +2660,8 @@ export const resolveDownloadMethods = {
 
         const isUrn = Boolean(missing.is_urn && !requestedSearchQuery && !searchSha256);
         const resultsId = `search-results-${this.getMissingModelDomKey(missing)}`;
-        const canUpdateCurrentWorkflow = workflowKey === this.getWorkflowScopedQueueKey();
+        const canUpdateCurrentWorkflow = workflowKey === this.getWorkflowScopedQueueKey()
+            && (!this.selectedMissingModelKey || this.getMissingModelKey(missing) === this.selectedMissingModelKey);
         const resultsDiv = canUpdateCurrentWorkflow
             ? this.contentElement?.querySelector(`#${resultsId}`)
             : null;
@@ -2695,9 +2710,10 @@ export const resolveDownloadMethods = {
             state.sourceProgress = {};
             for (const source of sourceIds) {
                 this.setSourceProgress(state, source, {
-                    status: 'running',
-                    percent: 6,
-                    startedAt: Date.now(),
+                    status: scheduleSource ? 'pending' : 'running',
+                    percent: scheduleSource ? 0 : 6,
+                    message: scheduleSource ? 'Queued' : 'Searching...',
+                    startedAt: scheduleSource ? null : Date.now(),
                     estimateMs: this.getSearchSourceEstimateMs(source, isUrn)
                 }, missing, { workflowKey });
             }
@@ -2707,22 +2723,13 @@ export const resolveDownloadMethods = {
                 searchBtn.disabled = true;
                 searchBtn.innerHTML = this.renderSearchButtonContent(`Searching ${selectedSourceLabel}...`);
             }
-            this.syncLinkNameActionUi?.(missing, this.contentElement, state);
+            if (canUpdateCurrentWorkflow) this.syncLinkNameActionUi?.(missing, this.contentElement, state);
             if (resultsDiv) {
                 resultsDiv.classList.remove('mr-is-hidden');
                 resultsDiv.classList.add('mr-is-visible');
                 this.displaySearchResults(missing, state, resultsDiv);
             }
-            for (const source of sourceIds) {
-                this.startEstimatedSearchProgress(
-                    state,
-                    missing,
-                    resultsDiv,
-                    source,
-                    searchRunId,
-                    { workflowKey }
-                );
-            }
+
 
             // For URNs, include model_id and version_id for direct download
             const tokens = this.getStoredTokens();
@@ -2757,7 +2764,19 @@ export const resolveDownloadMethods = {
             let anyFound = false;
             let hadError = false;
 
-            const searchPromises = sourceIds.map(async (source) => {
+            const runSource = async (source) => {
+                if (!this.isBackgroundSearchRunActive(workflowKey, missingSearchKey, searchRunId)
+                    || this.isSearchSourceCancelled?.(workflowKey, missingSearchKey, searchRunId, source)) {
+                    return { source, cancelled: true };
+                }
+                this.setSourceProgress(state, source, {
+                    status: 'running',
+                    percent: 6,
+                    message: 'Searching...',
+                    startedAt: Date.now()
+                }, missing, { workflowKey });
+                this.refreshSearchUiForMissing(missing, state, { workflowKey });
+                this.startEstimatedSearchProgress(state, missing, resultsDiv, source, searchRunId, { workflowKey });
                 const sourceIsUrn = isUrn && source !== 'lora_manager_archive';
                 const progressId = `${searchRunId}-${source}-${Math.random().toString(36).slice(2, 8)}`;
                 const searchData = {
@@ -2940,7 +2959,12 @@ export const resolveDownloadMethods = {
                         cleanupJob.sourceProgressIds?.delete(source);
                     }
                 }
-            });
+            };
+            const searchPromises = sourceIds.map(source => (
+                scheduleSource
+                    ? scheduleSource(source, () => runSource(source))
+                    : runSource(source)
+            ));
 
             const currentJob = this.backgroundSearchJobs.get(backgroundJobKey);
             if (currentJob?.runId === searchRunId) {
@@ -2982,7 +3006,7 @@ export const resolveDownloadMethods = {
             if (searchRunId && !isCurrentSearchRun()) return;
             state.lastAttemptError = error.message;
             this.persistSearchStateForWorkflow(workflowKey, missing, state);
-            if (resultsDiv?.isConnected !== false) {
+            if (resultsDiv && resultsDiv.isConnected !== false) {
                 this.patchSearchResultsContainer?.(
                     resultsDiv,
                     this.renderStatusMessage(`Search failed: ${error.message}`, 'error')
@@ -3012,7 +3036,7 @@ export const resolveDownloadMethods = {
                     refresh: false
                 });
             }
-            if (currentSearchRun && searchBtn?.isConnected !== false) {
+            if (currentSearchRun && searchBtn && searchBtn.isConnected !== false) {
                 searchBtn.disabled = false;
                 searchBtn.innerHTML = this.renderSearchButtonContent('Search Again');
             }
