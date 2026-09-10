@@ -792,6 +792,8 @@ def _find_civitai_file_in_model(
     exact_only: bool = False,
     preferred_version_id: Optional[int] = None,
     base_model_context: Optional[str] = None,
+    model_data_cache: Optional[Dict[int, Any]] = None,
+    title_only: bool = False,
 ) -> Optional[SearchResult]:
     """Load one CivitAI model and search all its versions for the requested file."""
     filename_lower = filename.lower()
@@ -843,35 +845,40 @@ def _find_civitai_file_in_model(
             return "partial"
         return None
 
-    if preferred_version_id is not None:
-        resolved = resolve_urn(model_id, preferred_version_id, api_key)
-        resolved_match_type = (
-            resolved_version_match_type(resolved) if resolved else None
-        )
-        if (
-            resolved
-            and resolved_match_type
-            and _base_model_matches(resolved.get("base_model"), base_model_context)
-        ):
-            return build_result_from_resolved_version(
-                resolved,
-                preferred_version_id,
-                match_type=resolved_match_type,
-            )
-
     best_resolved_result = None
     best_resolved_confidence = 0.0
-    data = execute_provider_json_request(
-        "CivitAI model lookup",
-        f"{CIVITAI_API_URL}/models/{model_id}",
-        api_key=api_key,
-        timeout=15,
-    )
+    if model_data_cache is None:
+        model_data_cache = {}
+    if model_id not in model_data_cache:
+        model_data_cache[model_id] = execute_provider_json_request(
+            "CivitAI model lookup",
+            f"{CIVITAI_API_URL}/models/{model_id}",
+            api_key=api_key,
+            timeout=15,
+        )
+    data = model_data_cache[model_id]
     if data is None:
+        if title_only:
+            return None
+        if preferred_version_id is not None:
+            resolved = resolve_urn(model_id, preferred_version_id, api_key)
+            resolved_match_type = (
+                resolved_version_match_type(resolved) if resolved else None
+            )
+            if (
+                resolved
+                and resolved_match_type
+                and _base_model_matches(resolved.get("base_model"), base_model_context)
+            ):
+                return build_result_from_resolved_version(
+                    resolved,
+                    preferred_version_id,
+                    match_type=resolved_match_type,
+                )
         return None
     versions = data.get("modelVersions", [])
 
-    if allow_model_title_match:
+    if allow_model_title_match or title_only:
         title_match = _find_model_title_match_in_model(
             model_id=model_id,
             model_data=data,
@@ -881,6 +888,8 @@ def _find_civitai_file_in_model(
         )
         if title_match:
             return title_match
+    if title_only:
+        return None
 
     if preferred_version_id is not None:
         preferred = [v for v in versions if v.get("id") == preferred_version_id]
@@ -891,11 +900,49 @@ def _find_civitai_file_in_model(
         f"CivitAI model lookup model_id={model_id} returned {len(versions)} versions"
     )
 
+    matching_versions = [
+        version for version in versions
+        if _base_model_matches(version.get("baseModel"), base_model_context)
+    ]
+    match = _find_matching_file_in_versions(matching_versions, filename, exact_only=exact_only)
+    if match:
+        version = match["version"]
+        file_info = match["file_info"]
+        result = _build_civitai_result_from_version(
+            model_id=model_id,
+            model_name=data.get("name", ""),
+            model_type=data.get("type", ""),
+            version=version,
+            file_info=file_info,
+            tags=data.get("tags", []),
+            match_type=match["match_type"],
+        )
+        result = result.with_updates(
+            confidence=match.get(
+                "confidence",
+                calculate_filename_confidence(filename, result.filename),
+            )
+        )
+        if match["match_type"] == "similar":
+            log.info(
+                f"CivitAI version-list probable match: model_id={model_id}, version_id={result.version_id}, filename={result.filename}, confidence={result.confidence}"
+            )
+        if _base_model_matches(result.base_model, base_model_context):
+            return result
+        if not base_model_context:
+            return result
+
+
     for version in versions:
         version_id = version.get("id")
         if not version_id:
             continue
 
+        # Complete file lists were already checked without extra requests.
+        # Fetch details only when this endpoint omitted usable file names.
+        files = version.get("files") or []
+        if files and all(isinstance(item, dict) and item.get("name") for item in files):
+            continue
         resolved = resolve_urn(model_id, version_id, api_key)
         if resolved:
             resolved_match_type = resolved_version_match_type(resolved)
@@ -940,33 +987,6 @@ def _find_civitai_file_in_model(
         )
         return best_resolved_result
 
-    match = _find_matching_file_in_versions(versions, filename, exact_only=exact_only)
-    if match:
-        version = match["version"]
-        file_info = match["file_info"]
-        result = _build_civitai_result_from_version(
-            model_id=model_id,
-            model_name=data.get("name", ""),
-            model_type=data.get("type", ""),
-            version=version,
-            file_info=file_info,
-            tags=data.get("tags", []),
-            match_type=match["match_type"],
-        )
-        result = result.with_updates(
-            confidence=match.get(
-                "confidence",
-                calculate_filename_confidence(filename, result.filename),
-            )
-        )
-        if match["match_type"] == "similar":
-            log.info(
-                f"CivitAI version-list probable match: model_id={model_id}, version_id={result.version_id}, filename={result.filename}, confidence={result.confidence}"
-            )
-        if _base_model_matches(result.base_model, base_model_context):
-            return result
-        if not base_model_context:
-            return result
 
     return None
 
@@ -1040,6 +1060,7 @@ def search_civitai_for_file(
         )
         return _search_cache[cache_key]
 
+    model_data_cache: Dict[int, Any] = {}
     try:
         if requested_sha256:
             _report_progress(
@@ -1221,6 +1242,7 @@ def search_civitai_for_file(
                 exact_only=exact_only,
                 preferred_version_id=version_id,
                 base_model_context=base_model_context,
+                model_data_cache=model_data_cache,
             )
             if result:
                 confidence = result.confidence
@@ -1314,6 +1336,8 @@ def search_civitai_for_file(
                         exact_only=False,
                         preferred_version_id=candidate.get("version_id"),
                         base_model_context=base_model_context,
+                        model_data_cache=model_data_cache,
+                        title_only=True,
                     )
                     if not title_result or title_result.match_type != "model_title":
                         continue

@@ -1979,8 +1979,10 @@ class CivitaiFilenameMatchTests(unittest.TestCase):
         self.assertEqual(result["match_type"], "exact")
 
     @patch("core.sources.civitai.resolve_urn")
+    @patch("core.sources.civitai.execute_provider_json_request", return_value=None)
     def test_resolved_meaningful_partial_filename_keeps_partial_type(
         self,
+        mock_request,
         mock_resolve_urn,
     ):
         mock_resolve_urn.return_value = {
@@ -2196,3 +2198,57 @@ class GetBaseDirectoryForModelTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CivitaiRequestOptimizationTests(unittest.TestCase):
+    @patch("core.sources.civitai.resolve_urn")
+    @patch("core.sources.civitai.execute_provider_json_request")
+    def test_reuses_model_data_across_queries_and_skips_unrelated_versions(self, request, resolve):
+        request.return_value = {
+            "name": "Unrelated",
+            "modelVersions": [{"id": n, "files": [{"name": "zzzzzz.safetensors"}]} for n in range(20)],
+        }
+        cache = {}
+        for query in ("target_model.safetensors", "target model", "target model LoRA"):
+            _find_civitai_file_in_model(1, query, model_data_cache=cache, title_only=True)
+        request.assert_called_once()
+        resolve.assert_not_called()
+
+    @patch("core.sources.civitai.resolve_urn")
+    @patch("core.sources.civitai.execute_provider_json_request")
+    def test_finds_non_primary_file_without_version_requests(self, request, resolve):
+        request.return_value = {
+            "name": "Example", "type": "LORA",
+            "modelVersions": [{"id": 2, "baseModel": "Krea 2", "files": [
+                {"name": "other.safetensors", "primary": True},
+                {"name": "target.safetensors", "sizeKB": 12, "hashes": {"SHA256": "a" * 64}},
+            ]}],
+        }
+        result = _find_civitai_file_in_model(1, "target.safetensors", preferred_version_id=2, exact_only=True)
+        self.assertEqual(result.filename, "target.safetensors")
+        self.assertEqual(result.match_type, "exact")
+        request.assert_called_once()
+        resolve.assert_not_called()
+
+    @patch("core.sources.civitai.resolve_urn")
+    @patch("core.sources.civitai.execute_provider_json_request")
+    def test_unrelated_complete_file_lists_need_no_version_requests(self, request, resolve):
+        request.return_value = {
+            "name": "Unrelated",
+            "modelVersions": [{"id": n, "files": [{"name": "zzzzzz.safetensors"}]} for n in range(20)],
+        }
+        result = _find_civitai_file_in_model(1, "target.safetensors", exact_only=True)
+        self.assertIsNone(result)
+        resolve.assert_not_called()
+
+    @patch("core.sources.civitai.resolve_urn")
+    @patch("core.sources.civitai.execute_provider_json_request")
+    def test_missing_file_list_falls_back_to_version_details(self, request, resolve):
+        request.return_value = {"name": "Example", "modelVersions": [{"id": 2}]}
+        resolve.return_value = {
+            "expected_filename": "target.safetensors",
+            "files": [{"name": "target.safetensors", "size": 12}],
+        }
+        result = _find_civitai_file_in_model(1, "target.safetensors", exact_only=True)
+        self.assertEqual(result.filename, "target.safetensors")
+        resolve.assert_called_once_with(1, 2, None)
