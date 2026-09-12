@@ -1,4 +1,4 @@
-<h1 align="center">Model-Resolver</h1>
+<h1 align="center">ComfyUI-Model-Resolver</h1>
 
 <p align="center"><i>Find missing models in ComfyUI, download them from supported sources, and update workflow paths.</i></p>
 
