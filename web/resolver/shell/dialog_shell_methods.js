@@ -18,6 +18,10 @@ export const dialogShellMethods = {
             onclick: () => this.switchTab('loaded')
         }, [$el("span.mr-tab-label", { textContent: "Loaded Models" })]);
 
+        this.metadataTab = $el("button.mr-tab", {
+            onclick: () => this.switchTab('metadata')
+        }, [$el("span.mr-tab-label", { textContent: "Metadata" })]);
+
         this.optionsTab = $el("button.mr-tab", {
             onclick: () => this.switchTab('options')
         }, [$el("span.mr-tab-label", { textContent: "Options" })]);
@@ -67,6 +71,7 @@ export const dialogShellMethods = {
                     $el("div.mr-tabs", {}, [
                         this.missingTab,
                         this.loadedTab,
+                        this.metadataTab,
                         this.optionsTab
                     ])
                 ]),

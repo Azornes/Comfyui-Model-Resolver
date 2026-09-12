@@ -51,6 +51,8 @@ export const lifecycleGraphMethods = {
             await this.loadWorkflowData(workflow);
         } else if (this.activeTab === 'loaded') {
             this.switchTab('loaded', { force: true });
+        } else if (this.activeTab === 'metadata') {
+            this.switchTab('metadata', { force: true });
         } else {
             this.switchTab('options', { force: true });
         }

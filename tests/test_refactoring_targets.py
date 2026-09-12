@@ -109,6 +109,7 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
         },
         "metadata": {
             ("GET", "/model_resolver/models"),
+            ("POST", "/model_resolver/inspect-metadata"),
             ("POST", "/model_resolver/metadata-size-audit"),
             ("GET", "/model_resolver/metadata-build/capabilities"),
             ("POST", "/model_resolver/metadata-build/start"),
@@ -230,6 +231,7 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
             ("GET", "/model_resolver/calculate-file-hash/progress/{progress_id}"),
             ("POST", "/model_resolver/calculate-file-hash/cancel/{progress_id}"),
             ("GET", "/model_resolver/models"),
+            ("POST", "/model_resolver/inspect-metadata"),
             ("POST", "/model_resolver/metadata-size-audit"),
             ("GET", "/model_resolver/metadata-build/capabilities"),
             ("POST", "/model_resolver/metadata-build/start"),

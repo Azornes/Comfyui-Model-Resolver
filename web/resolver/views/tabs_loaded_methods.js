@@ -13,12 +13,13 @@ export const tabsLoadedMethods = {
         return {
             missing: this.missingTab,
             loaded: this.loadedTab,
+            metadata: this.metadataTab,
             options: this.optionsTab
         }[tab] || null;
     },
 
     updateTabButtonStates() {
-        ['missing', 'loaded', 'options'].forEach((tab) => {
+        ['missing', 'loaded', 'metadata', 'options'].forEach((tab) => {
             const button = this.getTabButton(tab);
             if (!button) return;
             const isActive = tab === this.activeTab;
@@ -68,6 +69,12 @@ export const tabsLoadedMethods = {
             }
             this.setMissingFooterControlsVisible(false);
             return this.loadLoadedModels();
+        } else if (this.activeTab === 'metadata') {
+            if (this.contentElement) {
+                this.contentElement.style.overflowY = 'auto';
+            }
+            this.setMissingFooterControlsVisible(false);
+            return this.loadImageMetadata();
         } else {
             if (this.contentElement) {
                 this.contentElement.style.overflowY = 'hidden';

@@ -135,6 +135,7 @@ def register_routes(self):
             from .downloads import register_download_routes
             from .hashes import register_hash_routes
             from .helpers import create_route_helpers
+            from .image_metadata import register_image_metadata_routes
             from .loaded_models import register_loaded_model_routes
             from .metadata import register_metadata_routes
             from .model_details import register_model_details_routes
@@ -254,6 +255,7 @@ def register_routes(self):
         register_workflow_analysis_routes(route_context)
         register_hash_routes(route_context)
         register_metadata_routes(route_context)
+        register_image_metadata_routes(route_context)
         register_loaded_model_routes(route_context)
         model_service = ModelService(route_context)
         register_civitai_search_routes(route_context, model_service)
