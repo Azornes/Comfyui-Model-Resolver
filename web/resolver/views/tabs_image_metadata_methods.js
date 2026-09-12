@@ -41,6 +41,46 @@ function countLabel(count, singular, plural = `${singular}s`) {
     return `${value} ${value === 1 ? singular : plural}`;
 }
 
+function buildCivitaiModelData(resources = []) {
+    const models = resources.map((resource, index) => {
+        const modelVersionId = resource?.model_version_id
+            ?? resource?.modelVersionId
+            ?? '';
+        const rawStrength = resource?.strength;
+        const numericStrength = Number(rawStrength);
+        const strength = Number.isFinite(numericStrength) ? numericStrength : null;
+        const name = String(
+            resource?.name
+            || resource?.model_name
+            || resource?.modelName
+            || (modelVersionId ? `Civitai model ${modelVersionId}` : '')
+        ).trim();
+        if (!name) return null;
+
+        return {
+            name,
+            category: String(resource?.category || 'unknown'),
+            node_id: `civitai-resource-${modelVersionId || index}`,
+            widget_index: null,
+            node_type: 'Civitai metadata',
+            node_title: String(resource?.version_name || resource?.versionName || '').trim(),
+            exists: false,
+            active: resource?.active !== false && (strength === null || strength !== 0),
+            connected: true,
+            strength,
+            original_path: '',
+            model_id: resource?.model_id ?? resource?.modelId ?? null,
+            model_version_id: modelVersionId || null,
+            source: 'civitai_metadata',
+        };
+    }).filter(Boolean);
+
+    return {
+        loaded_models: models,
+        total: models.length,
+    };
+}
+
 export const imageMetadataMethods = {
     loadImageMetadata() {
         if (!this.contentElement) return null;
@@ -59,25 +99,19 @@ export const imageMetadataMethods = {
                     <div class="mr-loaded-models-header mr-image-inspector-header">
                         <div class="mr-loaded-title-block">
                             <h3 class="mr-loaded-models-title">Image Metadata</h3>
-                            <p class="mr-loaded-models-subtitle">Inspect workflow data embedded in an image or loaded from JSON.</p>
+                            <p class="mr-loaded-models-subtitle">Paste workflow JSON or drop an image or JSON file anywhere in this panel.</p>
                         </div>
                         <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm" data-image-inspector-action="clear">Clear</button>
                     </div>
                     <div class="mr-image-inspector-tools">
-                        <div class="mr-image-inspector-dropzone" data-image-inspector-dropzone tabindex="0" role="button" aria-label="Drop an image or workflow JSON file">
-                            <div class="mr-image-inspector-dropzone-title">Drop an image or workflow JSON here</div>
-                            <div class="mr-image-inspector-dropzone-subtitle">PNG, JPEG, WebP, or ComfyUI UI/API JSON</div>
-                            <div class="mr-image-inspector-actions">
-                                <button type="button" class="mr-btn mr-btn-primary mr-btn-sm" data-image-inspector-action="choose-image">Load image</button>
-                                <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm" data-image-inspector-action="choose-json">Load JSON</button>
-                            </div>
-                        </div>
-                        <input type="file" accept="image/png,image/jpeg,image/webp" hidden data-image-inspector-input="image">
-                        <input type="file" accept="application/json,.json" hidden data-image-inspector-input="json">
+                        <input type="file" accept="image/png,image/jpeg,image/webp,application/json,.json" hidden data-image-inspector-input="file">
                         <div class="mr-image-inspector-paste">
-                            <label for="mr-image-inspector-json-text">Or paste workflow JSON</label>
+                            <label for="mr-image-inspector-json-text">Paste workflow JSON</label>
                             <textarea id="mr-image-inspector-json-text" class="mr-image-inspector-textarea" rows="5" placeholder="Paste a ComfyUI UI workflow or API prompt graph..."></textarea>
-                            <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm" data-image-inspector-action="analyze-paste">Analyze pasted JSON</button>
+                            <div class="mr-image-inspector-actions">
+                                <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm" data-image-inspector-action="analyze-paste">Analyze pasted JSON</button>
+                                <button type="button" class="mr-btn mr-btn-primary mr-btn-sm" data-image-inspector-action="choose-file">Load file</button>
+                            </div>
                         </div>
                     </div>
                     <div class="mr-image-inspector-result" data-image-inspector-result></div>
@@ -94,20 +128,20 @@ export const imageMetadataMethods = {
         if (!root || root.dataset.imageInspectorBound === '1') return;
         root.dataset.imageInspectorBound = '1';
 
-        const imageInput = root.querySelector('[data-image-inspector-input="image"]');
-        const jsonInput = root.querySelector('[data-image-inspector-input="json"]');
-        const dropzone = root.querySelector('[data-image-inspector-dropzone]');
-
-        dropzone?.addEventListener('click', (event) => {
-            if (event.target.closest?.('button')) return;
-            imageInput?.click();
-        });
+        const fileInput = root.querySelector('[data-image-inspector-input="file"]');
+        const setDragOver = (active) => {
+            root.classList.toggle('is-dragover', active);
+        };
+        const isFileDrag = (event) => {
+            const types = Array.from(event.dataTransfer?.types || []);
+            return types.includes('Files') || Boolean(event.dataTransfer?.files?.length);
+        };
+        let dragDepth = 0;
 
         root.addEventListener('click', (event) => {
             const action = event.target.closest?.('[data-image-inspector-action]')?.dataset?.imageInspectorAction;
             if (!action) return;
-            if (action === 'choose-image') imageInput?.click();
-            if (action === 'choose-json') jsonInput?.click();
+            if (action === 'choose-file') fileInput?.click();
             if (action === 'clear') this.clearImageMetadata();
             if (action === 'analyze-paste') {
                 const textarea = root.querySelector('.mr-image-inspector-textarea');
@@ -115,35 +149,43 @@ export const imageMetadataMethods = {
             }
         });
 
-        imageInput?.addEventListener('change', (event) => {
+        fileInput?.addEventListener('change', (event) => {
             const file = event.target.files?.[0];
             event.target.value = '';
-            if (file) void this.inspectImageFile(file);
-        });
-        jsonInput?.addEventListener('change', (event) => {
-            const file = event.target.files?.[0];
-            event.target.value = '';
-            if (file) void this.inspectWorkflowFile(file);
-        });
-
-        dropzone?.addEventListener('dragover', (event) => {
-            event.preventDefault();
-            dropzone.classList.add('is-dragover');
-            if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
-        });
-        dropzone?.addEventListener('dragleave', () => {
-            dropzone.classList.remove('is-dragover');
-        });
-        dropzone?.addEventListener('drop', (event) => {
-            event.preventDefault();
-            dropzone.classList.remove('is-dragover');
-            const file = event.dataTransfer?.files?.[0];
             if (file) void this.inspectImageMetadataFile(file);
         });
-        dropzone?.addEventListener('keydown', (event) => {
-            if (event.key !== 'Enter' && event.key !== ' ') return;
+
+        root.addEventListener('dragenter', (event) => {
+            if (!isFileDrag(event)) return;
             event.preventDefault();
-            imageInput?.click();
+            event.stopPropagation();
+            dragDepth += 1;
+            setDragOver(true);
+        });
+        root.addEventListener('dragover', (event) => {
+            if (!isFileDrag(event)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            setDragOver(true);
+            if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+        });
+        root.addEventListener('dragleave', (event) => {
+            if (!isFileDrag(event)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            dragDepth = Math.max(0, dragDepth - 1);
+            if (dragDepth === 0 || (event.relatedTarget && !root.contains(event.relatedTarget))) {
+                setDragOver(false);
+            }
+        });
+        root.addEventListener('drop', (event) => {
+            if (!isFileDrag(event)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            dragDepth = 0;
+            setDragOver(false);
+            const file = event.dataTransfer?.files?.[0];
+            if (file) void this.inspectImageMetadataFile(file);
         });
     },
 
@@ -310,6 +352,11 @@ export const imageMetadataMethods = {
         const workflowFormat = metadata.workflow_format
             ? String(metadata.workflow_format).toUpperCase()
             : 'Not found';
+        const civitaiWorkflow = String(metadata.civitai_workflow || '').trim();
+        const civitaiResources = Array.isArray(metadata.civitai_resources)
+            ? metadata.civitai_resources
+            : [];
+        const civitaiModelData = buildCivitaiModelData(civitaiResources);
         const metadataKeys = Array.isArray(metadata.metadata?.keys)
             ? metadata.metadata.keys.join(', ')
             : '—';
@@ -323,6 +370,10 @@ export const imageMetadataMethods = {
             ['Workflow nodes', metadata.workflow
                 ? countLabel(metadata.workflow_node_count, 'node')
                 : 'No embedded workflow'],
+            civitaiWorkflow ? ['Civitai workflow', civitaiWorkflow] : null,
+            civitaiResources.length
+                ? ['Civitai resources', countLabel(civitaiResources.length, 'resource')]
+                : null,
             image.mode ? ['Color mode', image.mode] : null,
             ['Metadata keys', metadataKeys],
         ].filter(Boolean);
@@ -356,7 +407,13 @@ export const imageMetadataMethods = {
         `;
 
         const modelContainer = result.querySelector(`#${modelContainerId}`);
-        if (!metadata.workflow) {
+        if (!metadata.workflow && civitaiModelData.total) {
+            this.displayLoadedModels(modelContainer, civitaiModelData, {
+                title: 'Referenced Models',
+                subtitle: 'Models reported by embedded Civitai metadata.',
+                includeContextMenu: false,
+            });
+        } else if (!metadata.workflow) {
             modelContainer.innerHTML = this.renderStatusMessage(
                 'No supported ComfyUI workflow was found in this image.',
                 'info'

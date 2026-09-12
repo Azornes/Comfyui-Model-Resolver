@@ -265,6 +265,104 @@ def test_build_promoted_contexts_records_instance_and_inner_locators():
     assert contexts["inner_widget_names"][("subgraph-1", "10", "ckpt_name")]
 
 
+def test_promoted_context_uses_named_widget_indexes_when_inputs_omit_hidden_values():
+    model_name = "4x_NMKD-Superscale-SP_178000_G.pth"
+    workflow = {
+        "nodes": [
+            {
+                "id": 157,
+                "type": "subgraph-1",
+                "mode": 4,
+                "inputs": [
+                    {"name": "image", "link": 1},
+                    {"name": "positive", "link": 2},
+                    {"name": "negative", "link": 3},
+                    {"name": "vae", "link": 4},
+                    {"name": "model", "link": 5},
+                    {
+                        "name": "value",
+                        "widget": {"name": "value"},
+                        "link": None,
+                    },
+                    {
+                        "name": "model_name",
+                        "widget": {"name": "model_name"},
+                        "link": None,
+                    },
+                ],
+                # The hidden seed is present in the positional values but not
+                # in the visible instance inputs.
+                "widgets_values": [27499, 1.2, model_name],
+                "widgets_values_named": {
+                    "seed": 27499,
+                    "value": 1.2,
+                    "model_name": model_name,
+                },
+            }
+        ],
+        "definitions": {
+            "subgraphs": [
+                {
+                    "id": "subgraph-1",
+                    "name": "Second Pass (Upscale)",
+                    "inputs": [
+                        {"name": "seed", "linkIds": [10]},
+                        {"name": "value", "linkIds": [11]},
+                        {"name": "model_name", "linkIds": [12]},
+                    ],
+                    "nodes": [
+                        {
+                            "id": 142,
+                            "type": "UpscaleModelLoader",
+                            "mode": 4,
+                            "inputs": [
+                                {
+                                    "name": "model_name",
+                                    "widget": {"name": "model_name"},
+                                    "link": 12,
+                                }
+                            ],
+                            "outputs": [
+                                {
+                                    "type": "UPSCALE_MODEL",
+                                    "links": [20],
+                                }
+                            ],
+                            "widgets_values": [model_name],
+                            "widgets_values_named": {"model_name": model_name},
+                        },
+                        {
+                            "id": 154,
+                            "type": "PrimitiveFloat",
+                            "inputs": [
+                                {
+                                    "name": "value",
+                                    "widget": {"name": "value"},
+                                    "link": 11,
+                                }
+                            ],
+                            "outputs": [],
+                            "widgets_values": [1.2],
+                            "widgets_values_named": {"value": 1.2},
+                        },
+                    ],
+                }
+            ]
+        },
+    }
+
+    refs = analysis.analyze_workflow_models(workflow, available_models=[])
+
+    assert len(refs) == 1
+    assert refs[0].original_path == model_name
+    assert refs[0].category == "upscale_models"
+    assert refs[0].node_id == 157
+    assert refs[0].widget_index == 2
+    assert refs[0].extra_value("promoted_inner_node_id") == 142
+    assert refs[0].extra_value("promoted_widget_name") == "model_name"
+    assert refs[0].extra_value("connected") is False
+
+
 def test_apply_instance_promoted_context_resolves_existing_model(tmp_path):
     model_path = tmp_path / "promoted.safetensors"
     model_path.write_bytes(b"model")

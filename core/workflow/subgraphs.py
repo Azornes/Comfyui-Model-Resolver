@@ -46,6 +46,19 @@ def _get_widget_index_by_name(
         return None
 
     widgets_values = node.get("widgets_values", [])
+
+    # ComfyUI can omit promoted/hidden inputs from ``inputs`` while keeping
+    # their values in the positional array. ``widgets_values_named`` is the
+    # serialized mapping that preserves the real positional index in that
+    # case (for example: seed, value, model_name).
+    named_values = node.get("widgets_values_named")
+    if isinstance(named_values, dict):
+        for index, name in enumerate(named_values):
+            if index >= len(widgets_values):
+                break
+            if normalize_widget_name(name) == target_name:
+                return index
+
     for widget_index in range(len(widgets_values)):
         candidates = get_widget_name_candidates(node, widget_index)
         if any(
@@ -215,6 +228,14 @@ def _build_promoted_widget_contexts(
         ) -> None:
             if proxy_index is None or not proxy_widget_name or not targets:
                 return
+
+            named_proxy_index = _get_widget_index_by_name(
+                instance_node,
+                proxy_widget_name,
+            )
+            if named_proxy_index is not None:
+                proxy_index = named_proxy_index
+
             if proxy_index in seen_proxy_indexes:
                 return
 

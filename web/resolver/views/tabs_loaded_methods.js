@@ -335,9 +335,12 @@ export const tabsLoadedMethods = {
         return true;
     },
 
-    displayLoadedModels(container, data) {
+    displayLoadedModels(container, data, options = {}) {
         const loadedModels = data.loaded_models || [];
         const total = data.total || 0;
+        const title = String(options.title || 'Loaded Models');
+        const subtitle = options.subtitle ? String(options.subtitle) : '';
+        const includeContextMenu = options.includeContextMenu !== false;
 
         if (total === 0) {
             container.innerHTML = this.renderStatusMessage('No models found in workflow.', 'info');
@@ -365,12 +368,16 @@ export const tabsLoadedMethods = {
                 ${copyIcon}<span>Copy</span>
             </button>`;
         const countText = (count, label) => `${count} ${label}${count === 1 ? '' : 's'}`;
+        const modelContextAttrs = model => includeContextMenu
+            ? this.getContextMenuAttrs(this.getLoadedModelContext(model))
+            : '';
+        const modelSubtitle = subtitle || `${countText(activeCount, 'active')} / ${countText(inactiveCount, 'inactive')}`;
 
         let html = `
             <div class="mr-loaded-models-header">
                 <div class="mr-loaded-title-block">
-                    <h3 class="mr-loaded-models-title">Loaded Models <span class="mr-loaded-total">${total}</span></h3>
-                    <p class="mr-loaded-models-subtitle">${countText(activeCount, 'active')} / ${countText(inactiveCount, 'inactive')}</p>
+                    <h3 class="mr-loaded-models-title">${this.escapeHtml(title)} <span class="mr-loaded-total">${total}</span></h3>
+                    <p class="mr-loaded-models-subtitle">${this.escapeHtml(modelSubtitle)}</p>
                 </div>
                 <div class="mr-loaded-filter-row">
                     <button class="mr-btn-filter active" id="filter-all" onclick="window.MLFilterSwitch('all')">All (${activeCount + inactiveCount})</button>
@@ -414,7 +421,7 @@ export const tabsLoadedMethods = {
                     const { name, strength } = this.getModelNameAndStrength(model);
                     const fullName = model.original_path || model.name || name;
                     const modelKey = this.getLoadedModelDomKey(model);
-                    html += `<span class="mr-model-chip" data-ml-loaded-model-key="${this.escapeHtml(modelKey)}"${this.getContextMenuAttrs(this.getLoadedModelContext(model))}${this.getModelPreviewTooltipAttrs(model, fullName)}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
+                    html += `<span class="mr-model-chip" data-ml-loaded-model-key="${this.escapeHtml(modelKey)}"${modelContextAttrs(model)}${this.getModelPreviewTooltipAttrs(model, fullName)}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
                 }
                 html += `</div></div>`;
             }
@@ -433,7 +440,7 @@ export const tabsLoadedMethods = {
                     const { name, strength } = this.getModelNameAndStrength(model);
                     const fullName = model.original_path || model.name || name;
                     const modelKey = this.getLoadedModelDomKey(model);
-                    html += `<span class="mr-model-chip" data-ml-loaded-model-key="${this.escapeHtml(modelKey)}"${this.getContextMenuAttrs(this.getLoadedModelContext(model))}${this.getModelPreviewTooltipAttrs(model, fullName)}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
+                    html += `<span class="mr-model-chip" data-ml-loaded-model-key="${this.escapeHtml(modelKey)}"${modelContextAttrs(model)}${this.getModelPreviewTooltipAttrs(model, fullName)}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
                 }
                 html += `</div></div>`;
             }

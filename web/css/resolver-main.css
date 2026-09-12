@@ -4785,6 +4785,12 @@ button.mr-info-link:disabled {
 /* Image Metadata Tab */
 .mr-image-inspector {
     min-height: 100%;
+    transition: background 120ms ease, box-shadow 120ms ease;
+}
+
+.mr-image-inspector.is-dragover {
+    background: rgba(114, 211, 138, 0.025);
+    box-shadow: inset 0 0 0 1px var(--mr-accent);
 }
 
 .mr-image-inspector-header {
@@ -4793,13 +4799,12 @@ button.mr-info-link:disabled {
 
 .mr-image-inspector-tools {
     display: grid;
-    grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--mr-spacing-12);
     padding: var(--mr-spacing-12);
     border-bottom: 1px solid var(--mr-border);
 }
 
-.mr-image-inspector-dropzone,
 .mr-image-inspector-paste {
     display: flex;
     flex-direction: column;
@@ -4811,28 +4816,6 @@ button.mr-info-link:disabled {
     background: rgba(255, 255, 255, 0.018);
 }
 
-.mr-image-inspector-dropzone {
-    align-items: center;
-    justify-content: center;
-    min-height: 132px;
-    text-align: center;
-    cursor: pointer;
-    transition: background 120ms ease, border-color 120ms ease;
-}
-
-.mr-image-inspector-dropzone:hover,
-.mr-image-inspector-dropzone.is-dragover {
-    border-color: var(--mr-accent);
-    background: rgba(114, 211, 138, 0.08);
-}
-
-.mr-image-inspector-dropzone-title {
-    color: var(--mr-text);
-    font-size: var(--mr-font-lg);
-    font-weight: 700;
-}
-
-.mr-image-inspector-dropzone-subtitle,
 .mr-image-inspector-paste label {
     color: var(--mr-text-muted);
     font-size: var(--mr-font-md);
@@ -4841,7 +4824,7 @@ button.mr-info-link:disabled {
 .mr-image-inspector-actions {
     display: flex;
     flex-wrap: wrap;
-    justify-content: center;
+    justify-content: flex-start;
     gap: var(--mr-spacing-8);
     margin-top: var(--mr-spacing-4);
 }
@@ -4867,10 +4850,6 @@ button.mr-info-link:disabled {
 .mr-image-inspector-textarea:focus {
     border-color: var(--mr-accent);
     outline: none;
-}
-
-.mr-image-inspector-paste .mr-btn {
-    align-self: flex-start;
 }
 
 .mr-image-inspector-result {
