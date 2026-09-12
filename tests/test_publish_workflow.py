@@ -19,4 +19,5 @@ def test_publish_workflow_uses_current_python_runtime_without_the_external_wrapp
 
     assert "actions/setup-python@v6" in workflow
     assert "Comfy-Org/publish-node-action@main" not in workflow
-    assert "comfy node publish --token" in workflow
+    assert "comfy --skip-prompt --no-enable-telemetry node publish --token" in workflow
+    assert "env comfy node publish" not in workflow
