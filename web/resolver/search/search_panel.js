@@ -662,6 +662,47 @@ export const searchPanelMethods = {
         }
     },
 
+    waitForTooltipMedia(media, mediaType, previewUrl) {
+        if (!media || !previewUrl) return Promise.resolve(false);
+
+        return new Promise((resolve) => {
+            const readyEvent = mediaType === 'video' ? 'loadeddata' : 'load';
+            let settled = false;
+            const finish = (loaded) => {
+                if (settled) return;
+                settled = true;
+                media.removeEventListener(readyEvent, onReady);
+                media.removeEventListener('error', onError);
+                resolve(loaded);
+            };
+            const onReady = () => {
+                if (mediaType === 'image' && typeof media.decode === 'function') {
+                    media.decode().then(
+                        () => finish(true),
+                        () => finish(false),
+                    );
+                    return;
+                }
+                finish(true);
+            };
+            const onError = () => finish(false);
+
+            media.addEventListener(readyEvent, onReady);
+            media.addEventListener('error', onError);
+            try {
+                media.src = previewUrl;
+            } catch (_error) {
+                finish(false);
+                return;
+            }
+
+            const alreadyReady = mediaType === 'video'
+                ? Number(media.readyState || 0) >= 2
+                : Boolean(media.complete && Number(media.naturalWidth || 0) > 0);
+            if (alreadyReady) Promise.resolve().then(onReady);
+        });
+    },
+
     async showTooltip(target) {
         if (!target || !this.tooltipElement) return;
         if (this.contextMenu?.style.display === 'block') {
@@ -680,16 +721,10 @@ export const searchPanelMethods = {
         this._tooltipTarget = target;
         this.tooltipElement.replaceChildren();
         this.tooltipElement.classList.remove('mr-global-tooltip-with-image');
+        this.tooltipElement.style.display = 'none';
+        this.tooltipElement.removeAttribute('data-visible');
 
         if (imageUrl) {
-            const label = document.createElement('div');
-            label.className = 'mr-tooltip-label';
-            label.textContent = text;
-            this.tooltipElement.append(label);
-            this.tooltipElement.style.display = 'block';
-            this.positionTooltip(target);
-            this.tooltipElement.setAttribute('data-visible', 'true');
-
             const mediaType = await this.getTooltipPreviewMediaType(imageUrl);
             if (
                 this._tooltipTarget !== target
@@ -698,41 +733,42 @@ export const searchPanelMethods = {
                 return;
             }
             if (!mediaType) {
-                this.tooltipElement.classList.remove('mr-global-tooltip-with-image');
-                this.positionTooltip(target);
-                return;
-            }
-
-            const media = document.createElement(mediaType === 'video' ? 'video' : 'img');
-            media.className = 'mr-tooltip-preview';
-            if (mediaType === 'video') {
-                media.autoplay = true;
-                media.loop = true;
-                media.muted = true;
-                media.playsInline = true;
-                media.preload = 'metadata';
+                this.tooltipElement.textContent = text;
             } else {
-                media.alt = '';
-                media.decoding = 'async';
-            }
-
-            media.addEventListener(mediaType === 'video' ? 'loadeddata' : 'load', () => {
-                if (this._tooltipTarget === target) {
-                    this.positionTooltip(target);
-                    if (mediaType === 'video') {
-                        media.play?.().catch(() => {});
-                    }
+                const label = document.createElement('div');
+                label.className = 'mr-tooltip-label';
+                label.textContent = text;
+                const media = document.createElement(mediaType === 'video' ? 'video' : 'img');
+                media.className = 'mr-tooltip-preview';
+                if (mediaType === 'video') {
+                    media.autoplay = true;
+                    media.loop = true;
+                    media.muted = true;
+                    media.playsInline = true;
+                    media.preload = 'metadata';
+                } else {
+                    media.alt = '';
+                    media.decoding = 'async';
                 }
-            });
-            media.addEventListener('error', () => {
-                if (this._tooltipTarget !== target) return;
-                media.remove();
-                this.tooltipElement.classList.remove('mr-global-tooltip-with-image');
-                this.positionTooltip(target);
-            });
-            media.src = imageUrl;
-            this.tooltipElement.prepend(media);
-            this.tooltipElement.classList.add('mr-global-tooltip-with-image');
+
+                this.tooltipElement.append(label);
+                this.tooltipElement.prepend(media);
+                this.tooltipElement.classList.add('mr-global-tooltip-with-image');
+                const mediaLoaded = await this.waitForTooltipMedia(media, mediaType, imageUrl);
+                if (
+                    this._tooltipTarget !== target
+                    || this.contextMenu?.style.display === 'block'
+                ) {
+                    return;
+                }
+                if (!mediaLoaded) {
+                    media.remove();
+                    this.tooltipElement.classList.remove('mr-global-tooltip-with-image');
+                    this.tooltipElement.textContent = text;
+                } else if (mediaType === 'video') {
+                    media.play?.().catch(() => {});
+                }
+            }
         } else {
             this.tooltipElement.textContent = text;
         }

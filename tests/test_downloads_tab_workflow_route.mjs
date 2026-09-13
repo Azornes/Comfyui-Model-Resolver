@@ -908,6 +908,53 @@ test('model tooltip stays hidden while the context menu is visible', () => {
   );
 });
 
+test('model tooltip waits for its preview before becoming visible', async () => {
+  const showTooltip = eval(`(${extractMethod(searchPanelMethodsSource, 'showTooltip')})`);
+  const window = new Window();
+  const previousDocument = globalThis.document;
+  const target = window.document.createElement('span');
+  const tooltipElement = window.document.createElement('div');
+  let resolveMedia;
+
+  target.setAttribute('data-tooltip', 'model.safetensors');
+  target.setAttribute('data-tooltip-image', '/model-preview?path=model.safetensors');
+
+  globalThis.document = window.document;
+  try {
+    const dialog = {
+      contextMenu: { style: { display: 'none' } },
+      tooltipElement,
+      normalizeTooltipTarget() {},
+      async getTooltipPreviewMediaType() {
+        return 'image';
+      },
+      waitForTooltipMedia() {
+        return new Promise(resolve => {
+          resolveMedia = resolve;
+        });
+      },
+      positionTooltip() {},
+    };
+
+    const tooltipPromise = showTooltip.call(dialog, target);
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    assert.equal(tooltipElement.style.display, 'none');
+    assert.equal(tooltipElement.hasAttribute('data-visible'), false);
+    assert.ok(tooltipElement.querySelector('.mr-tooltip-preview'));
+
+    resolveMedia(true);
+    await tooltipPromise;
+
+    assert.equal(tooltipElement.style.display, 'block');
+    assert.equal(tooltipElement.getAttribute('data-visible'), 'true');
+    assert.equal(tooltipElement.classList.contains('mr-global-tooltip-with-image'), true);
+  } finally {
+    globalThis.document = previousDocument;
+    await window.happyDOM.close();
+  }
+});
+
 test('model tooltip revalidates and detects video previews from the preview route', async () => {
   const getTooltipPreviewMediaType = eval(`(${extractMethod(searchPanelMethodsSource, 'getTooltipPreviewMediaType')})`);
   const previousFetch = globalThis.fetch;
