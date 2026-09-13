@@ -926,6 +926,9 @@ export const workflowStateMethods = {
             await this.loadLoadedModels(workflow, {
                 preserveContent: !routeChanged && reason === 'node-widget-change'
             });
+        } else if (this.activeTab === 'metadata') {
+            if (this.contentElement) this.contentElement.style.overflowY = 'auto';
+            await this.openMetadataTransfer?.();
         }
     }
 };

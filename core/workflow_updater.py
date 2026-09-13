@@ -269,6 +269,25 @@ def update_model_path(workflow: Dict[str, Any], resolution: Resolution) -> bool:
     else:
         widgets_values[widget_index] = relative_path
         log.debug(f"Updated node {node_id}, widget {widget_index} to: {relative_path}")
+
+    # Some ComfyUI UI workflows keep a named mirror alongside the positional
+    # widgets array. Keep it in sync so promoted subgraph values do not appear
+    # to revert on the next workflow analysis.
+    named_values = node.get("widgets_values_named")
+    if isinstance(named_values, dict):
+        named_widget = resolution.promoted_widget_name
+        if not named_widget and resolution.reference:
+            named_widget = resolution.reference.extra_value("widget_name")
+        if not named_widget:
+            named_keys = list(named_values)
+            if 0 <= widget_index < len(named_keys):
+                named_widget = named_keys[widget_index]
+        if named_widget:
+            named_value = named_values.get(named_widget)
+            if nested_key and isinstance(named_value, dict):
+                named_value[nested_key] = relative_path
+            else:
+                named_values[named_widget] = relative_path
     return True
 
 

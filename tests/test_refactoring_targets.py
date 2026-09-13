@@ -95,6 +95,7 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
         "workflow": {
             ("POST", "/model_resolver/analyze"),
             ("GET", "/model_resolver/analyze-progress/{analysis_id}"),
+            ("POST", "/model_resolver/transfer-models"),
             ("POST", "/model_resolver/resolve"),
             ("POST", "/model_resolver/local-matches"),
             ("POST", "/model_resolver/local-model-hashes"),
@@ -170,6 +171,9 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
             ("POST", "/model_resolver/resolve"),
             ("POST", "/model_resolver/local-matches"),
         },
+        "workflow_transfer": {
+            ("POST", "/model_resolver/transfer-models"),
+        },
         "workflow_hashes": {
             ("POST", "/model_resolver/local-model-hashes"),
             ("GET", "/model_resolver/model-preview"),
@@ -219,6 +223,7 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
             ("POST", "/model_resolver/base-models/update"),
             ("POST", "/model_resolver/analyze"),
             ("GET", "/model_resolver/analyze-progress/{analysis_id}"),
+            ("POST", "/model_resolver/transfer-models"),
             ("POST", "/model_resolver/resolve"),
             ("POST", "/model_resolver/local-matches"),
             ("POST", "/model_resolver/local-model-hashes"),

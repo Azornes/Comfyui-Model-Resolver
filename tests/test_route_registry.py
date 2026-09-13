@@ -75,6 +75,7 @@ def test_register_routes_registers_each_route_family(route_environment):
     assert {
         ("GET", "/model_resolver/base-models"),
         ("POST", "/model_resolver/analyze"),
+        ("POST", "/model_resolver/transfer-models"),
         ("POST", "/model_resolver/local-model-hashes"),
         ("POST", "/model_resolver/civitai-search"),
         ("POST", "/model_resolver/search"),

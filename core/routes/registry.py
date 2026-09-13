@@ -144,6 +144,7 @@ def register_routes(self):
             from .source_search import register_source_search_routes
             from .version import register_version_routes
             from .workflow_analysis import register_workflow_analysis_routes
+            from .workflow_transfer import register_workflow_transfer_routes
         except ImportError as e:
             self.logger.error(f"Model Resolver: Could not import core modules: {e}")
             return False
@@ -253,6 +254,7 @@ def register_routes(self):
         register_base_model_routes(routes, web, json_api_endpoint)
         route_context = RouteContext.from_namespaces(globals(), locals())
         register_workflow_analysis_routes(route_context)
+        register_workflow_transfer_routes(route_context)
         register_hash_routes(route_context)
         register_metadata_routes(route_context)
         register_image_metadata_routes(route_context)
