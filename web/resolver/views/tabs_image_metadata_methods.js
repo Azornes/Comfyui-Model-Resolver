@@ -1294,7 +1294,7 @@ export const imageMetadataMethods = {
                         <span class="mr-image-transfer-node-check" aria-hidden="true">${selected ? '✓' : ''}</span>
                         <span class="mr-image-transfer-node-details">
                             <span class="mr-image-transfer-node-name">${this.escapeHtml(nodeName)} · Node ${this.escapeHtml(node.nodeId)}${this.escapeHtml(scopeLabel)}</span>
-                            <span class="mr-image-transfer-node-meta">${this.escapeHtml(nodeType)} · ${countText(node.refs.length, 'model slot')}${node.active ? ' · Active' : ' · Inactive'}</span>
+                            <span class="mr-image-transfer-node-meta">${this.escapeHtml(nodeType)} · ${countText(node.refs.length, 'model slot')} · <span class="mr-image-transfer-node-status ${node.active ? 'is-active' : 'is-inactive'}">${node.active ? 'Active' : 'Inactive'}</span></span>
                         </span>
                     </button>
                     <div class="mr-image-transfer-node-preview">${previewHtml}</div>

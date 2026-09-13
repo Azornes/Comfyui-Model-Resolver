@@ -5546,6 +5546,18 @@ button.mr-info-link:disabled {
     font-weight: 500;
 }
 
+.mr-image-transfer-node-status {
+    font-weight: 650;
+}
+
+.mr-image-transfer-node-status.is-active {
+    color: var(--mr-color-success-action, var(--mr-accent, #72d38a));
+}
+
+.mr-image-transfer-node-status.is-inactive {
+    color: var(--mr-text-dim, var(--mr-text-muted));
+}
+
 .mr-image-transfer-node-preview {
     display: flex;
     flex-direction: column;
