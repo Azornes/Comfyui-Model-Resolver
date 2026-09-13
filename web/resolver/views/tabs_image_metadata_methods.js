@@ -1,28 +1,14 @@
+import { safeStorage } from "../utils/html_utils.js";
+import {
+    isExistingResolvedModel,
+    toResolverContextModel,
+} from "../node_context_menu.js";
+import { normalizeCategoryValue } from "../utils/category_utils.js";
+
 const MAX_IMAGE_FILE_SIZE = 64 * 1024 * 1024;
 const MAX_WORKFLOW_FILE_SIZE = 16 * 1024 * 1024;
-
-const TRANSFER_CATEGORY_ALIASES = Object.freeze({
-    checkpoint: 'checkpoints',
-    checkpoints: 'checkpoints',
-    ckpt: 'checkpoints',
-    lora: 'loras',
-    loras: 'loras',
-    clip: 'text_encoders',
-    text_encoder: 'text_encoders',
-    text_encoders: 'text_encoders',
-    vae: 'vae',
-    control_net: 'controlnet',
-    controlnet: 'controlnet',
-    upscale: 'upscale_models',
-    upscaler: 'upscale_models',
-    upscale_model: 'upscale_models',
-    upscale_models: 'upscale_models',
-    unet: 'diffusion_models',
-    diffusion_model: 'diffusion_models',
-    diffusion_models: 'diffusion_models',
-    embedding: 'embeddings',
-    embeddings: 'embeddings',
-});
+const METADATA_TRANSFER_MODE_STORAGE_KEY = 'model_resolver_metadata_transfer_mode';
+const METADATA_TRANSFER_ACTIVITY_SCOPE_STORAGE_KEY = 'model_resolver_metadata_transfer_activity_scope';
 
 const MERGE_LORA_NODE_TYPES = new Set([
     'LoraLoaderV2',
@@ -63,8 +49,7 @@ function isAppendableLoraNodeType(nodeType) {
 }
 
 function normalizeTransferCategory(value) {
-    const token = String(value || '').trim().toLowerCase().replaceAll('-', '_');
-    return TRANSFER_CATEGORY_ALIASES[token] || token;
+    return normalizeCategoryValue(value);
 }
 
 function getTransferNodeKey(model = {}) {
@@ -161,11 +146,23 @@ function buildCivitaiModelData(resources = []) {
 }
 
 export const imageMetadataMethods = {
+    isMetadataTransferCurrentWorkflow(state = null, workflow = null) {
+        const transfer = state?.transfer;
+        if (!transfer) return false;
+        if (!workflow) return !transfer.workflowSignature;
+
+        const workflowSignature = this.getWorkflowSignature?.(workflow) || '';
+        return Boolean(workflowSignature) && transfer.workflowSignature === workflowSignature;
+    },
+
     loadImageMetadata() {
         if (!this.contentElement) return null;
         this.contentElement.style.overflowY = 'auto';
+        const state = getImageInspectorState(this);
+        const workflow = this.getCurrentWorkflow?.() || null;
+        const shouldOpenTransfer = !this.isMetadataTransferCurrentWorkflow(state, workflow);
         this.renderImageMetadataShell();
-        void this.openMetadataTransfer();
+        if (shouldOpenTransfer) void this.openMetadataTransfer();
         return null;
     },
 
@@ -244,7 +241,7 @@ export const imageMetadataMethods = {
             if (action === 'choose-file') fileInput?.click();
             if (action === 'clear') this.clearImageMetadata();
             if (action === 'clear-transfer-targets') this.clearMetadataTransferTargets();
-            if (action === 'retry-transfer-targets') void this.openMetadataTransfer();
+            if (action === 'retry-transfer-targets') void this.openMetadataTransfer({ force: true });
             if (action === 'apply-transfer') void this.applyMetadataTransfer();
             if (action === 'analyze-paste') {
                 const textarea = root.querySelector('.mr-image-inspector-textarea');
@@ -275,14 +272,14 @@ export const imageMetadataMethods = {
             }
             if (input.matches?.('[data-image-transfer-mode]')) {
                 const state = getImageInspectorState(this);
-                if (state.transfer) state.transfer.mode = normalizeTransferMode(input.value);
+                if (state.transfer) state.transfer.mode = this.setMetadataTransferMode(input.value);
                 this.renderImageMetadataResult();
                 return;
             }
             if (input.matches?.('[data-image-transfer-activity-scope]')) {
                 const state = getImageInspectorState(this);
                 if (state.transfer) {
-                    state.transfer.activityScope = normalizeTransferActivityScope(input.value);
+                    state.transfer.activityScope = this.setMetadataTransferActivityScope(input.value);
                 }
                 this.renderImageMetadataResult();
                 return;
@@ -681,18 +678,22 @@ export const imageMetadataMethods = {
     },
 
     getMetadataTransferModelInteractionAttrs(model = {}, contextScope = 'loaded_model', label = '') {
-        const modelPath = String(
-            model?.resolved_path
-            || model?.path
-            || model?.full_path
-            || ''
-        ).trim();
-        if (model?.exists !== true || !modelPath) return '';
+        if (!isExistingResolvedModel(model)) return '';
 
-        const contextModel = {
-            ...model,
-            context_scope: contextScope,
-        };
+        let contextModel;
+        if (contextScope === 'local_model') {
+            contextModel = toResolverContextModel(model);
+        } else if (
+            contextScope === 'loaded_model'
+            && typeof this.getLoadedModelContext === 'function'
+        ) {
+            contextModel = this.getLoadedModelContext(model);
+        } else {
+            contextModel = {
+                ...model,
+                context_scope: contextScope,
+            };
+        }
         const contextMenuAttrs = typeof this.getContextMenuAttrs === 'function'
             ? this.getContextMenuAttrs(contextModel)
             : '';
@@ -700,6 +701,27 @@ export const imageMetadataMethods = {
             ? this.getModelPreviewTooltipAttrs(model, label)
             : '';
         return `${contextMenuAttrs}${previewTooltipAttrs}`;
+    },
+
+    getMetadataTransferPreferences() {
+        return {
+            mode: normalizeTransferMode(safeStorage.getItem(METADATA_TRANSFER_MODE_STORAGE_KEY)),
+            activityScope: normalizeTransferActivityScope(
+                safeStorage.getItem(METADATA_TRANSFER_ACTIVITY_SCOPE_STORAGE_KEY)
+            ),
+        };
+    },
+
+    setMetadataTransferMode(value) {
+        const mode = normalizeTransferMode(value);
+        safeStorage.setItem(METADATA_TRANSFER_MODE_STORAGE_KEY, mode);
+        return mode;
+    },
+
+    setMetadataTransferActivityScope(value) {
+        const activityScope = normalizeTransferActivityScope(value);
+        safeStorage.setItem(METADATA_TRANSFER_ACTIVITY_SCOPE_STORAGE_KEY, activityScope);
+        return activityScope;
     },
 
     getMetadataTransferSourceSelectionKey(ref = {}) {
@@ -1378,13 +1400,14 @@ export const imageMetadataMethods = {
         `;
     },
 
-    async openMetadataTransfer() {
+    async openMetadataTransfer({ force = false } = {}) {
         const state = getImageInspectorState(this);
         const imageRequestToken = state.requestToken;
         const workflow = this.getCurrentWorkflow?.();
         const workflowSignature = workflow
             ? (this.getWorkflowSignature?.(workflow) || '')
             : '';
+        if (workflow) this.syncWorkflowScopedQueue?.(workflow);
         const previousTransfer = state.transfer;
         const preserveSelection = Boolean(
             workflowSignature
@@ -1392,6 +1415,7 @@ export const imageMetadataMethods = {
             && previousTransfer.workflowSignature === workflowSignature
         );
         const previousSourceSelections = previousTransfer?.sourceSelections;
+        const savedPreferences = this.getMetadataTransferPreferences();
         const sourceSelections = preserveSelection
             ? previousSourceSelections instanceof Map
                 ? Object.fromEntries(previousSourceSelections)
@@ -1405,8 +1429,10 @@ export const imageMetadataMethods = {
             loading: Boolean(workflow),
             applying: false,
             error: '',
-            mode: normalizeTransferMode(previousTransfer?.mode),
-            activityScope: normalizeTransferActivityScope(previousTransfer?.activityScope),
+            mode: normalizeTransferMode(previousTransfer?.mode ?? savedPreferences.mode),
+            activityScope: normalizeTransferActivityScope(
+                previousTransfer?.activityScope ?? savedPreferences.activityScope
+            ),
             requestToken: token,
             workflowSignature,
             targetGroups: [],
@@ -1428,18 +1454,30 @@ export const imageMetadataMethods = {
         }
 
         try {
-            const targetModels = await this.fetchJson(
-                '/model_resolver/loaded',
-                {
-                    method: 'POST',
-                    body: JSON.stringify({ workflow }),
-                },
-                'Scan current workflow for transfer'
+            const cachedTargetModels = this.getCachedLoadedModelsForSignature?.(
+                workflowSignature,
+                { force },
             );
+            let targetModels = cachedTargetModels;
+            if (!targetModels) {
+                targetModels = await this.fetchJson(
+                    '/model_resolver/loaded',
+                    {
+                        method: 'POST',
+                        body: JSON.stringify({ workflow }),
+                    },
+                    'Scan current workflow for transfer'
+                );
+            }
             if (
                 state.requestToken !== imageRequestToken
                 || state.transfer?.requestToken !== token
             ) return null;
+            if (!cachedTargetModels && workflowSignature) {
+                this.cachedLoadedModelsSignature = workflowSignature;
+                this.cachedLoadedModelsData = targetModels;
+                this.saveLoadedModelsCacheForActiveWorkflow?.();
+            }
             state.transfer.loading = false;
             state.transfer.targetModels = targetModels;
             state.transfer.targetGroups = this.getMetadataTransferTargetGroups(targetModels);

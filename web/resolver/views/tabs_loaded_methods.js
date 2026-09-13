@@ -120,14 +120,13 @@ export const tabsLoadedMethods = {
             this._loadedModelsLoadToken = loadToken;
 
             const workflowSignature = this.getWorkflowSignature(workflow);
-            if (
-                !force &&
-                workflowSignature &&
-                this.cachedLoadedModelsSignature === workflowSignature &&
-                this.cachedLoadedModelsData
-            ) {
+            const cachedLoadedModels = this.getCachedLoadedModelsForSignature?.(
+                workflowSignature,
+                { force },
+            );
+            if (cachedLoadedModels) {
                 if (shouldRenderLoadedModels()) {
-                    this.displayLoadedModels(this.contentElement, this.cachedLoadedModelsData);
+                    this.displayLoadedModels(this.contentElement, cachedLoadedModels);
                 }
                 return;
             }

@@ -2096,6 +2096,40 @@ test('background Loaded Models refresh keeps the current view until new data is 
   assert.equal(contentElement.scrollTop, 48);
 });
 
+test('Loaded Models renders the shared cache without starting another scan', async () => {
+  const loadLoadedModels = eval(`(${extractMethod(tabsLoadedMethodsSource, 'loadLoadedModels')})`);
+  const getCachedLoadedModelsForSignature = eval(`(${extractMethod(
+    workflowStateMethodsSource,
+    'getCachedLoadedModelsForSignature'
+  )})`);
+  const cachedData = { loaded_models: [{ strength: 0.5 }], total: 1 };
+  const contentElement = { innerHTML: '' };
+  let fetchCount = 0;
+  let renderCount = 0;
+  const dialog = {
+    activeTab: 'loaded',
+    contentElement,
+    cachedLoadedModelsSignature: 'workflow-a',
+    cachedLoadedModelsData: cachedData,
+    syncWorkflowScopedQueue() {},
+    getWorkflowSignature: () => 'workflow-a',
+    getCachedLoadedModelsForSignature,
+    fetchJson: async () => {
+      fetchCount += 1;
+      throw new Error('The shared cache was not used');
+    },
+    displayLoadedModels: (_container, data) => {
+      renderCount += 1;
+      assert.equal(data, cachedData);
+    },
+  };
+
+  await loadLoadedModels.call(dialog, { nodes: [] });
+
+  assert.equal(fetchCount, 0);
+  assert.equal(renderCount, 1);
+});
+
 test('Loaded Models progress patches the stable progress container', () => {
   const pollWorkflowProgress = extractMethod(renderFormatMethodsSource, 'pollWorkflowProgress');
   const patchLoadedModelsProgress = extractMethod(
@@ -2728,6 +2762,31 @@ test('workflow analysis and loaded model caches stay independent and cloned', ()
 
   dialog.cachedAnalysisData.missing_models.push({ filename: 'local-only.safetensors' });
   assert.equal(dialog.workflowAnalysisCaches.get(dialog.workflowKey).data.missing_models.length, 1);
+});
+
+test('shared loaded model cache requires a matching workflow signature unless forced', () => {
+  const getCachedLoadedModelsForSignature = eval(`(${extractMethod(
+    workflowStateMethodsSource,
+    'getCachedLoadedModelsForSignature'
+  )})`);
+  const cachedData = { loaded_models: [{ filename: 'loaded.safetensors' }] };
+  const dialog = {
+    cachedLoadedModelsSignature: 'workflow-a',
+    cachedLoadedModelsData: cachedData,
+  };
+
+  assert.equal(
+    getCachedLoadedModelsForSignature.call(dialog, 'workflow-a'),
+    cachedData
+  );
+  assert.equal(
+    getCachedLoadedModelsForSignature.call(dialog, 'workflow-b'),
+    null
+  );
+  assert.equal(
+    getCachedLoadedModelsForSignature.call(dialog, 'workflow-a', { force: true }),
+    null
+  );
 });
 
 test('Missing Models filter toggles persist state and rerender once per change', () => {

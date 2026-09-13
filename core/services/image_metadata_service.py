@@ -14,6 +14,7 @@ from ..request_utils import (
     read_text_field,
 )
 from ..routes.context import RouteContext
+from ..type_utils import CATEGORY_MAP, normalize_category_token
 from ..workflow.formats import normalize_workflow_payload
 
 MAX_IMAGE_BYTES = 64 * 1024 * 1024
@@ -25,22 +26,6 @@ _CIVITAI_JSON_LABELS = (
     "Civitai metadata",
     "Civitai resources",
 )
-_CIVITAI_CATEGORY_ALIASES = {
-    "checkpoint": "checkpoints",
-    "checkpoints": "checkpoints",
-    "lora": "loras",
-    "loras": "loras",
-    "vae": "vae",
-    "controlnet": "controlnet",
-    "embedding": "embeddings",
-    "embeddings": "embeddings",
-    "textualinversion": "embeddings",
-    "upscale": "upscale_models",
-    "upscaler": "upscale_models",
-    "upscalemodel": "upscale_models",
-}
-
-
 def _decode_exif_user_comment(value: bytes) -> str:
     """Decode the standard EXIF UserComment prefix and payload."""
     if value.startswith(b"UNICODE"):
@@ -268,8 +253,8 @@ def _normalize_civitai_resource(value: Any, index: int) -> Optional[dict[str, An
     resource_type = str(
         _first_mapping_value(value, ("type", "model_type", "modelType")) or ""
     ).strip()
-    category_key = re.sub(r"[^a-z0-9]+", "", resource_type.lower())
-    category = _CIVITAI_CATEGORY_ALIASES.get(category_key, category_key or "unknown")
+    category_key = normalize_category_token(resource_type)
+    category = CATEGORY_MAP.get(category_key, category_key or "unknown")
     model_version_id = _coerce_identifier(
         _first_mapping_value(
             value,

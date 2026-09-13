@@ -147,6 +147,123 @@ function createLoraTransferState(sourceModels, activityScope = 'all') {
   };
 }
 
+test('metadata transfer persists only mode and activity scope preferences', () => {
+  const context = createTransferContext();
+
+  assert.deepEqual(context.getMetadataTransferPreferences(), {
+    mode: 'replace',
+    activityScope: 'all',
+  });
+
+  assert.equal(context.setMetadataTransferMode('merge'), 'merge');
+  assert.equal(context.setMetadataTransferActivityScope('inactive'), 'inactive');
+  assert.deepEqual(context.getMetadataTransferPreferences(), {
+    mode: 'merge',
+    activityScope: 'inactive',
+  });
+});
+
+test('metadata tab reuses transfer state for the unchanged workflow', () => {
+  const context = createTransferContext();
+  context.getWorkflowSignature = workflow => workflow.signature;
+  const state = { transfer: { workflowSignature: 'workflow-a' } };
+
+  assert.equal(
+    context.isMetadataTransferCurrentWorkflow(state, { signature: 'workflow-a' }),
+    true
+  );
+  assert.equal(
+    context.isMetadataTransferCurrentWorkflow(state, { signature: 'workflow-b' }),
+    false
+  );
+  assert.equal(
+    context.isMetadataTransferCurrentWorkflow({ transfer: { workflowSignature: '' } }, null),
+    true
+  );
+  assert.equal(context.isMetadataTransferCurrentWorkflow(null, null), false);
+});
+
+test('metadata transfer reuses the shared Loaded Models cache for the same workflow', async () => {
+  const cachedData = {
+    loaded_models: [{
+      category: 'text_encoders',
+      node_id: 1,
+      node_type: 'CLIPLoader',
+      widget_index: 0,
+      original_path: 'current.safetensors',
+      active: true,
+      connected: true,
+      is_top_level: true,
+    }],
+    total: 1,
+  };
+  let fetchCount = 0;
+  const context = {
+    ...imageMetadataMethods,
+    getCurrentWorkflow: () => ({ signature: 'workflow-a' }),
+    getWorkflowSignature: workflow => workflow.signature,
+    cachedLoadedModelsSignature: 'workflow-a',
+    cachedLoadedModelsData: cachedData,
+    getCachedLoadedModelsForSignature(signature, { force = false } = {}) {
+      return !force && signature === this.cachedLoadedModelsSignature
+        ? this.cachedLoadedModelsData
+        : null;
+    },
+    fetchJson: async () => {
+      fetchCount += 1;
+      throw new Error('The shared cache was not used');
+    },
+    renderImageMetadataResult() {},
+  };
+
+  const result = await context.openMetadataTransfer();
+
+  assert.equal(fetchCount, 0);
+  assert.equal(result, cachedData);
+  assert.equal(context.imageInspectorState.transfer.targetModels, cachedData);
+});
+
+test('metadata transfer stores a fresh target scan in the shared Loaded Models cache', async () => {
+  const freshData = { loaded_models: [], total: 0 };
+  let saveCount = 0;
+  const context = {
+    ...imageMetadataMethods,
+    getCurrentWorkflow: () => ({ signature: 'workflow-b' }),
+    getWorkflowSignature: workflow => workflow.signature,
+    cachedLoadedModelsSignature: null,
+    cachedLoadedModelsData: null,
+    getCachedLoadedModelsForSignature() {
+      return null;
+    },
+    fetchJson: async () => freshData,
+    saveLoadedModelsCacheForActiveWorkflow() {
+      saveCount += 1;
+    },
+    renderImageMetadataResult() {},
+  };
+
+  const result = await context.openMetadataTransfer();
+
+  assert.equal(result, freshData);
+  assert.equal(context.cachedLoadedModelsSignature, 'workflow-b');
+  assert.equal(context.cachedLoadedModelsData, freshData);
+  assert.equal(saveCount, 1);
+});
+
+test('metadata transfer uses the shared canonical category aliases', () => {
+  const context = createTransferContext();
+  const state = createTransferState([
+    { category: 'clip_gguf', original_path: 'clip.safetensors' },
+  ]);
+  state.transfer.targetGroups[0].category = 'clips';
+  state.transfer.targetGroups[0].nodes[0].refs[0].category = 'clips';
+
+  const [row] = context.getMetadataTransferPreviewRows(state);
+
+  assert.equal(row.sourceUnavailable, false);
+  assert.equal(row.nextValue, 'clip.safetensors');
+});
+
 test('metadata transfer hides imported models with an unsupported file extension', () => {
   const context = createTransferContext();
   const state = createTransferState([

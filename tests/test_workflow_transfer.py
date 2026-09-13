@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from core.contracts import ModelReference
+from core.type_utils import CATEGORY_MAP
 from core.workflow_transfer import (
     normalize_transfer_category,
     transfer_models_to_workflow,
@@ -48,7 +49,13 @@ def _selector(reference):
 def test_normalize_transfer_category_covers_workflow_aliases():
     assert normalize_transfer_category("UPSCALE-MODEL") == "upscale_models"
     assert normalize_transfer_category("checkpoint") == "checkpoints"
+    assert normalize_transfer_category("CLIP / GGUF") == "text_encoders"
     assert normalize_transfer_category("unknown") == ""
+
+
+def test_normalize_transfer_category_matches_the_canonical_category_map():
+    for raw_category, canonical_category in CATEGORY_MAP.items():
+        assert normalize_transfer_category(raw_category) == canonical_category
 
 
 def test_replace_fans_one_source_to_selected_slots_and_syncs_named_values():

@@ -1,5 +1,22 @@
 import { CATEGORY_ALIASES, normalizeCategoryToken } from './category_aliases.generated.js';
 
+export function normalizeCategoryValue(
+    category = '',
+    {
+        aliases = CATEGORY_ALIASES,
+        defaultValue = '',
+        emptyValues = ['unknown', 'none', 'null'],
+    } = {},
+) {
+    const token = normalizeCategoryToken(category);
+    const categoryAliases = aliases && typeof aliases === 'object'
+        ? aliases
+        : CATEGORY_ALIASES;
+    const emptyTokens = new Set(emptyValues);
+    if (!token || emptyTokens.has(token)) return defaultValue;
+    return categoryAliases[token] || token;
+}
+
 export function normalizeDownloadCategoryValue(
     category = '',
     aliases = CATEGORY_ALIASES,

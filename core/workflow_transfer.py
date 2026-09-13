@@ -11,32 +11,10 @@ from typing import Any, Dict, List, Optional
 from .contracts import ModelReference, Resolution, ResolvedModel
 from .custom_nodes import get_custom_node_resolution_metadata
 from .path_utils import get_filename_from_path
+from .type_utils import CATEGORY_MAP, normalize_category_token
 from .workflow import dynamic_widgets
 from .workflow.widgets import get_widget_name_candidates, normalize_widget_name
 from .workflow_updater import update_model_path
-
-_CATEGORY_ALIASES = {
-    "checkpoint": "checkpoints",
-    "checkpoints": "checkpoints",
-    "ckpt": "checkpoints",
-    "lora": "loras",
-    "loras": "loras",
-    "text_encoder": "text_encoders",
-    "text_encoders": "text_encoders",
-    "clip": "text_encoders",
-    "vae": "vae",
-    "controlnet": "controlnet",
-    "control_net": "controlnet",
-    "upscale": "upscale_models",
-    "upscaler": "upscale_models",
-    "upscale_model": "upscale_models",
-    "upscale_models": "upscale_models",
-    "diffusion_model": "diffusion_models",
-    "diffusion_models": "diffusion_models",
-    "unet": "diffusion_models",
-    "embedding": "embeddings",
-    "embeddings": "embeddings",
-}
 
 _LORA_MANAGER_NODE_TYPES = {
     "LoraLoaderV2",
@@ -64,10 +42,10 @@ _TRANSFER_ACTIVITY_SCOPES = {"all", "active", "inactive"}
 
 def normalize_transfer_category(value: Any) -> str:
     """Normalize the category names used by workflow and metadata payloads."""
-    token = str(value or "").strip().lower().replace("-", "_")
+    token = normalize_category_token(value)
     if not token or token in {"unknown", "none", "null"}:
         return ""
-    return _CATEGORY_ALIASES.get(token, token)
+    return CATEGORY_MAP.get(token, token)
 
 
 def _normalize_identity(value: Any) -> str:
@@ -287,17 +265,6 @@ def _resolution_payload(resolution: Resolution) -> Dict[str, Any]:
     if metadata:
         payload["custom_node_metadata"] = metadata
     return payload
-
-
-def _assign_sources(
-    sources: Sequence[Mapping[str, Any]],
-    references: Sequence[ModelReference],
-) -> List[tuple[ModelReference, Mapping[str, Any]]]:
-    if not sources or not references:
-        return []
-    if len(sources) == 1:
-        return [(reference, sources[0]) for reference in references]
-    return list(zip(references, sources, strict=False))
 
 
 def _select_source_for_reference(

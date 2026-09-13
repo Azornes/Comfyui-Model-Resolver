@@ -242,6 +242,7 @@ URN_TYPE_MAP = {
 CATEGORY_MAP = {
     "checkpoints": "checkpoints",
     "checkpoint": "checkpoints",
+    "ckpt": "checkpoints",
     "loras": "loras",
     "lora": "loras",
     "embeddings": "embeddings",
@@ -254,7 +255,9 @@ CATEGORY_MAP = {
     "control_net": "controlnet",
     "vae": "vae",
     "upscaler": "upscale_models",
+    "upscale": "upscale_models",
     "upscale_model": "upscale_models",
+    "upscalemodel": "upscale_models",
     "upscale_models": "upscale_models",
     "latent_upscale_model": "latent_upscale_models",
     "latent_upscale_models": "latent_upscale_models",

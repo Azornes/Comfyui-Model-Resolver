@@ -486,6 +486,18 @@ export const workflowStateMethods = {
         };
     },
 
+    getCachedLoadedModelsForSignature(workflowSignature, { force = false } = {}) {
+        if (
+            force
+            || !workflowSignature
+            || this.cachedLoadedModelsSignature !== workflowSignature
+            || !this.cachedLoadedModelsData
+        ) {
+            return null;
+        }
+        return this.cachedLoadedModelsData;
+    },
+
     saveAnalysisCacheForActiveWorkflow() {
         this.saveWorkflowModelCache(
             this.workflowAnalysisCaches,
