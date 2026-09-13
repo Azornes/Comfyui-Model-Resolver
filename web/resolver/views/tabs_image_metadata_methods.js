@@ -73,9 +73,28 @@ function getImageInspectorState(dialog) {
             loading: '',
             requestToken: null,
             transfer: null,
+            lastTransfer: null,
         };
     }
     return dialog.imageInspectorState;
+}
+
+function cloneWorkflowSnapshot(workflow) {
+    if (!workflow || typeof workflow !== 'object') return null;
+
+    if (typeof structuredClone === 'function') {
+        try {
+            return structuredClone(workflow);
+        } catch {
+            // Fall back to JSON for plain serialized workflow values.
+        }
+    }
+
+    try {
+        return JSON.parse(JSON.stringify(workflow));
+    } catch {
+        return null;
+    }
 }
 
 function isImageFile(file) {
@@ -242,6 +261,7 @@ export const imageMetadataMethods = {
             if (action === 'clear') this.clearImageMetadata();
             if (action === 'clear-transfer-targets') this.clearMetadataTransferTargets();
             if (action === 'retry-transfer-targets') void this.openMetadataTransfer({ force: true });
+            if (action === 'undo-transfer') void this.undoMetadataTransfer();
             if (action === 'apply-transfer') void this.applyMetadataTransfer();
             if (action === 'analyze-paste') {
                 const textarea = root.querySelector('.mr-image-inspector-textarea');
@@ -724,6 +744,53 @@ export const imageMetadataMethods = {
         return activityScope;
     },
 
+    getMetadataTransferUndoState() {
+        const state = getImageInspectorState(this);
+        const lastTransfer = state.lastTransfer;
+        if (!lastTransfer?.workflow) {
+            return {
+                hasHistory: false,
+                available: false,
+                reason: '',
+            };
+        }
+        if (lastTransfer.undoing) {
+            return {
+                hasHistory: true,
+                available: false,
+                reason: 'Undoing the last model transfer...',
+            };
+        }
+
+        const workflow = this.getCurrentWorkflow?.();
+        if (!workflow) {
+            return {
+                hasHistory: true,
+                available: false,
+                reason: 'No current workflow is available.',
+            };
+        }
+
+        const currentSignature = this.getWorkflowSignature?.(workflow) || '';
+        if (
+            lastTransfer.afterSignature
+            && currentSignature
+            && lastTransfer.afterSignature !== currentSignature
+        ) {
+            return {
+                hasHistory: true,
+                available: false,
+                reason: 'The current workflow changed after the last transfer.',
+            };
+        }
+
+        return {
+            hasHistory: true,
+            available: true,
+            reason: 'Undo the last model transfer.',
+        };
+    },
+
     getMetadataTransferSourceSelectionKey(ref = {}) {
         return String(
             ref.transferKey
@@ -1151,12 +1218,19 @@ export const imageMetadataMethods = {
         const transfer = state?.transfer || {
             loading: false,
             applying: false,
+            undoing: false,
             error: '',
             mode: 'replace',
             activityScope: 'all',
             targetGroups: [],
             selectedNodeKeys: new Set(),
         };
+        const undoState = this.getMetadataTransferUndoState();
+        const undoButton = undoState.hasHistory ? `
+            <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm" data-image-inspector-action="undo-transfer"${undoState.available ? '' : ' disabled'} title="${this.escapeHtml(undoState.reason)}">
+                ${state.lastTransfer?.undoing ? 'Undoing...' : 'Undo transfer'}
+            </button>
+        ` : '';
         const targetGroups = Array.isArray(transfer.targetGroups) ? transfer.targetGroups : [];
         const selectedNodeKeys = transfer.selectedNodeKeys instanceof Set
             ? transfer.selectedNodeKeys
@@ -1196,7 +1270,10 @@ export const imageMetadataMethods = {
                             <h3 class="mr-loaded-models-title">Transfer models to current workflow</h3>
                             <p class="mr-error-text">${this.escapeHtml(transfer.error)}</p>
                         </div>
-                        <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm" data-image-inspector-action="retry-transfer-targets">Retry</button>
+                        <div class="mr-image-inspector-header-actions">
+                            ${undoButton}
+                            <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm" data-image-inspector-action="retry-transfer-targets">Retry</button>
+                        </div>
                     </div>
                     <p class="mr-image-transfer-note">${this.escapeHtml(sourceSummary)}</p>
                 </section>
@@ -1346,6 +1423,7 @@ export const imageMetadataMethods = {
         const hasTransferableTarget = previewRows.length > 0;
         const applyDisabled = (
             transfer.applying
+            || transfer.undoing
             || transfer.refreshing
             || !sourceEntries.length
             || !selectedTargetCount
@@ -1364,7 +1442,10 @@ export const imageMetadataMethods = {
                         <h3 class="mr-loaded-models-title">Transfer models to current workflow <span class="mr-loaded-total">${selectedTargetCount}/${allTargetNodeKeys.size}</span></h3>
                         <p class="mr-loaded-models-subtitle">Select the target nodes. ${this.escapeHtml(sourceSummary)}</p>
                     </div>
-                    <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm" data-image-inspector-action="clear-transfer-targets">Clear selection</button>
+                    <div class="mr-image-inspector-header-actions">
+                        ${undoButton}
+                        <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm" data-image-inspector-action="clear-transfer-targets">Clear selection</button>
+                    </div>
                 </div>
                 <div class="mr-image-transfer-mode" role="group" aria-label="Transfer mode">
                     <label class="mr-image-transfer-mode-option">
@@ -1394,7 +1475,7 @@ export const imageMetadataMethods = {
                 <div class="mr-image-transfer-actions">
                     <span class="mr-image-transfer-selection-count">${this.escapeHtml(selectionSourceText)} · ${selectedTargetCount} selected node${selectedTargetCount === 1 ? '' : 's'}</span>
                     <button type="button" class="mr-btn mr-btn-primary mr-btn-sm" data-image-inspector-action="apply-transfer" ${applyDisabled ? 'disabled' : ''}>
-                        ${transfer.applying ? 'Applying...' : 'Apply transfer'}
+                        ${transfer.applying ? 'Applying...' : transfer.undoing ? 'Undoing...' : 'Apply transfer'}
                     </button>
                 </div>
             </section>
@@ -1437,6 +1518,7 @@ export const imageMetadataMethods = {
             loading: Boolean(workflow) && !keepCurrentTransferContent,
             refreshing: Boolean(workflow) && keepCurrentTransferContent,
             applying: false,
+            undoing: false,
             error: '',
             mode: normalizeTransferMode(previousTransfer?.mode ?? savedPreferences.mode),
             activityScope: normalizeTransferActivityScope(
@@ -1577,6 +1659,58 @@ export const imageMetadataMethods = {
         this.renderImageMetadataResult();
     },
 
+    async undoMetadataTransfer() {
+        const state = getImageInspectorState(this);
+        const lastTransfer = state.lastTransfer;
+        if (!lastTransfer?.workflow || lastTransfer.undoing) return null;
+
+        const undoState = this.getMetadataTransferUndoState();
+        if (!undoState.available) {
+            if (undoState.reason) this.showNotification(undoState.reason, 'warning');
+            this.renderImageMetadataResult();
+            return null;
+        }
+
+        const restoreWorkflow = cloneWorkflowSnapshot(lastTransfer.workflow);
+        if (!restoreWorkflow) {
+            this.showNotification('The previous workflow snapshot could not be restored.', 'error');
+            return null;
+        }
+
+        const transfer = state.transfer;
+        lastTransfer.undoing = true;
+        if (transfer) transfer.undoing = true;
+        this.renderImageMetadataResult();
+
+        try {
+            const restored = await this.updateWorkflowInComfyUI(restoreWorkflow, []);
+            if (!restored) {
+                throw new Error('ComfyUI could not restore the previous workflow.');
+            }
+
+            this.cachedLoadedModelsSignature = null;
+            this.cachedLoadedModelsData = null;
+            this.activeWorkflowSignature = lastTransfer.beforeSignature
+                || this.getWorkflowSignature?.(restoreWorkflow)
+                || null;
+            state.lastTransfer = null;
+            state.transfer = null;
+            this.renderImageMetadataResult();
+            void this.openMetadataTransfer();
+            this.showNotification('Undid the last model transfer.', 'success');
+            window.dispatchEvent?.(new Event('model-resolver-active-workflowchange'));
+            return restoreWorkflow;
+        } catch (error) {
+            if (state.lastTransfer === lastTransfer) lastTransfer.undoing = false;
+            if (state.transfer === transfer && transfer) {
+                transfer.undoing = false;
+                transfer.error = error?.message || 'The previous workflow could not be restored.';
+            }
+            this.renderImageMetadataResult();
+            return null;
+        }
+    },
+
     async applyMetadataTransfer() {
         const state = getImageInspectorState(this);
         const transfer = state.transfer;
@@ -1679,6 +1813,12 @@ export const imageMetadataMethods = {
             this.showNotification('No current workflow is available.', 'warning');
             return null;
         }
+        const previousWorkflow = cloneWorkflowSnapshot(workflow);
+        if (!previousWorkflow) {
+            this.showNotification('Could not prepare an undo snapshot for this transfer.', 'error');
+            return null;
+        }
+        const previousWorkflowSignature = this.getWorkflowSignature?.(workflow) || null;
 
         transfer.applying = true;
         this.renderImageMetadataResult();
@@ -1710,7 +1850,14 @@ export const imageMetadataMethods = {
 
             this.cachedLoadedModelsSignature = null;
             this.cachedLoadedModelsData = null;
-            this.activeWorkflowSignature = this.getWorkflowSignature?.(data.workflow) || null;
+            const updatedWorkflow = this.getCurrentWorkflow?.() || data.workflow;
+            state.lastTransfer = {
+                workflow: previousWorkflow,
+                beforeSignature: previousWorkflowSignature,
+                afterSignature: this.getWorkflowSignature?.(updatedWorkflow) || null,
+                undoing: false,
+            };
+            this.activeWorkflowSignature = this.getWorkflowSignature?.(updatedWorkflow) || null;
             state.transfer = null;
             this.renderImageMetadataResult();
             void this.openMetadataTransfer();

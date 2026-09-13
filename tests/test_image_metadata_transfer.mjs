@@ -163,6 +163,130 @@ test('metadata transfer persists only mode and activity scope preferences', () =
   });
 });
 
+test('metadata transfer exposes Undo transfer while the post-transfer workflow is unchanged', () => {
+  const context = createTransferContext();
+  const state = createTransferState([
+    { category: 'text_encoders', original_path: 'imported.safetensors' },
+  ]);
+  state.lastTransfer = {
+    workflow: { signature: 'before' },
+    afterSignature: 'after',
+    undoing: false,
+  };
+  context.imageInspectorState = state;
+  context.getCurrentWorkflow = () => ({ signature: 'after' });
+  context.getWorkflowSignature = workflow => workflow.signature;
+
+  const html = context.renderMetadataTransferPanel(state);
+
+  assert.match(html, /data-image-inspector-action="undo-transfer"/);
+  assert.match(html, />\s*Undo transfer\s*<\/button>/);
+
+  context.getCurrentWorkflow = () => ({ signature: 'changed' });
+  const changedHtml = context.renderMetadataTransferPanel(state);
+  assert.match(changedHtml, /data-image-inspector-action="undo-transfer" disabled/);
+  assert.match(changedHtml, /title="The current workflow changed after the last transfer\."/);
+  assert.match(changedHtml, />\s*Undo transfer\s*<\/button>/);
+});
+
+test('metadata transfer undo restores the previous workflow and consumes its history', async () => {
+  const previousWorkflow = {
+    signature: 'before',
+    nodes: [{ id: 1, widgets_values: ['old-model.safetensors'] }],
+  };
+  let currentWorkflow = {
+    signature: 'after',
+    nodes: [{ id: 1, widgets_values: ['new-model.safetensors'] }],
+  };
+  let restoredWorkflow = null;
+  const notifications = [];
+  const state = {
+    transfer: { undoing: false },
+    lastTransfer: {
+      workflow: previousWorkflow,
+      beforeSignature: 'before',
+      afterSignature: 'after',
+      undoing: false,
+    },
+  };
+  const context = {
+    ...imageMetadataMethods,
+    imageInspectorState: state,
+    getCurrentWorkflow: () => currentWorkflow,
+    getWorkflowSignature: workflow => workflow.signature,
+    updateWorkflowInComfyUI: async workflow => {
+      restoredWorkflow = workflow;
+      currentWorkflow = workflow;
+      return true;
+    },
+    renderImageMetadataResult() {},
+    openMetadataTransfer() {},
+    showNotification(message, type) {
+      notifications.push({ message, type });
+    },
+    cachedLoadedModelsSignature: 'after',
+    cachedLoadedModelsData: { loaded_models: [] },
+    activeWorkflowSignature: 'after',
+  };
+  const previousWindow = globalThis.window;
+  globalThis.window = { dispatchEvent() {} };
+
+  try {
+    await context.undoMetadataTransfer();
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+
+  assert.deepEqual(restoredWorkflow, previousWorkflow);
+  assert.notEqual(restoredWorkflow, previousWorkflow);
+  assert.equal(context.imageInspectorState.lastTransfer, null);
+  assert.equal(context.imageInspectorState.transfer, null);
+  assert.equal(context.activeWorkflowSignature, 'before');
+  assert.equal(context.cachedLoadedModelsSignature, null);
+  assert.equal(context.cachedLoadedModelsData, null);
+  assert.deepEqual(notifications, [{
+    message: 'Undid the last model transfer.',
+    type: 'success',
+  }]);
+});
+
+test('metadata transfer undo refuses to restore a changed workflow', async () => {
+  const state = {
+    lastTransfer: {
+      workflow: { signature: 'before' },
+      afterSignature: 'after',
+      undoing: false,
+    },
+  };
+  let updateCalled = false;
+  const notifications = [];
+  const context = {
+    ...imageMetadataMethods,
+    imageInspectorState: state,
+    getCurrentWorkflow: () => ({ signature: 'changed' }),
+    getWorkflowSignature: workflow => workflow.signature,
+    updateWorkflowInComfyUI: async () => {
+      updateCalled = true;
+      return true;
+    },
+    renderImageMetadataResult() {},
+    showNotification(message, type) {
+      notifications.push({ message, type });
+    },
+  };
+
+  const result = await context.undoMetadataTransfer();
+
+  assert.equal(result, null);
+  assert.equal(updateCalled, false);
+  assert.equal(state.lastTransfer.undoing, false);
+  assert.deepEqual(notifications, [{
+    message: 'The current workflow changed after the last transfer.',
+    type: 'warning',
+  }]);
+});
+
 test('metadata tab reuses transfer state for the unchanged workflow', () => {
   const context = createTransferContext();
   context.getWorkflowSignature = workflow => workflow.signature;
