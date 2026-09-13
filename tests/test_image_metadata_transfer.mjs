@@ -225,6 +225,25 @@ test('metadata transfer preview adds model actions and previews only for local f
   assert.doesNotMatch(missingHtml, /data-tooltip-image="C:\\models\\imported\.safetensors"/);
 });
 
+test('unselected target nodes keep current model actions available', () => {
+  const context = createTransferContext();
+  const state = createTransferState([
+    { category: 'text_encoders', original_path: 'imported.safetensors' },
+  ]);
+  state.transfer.selectedNodeKeys = new Set();
+  state.transfer.targetGroups[0].nodes[0].refs[0] = {
+    ...state.transfer.targetGroups[0].nodes[0].refs[0],
+    exists: true,
+    resolved_path: 'C:\\models\\current.safetensors',
+  };
+
+  const html = context.renderMetadataTransferPanel(state);
+
+  assert.match(html, /class="mr-image-transfer-change is-unselected"/);
+  assert.match(html, /data-context-scope="loaded_model"/);
+  assert.match(html, /data-tooltip-image="C:\\models\\current\.safetensors"/);
+});
+
 test('LoRA activity scope filters imported models but keeps all target slots eligible', () => {
   const context = createTransferContext();
   const state = createLoraTransferState([

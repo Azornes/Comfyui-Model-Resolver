@@ -680,6 +680,28 @@ export const imageMetadataMethods = {
         return String(label || fallback).trim() || fallback;
     },
 
+    getMetadataTransferModelInteractionAttrs(model = {}, contextScope = 'loaded_model', label = '') {
+        const modelPath = String(
+            model?.resolved_path
+            || model?.path
+            || model?.full_path
+            || ''
+        ).trim();
+        if (model?.exists !== true || !modelPath) return '';
+
+        const contextModel = {
+            ...model,
+            context_scope: contextScope,
+        };
+        const contextMenuAttrs = typeof this.getContextMenuAttrs === 'function'
+            ? this.getContextMenuAttrs(contextModel)
+            : '';
+        const previewTooltipAttrs = typeof this.getModelPreviewTooltipAttrs === 'function'
+            ? this.getModelPreviewTooltipAttrs(model, label)
+            : '';
+        return `${contextMenuAttrs}${previewTooltipAttrs}`;
+    },
+
     getMetadataTransferSourceSelectionKey(ref = {}) {
         return String(
             ref.transferKey
@@ -1065,29 +1087,16 @@ export const imageMetadataMethods = {
                     : row.operation === 'add'
                         ? 'is-added'
                         : 'is-imported';
-            const getModelInteractionAttrs = (model, contextScope, label) => {
-                const modelPath = String(
-                    model?.resolved_path
-                    || model?.path
-                    || model?.full_path
-                    || ''
-                ).trim();
-                if (model?.exists !== true || !modelPath) return '';
-
-                const contextModel = {
-                    ...model,
-                    context_scope: contextScope,
-                };
-                const contextMenuAttrs = typeof this.getContextMenuAttrs === 'function'
-                    ? this.getContextMenuAttrs(contextModel)
-                    : '';
-                const previewTooltipAttrs = typeof this.getModelPreviewTooltipAttrs === 'function'
-                    ? this.getModelPreviewTooltipAttrs(model, label)
-                    : '';
-                return `${contextMenuAttrs}${previewTooltipAttrs}`;
-            };
-            const currentModelAttrs = getModelInteractionAttrs(row.ref, 'loaded_model', currentTitle);
-            const importedModelAttrs = getModelInteractionAttrs(row.nextModel, 'local_model', nextTitle);
+            const currentModelAttrs = this.getMetadataTransferModelInteractionAttrs?.(
+                row.ref,
+                'loaded_model',
+                currentTitle,
+            ) || '';
+            const importedModelAttrs = this.getMetadataTransferModelInteractionAttrs?.(
+                row.nextModel,
+                'local_model',
+                nextTitle,
+            ) || '';
             const sourceOptions = row.sourceSelectable
                 ? [
                     `<option value=""${row.sourceIndex === null ? ' selected' : ''}>Select imported model</option>`,
@@ -1208,11 +1217,16 @@ export const imageMetadataMethods = {
                     ? this.getMetadataTransferModelLabel(ref)
                     : '(empty)';
                 const slotLabel = refs.length > 1 ? ` · Slot ${index + 1}` : '';
+                const currentModelAttrs = this.getMetadataTransferModelInteractionAttrs?.(
+                    ref,
+                    'loaded_model',
+                    currentValue || currentLabel,
+                ) || '';
                 return `
                     <div class="mr-image-transfer-change is-unselected">
                         <div class="mr-image-transfer-change-side">
                             <span class="mr-image-transfer-change-label">Current${this.escapeHtml(slotLabel)}</span>
-                            <span class="mr-image-transfer-model-value is-current" title="${this.escapeHtml(currentValue || currentLabel)}">${this.escapeHtml(currentLabel)}</span>
+                            <span class="mr-image-transfer-model-value is-current" title="${this.escapeHtml(currentValue || currentLabel)}"${currentModelAttrs}>${this.escapeHtml(currentLabel)}</span>
                         </div>
                         <span class="mr-image-transfer-change-arrow" aria-hidden="true">→</span>
                         <div class="mr-image-transfer-change-side mr-image-transfer-change-side-imported">
