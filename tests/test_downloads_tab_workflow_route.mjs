@@ -252,6 +252,13 @@ test('manual model selection uses the two-line status card layout', () => {
   );
 });
 
+test('metadata action buttons use dark text on primary controls', () => {
+  assert.match(
+    resolverMainCssSource,
+    /#model-resolver-modal \[data-image-inspector-action="choose-file"\]\.mr-btn-primary,[\s\S]*?#model-resolver-modal \[data-image-inspector-action="apply-transfer"\]\.mr-btn-primary:hover:not\(:disabled\)\s*\{[^}]*color:\s*#101010;/s
+  );
+});
+
 test('manual model selection restores the per-model apply card after browser refresh', () => {
   const queueResolution = eval(`(${extractMethod(queueMethodsSource, 'queueResolution')})`);
   const calls = [];

@@ -2142,6 +2142,13 @@
     color: white;
 }
 
+#model-resolver-modal [data-image-inspector-action="choose-file"].mr-btn-primary,
+#model-resolver-modal [data-image-inspector-action="apply-transfer"].mr-btn-primary,
+#model-resolver-modal [data-image-inspector-action="choose-file"].mr-btn-primary:hover:not(:disabled),
+#model-resolver-modal [data-image-inspector-action="apply-transfer"].mr-btn-primary:hover:not(:disabled) {
+    color: #101010;
+}
+
 .mr-btn-secondary,
 .mr-btn-link,
 #model-resolver-modal .mr-btn-secondary,
