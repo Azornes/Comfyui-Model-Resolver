@@ -250,6 +250,90 @@ test('metadata transfer stores a fresh target scan in the shared Loaded Models c
   assert.equal(saveCount, 1);
 });
 
+test('metadata transfer refresh keeps the current panel visible while scanning a changed workflow', async () => {
+  const oldTargetGroup = {
+    category: 'text_encoders',
+    nodes: [{
+      nodeKey: 'top:1',
+      nodeId: 1,
+      nodeType: 'CLIPLoader',
+      refs: [],
+    }],
+  };
+  const sourceModel = {
+    category: 'text_encoders',
+    original_path: 'imported.safetensors',
+  };
+  let resolveFetch;
+  let renderCount = 0;
+  const context = {
+    ...imageMetadataMethods,
+    imageInspectorState: {
+      requestToken: 'source-request',
+      loadedModels: { loaded_models: [sourceModel] },
+      transfer: {
+        open: true,
+        workflowSignature: 'old-workflow',
+        targetModels: { loaded_models: [] },
+        targetGroups: [oldTargetGroup],
+        selectedNodeKeys: new Set(['top:1']),
+        collapsedCategories: new Set(['text_encoders']),
+        sourceSelections: {},
+      },
+    },
+    getCurrentWorkflow: () => ({ signature: 'new-workflow' }),
+    getWorkflowSignature: workflow => workflow.signature,
+    syncWorkflowScopedQueue() {},
+    getCachedLoadedModelsForSignature() {
+      return null;
+    },
+    getMetadataTransferAcceptedFileTypes() {
+      return [];
+    },
+    fetchJson: () => new Promise(resolve => {
+      resolveFetch = resolve;
+    }),
+    saveLoadedModelsCacheForActiveWorkflow() {},
+    renderImageMetadataResult() {
+      renderCount += 1;
+    },
+  };
+
+  const refreshPromise = context.openMetadataTransfer({ preserveContent: true });
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  assert.equal(renderCount, 0);
+  assert.equal(context.imageInspectorState.transfer.refreshing, true);
+  assert.deepEqual(context.imageInspectorState.transfer.targetGroups, [oldTargetGroup]);
+  assert.deepEqual(
+    Array.from(context.imageInspectorState.transfer.selectedNodeKeys),
+    ['top:1']
+  );
+
+  resolveFetch({
+    loaded_models: [{
+      category: 'text_encoders',
+      node_id: 1,
+      node_type: 'CLIPLoader',
+      widget_index: 0,
+      original_path: 'current.safetensors',
+      active: true,
+      connected: true,
+      is_top_level: true,
+    }],
+    total: 1,
+  });
+  await refreshPromise;
+
+  assert.equal(renderCount, 1);
+  assert.equal(context.imageInspectorState.transfer.refreshing, false);
+  assert.equal(context.imageInspectorState.transfer.targetGroups[0].nodes[0].nodeKey, 'top:1');
+  assert.deepEqual(
+    Array.from(context.imageInspectorState.transfer.selectedNodeKeys),
+    ['top:1']
+  );
+});
+
 test('metadata transfer uses the shared canonical category aliases', () => {
   const context = createTransferContext();
   const state = createTransferState([

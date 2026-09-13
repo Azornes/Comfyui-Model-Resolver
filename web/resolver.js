@@ -39,6 +39,8 @@ app.registerExtension({
         queueMicrotask(() => modelResolver.configureNodeContextMenu(node));
         modelResolver.configureWorkflowDependencyMarkerNode(node);
         modelResolver.configureCustomNodeModelAdapter(node);
+        modelResolver.configureWorkflowNodeLifecycle(node);
+        modelResolver.dialog?.scheduleActiveWorkflowRefresh?.('node-created');
     },
     loadedGraphNode(node) {
         modelResolver.configureNodeContextMenu(node?.constructor);
@@ -46,6 +48,7 @@ app.registerExtension({
         queueMicrotask(() => modelResolver.configureNodeContextMenu(node));
         modelResolver.configureWorkflowDependencyMarkerNode(node);
         modelResolver.configureCustomNodeModelAdapter(node);
+        modelResolver.configureWorkflowNodeLifecycle(node);
     },
     afterConfigureGraph() {
         modelResolver.handleGraphConfigured();

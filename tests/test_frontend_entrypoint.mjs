@@ -61,4 +61,14 @@ test('frontend entrypoint registers the ComfyUI extension contract', () => {
     2,
     'dynamically created and loaded node types must receive the widget-change hook'
   );
+  assert.match(
+    resolverSource,
+    /modelResolver\.dialog\?\.scheduleActiveWorkflowRefresh\?\.\('node-created'\)/,
+    'new nodes must notify the live workflow refresh mechanism'
+  );
+  assert.match(
+    modelResolverSource,
+    /configureWorkflowNodeLifecycle\(node\)/,
+    'workflow nodes must receive removal tracking'
+  );
 });

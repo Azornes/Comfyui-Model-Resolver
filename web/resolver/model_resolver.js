@@ -667,6 +667,32 @@ export class ModelResolver {
         adapter.observe(node, notifyIfModelsChanged);
     }
 
+    configureWorkflowNodeLifecycle(node) {
+        if (
+            !node
+            || typeof node !== 'object'
+            || node.__modelResolverWorkflowLifecyclePatched
+            || typeof node.onRemoved !== 'function'
+        ) return;
+
+        const owner = this;
+        const originalOnRemoved = node.onRemoved;
+        try {
+            node.onRemoved = function(...args) {
+                let result;
+                try {
+                    result = originalOnRemoved.apply(this, args);
+                } finally {
+                    owner.dialog?.scheduleActiveWorkflowRefresh?.('node-removed');
+                }
+                return result;
+            };
+            node.__modelResolverWorkflowLifecyclePatched = true;
+        } catch (_error) {
+            log.debug('Model Resolver: could not attach workflow lifecycle tracking to a node.');
+        }
+    }
+
     waitForResolverDialogReady(timeoutMs = 2500) {
         const startedAt = Date.now();
         return new Promise((resolve) => {

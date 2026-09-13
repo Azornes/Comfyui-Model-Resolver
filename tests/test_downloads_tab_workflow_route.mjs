@@ -1725,6 +1725,30 @@ test('rgthree dynamic lora widgets bypass the generic full workflow refresh', ()
   ]);
 });
 
+test('removed workflow nodes notify the live workflow refresh mechanism', () => {
+  const configureWorkflowNodeLifecycle = eval(
+    `(${extractMethod(modelResolverSource, 'configureWorkflowNodeLifecycle')})`
+  );
+  const calls = [];
+  const node = {
+    onRemoved(value) {
+      calls.push(`native:${value}`);
+      return 'removed';
+    },
+  };
+  const resolver = {
+    dialog: {
+      scheduleActiveWorkflowRefresh: reason => calls.push(reason),
+    },
+  };
+
+  configureWorkflowNodeLifecycle.call(resolver, node);
+
+  assert.equal(node.onRemoved('node'), 'removed');
+  assert.deepEqual(calls, ['native:node', 'node-removed']);
+  assert.equal(node.__modelResolverWorkflowLifecyclePatched, true);
+});
+
 test('LoRA Manager text onWidgetChanged waits for a confirmed model-list change', () => {
   const configureNodeContextMenu = eval(`(${extractMethod(modelResolverSource, 'configureNodeContextMenu')})`);
   const calls = [];
@@ -2926,6 +2950,44 @@ test('node widget changes request a content-preserving Missing Models refresh', 
   assert.equal(loadArguments[0], workflow);
   assert.deepEqual(loadArguments[1], { preserveContent: true });
   assert.equal(preserveSearchCacheAtSync, true);
+});
+
+test('metadata workflow changes refresh transfer targets without showing a loading replacement', async () => {
+  const log = { debug() {} };
+  const refreshForActiveWorkflowChange = eval(
+    `(${extractMethod(workflowStateMethodsSource, 'refreshForActiveWorkflowChange')})`
+  );
+  const workflow = { nodes: [{ id: 3, type: 'CLIPLoader' }] };
+  let openArguments = null;
+  const dialog = {
+    _workflowRefreshGeneration: 1,
+    activeWorkflowRouteKey: 'workflow-a',
+    activeWorkflowSignature: 'old-signature',
+    activeMissingWorkflowSignature: 'old-missing-signature',
+    activeTab: 'metadata',
+    contentElement: { style: {} },
+    isVisible: () => true,
+    getActiveWorkflowRouteKey: () => 'workflow-a',
+    getCurrentWorkflow: () => workflow,
+    getWorkflowSignature: () => 'new-signature',
+    getMissingWorkflowSignature: () => 'new-missing-signature',
+    syncWorkflowScopedQueue() {},
+    async openMetadataTransfer(...args) {
+      openArguments = args;
+    },
+  };
+
+  await refreshForActiveWorkflowChange.call(dialog, {
+    reason: 'node-created',
+    expectedRoute: 'workflow-a',
+    previousSignature: 'old-signature',
+    attempt: 8,
+    generation: 1,
+    candidateRoute: 'workflow-a',
+    candidateSignature: 'new-signature',
+  });
+
+  assert.deepEqual(openArguments, [{ preserveContent: true }]);
 });
 
 test('node widget refresh retries while ComfyUI still serializes the previous workflow', async () => {

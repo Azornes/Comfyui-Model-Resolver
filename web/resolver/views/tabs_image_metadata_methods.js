@@ -1346,6 +1346,7 @@ export const imageMetadataMethods = {
         const hasTransferableTarget = previewRows.length > 0;
         const applyDisabled = (
             transfer.applying
+            || transfer.refreshing
             || !sourceEntries.length
             || !selectedTargetCount
             || !hasTransferableTarget
@@ -1400,7 +1401,7 @@ export const imageMetadataMethods = {
         `;
     },
 
-    async openMetadataTransfer({ force = false } = {}) {
+    async openMetadataTransfer({ force = false, preserveContent = false } = {}) {
         const state = getImageInspectorState(this);
         const imageRequestToken = state.requestToken;
         const workflow = this.getCurrentWorkflow?.();
@@ -1409,10 +1410,17 @@ export const imageMetadataMethods = {
             : '';
         if (workflow) this.syncWorkflowScopedQueue?.(workflow);
         const previousTransfer = state.transfer;
+        const keepCurrentTransferContent = Boolean(preserveContent && previousTransfer);
         const preserveSelection = Boolean(
-            workflowSignature
-            && previousTransfer?.workflowSignature
-            && previousTransfer.workflowSignature === workflowSignature
+            previousTransfer
+            && (
+                preserveContent
+                || (
+                    workflowSignature
+                    && previousTransfer.workflowSignature
+                    && previousTransfer.workflowSignature === workflowSignature
+                )
+            )
         );
         const previousSourceSelections = previousTransfer?.sourceSelections;
         const savedPreferences = this.getMetadataTransferPreferences();
@@ -1426,7 +1434,8 @@ export const imageMetadataMethods = {
         const token = `transfer-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         state.transfer = {
             open: true,
-            loading: Boolean(workflow),
+            loading: Boolean(workflow) && !keepCurrentTransferContent,
+            refreshing: Boolean(workflow) && keepCurrentTransferContent,
             applying: false,
             error: '',
             mode: normalizeTransferMode(previousTransfer?.mode ?? savedPreferences.mode),
@@ -1444,7 +1453,14 @@ export const imageMetadataMethods = {
                 : new Set(),
             sourceSelections,
         };
-        this.renderImageMetadataResult();
+        if (keepCurrentTransferContent) {
+            state.transfer.targetModels = previousTransfer.targetModels || null;
+            state.transfer.targetGroups = Array.isArray(previousTransfer.targetGroups)
+                ? previousTransfer.targetGroups
+                : [];
+        } else {
+            this.renderImageMetadataResult();
+        }
 
         if (!workflow) {
             state.transfer.loading = false;
@@ -1479,6 +1495,7 @@ export const imageMetadataMethods = {
                 this.saveLoadedModelsCacheForActiveWorkflow?.();
             }
             state.transfer.loading = false;
+            state.transfer.refreshing = false;
             state.transfer.targetModels = targetModels;
             state.transfer.targetGroups = this.getMetadataTransferTargetGroups(targetModels);
             const sourceEntries = this.getMetadataTransferSourceModels(state.loadedModels);
@@ -1505,6 +1522,7 @@ export const imageMetadataMethods = {
                 || state.transfer?.requestToken !== token
             ) return null;
             state.transfer.loading = false;
+            state.transfer.refreshing = false;
             state.transfer.error = error?.message || 'Could not scan the current workflow.';
             this.renderImageMetadataResult();
             return null;
@@ -1562,7 +1580,7 @@ export const imageMetadataMethods = {
     async applyMetadataTransfer() {
         const state = getImageInspectorState(this);
         const transfer = state.transfer;
-        if (!transfer || transfer.loading || transfer.applying) return null;
+        if (!transfer || transfer.loading || transfer.refreshing || transfer.applying) return null;
         const mode = normalizeTransferMode(transfer.mode);
         const activityScope = normalizeTransferActivityScope(transfer.activityScope);
 

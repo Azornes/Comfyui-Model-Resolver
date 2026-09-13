@@ -872,7 +872,7 @@ export const workflowStateMethods = {
             && missingSignature !== this.activeMissingWorkflowSignature;
         const graphStillLooksOld = routeChanged && previousSignature && signature === previousSignature;
         const workflowChangeStillPending = (
-            reason === 'node-widget-change'
+            String(reason || '').startsWith('node-')
             && !routeChanged
             && !signatureChanged
         );
@@ -940,7 +940,9 @@ export const workflowStateMethods = {
             });
         } else if (this.activeTab === 'metadata') {
             if (this.contentElement) this.contentElement.style.overflowY = 'auto';
-            await this.openMetadataTransfer?.();
+            await this.openMetadataTransfer?.({
+                preserveContent: !routeChanged && String(reason || '').startsWith('node-'),
+            });
         }
     }
 };
