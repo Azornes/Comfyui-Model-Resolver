@@ -2952,6 +2952,51 @@ test('node widget changes request a content-preserving Missing Models refresh', 
   assert.equal(preserveSearchCacheAtSync, true);
 });
 
+test('node creation requests content-preserving Loaded and Missing Models refreshes', async () => {
+  const log = { debug() {} };
+  const refreshForActiveWorkflowChange = eval(
+    `(${extractMethod(workflowStateMethodsSource, 'refreshForActiveWorkflowChange')})`
+  );
+  const workflow = { nodes: [{ id: 12, type: 'PreviewImage' }] };
+
+  for (const [activeTab, loaderMethod] of [
+    ['missing', 'loadWorkflowData'],
+    ['loaded', 'loadLoadedModels'],
+  ]) {
+    let loadArguments = null;
+    const dialog = {
+      _workflowRefreshGeneration: 1,
+      activeWorkflowRouteKey: 'workflow-a',
+      activeWorkflowSignature: 'old-signature',
+      activeMissingWorkflowSignature: 'old-missing-signature',
+      activeTab,
+      contentElement: { style: {} },
+      isVisible: () => true,
+      getActiveWorkflowRouteKey: () => 'workflow-a',
+      getCurrentWorkflow: () => workflow,
+      getWorkflowSignature: () => 'new-signature',
+      getMissingWorkflowSignature: () => 'new-missing-signature',
+      syncWorkflowScopedQueue() {},
+      [loaderMethod](...args) {
+        loadArguments = args;
+      },
+    };
+
+    await refreshForActiveWorkflowChange.call(dialog, {
+      reason: 'node-created',
+      expectedRoute: 'workflow-a',
+      previousSignature: 'old-signature',
+      attempt: 8,
+      generation: 1,
+      candidateRoute: 'workflow-a',
+      candidateSignature: 'new-signature',
+    });
+
+    assert.equal(loadArguments[0], workflow);
+    assert.deepEqual(loadArguments[1], { preserveContent: true });
+  }
+});
+
 test('metadata workflow changes refresh transfer targets without showing a loading replacement', async () => {
   const log = { debug() {} };
   const refreshForActiveWorkflowChange = eval(

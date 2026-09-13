@@ -919,6 +919,11 @@ export const workflowStateMethods = {
             tab: this.activeTab
         });
 
+        const preserveWorkflowContent = (
+            !routeChanged
+            && String(reason || '').startsWith('node-')
+        );
+
         this.preserveSearchCacheAcrossNextWorkflowSync = Boolean(
             !routeChanged && reason === 'node-widget-change'
         );
@@ -931,12 +936,12 @@ export const workflowStateMethods = {
             }
             if (this.contentElement) this.contentElement.style.overflowY = 'auto';
             await this.loadWorkflowData(workflow, {
-                preserveContent: !routeChanged && reason === 'node-widget-change'
+                preserveContent: preserveWorkflowContent
             });
         } else if (this.activeTab === 'loaded') {
             if (this.contentElement) this.contentElement.style.overflowY = 'auto';
             await this.loadLoadedModels(workflow, {
-                preserveContent: !routeChanged && reason === 'node-widget-change'
+                preserveContent: preserveWorkflowContent
             });
         } else if (this.activeTab === 'metadata') {
             if (this.contentElement) this.contentElement.style.overflowY = 'auto';
