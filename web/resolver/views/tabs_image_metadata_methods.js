@@ -286,14 +286,14 @@ export const imageMetadataMethods = {
                         else delete sourceSelections[selectionKey];
                     }
                     state.transfer.sourceSelections = sourceSelections;
-                    this.renderImageMetadataResult();
+                    this.renderMetadataTransferPanelInPlace();
                 }
                 return;
             }
             if (input.matches?.('[data-image-transfer-mode]')) {
                 const state = getImageInspectorState(this);
                 if (state.transfer) state.transfer.mode = this.setMetadataTransferMode(input.value);
-                this.renderImageMetadataResult();
+                this.renderMetadataTransferPanelInPlace();
                 return;
             }
             if (input.matches?.('[data-image-transfer-activity-scope]')) {
@@ -301,7 +301,7 @@ export const imageMetadataMethods = {
                 if (state.transfer) {
                     state.transfer.activityScope = this.setMetadataTransferActivityScope(input.value);
                 }
-                this.renderImageMetadataResult();
+                this.renderMetadataTransferPanelInPlace();
                 return;
             }
         });
@@ -1482,6 +1482,19 @@ export const imageMetadataMethods = {
         `;
     },
 
+    renderMetadataTransferPanelInPlace({ fallback = true } = {}) {
+        const result = this.contentElement?.querySelector('[data-image-inspector-result]');
+        const currentPanel = result?.querySelector('.mr-image-transfer');
+        if (!currentPanel) {
+            if (fallback) this.renderImageMetadataResult();
+            return false;
+        }
+
+        currentPanel.outerHTML = this.renderMetadataTransferPanel(getImageInspectorState(this));
+        this.bindTooltips?.(result);
+        return true;
+    },
+
     async openMetadataTransfer({ force = false, preserveContent = false } = {}) {
         const state = getImageInspectorState(this);
         const imageRequestToken = state.requestToken;
@@ -1540,14 +1553,13 @@ export const imageMetadataMethods = {
             state.transfer.targetGroups = Array.isArray(previousTransfer.targetGroups)
                 ? previousTransfer.targetGroups
                 : [];
-        } else {
-            this.renderImageMetadataResult();
         }
+        this.renderMetadataTransferPanelInPlace({ fallback: !keepCurrentTransferContent });
 
         if (!workflow) {
             state.transfer.loading = false;
             state.transfer.error = 'No current workflow is available.';
-            this.renderImageMetadataResult();
+            this.renderMetadataTransferPanelInPlace();
             return null;
         }
 
@@ -1596,7 +1608,7 @@ export const imageMetadataMethods = {
                 Array.from(state.transfer.selectedNodeKeys || [])
                     .filter(nodeKey => selectableNodeKeys.has(nodeKey))
             );
-            this.renderImageMetadataResult();
+            this.renderMetadataTransferPanelInPlace();
             return targetModels;
         } catch (error) {
             if (
@@ -1606,7 +1618,7 @@ export const imageMetadataMethods = {
             state.transfer.loading = false;
             state.transfer.refreshing = false;
             state.transfer.error = error?.message || 'Could not scan the current workflow.';
-            this.renderImageMetadataResult();
+            this.renderMetadataTransferPanelInPlace();
             return null;
         }
     },
@@ -1615,7 +1627,7 @@ export const imageMetadataMethods = {
         const state = getImageInspectorState(this);
         if (!state.transfer) return;
         state.transfer.selectedNodeKeys = new Set();
-        this.renderImageMetadataResult();
+        this.renderMetadataTransferPanelInPlace();
     },
 
     toggleMetadataTransferCategory(category) {
@@ -1628,7 +1640,7 @@ export const imageMetadataMethods = {
         if (collapsed.has(normalizedCategory)) collapsed.delete(normalizedCategory);
         else collapsed.add(normalizedCategory);
         state.transfer.collapsedCategories = collapsed;
-        this.renderImageMetadataResult();
+        this.renderMetadataTransferPanelInPlace();
     },
 
     toggleMetadataTransferNode(nodeKey) {
@@ -1656,7 +1668,7 @@ export const imageMetadataMethods = {
             selected.add(String(nodeKey));
         }
         state.transfer.selectedNodeKeys = selected;
-        this.renderImageMetadataResult();
+        this.renderMetadataTransferPanelInPlace();
     },
 
     async undoMetadataTransfer() {
@@ -1667,7 +1679,7 @@ export const imageMetadataMethods = {
         const undoState = this.getMetadataTransferUndoState();
         if (!undoState.available) {
             if (undoState.reason) this.showNotification(undoState.reason, 'warning');
-            this.renderImageMetadataResult();
+            this.renderMetadataTransferPanelInPlace();
             return null;
         }
 
@@ -1680,7 +1692,7 @@ export const imageMetadataMethods = {
         const transfer = state.transfer;
         lastTransfer.undoing = true;
         if (transfer) transfer.undoing = true;
-        this.renderImageMetadataResult();
+        this.renderMetadataTransferPanelInPlace();
 
         try {
             const restored = await this.updateWorkflowInComfyUI(restoreWorkflow, []);
@@ -1694,9 +1706,7 @@ export const imageMetadataMethods = {
                 || this.getWorkflowSignature?.(restoreWorkflow)
                 || null;
             state.lastTransfer = null;
-            state.transfer = null;
-            this.renderImageMetadataResult();
-            void this.openMetadataTransfer();
+            void this.openMetadataTransfer({ preserveContent: true });
             this.showNotification('Undid the last model transfer.', 'success');
             window.dispatchEvent?.(new Event('model-resolver-active-workflowchange'));
             return restoreWorkflow;
@@ -1706,7 +1716,7 @@ export const imageMetadataMethods = {
                 transfer.undoing = false;
                 transfer.error = error?.message || 'The previous workflow could not be restored.';
             }
-            this.renderImageMetadataResult();
+            this.renderMetadataTransferPanelInPlace();
             return null;
         }
     },
@@ -1714,7 +1724,7 @@ export const imageMetadataMethods = {
     async applyMetadataTransfer() {
         const state = getImageInspectorState(this);
         const transfer = state.transfer;
-        if (!transfer || transfer.loading || transfer.refreshing || transfer.applying) return null;
+        if (!transfer || transfer.loading || transfer.refreshing || transfer.applying || transfer.undoing) return null;
         const mode = normalizeTransferMode(transfer.mode);
         const activityScope = normalizeTransferActivityScope(transfer.activityScope);
 
@@ -1821,7 +1831,7 @@ export const imageMetadataMethods = {
         const previousWorkflowSignature = this.getWorkflowSignature?.(workflow) || null;
 
         transfer.applying = true;
-        this.renderImageMetadataResult();
+        this.renderMetadataTransferPanelInPlace();
         try {
             const data = await this.fetchJson(
                 '/model_resolver/transfer-models',
@@ -1858,9 +1868,7 @@ export const imageMetadataMethods = {
                 undoing: false,
             };
             this.activeWorkflowSignature = this.getWorkflowSignature?.(updatedWorkflow) || null;
-            state.transfer = null;
-            this.renderImageMetadataResult();
-            void this.openMetadataTransfer();
+            void this.openMetadataTransfer({ preserveContent: true });
             const updatedCount = Number(data.updated) || 0;
             const skippedCount = Array.isArray(data.skipped) ? data.skipped.length : 0;
             const suffix = skippedCount
@@ -1876,7 +1884,7 @@ export const imageMetadataMethods = {
             if (state.transfer) {
                 state.transfer.applying = false;
                 state.transfer.error = error?.message || 'The metadata model transfer failed.';
-                this.renderImageMetadataResult();
+                this.renderMetadataTransferPanelInPlace();
             }
             return null;
         }

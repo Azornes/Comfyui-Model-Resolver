@@ -163,6 +163,43 @@ test('metadata transfer persists only mode and activity scope preferences', () =
   });
 });
 
+test('metadata transfer refresh updates only the transfer panel when it is mounted', () => {
+  const state = createTransferState([
+    { category: 'text_encoders', original_path: 'imported.safetensors' },
+  ]);
+  const currentPanel = { outerHTML: '<section class="mr-image-transfer">old</section>' };
+  const result = {
+    querySelector(selector) {
+      assert.equal(selector, '.mr-image-transfer');
+      return currentPanel;
+    },
+  };
+  let fullRenderCount = 0;
+  let tooltipBindCount = 0;
+  const context = {
+    ...imageMetadataMethods,
+    imageInspectorState: state,
+    contentElement: {
+      querySelector(selector) {
+        assert.equal(selector, '[data-image-inspector-result]');
+        return result;
+      },
+    },
+    renderMetadataTransferPanel: () => '<section class="mr-image-transfer">updated</section>',
+    renderImageMetadataResult() {
+      fullRenderCount += 1;
+    },
+    bindTooltips() {
+      tooltipBindCount += 1;
+    },
+  };
+
+  assert.equal(context.renderMetadataTransferPanelInPlace(), true);
+  assert.equal(currentPanel.outerHTML, '<section class="mr-image-transfer">updated</section>');
+  assert.equal(fullRenderCount, 0);
+  assert.equal(tooltipBindCount, 1);
+});
+
 test('metadata transfer exposes Undo transfer while the post-transfer workflow is unchanged', () => {
   const context = createTransferContext();
   const state = createTransferState([
@@ -220,7 +257,9 @@ test('metadata transfer undo restores the previous workflow and consumes its his
       return true;
     },
     renderImageMetadataResult() {},
-    openMetadataTransfer() {},
+    openMetadataTransfer() {
+      state.transfer = { undoing: false };
+    },
     showNotification(message, type) {
       notifications.push({ message, type });
     },
@@ -241,7 +280,7 @@ test('metadata transfer undo restores the previous workflow and consumes its his
   assert.deepEqual(restoredWorkflow, previousWorkflow);
   assert.notEqual(restoredWorkflow, previousWorkflow);
   assert.equal(context.imageInspectorState.lastTransfer, null);
-  assert.equal(context.imageInspectorState.transfer, null);
+  assert.equal(context.imageInspectorState.transfer.undoing, false);
   assert.equal(context.activeWorkflowSignature, 'before');
   assert.equal(context.cachedLoadedModelsSignature, null);
   assert.equal(context.cachedLoadedModelsData, null);
