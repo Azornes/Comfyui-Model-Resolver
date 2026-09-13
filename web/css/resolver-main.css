@@ -4905,10 +4905,10 @@ button.mr-info-link:disabled {
 
 .mr-image-transfer {
     margin: var(--mr-spacing-12) 0 var(--mr-spacing-16);
-    padding: var(--mr-spacing-12);
-    border: 1px solid var(--mr-border);
-    border-radius: var(--mr-radius-xl);
-    background: rgba(255, 255, 255, 0.018);
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
 }
 
 .mr-image-transfer-header,
