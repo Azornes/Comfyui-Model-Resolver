@@ -153,6 +153,64 @@ def test_replace_zips_multiple_sources_and_copies_lora_strength():
     assert workflow["nodes"][1]["widgets_values"] == ["new-b.safetensors", 0.8]
 
 
+def test_replace_honors_explicit_source_index_per_target():
+    workflow = {
+        "nodes": [
+            {
+                "id": 30,
+                "type": "CLIPLoader",
+                "widgets_values": ["old-clip-a.safetensors"],
+            },
+            {
+                "id": 31,
+                "type": "CLIPLoader",
+                "widgets_values": ["old-clip-b.safetensors"],
+            },
+        ]
+    }
+    refs = (
+        _reference(
+            30,
+            "old-clip-a.safetensors",
+            category="text_encoders",
+            node_type="CLIPLoader",
+        ),
+        _reference(
+            31,
+            "old-clip-b.safetensors",
+            category="text_encoders",
+            node_type="CLIPLoader",
+        ),
+    )
+
+    result = transfer_models_to_workflow(
+        workflow,
+        [
+            {
+                "original_path": "source-clip-a.safetensors",
+                "category": "text_encoders",
+                "source_index": 4,
+            },
+            {
+                "original_path": "source-clip-b.safetensors",
+                "category": "text_encoders",
+                "source_index": 9,
+            },
+        ],
+        [
+            {**_selector(refs[0]), "source_index": 9},
+            {**_selector(refs[1]), "source_index": 4},
+        ],
+        inventory=_inventory(*refs),
+    )
+
+    assert result["updated"] == 2
+    assert [node["widgets_values"][0] for node in workflow["nodes"]] == [
+        "source-clip-b.safetensors",
+        "source-clip-a.safetensors",
+    ]
+
+
 def test_replace_updates_inner_subgraph_node_and_requests_full_reload():
     workflow = {
         "nodes": [],
@@ -284,6 +342,65 @@ def test_merge_appends_lora_manager_entry_without_removing_existing_values():
     assert "<lora:added:0.6>" in workflow["nodes"][0]["widgets_values"][1]
 
 
+def test_replace_add_replaces_lora_manager_entries_and_appends_remaining_values():
+    workflow = {
+        "nodes": [
+            {
+                "id": 26,
+                "type": "LoraLoaderV2",
+                "widgets_values": [
+                    None,
+                    "existing prompt",
+                    [
+                        {"name": "old_a", "strength": 0.7, "active": True},
+                        {"name": "old_b", "strength": 0.8, "active": True},
+                    ],
+                ],
+            }
+        ]
+    }
+    refs = (
+        _reference(
+            26,
+            "old_a",
+            category="loras",
+            node_type="LoraLoaderV2",
+            widget_index=2,
+            custom_node_adapter="lora-manager",
+            name="old_a",
+            active=True,
+        ),
+        _reference(
+            26,
+            "old_b",
+            category="loras",
+            node_type="LoraLoaderV2",
+            widget_index=2,
+            custom_node_adapter="lora-manager",
+            name="old_b",
+            active=True,
+        ),
+    )
+
+    result = transfer_models_to_workflow(
+        workflow,
+        [
+            {"original_path": "new_a.safetensors", "category": "loras", "strength": 0.3},
+            {"original_path": "new_b.safetensors", "category": "loras", "strength": 0.4},
+            {"original_path": "new_c.safetensors", "category": "loras", "strength": 0.5},
+        ],
+        [_selector(ref) for ref in refs],
+        mode="replace-add",
+        inventory=_inventory(*refs),
+    )
+
+    entries = workflow["nodes"][0]["widgets_values"][2]
+    assert result["updated"] == 3
+    assert result["requires_full_reload"] is True
+    assert [entry["name"] for entry in entries] == ["new_a", "new_b", "new_c"]
+    assert [entry["strength"] for entry in entries] == [0.3, 0.4, 0.5]
+
+
 def test_merge_appends_power_lora_slot_without_removing_existing_values():
     workflow = {
         "nodes": [
@@ -342,6 +459,88 @@ def test_merge_appends_power_lora_slot_without_removing_existing_values():
     assert values[3]["strength"] == 1.0
     assert values[3]["on"] is True
     assert named_values["➕ Add Lora"] == ""
+
+
+def test_replace_add_activity_scope_filters_imported_loras_but_keeps_all_target_slots():
+    workflow = {
+        "nodes": [
+            {
+                "id": 27,
+                "type": "Power Lora Loader (rgthree)",
+                "widgets_values": [
+                    {},
+                    {"type": "PowerLoraLoaderHeaderWidget"},
+                    {"on": True, "lora": "active-old.safetensors", "strength": 1.0},
+                    {"on": False, "lora": "inactive-old.safetensors", "strength": 0.8},
+                    {},
+                    "",
+                ],
+            }
+        ]
+    }
+    refs = (
+        _reference(
+            27,
+            "active-old.safetensors",
+            category="loras",
+            node_type="Power Lora Loader (rgthree)",
+            widget_index=2,
+            nested_key="lora",
+            active=True,
+        ),
+        _reference(
+            27,
+            "inactive-old.safetensors",
+            category="loras",
+            node_type="Power Lora Loader (rgthree)",
+            widget_index=3,
+            nested_key="lora",
+            active=False,
+        ),
+    )
+
+    result = transfer_models_to_workflow(
+        workflow,
+        [
+            {
+                "original_path": "active-new.safetensors",
+                "category": "loras",
+                "active": True,
+            },
+            {
+                "original_path": "inactive-new-a.safetensors",
+                "category": "loras",
+                "active": False,
+            },
+            {
+                "original_path": "inactive-new-b.safetensors",
+                "category": "loras",
+                "active": False,
+            },
+            {
+                "original_path": "inactive-new-c.safetensors",
+                "category": "loras",
+                "active": False,
+            },
+        ],
+        [_selector(ref) for ref in refs],
+        mode="replace-add",
+        activity_scope="inactive",
+        inventory=_inventory(*refs),
+    )
+
+    lora_values = [
+        value
+        for value in workflow["nodes"][0]["widgets_values"]
+        if isinstance(value, dict) and "lora" in value
+    ]
+    assert result["updated"] == 3
+    assert [value["lora"] for value in lora_values] == [
+        "inactive-new-a.safetensors",
+        "inactive-new-b.safetensors",
+        "inactive-new-c.safetensors",
+    ]
+    assert [value["on"] for value in lora_values] == [False, False, False]
 
 
 def test_replace_updates_power_lora_named_mirror_and_strength():

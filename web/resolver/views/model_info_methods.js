@@ -45,9 +45,14 @@ export const modelInfoMethods = {
         const isDownloadQueueContext = model?.context_scope === 'download_queue';
         const isDownloadHistoryContext = model?.context_scope === 'download_history';
         const isLoadedModelContext = model?.context_scope === 'loaded_model';
+        const isWorkflowNodeContext = model?.context_scope === 'workflow_node';
         const isLocalModelContext = model?.context_scope === 'local_model' || model?.context_scope === 'local_match';
         const isFolderOnlyContext = isDownloadFolderContext || isDownloadRootContext;
-        const isSourceModelContext = !isDownloadTableContext && !isFolderOnlyContext && !isDownloadQueueContext && !isDownloadHistoryContext;
+        const isSourceModelContext = !isDownloadTableContext
+            && !isFolderOnlyContext
+            && !isDownloadQueueContext
+            && !isDownloadHistoryContext
+            && !isWorkflowNodeContext;
         const showSuggestSubfolder = this.canSuggestDownloadSubfolderFromContextMenu?.(model) || false;
         const hasLocalPath = Boolean(model?.open_path || model?.folder_path || model?.download_directory || model?.directory || model?.path || model?.resolved_path);
         const showOpenFolder = !isDownloadTableContext && hasLocalPath;
@@ -55,7 +60,7 @@ export const modelInfoMethods = {
             && hasLocalPath
             && Boolean(model?.missing_key || model?.missing_search_key);
         const showSwitchWorkflow = (isDownloadQueueContext || isDownloadHistoryContext) && Boolean(this.canSwitchToDownloadWorkflow?.(model));
-        const showLocateNode = isLoadedModelContext
+        const showLocateNode = (isLoadedModelContext || isWorkflowNodeContext)
             && model?.node_id !== undefined
             && model?.node_id !== null
             && model?.node_id !== '';
@@ -451,8 +456,13 @@ export const modelInfoMethods = {
         const isDownloadRootContext = model?.context_scope === 'download_root';
         const isDownloadQueueContext = model?.context_scope === 'download_queue';
         const isDownloadHistoryContext = model?.context_scope === 'download_history';
+        const isWorkflowNodeContext = model?.context_scope === 'workflow_node';
         const isFolderOnlyContext = isDownloadFolderContext || isDownloadRootContext;
-        const isSourceModelContext = !isDownloadTableContext && !isFolderOnlyContext && !isDownloadQueueContext && !isDownloadHistoryContext;
+        const isSourceModelContext = !isDownloadTableContext
+            && !isFolderOnlyContext
+            && !isDownloadQueueContext
+            && !isDownloadHistoryContext
+            && !isWorkflowNodeContext;
         const showSuggestSubfolder = this.canSuggestDownloadSubfolderFromContextMenu?.(model) || false;
         const hasLocalPath = Boolean(model?.open_path || model?.folder_path || model?.download_directory || model?.directory || model?.path || model?.resolved_path);
         const showOpenFolder = !isDownloadTableContext && hasLocalPath;

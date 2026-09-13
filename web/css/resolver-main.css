@@ -4807,25 +4807,16 @@ button.mr-info-link:disabled {
 .mr-image-inspector-tools {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    gap: var(--mr-spacing-12);
-    padding: var(--mr-spacing-12);
+    gap: var(--mr-spacing-8);
+    padding: var(--mr-spacing-8) var(--mr-spacing-12) var(--mr-spacing-10);
     border-bottom: 1px solid var(--mr-border);
 }
 
 .mr-image-inspector-paste {
     display: flex;
     flex-direction: column;
-    gap: var(--mr-spacing-8);
+    gap: var(--mr-spacing-6);
     min-width: 0;
-    padding: var(--mr-spacing-16);
-    border: 1px dashed var(--mr-border-strong, rgba(255, 255, 255, 0.24));
-    border-radius: var(--mr-radius-xl);
-    background: rgba(255, 255, 255, 0.018);
-}
-
-.mr-image-inspector-paste label {
-    color: var(--mr-text-muted);
-    font-size: var(--mr-font-md);
 }
 
 .mr-image-inspector-actions {
@@ -4833,16 +4824,11 @@ button.mr-info-link:disabled {
     flex-wrap: wrap;
     justify-content: flex-start;
     gap: var(--mr-spacing-8);
-    margin-top: var(--mr-spacing-4);
-}
-
-.mr-image-inspector-paste label {
-    font-weight: 700;
 }
 
 .mr-image-inspector-textarea {
     width: 100%;
-    min-height: 112px;
+    min-height: 76px;
     box-sizing: border-box;
     resize: vertical;
     padding: var(--mr-spacing-8) var(--mr-spacing-10);
@@ -4896,8 +4882,7 @@ button.mr-info-link:disabled {
     padding-top: var(--mr-spacing-4);
 }
 
-.mr-image-inspector-loading,
-.mr-image-inspector-empty {
+.mr-image-inspector-loading {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -4957,7 +4942,7 @@ button.mr-info-link:disabled {
 
 .mr-image-transfer-mode {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: var(--mr-spacing-8);
 }
 
@@ -5004,6 +4989,44 @@ button.mr-info-link:disabled {
     font-size: var(--mr-font-xs);
 }
 
+.mr-image-transfer-activity {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--mr-spacing-4) var(--mr-spacing-8);
+    margin-top: var(--mr-spacing-8);
+}
+
+.mr-image-transfer-activity-label {
+    margin-right: var(--mr-spacing-4);
+    color: var(--mr-text-muted);
+    font-size: var(--mr-font-xs);
+    font-weight: 650;
+}
+
+.mr-image-transfer-activity-option {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--mr-spacing-4);
+    padding: var(--mr-spacing-4) var(--mr-spacing-6);
+    border: 1px solid transparent;
+    border-radius: var(--mr-radius-md, 5px);
+    color: var(--mr-text-muted);
+    cursor: pointer;
+    font-size: var(--mr-font-xs);
+}
+
+.mr-image-transfer-activity-option:has(input:checked) {
+    border-color: rgba(114, 211, 138, 0.25);
+    background: rgba(114, 211, 138, 0.06);
+    color: var(--mr-accent);
+}
+
+.mr-image-transfer-activity-option input {
+    margin: 0;
+    accent-color: var(--mr-accent);
+}
+
 .mr-image-transfer-note {
     margin: var(--mr-spacing-10) 0;
     color: var(--mr-text-muted);
@@ -5015,6 +5038,7 @@ button.mr-info-link:disabled {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--mr-spacing-12);
+    align-items: start;
 }
 
 .mr-image-transfer-column {
@@ -5057,12 +5081,16 @@ button.mr-info-link:disabled {
 
 .mr-image-transfer-node-list {
     padding: 0;
+    max-height: 520px;
+    overflow: auto;
 }
 
 .mr-image-transfer-preview {
-    margin-top: var(--mr-spacing-12);
-    padding-top: var(--mr-spacing-12);
-    border-top: 1px solid var(--mr-border);
+    margin: 0;
+    padding: var(--mr-spacing-10);
+    border: 1px solid var(--mr-border);
+    border-radius: var(--mr-radius-lg);
+    background: rgba(255, 255, 255, 0.018);
 }
 
 .mr-image-transfer-preview-header {
@@ -5119,6 +5147,7 @@ button.mr-info-link:disabled {
 
 .mr-image-transfer-preview-side-next {
     text-align: right;
+    align-items: flex-end;
 }
 
 .mr-image-transfer-preview-label {
@@ -5133,6 +5162,25 @@ button.mr-info-link:disabled {
     font-family: var(--mr-font-family-mono);
     font-size: var(--mr-font-sm);
     font-weight: 650;
+}
+
+.mr-image-transfer-source-select {
+    width: min(100%, 260px);
+    min-width: 0;
+    padding: var(--mr-spacing-6) var(--mr-spacing-8);
+    border: 1px solid var(--mr-border-strong, rgba(255, 255, 255, 0.24));
+    border-radius: var(--mr-radius-md, var(--mr-radius-lg));
+    background: rgba(0, 0, 0, 0.2);
+    color: var(--mr-text);
+    font: inherit;
+    font-size: var(--mr-font-sm);
+    text-align: left;
+}
+
+.mr-image-transfer-source-select:focus {
+    border-color: var(--mr-accent);
+    outline: none;
+    box-shadow: 0 0 0 2px var(--mr-missing-control-focus-ring, rgba(114, 211, 138, 0.08));
 }
 
 .mr-image-transfer-preview-arrow {
@@ -5254,6 +5302,339 @@ button.mr-info-link:disabled {
     font-size: var(--mr-font-xs);
 }
 
+.mr-image-transfer-category-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--mr-spacing-6);
+}
+
+.mr-image-transfer-category {
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: var(--mr-radius-lg, 7px);
+    background: rgba(255, 255, 255, 0.018);
+    box-shadow: none;
+}
+
+.mr-image-transfer-category-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--mr-spacing-10);
+    min-width: 0;
+    min-height: 36px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.075);
+}
+
+.mr-image-transfer-category.is-collapsed .mr-image-transfer-category-header {
+    border-bottom-color: transparent;
+}
+
+.mr-image-transfer-category-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--mr-spacing-8);
+    min-width: 0;
+    flex: 1 1 auto;
+    padding: var(--mr-spacing-8) var(--mr-spacing-10);
+    border: 0;
+    background: transparent;
+    color: var(--mr-text);
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+}
+
+.mr-image-transfer-category-toggle:hover {
+    background: rgba(255, 255, 255, 0.025);
+}
+
+.mr-image-transfer-category-toggle:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 1px var(--mr-missing-control-focus-ring, rgba(114, 211, 138, 0.12));
+}
+
+.mr-image-transfer-category-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    flex: 0 0 14px;
+    color: var(--mr-text);
+    line-height: 1;
+    transition: transform 120ms ease;
+}
+
+.mr-image-transfer-category-chevron::before {
+    width: 5px;
+    height: 5px;
+    border-right: 1px solid currentColor;
+    border-bottom: 1px solid currentColor;
+    content: "";
+    transform: rotate(45deg) translate(-1px, -1px);
+}
+
+.mr-image-transfer-category.is-collapsed .mr-image-transfer-category-chevron {
+    transform: rotate(-90deg);
+}
+
+.mr-image-transfer-category-title {
+    overflow: hidden;
+    color: var(--mr-text);
+    font-size: var(--mr-font-sm);
+    font-weight: 650;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mr-image-transfer-category-selected {
+    color: var(--mr-accent);
+    font-size: var(--mr-font-xs);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.mr-image-transfer-category-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--mr-spacing-6);
+    padding: var(--mr-spacing-6) var(--mr-spacing-8);
+    color: var(--mr-text-muted);
+    font-size: var(--mr-font-xs);
+    white-space: nowrap;
+}
+
+.mr-image-transfer-category-node-count {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    padding: 0 var(--mr-spacing-7);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.035);
+    color: var(--mr-text-muted);
+    font-size: var(--mr-font-xs);
+}
+
+.mr-image-transfer-category-nodes {
+    display: flex;
+    flex-direction: column;
+}
+
+.mr-image-transfer-node-row {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(260px, 0.92fr) minmax(320px, 1.08fr);
+    align-items: center;
+    gap: var(--mr-spacing-12);
+    min-width: 0;
+    margin: 0;
+    padding: var(--mr-spacing-10) var(--mr-spacing-10);
+    border: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+    border-radius: 0;
+    background: transparent;
+    cursor: default;
+}
+
+.mr-image-transfer-node-row:last-child {
+    border-bottom: 0;
+}
+
+.mr-image-transfer-node-row:hover {
+    background: rgba(255, 255, 255, 0.02);
+    border-color: rgba(255, 255, 255, 0.055);
+}
+
+.mr-image-transfer-node-row.is-selected {
+    background: linear-gradient(90deg, rgba(114, 211, 138, 0.12), rgba(114, 211, 138, 0.035) 55%, transparent);
+}
+
+.mr-image-transfer-node-row.is-selected::before {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 3px;
+    border-radius: 0 2px 2px 0;
+    background: var(--mr-accent);
+    content: "";
+}
+
+.mr-image-transfer-node-row.is-unavailable {
+    opacity: 0.5;
+}
+
+.mr-image-transfer-node-select {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    gap: var(--mr-spacing-10);
+    min-width: 0;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--mr-text);
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+}
+
+.mr-image-transfer-node-select:disabled {
+    cursor: not-allowed;
+}
+
+.mr-image-transfer-node-select:focus-visible {
+    outline: none;
+}
+
+.mr-image-transfer-node-check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 19px;
+    height: 19px;
+    flex: 0 0 19px;
+    margin-top: 0;
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    border-radius: var(--mr-radius-md, 5px);
+    background: rgba(0, 0, 0, 0.2);
+    color: #102015;
+    font-size: var(--mr-font-sm);
+    font-weight: 800;
+    line-height: 1;
+}
+
+.mr-image-transfer-node-row.is-selected .mr-image-transfer-node-check {
+    border-color: var(--mr-accent);
+    background: var(--mr-accent);
+}
+
+.mr-image-transfer-node-select:hover:not(:disabled) .mr-image-transfer-node-check {
+    border-color: rgba(114, 211, 138, 0.62);
+}
+
+.mr-image-transfer-node-details {
+    display: flex;
+    flex-direction: column;
+    gap: var(--mr-spacing-4);
+    min-width: 0;
+}
+
+.mr-image-transfer-node-name {
+    overflow-wrap: anywhere;
+    color: var(--mr-text);
+    font-size: var(--mr-font-sm);
+    font-weight: 650;
+}
+
+.mr-image-transfer-node-meta {
+    overflow-wrap: anywhere;
+    color: var(--mr-text-muted);
+    font-family: var(--mr-font-family-sans, sans-serif);
+    font-size: var(--mr-font-xs);
+    font-weight: 500;
+}
+
+.mr-image-transfer-node-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-width: 0;
+}
+
+.mr-image-transfer-node-preview > .mr-image-transfer-change + .mr-image-transfer-change {
+    margin-top: var(--mr-spacing-6);
+    padding-top: var(--mr-spacing-6);
+    border-top: 1px solid rgba(255, 255, 255, 0.055);
+}
+
+.mr-image-transfer-change {
+    display: grid;
+    grid-template-columns: minmax(110px, 0.9fr) 18px minmax(135px, 1.1fr);
+    align-items: center;
+    gap: var(--mr-spacing-10);
+    min-width: 0;
+}
+
+.mr-image-transfer-change-side {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--mr-spacing-4);
+    min-width: 0;
+}
+
+.mr-image-transfer-change-side-imported {
+    align-items: flex-start;
+}
+
+.mr-image-transfer-change-label {
+    color: var(--mr-text-muted);
+    font-size: var(--mr-font-xs);
+}
+
+.mr-image-transfer-change-arrow {
+    color: var(--mr-text-muted);
+    font-size: var(--mr-font-lg);
+    font-weight: 700;
+}
+
+.mr-image-transfer-model-value {
+    display: inline-flex;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-wrap: anywhere;
+    padding: var(--mr-spacing-4) var(--mr-spacing-8);
+    border: 1px solid transparent;
+    border-radius: var(--mr-radius-lg);
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--mr-text);
+    font-family: var(--mr-font-family-mono);
+    font-size: var(--mr-font-xs);
+    font-weight: 600;
+}
+
+.mr-image-transfer-model-value.is-current {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--mr-text);
+}
+
+.mr-image-transfer-model-value.is-imported,
+.mr-image-transfer-model-value.is-added {
+    border-color: rgba(114, 211, 138, 0.26);
+    background: rgba(114, 211, 138, 0.16);
+    color: var(--mr-accent);
+}
+
+.mr-image-transfer-model-value.is-unchanged,
+.mr-image-transfer-model-value.is-placeholder {
+    color: var(--mr-text-muted);
+}
+
+.mr-image-transfer-change.is-unselected {
+    opacity: 0.7;
+}
+
+.mr-image-transfer-source-select {
+    width: 100%;
+    max-width: 260px;
+    min-width: 0;
+    box-sizing: border-box;
+    min-height: 24px;
+    padding: var(--mr-spacing-4) var(--mr-spacing-8);
+    border-color: rgba(114, 211, 138, 0.26);
+    border-radius: var(--mr-radius-lg, 6px);
+    background: rgba(114, 211, 138, 0.12);
+    color: var(--mr-accent);
+    font-family: var(--mr-font-family-mono);
+    font-size: var(--mr-font-xs);
+    font-weight: 600;
+}
+
 @keyframes mr-image-inspector-spin {
     to {
         transform: rotate(360deg);
@@ -5270,6 +5651,41 @@ button.mr-info-link:disabled {
         grid-template-columns: 1fr;
     }
 
+    .mr-image-transfer-category-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .mr-image-transfer-category-meta {
+        box-sizing: border-box;
+        justify-content: space-between;
+        padding-top: 0;
+        width: 100%;
+    }
+
+    .mr-image-transfer-node-row {
+        align-items: start;
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .mr-image-transfer-node-select {
+        grid-column: 1;
+    }
+
+    .mr-image-transfer-node-preview {
+        grid-column: 1 / -1;
+    }
+
+    .mr-image-transfer-change {
+        gap: var(--mr-spacing-6);
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .mr-image-transfer-change-arrow {
+        justify-self: start;
+        transform: rotate(90deg);
+    }
+
     .mr-image-transfer-preview-row {
         grid-template-columns: minmax(0, 1fr);
     }
@@ -5281,6 +5697,7 @@ button.mr-info-link:disabled {
 
     .mr-image-transfer-preview-side-next {
         text-align: left;
+        align-items: flex-start;
     }
 
     .mr-image-transfer-header,
@@ -10598,4 +11015,53 @@ a.mr-image-preview-resource-name:hover {
 
 .litegraph.litecontextmenu .litemenu-entry.mr-model-resolver-node-menu::before {
     margin-right: var(--mr-spacing-6);
+}
+
+/* Keep the transfer rows flat when ComfyUI's global button theme is present. */
+#model-resolver-modal .mr-image-transfer-category-toggle,
+#model-resolver-modal .mr-image-transfer-node-select {
+    appearance: none;
+    background: transparent !important;
+    border: 0 !important;
+    border-radius: 0;
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+#model-resolver-modal .mr-image-transfer-node-select {
+    padding: 0 !important;
+}
+
+#model-resolver-modal .mr-image-transfer-model-value,
+#model-resolver-modal .mr-image-transfer-source-select {
+    box-sizing: border-box;
+    height: 24px;
+    min-height: 24px;
+    margin: 0;
+    padding: 0 var(--mr-spacing-8) !important;
+    line-height: 1;
+}
+
+#model-resolver-modal .mr-image-transfer-model-value {
+    align-items: center;
+    display: inline-flex;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#model-resolver-modal .mr-image-transfer-source-select {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#model-resolver-modal .mr-image-transfer-category-toggle:focus,
+#model-resolver-modal .mr-image-transfer-category-toggle:focus-visible,
+#model-resolver-modal .mr-image-transfer-node-select:focus,
+#model-resolver-modal .mr-image-transfer-node-select:focus-visible {
+    border: 0 !important;
+    box-shadow: none !important;
+    outline: none !important;
 }

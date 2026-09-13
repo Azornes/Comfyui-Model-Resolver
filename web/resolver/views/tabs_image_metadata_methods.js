@@ -30,6 +30,37 @@ const MERGE_LORA_NODE_TYPES = new Set([
     'Lora Stacker (LoraManager)',
 ]);
 const MERGE_POWER_LORA_NODE_TYPE = 'Power Lora Loader (rgthree)';
+const TRANSFER_ACTIVITY_SCOPES = new Set(['all', 'active', 'inactive']);
+
+function normalizeTransferMode(value) {
+    const token = String(value || 'replace').trim().toLowerCase().replaceAll('_', '-');
+    if (token === 'merge' || token === 'add' || token === 'merge-add') return 'merge';
+    if (token === 'replace-add' || token === 'replaceadd' || token === 'replace-plus-add') {
+        return 'replace-add';
+    }
+    return 'replace';
+}
+
+function normalizeTransferActivityScope(value) {
+    const token = String(value || 'all').trim().toLowerCase().replaceAll('_', '-');
+    if (token === 'both' || token === 'active-inactive' || token === 'active-and-inactive') {
+        return 'all';
+    }
+    return TRANSFER_ACTIVITY_SCOPES.has(token) ? token : 'all';
+}
+
+function isTransferActivityAllowed(value, scope) {
+    const normalizedScope = normalizeTransferActivityScope(scope);
+    if (normalizedScope === 'all') return true;
+    if (normalizedScope === 'inactive') return value === false;
+    return value !== false;
+}
+
+function isAppendableLoraNodeType(nodeType) {
+    const normalizedType = String(nodeType || '');
+    return MERGE_LORA_NODE_TYPES.has(normalizedType)
+        || normalizedType === MERGE_POWER_LORA_NODE_TYPE;
+}
 
 function normalizeTransferCategory(value) {
     const token = String(value || '').trim().toLowerCase().replaceAll('-', '_');
@@ -148,7 +179,7 @@ export const imageMetadataMethods = {
                     <div class="mr-loaded-models-header mr-image-inspector-header">
                         <div class="mr-loaded-title-block">
                             <h3 class="mr-loaded-models-title">Image Metadata</h3>
-                            <p class="mr-loaded-models-subtitle">Paste workflow JSON or drop an image or JSON file anywhere in this panel.</p>
+                            <p class="mr-loaded-models-subtitle">Paste JSON or drop a supported file anywhere in this panel.</p>
                         </div>
                         <div class="mr-image-inspector-header-actions">
                             <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm" data-image-inspector-action="clear">Clear</button>
@@ -157,10 +188,9 @@ export const imageMetadataMethods = {
                     <div class="mr-image-inspector-tools">
                         <input type="file" accept="image/png,image/jpeg,image/webp,application/json,.json" hidden data-image-inspector-input="file">
                         <div class="mr-image-inspector-paste">
-                            <label for="mr-image-inspector-json-text">Paste workflow JSON</label>
-                            <textarea id="mr-image-inspector-json-text" class="mr-image-inspector-textarea" rows="5" placeholder="Paste a ComfyUI UI workflow or API prompt graph..."></textarea>
+                            <textarea id="mr-image-inspector-json-text" class="mr-image-inspector-textarea" rows="3" aria-label="Paste workflow JSON" placeholder="Paste a ComfyUI UI workflow or API prompt graph..."></textarea>
                             <div class="mr-image-inspector-actions">
-                                <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm" data-image-inspector-action="analyze-paste">Analyze pasted JSON</button>
+                                <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm" data-image-inspector-action="analyze-paste" disabled>Analyze JSON</button>
                                 <button type="button" class="mr-btn mr-btn-primary mr-btn-sm" data-image-inspector-action="choose-file">Load file</button>
                             </div>
                         </div>
@@ -180,6 +210,13 @@ export const imageMetadataMethods = {
         root.dataset.imageInspectorBound = '1';
 
         const fileInput = root.querySelector('[data-image-inspector-input="file"]');
+        const pasteInput = root.querySelector('.mr-image-inspector-textarea');
+        const analyzePasteButton = root.querySelector('[data-image-inspector-action="analyze-paste"]');
+        const updateAnalyzePasteButton = () => {
+            if (analyzePasteButton) {
+                analyzePasteButton.disabled = !(pasteInput?.value || '').trim();
+            }
+        };
         const setDragOver = (active) => {
             root.classList.toggle('is-dragover', active);
         };
@@ -190,6 +227,12 @@ export const imageMetadataMethods = {
         let dragDepth = 0;
 
         root.addEventListener('click', (event) => {
+            const categoryToggle = event.target.closest?.('[data-image-transfer-category-toggle]');
+            if (categoryToggle) {
+                this.toggleMetadataTransferCategory(categoryToggle.dataset.imageTransferCategoryToggle);
+                return;
+            }
+
             const nodeChip = event.target.closest?.('[data-image-transfer-node]');
             if (nodeChip) {
                 this.toggleMetadataTransferNode(nodeChip.dataset.imageTransferNode);
@@ -211,13 +254,43 @@ export const imageMetadataMethods = {
 
         root.addEventListener('change', (event) => {
             const input = event.target;
+            if (input.matches?.('[data-image-transfer-source]')) {
+                const state = getImageInspectorState(this);
+                if (state.transfer) {
+                    const existingSourceSelections = state.transfer.sourceSelections;
+                    const sourceSelections = existingSourceSelections instanceof Map
+                        ? Object.fromEntries(existingSourceSelections)
+                        : existingSourceSelections && typeof existingSourceSelections === 'object'
+                            ? { ...existingSourceSelections }
+                            : {};
+                    const selectionKey = input.dataset.imageTransferSource;
+                    if (selectionKey) {
+                        if (input.value) sourceSelections[selectionKey] = input.value;
+                        else delete sourceSelections[selectionKey];
+                    }
+                    state.transfer.sourceSelections = sourceSelections;
+                    this.renderImageMetadataResult();
+                }
+                return;
+            }
             if (input.matches?.('[data-image-transfer-mode]')) {
                 const state = getImageInspectorState(this);
-                if (state.transfer) state.transfer.mode = input.value === 'merge' ? 'merge' : 'replace';
+                if (state.transfer) state.transfer.mode = normalizeTransferMode(input.value);
+                this.renderImageMetadataResult();
+                return;
+            }
+            if (input.matches?.('[data-image-transfer-activity-scope]')) {
+                const state = getImageInspectorState(this);
+                if (state.transfer) {
+                    state.transfer.activityScope = normalizeTransferActivityScope(input.value);
+                }
                 this.renderImageMetadataResult();
                 return;
             }
         });
+
+        pasteInput?.addEventListener('input', updateAnalyzePasteButton);
+        updateAnalyzePasteButton();
 
         fileInput?.addEventListener('change', (event) => {
             const file = event.target.files?.[0];
@@ -340,6 +413,7 @@ export const imageMetadataMethods = {
             state.transfer.loading = false;
             state.transfer.applying = false;
             state.transfer.error = '';
+            state.transfer.sourceSelections = {};
         }
         state.error = '';
         state.loading = 'metadata';
@@ -424,10 +498,7 @@ export const imageMetadataMethods = {
             return;
         }
         if (!state.metadata) {
-            result.innerHTML = `
-                <p class="mr-image-inspector-empty">Drop an image or workflow JSON to inspect it.</p>
-                ${this.renderMetadataTransferPanel(state)}
-            `;
+            result.innerHTML = this.renderMetadataTransferPanel(state);
             return;
         }
 
@@ -609,10 +680,103 @@ export const imageMetadataMethods = {
         return String(label || fallback).trim() || fallback;
     },
 
+    getMetadataTransferSourceSelectionKey(ref = {}) {
+        return String(
+            ref.transferKey
+            || `${normalizeTransferCategory(ref.category)}:${String(ref.node_id ?? '')}:${String(ref.widget_index ?? '')}`
+        );
+    },
+
+    getMetadataTransferSourceSelection(transfer, ref = {}) {
+        const key = this.getMetadataTransferSourceSelectionKey(ref);
+        const selections = transfer?.sourceSelections;
+        if (selections instanceof Map) return selections.get(key);
+        if (selections && typeof selections === 'object') return selections[key];
+        return null;
+    },
+
+    getMetadataTransferAcceptedFileTypes(target = {}) {
+        const ref = target?.ref || target || {};
+        const node = target?.node || {};
+        const widgetIndex = Number(ref.widget_index ?? ref.widgetIndex);
+        const resolution = {
+            node_id: ref.node_id ?? node.nodeId,
+            is_top_level: ref.is_top_level ?? node.isTopLevel,
+            subgraph_id: ref.subgraph_id || node.subgraphId || '',
+        };
+        const workflow = this.getCurrentWorkflow?.() || {};
+        const workflowNode = this.findWorkflowNodeForResolution?.(workflow, resolution);
+        const widgetName = String(
+            ref.widget_name
+            || ref.widgetName
+            || this.getWorkflowNodeWidgetName?.(workflowNode || {}, widgetIndex)
+            || this.getGraphNodeWidgetName?.(workflowNode || {}, widgetIndex, resolution)
+            || ''
+        ).trim();
+        const explicitExtensions = (
+            ref.accepted_extensions
+            || ref.allowed_extensions
+            || ref.accepted_model_extensions
+        );
+        return this.getMissingAcceptedModelFileTypes?.({
+            node_type: ref.node_type || ref.nodeType || node.nodeType || '',
+            widget_index: Number.isInteger(widgetIndex) ? widgetIndex : -1,
+            widget_name: widgetName,
+            accepted_extensions: explicitExtensions,
+        }) || [];
+    },
+
+    getMetadataTransferCompatibleSourcesForTarget(target, sourcesByCategory) {
+        const category = normalizeTransferCategory(target?.category || target?.ref?.category);
+        const allSources = sourcesByCategory.get(category) || [];
+        if (!allSources.length) return [];
+
+        const activityScope = normalizeTransferActivityScope(target?.activityScope);
+        const activitySources = category === 'loras'
+            ? allSources.filter(({ model }) => isTransferActivityAllowed(model?.active, activityScope))
+            : allSources;
+        if (!activitySources.length) return [];
+
+        const acceptedTypes = Array.isArray(target?.acceptedFileTypes)
+            ? target.acceptedFileTypes
+            : this.getMetadataTransferAcceptedFileTypes(target);
+        const acceptedExtensions = new Set(
+            acceptedTypes
+                .map(type => String(type?.extension || '').trim().toLowerCase())
+                .filter(Boolean)
+        );
+        if (!acceptedExtensions.size) return activitySources;
+
+        return activitySources.filter(({ model }) => {
+            const modelValue = this.getMetadataTransferModelValue(model);
+            const fileType = this.getModelFileTypeInfo?.(modelValue);
+            return !fileType || acceptedExtensions.has(fileType.extension);
+        });
+    },
+
+    getMetadataTransferSourceForTarget(target, sourcesByCategory, transfer, fallbackIndex = 0) {
+        const category = normalizeTransferCategory(target?.category || target?.ref?.category);
+        const sources = Array.isArray(target?.compatibleSources)
+            ? target.compatibleSources
+            : sourcesByCategory.get(category) || [];
+        if (!sources.length) return null;
+
+        const selectedSourceIndex = this.getMetadataTransferSourceSelection(transfer, target.ref);
+        if (selectedSourceIndex !== null && selectedSourceIndex !== undefined && selectedSourceIndex !== '') {
+            const selectedSource = sources.find(({ sourceIndex }) => (
+                String(sourceIndex) === String(selectedSourceIndex)
+            ));
+            if (selectedSource) return selectedSource;
+        }
+
+        return sources.length === 1 ? sources[0] : sources[fallbackIndex] || null;
+    },
+
     getMetadataTransferPreviewRows(state) {
         const sourceEntries = this.getMetadataTransferSourceModels(state?.loadedModels);
         const transfer = state?.transfer;
         if (!transfer) return [];
+        const activityScope = normalizeTransferActivityScope(transfer.activityScope);
 
         const targetGroups = Array.isArray(transfer.targetGroups) ? transfer.targetGroups : [];
         const selectedNodeKeys = transfer.selectedNodeKeys instanceof Set
@@ -621,11 +785,12 @@ export const imageMetadataMethods = {
         const selectedTargets = [];
         const sourcesByCategory = new Map();
 
-        for (const { model } of sourceEntries) {
+        for (const sourceEntry of sourceEntries) {
+            const { model } = sourceEntry;
             const category = normalizeTransferCategory(model.category);
             if (!category) continue;
             if (!sourcesByCategory.has(category)) sourcesByCategory.set(category, []);
-            sourcesByCategory.get(category).push(model);
+            sourcesByCategory.get(category).push(sourceEntry);
         }
 
         for (const group of targetGroups) {
@@ -633,16 +798,58 @@ export const imageMetadataMethods = {
             for (const node of group.nodes || []) {
                 if (!selectedNodeKeys.has(node.nodeKey)) continue;
                 for (const ref of node.refs || []) {
-                    selectedTargets.push({ category, node, ref });
+                    const target = { category, node, ref, activityScope };
+                    target.acceptedFileTypes = this.getMetadataTransferAcceptedFileTypes(target);
+                    target.compatibleSources = this.getMetadataTransferCompatibleSourcesForTarget(
+                        target,
+                        sourcesByCategory,
+                    );
+                    selectedTargets.push(target);
                 }
             }
         }
 
         const makeRow = (
             target,
-            nextModel = null,
-            { operation = 'replace', currentLabelOverride = '', forceChange = false } = {},
+            nextSource = null,
+            {
+                operation = 'replace',
+                currentLabelOverride = '',
+                forceChange = false,
+                sourceSelectable = null,
+                unchangedWhenNoSource = false,
+            } = {},
         ) => {
+            const allSourceEntries = sourcesByCategory.get(target.category) || [];
+            const compatibleSources = Array.isArray(target.compatibleSources)
+                ? target.compatibleSources
+                : this.getMetadataTransferCompatibleSourcesForTarget(target, sourcesByCategory);
+            const activityScope = normalizeTransferActivityScope(target.activityScope);
+            const acceptedFileTypes = Array.isArray(target.acceptedFileTypes)
+                ? target.acceptedFileTypes
+                : this.getMetadataTransferAcceptedFileTypes(target);
+            const hasActivityMismatch = Boolean(
+                target.category === 'loras'
+                && activityScope !== 'all'
+                && allSourceEntries.length
+                && !allSourceEntries.some(({ model }) => (
+                    isTransferActivityAllowed(model?.active, activityScope)
+                ))
+            );
+            const hasIncompatibleSources = Boolean(
+                allSourceEntries.length
+                && acceptedFileTypes.length
+                && !compatibleSources.length
+            ) || hasActivityMismatch;
+            const sourceOptions = compatibleSources.map(({ model, sourceIndex }) => ({
+                sourceIndex,
+                label: this.getMetadataTransferModelLabel(model),
+                value: this.getMetadataTransferModelValue(model),
+            }));
+            const canSelectSource = sourceSelectable === null
+                ? sourceOptions.length > 1
+                : Boolean(sourceSelectable) && sourceOptions.length > 1;
+            const nextModel = nextSource?.model || null;
             const currentValue = this.getMetadataTransferModelValue(target.ref);
             const currentLabel = currentLabelOverride
                 || this.getMetadataTransferModelLabel(target.ref);
@@ -651,53 +858,83 @@ export const imageMetadataMethods = {
                 : '';
             const nextLabel = nextModel
                 ? this.getMetadataTransferModelLabel(nextModel)
-                : 'Unchanged';
+                : hasActivityMismatch
+                    ? 'No matching activity'
+                    : hasIncompatibleSources
+                        ? 'No compatible model'
+                        : 'Unchanged';
             const currentIdentity = normalizeTransferModelIdentity(currentValue);
             const nextIdentity = normalizeTransferModelIdentity(nextValue);
-            const unchanged = !forceChange && (
+            const needsSourceSelection = canSelectSource && !nextModel;
+            const unchanged = !forceChange && !needsSourceSelection && (
                 !nextModel
-                || (
-                    currentIdentity && nextIdentity
-                        ? currentIdentity === nextIdentity
-                        : currentLabel === nextLabel
-                )
+                    ? (
+                        unchangedWhenNoSource
+                            ? !hasIncompatibleSources
+                            : !hasIncompatibleSources && sourceOptions.length === 0
+                    )
+                    : (
+                        currentIdentity && nextIdentity
+                            ? currentIdentity === nextIdentity
+                            : currentLabel === nextLabel
+                    )
             );
             const nodeName = target.node.nodeTitle
                 || target.node.nodeType
                 || `Node ${target.node.nodeId}`;
             return {
                 category: target.category,
+                nodeKey: target.node.nodeKey,
+                refKey: this.getMetadataTransferSourceSelectionKey(target.ref),
                 nodeName,
                 nodeId: target.node.nodeId,
                 slot: target.ref?.transferSlot || 1,
+                ref: target.ref,
                 currentLabel,
                 currentValue,
-                nextLabel: unchanged ? 'Unchanged' : nextLabel,
+                nextLabel: unchanged
+                    ? 'Unchanged'
+                    : needsSourceSelection
+                        ? 'Select model'
+                        : nextLabel,
                 nextValue,
+                nextModel,
                 operation: unchanged ? 'unchanged' : operation,
                 unchanged,
+                sourceIndex: nextSource?.sourceIndex ?? null,
+                sourceOptions,
+                sourceSelectable: canSelectSource,
+                sourceSelectionKey: this.getMetadataTransferSourceSelectionKey(target.ref),
+                sourceUnavailable: hasIncompatibleSources,
+                sourceUnavailableReason: hasActivityMismatch
+                    ? 'No imported LoRA matches the selected activity scope.'
+                    : '',
+                acceptedFileTypes,
+                activityScope,
             };
         };
 
-        if (transfer.mode === 'merge') {
-            const selectedNodes = new Map();
-            for (const target of selectedTargets) {
-                let entry = selectedNodes.get(target.node.nodeKey);
-                if (!entry) {
-                    entry = { node: target.node, targets: [] };
-                    selectedNodes.set(target.node.nodeKey, entry);
-                }
-                entry.targets.push(target);
+        const selectedNodes = new Map();
+        for (const target of selectedTargets) {
+            let entry = selectedNodes.get(target.node.nodeKey);
+            if (!entry) {
+                entry = { node: target.node, targets: [] };
+                selectedNodes.set(target.node.nodeKey, entry);
             }
+            entry.targets.push(target);
+        }
+
+        const mode = normalizeTransferMode(transfer.mode);
+        if (mode === 'merge') {
 
             const previewRows = [];
             for (const { node, targets } of selectedNodes.values()) {
                 const nodeType = String(node.nodeType || '');
-                const canAppendLoras = (
-                    MERGE_LORA_NODE_TYPES.has(nodeType)
-                    || nodeType === MERGE_POWER_LORA_NODE_TYPE
+                const canAppendLoras = isAppendableLoraNodeType(nodeType);
+                const loraSources = this.getMetadataTransferCompatibleSourcesForTarget(
+                    targets[0],
+                    sourcesByCategory,
                 );
-                const loraSources = sourcesByCategory.get('loras') || [];
                 if (canAppendLoras && loraSources.length) {
                     for (const source of loraSources) {
                         previewRows.push(makeRow(
@@ -707,13 +944,84 @@ export const imageMetadataMethods = {
                                 operation: 'add',
                                 currentLabelOverride: 'Existing LoRAs',
                                 forceChange: true,
+                                sourceSelectable: false,
                             },
                         ));
                     }
                     continue;
                 }
                 for (const target of targets) {
-                    previewRows.push(makeRow(target, null, { operation: 'merge' }));
+                    previewRows.push(makeRow(target, null, {
+                        operation: 'merge',
+                        sourceSelectable: false,
+                    }));
+                }
+            }
+            return previewRows;
+        }
+
+        if (mode === 'replace-add') {
+            const previewRows = [];
+            const sourceIndexes = new Map();
+            for (const { node, targets } of selectedNodes.values()) {
+                const nodeType = String(node.nodeType || '');
+                const loraTargets = targets.filter(target => target.category === 'loras');
+                if (isAppendableLoraNodeType(nodeType) && loraTargets.length) {
+                    const loraSources = this.getMetadataTransferCompatibleSourcesForTarget(
+                        loraTargets[0],
+                        sourcesByCategory,
+                    );
+                    const usedSourceIndexes = new Set();
+                    for (const [sourcePosition, target] of loraTargets.entries()) {
+                        const source = this.getMetadataTransferSourceForTarget(
+                            target,
+                            sourcesByCategory,
+                            transfer,
+                            sourcePosition,
+                        );
+                        if (source) usedSourceIndexes.add(String(source.sourceIndex));
+                        previewRows.push(makeRow(target, source, {
+                            sourceSelectable: source ? null : false,
+                            unchangedWhenNoSource: true,
+                        }));
+                    }
+                    for (const source of loraSources) {
+                        if (usedSourceIndexes.has(String(source.sourceIndex))) continue;
+                        previewRows.push(makeRow(
+                            loraTargets[0],
+                            source,
+                            {
+                                operation: 'add',
+                                currentLabelOverride: 'Remaining LoRAs',
+                                forceChange: true,
+                                sourceSelectable: false,
+                            },
+                        ));
+                    }
+                    for (const target of targets) {
+                        if (target.category === 'loras') continue;
+                        const sourceIndex = sourceIndexes.get(target.category) || 0;
+                        sourceIndexes.set(target.category, sourceIndex + 1);
+                        const source = this.getMetadataTransferSourceForTarget(
+                            target,
+                            sourcesByCategory,
+                            transfer,
+                            sourceIndex,
+                        );
+                        previewRows.push(makeRow(target, source));
+                    }
+                    continue;
+                }
+                for (const target of targets) {
+                    const sourceIndex = sourceIndexes.get(target.category) || 0;
+                    sourceIndexes.set(target.category, sourceIndex + 1);
+                    const source = this.getMetadataTransferSourceForTarget(
+                        target,
+                        sourcesByCategory,
+                        transfer,
+                        sourceIndex,
+                    );
+                    previewRows.push(makeRow(target, source));
                 }
             }
             return previewRows;
@@ -721,53 +1029,90 @@ export const imageMetadataMethods = {
 
         const sourceIndexes = new Map();
         return selectedTargets.map(target => {
-            const sources = sourcesByCategory.get(target.category) || [];
             const sourceIndex = sourceIndexes.get(target.category) || 0;
             sourceIndexes.set(target.category, sourceIndex + 1);
-            const source = sources.length === 1
-                ? sources[0]
-                : sources[sourceIndex];
-            return makeRow(target, source || null);
+            const source = this.getMetadataTransferSourceForTarget(
+                target,
+                sourcesByCategory,
+                transfer,
+                sourceIndex,
+            );
+            return makeRow(target, source);
         });
     },
 
     renderMetadataTransferPreview(rows = []) {
         const previewRows = Array.isArray(rows) ? rows : [];
-        const content = previewRows.length
-            ? previewRows.map(row => {
-                const categoryLabel = this.getCategoryDisplayName(row.category).toUpperCase();
-                const slotLabel = row.slot > 1 ? ` · Slot ${row.slot}` : '';
-                const targetLabel = `${categoryLabel} · ${row.nodeName} · Node ${row.nodeId}${slotLabel}`;
-                const operationLabel = row.unchanged
-                    ? 'Unchanged'
+        return previewRows.map(row => {
+            const slotLabel = row.slot > 1 ? ` · Slot ${row.slot}` : '';
+            const targetLabel = `${row.nodeName} · Node ${row.nodeId}${slotLabel}`;
+            const currentTitle = row.currentValue || row.currentLabel;
+            const acceptedFormats = Array.isArray(row.acceptedFileTypes)
+                ? row.acceptedFileTypes
+                    .map(type => String(type?.display || '').trim())
+                    .filter(Boolean)
+                    .join(', ')
+                : '';
+            const nextTitle = row.sourceUnavailable
+                ? row.sourceUnavailableReason
+                    || `No imported model matches this node's accepted file format${acceptedFormats ? `: ${acceptedFormats}` : ''}.`
+                : row.nextValue || row.nextLabel;
+            const currentLabel = row.currentValue ? row.currentLabel : '(empty)';
+            const importedClass = row.sourceUnavailable
+                ? 'is-placeholder'
+                : row.unchanged
+                    ? 'is-unchanged'
                     : row.operation === 'add'
-                        ? 'Added'
-                        : 'Replace';
-                const currentTitle = row.currentValue || row.currentLabel;
-                const nextTitle = row.nextValue || row.nextLabel;
-                return `
-                    <div class="mr-image-transfer-preview-row${row.unchanged ? ' is-unchanged' : ''}">
-                        <div class="mr-image-transfer-preview-side">
-                            <span class="mr-image-transfer-preview-label">${this.escapeHtml(targetLabel)} · Current</span>
-                            <strong class="mr-image-transfer-preview-value" title="${this.escapeHtml(currentTitle)}">${this.escapeHtml(row.currentLabel)}</strong>
-                        </div>
-                        <span class="mr-image-transfer-preview-arrow" aria-hidden="true">→</span>
-                        <div class="mr-image-transfer-preview-side mr-image-transfer-preview-side-next">
-                            <span class="mr-image-transfer-preview-label">${this.escapeHtml(operationLabel)}</span>
-                            <strong class="mr-image-transfer-preview-value" title="${this.escapeHtml(nextTitle)}">${this.escapeHtml(row.nextLabel)}</strong>
-                        </div>
+                        ? 'is-added'
+                        : 'is-imported';
+            const getModelInteractionAttrs = (model, contextScope, label) => {
+                const modelPath = String(
+                    model?.resolved_path
+                    || model?.path
+                    || model?.full_path
+                    || ''
+                ).trim();
+                if (model?.exists !== true || !modelPath) return '';
+
+                const contextModel = {
+                    ...model,
+                    context_scope: contextScope,
+                };
+                const contextMenuAttrs = typeof this.getContextMenuAttrs === 'function'
+                    ? this.getContextMenuAttrs(contextModel)
+                    : '';
+                const previewTooltipAttrs = typeof this.getModelPreviewTooltipAttrs === 'function'
+                    ? this.getModelPreviewTooltipAttrs(model, label)
+                    : '';
+                return `${contextMenuAttrs}${previewTooltipAttrs}`;
+            };
+            const currentModelAttrs = getModelInteractionAttrs(row.ref, 'loaded_model', currentTitle);
+            const importedModelAttrs = getModelInteractionAttrs(row.nextModel, 'local_model', nextTitle);
+            const sourceOptions = row.sourceSelectable
+                ? [
+                    `<option value=""${row.sourceIndex === null ? ' selected' : ''}>Select imported model</option>`,
+                    ...row.sourceOptions.map(option => `
+                        <option value="${this.escapeHtml(option.sourceIndex)}"${String(option.sourceIndex) === String(row.sourceIndex) ? ' selected' : ''} title="${this.escapeHtml(option.value)}">${this.escapeHtml(option.label)}</option>
+                    `),
+                ].join('')
+                : '';
+            const importedValueHtml = row.sourceSelectable
+                ? `<select class="mr-image-transfer-source-select" data-image-transfer-source="${this.escapeHtml(row.refKey || row.sourceSelectionKey)}" aria-label="Select imported model for ${this.escapeHtml(targetLabel)}" title="${this.escapeHtml(nextTitle)}"${importedModelAttrs}>${sourceOptions}</select>`
+                : `<span class="mr-image-transfer-model-value ${importedClass}" title="${this.escapeHtml(nextTitle)}"${importedModelAttrs}>${this.escapeHtml(row.nextLabel)}</span>`;
+            return `
+                <div class="mr-image-transfer-change${row.unchanged ? ' is-unchanged' : ''}">
+                    <div class="mr-image-transfer-change-side">
+                        <span class="mr-image-transfer-change-label">Current</span>
+                        <span class="mr-image-transfer-model-value is-current" title="${this.escapeHtml(currentTitle)}"${currentModelAttrs}>${this.escapeHtml(currentLabel)}</span>
                     </div>
-                `;
-            }).join('')
-            : '<p class="mr-image-transfer-preview-empty">Select a target node above to preview model changes.</p>';
-        return `
-            <section class="mr-image-transfer-preview">
-                <div class="mr-image-transfer-preview-header">
-                    <h4>Transfer preview <span>${previewRows.length} ${previewRows.length === 1 ? 'slot' : 'slots'}</span></h4>
+                    <span class="mr-image-transfer-change-arrow" aria-hidden="true">→</span>
+                    <div class="mr-image-transfer-change-side mr-image-transfer-change-side-imported">
+                        <span class="mr-image-transfer-change-label">Imported</span>
+                        ${importedValueHtml}
+                    </div>
                 </div>
-                <div class="mr-image-transfer-preview-list">${content}</div>
-            </section>
-        `;
+            `;
+        }).join('');
     },
 
     renderMetadataTransferPanel(state) {
@@ -777,6 +1122,7 @@ export const imageMetadataMethods = {
             applying: false,
             error: '',
             mode: 'replace',
+            activityScope: 'all',
             targetGroups: [],
             selectedNodeKeys: new Set(),
         };
@@ -826,6 +1172,57 @@ export const imageMetadataMethods = {
             `;
         }
 
+        const previewRows = this.getMetadataTransferPreviewRows(state);
+        const previewRowsByNodeKey = new Map();
+        for (const row of previewRows) {
+            if (!previewRowsByNodeKey.has(row.nodeKey)) previewRowsByNodeKey.set(row.nodeKey, []);
+            previewRowsByNodeKey.get(row.nodeKey).push(row);
+        }
+        const collapsedCategories = transfer.collapsedCategories instanceof Set
+            ? transfer.collapsedCategories
+            : new Set(transfer.collapsedCategories || []);
+        const categoryLabels = {
+            checkpoints: 'Checkpoints',
+            diffusion_models: 'Diffusion Models',
+            text_encoders: 'Text Encoders',
+            loras: 'LoRAs',
+            vae: 'VAE',
+            controlnet: 'ControlNet',
+            upscale_models: 'Upscale Models',
+            embeddings: 'Embeddings',
+        };
+        const getCategoryLabel = category => {
+            const normalized = normalizeTransferCategory(category);
+            if (categoryLabels[normalized]) return categoryLabels[normalized];
+            return String(this.getCategoryDisplayName(normalized) || normalized || 'Unknown')
+                .split('_')
+                .filter(Boolean)
+                .map(part => `${part.charAt(0).toUpperCase()}${part.slice(1).toLowerCase()}`)
+                .join(' ');
+        };
+        const renderUnselectedPreview = node => {
+            const refs = Array.isArray(node.refs) && node.refs.length ? node.refs : [{}];
+            return refs.map((ref, index) => {
+                const currentValue = this.getMetadataTransferModelValue(ref);
+                const currentLabel = currentValue
+                    ? this.getMetadataTransferModelLabel(ref)
+                    : '(empty)';
+                const slotLabel = refs.length > 1 ? ` · Slot ${index + 1}` : '';
+                return `
+                    <div class="mr-image-transfer-change is-unselected">
+                        <div class="mr-image-transfer-change-side">
+                            <span class="mr-image-transfer-change-label">Current${this.escapeHtml(slotLabel)}</span>
+                            <span class="mr-image-transfer-model-value is-current" title="${this.escapeHtml(currentValue || currentLabel)}">${this.escapeHtml(currentLabel)}</span>
+                        </div>
+                        <span class="mr-image-transfer-change-arrow" aria-hidden="true">→</span>
+                        <div class="mr-image-transfer-change-side mr-image-transfer-change-side-imported">
+                            <span class="mr-image-transfer-change-label">Imported</span>
+                            <span class="mr-image-transfer-model-value is-placeholder">Select node</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        };
         const renderNode = (node, isAvailable) => {
             const selected = selectedNodeKeys.has(node.nodeKey);
             const scopeLabel = node.isTopLevel
@@ -837,37 +1234,34 @@ export const imageMetadataMethods = {
                 : 'Workflow node';
             const unavailable = sourceEntries.length > 0 && !isAvailable;
             const contextMenuAttrs = this.getContextMenuAttrs?.({
-                context_scope: 'loaded_model',
+                context_scope: 'workflow_node',
                 node_id: node.nodeId,
                 node_type: node.nodeType,
                 node_title: node.nodeTitle,
                 subgraph_id: node.subgraphId,
                 subgraph_name: node.subgraphName,
                 is_top_level: node.isTopLevel,
-            }, 'Right-click to open node options') || '';
+            }, 'Right-click to locate this node in the workflow') || '';
+            const nodePreviewRows = previewRowsByNodeKey.get(node.nodeKey) || [];
+            const previewHtml = selected
+                ? nodePreviewRows.length
+                    ? this.renderMetadataTransferPreview(nodePreviewRows)
+                    : '<p class="mr-image-transfer-empty">No imported LoRAs match the selected activity scope.</p>'
+                : renderUnselectedPreview(node);
             return `
-                <button type="button" class="mr-model-chip mr-image-transfer-node-chip ${selected ? 'is-selected' : ''}${unavailable ? ' is-unavailable' : ''}"
-                    data-image-transfer-node="${this.escapeHtml(node.nodeKey)}"
-                    aria-pressed="${selected ? 'true' : 'false'}"
-                    aria-disabled="${unavailable ? 'true' : 'false'}"
-                    ${contextMenuAttrs}
-                    ${unavailable ? 'title="No matching model category in the metadata workflow"' : ''}>
-                    <span class="mr-image-transfer-node-name">${this.escapeHtml(nodeName)} · Node ${this.escapeHtml(node.nodeId)}${this.escapeHtml(scopeLabel)}</span>
-                    <span class="mr-image-transfer-node-meta">${this.escapeHtml(nodeType)} · ${countText(node.refs.length, 'model slot')}</span>
-                </button>
-            `;
-        };
-        const renderNodeGroup = (nodes, label, groupClass, isAvailable) => {
-            if (!nodes.length) return '';
-            const chips = nodes
-                .map(node => renderNode(node, isAvailable))
-                .join('');
-            return `
-                <div class="mr-model-group mr-model-group-${groupClass}">
-                    <div class="mr-model-group-head">
-                        <span class="mr-model-group-label mr-model-group-label-${groupClass}"><span class="mr-model-group-dot"></span>${label} <span class="mr-model-group-count">${nodes.length}</span></span>
-                    </div>
-                    <div class="mr-model-chip-list${groupClass === 'inactive' ? ' mr-model-chip-list-inactive' : ''}">${chips}</div>
+                <div class="mr-image-transfer-node-row${selected ? ' is-selected' : ''}${unavailable ? ' is-unavailable' : ''}" ${contextMenuAttrs}>
+                    <button type="button" class="mr-image-transfer-node-select"
+                        data-image-transfer-node="${this.escapeHtml(node.nodeKey)}"
+                        aria-pressed="${selected ? 'true' : 'false'}"
+                        aria-disabled="${unavailable ? 'true' : 'false'}"
+                        ${unavailable ? 'disabled title="No matching model category in the metadata workflow"' : ''}>
+                        <span class="mr-image-transfer-node-check" aria-hidden="true">${selected ? '✓' : ''}</span>
+                        <span class="mr-image-transfer-node-details">
+                            <span class="mr-image-transfer-node-name">${this.escapeHtml(nodeName)} · Node ${this.escapeHtml(node.nodeId)}${this.escapeHtml(scopeLabel)}</span>
+                            <span class="mr-image-transfer-node-meta">${this.escapeHtml(nodeType)} · ${countText(node.refs.length, 'model slot')}${node.active ? ' · Active' : ' · Inactive'}</span>
+                        </span>
+                    </button>
+                    <div class="mr-image-transfer-node-preview">${previewHtml}</div>
                 </div>
             `;
         };
@@ -875,43 +1269,57 @@ export const imageMetadataMethods = {
         const targetRows = targetGroups.length
             ? targetGroups.map(group => {
                 const nodes = Array.isArray(group.nodes) ? group.nodes : [];
-                const activeNodes = nodes.filter(node => node.active);
-                const inactiveNodes = nodes.filter(node => !node.active);
                 const isAvailable = sourceEntries.length === 0 || sourceCategories.has(group.category);
                 const isUnavailable = sourceEntries.length > 0 && !isAvailable;
                 const selectedCount = nodes.filter(node => selectedNodeKeys.has(node.nodeKey)).length;
+                const categoryLabel = getCategoryLabel(group.category);
+                const collapsed = collapsedCategories.has(group.category);
                 return `
-                    <div class="mr-model-section" data-image-transfer-category="${this.escapeHtml(group.category)}">
-                        <div class="mr-model-section-header">
-                            <div class="mr-model-section-heading">
-                                <span class="mr-model-section-title">${this.escapeHtml(this.getCategoryDisplayName(group.category).toUpperCase())}</span>
-                                <span class="mr-model-section-total">${countText(nodes.length, 'node')}</span>
-                            </div>
-                            <div class="mr-model-section-counts">
-                                ${activeNodes.length ? `<span class="mr-model-count-pill is-active">${countText(activeNodes.length, 'active')}</span>` : ''}
-                                ${inactiveNodes.length ? `<span class="mr-model-count-pill is-inactive">${countText(inactiveNodes.length, 'inactive')}</span>` : ''}
-                                ${selectedCount ? `<span class="mr-model-count-pill mr-image-transfer-selected-pill">${countText(selectedCount, 'selected')}</span>` : ''}
-                                ${isUnavailable ? '<span class="mr-model-count-pill mr-image-transfer-unavailable-pill">No source model</span>' : ''}
-                            </div>
+                    <section class="mr-image-transfer-category${collapsed ? ' is-collapsed' : ''}${isUnavailable ? ' is-unavailable' : ''}" data-image-transfer-category="${this.escapeHtml(group.category)}">
+                        <div class="mr-image-transfer-category-header">
+                            <button type="button" class="mr-image-transfer-category-toggle" data-image-transfer-category-toggle="${this.escapeHtml(group.category)}" aria-expanded="${collapsed ? 'false' : 'true'}">
+                                <span class="mr-image-transfer-category-chevron" aria-hidden="true"></span>
+                                <span class="mr-image-transfer-category-title">${this.escapeHtml(categoryLabel)}</span>
+                                <span class="mr-image-transfer-category-selected">${selectedCount} selected</span>
+                            </button>
+                            <span class="mr-image-transfer-category-meta">
+                                <span class="mr-image-transfer-category-node-count">${countText(nodes.length, 'node')}</span>
+                                ${isUnavailable ? '<span class="mr-image-transfer-unavailable-pill">No source model</span>' : ''}
+                            </span>
                         </div>
-                        ${renderNodeGroup(activeNodes, 'Active', 'active', isAvailable)}
-                        ${renderNodeGroup(inactiveNodes, 'Inactive', 'inactive', isAvailable)}
-                    </div>
+                        ${collapsed ? '' : `<div class="mr-image-transfer-category-nodes">${nodes.map(node => renderNode(node, isAvailable)).join('')}</div>`}
+                    </section>
                 `;
             }).join('')
             : '<p class="mr-image-transfer-empty">No model nodes were found in the current workflow.</p>';
 
-        const mode = transfer.mode === 'merge' ? 'merge' : 'replace';
+        const mode = normalizeTransferMode(transfer.mode);
+        const activityScope = normalizeTransferActivityScope(transfer.activityScope);
         const allTargetNodes = targetGroups.flatMap(group => group.nodes || []);
         const allTargetNodeKeys = new Set(allTargetNodes.map(node => node.nodeKey));
         const selectedTargetCount = Array.from(selectedNodeKeys)
             .filter(nodeKey => allTargetNodeKeys.has(nodeKey))
             .length;
-        const applyDisabled = transfer.applying || !sourceEntries.length || !selectedTargetCount;
         const selectionSourceText = sourceEntries.length
             ? countText(sourceEntries.length, 'metadata model')
             : 'No source workflow imported';
-        const previewRows = this.getMetadataTransferPreviewRows(state);
+        const hasUnresolvedSource = previewRows.some(row => (
+            row.sourceUnavailable
+            || (row.sourceSelectable && (row.sourceIndex === null || row.sourceIndex === undefined))
+        ));
+        const hasTransferableTarget = previewRows.length > 0;
+        const applyDisabled = (
+            transfer.applying
+            || !sourceEntries.length
+            || !selectedTargetCount
+            || !hasTransferableTarget
+            || hasUnresolvedSource
+        );
+        const activityLabels = {
+            all: 'Active + inactive',
+            active: 'Active only',
+            inactive: 'Inactive only',
+        };
         return `
             <section class="mr-image-transfer">
                 <div class="mr-image-transfer-header">
@@ -927,13 +1335,25 @@ export const imageMetadataMethods = {
                         <span><strong>Replace</strong><small>Overwrite slots in selected nodes.</small></span>
                     </label>
                     <label class="mr-image-transfer-mode-option">
+                        <input type="radio" name="mr-image-transfer-mode" value="replace-add" data-image-transfer-mode ${mode === 'replace-add' ? 'checked' : ''}>
+                        <span><strong>Replace / Add</strong><small>Replace LoRA slots and append remaining models.</small></span>
+                    </label>
+                    <label class="mr-image-transfer-mode-option">
                         <input type="radio" name="mr-image-transfer-mode" value="merge" data-image-transfer-mode ${mode === 'merge' ? 'checked' : ''}>
                         <span><strong>Merge / Add</strong><small>Keep current values and append to multi-LoRA nodes.</small></span>
                     </label>
                 </div>
-                <p class="mr-image-transfer-note">Click a node name to select it. A green border marks nodes that will be updated. ${this.escapeHtml(sourceEntries.length ? 'Categories without a matching metadata model are shown as unavailable.' : 'Target nodes come from the current ComfyUI workflow. Import a source workflow with model metadata to enable Apply transfer.')}</p>
-                <div class="mr-models-list mr-models-list-pad mr-image-transfer-node-list">${targetRows}</div>
-                ${this.renderMetadataTransferPreview(previewRows)}
+                <div class="mr-image-transfer-activity" role="group" aria-label="LoRA activity scope">
+                    <span class="mr-image-transfer-activity-label">Imported LoRAs</span>
+                    ${Object.entries(activityLabels).map(([value, label]) => `
+                        <label class="mr-image-transfer-activity-option">
+                            <input type="radio" name="mr-image-transfer-activity-scope" value="${value}" data-image-transfer-activity-scope ${activityScope === value ? 'checked' : ''}>
+                            <span>${label}</span>
+                        </label>
+                    `).join('')}
+                </div>
+                <p class="mr-image-transfer-note">Select a node row to include it in the transfer. ${this.escapeHtml(sourceEntries.length ? 'The current and imported models are shown in the same row. Choose a different imported model when a category contains multiple models.' : 'Target nodes come from the current ComfyUI workflow. Import a source workflow with model metadata to enable Apply transfer.')}${activityScope !== 'all' ? ` ${this.escapeHtml(`Imported LoRAs: ${activityLabels[activityScope]}; current target slots remain eligible.`)}` : ''}</p>
+                <div class="mr-image-transfer-category-list">${targetRows}</div>
                 <div class="mr-image-transfer-actions">
                     <span class="mr-image-transfer-selection-count">${this.escapeHtml(selectionSourceText)} · ${selectedTargetCount} selected node${selectedTargetCount === 1 ? '' : 's'}</span>
                     <button type="button" class="mr-btn mr-btn-primary mr-btn-sm" data-image-inspector-action="apply-transfer" ${applyDisabled ? 'disabled' : ''}>
@@ -957,19 +1377,32 @@ export const imageMetadataMethods = {
             && previousTransfer?.workflowSignature
             && previousTransfer.workflowSignature === workflowSignature
         );
+        const previousSourceSelections = previousTransfer?.sourceSelections;
+        const sourceSelections = preserveSelection
+            ? previousSourceSelections instanceof Map
+                ? Object.fromEntries(previousSourceSelections)
+                : previousSourceSelections && typeof previousSourceSelections === 'object'
+                    ? { ...previousSourceSelections }
+                    : {}
+            : {};
         const token = `transfer-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         state.transfer = {
             open: true,
             loading: Boolean(workflow),
             applying: false,
             error: '',
-            mode: previousTransfer?.mode === 'merge' ? 'merge' : 'replace',
+            mode: normalizeTransferMode(previousTransfer?.mode),
+            activityScope: normalizeTransferActivityScope(previousTransfer?.activityScope),
             requestToken: token,
             workflowSignature,
             targetGroups: [],
             selectedNodeKeys: preserveSelection
                 ? new Set(previousTransfer.selectedNodeKeys || [])
                 : new Set(),
+            collapsedCategories: preserveSelection
+                ? new Set(previousTransfer.collapsedCategories || [])
+                : new Set(),
+            sourceSelections,
         };
         this.renderImageMetadataResult();
 
@@ -1033,6 +1466,19 @@ export const imageMetadataMethods = {
         this.renderImageMetadataResult();
     },
 
+    toggleMetadataTransferCategory(category) {
+        const state = getImageInspectorState(this);
+        if (!state.transfer || !category) return;
+        const normalizedCategory = normalizeTransferCategory(category);
+        const collapsed = state.transfer.collapsedCategories instanceof Set
+            ? new Set(state.transfer.collapsedCategories)
+            : new Set(state.transfer.collapsedCategories || []);
+        if (collapsed.has(normalizedCategory)) collapsed.delete(normalizedCategory);
+        else collapsed.add(normalizedCategory);
+        state.transfer.collapsedCategories = collapsed;
+        this.renderImageMetadataResult();
+    },
+
     toggleMetadataTransferNode(nodeKey) {
         const state = getImageInspectorState(this);
         if (!state.transfer || !nodeKey) return;
@@ -1065,27 +1511,94 @@ export const imageMetadataMethods = {
         const state = getImageInspectorState(this);
         const transfer = state.transfer;
         if (!transfer || transfer.loading || transfer.applying) return null;
+        const mode = normalizeTransferMode(transfer.mode);
+        const activityScope = normalizeTransferActivityScope(transfer.activityScope);
 
-        const sourceModels = this.getMetadataTransferSourceModels(state.loadedModels)
-            .map(({ model }) => model);
+        const sourceEntries = this.getMetadataTransferSourceModels(state.loadedModels);
+        const sourceModels = sourceEntries.map(({ model, sourceIndex }) => ({
+            ...model,
+            source_index: sourceIndex,
+        }));
+        const sourcesByCategory = new Map();
+        for (const sourceEntry of sourceEntries) {
+            const category = normalizeTransferCategory(sourceEntry.model.category);
+            if (!category) continue;
+            if (!sourcesByCategory.has(category)) sourcesByCategory.set(category, []);
+            sourcesByCategory.get(category).push(sourceEntry);
+        }
         const selectedNodeKeys = transfer.selectedNodeKeys instanceof Set
             ? transfer.selectedNodeKeys
             : new Set();
         const targetRefs = [];
         const targetRefKeys = new Set();
+        const sourceIndexes = new Map();
+        const nodeSourceIndexes = new Map();
+        const appendLoraSourceIndexes = new Set();
+        let hasAppendableLoraTarget = false;
         for (const group of transfer.targetGroups || []) {
+            const category = normalizeTransferCategory(group.category);
             for (const node of group.nodes || []) {
                 if (!selectedNodeKeys.has(node.nodeKey)) continue;
                 for (const ref of node.refs || []) {
-                    if (targetRefKeys.has(ref.transferKey)) continue;
-                    targetRefKeys.add(ref.transferKey);
-                    targetRefs.push(ref);
+                    const refKey = ref.transferKey || this.getMetadataTransferSourceSelectionKey(ref);
+                    if (targetRefKeys.has(refKey)) continue;
+                    targetRefKeys.add(refKey);
+                    const nodeType = String(node.nodeType || '');
+                    const isAppendableLoraTarget = (
+                        category === 'loras'
+                        && isAppendableLoraNodeType(nodeType)
+                        && (mode === 'merge' || mode === 'replace-add')
+                    );
+                    const sourceIndexKey = `${node.nodeKey}:${category}`;
+                    const sourceIndex = mode === 'replace-add' && isAppendableLoraTarget
+                        ? nodeSourceIndexes.get(sourceIndexKey) || 0
+                        : sourceIndexes.get(category) || 0;
+                    if (mode === 'replace-add' && isAppendableLoraTarget) {
+                        nodeSourceIndexes.set(sourceIndexKey, sourceIndex + 1);
+                    } else {
+                        sourceIndexes.set(category, sourceIndex + 1);
+                    }
+                    const target = { category, node, ref, activityScope };
+                    target.acceptedFileTypes = this.getMetadataTransferAcceptedFileTypes(target);
+                    target.compatibleSources = this.getMetadataTransferCompatibleSourcesForTarget(
+                        target,
+                        sourcesByCategory,
+                    );
+                    if (isAppendableLoraTarget) {
+                        hasAppendableLoraTarget = true;
+                        for (const source of target.compatibleSources) {
+                            appendLoraSourceIndexes.add(String(source.sourceIndex));
+                        }
+                    }
+                    const source = this.getMetadataTransferSourceForTarget(
+                        target,
+                        sourcesByCategory,
+                        transfer,
+                        sourceIndex,
+                    );
+                    targetRefs.push(source
+                        ? { ...ref, source_index: source.sourceIndex }
+                        : ref);
                 }
             }
         }
+        const requestSourceModels = sourceModels.filter(model => {
+            const category = normalizeTransferCategory(model.category);
+            if (
+                category === 'loras'
+                && !isTransferActivityAllowed(model.active, activityScope)
+            ) return false;
+            return !hasAppendableLoraTarget
+                || category !== 'loras'
+                || appendLoraSourceIndexes.has(String(model.source_index));
+        });
         const workflow = this.getCurrentWorkflow?.();
         if (!sourceModels.length) {
             this.showNotification('Import a workflow with transferable model metadata first.', 'warning');
+            return null;
+        }
+        if (!requestSourceModels.length) {
+            this.showNotification('No imported model matches the selected nodes\' accepted file formats.', 'warning');
             return null;
         }
         if (!targetRefs.length) {
@@ -1106,8 +1619,9 @@ export const imageMetadataMethods = {
                     method: 'POST',
                     body: JSON.stringify({
                         workflow,
-                        mode: transfer.mode === 'merge' ? 'merge' : 'replace',
-                        source_models: sourceModels,
+                        mode,
+                        activity_scope: activityScope,
+                        source_models: requestSourceModels,
                         target_refs: targetRefs,
                     }),
                 },

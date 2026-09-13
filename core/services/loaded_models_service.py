@@ -318,6 +318,7 @@ class LoadedModelsService:
                         "category": category,
                         "node_id": node_id,
                         "widget_index": widget_index,
+                        "widget_name": ref.extra_value("widget_name", ""),
                         "node_type": node_type,
                         "node_title": ref.extra_value("node_title", ""),
                         "subgraph_id": ref.subgraph_id or "",

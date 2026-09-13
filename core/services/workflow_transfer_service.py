@@ -49,6 +49,12 @@ class WorkflowTransferService:
                 {"error": "Transfer mode must be a string"},
                 status=400,
             )
+        activity_scope = data.get("activity_scope", "all")
+        if not isinstance(activity_scope, str):
+            return self.web.json_response(
+                {"error": "LoRA activity scope must be a string"},
+                status=400,
+            )
 
         if detect_workflow_format(workflow) == "api":
             try:
@@ -67,6 +73,7 @@ class WorkflowTransferService:
                 source_models,
                 target_refs,
                 mode=mode,
+                activity_scope=activity_scope,
                 inventory=inventory,
             )
         except (TypeError, ValueError) as exc:
