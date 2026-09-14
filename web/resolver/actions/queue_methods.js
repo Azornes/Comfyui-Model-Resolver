@@ -2131,7 +2131,8 @@ export const queueMethods = {
         if (button) {
             button.disabled = true;
             button.classList.add('mr-btn-is-disabled');
-            button.textContent = 'Applying...';
+            button.setAttribute('aria-busy', 'true');
+            button.innerHTML = '<span class="mr-queue-apply-spinner" aria-hidden="true"></span><span>Applying...</span>';
         }
 
         try {
@@ -2142,6 +2143,7 @@ export const queueMethods = {
             if (button?.isConnected && this.pendingIndex.has(key)) {
                 button.disabled = false;
                 button.classList.remove('mr-btn-is-disabled');
+                button.removeAttribute('aria-busy');
                 button.textContent = 'Apply';
             }
         }

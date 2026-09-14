@@ -2050,6 +2050,8 @@ test('Apply stays busy after linking until the old card is removed', async () =>
   const pending = applyQueuedByKey.call(dialog, 'model', button);
   assert.equal(button.textContent, 'Applying...');
   assert.equal(button.disabled, true);
+  assert.ok(button.querySelector('.mr-queue-apply-spinner'));
+  assert.equal(button.getAttribute('aria-busy'), 'true');
   await applyQueuedByKey.call(dialog, 'model', button);
   assert.equal(calls, 1);
   finishApply();
@@ -2076,6 +2078,8 @@ test('Apply becomes available again when linking fails and selection stays queue
   assert.equal(button.textContent, 'Apply');
   assert.equal(button.disabled, false);
   assert.equal(button.classList.contains('mr-btn-is-disabled'), false);
+  assert.equal(button.querySelector('.mr-queue-apply-spinner'), null);
+  assert.equal(button.hasAttribute('aria-busy'), false);
   await window.happyDOM.close();
 });
 

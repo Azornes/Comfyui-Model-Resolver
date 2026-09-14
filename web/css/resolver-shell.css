@@ -1067,6 +1067,24 @@
     margin-left: auto;
 }
 
+.mr-queue-apply-spinner {
+    display: inline-block;
+    box-sizing: border-box;
+    width: 12px;
+    height: 12px;
+    flex: 0 0 12px;
+    border: 2px solid rgba(255, 255, 255, 0.28);
+    border-top-color: rgba(255, 255, 255, 0.95);
+    border-radius: 50%;
+    animation: mr-queue-apply-spin 700ms linear infinite;
+}
+
+@keyframes mr-queue-apply-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 .mr-inline-note-link {
     cursor: pointer;
     color: var(--mr-accent-blue);
