@@ -1474,8 +1474,10 @@ export const imageMetadataMethods = {
                 <div class="mr-image-transfer-category-list">${targetRows}</div>
                 <div class="mr-image-transfer-actions">
                     <span class="mr-image-transfer-selection-count">${this.escapeHtml(selectionSourceText)} · ${selectedTargetCount} selected node${selectedTargetCount === 1 ? '' : 's'}</span>
-                    <button type="button" class="mr-btn mr-btn-primary mr-btn-sm" data-image-inspector-action="apply-transfer" ${applyDisabled ? 'disabled' : ''}>
-                        ${transfer.applying ? 'Applying...' : transfer.undoing ? 'Undoing...' : 'Apply transfer'}
+                    <button type="button" class="mr-btn mr-btn-primary mr-btn-sm" data-image-inspector-action="apply-transfer" ${applyDisabled ? 'disabled' : ''} aria-busy="${transfer.applying ? 'true' : 'false'}">
+                        ${transfer.applying
+                            ? '<span class="mr-image-transfer-action-spinner" aria-hidden="true"></span><span>Applying...</span>'
+                            : transfer.undoing ? 'Undoing...' : 'Apply transfer'}
                     </button>
                 </div>
             </section>

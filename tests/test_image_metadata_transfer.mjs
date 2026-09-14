@@ -200,6 +200,20 @@ test('metadata transfer refresh updates only the transfer panel when it is mount
   assert.equal(tooltipBindCount, 1);
 });
 
+test('metadata transfer shows a spinner while applying', () => {
+  const context = createTransferContext();
+  const state = createTransferState([
+    { category: 'text_encoders', original_path: 'imported.safetensors' },
+  ]);
+  state.transfer.applying = true;
+
+  const html = context.renderMetadataTransferPanel(state);
+
+  assert.match(html, /aria-busy="true"/);
+  assert.match(html, /class="mr-image-transfer-action-spinner" aria-hidden="true"/);
+  assert.match(html, /<span>Applying\.\.\.<\/span>/);
+});
+
 test('metadata transfer exposes Undo transfer while the post-transfer workflow is unchanged', () => {
   const context = createTransferContext();
   const state = createTransferState([
