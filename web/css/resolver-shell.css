@@ -462,6 +462,7 @@
     border: 0;
     border-radius: 0;
     box-shadow: none;
+    overflow: visible;
 }
 
 #queue-toggle-icon::before {
@@ -477,6 +478,37 @@
     transition: var(--mr-transition-smooth);
 }
 
+#queue-toggle-icon .mr-queue-toggle-count {
+    position: absolute;
+    left: 50%;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 2px;
+    box-sizing: border-box;
+    color: var(--mr-text-muted, #b1b1b1);
+    background: var(--mr-bg, #121212);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 999px;
+    font-size: 9px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 800;
+    line-height: 1;
+    pointer-events: none;
+    transform: translateX(-50%);
+}
+
+#queue-toggle-icon .mr-queue-toggle-count-queued {
+    top: -11px;
+}
+
+#queue-toggle-icon .mr-queue-toggle-count-downloads {
+    bottom: -11px;
+}
+
 #queue-toggle-icon:hover,
 #queue-toggle-icon:focus-visible {
     opacity: 1;
@@ -488,6 +520,13 @@
 #queue-toggle-icon.is-collapsed::before {
     background: rgba(114, 211, 138, 0.82);
     box-shadow: var(--mr-shadow-focus-ring);
+}
+
+#queue-toggle-icon:hover .mr-queue-toggle-count,
+#queue-toggle-icon:focus-visible .mr-queue-toggle-count,
+#queue-toggle-icon.is-collapsed .mr-queue-toggle-count {
+    color: var(--mr-accent, #72d38a);
+    border-color: rgba(114, 211, 138, 0.45);
 }
 
 .mr-queue-panel,

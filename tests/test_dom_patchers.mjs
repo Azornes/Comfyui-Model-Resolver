@@ -66,6 +66,7 @@ const scheduleSearchUiRefresh = eval(`(${extractMethod(searchPanelMethodsSource,
 const wireLocalMatchButtons = eval(`(${extractMethod(searchPanelMethodsSource, 'wireLocalMatchButtons')})`);
 const patchQueuedSelections = eval(`(${extractMethod(queueMethodsSource, 'patchQueuedSelections')})`);
 const patchDownloadsPanelElement = eval(`(${extractMethod(queueMethodsSource, 'patchDownloadsPanelElement')})`);
+const updateQueueToggleIcon = eval(`(${extractMethod(queueMethodsSource, 'updateQueueToggleIcon')})`);
 const patchLoadedModelsProgress = eval(`(${extractMethod(renderFormatMethodsSource, 'patchLoadedModelsProgress')})`);
 const patchAnalysisProgress = eval(`(${extractMethod(renderFormatMethodsSource, 'patchAnalysisProgress')})`);
 
@@ -123,6 +124,31 @@ test('sidebar active helper recognizes supported state attributes and classes', 
   const inactiveButton = window.document.createElement('button');
   assert.equal(domPatchUtils.isSidebarButtonActive(inactiveButton), false);
   assert.equal(domPatchUtils.isSidebarButtonActive(null), false);
+});
+
+test('queue toggle icon shows queued and active download counts', () => {
+  const window = new Window();
+  const queueToggleIcon = window.document.createElement('button');
+  queueToggleIcon.innerHTML = `
+    <span class="mr-queue-toggle-count mr-queue-toggle-count-queued" aria-hidden="true"></span>
+    <span class="mr-queue-toggle-count mr-queue-toggle-count-downloads" aria-hidden="true"></span>
+  `;
+  const dialog = {
+    queueToggleIcon,
+    activeTab: 'missing',
+    queueCollapsed: true,
+    pendingResolutions: [{}, {}, {}],
+    getActiveQueuePanelDownloads: () => [{ downloadId: 'download-1' }],
+  };
+
+  updateQueueToggleIcon.call(dialog);
+
+  assert.equal(queueToggleIcon.querySelector('.mr-queue-toggle-count-queued').textContent, '3');
+  assert.equal(queueToggleIcon.querySelector('.mr-queue-toggle-count-downloads').textContent, '1');
+  assert.equal(
+    queueToggleIcon.getAttribute('aria-label'),
+    'Show queue and downloads panel. Queued: 3. Downloads: 1.'
+  );
 });
 
 test('instant actions handle pointer and click as one idempotent action', () => {

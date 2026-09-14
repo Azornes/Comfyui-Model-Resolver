@@ -61,7 +61,14 @@ export const queueMethods = {
                 type: "button",
                 "aria-label": "Toggle queued selections",
                 onclick: (event) => this.onQueueEdgeClick(event)
-            });
+            }, [
+                $el("span.mr-queue-toggle-count.mr-queue-toggle-count-queued", {
+                    "aria-hidden": "true"
+                }),
+                $el("span.mr-queue-toggle-count.mr-queue-toggle-count-downloads", {
+                    "aria-hidden": "true"
+                })
+            ]);
             this.queueToggleIcon.addEventListener(
                 typeof PointerEvent === 'function' ? 'pointerdown' : 'mousedown',
                 (event) => this.startQueueEdgeDrag(event)
@@ -152,6 +159,7 @@ export const queueMethods = {
     },
 
     updateQueuePanel({ force = false } = {}) {
+        this.updateQueueToggleIcon();
         if (!this.queueList || !this.queueHeader) return;
         if (this._queuePanelUpdateTimer) {
             clearTimeout(this._queuePanelUpdateTimer);
@@ -1639,15 +1647,26 @@ export const queueMethods = {
     updateQueueToggleIcon() {
         if (!this.queueToggleIcon) return;
         this.queueToggleIcon.style.display = this.activeTab === 'missing' ? '' : 'none';
-        this.queueToggleIcon.textContent = '';
         this.queueToggleIcon.removeAttribute('data-tooltip');
         this.queueToggleIcon.removeAttribute('title');
+        const queueCount = Array.isArray(this.pendingResolutions) ? this.pendingResolutions.length : 0;
+        const downloadCount = this.getActiveQueuePanelDownloads().length;
+        const queuedCountElement = this.queueToggleIcon.querySelector('.mr-queue-toggle-count-queued');
+        const downloadsCountElement = this.queueToggleIcon.querySelector('.mr-queue-toggle-count-downloads');
+        if (queuedCountElement) queuedCountElement.textContent = String(queueCount);
+        if (downloadsCountElement) downloadsCountElement.textContent = String(downloadCount);
         if (this.queueCollapsed) {
             this.queueToggleIcon.classList.add('is-collapsed');
-            this.queueToggleIcon.setAttribute('aria-label', 'Show queue and downloads panel');
+            this.queueToggleIcon.setAttribute(
+                'aria-label',
+                `Show queue and downloads panel. Queued: ${queueCount}. Downloads: ${downloadCount}.`
+            );
         } else {
             this.queueToggleIcon.classList.remove('is-collapsed');
-            this.queueToggleIcon.setAttribute('aria-label', 'Hide queue and downloads panel');
+            this.queueToggleIcon.setAttribute(
+                'aria-label',
+                `Hide queue and downloads panel. Queued: ${queueCount}. Downloads: ${downloadCount}.`
+            );
         }
     },
 
