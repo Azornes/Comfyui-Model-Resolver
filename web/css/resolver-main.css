@@ -986,6 +986,8 @@
     width: 104px;
     height: 50px;
     contain: layout style;
+    /* Keep the fixed-size source group on a compositor layer during pane resizing. */
+    will-change: transform;
 }
 
 .mr-missing-source-dot {
