@@ -4,11 +4,18 @@ import {
     toResolverContextModel,
 } from "../node_context_menu.js";
 import { normalizeCategoryValue } from "../utils/category_utils.js";
+import {
+    extractWorkflowPrompts,
+    getPromptRoleLabel,
+    updateWorkflowPromptValue,
+} from "../utils/prompt_utils.js";
 
 const MAX_IMAGE_FILE_SIZE = 64 * 1024 * 1024;
 const MAX_WORKFLOW_FILE_SIZE = 16 * 1024 * 1024;
 const METADATA_TRANSFER_MODE_STORAGE_KEY = 'model_resolver_metadata_transfer_mode';
 const METADATA_TRANSFER_ACTIVITY_SCOPE_STORAGE_KEY = 'model_resolver_metadata_transfer_activity_scope';
+const METADATA_PROMPT_ROLES = ['positive', 'negative'];
+const MAX_PROMPT_PREVIEW_LENGTH = 12_000;
 
 const MERGE_LORA_NODE_TYPES = new Set([
     'LoraLoaderV2',
@@ -73,6 +80,7 @@ function getImageInspectorState(dialog) {
             loading: '',
             requestToken: null,
             transfer: null,
+            promptTransfer: null,
             lastTransfer: null,
         };
     }
@@ -263,6 +271,7 @@ export const imageMetadataMethods = {
             if (action === 'retry-transfer-targets') void this.openMetadataTransfer({ force: true });
             if (action === 'undo-transfer') void this.undoMetadataTransfer();
             if (action === 'apply-transfer') void this.applyMetadataTransfer();
+            if (action === 'apply-prompts') void this.applyMetadataPromptTransfer();
             if (action === 'analyze-paste') {
                 const textarea = root.querySelector('.mr-image-inspector-textarea');
                 void this.inspectPastedWorkflow(textarea?.value || '');
@@ -287,6 +296,42 @@ export const imageMetadataMethods = {
                     }
                     state.transfer.sourceSelections = sourceSelections;
                     this.renderMetadataTransferPanelInPlace();
+                }
+                return;
+            }
+            if (input.matches?.('[data-image-prompt-source]')) {
+                const state = getImageInspectorState(this);
+                const role = String(input.dataset.imagePromptSource || '').trim();
+                if (state.promptTransfer && METADATA_PROMPT_ROLES.includes(role)) {
+                    state.promptTransfer.sourceSelections = {
+                        ...(state.promptTransfer.sourceSelections || {}),
+                        [role]: input.value,
+                    };
+                    this.renderMetadataPromptTransferPanelInPlace();
+                }
+                return;
+            }
+            if (input.matches?.('[data-image-prompt-role-selection]')) {
+                const state = getImageInspectorState(this);
+                const role = String(input.dataset.imagePromptRoleSelection || '').trim();
+                if (state.promptTransfer && METADATA_PROMPT_ROLES.includes(role)) {
+                    const selectedRoles = new Set(this.getMetadataPromptTransferState(state).selectedRoles);
+                    if (input.checked) selectedRoles.add(role);
+                    else selectedRoles.delete(role);
+                    state.promptTransfer.selectedRoles = selectedRoles;
+                    this.renderMetadataPromptTransferPanelInPlace();
+                }
+                return;
+            }
+            if (input.matches?.('[data-image-prompt-target]')) {
+                const state = getImageInspectorState(this);
+                const role = String(input.dataset.imagePromptTarget || '').trim();
+                if (state.promptTransfer && METADATA_PROMPT_ROLES.includes(role)) {
+                    state.promptTransfer.targetSelections = {
+                        ...(state.promptTransfer.targetSelections || {}),
+                        [role]: input.value,
+                    };
+                    this.renderMetadataPromptTransferPanelInPlace();
                 }
                 return;
             }
@@ -425,6 +470,11 @@ export const imageMetadataMethods = {
         state.requestToken = requestToken;
         state.metadata = null;
         state.loadedModels = null;
+        if (state.promptTransfer) {
+            state.promptTransfer.applying = false;
+            state.promptTransfer.error = '';
+            state.promptTransfer.sourceSelections = {};
+        }
         if (state.transfer) {
             state.transfer.requestToken = null;
             state.transfer.loading = false;
@@ -503,6 +553,7 @@ export const imageMetadataMethods = {
                 : 'Reading embedded metadata...';
             result.innerHTML = `
                 <div class="mr-image-inspector-loading"><span class="mr-spinner"></span>${this.escapeHtml(message)}</div>
+                ${this.renderMetadataPromptTransferPanel(state)}
                 ${this.renderMetadataTransferPanel(state)}
             `;
             return;
@@ -510,12 +561,13 @@ export const imageMetadataMethods = {
         if (state.error) {
             result.innerHTML = `
                 <p class="mr-error-text">${this.escapeHtml(state.error)}</p>
+                ${this.renderMetadataPromptTransferPanel(state)}
                 ${this.renderMetadataTransferPanel(state)}
             `;
             return;
         }
         if (!state.metadata) {
-            result.innerHTML = this.renderMetadataTransferPanel(state);
+            result.innerHTML = `${this.renderMetadataPromptTransferPanel(state)}${this.renderMetadataTransferPanel(state)}`;
             return;
         }
 
@@ -577,6 +629,7 @@ export const imageMetadataMethods = {
                 </div>
                 <table class="mr-info-table mr-image-inspector-info-table"><tbody>${rowsHtml}${parametersHtml}</tbody></table>
             </section>
+            ${this.renderMetadataPromptTransferPanel(state)}
             ${this.renderMetadataTransferPanel(state)}
             <section class="mr-image-inspector-models">
                 <div id="${this.escapeHtml(modelContainerId)}"></div>
@@ -604,6 +657,348 @@ export const imageMetadataMethods = {
             );
         }
         this.bindTooltips?.(result);
+    },
+
+    getMetadataPromptTransferState(state = null) {
+        const imageState = state || getImageInspectorState(this);
+        if (!imageState.promptTransfer) {
+            imageState.promptTransfer = {
+                applying: false,
+                error: '',
+                sourceSelections: {},
+                targetSelections: {},
+                selectedRoles: new Set(METADATA_PROMPT_ROLES),
+            };
+        }
+        if (!(imageState.promptTransfer.selectedRoles instanceof Set)) {
+            const selectedRoles = Array.isArray(imageState.promptTransfer.selectedRoles)
+                ? imageState.promptTransfer.selectedRoles
+                : METADATA_PROMPT_ROLES;
+            imageState.promptTransfer.selectedRoles = new Set(
+                selectedRoles.filter(role => METADATA_PROMPT_ROLES.includes(role)),
+            );
+        }
+        return imageState.promptTransfer;
+    },
+
+    getMetadataPromptLabel(prompt = {}, fallback = 'Text prompt') {
+        const nodeLabel = String(
+            prompt.node_title
+            || prompt.node_type
+            || fallback
+        ).trim() || fallback;
+        const nodeId = prompt.node_id === undefined || prompt.node_id === null
+            ? ''
+            : ` · Node ${String(prompt.node_id)}`;
+        const scope = prompt.is_top_level === false
+            ? ` · ${String(prompt.subgraph_name || prompt.subgraph_id || 'subgraph')}`
+            : '';
+        const widget = prompt.widget_name ? ` · ${String(prompt.widget_name)}` : '';
+        return `${nodeLabel}${nodeId}${scope}${widget}`;
+    },
+
+    getMetadataPromptNodeContextMenuAttrs(prompt = {}) {
+        const nodeId = prompt.node_id;
+        if (
+            typeof this.getContextMenuAttrs !== 'function'
+            || nodeId === undefined
+            || nodeId === null
+            || nodeId === ''
+        ) {
+            return '';
+        }
+
+        return this.getContextMenuAttrs({
+            context_scope: 'workflow_node',
+            node_id: nodeId,
+            node_type: prompt.node_type,
+            node_title: prompt.node_title,
+            subgraph_id: prompt.subgraph_id,
+            subgraph_name: prompt.subgraph_name,
+            is_top_level: prompt.is_top_level,
+        }, 'Right-click to locate this node in the workflow');
+    },
+
+    getMetadataPromptPreviewText(prompt = {}) {
+        const text = String(prompt.text || '');
+        if (text.length <= MAX_PROMPT_PREVIEW_LENGTH) return text;
+        return `${text.slice(0, MAX_PROMPT_PREVIEW_LENGTH)}\n…`;
+    },
+
+    getMetadataPromptTransferData(state = null) {
+        const imageState = state || getImageInspectorState(this);
+        const promptTransfer = this.getMetadataPromptTransferState(imageState);
+        const sourcePrompts = extractWorkflowPrompts(imageState.metadata?.workflow || {})
+            .filter(prompt => !prompt.linked && String(prompt.text || '').trim());
+        const targetPrompts = extractWorkflowPrompts(this.getCurrentWorkflow?.() || {})
+            .filter(prompt => !prompt.linked);
+        const selectedRoles = this.getMetadataPromptTransferState(imageState).selectedRoles;
+        const sourceSelections = promptTransfer.sourceSelections || {};
+        const targetSelections = promptTransfer.targetSelections || {};
+        const usedSourceIds = new Set();
+        const usedTargetIds = new Set();
+
+        const rows = METADATA_PROMPT_ROLES.map(role => {
+            const sourceOptions = sourcePrompts.filter(prompt => (
+                prompt.role === role || prompt.role === 'unknown'
+            ));
+            const targetOptions = targetPrompts.filter(prompt => (
+                prompt.role === role || prompt.role === 'unknown'
+            ));
+            const requestedSource = sourceOptions.find(prompt => (
+                String(prompt.id) === String(sourceSelections[role] || '')
+            ));
+            const selectedSource = requestedSource
+                || sourceOptions.find(prompt => prompt.role === role)
+                || sourceOptions.find(prompt => !usedSourceIds.has(String(prompt.id)))
+                || sourceOptions[0]
+                || null;
+            const requestedTarget = targetOptions.find(prompt => (
+                String(prompt.id) === String(targetSelections[role] || '')
+            ));
+            const selectedTarget = requestedTarget
+                || targetOptions.find(prompt => prompt.role === role)
+                || targetOptions.find(prompt => !usedTargetIds.has(String(prompt.id)))
+                || targetOptions[0]
+                || null;
+            if (selectedSource) usedSourceIds.add(String(selectedSource.id));
+            if (selectedTarget) usedTargetIds.add(String(selectedTarget.id));
+            return {
+                role,
+                label: getPromptRoleLabel(role),
+                sourceOptions,
+                targetOptions,
+                source: selectedSource,
+                target: selectedTarget,
+                selected: selectedRoles.has(role),
+                applicable: Boolean(
+                    selectedSource
+                    && selectedTarget
+                    && String(selectedSource.text || '').trim()
+                    && !selectedTarget.linked
+                ),
+            };
+        });
+
+        const targetSelectionCounts = new Map();
+        for (const row of rows.filter(row => row.selected && row.applicable)) {
+            if (!row.target) continue;
+            const targetId = String(row.target.id);
+            targetSelectionCounts.set(targetId, (targetSelectionCounts.get(targetId) || 0) + 1);
+        }
+
+        return {
+            sourcePrompts,
+            targetPrompts,
+            rows,
+            selectedRoles,
+            selectedRoleCount: rows.filter(row => row.selected).length,
+            applicableSelectedRoleCount: rows.filter(row => row.selected && row.applicable).length,
+            unclassifiedSourceCount: sourcePrompts.filter(prompt => prompt.role === 'unknown').length,
+            unclassifiedTargetCount: targetPrompts.filter(prompt => prompt.role === 'unknown').length,
+            hasDuplicateTargetSelection: Array.from(targetSelectionCounts.values()).some(count => count > 1),
+        };
+    },
+
+    getMetadataPromptTransferRows(state = null) {
+        return this.getMetadataPromptTransferData(state).rows;
+    },
+
+    renderMetadataPromptTransferPanel(state) {
+        const imageState = state || getImageInspectorState(this);
+        const promptTransfer = this.getMetadataPromptTransferState(imageState);
+        const data = this.getMetadataPromptTransferData(imageState);
+        const sourceSummary = data.sourcePrompts.length
+            ? `${data.sourcePrompts.length} editable prompt${data.sourcePrompts.length === 1 ? '' : 's'} found in the imported workflow.`
+            : imageState.loading
+                ? 'Reading prompt text from the imported workflow...'
+                : imageState.metadata?.workflow
+                    ? 'No editable prompt text nodes were found in the imported workflow.'
+                    : 'Import an image or workflow JSON with prompt nodes to enable prompt transfer.';
+        const targetSummary = data.targetPrompts.length
+            ? `${data.targetPrompts.length} editable prompt field${data.targetPrompts.length === 1 ? '' : 's'} in the current workflow.`
+            : 'No editable prompt text fields were found in the current workflow.';
+        const hasApplicablePair = data.applicableSelectedRoleCount > 0;
+        const applyDisabled = promptTransfer.applying
+            || !hasApplicablePair
+            || data.hasDuplicateTargetSelection;
+        const roleRows = data.rows.map(row => {
+            const sourceOptions = row.sourceOptions.map(prompt => `
+                <option value="${this.escapeHtml(prompt.id)}"${row.source?.id === prompt.id ? ' selected' : ''}>
+                    ${this.escapeHtml(this.getMetadataPromptLabel(prompt))}
+                </option>
+            `).join('');
+            const targetOptions = row.targetOptions.map(prompt => `
+                <option value="${this.escapeHtml(prompt.id)}"${row.target?.id === prompt.id ? ' selected' : ''}>
+                    ${this.escapeHtml(this.getMetadataPromptLabel(prompt))}
+                </option>
+            `).join('');
+            const sourceRoleHint = row.source?.role === row.role
+                ? 'Role detected from workflow connections.'
+                : 'Role not explicit; choose the source text for this slot.';
+            const targetRoleHint = row.target?.role === row.role
+                ? 'Positive/negative role detected from workflow connections.'
+                : 'Role not explicit; choose the target text field for this slot.';
+            const targetContextMenuAttrs = row.target
+                ? this.getMetadataPromptNodeContextMenuAttrs?.(row.target) || ''
+                : '';
+            const sourceHtml = row.source
+                ? `
+                    <select class="mr-image-prompt-select" data-image-prompt-source="${row.role}" aria-label="Select imported ${row.role} prompt"${row.sourceOptions.length < 2 ? ' disabled' : ''}>
+                        ${sourceOptions}
+                    </select>
+                    <pre class="mr-image-prompt-text" title="${this.escapeHtml(String(row.source.text || ''))}">${this.escapeHtml(this.getMetadataPromptPreviewText(row.source) || '(empty)')}</pre>
+                    <span class="mr-image-prompt-meta">${this.escapeHtml(sourceRoleHint)}</span>
+                `
+                : '<p class="mr-image-prompt-empty">No imported prompt available.</p>';
+            const targetHtml = row.target
+                ? `
+                    <select class="mr-image-prompt-select" data-image-prompt-target="${row.role}" aria-label="Select current ${row.role} text field"${row.targetOptions.length < 2 ? ' disabled' : ''}>
+                        ${targetOptions}
+                    </select>
+                    <pre class="mr-image-prompt-text is-current" title="${this.escapeHtml(String(row.target.text || ''))}">${this.escapeHtml(this.getMetadataPromptPreviewText(row.target) || '(empty)')}</pre>
+                    <span class="mr-image-prompt-meta">${this.escapeHtml(targetRoleHint)}</span>
+                `
+                : '<p class="mr-image-prompt-empty">No current text field available.</p>';
+            return `
+                <article class="mr-image-prompt-row is-${row.role}${row.selected ? ' is-selected' : ''}">
+                    <div class="mr-image-prompt-row-header">
+                        <label class="mr-image-prompt-role-option">
+                            <input type="checkbox" data-image-prompt-role-selection="${row.role}" aria-label="Replace ${this.escapeHtml(row.label)}"${row.selected ? ' checked' : ''}>
+                            <span class="mr-image-prompt-role">${this.escapeHtml(row.label)}</span>
+                        </label>
+                        <span class="mr-image-prompt-role-chip">${row.selected ? (row.applicable ? 'Selected' : 'Needs selection') : 'Not selected'}</span>
+                    </div>
+                    <div class="mr-image-prompt-grid">
+                        <div class="mr-image-prompt-side${targetContextMenuAttrs ? ' is-context-menu' : ''}"${targetContextMenuAttrs}>
+                            <span class="mr-image-prompt-side-label">Current text field</span>
+                            ${targetHtml}
+                        </div>
+                        <span class="mr-image-prompt-arrow" aria-hidden="true">→</span>
+                        <div class="mr-image-prompt-side">
+                            <span class="mr-image-prompt-side-label">Imported</span>
+                            ${sourceHtml}
+                        </div>
+                    </div>
+                </article>
+            `;
+        }).join('');
+        const unclassifiedNote = data.unclassifiedSourceCount || data.unclassifiedTargetCount
+            ? 'Some prompts have no explicit role in the graph and remain selectable in both slots.'
+            : 'Positive and negative roles are detected from connected node input names whenever available.';
+        const statusHtml = promptTransfer.error
+            ? `<p class="mr-error-text">${this.escapeHtml(promptTransfer.error)}</p>`
+            : '';
+
+        return `
+            <section class="mr-image-prompt-transfer">
+                <div class="mr-image-prompt-header">
+                    <div>
+                        <h3 class="mr-loaded-models-title">Transfer prompts to current workflow</h3>
+                        <p class="mr-loaded-models-subtitle">${this.escapeHtml(sourceSummary)} ${this.escapeHtml(targetSummary)}</p>
+                    </div>
+                </div>
+                ${statusHtml}
+                <p class="mr-image-prompt-note">${this.escapeHtml(unclassifiedNote)} Select which prompt roles to replace, then choose the source and target text fields.</p>
+                <div class="mr-image-prompt-list">
+                    ${roleRows || '<p class="mr-image-prompt-empty">No positive or negative prompt slots are available.</p>'}
+                </div>
+                <div class="mr-image-prompt-actions">
+                    <span class="mr-image-prompt-selection-count">${this.escapeHtml(
+                        data.hasDuplicateTargetSelection
+                            ? 'Choose a different current text field for each selected role.'
+                            : !data.selectedRoleCount
+                                ? 'Select positive, negative, or both prompt roles.'
+                            : hasApplicablePair
+                                ? `${data.applicableSelectedRoleCount} prompt role${data.applicableSelectedRoleCount === 1 ? '' : 's'} selected for replacement.`
+                                : 'Select an imported prompt and a current text field.'
+                    )}</span>
+                    <button type="button" class="mr-btn mr-btn-primary mr-btn-sm" data-image-inspector-action="apply-prompts" ${applyDisabled ? 'disabled' : ''} aria-busy="${promptTransfer.applying ? 'true' : 'false'}">
+                        ${promptTransfer.applying
+                            ? '<span class="mr-image-transfer-action-spinner" aria-hidden="true"></span><span>Replacing...</span>'
+                            : 'Replace prompts'}
+                    </button>
+                </div>
+            </section>
+        `;
+    },
+
+    renderMetadataPromptTransferPanelInPlace({ fallback = true } = {}) {
+        const result = this.contentElement?.querySelector('[data-image-inspector-result]');
+        const currentPanel = result?.querySelector('.mr-image-prompt-transfer');
+        if (!currentPanel) {
+            if (fallback) this.renderImageMetadataResult();
+            return false;
+        }
+
+        currentPanel.outerHTML = this.renderMetadataPromptTransferPanel(getImageInspectorState(this));
+        this.bindTooltips?.(result);
+        return true;
+    },
+
+    async applyMetadataPromptTransfer() {
+        const state = getImageInspectorState(this);
+        const promptTransfer = this.getMetadataPromptTransferState(state);
+        if (promptTransfer.applying) return null;
+
+        const data = this.getMetadataPromptTransferData(state);
+        const pairs = data.rows.filter(row => row.selected && row.applicable);
+        if (!pairs.length) {
+            this.showNotification('Select at least one prompt role with an imported and current text field first.', 'warning');
+            return null;
+        }
+        if (data.hasDuplicateTargetSelection) {
+            this.showNotification('Choose a different current text field for each selected role.', 'warning');
+            return null;
+        }
+
+        const workflow = this.getCurrentWorkflow?.();
+        if (!workflow) {
+            this.showNotification('No current workflow is available.', 'warning');
+            return null;
+        }
+        const updatedWorkflow = cloneWorkflowSnapshot(workflow);
+        if (!updatedWorkflow) {
+            this.showNotification('Could not prepare the prompt replacement.', 'error');
+            return null;
+        }
+
+        let updatedCount = 0;
+        for (const pair of pairs) {
+            if (updateWorkflowPromptValue(updatedWorkflow, pair.target, pair.source.text)) {
+                updatedCount += 1;
+            }
+        }
+        if (!updatedCount) {
+            this.showNotification('The selected current text fields cannot be replaced.', 'warning');
+            return null;
+        }
+
+        promptTransfer.applying = true;
+        promptTransfer.error = '';
+        this.renderMetadataPromptTransferPanelInPlace();
+        try {
+            const applied = await this.updateWorkflowInComfyUI(updatedWorkflow, []);
+            if (!applied) throw new Error('ComfyUI could not apply the prompt replacement.');
+
+            promptTransfer.applying = false;
+            this.cachedLoadedModelsSignature = null;
+            this.cachedLoadedModelsData = null;
+            const currentWorkflow = this.getCurrentWorkflow?.() || updatedWorkflow;
+            this.activeWorkflowSignature = this.getWorkflowSignature?.(currentWorkflow) || null;
+            void this.openMetadataTransfer({ preserveContent: true });
+            this.showNotification(
+                `Replaced ${updatedCount} prompt field${updatedCount === 1 ? '' : 's'} in the current workflow.`,
+                'success',
+            );
+            window.dispatchEvent?.(new Event('model-resolver-active-workflowchange'));
+            return { workflow: updatedWorkflow, updated: updatedCount };
+        } catch (error) {
+            promptTransfer.applying = false;
+            promptTransfer.error = error?.message || 'The prompt replacement failed.';
+            this.renderMetadataPromptTransferPanelInPlace();
+            return null;
+        }
     },
 
     getMetadataTransferSourceModels(loadedModels = null) {
@@ -698,7 +1093,7 @@ export const imageMetadataMethods = {
     },
 
     getMetadataTransferModelInteractionAttrs(model = {}, contextScope = 'loaded_model', label = '') {
-        if (!isExistingResolvedModel(model)) return '';
+        if (!model || !isExistingResolvedModel(model)) return '';
 
         let contextModel;
         if (contextScope === 'local_model') {
@@ -1336,7 +1731,7 @@ export const imageMetadataMethods = {
                 `;
             }).join('');
         };
-        const renderNode = (node, isAvailable) => {
+        const renderNode = node => {
             const selected = selectedNodeKeys.has(node.nodeKey);
             const scopeLabel = node.isTopLevel
                 ? ''
@@ -1345,7 +1740,6 @@ export const imageMetadataMethods = {
             const nodeType = node.nodeType && node.nodeType !== nodeName
                 ? node.nodeType
                 : 'Workflow node';
-            const unavailable = sourceEntries.length > 0 && !isAvailable;
             const contextMenuAttrs = this.getContextMenuAttrs?.({
                 context_scope: 'workflow_node',
                 node_id: node.nodeId,
@@ -1362,12 +1756,11 @@ export const imageMetadataMethods = {
                     : '<p class="mr-image-transfer-empty">No imported LoRAs match the selected activity scope.</p>'
                 : renderUnselectedPreview(node);
             return `
-                <div class="mr-image-transfer-node-row${selected ? ' is-selected' : ''}${unavailable ? ' is-unavailable' : ''}" ${contextMenuAttrs}>
+                <div class="mr-image-transfer-node-row${selected ? ' is-selected' : ''}" ${contextMenuAttrs}>
                     <button type="button" class="mr-image-transfer-node-select"
                         data-image-transfer-node="${this.escapeHtml(node.nodeKey)}"
                         aria-pressed="${selected ? 'true' : 'false'}"
-                        aria-disabled="${unavailable ? 'true' : 'false'}"
-                        ${unavailable ? 'disabled title="No matching model category in the metadata workflow"' : ''}>
+                        aria-disabled="false">
                         <span class="mr-image-transfer-node-check" aria-hidden="true">${selected ? '✓' : ''}</span>
                         <span class="mr-image-transfer-node-details">
                             <span class="mr-image-transfer-node-name">${this.escapeHtml(nodeName)} · Node ${this.escapeHtml(node.nodeId)}${this.escapeHtml(scopeLabel)}</span>
@@ -1400,7 +1793,7 @@ export const imageMetadataMethods = {
                                 ${isUnavailable ? '<span class="mr-image-transfer-unavailable-pill">No source model</span>' : ''}
                             </span>
                         </div>
-                        ${collapsed ? '' : `<div class="mr-image-transfer-category-nodes">${nodes.map(node => renderNode(node, isAvailable)).join('')}</div>`}
+                        ${collapsed ? '' : `<div class="mr-image-transfer-category-nodes">${nodes.map(renderNode).join('')}</div>`}
                     </section>
                 `;
             }).join('')
@@ -1557,6 +1950,7 @@ export const imageMetadataMethods = {
                 : [];
         }
         this.renderMetadataTransferPanelInPlace({ fallback: !keepCurrentTransferContent });
+        this.renderMetadataPromptTransferPanelInPlace({ fallback: !keepCurrentTransferContent });
 
         if (!workflow) {
             state.transfer.loading = false;
@@ -1594,23 +1988,17 @@ export const imageMetadataMethods = {
             state.transfer.refreshing = false;
             state.transfer.targetModels = targetModels;
             state.transfer.targetGroups = this.getMetadataTransferTargetGroups(targetModels);
-            const sourceEntries = this.getMetadataTransferSourceModels(state.loadedModels);
-            const sourceCategories = new Set(
-                sourceEntries
-                    .map(({ model }) => normalizeTransferCategory(model.category))
-            );
-            const selectableNodeKeys = new Set(
+            const targetNodeKeys = new Set(
                 state.transfer.targetGroups.flatMap(group => (
-                    sourceEntries.length === 0 || sourceCategories.has(group.category)
-                        ? (group.nodes || []).map(node => node.nodeKey)
-                        : []
+                    (group.nodes || []).map(node => node.nodeKey)
                 ))
             );
             state.transfer.selectedNodeKeys = new Set(
                 Array.from(state.transfer.selectedNodeKeys || [])
-                    .filter(nodeKey => selectableNodeKeys.has(nodeKey))
+                    .filter(nodeKey => targetNodeKeys.has(nodeKey))
             );
             this.renderMetadataTransferPanelInPlace();
+            this.renderMetadataPromptTransferPanelInPlace({ fallback: false });
             return targetModels;
         } catch (error) {
             if (
@@ -1621,6 +2009,7 @@ export const imageMetadataMethods = {
             state.transfer.refreshing = false;
             state.transfer.error = error?.message || 'Could not scan the current workflow.';
             this.renderMetadataTransferPanelInPlace();
+            this.renderMetadataPromptTransferPanelInPlace({ fallback: false });
             return null;
         }
     },
@@ -1653,17 +2042,7 @@ export const imageMetadataMethods = {
             .filter(node => node.nodeKey === String(nodeKey));
         if (!nodeGroups.length) return;
 
-        const sourceCategories = new Set(
-            this.getMetadataTransferSourceModels(state.loadedModels)
-                .map(({ model }) => normalizeTransferCategory(model.category))
-        );
         const selected = new Set(state.transfer.selectedNodeKeys || []);
-        if (sourceCategories.size && !nodeGroups.some(node => {
-            const categoryGroup = (state.transfer.targetGroups || [])
-                .find(group => group.nodes.includes(node));
-            return categoryGroup && sourceCategories.has(categoryGroup.category);
-        }) && !selected.has(String(nodeKey))) return;
-
         if (selected.has(String(nodeKey))) {
             selected.delete(String(nodeKey));
         } else {

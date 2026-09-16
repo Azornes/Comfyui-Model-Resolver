@@ -214,6 +214,41 @@ test('metadata transfer shows a spinner while applying', () => {
   assert.match(html, /<span>Applying\.\.\.<\/span>/);
 });
 
+test('metadata transfer keeps target node checkboxes selectable without an imported workflow', () => {
+  const context = createTransferContext();
+  const state = createTransferState([]);
+  state.loadedModels = null;
+  state.transfer.selectedNodeKeys = new Set();
+  let renderCount = 0;
+  context.imageInspectorState = state;
+  context.renderMetadataTransferPanelInPlace = () => {
+    renderCount += 1;
+    return true;
+  };
+
+  const html = context.renderMetadataTransferPanel(state);
+
+  assert.match(html, /data-image-transfer-node="top:1"/);
+  const targetButton = html.match(/<button[^>]*data-image-transfer-node="top:1"[^>]*>/)?.[0] || '';
+  assert.doesNotMatch(targetButton, /\sdisabled(?:\s|=|>)/);
+  context.toggleMetadataTransferNode('top:1');
+  assert.deepEqual(Array.from(state.transfer.selectedNodeKeys), ['top:1']);
+  assert.equal(renderCount, 1);
+});
+
+test('metadata transfer does not disable a target category missing from the imported workflow', () => {
+  const context = createTransferContext();
+  const state = createTransferState([
+    { category: 'checkpoints', original_path: 'imported-checkpoint.safetensors' },
+  ]);
+
+  const html = context.renderMetadataTransferPanel(state);
+
+  assert.match(html, /No source model/);
+  const targetButton = html.match(/<button[^>]*data-image-transfer-node="top:1"[^>]*>/)?.[0] || '';
+  assert.doesNotMatch(targetButton, /\sdisabled(?:\s|=|>)/);
+});
+
 test('metadata transfer exposes Undo transfer while the post-transfer workflow is unchanged', () => {
   const context = createTransferContext();
   const state = createTransferState([
