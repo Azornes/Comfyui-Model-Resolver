@@ -45,7 +45,7 @@ test('HuggingFace download rows expose the Show More action', () => {
   );
   assert.match(
     resolveDownloadSource,
-    /if \(hfResult && hfResult\.url\)[\s\S]*?detailsContext:\s*\{[\s\S]*?\.\.\.hfResult,[\s\S]*?details_source:\s*'huggingface'/
+    /const hfDownloadUrl = hfResult\?\.download_url \|\| hfResult\?\.url \|\| ''[\s\S]*?if \(hfResult && hfDownloadUrl\)[\s\S]*?detailsContext:\s*\{[\s\S]*?\.\.\.hfResult,[\s\S]*?details_source:\s*'huggingface'/
   );
 });
 
@@ -53,6 +53,19 @@ test('HuggingFace details requests keep folder, branch, and token context', () =
   assert.match(modelInfoSource, /file_path: model\.path/);
   assert.match(modelInfoSource, /branch: model\.branch \|\| ''/);
   assert.match(modelInfoSource, /hf_token: tokens\.hf_token \|\| ''/);
+});
+
+test('selected HuggingFace details reuse the row and download the direct file URL', () => {
+  assert.match(
+    resolveDownloadSource,
+    /const hfDownloadUrl = hfResult\?\.download_url \|\| hfResult\?\.url \|\| ''/
+  );
+  assert.match(resolveDownloadSource, /downloadUrl: hfDownloadUrl/);
+  assert.match(
+    modelInfoSource,
+    /const isHuggingFace = sourceKey === 'huggingface'[\s\S]*?url: isHuggingFace \? selection\.download_url : selection\.url/
+  );
+  assert.match(modelInfoSource, /model_url: sourceResult\.model_url \|\| sourceResult\.url/);
 });
 
 test('a selected HuggingFace variant keeps its repository path', () => {

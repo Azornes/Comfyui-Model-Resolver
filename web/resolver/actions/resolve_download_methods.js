@@ -130,7 +130,8 @@ export const resolveDownloadMethods = {
             {
                 source: 'huggingface',
                 result: first(results.huggingface),
-                urlKey: 'url',
+                urlKey: 'download_url',
+                fallbackUrlKey: 'url',
                 filenameKey: 'filename'
             },
             {
@@ -155,7 +156,8 @@ export const resolveDownloadMethods = {
 
         for (const candidate of candidates) {
             const result = candidate.result;
-            const url = result?.[candidate.urlKey];
+            const url = result?.[candidate.urlKey]
+                || (candidate.fallbackUrlKey ? result?.[candidate.fallbackUrlKey] : '');
             if (!url) continue;
             const rawModelUrl = result.model_url || result.url || url;
 
@@ -3859,7 +3861,8 @@ export const resolveDownloadMethods = {
             }));
         }
 
-        if (hfResult && hfResult.url) {
+        const hfDownloadUrl = hfResult?.download_url || hfResult?.url || '';
+        if (hfResult && hfDownloadUrl) {
             const hfRepo = hfResult.repo_id || hfResult.repo || '';
             const hfModelUrl = hfRepo ? `https://huggingface.co/${hfRepo}` : getModelCardUrl(hfResult.url);
             const missingCategory = this.getMissingDownloadCategory?.(missing, 'checkpoints') || missing.category || 'checkpoints';
@@ -3870,7 +3873,7 @@ export const resolveDownloadMethods = {
                 model: hfRepo || hfResult.filename,
                 filename: hfResult.filename,
                 secondary: hfResult.path && hfResult.path !== hfResult.filename ? hfResult.path : '',
-                downloadUrl: hfResult.url,
+                downloadUrl: hfDownloadUrl,
                 downloadFilename: hfResult.filename,
                 category: missingCategory,
                 openUrl: hfModelUrl,

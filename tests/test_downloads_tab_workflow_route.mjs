@@ -3830,6 +3830,39 @@ test('automatic Local Database download source stays hidden until that source is
   assert.equal(shouldDisplayKnownDownloadSource.call(dialog, {}, downloadSource, state), true);
 });
 
+test('HuggingFace fallback download source prefers the direct file URL', () => {
+  const getBestDownloadSourceForMissing = eval(`(${extractMethod(resolveDownloadMethodsSource, 'getBestDownloadSourceForMissing')})`);
+  const pageUrl = 'https://huggingface.co/Comfy-Org/YuE2/tree/main/checkpoints';
+  const downloadUrl = 'https://huggingface.co/Comfy-Org/YuE2/resolve/main/checkpoints/yue2_3b_bf16.safetensors';
+  const missing = {
+    missing_search_key: 'missing-key',
+    original_path: 'yue2_convrot_int8.safetensors',
+    category: 'checkpoints',
+  };
+  const dialog = {
+    searchResultCache: new Map([[
+      'missing-key',
+      { results: { huggingface: {
+        source: 'huggingface',
+        model_id: 'Comfy-Org/YuE2',
+        filename: 'yue2_3b_bf16.safetensors',
+        url: pageUrl,
+        download_url: downloadUrl,
+      } } }
+    ]]),
+    getMissingSearchKey() {
+      return 'missing-key';
+    },
+    getFilenameFromPath(value = '') {
+      return String(value).split(/[\\/]/).at(-1) || '';
+    },
+  };
+
+  const source = getBestDownloadSourceForMissing.call(dialog, missing);
+
+  assert.equal(source.url, downloadUrl);
+});
+
 test('inactive missing models require every workflow reference to be inactive', () => {
   const { isMissingModelInactive } = missingModelStateMethods;
 
@@ -8418,6 +8451,66 @@ test('applying source model details selection updates current download source ha
   assert.equal(state.results.civitai.sha256, sha256);
   assert.equal(state.results.civitai.file_info.hashes.SHA256, sha256);
   assert.equal(refreshCalls.length, 1);
+});
+
+test('applying a HuggingFace file selection keeps the direct URL in the search result', () => {
+  const applySourceModelDetailsSelection = eval(`(${extractMethod(modelInfoMethodsSource, 'applySourceModelDetailsSelection')})`);
+  const sha256 = 'c'.repeat(64);
+  const pageUrl = 'https://huggingface.co/Comfy-Org/YuE2/tree/main/checkpoints';
+  const downloadUrl = 'https://huggingface.co/Comfy-Org/YuE2/resolve/main/checkpoints/yue2_3b_bf16.safetensors';
+  const missing = {
+    original_path: 'yue2_convrot_int8.safetensors',
+    category: 'checkpoints',
+    civitai_info: {},
+  };
+  const state = { results: {} };
+  const dialog = {
+    getMissingByKey(key) {
+      return key === 'missing-key' ? missing : null;
+    },
+    getSearchState() {
+      return state;
+    },
+    getSourceModelFileHash(value = {}) {
+      const hashes = value.hashes && typeof value.hashes === 'object' ? value.hashes : {};
+      return String(value.sha256 || value.hash || hashes.SHA256 || hashes.sha256 || '').trim().toLowerCase();
+    },
+    refreshSearchUiForMissing() {},
+    refreshSearchBaseModelLabels() {},
+    updateBatchFooterButtons() {},
+    persistSearchStateForActiveWorkflow() {},
+    syncRemoteHashMatchesForResult() {},
+    showNotification() {},
+  };
+
+  applySourceModelDetailsSelection.call(dialog, {
+    source: 'huggingface',
+    model_id: 'Comfy-Org/YuE2',
+    version_id: 'main',
+    name: 'Comfy-Org/YuE2',
+    filename: 'yue2_3b_bf16.safetensors',
+    url: pageUrl,
+    download_url: downloadUrl,
+    path: 'checkpoints/yue2_3b_bf16.safetensors',
+    sha256,
+    hashes: { SHA256: sha256 },
+    file_info: {
+      name: 'yue2_3b_bf16.safetensors',
+      path: 'checkpoints/yue2_3b_bf16.safetensors',
+      sha256,
+      hashes: { SHA256: sha256 },
+    },
+  }, {
+    missing_key: 'missing-key',
+    details_source: 'huggingface',
+  });
+
+  assert.equal(state.results.huggingface.url, downloadUrl);
+  assert.equal(state.results.huggingface.download_url, downloadUrl);
+  assert.equal(state.results.huggingface.model_url, pageUrl);
+  assert.equal(missing.download_source.url, downloadUrl);
+  assert.equal(missing.download_source.model_url, pageUrl);
+  assert.equal(missing.download_source.sha256, sha256);
 });
 
 test('batch sources advance independently while each source stays sequential', async () => {

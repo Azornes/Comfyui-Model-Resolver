@@ -3549,6 +3549,13 @@ export const modelInfoMethods = {
         }
 
         const sourceKey = String(selection.source || contextModel.details_source || contextModel.source || '').toLowerCase();
+        const isHuggingFace = sourceKey === 'huggingface';
+        const sourcePageUrl = selection.page_url
+            || selection.pageUrl
+            || selection.version_url
+            || selection.versionUrl
+            || selection.url
+            || '';
         const selectedBaseModel = selection.base_model || contextModel.base_model || '';
         const selectionHashes = selection.hashes && typeof selection.hashes === 'object' ? selection.hashes : {};
         const selectionFile = selection.file_info || selection.selected_file || selection.file || null;
@@ -3565,7 +3572,7 @@ export const modelInfoMethods = {
             version_name: selection.version_name,
             type: selection.type,
             filename: selection.filename,
-            url: selection.url,
+            url: isHuggingFace ? selection.download_url : selection.url,
             download_url: selection.download_url,
             size: selection.size,
             base_model: selectedBaseModel,
@@ -3578,6 +3585,12 @@ export const modelInfoMethods = {
             confidence: selection.confidence || 100,
             searchedAt: new Date().toISOString()
         };
+        if (isHuggingFace) {
+            sourceResult.repo_id = selection.repo_id || selection.repo || selection.model_id || '';
+            sourceResult.version_url = sourcePageUrl;
+            sourceResult.page_url = sourcePageUrl;
+            sourceResult.model_url = sourcePageUrl;
+        }
         if (Object.keys(selectionHashes).length) sourceResult.hashes = selectionHashes;
         if (selectionFile && typeof selectionFile === 'object') {
             sourceResult.file_info = selectionFile;
@@ -3591,7 +3604,7 @@ export const modelInfoMethods = {
         missing.download_source = {
             ...sourceResult,
             url: sourceResult.download_url,
-            model_url: sourceResult.url,
+            model_url: sourceResult.model_url || sourceResult.url,
             directory: missing.category || 'checkpoints'
         };
 
