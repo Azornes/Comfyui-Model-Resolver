@@ -13,6 +13,7 @@ from core.sources.huggingface import (
     _build_author_index_from_models,
     _fetch_author_index,
     _find_matching_file_in_author_index,
+    _find_matching_file_in_repo,
     _get_author_index,
     _is_author_index_fresh,
     _read_persistent_author_indexes,
@@ -172,6 +173,119 @@ class HuggingFaceSourceTests(unittest.TestCase):
         self.assertEqual("hash", result["match_type"])
         self.assertEqual(sha256, result["sha256"])
         self.assertEqual("models/example.safetensors", result["path"])
+        self.assertEqual(100.0, result["confidence"])
+
+    def test_huggingface_matches_reordered_variant_with_confidence(self):
+        files = [
+            {
+                "path": "checkpoints/yue2_3b_bf16.safetensors",
+                "size": 100,
+            },
+            {
+                "path": "checkpoints/yue2_3b_int8_convrot.safetensors",
+                "size": 100,
+            },
+        ]
+
+        repo_result = _find_matching_file_in_repo(
+            "Comfy-Org/YuE2",
+            files,
+            "yue2_convrot_int8.safetensors",
+        )
+        index_result = _find_matching_file_in_author_index(
+            {
+                "files": [
+                    {
+                        "repo_id": "Comfy-Org/YuE2",
+                        "path": file["path"],
+                        "size": file["size"],
+                    }
+                    for file in files
+                ]
+            },
+            "yue2_convrot_int8.safetensors",
+        )
+
+        for result in (repo_result, index_result):
+            self.assertIsNotNone(result)
+            result = _result_dict(result)
+            self.assertEqual(
+                "checkpoints/yue2_3b_int8_convrot.safetensors", result["path"]
+            )
+            self.assertEqual("partial", result["match_type"])
+            self.assertGreater(result["confidence"], 0.0)
+            self.assertLess(result["confidence"], 100.0)
+
+    def test_huggingface_variant_match_stays_strict_for_exact_only(self):
+        result = _find_matching_file_in_repo(
+            "Comfy-Org/YuE2",
+            [
+                {
+                    "path": "checkpoints/yue2_3b_int8_convrot.safetensors",
+                    "size": 100,
+                }
+            ],
+            "yue2_convrot_int8.safetensors",
+            exact_only=True,
+        )
+
+        self.assertIsNone(result)
+
+    def test_huggingface_variant_match_keeps_precision_alternatives(self):
+        result = _find_matching_file_in_author_index(
+            {
+                "files": [
+                    {
+                        "repo_id": "Comfy-Org/YuE2",
+                        "path": "checkpoints/yue2_3b_bf16.safetensors",
+                        "size": 100,
+                    }
+                ]
+            },
+            "yue2_convrot_int8.safetensors",
+        )
+
+        self.assertIsNotNone(result)
+        result = _result_dict(result)
+        self.assertEqual(
+            "checkpoints/yue2_3b_bf16.safetensors", result["path"]
+        )
+        self.assertGreater(result["confidence"], 0.0)
+
+    def test_file_search_returns_variant_match_from_author_index(self):
+        index = {
+            "files": [
+                {
+                    "repo_id": "Comfy-Org/YuE2",
+                    "path": "checkpoints/yue2_3b_int8_convrot.safetensors",
+                    "size": 100,
+                }
+            ]
+        }
+
+        clear_search_cache()
+        with (
+            patch(
+                "core.sources.huggingface._get_author_index",
+                return_value=index,
+            ) as get_index,
+            patch("core.sources.huggingface.execute_provider_json_request") as request,
+        ):
+            result = search_huggingface_for_file(
+                "yue2_convrot_int8.safetensors",
+                use_api_search=False,
+                use_brave_fallback=False,
+            )
+
+        self.assertIsNotNone(result)
+        result = _result_dict(result)
+        self.assertEqual("Comfy-Org/YuE2", result["repo_id"])
+        self.assertEqual(
+            "checkpoints/yue2_3b_int8_convrot.safetensors", result["path"]
+        )
+        self.assertGreater(result["confidence"], 0.0)
+        get_index.assert_called_once()
+        request.assert_not_called()
 
     def test_hash_search_uses_author_index_before_filename_search(self):
         sha256 = "c" * 64

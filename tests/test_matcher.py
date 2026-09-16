@@ -176,6 +176,15 @@ class MatcherTests(unittest.TestCase):
             ),
         )
 
+    def test_filename_confidence_ignores_token_order(self):
+        target = "yue2_convrot_int8.safetensors"
+
+        confidence = calculate_filename_confidence(
+            target, "yue2_3b_int8_convrot.safetensors"
+        )
+
+        self.assertGreaterEqual(confidence, 90.0)
+
     def test_filename_confidence_does_not_merge_different_sizes_or_generations(self):
         target = "qwen3vl-4b_fp8_e4m3fn.safetensors"
 

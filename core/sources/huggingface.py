@@ -19,7 +19,10 @@ from ..progress import get_progress_reporter
 
 log = create_module_logger(__name__)
 
-from ..matcher import build_filename_search_queries
+from ..matcher import (
+    build_filename_search_queries,
+    calculate_filename_confidence,
+)
 from ..network_utils import execute_provider_json_request, host_matches_domain, request_source_response
 from ..path_utils import METADATA_DIR, get_filename_from_path, read_json_safe, write_json_atomic
 from ..type_utils import (
@@ -704,6 +707,7 @@ def _build_huggingface_result(
     file_info: Dict[str, Any],
     match_type: str,
     headers: Optional[Dict[str, str]] = None,
+    confidence: float = 0.0,
 ) -> SearchResult:
     sha256 = _extract_huggingface_file_sha256(file_info)
     download_url = get_huggingface_download_url(repo_id, file_path)
@@ -721,6 +725,7 @@ def _build_huggingface_result(
         download_url=download_url,
         size=size,
         match_type=match_type,
+        confidence=confidence,
         sha256=sha256,
         normalize_hashes=True,
         repo_id=repo_id,
@@ -794,7 +799,6 @@ def _find_matching_file_in_repo(
 ) -> Optional[SearchResult]:
     filename_lower = filename.lower()
     filename_base = os.path.splitext(filename_lower)[0]
-    partial_match = None
 
     for file_info in files:
         file_path = file_info.get("path", "")
@@ -803,7 +807,6 @@ def _find_matching_file_in_repo(
 
         file_name = get_filename_from_path(file_path)
         file_name_lower = file_name.lower()
-        file_base = os.path.splitext(file_name_lower)[0]
 
         if file_name_lower == filename_lower or file_path.lower().endswith(filename_lower):
             return _build_huggingface_result(
@@ -812,11 +815,13 @@ def _find_matching_file_in_repo(
                 file_info,
                 "exact",
                 headers=headers,
+                confidence=100.0,
             )
 
     if exact_only:
         return None
 
+    best_match: Optional[SearchResult] = None
     for file_info in files:
         file_path = file_info.get("path", "")
         if not file_path:
@@ -825,22 +830,28 @@ def _find_matching_file_in_repo(
         file_name = get_filename_from_path(file_path)
         file_name_lower = file_name.lower()
         file_base = os.path.splitext(file_name_lower)[0]
+        if not file_path.lower().endswith((".safetensors", ".ckpt")):
+            continue
 
-        if (
-            not exact_only
-            and (filename_base in file_base or file_base in filename_base)
-            and (file_path.endswith(".safetensors") or file_path.endswith(".ckpt"))
-        ):
-            partial_match = _build_huggingface_result(
-                repo_id,
-                file_path,
-                file_info,
-                "partial",
-                headers=headers,
-            )
-            break
+        confidence = calculate_filename_confidence(filename, file_name)
+        is_partial_filename = (
+            filename_base in file_base or file_base in filename_base
+        )
+        if not is_partial_filename and confidence < 70.0:
+            continue
 
-    return partial_match
+        candidate = _build_huggingface_result(
+            repo_id,
+            file_path,
+            file_info,
+            "partial",
+            headers=headers,
+            confidence=confidence,
+        )
+        if best_match is None or candidate.confidence > best_match.confidence:
+            best_match = candidate
+
+    return best_match
 
 
 def _find_matching_file_in_author_index(
@@ -870,13 +881,13 @@ def _find_matching_file_in_author_index(
                 file_info,
                 "hash",
                 headers=headers,
+                confidence=100.0,
             )
 
         return None
 
     filename_lower = filename.lower()
     filename_base = os.path.splitext(filename_lower)[0]
-    partial_match = None
 
     for file_info in files:
         repo_id = file_info.get("repo_id", "")
@@ -895,11 +906,13 @@ def _find_matching_file_in_author_index(
                 file_info,
                 "exact",
                 headers=headers,
+                confidence=100.0,
             )
 
     if exact_only:
         return None
 
+    best_match: Optional[SearchResult] = None
     for file_info in files:
         repo_id = file_info.get("repo_id", "")
         file_path = file_info.get("path", "")
@@ -911,19 +924,28 @@ def _find_matching_file_in_author_index(
         file_base = os.path.splitext(file_name_lower)[0]
         file_path_lower = file_path.lower()
 
-        if (
-            filename_base in file_base or file_base in filename_base
-        ) and file_path_lower.endswith((".safetensors", ".ckpt")):
-            partial_match = _build_huggingface_result(
-                repo_id,
-                file_path,
-                file_info,
-                "partial",
-                headers=headers,
-            )
-            break
+        if not file_path_lower.endswith((".safetensors", ".ckpt")):
+            continue
 
-    return partial_match
+        confidence = calculate_filename_confidence(filename, file_name)
+        is_partial_filename = (
+            filename_base in file_base or file_base in filename_base
+        )
+        if not is_partial_filename and confidence < 70.0:
+            continue
+
+        candidate = _build_huggingface_result(
+            repo_id,
+            file_path,
+            file_info,
+            "partial",
+            headers=headers,
+            confidence=confidence,
+        )
+        if best_match is None or candidate.confidence > best_match.confidence:
+            best_match = candidate
+
+    return best_match
 
 
 

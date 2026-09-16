@@ -425,6 +425,18 @@ def calculate_filename_confidence(target_filename: str, candidate_filename: str)
         return 100.0
 
     best_similarity = calculate_similarity(target_norm, candidate_norm)
+    target_tokens = target_norm.split()
+    candidate_tokens = candidate_norm.split()
+    if target_tokens and candidate_tokens:
+        # Compare a canonical token order as well as the original spelling.
+        # This keeps names such as `convrot_int8` and `int8_convrot` together
+        # without introducing a second variant-matching implementation.
+        order_insensitive_similarity = calculate_similarity(
+            " ".join(sorted(target_tokens)),
+            " ".join(sorted(candidate_tokens)),
+        )
+        best_similarity = max(best_similarity, order_insensitive_similarity)
+
     target_family = normalize_model_family_filename(target_filename)
     candidate_family = normalize_model_family_filename(candidate_filename)
 
