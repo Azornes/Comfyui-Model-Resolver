@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { imageMetadataMethods } from '../web/resolver/views/tabs_image_metadata_methods.js';
 import {
   extractWorkflowPrompts,
+  getPromptCandidateScore,
+  sortPromptCandidates,
   updateWorkflowPromptValue,
 } from '../web/resolver/utils/prompt_utils.js';
 
@@ -80,6 +82,33 @@ test('workflow prompt extraction distinguishes positive and negative CLIP text n
       [1, 'positive source', 'positive', 'text'],
       [2, 'negative source', 'negative', 'text'],
     ],
+  );
+});
+
+test('prompt candidates are ranked by role and prompt-specific node type', () => {
+  const candidates = [
+    {
+      id: 'generic',
+      node_type: 'PrimitiveStringMultiline',
+      node_title: 'Text value',
+      widget_name: 'value',
+      role: 'unknown',
+      role_candidates: [],
+    },
+    {
+      id: 'clip',
+      node_type: 'CLIPTextEncode',
+      node_title: '',
+      widget_name: 'text',
+      role: 'positive',
+      role_candidates: ['positive'],
+    },
+  ];
+
+  assert.ok(getPromptCandidateScore(candidates[1], 'positive') > getPromptCandidateScore(candidates[0], 'positive'));
+  assert.deepEqual(
+    sortPromptCandidates(candidates, 'positive').map(candidate => candidate.id),
+    ['clip', 'generic'],
   );
 });
 
@@ -344,6 +373,8 @@ test('metadata prompt panel renders separate positive and negative transfer rows
   assert.match(html, /data-image-prompt-target="negative"/);
   assert.match(html, /data-image-prompt-role-selection="positive"[^>]*checked/);
   assert.match(html, /data-image-prompt-role-selection="negative"[^>]*checked/);
+  assert.match(html, /class="mr-tooltip-badge"[^>]*data-tooltip="[\s\S]*Select which prompt roles to replace/);
+  assert.doesNotMatch(html, /class="mr-image-prompt-note"/);
   const positiveTargetIndex = html.indexOf('data-image-prompt-target="positive"');
   const positiveSourceIndex = html.indexOf('data-image-prompt-source="positive"');
   assert.ok(positiveTargetIndex >= 0 && positiveTargetIndex < positiveSourceIndex);
@@ -353,6 +384,32 @@ test('metadata prompt panel renders separate positive and negative transfer rows
   );
   assert.match(html, /class="mr-image-prompt-side is-context-menu" data-context-scope="workflow_node" data-node-id="1"/);
   assert.match(html, /Replace prompts/);
+});
+
+test('metadata prompt selectors put the most likely prompt node first', () => {
+  const currentWorkflow = {
+    nodes: [
+      {
+        id: 90,
+        type: 'PrimitiveStringMultiline',
+        widgets_values: ['generic text field'],
+      },
+      clipTextNode(371, 'actual prompt', 11),
+      {
+        id: 3,
+        type: 'KSampler',
+        inputs: [{ name: 'positive', type: 'CONDITIONING', link: 11 }],
+      },
+    ],
+  };
+  const context = createContext(createRoleWorkflow(), currentWorkflow);
+  const positiveRow = context.getMetadataPromptTransferRows(context.imageInspectorState)
+    .find(row => row.role === 'positive');
+
+  assert.deepEqual(
+    positiveRow.targetOptions.map(prompt => prompt.node_id),
+    [371, 90],
+  );
 });
 
 test('metadata prompt role checkboxes stay selectable without an imported workflow', () => {

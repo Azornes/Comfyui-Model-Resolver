@@ -214,6 +214,18 @@ test('metadata transfer shows a spinner while applying', () => {
   assert.match(html, /<span>Applying\.\.\.<\/span>/);
 });
 
+test('metadata transfer guidance is available through a question tooltip', () => {
+  const context = createTransferContext();
+  const state = createTransferState([]);
+  state.loadedModels = null;
+
+  const html = context.renderMetadataTransferPanel(state);
+
+  assert.match(html, /class="mr-tooltip-badge"[^>]*data-tooltip="[\s\S]*Select a node row to include it in the transfer/);
+  assert.match(html, /Import a workflow with model metadata to enable Apply transfer/);
+  assert.doesNotMatch(html, /class="mr-image-transfer-note"/);
+});
+
 test('metadata transfer keeps target node checkboxes selectable without an imported workflow', () => {
   const context = createTransferContext();
   const state = createTransferState([]);

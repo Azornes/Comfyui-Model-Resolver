@@ -2151,6 +2151,11 @@
     color: #101010;
 }
 
+#model-resolver-modal [data-image-inspector-action="apply-prompts"].mr-btn-primary,
+#model-resolver-modal [data-image-inspector-action="apply-prompts"].mr-btn-primary:hover:not(:disabled) {
+    color: #101010;
+}
+
 .mr-btn-secondary,
 .mr-btn-link,
 #model-resolver-modal .mr-btn-secondary,
@@ -4233,6 +4238,10 @@
     margin: 0;
 }
 
+.mr-image-inspector .mr-loaded-models-title {
+    font-size: var(--mr-font-xl);
+}
+
 .mr-loaded-total {
     display: inline-flex;
     align-items: center;
@@ -4972,7 +4981,19 @@ button.mr-info-link:disabled {
 }
 
 .mr-image-prompt-row.is-selected {
-    background: rgba(114, 211, 138, 0.055);
+    position: relative;
+    background: linear-gradient(90deg, rgba(114, 211, 138, 0.12), rgba(114, 211, 138, 0.035) 55%, transparent);
+}
+
+.mr-image-prompt-row.is-selected::before {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 3px;
+    border-radius: 0 2px 2px 0;
+    background: var(--mr-accent);
+    content: "";
 }
 
 .mr-image-prompt-row-header {

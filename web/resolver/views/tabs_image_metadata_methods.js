@@ -7,6 +7,7 @@ import { normalizeCategoryValue } from "../utils/category_utils.js";
 import {
     extractWorkflowPrompts,
     getPromptRoleLabel,
+    sortPromptCandidates,
     updateWorkflowPromptValue,
 } from "../utils/prompt_utils.js";
 
@@ -202,8 +203,7 @@ export const imageMetadataMethods = {
                 <div class="mr-image-inspector">
                     <div class="mr-loaded-models-header mr-image-inspector-header">
                         <div class="mr-loaded-title-block">
-                            <h3 class="mr-loaded-models-title">Image Metadata</h3>
-                            <p class="mr-loaded-models-subtitle">Paste JSON or drop a supported file anywhere in this panel.</p>
+                            <h3 class="mr-loaded-models-title">Image Metadata ${this.getMetadataTooltipBadge('Paste JSON or drop a supported file anywhere in this panel.', 'Image metadata help')}</h3>
                         </div>
                         <div class="mr-image-inspector-header-actions">
                             <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm" data-image-inspector-action="clear">Clear</button>
@@ -225,6 +225,7 @@ export const imageMetadataMethods = {
             this.bindImageMetadataEvents();
         }
 
+        this.bindTooltips?.(this.contentElement);
         this.renderImageMetadataResult();
     },
 
@@ -725,6 +726,13 @@ export const imageMetadataMethods = {
         return `${text.slice(0, MAX_PROMPT_PREVIEW_LENGTH)}\n…`;
     },
 
+    getMetadataTooltipBadge(text, ariaLabel = 'More information') {
+        const tooltip = String(text ?? '').trim();
+        if (!tooltip) return '';
+        const label = String(ariaLabel ?? 'More information').trim() || 'More information';
+        return `<span class="mr-tooltip-badge" data-tooltip="${this.escapeHtml(tooltip)}" aria-label="${this.escapeHtml(label)}">?</span>`;
+    },
+
     getMetadataPromptTransferData(state = null) {
         const imageState = state || getImageInspectorState(this);
         const promptTransfer = this.getMetadataPromptTransferState(imageState);
@@ -739,12 +747,18 @@ export const imageMetadataMethods = {
         const usedTargetIds = new Set();
 
         const rows = METADATA_PROMPT_ROLES.map(role => {
-            const sourceOptions = sourcePrompts.filter(prompt => (
-                prompt.role === role || prompt.role === 'unknown'
-            ));
-            const targetOptions = targetPrompts.filter(prompt => (
-                prompt.role === role || prompt.role === 'unknown'
-            ));
+            const sourceOptions = sortPromptCandidates(
+                sourcePrompts.filter(prompt => (
+                    prompt.role === role || prompt.role === 'unknown'
+                )),
+                role,
+            );
+            const targetOptions = sortPromptCandidates(
+                targetPrompts.filter(prompt => (
+                    prompt.role === role || prompt.role === 'unknown'
+                )),
+                role,
+            );
             const requestedSource = sourceOptions.find(prompt => (
                 String(prompt.id) === String(sourceSelections[role] || '')
             ));
@@ -886,6 +900,13 @@ export const imageMetadataMethods = {
         const unclassifiedNote = data.unclassifiedSourceCount || data.unclassifiedTargetCount
             ? 'Some prompts have no explicit role in the graph and remain selectable in both slots.'
             : 'Positive and negative roles are detected from connected node input names whenever available.';
+        const promptHelpText = [
+            sourceSummary,
+            targetSummary,
+            unclassifiedNote,
+            'Select which prompt roles to replace, then choose the source and target text fields.',
+            'Select an imported prompt and a current text field.',
+        ].join('\n\n');
         const statusHtml = promptTransfer.error
             ? `<p class="mr-error-text">${this.escapeHtml(promptTransfer.error)}</p>`
             : '';
@@ -894,12 +915,10 @@ export const imageMetadataMethods = {
             <section class="mr-image-prompt-transfer">
                 <div class="mr-image-prompt-header">
                     <div>
-                        <h3 class="mr-loaded-models-title">Transfer prompts to current workflow</h3>
-                        <p class="mr-loaded-models-subtitle">${this.escapeHtml(sourceSummary)} ${this.escapeHtml(targetSummary)}</p>
+                        <h3 class="mr-loaded-models-title">Transfer prompts to current workflow ${this.getMetadataTooltipBadge(promptHelpText, 'Prompt transfer help')}</h3>
                     </div>
                 </div>
                 ${statusHtml}
-                <p class="mr-image-prompt-note">${this.escapeHtml(unclassifiedNote)} Select which prompt roles to replace, then choose the source and target text fields.</p>
                 <div class="mr-image-prompt-list">
                     ${roleRows || '<p class="mr-image-prompt-empty">No positive or negative prompt slots are available.</p>'}
                 </div>
@@ -911,7 +930,7 @@ export const imageMetadataMethods = {
                                 ? 'Select positive, negative, or both prompt roles.'
                             : hasApplicablePair
                                 ? `${data.applicableSelectedRoleCount} prompt role${data.applicableSelectedRoleCount === 1 ? '' : 's'} selected for replacement.`
-                                : 'Select an imported prompt and a current text field.'
+                                : 'Prompt source and target selection needed.'
                     )}</span>
                     <button type="button" class="mr-btn mr-btn-primary mr-btn-sm" data-image-inspector-action="apply-prompts" ${applyDisabled ? 'disabled' : ''} aria-busy="${promptTransfer.applying ? 'true' : 'false'}">
                         ${promptTransfer.applying
@@ -1828,12 +1847,22 @@ export const imageMetadataMethods = {
             active: 'Active only',
             inactive: 'Inactive only',
         };
+        const transferHelpText = [
+            'Select the target nodes.',
+            'Select a node row to include it in the transfer.',
+            sourceSummary,
+            sourceEntries.length
+                ? 'The current and imported models are shown in the same row. Choose a different imported model when a category contains multiple models.'
+                : 'Target nodes come from the current ComfyUI workflow. Import a source workflow with model metadata to enable Apply transfer.',
+            activityScope !== 'all'
+                ? `Imported LoRAs: ${activityLabels[activityScope]}; current target slots remain eligible.`
+                : '',
+        ].filter(Boolean).join('\n\n');
         return `
             <section class="mr-image-transfer">
                 <div class="mr-image-transfer-header">
                     <div>
-                        <h3 class="mr-loaded-models-title">Transfer models to current workflow <span class="mr-loaded-total">${selectedTargetCount}/${allTargetNodeKeys.size}</span></h3>
-                        <p class="mr-loaded-models-subtitle">Select the target nodes. ${this.escapeHtml(sourceSummary)}</p>
+                        <h3 class="mr-loaded-models-title">Transfer models to current workflow <span class="mr-loaded-total">${selectedTargetCount}/${allTargetNodeKeys.size}</span>${this.getMetadataTooltipBadge(transferHelpText, 'Model transfer help')}</h3>
                     </div>
                     <div class="mr-image-inspector-header-actions">
                         ${undoButton}
@@ -1863,7 +1892,6 @@ export const imageMetadataMethods = {
                         </label>
                     `).join('')}
                 </div>
-                <p class="mr-image-transfer-note">Select a node row to include it in the transfer. ${this.escapeHtml(sourceEntries.length ? 'The current and imported models are shown in the same row. Choose a different imported model when a category contains multiple models.' : 'Target nodes come from the current ComfyUI workflow. Import a source workflow with model metadata to enable Apply transfer.')}${activityScope !== 'all' ? ` ${this.escapeHtml(`Imported LoRAs: ${activityLabels[activityScope]}; current target slots remain eligible.`)}` : ''}</p>
                 <div class="mr-image-transfer-category-list">${targetRows}</div>
                 <div class="mr-image-transfer-actions">
                     <span class="mr-image-transfer-selection-count">${this.escapeHtml(selectionSourceText)} · ${selectedTargetCount} selected node${selectedTargetCount === 1 ? '' : 's'}</span>

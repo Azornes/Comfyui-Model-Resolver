@@ -18,6 +18,11 @@ const PROMPT_WIDGET_NAMES = new Set([
 ]);
 
 const PROMPT_NODE_TYPE_PATTERN = /(?:clip.*text|text.*encode|primitive.*string|string.*multiline|text.*multiline|multiline.*text|conditioning.*text|textinput)/i;
+const PROMPT_NODE_TYPE_SCORE_RULES = [
+    { pattern: /(?:clip.*text|text.*encode)/i, score: 500 },
+    { pattern: /conditioning.*text/i, score: 420 },
+    { pattern: /(?:primitive.*string|string.*multiline|text.*multiline|multiline.*text|textinput)/i, score: 320 },
+];
 const SCALAR_WIDGET_TYPES = new Set(['STRING', 'INT', 'FLOAT', 'BOOLEAN']);
 const PROMPT_INPUT_NAMES = new Set(['text', 'prompt', 'text_input', 'string']);
 const TEXT_WIDGET_TYPES = new Set(['STRING', 'TEXT']);
@@ -428,6 +433,52 @@ function isPromptTextDescriptor(descriptor = {}, { node = {}, hasGraphPromptRole
             isDedicatedTextNode(node)
             || hasGraphPromptRole
         ));
+}
+
+function getPromptLabelScore(value, role = '') {
+    const label = String(value ?? '').trim();
+    const token = normalizePromptName(label);
+    if (!token) return 0;
+
+    let score = 0;
+    if (role && getRoleFromLabel(label) === role) score += 180;
+    if (token.includes('prompt')) score += 110;
+    if (token === 'text' || token.includes('text')) score += 35;
+    return score;
+}
+
+function getPromptNodeTypeScore(value) {
+    const nodeType = String(value ?? '').trim();
+    return PROMPT_NODE_TYPE_SCORE_RULES.find(rule => rule.pattern.test(nodeType))?.score || 0;
+}
+
+export function getPromptCandidateScore(prompt = {}, role = '') {
+    const requestedRole = String(role || '').trim();
+    const roleCandidates = Array.isArray(prompt.role_candidates)
+        ? prompt.role_candidates
+        : [];
+    let score = 0;
+
+    if (requestedRole && prompt.role === requestedRole) score += 1000;
+    else if (requestedRole && roleCandidates.includes(requestedRole)) score += 650;
+
+    score += getPromptNodeTypeScore(prompt.node_type);
+    score += getPromptLabelScore(prompt.node_title, requestedRole);
+    score += getPromptLabelScore(prompt.widget_name, requestedRole);
+    return score;
+}
+
+export function sortPromptCandidates(prompts = [], role = '') {
+    if (!Array.isArray(prompts)) return [];
+
+    return prompts
+        .map((prompt, index) => ({
+            prompt,
+            index,
+            score: getPromptCandidateScore(prompt, role),
+        }))
+        .sort((left, right) => right.score - left.score || left.index - right.index)
+        .map(({ prompt }) => prompt);
 }
 
 function promptIdentity(entry, descriptor) {
