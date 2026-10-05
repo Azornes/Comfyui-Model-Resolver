@@ -373,6 +373,10 @@ test('metadata prompt panel renders separate positive and negative transfer rows
   assert.match(html, /data-image-prompt-target="negative"/);
   assert.match(html, /data-image-prompt-role-selection="positive"[^>]*checked/);
   assert.match(html, /data-image-prompt-role-selection="negative"[^>]*checked/);
+  assert.equal((html.match(/data-image-prompt-copy/g) || []).length, 4);
+  assert.match(html, /class="mr-btn mr-btn-secondary mr-btn-sm mr-image-prompt-copy"[^>]*data-image-prompt-copy/);
+  assert.match(html, /data-tooltip="["]*Positive\/negative role detected from workflow connections\./);
+  assert.doesNotMatch(html, /class="mr-image-prompt-meta"/);
   assert.match(html, /class="mr-tooltip-badge"[^>]*data-tooltip="[\s\S]*Select which prompt roles to replace/);
   assert.doesNotMatch(html, /class="mr-image-prompt-note"/);
   const positiveTargetIndex = html.indexOf('data-image-prompt-target="positive"');
@@ -384,6 +388,48 @@ test('metadata prompt panel renders separate positive and negative transfer rows
   );
   assert.match(html, /class="mr-image-prompt-side is-context-menu" data-context-scope="workflow_node" data-node-id="1"/);
   assert.match(html, /Replace prompts/);
+});
+
+test('metadata prompt copy uses the visible prompt preview text', async () => {
+  const context = createContext(null, createRoleWorkflow());
+  const copied = [];
+  const previousNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true,
+    value: {
+      clipboard: {
+        async writeText(value) {
+          copied.push(value);
+        },
+      },
+    },
+    writable: true,
+  });
+  const button = {
+    innerHTML: '<svg></svg> Copy',
+    isConnected: false,
+    classList: {
+      add() {},
+      remove() {},
+    },
+    closest(selector) {
+      assert.equal(selector, '.mr-image-prompt-side');
+      return {
+        querySelector(query) {
+          assert.equal(query, '.mr-image-prompt-text');
+          return { textContent: 'visible prompt preview' };
+        },
+      };
+    },
+  };
+
+  try {
+    assert.equal(await context.copyMetadataPromptText(button), true);
+    assert.deepEqual(copied, ['visible prompt preview']);
+  } finally {
+    if (previousNavigator) Object.defineProperty(globalThis, 'navigator', previousNavigator);
+    else delete globalThis.navigator;
+  }
 });
 
 test('metadata prompt selectors put the most likely prompt node first', () => {

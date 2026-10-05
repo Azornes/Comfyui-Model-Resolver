@@ -1,4 +1,4 @@
-import { safeStorage } from "../utils/html_utils.js";
+import { copyTextWithFeedback, safeStorage } from "../utils/html_utils.js";
 import {
     isExistingResolvedModel,
     toResolverContextModel,
@@ -17,6 +17,7 @@ const METADATA_TRANSFER_MODE_STORAGE_KEY = 'model_resolver_metadata_transfer_mod
 const METADATA_TRANSFER_ACTIVITY_SCOPE_STORAGE_KEY = 'model_resolver_metadata_transfer_activity_scope';
 const METADATA_PROMPT_ROLES = ['positive', 'negative'];
 const MAX_PROMPT_PREVIEW_LENGTH = 12_000;
+const COPY_ICON_HTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
 
 const MERGE_LORA_NODE_TYPES = new Set([
     'LoraLoaderV2',
@@ -261,6 +262,12 @@ export const imageMetadataMethods = {
             const nodeChip = event.target.closest?.('[data-image-transfer-node]');
             if (nodeChip) {
                 this.toggleMetadataTransferNode(nodeChip.dataset.imageTransferNode);
+                return;
+            }
+
+            const promptCopyButton = event.target.closest?.('[data-image-prompt-copy]');
+            if (promptCopyButton) {
+                void this.copyMetadataPromptText(promptCopyButton);
                 return;
             }
 
@@ -726,6 +733,30 @@ export const imageMetadataMethods = {
         return `${text.slice(0, MAX_PROMPT_PREVIEW_LENGTH)}\n…`;
     },
 
+    getMetadataPromptCopyButton(prompt = {}) {
+        if (!String(prompt.text || '').trim()) return '';
+        return `
+            <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm mr-image-prompt-copy" data-image-prompt-copy aria-label="Copy visible prompt text" data-tooltip="Copy visible prompt text">
+                ${COPY_ICON_HTML} Copy
+            </button>
+        `;
+    },
+
+    async copyMetadataPromptText(button) {
+        const textElement = button?.closest?.('.mr-image-prompt-side')
+            ?.querySelector?.('.mr-image-prompt-text');
+        const text = textElement?.textContent || '';
+        if (!text) return false;
+
+        await copyTextWithFeedback(String(text), button, {
+            successClass: 'is-copied',
+            successHtml: `${COPY_ICON_HTML} Copied`,
+            errorText: 'Failed',
+            duration: 1200,
+        });
+        return true;
+    },
+
     getMetadataTooltipBadge(text, ariaLabel = 'More information') {
         const tooltip = String(text ?? '').trim();
         if (!tooltip) return '';
@@ -862,7 +893,7 @@ export const imageMetadataMethods = {
                         ${sourceOptions}
                     </select>
                     <pre class="mr-image-prompt-text" title="${this.escapeHtml(String(row.source.text || ''))}">${this.escapeHtml(this.getMetadataPromptPreviewText(row.source) || '(empty)')}</pre>
-                    <span class="mr-image-prompt-meta">${this.escapeHtml(sourceRoleHint)}</span>
+                    ${this.getMetadataPromptCopyButton(row.source)}
                 `
                 : '<p class="mr-image-prompt-empty">No imported prompt available.</p>';
             const targetHtml = row.target
@@ -871,7 +902,7 @@ export const imageMetadataMethods = {
                         ${targetOptions}
                     </select>
                     <pre class="mr-image-prompt-text is-current" title="${this.escapeHtml(String(row.target.text || ''))}">${this.escapeHtml(this.getMetadataPromptPreviewText(row.target) || '(empty)')}</pre>
-                    <span class="mr-image-prompt-meta">${this.escapeHtml(targetRoleHint)}</span>
+                    ${this.getMetadataPromptCopyButton(row.target)}
                 `
                 : '<p class="mr-image-prompt-empty">No current text field available.</p>';
             return `
@@ -885,12 +916,18 @@ export const imageMetadataMethods = {
                     </div>
                     <div class="mr-image-prompt-grid">
                         <div class="mr-image-prompt-side${targetContextMenuAttrs ? ' is-context-menu' : ''}"${targetContextMenuAttrs}>
-                            <span class="mr-image-prompt-side-label">Current text field</span>
+                            <span class="mr-image-prompt-side-label">
+                                Current text field
+                                ${this.getMetadataTooltipBadge(targetRoleHint, `Current ${row.role} prompt role information`)}
+                            </span>
                             ${targetHtml}
                         </div>
                         <span class="mr-image-prompt-arrow" aria-hidden="true">→</span>
                         <div class="mr-image-prompt-side">
-                            <span class="mr-image-prompt-side-label">Imported</span>
+                            <span class="mr-image-prompt-side-label">
+                                Imported
+                                ${this.getMetadataTooltipBadge(sourceRoleHint, `Imported ${row.role} prompt role information`)}
+                            </span>
                             ${sourceHtml}
                         </div>
                     </div>

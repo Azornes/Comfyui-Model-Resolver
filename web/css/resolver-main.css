@@ -5080,9 +5080,12 @@ button.mr-info-link:disabled {
 }
 
 .mr-image-prompt-select {
+    box-sizing: border-box;
     width: 100%;
     min-width: 0;
     min-height: 26px;
+    margin: 0 !important;
+    align-self: stretch;
     padding: var(--mr-spacing-4) var(--mr-spacing-7);
     border: 1px solid var(--mr-border-strong, rgba(255, 255, 255, 0.24));
     border-radius: var(--mr-radius-md, var(--mr-radius-lg));
@@ -5105,10 +5108,13 @@ button.mr-info-link:disabled {
 .mr-image-prompt-text {
     box-sizing: border-box;
     width: 100%;
-    max-height: 150px;
+    height: auto;
+    min-height: 28px;
+    max-height: 70vh;
+    resize: vertical;
     margin: 0;
     overflow: auto;
-    padding: var(--mr-spacing-8);
+    padding: var(--mr-spacing-4) var(--mr-spacing-8);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: var(--mr-radius-md, var(--mr-radius-lg));
     background: rgba(0, 0, 0, 0.16);
@@ -5122,6 +5128,15 @@ button.mr-info-link:disabled {
 
 .mr-image-prompt-text.is-current {
     background: rgba(255, 255, 255, 0.045);
+}
+
+.mr-image-prompt-copy {
+    align-self: flex-start;
+}
+
+.mr-image-prompt-copy.is-copied {
+    background: rgba(114, 211, 138, 0.16);
+    border-color: rgba(114, 211, 138, 0.28);
 }
 
 .mr-image-prompt-arrow {
