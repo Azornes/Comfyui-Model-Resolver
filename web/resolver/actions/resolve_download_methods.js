@@ -2560,6 +2560,15 @@ export const resolveDownloadMethods = {
                 custom: nextCustom,
                 local_hash_matches: localHashMatches
             };
+            if (state.removedSearchResultKeys?.length) {
+                const restoredKeys = new Set(customResults.map(item => {
+                    const customRow = this.getCustomUrlResultTableRow(missing, item);
+                    if (!customRow) return '';
+                    const row = this.prepareSearchResultRow(missing, customRow);
+                    return `${row.sourceKey}:${row.downloadUrl || row.openUrl || `${row.model}:${row.filename}`}`;
+                }));
+                state.removedSearchResultKeys = state.removedSearchResultKeys.filter(key => !restoredKeys.has(key));
+            }
             state.lastAttemptSources = Array.from(new Set([
                 ...(Array.isArray(state.lastAttemptSources) ? state.lastAttemptSources : []),
                 'custom'
@@ -3178,9 +3187,28 @@ export const resolveDownloadMethods = {
         this.wireSearchHashMatchHighlights?.(container);
         bindEventOnce(container, 'click', (event) => {
             const btn = event.target?.closest?.(
-                '.search-download-btn, .search-open-page-btn, .search-show-details-btn'
+                '.search-download-btn, .search-open-page-btn, .search-show-details-btn, .search-toggle-remove-btn, .search-remove-result-btn'
             );
             if (!btn || !container.contains(btn)) return;
+
+            if (btn.matches('.search-toggle-remove-btn, .search-remove-result-btn')) {
+                const workflowKey = this.getWorkflowScopedQueueKey();
+                const state = this.getSearchStateForWorkflow(workflowKey, missing);
+                if (btn.classList.contains('search-toggle-remove-btn')) {
+                    state.showSearchResultRemoval = !state.showSearchResultRemoval;
+                } else {
+                    if (!state.showSearchResultRemoval) return;
+                    const key = btn.closest('tr')?.dataset.searchResultKey;
+                    if (!key) return;
+                    state.removedSearchResultKeys = Array.from(new Set([
+                        ...(state.removedSearchResultKeys || []), decodeURIComponent(key)
+                    ]));
+                }
+                this.persistSearchStateForWorkflow(workflowKey, missing, state);
+                const resultsContainer = btn.closest('.mr-search-results-table-wrap')?.parentElement;
+                this.displaySearchResults(missing, state, resultsContainer);
+                return;
+            }
 
             if (btn.classList.contains('search-download-btn')) {
                 const url = btn.dataset.url;
@@ -3587,6 +3615,11 @@ export const resolveDownloadMethods = {
 
         this.syncSearchElementAttributes(current, next);
         this.syncSearchElementAttributes(currentTable, nextTable);
+        const currentHead = currentTable.querySelector('thead');
+        const nextHead = nextTable.querySelector('thead');
+        if (currentHead && nextHead && currentHead.innerHTML !== nextHead.innerHTML) {
+            currentHead.innerHTML = nextHead.innerHTML;
+        }
         for (const nextRow of nextRows) {
             const key = nextRow.dataset.searchResultKey;
             let currentRow = currentByKey.get(key);
@@ -3742,10 +3775,12 @@ export const resolveDownloadMethods = {
 
         const rows = [];
         const rowKeys = new Set();
+        const removedRowKeys = new Set(state?.removedSearchResultKeys || []);
         const addRow = (row) => {
             if (!row) return;
             row = this.prepareSearchResultRow(missing, row);
             const rowKey = `${row.sourceKey}:${row.downloadUrl || row.openUrl || `${row.model}:${row.filename}`}`;
+            if (removedRowKeys.has(rowKey)) return;
             if (rowKeys.has(rowKey)) return;
             rowKeys.add(rowKey);
             rows.push({ ...row, __searchResultKey: rowKey });
@@ -3974,7 +4009,10 @@ export const resolveDownloadMethods = {
             ));
         });
 
-        const html = `${progressHtml}${statusHtml}${this.renderSearchResultsTable(rows)}`;
+        const tableHtml = rows.length
+            ? this.renderSearchResultsTable(rows, { removalEnabled: true, showRemoval: Boolean(state?.showSearchResultRemoval) })
+            : this.renderStatusMessage('No model results remain in this table.', 'info');
+        const html = `${progressHtml}${statusHtml}${tableHtml}`;
         this.patchSearchResultsContainer(container, html);
 
         this.wireSearchProgressCancelButtons?.(container, missing, state);

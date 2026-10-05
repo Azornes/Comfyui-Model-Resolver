@@ -3,7 +3,7 @@ import path from 'node:path';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-test('image URL adds every linked version and deduplicates repeated additions', async () => {
+test('image URL restores removed linked versions without duplicates or restoring unrelated results', async () => {
   const methodStart = resolveDownloadMethodsSource.indexOf('async addCustomUrlResult(');
   const methodEnd = resolveDownloadMethodsSource.indexOf('\n    },', methodStart);
   const addCustomUrlResult = eval(`(${resolveDownloadMethodsSource.slice(methodStart, methodEnd + 6).replace('async addCustomUrlResult', 'async function addCustomUrlResult')})`);
@@ -19,6 +19,10 @@ test('image URL adds every linked version and deduplicates repeated additions', 
     getFilenameFromPath: value => value,
     fetchJson: async () => ({ result: models[0], custom: models }),
     getSearchResultSignature: result => String(result.version_id),
+    getCustomUrlResultTableRow: (_missing, result) => ({
+      sourceKey: result.source, downloadUrl: `https://civitai.com/api/download/models/${result.version_id}`,
+    }),
+    prepareSearchResultRow: (_missing, row) => row,
     persistSearchStateForWorkflow() {},
     refreshSearchUiForMissing() {},
   };
@@ -28,6 +32,15 @@ test('image URL adds every linked version and deduplicates repeated additions', 
   input.value = 'https://civitai.com/images/144201545';
   await addCustomUrlResult.call(dialog, missing, input, null);
   assert.deepEqual(state.results.custom.map(result => result.version_id), [3352534, 3356151]);
+  state.removedSearchResultKeys = [
+    'civitai:https://civitai.com/api/download/models/3352534',
+    'civitai:https://civitai.com/api/download/models/3356151',
+    'civitai:https://civitai.com/api/download/models/999',
+  ];
+  input.value = 'https://civitai.com/images/144201545';
+  await addCustomUrlResult.call(dialog, missing, input, null);
+  assert.deepEqual(state.results.custom.map(result => result.version_id), [3352534, 3356151]);
+  assert.deepEqual(state.removedSearchResultKeys, ['civitai:https://civitai.com/api/download/models/999']);
   assert.equal(input.disabled, false);
 });
 import { Window } from 'happy-dom';
@@ -7938,6 +7951,66 @@ test('search result highlight toggles linked hash result row and badge', () => {
 
   assert.deepEqual(badgeToggles, [['mr-search-match-linked-highlight', true]]);
   assert.deepEqual(rowToggles, [['mr-search-result-hash-highlight', true]]);
+});
+
+test('result removal is opt-in, removes only its row, and survives rerendering', () => {
+  const window = new Window();
+  const container = window.document.createElement('div');
+  const render = eval(`(${extractMethod(searchPanelMethodsSource, 'renderSearchResultsTable')})`);
+  const display = eval(`(${extractMethod(resolveDownloadMethodsSource, 'displaySearchResults')})`);
+  const wire = new Function('bindEventOnce', `return (${extractMethod(resolveDownloadMethodsSource, 'wireSearchDownloadButtons')});`)(
+    (element, type, handler) => {
+      if (element.bound) return;
+      element.bound = true;
+      element.addEventListener(type, handler);
+    }
+  );
+  const state = { results: { custom: [
+    { sourceKey: 'civitai', model: 'First', downloadUrl: 'first' },
+    { sourceKey: 'civitai', model: 'Second', downloadUrl: 'second' },
+  ] } };
+  let saved;
+  const dialog = {
+    getWorkflowScopedQueueKey: () => 'workflow',
+    getSearchStateForWorkflow: () => state,
+    persistSearchStateForWorkflow(_key, _missing, value) { saved = structuredClone(value); },
+    displaySearchResults: display,
+    renderSearchResultsTable: render,
+    wireSearchDownloadButtons: wire,
+    shouldDisplayKnownDownloadSource: () => false,
+    renderSearchProgress: () => '',
+    hasActiveSearchProgress: () => false,
+    prepareSearchResultRow: (_missing, row) => row,
+    getCustomUrlResultTableRow: (_missing, result) => result,
+    patchSearchResultsContainer(element, html) { element.innerHTML = html; },
+    renderStatusMessage: message => `<p>${message}</p>`,
+    getSearchResultsTableLayout: () => ({ sourcePx: 100, matchPx: 60, sizePx: 60, actionsPx: 100, tableMinPx: 500 }),
+    renderSearchSourcePill: () => 'CivitAI',
+    escapeHtml: value => String(value),
+    getVersionedModelName: name => name,
+    renderVersionedModelNameHtml: name => name,
+    getContextMenuAttrs: () => '',
+  };
+  const missing = {};
+  display.call(dialog, missing, state, container);
+  assert.equal(container.querySelectorAll('.search-remove-result-btn').length, 0);
+  container.querySelector('.search-toggle-remove-btn').click();
+  assert.equal(container.querySelectorAll('.search-remove-result-btn').length, 2);
+  const actions = container.querySelector('.mr-search-result-actions');
+  assert.equal(actions.lastElementChild.classList.contains('search-remove-result-btn'), true);
+  actions.lastElementChild.click();
+  assert.equal(container.querySelectorAll('tbody tr').length, 1);
+  assert.match(container.textContent, /Second/);
+  assert.deepEqual(saved.removedSearchResultKeys, ['civitai:first']);
+  display.call(dialog, missing, structuredClone(saved), container);
+  assert.equal(container.querySelectorAll('tbody tr').length, 1);
+  container.querySelector('.search-toggle-remove-btn').click();
+  assert.equal(container.querySelectorAll('.search-remove-result-btn').length, 0);
+  container.querySelector('.search-toggle-remove-btn').click();
+  container.querySelector('.search-remove-result-btn').click();
+  assert.equal(container.querySelector('table'), null);
+  assert.match(container.textContent, /No model results remain/);
+  window.happyDOM.close();
 });
 
 test('search result table exposes linked local hash targets for exact matches', () => {

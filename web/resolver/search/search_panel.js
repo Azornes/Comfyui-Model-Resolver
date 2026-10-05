@@ -1965,15 +1965,26 @@ export const searchPanelMethods = {
         html += `</div>`;
 
         const downloadSourceRow = this.getDownloadSourceTableRow(missing, downloadSource);
+        const searchState = this.getSearchState(missing);
+        const resultKey = downloadSourceRow
+            ? `${downloadSourceRow.sourceKey}:${downloadSourceRow.downloadUrl || downloadSourceRow.openUrl || `${downloadSourceRow.model}:${downloadSourceRow.filename}`}`
+            : '';
+        const visibleRow = downloadSourceRow && !(searchState.removedSearchResultKeys || []).includes(resultKey);
         html += `<div id="search-results-${this.getMissingModelDomKey(missing)}" class="mr-search-results mr-is-visible">`;
-        html += this.renderSearchResultsTable(downloadSourceRow ? [downloadSourceRow] : []);
+        html += this.renderSearchResultsTable(visibleRow ? [downloadSourceRow] : [], {
+            removalEnabled: true, showRemoval: Boolean(searchState.showSearchResultRemoval)
+        });
         html += `</div>`;
         return html;
     },
 
-    renderSearchResultsTable(rows = []) {
+    renderSearchResultsTable(rows = [], { removalEnabled = false, showRemoval = false } = {}) {
         if (!rows.length) return '';
         const layout = this.getSearchResultsTableLayout(rows);
+        if (removalEnabled && showRemoval) {
+            layout.actionsPx += 36;
+            layout.tableMinPx += 36;
+        }
         const tableStyle = [
             `--mr-source-col:${layout.sourcePx}px`,
             `--mr-match-col:${layout.matchPx}px`,
@@ -1998,7 +2009,11 @@ export const searchPanelMethods = {
                             <th>Model</th>
                             <th>Match</th>
                             <th>Size</th>
-                            <th>Actions</th>
+                            <th><div class="mr-search-actions-header">Actions${removalEnabled ? `
+                                <button type="button" class="search-toggle-remove-btn mr-search-result-action-btn"
+                                    aria-label="Toggle result removal" aria-pressed="${showRemoval}"
+                                    data-tooltip="${showRemoval ? 'Hide remove buttons' : 'Show remove buttons'}">${getSvgIcon('pencil')}</button>
+                            ` : ''}</div></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -2086,6 +2101,10 @@ export const searchPanelMethods = {
             }
             if (!actions) {
                 actions = '<span class="mr-search-result-empty">-</span>';
+            }
+            if (removalEnabled && showRemoval) {
+                actions += `<button type="button" class="search-remove-result-btn mr-search-result-action-btn"
+                    data-tooltip="Remove from results" aria-label="Remove ${modelTitle} from results">${getSvgIcon('trash2')}</button>`;
             }
 
             const resultKey = row.__searchResultKey || `${row.sourceKey}:${row.downloadUrl || row.openUrl || `${row.model}:${row.filename}`}`;

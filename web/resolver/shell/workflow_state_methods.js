@@ -632,6 +632,7 @@ export const workflowStateMethods = {
     },
 
     isPersistableSearchState(state = {}) {
+        if (state?.removedSearchResultKeys?.length || state?.showSearchResultRemoval) return true;
         if ((state?.selectedSource || 'all') !== 'all') return true;
         const defaultBaseModel = this.getDefaultSearchBaseModel?.() || 'auto';
         if ((state?.selectedBaseModel || defaultBaseModel) !== defaultBaseModel) return true;
