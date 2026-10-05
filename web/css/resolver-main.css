@@ -4840,6 +4840,7 @@ button.mr-info-link:disabled {
 
 .mr-image-inspector-header {
     align-items: center;
+    border-bottom: 0;
 }
 
 .mr-image-inspector-header-actions {
@@ -4854,7 +4855,7 @@ button.mr-info-link:disabled {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--mr-spacing-8);
     padding: var(--mr-spacing-8) var(--mr-spacing-12) var(--mr-spacing-10);
-    border-bottom: 1px solid var(--mr-border);
+    border-bottom: 0;
 }
 
 .mr-image-inspector-paste {
@@ -4900,6 +4901,7 @@ button.mr-info-link:disabled {
 
 .mr-image-inspector-summary {
     padding-top: var(--mr-spacing-12);
+    border-top: 1px solid var(--mr-border);
 }
 
 .mr-image-inspector-info-table {
@@ -4931,6 +4933,11 @@ button.mr-info-link:disabled {
     padding-top: var(--mr-spacing-4);
 }
 
+.mr-image-inspector-models:has(.mr-loaded-models-header) {
+    padding-top: var(--mr-spacing-12);
+    border-top: 1px solid var(--mr-border);
+}
+
 .mr-image-inspector-loading {
     display: flex;
     align-items: center;
@@ -4954,15 +4961,17 @@ button.mr-info-link:disabled {
 
 .mr-image-transfer {
     margin: var(--mr-spacing-12) 0 var(--mr-spacing-16);
-    padding: 0;
+    padding: var(--mr-spacing-12) 0 0;
     border: 0;
+    border-top: 1px solid var(--mr-border);
     border-radius: 0;
     background: transparent;
 }
 
 .mr-image-prompt-transfer {
     margin: var(--mr-spacing-12) 0 var(--mr-spacing-16);
-    padding: 0;
+    padding: var(--mr-spacing-12) 0 0;
+    border-top: 1px solid var(--mr-border);
 }
 
 .mr-image-prompt-header,
@@ -5205,7 +5214,7 @@ button.mr-info-link:disabled {
 .mr-image-prompt-actions {
     margin-top: var(--mr-spacing-10);
     padding-top: var(--mr-spacing-10);
-    border-top: 1px solid var(--mr-border);
+    border-top: 0;
 }
 
 .mr-image-transfer-header,
@@ -5612,7 +5621,7 @@ button.mr-info-link:disabled {
 .mr-image-transfer-actions {
     margin-top: var(--mr-spacing-12);
     padding-top: var(--mr-spacing-10);
-    border-top: 1px solid var(--mr-border);
+    border-top: 0;
 }
 
 .mr-image-transfer-action-spinner {
