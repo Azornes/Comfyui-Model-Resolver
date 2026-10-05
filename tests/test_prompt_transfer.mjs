@@ -73,6 +73,28 @@ function createContext(sourceWorkflow, currentWorkflow) {
   };
 }
 
+test('live prompt preview detects positive and negative text changes without changing imported metadata', () => {
+  const source = createRoleWorkflow('imported positive', 'imported negative');
+  const current = createRoleWorkflow('current positive', 'current negative');
+  const dialog = createContext(source, current);
+  let refreshes = 0;
+  dialog.renderMetadataPromptTransferPanelInPlace = () => {
+    refreshes += 1;
+    dialog.renderMetadataPromptTransferPanel(dialog.imageInspectorState);
+    return true;
+  };
+  dialog.renderMetadataPromptTransferPanel(dialog.imageInspectorState);
+  assert.equal(dialog.refreshMetadataPromptPreview(current), false);
+  current.nodes[0].widgets_values[0] = 'edited positive';
+  assert.equal(dialog.refreshMetadataPromptPreview(current), true);
+  assert.match(dialog.renderMetadataPromptTransferPanel(dialog.imageInspectorState), /edited positive/);
+  current.nodes[1].widgets_values[0] = 'edited negative';
+  assert.equal(dialog.refreshMetadataPromptPreview(current), true);
+  assert.equal(dialog.refreshMetadataPromptPreview(current), false);
+  assert.equal(refreshes, 2);
+  assert.equal(source.nodes[0].widgets_values[0], 'imported positive');
+});
+
 test('workflow prompt extraction distinguishes positive and negative CLIP text nodes', () => {
   const prompts = extractWorkflowPrompts(createRoleWorkflow());
 

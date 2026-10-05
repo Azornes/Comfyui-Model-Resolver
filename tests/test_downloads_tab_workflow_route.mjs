@@ -3002,6 +3002,36 @@ test('Missing Models filter toggles persist state and rerender once per change',
   }
 });
 
+test('metadata refresh updates prompts even when the model workflow signature is unchanged', async () => {
+  const refresh = eval(`(${extractMethod(workflowStateMethodsSource, 'refreshForActiveWorkflowChange')})`);
+  const workflow = { nodes: [{ id: 1, type: 'CLIPTextEncode', widgets_values: ['edited prompt'] }] };
+  let promptRefreshes = 0;
+  const dialog = {
+    _workflowRefreshGeneration: 1,
+    activeWorkflowRouteKey: 'workflow-a',
+    activeWorkflowSignature: 'same-model-signature',
+    activeTab: 'metadata',
+    isVisible: () => true,
+    getActiveWorkflowRouteKey: () => 'workflow-a',
+    getCurrentWorkflow: () => workflow,
+    getWorkflowSignature: () => 'same-model-signature',
+    getMissingWorkflowSignature: () => 'same-model-signature',
+    refreshMetadataPromptPreview(value) {
+      assert.equal(value, workflow);
+      promptRefreshes += 1;
+      return true;
+    },
+    openMetadataTransfer() { assert.fail('Prompt-only edits must not rescan models'); },
+    syncWorkflowScopedQueue() { assert.fail('Prompt-only edits must preserve model state'); },
+  };
+  await refresh.call(dialog, { reason: 'node-widget-change', generation: 1 });
+  assert.equal(promptRefreshes, 1);
+  assert.equal(dialog._workflowRefreshRetryTimer, undefined);
+  dialog._applyWorkflowRefreshSuppressionDepth = 1;
+  await refresh.call(dialog, { reason: 'node-widget-change', generation: 1 });
+  assert.equal(promptRefreshes, 1);
+});
+
 test('node widget changes request a content-preserving Missing Models refresh', async () => {
   const log = { debug() {} };
   const refreshForActiveWorkflowChange = eval(

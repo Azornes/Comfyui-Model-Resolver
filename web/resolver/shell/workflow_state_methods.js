@@ -872,6 +872,10 @@ export const workflowStateMethods = {
         const missingSignatureChanged = missingSignature
             && missingSignature !== this.activeMissingWorkflowSignature;
         const graphStillLooksOld = routeChanged && previousSignature && signature === previousSignature;
+        if (this.activeTab === 'metadata' && !routeChanged) {
+            const promptsChanged = this.refreshMetadataPromptPreview?.(workflow);
+            if (promptsChanged && !signatureChanged) return;
+        }
         const workflowChangeStillPending = (
             String(reason || '').startsWith('node-')
             && !routeChanged

@@ -955,6 +955,15 @@ export class ModelResolver {
         const focusHandler = () => {
             window.__ModelResolverWorkflowChangeOwner?.handleActiveWorkflowRouteChange('window-focus');
         };
+        const promptInputHandler = (event) => {
+            const dialog = window.__ModelResolverWorkflowChangeOwner?.dialog;
+            const target = event.target instanceof Element ? event.target : null;
+            if (!dialog?.isVisible() || dialog.activeTab !== 'metadata') return;
+            if (target?.closest('#model-resolver-modal, .model-resolver-backdrop')) return;
+            if (!target?.matches('textarea, input[type="text"], [contenteditable="true"]')) return;
+            dialog.scheduleActiveWorkflowRefresh('node-widget-change');
+        };
+        document.addEventListener('input', promptInputHandler);
         const visibilityHandler = () => {
             if (document.visibilityState === 'visible') {
                 window.__ModelResolverWorkflowChangeOwner?.handleActiveWorkflowRouteChange('visibility-change');
@@ -970,6 +979,7 @@ export class ModelResolver {
         document.addEventListener('visibilitychange', visibilityHandler);
 
         window.__ModelResolverWorkflowChangeHandlers = [
+            { target: document, event: 'input', handler: promptInputHandler },
             { target: window, event: 'hashchange', handler: routeHandler },
             { target: window, event: 'popstate', handler: routeHandler },
             { target: window, event: 'model-resolver-locationchange', handler: routeHandler },

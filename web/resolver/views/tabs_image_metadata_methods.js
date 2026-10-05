@@ -851,6 +851,7 @@ export const imageMetadataMethods = {
         const imageState = state || getImageInspectorState(this);
         const promptTransfer = this.getMetadataPromptTransferState(imageState);
         const data = this.getMetadataPromptTransferData(imageState);
+        this._metadataPromptPreviewSignature = JSON.stringify(data.targetPrompts);
         const sourceSummary = data.sourcePrompts.length
             ? `${data.sourcePrompts.length} editable prompt${data.sourcePrompts.length === 1 ? '' : 's'} found in the imported workflow.`
             : imageState.loading
@@ -975,6 +976,12 @@ export const imageMetadataMethods = {
                 </div>
             </section>
         `;
+    },
+
+    refreshMetadataPromptPreview(workflow) {
+        const signature = JSON.stringify(extractWorkflowPrompts(workflow || {}).filter(prompt => !prompt.linked));
+        if (signature === this._metadataPromptPreviewSignature) return false;
+        return this.renderMetadataPromptTransferPanelInPlace({ fallback: false });
     },
 
     renderMetadataPromptTransferPanelInPlace({ fallback = true } = {}) {
