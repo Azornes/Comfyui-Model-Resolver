@@ -2523,22 +2523,28 @@ export const resolveDownloadMethods = {
                 silent: true
             }, 'Add custom URL');
 
-            const result = data?.result || (Array.isArray(data?.custom) ? data.custom[0] : null);
-            if (!result || typeof result !== 'object') {
+            const results = (Array.isArray(data?.custom) ? data.custom : [data?.result])
+                .filter(result => result && typeof result === 'object');
+            if (!results.length) {
                 throw new Error('The URL did not resolve to a downloadable model.');
             }
 
             const searchedAt = new Date().toISOString();
-            const customResult = this.withSearchResultTimestamp?.(result, result.searched_at || searchedAt) || result;
+            const customResults = results.map(result => (
+                this.withSearchResultTimestamp?.(result, result.searched_at || searchedAt) || result
+            ));
+            const customResult = customResults[0];
             const currentResults = state.results || this.createEmptySearchState().results;
             const existingCustom = Array.isArray(currentResults.custom) ? currentResults.custom : [];
-            const nextSignature = this.getSearchResultSignature(customResult) || (customResult.provided_url || url);
-            const nextCustom = [
-                ...existingCustom.filter(existing => (
-                    (this.getSearchResultSignature(existing) || existing.provided_url || '') !== nextSignature
-                )),
-                customResult
-            ];
+            const nextCustom = [...existingCustom];
+            for (const item of customResults) {
+                const signature = this.getSearchResultSignature(item) || item.version_url || item.download_url || url;
+                const existingIndex = nextCustom.findIndex(existing => (
+                    (this.getSearchResultSignature(existing) || existing.version_url || existing.download_url || '') === signature
+                ));
+                if (existingIndex >= 0) nextCustom[existingIndex] = item;
+                else nextCustom.push(item);
+            }
             const localHashMatches = this.mergeLocalMatches
                 ? this.mergeLocalMatches(
                     Array.isArray(currentResults.local_hash_matches) ? currentResults.local_hash_matches : [],
@@ -2576,7 +2582,13 @@ export const resolveDownloadMethods = {
             this.refreshSearchUiForMissing(missing, state, { workflowKey });
             this.applySearchResultSuggestion?.(missing);
             if (inputEl) inputEl.value = '';
-            this.showNotification?.('Link added.', 'success');
+            const unresolvedCount = data?.unresolved_version_ids?.length || 0;
+            this.showNotification?.(
+                unresolvedCount
+                    ? `Added ${customResults.length} models. ${unresolvedCount} linked versions could not be resolved.`
+                    : customResults.length > 1 ? `Added ${customResults.length} models.` : 'Link added.',
+                unresolvedCount ? 'warning' : 'success'
+            );
         } catch (error) {
             console.error('Model Resolver: custom URL add failed:', error);
             this.showNotification?.(error.message || 'Failed to add link.', 'error');

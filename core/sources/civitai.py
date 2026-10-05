@@ -8,7 +8,7 @@ import json
 import os
 import re
 from typing import Any, Callable, Dict, List, Optional
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlparse
 
 import requests
 
@@ -2567,6 +2567,94 @@ def build_civitai_custom_result(
         ),
         model_description=details.get("description") or "",
     )
+
+
+def parse_civitai_image_url(url: str) -> Optional[int]:
+    """Recognize image pages without accepting lookalike provider hosts."""
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or parsed.hostname not in {
+        "civitai.com", "www.civitai.com", "civitai.red", "www.civitai.red",
+    }:
+        return None
+    match = re.fullmatch(r"/images/([1-9]\d*)/?", parsed.path)
+    return int(match.group(1)) if match else None
+
+
+def _extract_civitai_image_page_version_ids(html_text: str, image_id: int) -> List[int]:
+    """Read only generation resources belonging to the requested image."""
+    match = re.search(
+        r'<script\b(?=[^>]*\bid=["\']__NEXT_DATA__["\'])[^>]*>(.*?)</script>',
+        html_text, re.DOTALL | re.IGNORECASE,
+    )
+    if not match:
+        return []
+    try:
+        data = as_dict(json.loads(match.group(1)))
+    except (TypeError, ValueError):
+        return []
+    page = as_dict(as_dict(data.get("props")).get("pageProps"))
+    state = as_dict(page.get("trpcState"))
+    state = as_dict(state.get("json")) or state
+    versions = []
+    for query in as_list(state.get("queries")):
+        query = as_dict(query)
+        key = as_list(query.get("queryKey"))
+        if len(key) != 2 or key[0] != ["image", "getGenerationData"]:
+            continue
+        requested_id = as_dict(as_dict(key[1]).get("input")).get("id")
+        if str(requested_id) != str(image_id):
+            continue
+        generation = as_dict(as_dict(query.get("state")).get("data"))
+        for resource in as_list(generation.get("resources")):
+            resource = as_dict(resource)
+            if str(resource.get("imageId", image_id)) != str(image_id):
+                continue
+            value = resource.get("modelVersionId") or resource.get("versionId")
+            if isinstance(value, bool):
+                continue
+            try:
+                version_id = int(value)
+            except (TypeError, ValueError):
+                continue
+            if version_id > 0 and version_id not in versions:
+                versions.append(version_id)
+    return versions
+
+
+def get_civitai_image_version_ids(image_id: int, api_key: Optional[str] = None) -> List[int]:
+    """Read the exact linked versions from the public image API."""
+    data = execute_provider_json_request(
+        "CivitAI image resources", f"{CIVITAI_API_URL}/images",
+        params={"imageId": image_id}, api_key=api_key, timeout=20,
+    )
+    for image in as_list(as_dict(data).get("items")):
+        if not isinstance(image, dict) or str(image.get("id")) != str(image_id):
+            continue
+        versions = []
+        for value in as_list(image.get("modelVersionIds")):
+            if isinstance(value, bool):
+                continue
+            try:
+                version_id = int(value)
+            except (ValueError, TypeError):
+                continue
+            if version_id > 0 and version_id not in versions:
+                versions.append(version_id)
+        if versions:
+            return versions
+        break
+    # Public image results can omit manually attached resources even though the
+    # image page includes them in its server-rendered generation data.
+    headers = {"User-Agent": DEFAULT_BROWSER_USER_AGENT, "Accept": "text/html"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    response = request_source_response(
+        f"https://civitai.com/images/{image_id}", headers=headers,
+        timeout=20, log_name="CivitAI image page",
+    )
+    if response is not None and response.status_code == 200:
+        return _extract_civitai_image_page_version_ids(response.text, image_id)
+    return []
 
 
 def resolve_civitai_version_custom_result(

@@ -8,6 +8,7 @@ from ..request_utils import (
     read_text_field,
 )
 from ..routes.context import RouteContext
+from ..sources.civitai import get_civitai_image_version_ids, parse_civitai_image_url
 from .model_utils import CustomUrlDependencies, ModelServiceDependencies
 
 
@@ -175,6 +176,8 @@ class CustomUrlService(ModelServiceDependencies):
         )
 
         result = None
+        results = []
+        unresolved_versions = []
         source = ""
         try:
             civitai_parsed = parse_civitai_url(normalized_url)
@@ -185,7 +188,31 @@ class CustomUrlService(ModelServiceDependencies):
         except Exception:
             civarchive_parsed = None
 
-        if civitai_parsed:
+        image_id = parse_civitai_image_url(normalized_url)
+        if image_id:
+            source = "civitai"
+            version_ids = await asyncio.to_thread(
+                get_civitai_image_version_ids, image_id, civitai_key or None,
+            )
+            for version_id in version_ids:
+                image_result = await asyncio.to_thread(
+                    resolve_civitai_version_custom_result, version_id, "", civitai_key or None,
+                )
+                if isinstance(image_result, SearchResult):
+                    results.append(image_result)
+                else:
+                    unresolved_versions.append(version_id)
+            if not results:
+                return web.json_response(
+                    {"error": (
+                        "No downloadable linked models could be resolved for this CivitAI image."
+                        if version_ids else
+                        "CivitAI did not provide any linked model versions for this image."
+                    )},
+                    status=400,
+                )
+            result = results[0]
+        elif civitai_parsed:
             source = "civitai"
             model_id = civitai_parsed.model_id
             version_id = civitai_parsed.version_id
@@ -297,7 +324,7 @@ class CustomUrlService(ModelServiceDependencies):
                 {
                     "error": (
                         "Unsupported or unresolved URL. Use a HuggingFace file URL, "
-                        "CivitAI model/download URL, or CivArchive model/hash URL."
+                        "CivitAI model/image/download URL, or CivArchive model/hash URL."
                     )
                 },
                 status=400,
@@ -310,15 +337,18 @@ class CustomUrlService(ModelServiceDependencies):
                 status=400,
             )
 
-        result = result.with_extra(
+        results = results or [result]
+        results = [item.with_extra(
             provided_url=normalized_url,
             url_source="custom",
-            searched_at=result.extra_value("searched_at")
+            searched_at=item.extra_value("searched_at")
             or _custom_result_timestamp(),
-            category=result.extra_value("category") or category,
-        )
+            category=item.extra_value("category") or ("" if image_id else category),
+        ) for item in results]
+        result = results[0]
         if expected_filename and not result.filename:
             result = result.with_updates(filename=expected_filename)
+            results[0] = result
 
         if not (result.download_url or result.url):
             return web.json_response(
@@ -327,16 +357,18 @@ class CustomUrlService(ModelServiceDependencies):
             )
 
         source = source or result.source or "custom"
-        local_hash_matches = _collect_custom_url_local_hash_matches(
-            result,
-            category,
-        )
+        local_hash_matches = []
+        for item in results:
+            local_hash_matches.extend(_collect_custom_url_local_hash_matches(
+                item, "" if image_id else category,
+            ))
         result_mapping = result.to_dict()
         response = {
             "success": True,
             "source": source,
             "result": result_mapping,
-            "custom": [result_mapping],
+            "custom": [item.to_dict() for item in results],
+            "unresolved_version_ids": unresolved_versions,
             "searched_sources": ["custom"],
             "local_hash_matches": [
                 match.to_dict() for match in local_hash_matches

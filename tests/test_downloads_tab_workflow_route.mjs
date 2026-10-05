@@ -2,6 +2,34 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+
+test('image URL adds every linked version and deduplicates repeated additions', async () => {
+  const methodStart = resolveDownloadMethodsSource.indexOf('async addCustomUrlResult(');
+  const methodEnd = resolveDownloadMethodsSource.indexOf('\n    },', methodStart);
+  const addCustomUrlResult = eval(`(${resolveDownloadMethodsSource.slice(methodStart, methodEnd + 6).replace('async addCustomUrlResult', 'async function addCustomUrlResult')})`);
+  const state = { results: { custom: [] } };
+  const models = [
+    { source: 'civitai', version_id: 3352534, filename: 'qwen.safetensors' },
+    { source: 'civitai', version_id: 3356151, filename: 'adapter.safetensors' },
+  ];
+  const dialog = {
+    getWorkflowScopedQueueKey: () => 'workflow',
+    getSearchStateForWorkflow: () => state,
+    getStoredTokens: () => ({}),
+    getFilenameFromPath: value => value,
+    fetchJson: async () => ({ result: models[0], custom: models }),
+    getSearchResultSignature: result => String(result.version_id),
+    persistSearchStateForWorkflow() {},
+    refreshSearchUiForMissing() {},
+  };
+  const missing = { original_path: 'missing.safetensors' };
+  const input = { value: 'https://civitai.com/images/144201545' };
+  await addCustomUrlResult.call(dialog, missing, input, null);
+  input.value = 'https://civitai.com/images/144201545';
+  await addCustomUrlResult.call(dialog, missing, input, null);
+  assert.deepEqual(state.results.custom.map(result => result.version_id), [3352534, 3356151]);
+  assert.equal(input.disabled, false);
+});
 import { Window } from 'happy-dom';
 import {
   html,

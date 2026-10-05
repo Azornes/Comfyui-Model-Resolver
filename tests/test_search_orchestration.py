@@ -192,6 +192,33 @@ class SearchOrchestrationTests(unittest.IsolatedAsyncioTestCase):
         # Verify response structure and status
         self.assertIsInstance(response, web.Response)
 
+    async def test_custom_url_image_keeps_all_versions_and_reports_partial_failure(self):
+        service = importlib.import_module("comfyui-model-resolver.core.services.custom_url_service")
+        first = typed_contracts.SearchResult(
+            source="civitai", model_id=2954443, version_id=3352534,
+            filename="qwen.safetensors", download_url="https://civitai.com/api/download/models/3352534",
+        )
+        second = typed_contracts.SearchResult(
+            source="civitai", model_id=2962344, version_id=3356151,
+            filename="adapter.safetensors", download_url="https://civitai.com/api/download/models/3356151",
+        )
+        request = MagicMock()
+        request.json = AsyncMock(return_value={
+            "url": "https://civitai.com/images/144201545",
+            "filename": "unrelated.safetensors", "category": "checkpoints",
+        })
+        with patch.object(service, "get_civitai_image_version_ids", return_value=[3352534, 3356151, 99]), \
+             patch.object(civitai_sources, "resolve_civitai_version_custom_result", side_effect=[first, second, None]) as resolver:
+            self.ext.routes_setup = False
+            self.ext.setup_routes()
+            response = await custom_url_handler(request)
+        body = json.loads(response.text)
+        self.assertEqual(response.status, 200, body)
+        self.assertEqual([item["version_id"] for item in body["custom"]], [3352534, 3356151])
+        self.assertEqual([item["filename"] for item in body["custom"]], ["qwen.safetensors", "adapter.safetensors"])
+        self.assertEqual(body["unresolved_version_ids"], [99])
+        self.assertEqual(resolver.call_args_list[0].args[1], "")
+
     async def test_custom_url_route_resolves_civitai_model_link(self):
         self.mock_civitai_details.return_value = {
             "source": "civitai",
