@@ -726,6 +726,54 @@
         "Trellis.2",
         "trellis 2"
       ]
+    },
+    {
+      "name": "Qwen 2.1",
+      "aliases": [
+        "Qwen 2.1",
+        "qwen 2 1"
+      ]
+    },
+    {
+      "name": "Ming Image Design 0.1",
+      "aliases": [
+        "Ming Image Design 0.1",
+        "ming",
+        "ming image design 0 1"
+      ]
+    },
+    {
+      "name": "Ming Image Design Layer 0.1",
+      "aliases": [
+        "Ming Image Design Layer 0.1",
+        "ming image design layer 0 1"
+      ]
+    },
+    {
+      "name": "YuE2",
+      "aliases": [
+        "yue2"
+      ]
+    },
+    {
+      "name": "Flux.3",
+      "aliases": [
+        "Flux.3",
+        "flux 3"
+      ]
+    },
+    {
+      "name": "Ideogram 4.5",
+      "aliases": [
+        "Ideogram 4.5",
+        "ideogram 4 5"
+      ]
+    },
+    {
+      "name": "Sonilo",
+      "aliases": [
+        "sonilo"
+      ]
     }
   ]
 }

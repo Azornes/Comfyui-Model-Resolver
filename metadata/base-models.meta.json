@@ -1,7 +1,11 @@
 {
-  "updated_at": "2026-09-16T16:53:13+00:00",
-  "last_checked_at": "2026-09-16T16:53:13+00:00",
-  "local_count": 107,
-  "new_models_added": 0,
-  "new_models_added_list": []
+  "updated_at": "2026-10-05T14:11:54+00:00",
+  "last_checked_at": "2026-10-05T14:11:54+00:00",
+  "local_count": 114,
+  "new_models_added": 3,
+  "new_models_added_list": [
+    "Flux.3",
+    "Ideogram 4.5",
+    "Sonilo"
+  ]
 }
