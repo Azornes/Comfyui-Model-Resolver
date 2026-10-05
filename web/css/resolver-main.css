@@ -4974,6 +4974,27 @@ button.mr-info-link:disabled {
     border-top: 1px solid var(--mr-border);
 }
 
+.mr-image-inspector-summary,
+.mr-image-inspector-models:has(.mr-loaded-models-header),
+.mr-image-transfer,
+.mr-image-prompt-transfer {
+    position: relative;
+    border-top-color: rgba(255, 255, 255, 0.12);
+}
+
+.mr-image-inspector-summary::before,
+.mr-image-inspector-models:has(.mr-loaded-models-header)::before,
+.mr-image-transfer::before,
+.mr-image-prompt-transfer::before {
+    content: "";
+    position: absolute;
+    top: -2px;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(114, 211, 138, 0.28), var(--mr-border) 34%, transparent 100%);
+}
+
 .mr-image-prompt-header,
 .mr-image-prompt-actions {
     display: flex;
