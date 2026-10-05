@@ -206,9 +206,6 @@ export const imageMetadataMethods = {
                         <div class="mr-loaded-title-block">
                             <h3 class="mr-loaded-models-title">Image Metadata ${this.getMetadataTooltipBadge('Paste JSON or drop a supported file anywhere in this panel.', 'Image metadata help')}</h3>
                         </div>
-                        <div class="mr-image-inspector-header-actions">
-                            <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm" data-image-inspector-action="clear">Clear</button>
-                        </div>
                     </div>
                     <div class="mr-image-inspector-tools">
                         <input type="file" accept="image/png,image/jpeg,image/webp,application/json,.json" hidden data-image-inspector-input="file">
@@ -217,6 +214,7 @@ export const imageMetadataMethods = {
                             <div class="mr-image-inspector-actions">
                                 <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm" data-image-inspector-action="analyze-paste" disabled>Analyze JSON</button>
                                 <button type="button" class="mr-btn mr-btn-primary mr-btn-sm" data-image-inspector-action="choose-file">Load file</button>
+                                <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm mr-image-inspector-clear" data-image-inspector-action="clear" data-tooltip="Clear imported metadata and refresh model information for the current workflow. Pasted JSON and the current workflow remain unchanged.">Clear</button>
                             </div>
                         </div>
                     </div>
@@ -1899,11 +1897,10 @@ export const imageMetadataMethods = {
             <section class="mr-image-transfer">
                 <div class="mr-image-transfer-header">
                     <div>
-                        <h3 class="mr-loaded-models-title">Transfer models to current workflow <span class="mr-loaded-total">${selectedTargetCount}/${allTargetNodeKeys.size}</span>${this.getMetadataTooltipBadge(transferHelpText, 'Model transfer help')}</h3>
+                        <h3 class="mr-loaded-models-title">Transfer models to current workflow ${this.getMetadataTooltipBadge(transferHelpText, 'Model transfer help')}</h3>
                     </div>
                     <div class="mr-image-inspector-header-actions">
                         ${undoButton}
-                        <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm" data-image-inspector-action="clear-transfer-targets">Clear selection</button>
                     </div>
                 </div>
                 <div class="mr-image-transfer-mode" role="group" aria-label="Transfer mode">
@@ -1928,6 +1925,10 @@ export const imageMetadataMethods = {
                             <span>${label}</span>
                         </label>
                     `).join('')}
+                    <div class="mr-image-transfer-selection-tools">
+                        <span class="mr-loaded-total">${selectedTargetCount}/${allTargetNodeKeys.size}</span>
+                        <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm mr-image-transfer-clear-selection" data-image-inspector-action="clear-transfer-targets">Clear selection</button>
+                    </div>
                 </div>
                 <div class="mr-image-transfer-category-list">${targetRows}</div>
                 <div class="mr-image-transfer-actions">

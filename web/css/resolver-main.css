@@ -4871,6 +4871,10 @@ button.mr-info-link:disabled {
     gap: var(--mr-spacing-8);
 }
 
+#model-resolver-modal .mr-image-inspector-actions .mr-image-inspector-clear {
+    margin-left: auto;
+}
+
 .mr-image-inspector-textarea {
     width: 100%;
     min-height: 76px;
@@ -5023,6 +5027,14 @@ button.mr-info-link:disabled {
     content: "";
 }
 
+.mr-image-prompt-row.is-negative.is-selected {
+    background: linear-gradient(90deg, rgba(240, 180, 100, 0.12), rgba(240, 180, 100, 0.035) 55%, transparent);
+}
+
+.mr-image-prompt-row.is-negative.is-selected::before {
+    background: rgb(240, 180, 100);
+}
+
 .mr-image-prompt-row-header {
     display: flex;
     align-items: center;
@@ -5050,6 +5062,14 @@ button.mr-info-link:disabled {
 .mr-image-prompt-role-option input:focus-visible {
     outline: 2px solid var(--mr-accent);
     outline-offset: 2px;
+}
+
+.mr-image-prompt-row.is-negative .mr-image-prompt-role-option input {
+    accent-color: rgb(240, 180, 100);
+}
+
+.mr-image-prompt-row.is-negative .mr-image-prompt-role-option input:focus-visible {
+    outline-color: rgb(240, 180, 100);
 }
 
 .mr-image-prompt-role-option input:disabled {
@@ -5234,6 +5254,7 @@ button.mr-info-link:disabled {
 }
 
 .mr-image-transfer-mode-option {
+    align-items: center;
     padding: var(--mr-spacing-10);
     border: 1px solid var(--mr-border);
     border-radius: var(--mr-radius-lg);
@@ -5279,6 +5300,22 @@ button.mr-info-link:disabled {
     color: var(--mr-text-muted);
     font-size: var(--mr-font-xs);
     font-weight: 650;
+}
+
+.mr-image-transfer-selection-tools {
+    display: flex;
+    align-items: center;
+    gap: var(--mr-spacing-8);
+    margin-left: auto;
+}
+
+#model-resolver-modal .mr-image-transfer-activity .mr-image-transfer-clear-selection {
+    margin: 0;
+    padding: 2px 8px;
+    height: 24px;
+    min-height: 24px;
+    font-size: var(--mr-font-xs);
+    line-height: 1;
 }
 
 .mr-image-transfer-activity-option {
@@ -5354,6 +5391,11 @@ button.mr-info-link:disabled {
     flex: 0 0 auto;
     margin-top: 2px;
     accent-color: var(--mr-accent);
+}
+
+.mr-image-transfer-mode-option input {
+    margin-top: 0;
+    margin-bottom: 0;
 }
 
 .mr-image-transfer-node-list {
