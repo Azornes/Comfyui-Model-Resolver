@@ -2865,34 +2865,20 @@ export const optionsMethods = {
             }, {});
         };
 
-        const renderBaseModelMappingOptions = (currentValue = '', currentRow = null) => {
+        const getAvailableBaseModelMappingChoices = (currentValue = '', currentRow = null) => {
             const usedValues = new Set(
                 getBaseModelMappingRows()
                     .filter(row => row !== currentRow)
                     .map(row => row.querySelector('.mr-options-mapping-base')?.value?.trim() || '')
                     .filter(Boolean)
             );
-            const options = [
-                `<option value="">Select Base Model</option>`
-            ];
             const choices = getBaseModelMappingChoices();
-            if (currentValue && !choices.includes(currentValue)) {
-                options.push(`<option value="${this.escapeHtml(currentValue)}" selected>${this.escapeHtml(currentValue)}</option>`);
-            }
-            choices.forEach((name) => {
-                if (usedValues.has(name) && name !== currentValue) return;
-                options.push(`<option value="${this.escapeHtml(name)}" ${name === currentValue ? 'selected' : ''}>${this.escapeHtml(name)}</option>`);
-            });
-            return options.join('');
+            return choices.filter(name => !usedValues.has(name) || name === currentValue);
         };
 
         const refreshBaseModelMappingOptions = () => {
             getBaseModelMappingRows().forEach((row) => {
-                const select = row.querySelector('.mr-options-mapping-base');
-                if (!select) return;
-                const currentValue = select.value;
-                select.innerHTML = renderBaseModelMappingOptions(currentValue, row);
-                select.value = currentValue;
+                row.refreshMappingChoices?.();
             });
         };
 
@@ -2903,14 +2889,16 @@ export const optionsMethods = {
             const row = document.createElement('div');
             row.className = 'mr-options-mapping-row';
             row.innerHTML = `
-                <select class="mr-options-input mr-options-mapping-base">
-                    ${renderBaseModelMappingOptions(baseModel, row)}
-                </select>
+                <div class="mr-download-target-wrap">
+                    <input class="mr-options-input mr-options-mapping-base" type="text" autocomplete="off" placeholder="Search Base Models…" value="${this.escapeHtml(baseModel)}">
+                    <div class="mr-download-target-list"></div>
+                </div>
                 <input class="mr-options-input mr-options-mapping-path" type="text" placeholder="Custom path (e.g., SDXL/Pony)" value="${this.escapeHtml(pathValue)}">
                 <button type="button" class="mr-options-mapping-remove" aria-label="Remove mapping" data-tooltip="Remove mapping">&times;</button>
             `;
 
             const baseSelect = row.querySelector('.mr-options-mapping-base');
+            const baseList = row.querySelector('.mr-download-target-list');
             const pathInput = row.querySelector('.mr-options-mapping-path');
             const removeBtn = row.querySelector('.mr-options-mapping-remove');
             const markChanged = () => {
@@ -2918,6 +2906,54 @@ export const optionsMethods = {
                 refreshBaseModelMappingOptions();
                 syncAllTemplateControls();
             };
+
+            let filterText = '';
+            const renderChoices = (filter = '', show = true) => {
+                filterText = filter;
+                const search = filter.trim().toLowerCase();
+                const choices = getAvailableBaseModelMappingChoices(baseSelect.value.trim(), row)
+                    .filter(name => name.toLowerCase().includes(search));
+                baseList.innerHTML = choices.map(name => (
+                    `<div class="mr-download-target-option" data-value="${encodeURIComponent(name)}">${this.escapeHtml(name)}</div>`
+                )).join('');
+                baseList.querySelectorAll('.mr-download-target-option').forEach(option => {
+                    option.addEventListener('mousedown', event => {
+                        event.preventDefault();
+                        baseSelect.value = decodeURIComponent(option.dataset.value);
+                        this.hideDropdownList(baseList);
+                        markChanged();
+                    });
+                });
+                if (show && choices.length) this.showDropdownList(baseList, baseSelect);
+                else if (!choices.length) this.hideDropdownList(baseList);
+            };
+            row.refreshMappingChoices = () => {
+                if (baseList.style.display !== 'none') renderChoices(filterText, false);
+            };
+            this.enableWheelScrollChaining(baseList);
+            this.bindDropdownOutsideDismiss(baseList, [baseSelect], () => this.hideDropdownList(baseList));
+            baseSelect.addEventListener('focus', () => renderChoices());
+            baseSelect.addEventListener('click', () => renderChoices());
+            baseSelect.addEventListener('input', () => {
+                markChanged();
+                renderChoices(baseSelect.value);
+            });
+            baseSelect.addEventListener('keydown', event => {
+                if (event.key === 'Escape') this.hideDropdownList(baseList);
+                if (event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    renderChoices(baseSelect.value);
+                }
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    const option = baseList.querySelector('.mr-download-target-option');
+                    if (option && baseList.style.display !== 'none') {
+                        baseSelect.value = decodeURIComponent(option.dataset.value);
+                        markChanged();
+                    }
+                    this.hideDropdownList(baseList);
+                }
+            });
 
             baseSelect?.addEventListener('change', markChanged);
             pathInput?.addEventListener('input', markChanged);
@@ -2928,6 +2964,7 @@ export const optionsMethods = {
                 }
             });
             removeBtn?.addEventListener('click', () => {
+                baseList._mlTreePicker?.cleanup();
                 row.remove();
                 if (!getBaseModelMappingRows().length) {
                     addBaseModelMappingRow('', '');
@@ -2944,6 +2981,7 @@ export const optionsMethods = {
 
         const renderBaseModelMappingRows = (mappings = {}) => {
             if (!baseModelMappingsContainer) return;
+            getBaseModelMappingRows().forEach(row => row.querySelector('.mr-download-target-list')?._mlTreePicker?.cleanup());
             baseModelMappingsContainer.innerHTML = '';
             const entries = Object.entries(mappings || {});
             if (!entries.length) {
