@@ -36,6 +36,7 @@ SETTINGS_SCHEMA: List[Dict[str, Any]] = [
     { "serverKey": "download_backend", "localKey": "ModelResolver.downloadBackend", "type": "backend", "default": "python" },
     { "serverKey": "aria2c_path", "localKey": "ModelResolver.aria2cPath", "type": "string", "default": "" },
     { "serverKey": "aria2_auto_stop_daemon", "localKey": "ModelResolver.aria2AutoStopDaemon", "type": "boolean", "default": True },
+    { "serverKey": "download_sound_enabled", "localKey": "ModelResolver.downloadSoundEnabled", "type": "boolean", "default": True },
     { "serverKey": "download_path_mode", "localKey": "ModelResolver.downloadPathMode", "type": "pathMode", "default": "suggested" },
     { "serverKey": "download_path_templates", "localKey": "ModelResolver.downloadPathTemplates", "type": "json", "default": {} },
     { "serverKey": "base_model_path_mappings", "localKey": "ModelResolver.baseModelPathMappings", "type": "json", "default": {} },
@@ -195,6 +196,9 @@ def normalize_settings(settings: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
     data["aria2c_path"] = str(data.get("aria2c_path") or "").strip()
     data["aria2_auto_stop_daemon"] = bool_setting(
         data.get("aria2_auto_stop_daemon"), True
+    )
+    data["download_sound_enabled"] = bool_setting(
+        data.get("download_sound_enabled"), True
     )
     data["auto_refresh_comfy_models_after_apply"] = bool_setting(
         data.get("auto_refresh_comfy_models_after_apply"), True

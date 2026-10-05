@@ -78,10 +78,14 @@ def get_all_progress(state: DownloadStateDependencies) -> Dict[str, Dict[str, An
 
 def cancel_download(download_id: str, state: DownloadStateDependencies) -> bool:
     """Cancel a download in progress."""
-    state.cancelled_downloads.add(download_id)
+    with state.download_lock:
+        progress = state.download_progress.get(download_id)
+        if not progress or progress.get("status") in {"completed", "error", "cancelled"}:
+            return True
+        state.cancelled_downloads.add(download_id)
+        progress.update(status="cancelling", speed=0)
     with state.aria2_lock:
         state.aria2_desired_states.pop(download_id, None)
-    state.set_download_progress_status(download_id, "cancelling", speed=0)
 
     transfer = state.aria2_transfers.get(download_id)
     if transfer and transfer.get("gid"):

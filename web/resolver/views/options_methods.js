@@ -295,6 +295,15 @@ export const optionsMethods = {
                                                 ${renderDownloadBackendOptions(tokens.download_backend)}
                                             </select>
                                         </div>
+                                        <label class="mr-options-toggle-row mr-options-compact-toggle-row">
+                                            <div class="mr-options-toggle-copy">
+                                                <span class="mr-options-toggle-title">Download sound notifications <span class="mr-tooltip-badge" data-tooltip="Play a sound when a model finishes downloading successfully.">?</span></span>
+                                            </div>
+                                            <span class="mr-options-toggle-control">
+                                                <input id="mr-options-download-sound" class="mr-options-switch-input" type="checkbox" ${tokens.download_sound_enabled !== false ? 'checked' : ''}>
+                                                <span class="mr-options-switch"></span>
+                                            </span>
+                                        </label>
                                         <div class="mr-options-dependent-block mr-options-aria2-setting">
                                             <div class="mr-options-number-row mr-options-wide-row">
                                                 <div class="mr-options-number-copy">
@@ -969,6 +978,7 @@ export const optionsMethods = {
         const aria2AvailabilityEl = this.contentElement.querySelector('#mr-options-aria2-availability');
         const aria2DaemonEl = this.contentElement.querySelector('#mr-options-aria2-daemon');
         const aria2AutoStopInput = this.contentElement.querySelector('#mr-options-aria2-auto-stop');
+        const downloadSoundInput = this.contentElement.querySelector('#mr-options-download-sound');
         const aria2SettingEls = Array.from(this.contentElement.querySelectorAll('.mr-options-aria2-setting'));
         const downloadPathModeInput = this.contentElement.querySelector('#mr-options-download-path-mode');
         const defaultRootSelectInputs = Array.from(this.contentElement.querySelectorAll('.mr-options-default-root'));
@@ -1091,6 +1101,7 @@ export const optionsMethods = {
             downloadBackendInput,
             aria2cPathInput,
             aria2AutoStopInput,
+            downloadSoundInput,
             downloadPathModeInput,
             ...defaultRootSelectInputs,
             ...templatePresetInputs,
@@ -3508,6 +3519,7 @@ export const optionsMethods = {
                     download_backend: downloadBackend,
                     aria2c_path: aria2cPathInput?.value?.trim() || '',
                     aria2_auto_stop_daemon: Boolean(aria2AutoStopInput?.checked),
+                    download_sound_enabled: Boolean(downloadSoundInput?.checked),
                     download_path_mode: downloadPathMode,
                     download_path_templates: downloadPathTemplates,
                     base_model_path_mappings: baseModelPathMappings,

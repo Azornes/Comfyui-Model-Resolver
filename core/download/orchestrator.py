@@ -1,8 +1,51 @@
 """High-level download orchestration used by the downloader facade."""
 
+import threading
 from typing import Any, Callable, Dict, Optional
 
 from .state import create_initial_progress
+
+
+class DownloadCancelled(Exception):
+    """The caller cancelled before the download response became available."""
+
+
+def request_download_response(facade: Any, download_id: str, url: str, **kwargs: Any):
+    """Allow cancellation while waiting for HTTP headers without opening a file."""
+    finished = threading.Event()
+    guard = threading.Lock()
+    outcome = {}
+    abandoned = False
+
+    def request():
+        try:
+            result = facade.request_public_url("GET", url, **kwargs)
+            with guard:
+                if abandoned:
+                    result[0].close()
+                else:
+                    outcome["result"] = result
+        except Exception as exc:
+            with guard:
+                outcome["error"] = exc
+        finally:
+            finished.set()
+
+    if download_id in facade.cancelled_downloads:
+        raise DownloadCancelled()
+    threading.Thread(target=request, daemon=True).start()
+    while True:
+        finished.wait(0.1)
+        with guard:
+            if download_id in facade.cancelled_downloads:
+                abandoned = True
+                if "result" in outcome:
+                    outcome.pop("result")[0].close()
+                raise DownloadCancelled()
+            if finished.is_set():
+                if "error" in outcome:
+                    raise outcome["error"]
+                return outcome["result"]
 
 
 def find_active_download_for_path(
@@ -147,8 +190,9 @@ def download_file(
         log.info(f"URL: {facade._strip_sensitive_url_params(url)}")
 
         request_headers = facade.build_download_headers(url, headers)
-        response, final_url, _final_headers = facade.request_public_url(
-            "GET",
+        response, final_url, _final_headers = request_download_response(
+            facade,
+            download_id,
             url,
             headers=request_headers,
             stream=True,
@@ -317,6 +361,13 @@ def download_file(
             f"Avg speed: {facade.format_bytes(int(avg_speed))}/s"
         )
         facade.invalidate_model_caches()
+
+    except DownloadCancelled:
+        facade._delete_python_partial_download_file(partial_path)
+        result["error"] = "Download cancelled"
+        with download_lock:
+            download_progress[download_id].update(status="cancelled", speed=0)
+        cancelled_downloads.discard(download_id)
 
     except requests.exceptions.RequestException as exc:
         error_msg = facade._sanitize_download_error(exc)
@@ -622,6 +673,11 @@ def start_background_download(
 
     def run_download() -> None:
         try:
+            with download_lock:
+                if download_id in facade.cancelled_downloads:
+                    download_progress[download_id].update(status="cancelled", speed=0)
+                    facade.cancelled_downloads.discard(download_id)
+                    return
             result = facade.download_model(
                 url,
                 filename,
@@ -635,7 +691,12 @@ def start_background_download(
             if not result.get("success"):
                 with download_lock:
                     if download_id in download_progress:
-                        download_progress[download_id]["status"] = "error"
+                        cancelled = (
+                            download_id in facade.cancelled_downloads
+                            or download_progress[download_id].get("status") == "cancelled"
+                        )
+                        download_progress[download_id]["status"] = "cancelled" if cancelled else "error"
+                        facade.cancelled_downloads.discard(download_id)
                         download_progress[download_id]["error"] = result.get(
                             "error",
                             "Download failed",

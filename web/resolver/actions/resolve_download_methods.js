@@ -9,6 +9,7 @@ import { bindDownloadActionHandlers } from "../utils/download_action_handlers.js
 import { matchesLocalModelDownload } from "../utils/local_match_utils.js";
 import { matchesSearchText } from "../utils/search_utils.js";
 import { normalizeSourceKey } from "../utils/source_labels.js";
+import { playDownloadSuccessSound } from "../../utils/download_sound.js";
 const log = createModuleLogger('resolve_download_methods');
 
 export const resolveDownloadMethods = {
@@ -2225,6 +2226,7 @@ export const resolveDownloadMethods = {
                 this.updateDownloadAllButtonState();
                 this.updateQueuePanel?.();
                 this.refreshLocalMatchesUiForMissing?.(missing);
+                if (!alreadyExists) playDownloadSuccessSound();
                 this.showNotification(alreadyExists
                     ? `Already downloaded: ${progress.filename}`
                     : `Downloaded: ${progress.filename}`, 'success', {
@@ -2333,16 +2335,10 @@ export const resolveDownloadMethods = {
         this.fetchJson(`/model_resolver/cancel/${downloadId}`, {
             method: 'POST'
         }, 'Cancel download').then(() => {
-            if (!info) return;
-            this.finalizeCancelledDownloadFrontend?.(downloadId, info, {
-                ...(info.lastProgress || {}),
-                status: 'cancelled',
-                filename: info.lastProgress?.filename || info.filename || '',
-                path: info.lastProgress?.path || info.downloadPath || '',
-                directory: info.lastProgress?.directory || info.downloadDirectory || ''
-            });
-            this.showNotification('Download cancelled', 'info');
+            // The request only acknowledges cancellation. Progress polling
+            // releases the file and enables retry when the worker has stopped.
         }).catch((error) => {
+            this.clearPendingDownloadStatus(info);
             console.error('Model Resolver: Cancel error:', error);
             this.showNotification('Failed to cancel download', 'error');
         });
