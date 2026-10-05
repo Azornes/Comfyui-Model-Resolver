@@ -2,16 +2,18 @@ import { app } from "../../../../../scripts/app.js";
 import { safeStorage } from "../utils/html_utils.js";
 export const lifecycleGraphMethods = {
     async show(workflow = null) {
+        const preserveCurrentView = this.isVisible();
         this.undockToFloating({ persist: false });
-        await this.showContent(workflow, { restoreFullscreen: true });
+        await this.showContent(workflow, { restoreFullscreen: true, preserveCurrentView });
     },
 
     async showDocked(container, workflow = null) {
+        const preserveCurrentView = this.isVisible();
         this.dockTo(container);
-        await this.showContent(workflow, { restoreFullscreen: false });
+        await this.showContent(workflow, { restoreFullscreen: false, preserveCurrentView });
     },
 
-    async showContent(workflow = null, { restoreFullscreen = true } = {}) {
+    async showContent(workflow = null, { restoreFullscreen = true, preserveCurrentView = false } = {}) {
         this.backdrop.style.display = "none";
         this.element.style.display = "flex";
         void this.loadFooterVersion();
@@ -41,11 +43,15 @@ export const lifecycleGraphMethods = {
         // Attach drag handle event listener (only once)
         this.attachDragHandleIfNeeded();
 
-        this.activeTab = this.restoreActiveTab();
+        if (!preserveCurrentView) {
+            this.activeTab = this.restoreActiveTab();
+        }
         this.updateTabButtonStates();
         this.updateQueueVisibility();
         this.syncWorkflowScopedQueue(workflow || this.getCurrentWorkflow());
         await this.restoreActiveDownloadsFromBackend?.();
+
+        if (preserveCurrentView) return;
 
         if (this.activeTab === 'missing') {
             await this.loadWorkflowData(workflow);

@@ -83,7 +83,7 @@ export const dialogShellMethods = {
                         className: "mr-window-btn mr-window-btn--close",
                         innerHTML: getSvgIcon('x', 'currentColor', 'mr-window-btn-icon'),
                         ariaLabel: "Close Model Resolver",
-                        onclick: () => this.close()
+                        onclick: () => this.requestClose()
                     })
                 ])
             ])

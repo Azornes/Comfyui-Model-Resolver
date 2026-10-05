@@ -794,9 +794,16 @@ export class ModelResolver {
         const button = target?.closest(`.${this.sidebarTabId}-tab-button`);
         if (!(button instanceof HTMLElement)) return;
         if (!this.dialog?.isVisible()) return;
+        if (this.dialog.pendingDockToSidebar) return;
 
         const wasDocked = this.dialog.docked;
-        this.dialog.close({ collapseSidebar: false });
+        const didClose = this.dialog.requestClose({ collapseSidebar: false });
+        if (didClose === false) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation?.();
+            return;
+        }
 
         if (!wasDocked) {
             event.preventDefault();
@@ -823,7 +830,7 @@ export class ModelResolver {
 
         if (this.dialog.shouldOpenFromSidebarFloating()) {
             if (this.dialog.isVisible() && !this.dialog.docked) {
-                this.dialog.close();
+                if (this.dialog.requestClose() === false) return;
                 this.dialog.closeComfySidebar(element);
                 return;
             }

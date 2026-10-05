@@ -5,7 +5,7 @@ export const selectionMethods = {
     handleOutsideClick(e) {
         // Close if click is on the backdrop (not on the dialog itself)
         if (e.target === this.backdrop) {
-            this.close();
+            this.requestClose();
         }
     },
 

@@ -37,6 +37,13 @@ export const tabsLoadedMethods = {
     switchTab(tab, { force = false } = {}) {
         const nextTab = this.getValidTab(tab);
         const nextTabButton = this.getTabButton(nextTab);
+        if (
+            this.activeTab === 'options'
+            && nextTab !== 'options'
+            && !this.confirmDiscardOptionsChanges()
+        ) {
+            return null;
+        }
         if (!force && nextTab === this.activeTab && nextTabButton?.classList.contains('mr-tab-active')) {
             this.hideTooltip();
             this.updateQueueVisibility();

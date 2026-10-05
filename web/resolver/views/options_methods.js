@@ -4,6 +4,20 @@ import { escapeHtml, pollBackgroundTask, safeStorage } from "../utils/html_utils
 const SETTINGS_MAP = [];
 
 export const optionsMethods = {
+    confirmDiscardOptionsChanges() {
+        if (this.activeTab !== 'options') return true;
+
+        const status = this.contentElement?.querySelector('#mr-options-status');
+        if (!status?.classList.contains('is-dirty')) return true;
+
+        return window.confirm('You have unsaved options. Are you sure you want to leave without saving?');
+    },
+
+    requestClose(...args) {
+        if (!this.confirmDiscardOptionsChanges()) return false;
+        return this.close(...args);
+    },
+
     buildLocalModelContext(item = {}, contextSource = '', extraFields = {}) {
         const modelLabel = item.relative_path || item.filename || item.model_path || 'Model';
         const modelPath = item.model_path || '';
