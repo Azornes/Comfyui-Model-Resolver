@@ -4258,15 +4258,31 @@
     min-width: 0;
 }
 
+#model-resolver-modal .mr-loaded-models-title,
 .mr-loaded-models-title {
     font-size: var(--mr-font-lg);
-    font-weight: 600;
-    color: var(--mr-text);
+    font-weight: 700;
+    color: #c3c3c3;
+    text-transform: uppercase;
+    letter-spacing: 0.075em;
     margin: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--mr-spacing-6);
 }
 
+#model-resolver-modal .mr-image-inspector .mr-loaded-models-title,
 .mr-image-inspector .mr-loaded-models-title {
-    font-size: var(--mr-font-xl);
+    font-size: var(--mr-font-lg);
+    font-weight: 700;
+    color: #c3c3c3;
+    text-transform: uppercase;
+    letter-spacing: 0.075em;
+}
+
+.mr-loaded-models-title .mr-tooltip-badge {
+    text-transform: none;
+    letter-spacing: normal;
 }
 
 .mr-loaded-total {
@@ -4281,6 +4297,9 @@
     background: rgba(114, 211, 138, 0.12);
     color: var(--mr-accent);
     font-size: var(--mr-font-xs);
+    font-weight: 700;
+    text-transform: none;
+    letter-spacing: normal;
 }
 
 .mr-loaded-models-subtitle {
@@ -4923,6 +4942,15 @@ button.mr-info-link:disabled {
     border-top: 1px solid var(--mr-border);
 }
 
+#model-resolver-modal .mr-image-inspector-summary .mr-loaded-models-header,
+.mr-image-inspector-summary .mr-loaded-models-header {
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 0;
+    border-bottom: 0;
+    margin-bottom: var(--mr-spacing-8);
+}
+
 .mr-image-inspector-info-table {
     margin-bottom: var(--mr-spacing-12);
 }
@@ -4955,6 +4983,28 @@ button.mr-info-link:disabled {
 .mr-image-inspector-models:has(.mr-loaded-models-header) {
     padding-top: var(--mr-spacing-12);
     border-top: 1px solid var(--mr-border);
+}
+
+#model-resolver-modal .mr-image-inspector-models .mr-loaded-models-header,
+.mr-image-inspector-models .mr-loaded-models-header {
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 0;
+}
+
+#model-resolver-modal .mr-image-inspector-models .mr-models-list,
+.mr-image-inspector-models .mr-models-list,
+#model-resolver-modal .mr-image-inspector-models .mr-models-list-pad,
+.mr-image-inspector-models .mr-models-list-pad {
+    padding-left: 0;
+    padding-right: 0;
+}
+
+#model-resolver-modal .mr-image-inspector-models .mr-copy-section,
+.mr-image-inspector-models .mr-copy-section {
+    padding-left: 0;
+    padding-right: 0;
+    background: transparent;
 }
 
 .mr-image-inspector-loading {
