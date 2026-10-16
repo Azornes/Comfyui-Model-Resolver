@@ -1,11 +1,12 @@
 {
-  "updated_at": "2026-10-05T14:11:54+00:00",
-  "last_checked_at": "2026-10-05T14:11:54+00:00",
-  "local_count": 114,
-  "new_models_added": 3,
+  "updated_at": "2026-10-16T13:14:28+00:00",
+  "last_checked_at": "2026-10-16T13:14:28+00:00",
+  "local_count": 118,
+  "new_models_added": 4,
   "new_models_added_list": [
-    "Flux.3",
-    "Ideogram 4.5",
-    "Sonilo"
+    "Flux.3 Klein",
+    "Flux.3 Klein-base",
+    "Krea 2 Turbo",
+    "Krea 3"
   ]
 }

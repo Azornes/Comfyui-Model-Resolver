@@ -774,6 +774,32 @@
       "aliases": [
         "sonilo"
       ]
+    },
+    {
+      "name": "Flux.3 Klein",
+      "aliases": [
+        "Flux.3 Klein",
+        "flux 3 klein"
+      ]
+    },
+    {
+      "name": "Flux.3 Klein-base",
+      "aliases": [
+        "Flux.3 Klein-base",
+        "flux 3 klein base"
+      ]
+    },
+    {
+      "name": "Krea 2 Turbo",
+      "aliases": [
+        "krea 2 turbo"
+      ]
+    },
+    {
+      "name": "Krea 3",
+      "aliases": [
+        "krea 3"
+      ]
     }
   ]
 }
