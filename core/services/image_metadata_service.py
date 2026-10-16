@@ -4,18 +4,30 @@ import base64
 import binascii
 import io
 import json
+import os
 import re
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Optional
 
+from ..log_system import create_module_logger
+from ..network_utils import execute_provider_json_request, request_source_response
 from ..request_utils import (
     read_optional_object_payload,
     read_optional_text_field,
     read_text_field,
 )
 from ..routes.context import RouteContext
-from ..type_utils import CATEGORY_MAP, normalize_category_token
+from ..type_utils import (
+    CATEGORY_MAP,
+    DEFAULT_BROWSER_USER_AGENT,
+    as_dict,
+    as_list,
+    normalize_category_token,
+)
 from ..workflow.formats import normalize_workflow_payload
+
+log = create_module_logger(__name__)
 
 MAX_IMAGE_BYTES = 64 * 1024 * 1024
 MAX_WORKFLOW_JSON_BYTES = 16 * 1024 * 1024
@@ -258,7 +270,7 @@ def _normalize_civitai_resource(value: Any, index: int) -> Optional[dict[str, An
     model_version_id = _coerce_identifier(
         _first_mapping_value(
             value,
-            ("modelVersionId", "model_version_id", "versionId", "version_id"),
+            ("modelVersionId", "model_version_id", "versionId", "version_id", "id"),
         )
     )
     model_id = _coerce_identifier(
@@ -324,6 +336,174 @@ def _merge_civitai_resources(values: list[Any]) -> list[dict[str, Any]]:
             if existing.get(key) in (None, "") and candidate not in (None, ""):
                 existing[key] = candidate
     return result
+
+
+_CIVITAI_VERSION_FILES_CACHE: dict[int, dict[str, Any]] = {}
+
+
+def get_civitai_version_file_info(
+    version_id: int,
+    api_key: Optional[str] = None,
+) -> Optional[dict[str, Any]]:
+    """Fetch primary file and model metadata for a Civitai modelVersionId."""
+    if not version_id:
+        return None
+    try:
+        vid = int(version_id)
+    except (TypeError, ValueError):
+        return None
+
+    if vid in _CIVITAI_VERSION_FILES_CACHE:
+        return _CIVITAI_VERSION_FILES_CACHE[vid]
+
+    try:
+        data = execute_provider_json_request(
+            "CivitAI version file lookup",
+            f"https://civitai.com/api/v1/model-versions/{vid}",
+            api_key=api_key,
+            timeout=10,
+            max_attempts=1,
+            raise_on_error=False,
+        )
+    except Exception as exc:
+        log.warning(f"Failed to lookup Civitai model version {vid}: {exc}")
+        return None
+
+    if not isinstance(data, dict):
+        return None
+
+    files = as_list(data.get("files"))
+    primary_file = None
+    for f in files:
+        if isinstance(f, dict) and f.get("primary") and f.get("type") == "Model":
+            primary_file = f
+            break
+    if not primary_file:
+        for f in files:
+            if isinstance(f, dict) and f.get("primary"):
+                primary_file = f
+                break
+    if not primary_file:
+        for f in files:
+            if isinstance(f, dict) and f.get("type") == "Model":
+                primary_file = f
+                break
+    if not primary_file and files:
+        first = files[0]
+        if isinstance(first, dict):
+            primary_file = first
+
+    model_block = as_dict(data.get("model"))
+    result = {
+        "filename": str(primary_file.get("name") or "").strip() if primary_file else "",
+        "model_name": str(model_block.get("name") or "").strip(),
+        "version_name": str(data.get("name") or "").strip(),
+        "base_model": str(data.get("baseModel") or "").strip(),
+        "hashes": as_dict(primary_file.get("hashes")) if primary_file else {},
+        "download_url": str(primary_file.get("downloadUrl") or "").strip() if primary_file else "",
+        "trained_words": [
+            str(w).strip()
+            for w in as_list(data.get("trainedWords"))
+            if str(w).strip()
+        ],
+    }
+    _CIVITAI_VERSION_FILES_CACHE[vid] = result
+    return result
+
+
+def resolve_civitai_resource_filenames(
+    resources: list[dict[str, Any]],
+    api_key: Optional[str] = None,
+) -> list[dict[str, Any]]:
+    """Enrich Civitai resources with real filenames and local availability."""
+    if not resources:
+        return resources
+
+    version_ids_to_fetch = set()
+    for res in resources:
+        vid = res.get("model_version_id") or res.get("modelVersionId")
+        if vid:
+            try:
+                version_ids_to_fetch.add(int(vid))
+            except (TypeError, ValueError):
+                pass
+
+    if not version_ids_to_fetch:
+        return resources
+
+    missing_vids = [
+        v for v in version_ids_to_fetch if v not in _CIVITAI_VERSION_FILES_CACHE
+    ]
+    if missing_vids:
+        max_workers = min(len(missing_vids), 8)
+        try:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                list(
+                    executor.map(
+                        lambda v: get_civitai_version_file_info(v, api_key=api_key),
+                        missing_vids,
+                    )
+                )
+        except Exception as exc:
+            log.warning(f"Error resolving Civitai model version files: {exc}")
+
+    for res in resources:
+        vid = res.get("model_version_id") or res.get("modelVersionId")
+        if not vid:
+            continue
+        try:
+            info = _CIVITAI_VERSION_FILES_CACHE.get(int(vid))
+        except (TypeError, ValueError):
+            info = None
+        if not info:
+            continue
+
+        filename = info.get("filename")
+        model_name = info.get("model_name") or ""
+        version_name = info.get("version_name") or ""
+
+        if filename:
+            res["filename"] = filename
+            res["original_path"] = filename
+
+        original_display_name = (
+            res.get("name") or model_name or ""
+        )
+        if original_display_name.startswith("Civitai model ") and model_name:
+            original_display_name = model_name
+            res["name"] = model_name
+
+        if original_display_name:
+            res["model_name"] = original_display_name
+            res["display_name"] = original_display_name
+
+        if version_name and not res.get("version_name"):
+            res["version_name"] = version_name
+        if info.get("base_model"):
+            res["base_model"] = info["base_model"]
+        if info.get("download_url"):
+            res["download_url"] = info["download_url"]
+        if info.get("hashes"):
+            res["hashes"] = info["hashes"]
+        if info.get("trained_words"):
+            res["trained_words"] = info["trained_words"]
+
+        # Check local file existence in ComfyUI
+        target_filename = res.get("filename") or res.get("name")
+        if target_filename:
+            try:
+                from ..scanner import find_local_file_path
+
+                category = res.get("category")
+                local_path = find_local_file_path(target_filename, category)
+                if local_path:
+                    res["exists"] = True
+                    res["resolved_path"] = local_path
+                    res["path"] = local_path
+            except Exception:
+                pass
+
+    return resources
 
 
 def _extract_civitai_metadata(
@@ -395,7 +575,12 @@ def _metadata_summary(
     }
 
 
-def inspect_image_bytes(raw: bytes, filename: str = "") -> dict[str, Any]:
+def inspect_image_bytes(
+    raw: bytes,
+    filename: str = "",
+    *,
+    api_key: Optional[str] = None,
+) -> dict[str, Any]:
     """Inspect a supported image without writing it or executing its workflow."""
     try:
         from PIL import Image
@@ -404,6 +589,10 @@ def inspect_image_bytes(raw: bytes, filename: str = "") -> dict[str, Any]:
             image.load()
             metadata = _image_metadata(image)
             civitai_metadata, civitai_resources = _extract_civitai_metadata(metadata)
+            if civitai_resources:
+                civitai_resources = resolve_civitai_resource_filenames(
+                    civitai_resources, api_key=api_key
+                )
             if civitai_metadata:
                 metadata.setdefault(
                     "Civitai metadata",
@@ -493,6 +682,196 @@ def inspect_workflow_json(
     }
 
 
+def inspect_civitai_image(
+    image_id: int,
+    *,
+    filename: str = "",
+    url: str = "",
+    api_key: Optional[str] = None,
+) -> dict[str, Any]:
+    """Fetch Civitai image page and extract full generation metadata and resources."""
+    headers = {"User-Agent": DEFAULT_BROWSER_USER_AGENT, "Accept": "text/html"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    response = request_source_response(
+        f"https://civitai.com/images/{image_id}",
+        headers=headers,
+        timeout=20,
+        log_name="CivitAI image page",
+    )
+    if response is None or response.status_code != 200:
+        response = request_source_response(
+            f"https://civitai.red/images/{image_id}",
+            headers=headers,
+            timeout=20,
+            log_name="CivitAI.red image page",
+        )
+
+    if response is None or response.status_code != 200:
+        status = response.status_code if response else "no response"
+        raise ValueError(f"Could not load Civitai image {image_id} ({status})")
+
+    html_text = response.text
+    match = re.search(
+        r'<script\b(?=[^>]*\bid=["\']__NEXT_DATA__["\'])[^>]*>(.*?)</script>',
+        html_text,
+        re.DOTALL | re.IGNORECASE,
+    )
+    if not match:
+        raise ValueError(f"Civitai page for image {image_id} did not contain generation data")
+
+    try:
+        data = as_dict(json.loads(match.group(1)))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Could not parse Civitai page data: {exc}") from exc
+
+    page = as_dict(as_dict(data.get("props")).get("pageProps"))
+    state = as_dict(page.get("trpcState"))
+    state = as_dict(state.get("json")) or state
+    queries = as_list(state.get("queries"))
+
+    img_data: dict[str, Any] = {}
+    gen_data: dict[str, Any] = {}
+
+    for query in queries:
+        query_dict = as_dict(query)
+        key = as_list(query_dict.get("queryKey"))
+        if not key:
+            continue
+        first_key = key[0]
+        if first_key == ["image", "get"]:
+            img_data = as_dict(as_dict(query_dict.get("state")).get("data"))
+        elif first_key == ["image", "getGenerationData"]:
+            gen_data = as_dict(as_dict(query_dict.get("state")).get("data"))
+
+    meta = as_dict(gen_data.get("meta"))
+    raw_resources = as_list(gen_data.get("resources"))
+    meta_resources = as_list(meta.get("civitaiResources"))
+    all_resources = list(raw_resources) + list(meta_resources)
+    civitai_resources = _merge_civitai_resources(all_resources)
+    civitai_resources = resolve_civitai_resource_filenames(
+        civitai_resources, api_key=api_key
+    )
+
+    # Check for embedded ComfyUI workflow
+    workflow = None
+    workflow_format = ""
+    workflow_source = ""
+    comfy_candidate = meta.get("comfy") or as_dict(meta.get("extra")).get("comfy")
+    if isinstance(comfy_candidate, str):
+        try:
+            workflow = json.loads(comfy_candidate)
+        except Exception:
+            workflow = None
+    elif isinstance(comfy_candidate, Mapping):
+        workflow = dict(comfy_candidate)
+
+    if isinstance(workflow, Mapping):
+        try:
+            workflow, workflow_format = normalize_workflow_payload(workflow)
+            workflow_source = "Civitai generation data"
+        except Exception:
+            workflow = None
+
+    prompt = str(meta.get("prompt") or "").strip()
+    negative_prompt = str(meta.get("negativePrompt") or "").strip()
+
+    # Normalize LoRA references in prompt if titles or version IDs were used
+    for res in civitai_resources:
+        if res.get("category") == "loras" and res.get("filename"):
+            clean_name = os.path.splitext(res["filename"])[0]
+            names_to_replace = []
+            if (
+                res.get("model_name")
+                and res["model_name"].lower() != clean_name.lower()
+            ):
+                names_to_replace.append(res["model_name"])
+            if res.get("model_id"):
+                names_to_replace.append(str(res["model_id"]))
+            if res.get("model_version_id"):
+                names_to_replace.append(str(res["model_version_id"]))
+            for name_pattern in names_to_replace:
+                pattern = re.compile(
+                    rf"<lora:{re.escape(name_pattern)}(:[0-9\.\-]+(?:,[0-9\.\-]+)?)>",
+                    re.IGNORECASE,
+                )
+                prompt = pattern.sub(rf"<lora:{clean_name}\1>", prompt)
+
+    meta["prompt"] = prompt
+    param_lines = []
+    if prompt:
+        param_lines.append(prompt)
+    if negative_prompt:
+        param_lines.append(f"Negative prompt: {negative_prompt}")
+
+    meta_details = []
+    if meta.get("steps") is not None:
+        meta_details.append(f"Steps: {meta['steps']}")
+    if meta.get("sampler"):
+        meta_details.append(f"Sampler: {meta['sampler']}")
+    if meta.get("cfgScale") is not None:
+        meta_details.append(f"CFG scale: {meta['cfgScale']}")
+    if meta.get("seed") is not None:
+        meta_details.append(f"Seed: {meta['seed']}")
+    width = img_data.get("width") or meta.get("width")
+    height = img_data.get("height") or meta.get("height")
+    if width and height:
+        meta_details.append(f"Size: {width}x{height}")
+    for res in civitai_resources:
+        if res.get("category") == "checkpoints":
+            ckpt_name = res.get("filename") or res.get("name")
+            if ckpt_name:
+                meta_details.append(f"Model: {ckpt_name}")
+                break
+    if meta_details:
+        param_lines.append(", ".join(meta_details))
+
+    parameters_text = "\n".join(param_lines)
+
+    display_name = (
+        filename
+        or str(img_data.get("name") or "")
+        or (url if url else f"Civitai image {image_id}")
+    )
+
+    mime_type = str(img_data.get("mimeType") or "image/jpeg")
+    img_format = "JPEG"
+    if "png" in mime_type.lower():
+        img_format = "PNG"
+    elif "webp" in mime_type.lower():
+        img_format = "WEBP"
+
+    civitai_workflow = str(meta.get("workflow") or gen_data.get("type") or "").strip()
+
+    metadata_dict = {
+        "keys": ["Civitai metadata", "Civitai resources"],
+        "has_workflow": bool(workflow_format),
+        "workflow_source": workflow_source or f"Civitai image {image_id}",
+        "parameters": parameters_text,
+    }
+
+    return {
+        "source_type": "civitai",
+        "civitai_image_id": image_id,
+        "filename": display_name,
+        "image": {
+            "format": img_format,
+            "width": int(width or 0),
+            "height": int(height or 0),
+            "mode": "RGB",
+        },
+        "metadata": metadata_dict,
+        "workflow": workflow,
+        "workflow_format": workflow_format,
+        "workflow_source": workflow_source or f"Civitai image {image_id}",
+        "workflow_node_count": len(workflow.get("nodes", [])) if isinstance(workflow, Mapping) else 0,
+        "civitai_metadata": meta,
+        "civitai_resources": civitai_resources,
+        "civitai_workflow": civitai_workflow,
+    }
+
+
 class ImageMetadataService:
     """HTTP service for dropped images, workflow JSON files, and pasted JSON."""
 
@@ -513,6 +892,11 @@ class ImageMetadataService:
                 "filename",
                 contract_name="Metadata inspection request",
             ) or ""
+            civitai_key = read_optional_text_field(
+                data,
+                "civitai_key",
+                contract_name="Metadata inspection request",
+            ) or ""
         except TypeError as exc:
             return self.web.json_response({"error": str(exc)}, status=400)
 
@@ -526,11 +910,25 @@ class ImageMetadataService:
                     inspect_image_bytes,
                     raw,
                     filename,
+                    api_key=civitai_key or None,
                 )
             elif source_type in {"workflow", "json"}:
+                from ..sources.civitai import parse_civitai_image_url
+
                 workflow = data.get("workflow")
                 if workflow is None:
                     workflow = data.get("json_text")
+                if isinstance(workflow, str):
+                    civitai_id = parse_civitai_image_url(workflow.strip())
+                    if civitai_id:
+                        result = await self.asyncio.to_thread(
+                            inspect_civitai_image,
+                            civitai_id,
+                            filename=filename,
+                            url=workflow.strip(),
+                            api_key=civitai_key or None,
+                        )
+                        return self.web.json_response(result)
                 if workflow is None:
                     raise ValueError("Workflow JSON is required")
                 result = await self.asyncio.to_thread(
@@ -539,8 +937,24 @@ class ImageMetadataService:
                     filename=filename,
                     source_type="workflow",
                 )
+            elif source_type in {"civitai", "civitai_image"}:
+                from ..sources.civitai import parse_civitai_image_url
+
+                image_id = data.get("image_id")
+                url_candidate = str(data.get("url") or "")
+                if not image_id and url_candidate:
+                    image_id = parse_civitai_image_url(url_candidate)
+                if not image_id:
+                    raise ValueError("Civitai image ID or URL is required")
+                result = await self.asyncio.to_thread(
+                    inspect_civitai_image,
+                    int(image_id),
+                    filename=filename,
+                    url=url_candidate,
+                    api_key=civitai_key or None,
+                )
             else:
-                raise ValueError("Metadata source type must be image or workflow")
+                raise ValueError("Metadata source type must be image, workflow, or civitai")
         except (TypeError, ValueError) as exc:
             return self.web.json_response({"error": str(exc)}, status=400)
         except Exception as exc:

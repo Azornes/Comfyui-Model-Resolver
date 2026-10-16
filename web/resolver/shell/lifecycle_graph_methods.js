@@ -119,6 +119,11 @@ export const lifecycleGraphMethods = {
             this._mlSelectionCleanup = null;
         }
 
+        if (typeof this._metadataPasteCleanup === 'function') {
+            this._metadataPasteCleanup();
+            this._metadataPasteCleanup = null;
+        }
+
         if (wasDocked && collapseSidebar) {
             this.closeComfySidebar(dockContainer);
         }

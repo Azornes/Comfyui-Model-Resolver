@@ -69,6 +69,12 @@ export const tabsLoadedMethods = {
                 this._mlSelectionCleanup = null;
             }
         }
+        if (this.activeTab !== 'metadata') {
+            if (typeof this._metadataPasteCleanup === 'function') {
+                this._metadataPasteCleanup();
+                this._metadataPasteCleanup = null;
+            }
+        }
         this.hideTooltip();
         this.animateTabContentTransition();
         this.updateTabButtonStates();
@@ -471,7 +477,10 @@ export const tabsLoadedMethods = {
                     const fullName = model.original_path || model.name || name;
                     const modelKey = this.getLoadedModelDomKey(model);
                     const token = this.getModelToken(model, category);
-                    html += `<span class="mr-model-chip" data-ml-token="${this.escapeHtml(token)}" data-ml-loaded-model-key="${this.escapeHtml(modelKey)}"${modelContextAttrs(model)}${this.getModelPreviewTooltipAttrs(model, fullName)}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
+                    const tooltipLabel = model.model_name && model.model_name.toLowerCase() !== name.toLowerCase()
+                        ? `${model.model_name}${model.version_name ? ` (${model.version_name})` : ''} — ${fullName}`
+                        : fullName;
+                    html += `<span class="mr-model-chip" data-ml-token="${this.escapeHtml(token)}" data-ml-loaded-model-key="${this.escapeHtml(modelKey)}"${modelContextAttrs(model)}${this.getModelPreviewTooltipAttrs(model, tooltipLabel)}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
                 }
                 html += `</div></div>`;
             }
@@ -491,7 +500,10 @@ export const tabsLoadedMethods = {
                     const fullName = model.original_path || model.name || name;
                     const modelKey = this.getLoadedModelDomKey(model);
                     const token = this.getModelToken(model, category);
-                    html += `<span class="mr-model-chip" data-ml-token="${this.escapeHtml(token)}" data-ml-loaded-model-key="${this.escapeHtml(modelKey)}"${modelContextAttrs(model)}${this.getModelPreviewTooltipAttrs(model, fullName)}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
+                    const tooltipLabel = model.model_name && model.model_name.toLowerCase() !== name.toLowerCase()
+                        ? `${model.model_name}${model.version_name ? ` (${model.version_name})` : ''} — ${fullName}`
+                        : fullName;
+                    html += `<span class="mr-model-chip" data-ml-token="${this.escapeHtml(token)}" data-ml-loaded-model-key="${this.escapeHtml(modelKey)}"${modelContextAttrs(model)}${this.getModelPreviewTooltipAttrs(model, tooltipLabel)}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
                 }
                 html += `</div></div>`;
             }

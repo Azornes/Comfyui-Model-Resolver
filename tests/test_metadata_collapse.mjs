@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { imageMetadataMethods } from '../web/resolver/views/tabs_image_metadata_methods.js';
+import { imageMetadataMethods, extractCivitaiImageId } from '../web/resolver/views/tabs_image_metadata_methods.js';
 import { tabsLoadedMethods } from '../web/resolver/views/tabs_loaded_methods.js';
 
 globalThis.window = globalThis;
@@ -195,4 +195,364 @@ test('renderImageMetadataResult without metadata renders prompt transfer panel f
     assert.ok(resultEl.innerHTML.startsWith('<section class="mr-image-prompt-transfer'));
     assert.ok(!resultEl.innerHTML.includes('Extracted Metadata'));
 });
+
+function createMockPasteTarget(ctx) {
+    const textarea = {
+        id: 'mr-image-inspector-json-text',
+        classList: { contains: (cls) => cls === 'mr-image-inspector-textarea' },
+        value: '',
+        dispatchEvent: () => {},
+    };
+    const root = {
+        classList: { contains: () => false },
+        contains: (node) => node === root || node === textarea,
+        querySelector: (sel) => (sel === '.mr-image-inspector-textarea' ? textarea : null),
+        matches: () => false,
+    };
+    ctx.contentElement = {
+        contains: (node) => node === root || node === textarea,
+        querySelector: (sel) => (sel === '.mr-image-inspector' ? root : null),
+        matches: () => false,
+    };
+    ctx.activeTab = 'metadata';
+    ctx._isMouseOverMetadata = true;
+    return { root, textarea };
+}
+
+test('handleImageMetadataPaste ignores event when tab is not metadata', () => {
+    const ctx = createMockContext();
+    createMockPasteTarget(ctx);
+    ctx.activeTab = 'loaded';
+    let inspected = false;
+    ctx.inspectImageFile = () => { inspected = true; };
+    const event = {
+        preventDefault: () => {},
+        stopPropagation: () => {},
+        clipboardData: { files: [{ name: 'test.png', type: 'image/png' }] },
+    };
+    assert.strictEqual(ctx.handleImageMetadataPaste(event), false);
+    assert.strictEqual(inspected, false);
+});
+
+test('handleImageMetadataPaste ignores event when active element is external input', () => {
+    const ctx = createMockContext();
+    createMockPasteTarget(ctx);
+    const externalInput = { tagName: 'INPUT', isContentEditable: false };
+    globalThis.document = { activeElement: externalInput };
+    let inspected = false;
+    ctx.inspectImageFile = () => { inspected = true; };
+    const event = {
+        target: externalInput,
+        preventDefault: () => {},
+        stopPropagation: () => {},
+        clipboardData: { files: [{ name: 'test.png', type: 'image/png' }] },
+    };
+    try {
+        assert.strictEqual(ctx.handleImageMetadataPaste(event), false);
+        assert.strictEqual(inspected, false);
+    } finally {
+        delete globalThis.document;
+    }
+});
+
+test('handleImageMetadataPaste inspects image file from clipboard files', () => {
+    const ctx = createMockContext();
+    const { root } = createMockPasteTarget(ctx);
+    let inspectedFile = null;
+    let defaultPrevented = false;
+    let propagationStopped = false;
+    ctx.inspectImageFile = (file) => { inspectedFile = file; };
+    const imageFile = { name: 'workflow_output.png', type: 'image/png', size: 1024 };
+    const event = {
+        target: root,
+        preventDefault: () => { defaultPrevented = true; },
+        stopPropagation: () => { propagationStopped = true; },
+        clipboardData: { files: [imageFile], items: [] },
+    };
+    assert.strictEqual(ctx.handleImageMetadataPaste(event), true);
+    assert.strictEqual(inspectedFile, imageFile);
+    assert.strictEqual(defaultPrevented, true);
+    assert.strictEqual(propagationStopped, true);
+});
+
+test('handleImageMetadataPaste inspects image file from clipboard items', () => {
+    const ctx = createMockContext();
+    const { root } = createMockPasteTarget(ctx);
+    let inspectedFile = null;
+    ctx.inspectImageFile = (file) => { inspectedFile = file; };
+    const blobFile = { name: '', type: 'image/webp', size: 2048 };
+    const item = { kind: 'file', type: 'image/webp', getAsFile: () => blobFile };
+    const event = {
+        target: root,
+        preventDefault: () => {},
+        stopPropagation: () => {},
+        clipboardData: { files: [], items: [item] },
+    };
+    assert.strictEqual(ctx.handleImageMetadataPaste(event), true);
+    assert.strictEqual(inspectedFile, blobFile);
+});
+
+test('handleImageMetadataPaste inspects workflow JSON file from clipboard', () => {
+    const ctx = createMockContext();
+    const { root } = createMockPasteTarget(ctx);
+    let inspectedWorkflowFile = null;
+    ctx.inspectWorkflowFile = (file) => { inspectedWorkflowFile = file; };
+    const jsonFile = { name: 'my_workflow.json', type: 'application/json', size: 512 };
+    const event = {
+        target: root,
+        preventDefault: () => {},
+        stopPropagation: () => {},
+        clipboardData: { files: [jsonFile], items: [] },
+    };
+    assert.strictEqual(ctx.handleImageMetadataPaste(event), true);
+    assert.strictEqual(inspectedWorkflowFile, jsonFile);
+});
+
+test('handleImageMetadataPaste inspects workflow JSON text from clipboard', () => {
+    const ctx = createMockContext();
+    const { root, textarea } = createMockPasteTarget(ctx);
+    let inspectedText = null;
+    ctx.inspectPastedWorkflow = (text) => { inspectedText = text; };
+    const workflowJson = JSON.stringify({ nodes: [{ id: 1, type: 'KSampler' }] });
+    const event = {
+        target: root,
+        preventDefault: () => {},
+        stopPropagation: () => {},
+        clipboardData: {
+            files: [],
+            items: [],
+            getData: (type) => (type === 'text/plain' ? workflowJson : ''),
+        },
+    };
+    assert.strictEqual(ctx.handleImageMetadataPaste(event), true);
+    assert.strictEqual(inspectedText, workflowJson);
+    assert.strictEqual(textarea.value, workflowJson);
+});
+
+test('handleImageMetadataPaste inspects image data URL from clipboard text', () => {
+    const ctx = createMockContext();
+    const { root } = createMockPasteTarget(ctx);
+    let inspectedPayload = null;
+    ctx.runImageMetadataInspection = (payload) => { inspectedPayload = payload; };
+    const dataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    const event = {
+        target: root,
+        preventDefault: () => {},
+        stopPropagation: () => {},
+        clipboardData: {
+            files: [],
+            items: [],
+            getData: (type) => (type === 'text/plain' ? dataUrl : ''),
+        },
+    };
+    assert.strictEqual(ctx.handleImageMetadataPaste(event), true);
+    assert.strictEqual(inspectedPayload?.source_type, 'image');
+    assert.strictEqual(inspectedPayload?.data_url, dataUrl);
+});
+
+test('handleImageMetadataPaste allows native paste when pasting non-json text into textarea', () => {
+    const ctx = createMockContext();
+    const { textarea } = createMockPasteTarget(ctx);
+    let defaultPrevented = false;
+    const event = {
+        target: textarea,
+        preventDefault: () => { defaultPrevented = true; },
+        stopPropagation: () => {},
+        clipboardData: {
+            files: [],
+            items: [],
+            getData: (type) => (type === 'text/plain' ? 'some notes or query' : ''),
+        },
+    };
+    assert.strictEqual(ctx.handleImageMetadataPaste(event), false);
+    assert.strictEqual(defaultPrevented, false);
+});
+
+test('handleImageMetadataPaste shows warning notification for invalid clipboard data on panel', () => {
+    const ctx = createMockContext();
+    const { root } = createMockPasteTarget(ctx);
+    let notification = null;
+    ctx.showNotification = (msg, type) => { notification = { msg, type }; };
+    let defaultPrevented = false;
+    let propagationStopped = false;
+    const event = {
+        target: root,
+        preventDefault: () => { defaultPrevented = true; },
+        stopPropagation: () => { propagationStopped = true; },
+        clipboardData: {
+            files: [],
+            items: [],
+            getData: () => 'random string',
+        },
+    };
+    assert.strictEqual(ctx.handleImageMetadataPaste(event), true);
+    assert.strictEqual(defaultPrevented, true);
+    assert.strictEqual(propagationStopped, true);
+    assert.strictEqual(notification?.type, 'warning');
+    assert.ok(notification?.msg.includes('image, Civitai link, or valid workflow JSON'));
+});
+
+test('extractCivitaiImageId extracts image IDs from URLs, HTML snippets, and image paths', () => {
+    assert.strictEqual(extractCivitaiImageId('https://civitai.com/images/145110824'), 145110824);
+    assert.strictEqual(extractCivitaiImageId('https://civitai.red/images/145110824'), 145110824);
+    assert.strictEqual(extractCivitaiImageId('https://civitai.com/images/145110824?period=AllTime&sort=Most+Reactions'), 145110824);
+    assert.strictEqual(extractCivitaiImageId('<a href="/images/145110824" class="mantine-Text-root">link</a>'), 145110824);
+    assert.strictEqual(extractCivitaiImageId('<a href="https://civitai.red/images/145110824">photo</a>'), 145110824);
+    assert.strictEqual(
+        extractCivitaiImageId('<img src="https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/c9945cb9-897b-40aa-a035-71714b1d615e/width=450/145110824.jpeg" />'),
+        145110824,
+    );
+    assert.strictEqual(extractCivitaiImageId('<div data-image-id="145110824"></div>'), 145110824);
+    assert.strictEqual(extractCivitaiImageId('https://example.com/foo.png'), null);
+    assert.strictEqual(extractCivitaiImageId('just some text'), null);
+    assert.strictEqual(extractCivitaiImageId(''), null);
+    assert.strictEqual(extractCivitaiImageId(null), null);
+});
+
+test('handleImageMetadataPaste inspects Civitai URL from plain text clipboard', () => {
+    const ctx = createMockContext();
+    const { root, textarea } = createMockPasteTarget(ctx);
+    let civitaiImageId = null;
+    let civitaiSourceUrl = null;
+    ctx.inspectCivitaiImage = (id, url) => {
+        civitaiImageId = id;
+        civitaiSourceUrl = url;
+    };
+    let defaultPrevented = false;
+    let propagationStopped = false;
+    const civitaiUrl = 'https://civitai.red/images/145110824';
+    const event = {
+        target: root,
+        preventDefault: () => { defaultPrevented = true; },
+        stopPropagation: () => { propagationStopped = true; },
+        clipboardData: {
+            files: [],
+            items: [],
+            getData: (type) => (type === 'text/plain' ? civitaiUrl : ''),
+        },
+    };
+    assert.strictEqual(ctx.handleImageMetadataPaste(event), true);
+    assert.strictEqual(defaultPrevented, true);
+    assert.strictEqual(propagationStopped, true);
+    assert.strictEqual(civitaiImageId, 145110824);
+    assert.strictEqual(civitaiSourceUrl, civitaiUrl);
+    assert.strictEqual(textarea.value, civitaiUrl);
+});
+
+test('handleImageMetadataPaste inspects Civitai image from HTML clipboard', () => {
+    const ctx = createMockContext();
+    const { root, textarea } = createMockPasteTarget(ctx);
+    let civitaiImageId = null;
+    let civitaiSourceUrl = null;
+    ctx.inspectCivitaiImage = (id, url) => {
+        civitaiImageId = id;
+        civitaiSourceUrl = url;
+    };
+    let defaultPrevented = false;
+    const htmlSnippet = '<a href="/images/145110824"><img src="https://image.civitai.com/.../145110824.jpeg" /></a>';
+    const event = {
+        target: root,
+        preventDefault: () => { defaultPrevented = true; },
+        stopPropagation: () => {},
+        clipboardData: {
+            files: [],
+            items: [],
+            getData: (type) => (type === 'text/html' ? htmlSnippet : (type === 'text/plain' ? 'Civitai Image' : '')),
+        },
+    };
+    assert.strictEqual(ctx.handleImageMetadataPaste(event), true);
+    assert.strictEqual(defaultPrevented, true);
+    assert.strictEqual(civitaiImageId, 145110824);
+    assert.ok(civitaiSourceUrl.includes('145110824'));
+    assert.ok(textarea.value.includes('145110824'));
+});
+
+test('inspectPastedWorkflow delegates to inspectCivitaiImage when input is a Civitai URL', () => {
+    const ctx = createMockContext();
+    let civitaiImageId = null;
+    let civitaiSourceUrl = null;
+    ctx.inspectCivitaiImage = (id, url) => {
+        civitaiImageId = id;
+        civitaiSourceUrl = url;
+    };
+    const civitaiUrl = 'https://civitai.com/images/145110824';
+    ctx.inspectPastedWorkflow(civitaiUrl);
+    assert.strictEqual(civitaiImageId, 145110824);
+    assert.strictEqual(civitaiSourceUrl, civitaiUrl);
+});
+
+test('getMetadataPromptTransferData falls back to civitai_metadata when workflow prompts are empty', () => {
+    const ctx = createMockContext();
+    const state = {
+        workflow: null,
+        metadata: {
+            civitai_metadata: {
+                prompt: 'a cinematic portrait of an astronaut',
+                negativePrompt: 'blurry, bad quality',
+            },
+        },
+    };
+    const transferData = ctx.getMetadataPromptTransferData(state);
+    assert.strictEqual(transferData.sourcePrompts.length, 2);
+    assert.strictEqual(transferData.sourcePrompts[0].role, 'positive');
+    assert.strictEqual(transferData.sourcePrompts[0].text, 'a cinematic portrait of an astronaut');
+    assert.strictEqual(transferData.sourcePrompts[1].role, 'negative');
+    assert.strictEqual(transferData.sourcePrompts[1].text, 'blurry, bad quality');
+});
+
+test('getMetadataTransferSourceModels includes models with name and category even when original_path is empty', () => {
+    const ctx = createMockContext();
+    const loadedModels = {
+        loaded_models: [
+            {
+                name: 'SDXL Base 1.0',
+                category: 'checkpoints',
+                original_path: '',
+                source: 'civitai_metadata',
+            },
+            {
+                name: 'Detail Tweaker LoRA',
+                category: 'loras',
+                original_path: '',
+                source: 'civitai_metadata',
+            },
+            {
+                name: '',
+                category: 'checkpoints',
+                original_path: '',
+            },
+            {
+                name: 'URN model',
+                category: 'checkpoints',
+                is_urn: true,
+                original_path: 'urn:air:sdxl:...',
+            },
+        ],
+    };
+    const sourceEntries = ctx.getMetadataTransferSourceModels(loadedModels);
+    assert.strictEqual(sourceEntries.length, 2);
+    assert.strictEqual(sourceEntries[0].model.name, 'SDXL Base 1.0');
+    assert.strictEqual(sourceEntries[1].model.name, 'Detail Tweaker LoRA');
+});
+
+test('getMetadataTransferModelLabel appends friendly model name in brackets when available', () => {
+    const ctx = createMockContext();
+    const modelWithFriendly = {
+        name: 'Cinematic_Krea2_krea2_3283603_epoch_10.safetensors',
+        original_path: 'Cinematic_Krea2_krea2_3283603_epoch_10.safetensors',
+        model_name: 'Cinematic Krea2',
+    };
+    const label = ctx.getMetadataTransferModelLabel(modelWithFriendly);
+    assert.strictEqual(label, 'Cinematic_Krea2_krea2_3283603_epoch_10 (Cinematic Krea2)');
+
+    const modelSameName = {
+        name: 'Cinematic Krea2.safetensors',
+        original_path: 'Cinematic Krea2.safetensors',
+        model_name: 'Cinematic Krea2',
+    };
+    assert.strictEqual(ctx.getMetadataTransferModelLabel(modelSameName), 'Cinematic Krea2');
+});
+
+
+
 

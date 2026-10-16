@@ -132,6 +132,82 @@ function readFileAsDataUrl(file) {
     });
 }
 
+function extractClipboardFile(clipboardData) {
+    if (!clipboardData) return null;
+
+    const files = Array.from(clipboardData.files || []);
+    for (const file of files) {
+        if (isImageFile(file) || isWorkflowFile(file)) {
+            return file;
+        }
+    }
+
+    const items = Array.from(clipboardData.items || []);
+    for (const item of items) {
+        if (item.kind === 'file') {
+            const file = item.getAsFile?.();
+            if (file && (isImageFile(file) || isWorkflowFile(file))) {
+                return file;
+            }
+        }
+    }
+
+    return null;
+}
+
+export function extractCivitaiImageId(input) {
+    if (!input || typeof input !== 'string') return null;
+    const str = input.trim();
+
+    // 1. Direct or full URL: https://civitai.com/images/12345 or https://civitai.red/images/12345
+    const urlMatch = str.match(/https?:\/\/(?:www\.)?civitai\.(?:com|red)\/images\/([1-9]\d*)/i);
+    if (urlMatch) {
+        return parseInt(urlMatch[1], 10);
+    }
+
+    // 2. Relative link in HTML: href="/images/12345" or href='/images/12345'
+    const hrefMatch = str.match(/href=["'](?:\/|https?:\/\/(?:www\.)?civitai\.(?:com|red)\/)?images\/([1-9]\d*)/i);
+    if (hrefMatch) {
+        return parseInt(hrefMatch[1], 10);
+    }
+
+    // 3. Image CDN URL: https://image.civitai.com/.../12345.jpeg or similar
+    const cdnMatch = str.match(/image\.civitai\.com\/[^\s"'<>]*\/([1-9]\d*)\.[a-zA-Z0-9]+/i);
+    if (cdnMatch) {
+        return parseInt(cdnMatch[1], 10);
+    }
+
+    // 4. HTML data attribute: data-image-id="12345"
+    const dataIdMatch = str.match(/data-image-id=["']([1-9]\d*)["']/i);
+    if (dataIdMatch) {
+        return parseInt(dataIdMatch[1], 10);
+    }
+
+    return null;
+}
+
+function isExternalInputElement(element, root) {
+    if (!element) return false;
+    if (typeof document !== 'undefined') {
+        if (element === document.body || element === document.documentElement) {
+            return false;
+        }
+    }
+    if (root && root.contains(element)) {
+        return false;
+    }
+    const tagName = element.tagName?.toLowerCase();
+    if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') {
+        return true;
+    }
+    return Boolean(element.isContentEditable);
+}
+
+function isExternalInputActive(root) {
+    const active = typeof document !== 'undefined' ? document.activeElement : null;
+    return isExternalInputElement(active, root);
+}
+
 function countLabel(count, singular, plural = `${singular}s`) {
     const value = Number(count) || 0;
     return `${value} ${value === 1 ? singular : plural}`;
@@ -145,29 +221,47 @@ function buildCivitaiModelData(resources = []) {
         const rawStrength = resource?.strength;
         const numericStrength = Number(rawStrength);
         const strength = Number.isFinite(numericStrength) ? numericStrength : null;
-        const name = String(
-            resource?.name
-            || resource?.model_name
+        const filename = String(resource?.filename || resource?.file_name || '').trim();
+        const modelName = String(
+            resource?.model_name
             || resource?.modelName
-            || (modelVersionId ? `Civitai model ${modelVersionId}` : '')
+            || resource?.display_name
+            || ''
         ).trim();
+        const versionName = String(resource?.version_name || resource?.versionName || '').trim();
+        const rawName = String(resource?.name || '').trim();
+        const name = filename || rawName || modelName || (modelVersionId ? `Civitai model ${modelVersionId}` : '');
         if (!name) return null;
+
+        const originalPath = String(resource?.original_path || filename || name).trim();
+        const friendlyTitle = modelName && versionName
+            ? `${modelName} (${versionName})`
+            : (modelName || versionName || name);
 
         return {
             name,
+            model_name: modelName,
+            version_name: versionName,
+            filename: filename || name,
             category: String(resource?.category || 'unknown'),
             node_id: `civitai-resource-${modelVersionId || index}`,
             widget_index: null,
             node_type: 'Civitai metadata',
-            node_title: String(resource?.version_name || resource?.versionName || '').trim(),
-            exists: false,
+            node_title: friendlyTitle,
+            exists: Boolean(resource?.exists),
             active: resource?.active !== false && (strength === null || strength !== 0),
             connected: true,
             strength,
-            original_path: '',
+            original_path: originalPath,
+            resolved_path: resource?.resolved_path || resource?.path || '',
+            path: resource?.path || resource?.resolved_path || '',
             model_id: resource?.model_id ?? resource?.modelId ?? null,
             model_version_id: modelVersionId || null,
             source: 'civitai_metadata',
+            base_model: resource?.base_model || null,
+            download_url: resource?.download_url || null,
+            hashes: resource?.hashes || {},
+            trained_words: Array.isArray(resource?.trained_words) ? resource.trained_words : [],
         };
     }).filter(Boolean);
 
@@ -283,7 +377,7 @@ export const imageMetadataMethods = {
         const existingRoot = this.contentElement.querySelector('.mr-image-inspector');
         if (!existingRoot) {
             this.contentElement.innerHTML = `
-                <div class="mr-image-inspector${isToolsCollapsed ? ' is-tools-collapsed' : ''}" data-inspector-section="tools">
+                <div class="mr-image-inspector${isToolsCollapsed ? ' is-tools-collapsed' : ''}" data-inspector-section="tools" tabindex="-1">
                     <div class="mr-loaded-models-header mr-image-inspector-header">
                         <div class="mr-loaded-title-block">
                             <div class="mr-section-collapse-header-row">
@@ -291,14 +385,14 @@ export const imageMetadataMethods = {
                                     <span class="mr-section-collapse-chevron" aria-hidden="true">${getSvgIcon('chevronDown')}</span>
                                     <span class="mr-loaded-models-title">Image Metadata</span>
                                 </button>
-                                ${this.getMetadataTooltipBadge('Drop an image or workflow JSON here, or paste JSON into the box below.', 'Image metadata help')}
+                                ${this.getMetadataTooltipBadge('Drop or paste (Ctrl+V) an image, Civitai link, or workflow JSON here, or paste JSON into the box below.', 'Image metadata help')}
                             </div>
                         </div>
                     </div>
                     <div class="mr-image-inspector-tools">
                         <input type="file" accept="image/png,image/jpeg,image/webp,application/json,.json" hidden data-image-inspector-input="file">
                         <div class="mr-image-inspector-paste">
-                            <textarea id="mr-image-inspector-json-text" class="mr-image-inspector-textarea" rows="3" aria-label="Paste workflow JSON" placeholder="Paste a ComfyUI UI workflow or API prompt graph..."></textarea>
+                            <textarea id="mr-image-inspector-json-text" class="mr-image-inspector-textarea" rows="3" aria-label="Paste workflow JSON" placeholder="Paste a ComfyUI workflow JSON or Civitai image link (e.g. https://civitai.red/images/145110824)..."></textarea>
                             <div class="mr-image-inspector-actions">
                                 <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm" data-image-inspector-action="analyze-paste" disabled>Analyze JSON</button>
                                 <button type="button" class="mr-btn mr-btn-primary mr-btn-sm" data-image-inspector-action="choose-file">Load file</button>
@@ -325,12 +419,69 @@ export const imageMetadataMethods = {
         if (!root || root.dataset.imageInspectorBound === '1') return;
         root.dataset.imageInspectorBound = '1';
 
+        if (typeof this._metadataPasteCleanup === 'function') {
+            this._metadataPasteCleanup();
+            this._metadataPasteCleanup = null;
+        }
+
+        const onMouseEnter = () => {
+            this._isMouseOverMetadata = true;
+            const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
+            const docBody = typeof document !== 'undefined' ? document.body : null;
+            if (!isExternalInputActive(root) && activeEl === docBody) {
+                root.focus?.({ preventScroll: true });
+            }
+        };
+        const onMouseLeave = (e) => {
+            const relTarget = e.relatedTarget;
+            if (relTarget && (root.contains(relTarget) || this.contentElement?.contains(relTarget))) {
+                return;
+            }
+            this._isMouseOverMetadata = false;
+        };
+
+        root.addEventListener('mouseenter', onMouseEnter);
+        root.addEventListener('mouseleave', onMouseLeave);
+        if (this.contentElement && this.contentElement !== root) {
+            this.contentElement.addEventListener('mouseenter', onMouseEnter);
+            this.contentElement.addEventListener('mouseleave', onMouseLeave);
+        }
+
+        const onPasteCapture = (event) => {
+            this.handleImageMetadataPaste(event);
+        };
+        if (typeof document !== 'undefined') {
+            document.addEventListener('paste', onPasteCapture, true);
+        }
+
+        this._metadataPasteCleanup = () => {
+            this._isMouseOverMetadata = false;
+            if (typeof document !== 'undefined') {
+                document.removeEventListener('paste', onPasteCapture, true);
+            }
+            root.removeEventListener('mouseenter', onMouseEnter);
+            root.removeEventListener('mouseleave', onMouseLeave);
+            if (this.contentElement && this.contentElement !== root) {
+                this.contentElement.removeEventListener('mouseenter', onMouseEnter);
+                this.contentElement.removeEventListener('mouseleave', onMouseLeave);
+            }
+            if (root) {
+                delete root.dataset.imageInspectorBound;
+            }
+        };
+
         const fileInput = root.querySelector('[data-image-inspector-input="file"]');
         const pasteInput = root.querySelector('.mr-image-inspector-textarea');
         const analyzePasteButton = root.querySelector('[data-image-inspector-action="analyze-paste"]');
         const updateAnalyzePasteButton = () => {
             if (analyzePasteButton) {
-                analyzePasteButton.disabled = !(pasteInput?.value || '').trim();
+                const val = (pasteInput?.value || '').trim();
+                analyzePasteButton.disabled = !val;
+                if (extractCivitaiImageId(val)) {
+                    analyzePasteButton.textContent = 'Analyze Civitai';
+                } else {
+                    analyzePasteButton.textContent = 'Analyze JSON';
+                }
             }
         };
         const setDragOver = (active) => {
@@ -500,6 +651,127 @@ export const imageMetadataMethods = {
         });
     },
 
+    handleImageMetadataPaste(event) {
+        if (this.activeTab !== 'metadata') return false;
+        if (this.element && this.element.style.display === 'none') return false;
+
+        const root = this.contentElement?.querySelector('.mr-image-inspector');
+        if (!root) return false;
+
+        if (isExternalInputElement(event.target, root) || isExternalInputActive(root)) {
+            return false;
+        }
+
+        const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
+        const isTargetInside = Boolean(
+            (event.target && root.contains(event.target))
+            || (activeEl && root.contains(activeEl))
+        );
+        const isHovered = Boolean(
+            this._isMouseOverMetadata
+            || root.matches?.(':hover')
+            || this.contentElement?.matches?.(':hover')
+        );
+
+        if (!isTargetInside && !isHovered) {
+            return false;
+        }
+
+        const clipboardData = event.clipboardData || (typeof window !== 'undefined' ? window.clipboardData : null);
+        if (!clipboardData) return false;
+
+        const targetIsTextarea = event.target?.classList?.contains('mr-image-inspector-textarea')
+            || event.target?.id === 'mr-image-inspector-json-text';
+
+        const htmlText = clipboardData.getData?.('text/html') || '';
+        const plainText = clipboardData.getData?.('text/plain') || '';
+        const civitaiFromPlain = extractCivitaiImageId(plainText);
+        const civitaiFromHtml = extractCivitaiImageId(htmlText);
+        const civitaiImageId = civitaiFromPlain || civitaiFromHtml;
+
+        if (civitaiImageId) {
+            event.preventDefault?.();
+            event.stopPropagation?.();
+            const sourceUrl = civitaiFromPlain
+                ? plainText.trim()
+                : `https://civitai.com/images/${civitaiImageId}`;
+            const textarea = root.querySelector('.mr-image-inspector-textarea');
+            if (textarea) {
+                textarea.value = sourceUrl;
+                if (typeof Event === 'function') {
+                    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+            }
+            void this.inspectCivitaiImage(civitaiImageId, sourceUrl);
+            return true;
+        }
+
+        const file = extractClipboardFile(clipboardData);
+        if (file) {
+            if (isImageFile(file)) {
+                event.preventDefault?.();
+                event.stopPropagation?.();
+                void this.inspectImageFile(file);
+                return true;
+            }
+            if (isWorkflowFile(file)) {
+                event.preventDefault?.();
+                event.stopPropagation?.();
+                void this.inspectWorkflowFile(file);
+                return true;
+            }
+        }
+
+        const text = clipboardData.getData?.('text/plain') || '';
+        const trimmed = text.trim();
+
+        if (/^data:image\/(png|jpeg|jpg|webp);base64,/i.test(trimmed)) {
+            event.preventDefault?.();
+            event.stopPropagation?.();
+            void this.runImageMetadataInspection({
+                source_type: 'image',
+                filename: 'Pasted image',
+                data_url: trimmed,
+            });
+            return true;
+        }
+
+        if (
+            (trimmed.startsWith('{') && trimmed.endsWith('}'))
+            || (trimmed.startsWith('[') && trimmed.endsWith(']'))
+        ) {
+            let parsed = null;
+            try {
+                parsed = JSON.parse(trimmed);
+            } catch {
+                // Ignore parse errors for non-JSON text.
+            }
+
+            if (parsed && typeof parsed === 'object') {
+                event.preventDefault?.();
+                event.stopPropagation?.();
+                const textarea = root.querySelector('.mr-image-inspector-textarea');
+                if (textarea) {
+                    textarea.value = trimmed;
+                    if (typeof Event === 'function') {
+                        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                    }
+                }
+                void this.inspectPastedWorkflow(trimmed);
+                return true;
+            }
+        }
+
+        if (targetIsTextarea) {
+            return false;
+        }
+
+        event.preventDefault?.();
+        event.stopPropagation?.();
+        this.showNotification('The clipboard does not contain an image, Civitai link, or valid workflow JSON.', 'warning');
+        return true;
+    },
+
     async inspectImageMetadataFile(file) {
         if (isImageFile(file)) {
             return this.inspectImageFile(file);
@@ -520,7 +792,7 @@ export const imageMetadataMethods = {
             const dataUrl = await readFileAsDataUrl(file);
             return this.runImageMetadataInspection({
                 source_type: 'image',
-                filename: file.name,
+                filename: file.name || 'Pasted image.png',
                 data_url: dataUrl,
             });
         } catch (error) {
@@ -539,7 +811,7 @@ export const imageMetadataMethods = {
             const workflow = JSON.parse(text);
             return this.runImageMetadataInspection({
                 source_type: 'workflow',
-                filename: file.name,
+                filename: file.name || 'Pasted workflow.json',
                 workflow,
             });
         } catch (error) {
@@ -551,8 +823,12 @@ export const imageMetadataMethods = {
     async inspectPastedWorkflow(text) {
         const value = String(text || '').trim();
         if (!value) {
-            this.showNotification('Paste a workflow JSON object first.', 'warning');
+            this.showNotification('Paste a workflow JSON object or Civitai image link first.', 'warning');
             return null;
+        }
+        const civitaiImageId = extractCivitaiImageId(value);
+        if (civitaiImageId) {
+            return this.inspectCivitaiImage(civitaiImageId, value);
         }
         if (new TextEncoder().encode(value).length > MAX_WORKFLOW_FILE_SIZE) {
             this.showNotification('The workflow JSON is too large to inspect (maximum 16 MB).', 'error');
@@ -568,6 +844,22 @@ export const imageMetadataMethods = {
             this.showNotification(error.message || 'The pasted workflow is not valid JSON.', 'error');
             return null;
         }
+    },
+
+    async inspectCivitaiImage(imageId, sourceUrl = '') {
+        const id = parseInt(imageId, 10);
+        if (!id || id <= 0) {
+            this.showNotification('Invalid Civitai image ID.', 'warning');
+            return null;
+        }
+        const tokens = this.getStoredTokens?.() || {};
+        return this.runImageMetadataInspection({
+            source_type: 'civitai',
+            image_id: id,
+            url: sourceUrl || `https://civitai.com/images/${id}`,
+            filename: `Civitai image ${id}`,
+            civitai_key: tokens.civitai_key || '',
+        });
     },
 
     async runImageMetadataInspection(payload) {
@@ -602,6 +894,12 @@ export const imageMetadataMethods = {
 
             state.metadata = metadata;
             if (!metadata?.workflow) {
+                const civitaiResources = Array.isArray(metadata.civitai_resources)
+                    ? metadata.civitai_resources
+                    : [];
+                if (civitaiResources.length) {
+                    state.loadedModels = buildCivitaiModelData(civitaiResources);
+                }
                 state.loading = '';
                 this.renderImageMetadataResult();
                 void this.openMetadataTransfer();
@@ -891,6 +1189,39 @@ export const imageMetadataMethods = {
         const promptTransfer = this.getMetadataPromptTransferState(imageState);
         const sourcePrompts = extractWorkflowPrompts(imageState.metadata?.workflow || {})
             .filter(prompt => !prompt.linked && String(prompt.text || '').trim());
+        if (!sourcePrompts.length && imageState.metadata?.civitai_metadata) {
+            const cm = imageState.metadata.civitai_metadata;
+            if (cm.prompt && typeof cm.prompt === 'string' && cm.prompt.trim()) {
+                sourcePrompts.push({
+                    id: 'civitai:positive',
+                    node_id: 'civitai-prompt-positive',
+                    node_type: 'Civitai metadata',
+                    node_title: 'Civitai positive prompt',
+                    widget_index: 0,
+                    widget_name: 'prompt',
+                    text: cm.prompt.trim(),
+                    role: 'positive',
+                    roleConfidence: 1,
+                    isDedicated: true,
+                    linked: false,
+                });
+            }
+            if (cm.negativePrompt && typeof cm.negativePrompt === 'string' && cm.negativePrompt.trim()) {
+                sourcePrompts.push({
+                    id: 'civitai:negative',
+                    node_id: 'civitai-prompt-negative',
+                    node_type: 'Civitai metadata',
+                    node_title: 'Civitai negative prompt',
+                    widget_index: 0,
+                    widget_name: 'negativePrompt',
+                    text: cm.negativePrompt.trim(),
+                    role: 'negative',
+                    roleConfidence: 1,
+                    isDedicated: true,
+                    linked: false,
+                });
+            }
+        }
         const targetPrompts = extractWorkflowPrompts(this.getCurrentWorkflow?.() || {})
             .filter(prompt => !prompt.linked);
         const selectedRoles = this.getMetadataPromptTransferState(imageState).selectedRoles;
@@ -1199,7 +1530,7 @@ export const imageMetadataMethods = {
             .filter(({ model }) => (
                 model
                 && !model.is_urn
-                && String(model.original_path || '').trim()
+                && (String(model.original_path || '').trim() || String(model.name || '').trim())
                 && normalizeTransferCategory(model.category)
             ));
     },
@@ -1278,7 +1609,15 @@ export const imageMetadataMethods = {
         const value = this.getMetadataTransferModelValue(model);
         const filename = this.getFilenameFromPath?.(value) || value;
         const label = this.stripModelExtension?.(filename) || filename;
-        return String(label || fallback).trim() || fallback;
+        const cleanLabel = String(label || fallback).trim() || fallback;
+        const friendlyName = String(model?.model_name || '').trim();
+        if (
+            friendlyName
+            && friendlyName.toLowerCase() !== cleanLabel.toLowerCase()
+        ) {
+            return `${cleanLabel} (${friendlyName})`;
+        }
+        return cleanLabel;
     },
 
     getMetadataTransferModelInteractionAttrs(model = {}, contextScope = 'loaded_model', label = '') {
