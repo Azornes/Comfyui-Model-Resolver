@@ -397,11 +397,36 @@ export const tabsLoadedMethods = {
             : '';
         const modelSubtitle = subtitle || `${countText(activeCount, 'active')} / ${countText(inactiveCount, 'inactive')}`;
 
+        const isCollapsed = Boolean(options.isCollapsed);
+        const tooltipText = options.tooltip || (options.collapsible && subtitle ? subtitle : '');
+        const tooltipHtml = tooltipText
+            ? (typeof this.getMetadataTooltipBadge === 'function'
+                ? this.getMetadataTooltipBadge(tooltipText, `${title} help`)
+                : `<span class="mr-tooltip-badge" data-tooltip="${this.escapeHtml(tooltipText)}" aria-label="${this.escapeHtml(title)} help">?</span>`)
+            : '';
+
+        const titleHtml = options.collapsible
+            ? `
+                <div class="mr-section-collapse-header-row">
+                    <button type="button" class="mr-section-collapse-btn" data-image-inspector-collapse="${this.escapeHtml(options.sectionId || 'models')}" aria-expanded="${isCollapsed ? 'false' : 'true'}" aria-label="Toggle ${this.escapeHtml(title)} section">
+                        <span class="mr-section-collapse-chevron" aria-hidden="true">${getSvgIcon('chevronDown')}</span>
+                        <span class="mr-loaded-models-title">${this.escapeHtml(title)} <span class="mr-loaded-total">${total}</span></span>
+                    </button>
+                    ${tooltipHtml}
+                </div>
+            `
+            : `<h3 class="mr-loaded-models-title">${this.escapeHtml(title)} <span class="mr-loaded-total">${total}</span>${tooltipHtml}</h3>`;
+
+        const showSubtitle = (options.showSubtitle ?? !options.collapsible) && Boolean(modelSubtitle);
+        const subtitleHtml = showSubtitle
+            ? `<p class="mr-loaded-models-subtitle">${this.escapeHtml(modelSubtitle)}</p>`
+            : '';
+
         let html = `
             <div class="mr-loaded-models-header">
                 <div class="mr-loaded-title-block">
-                    <h3 class="mr-loaded-models-title">${this.escapeHtml(title)} <span class="mr-loaded-total">${total}</span></h3>
-                    <p class="mr-loaded-models-subtitle">${this.escapeHtml(modelSubtitle)}</p>
+                    ${titleHtml}
+                    ${subtitleHtml}
                 </div>
                 <div class="mr-loaded-filter-row">
                     <button class="mr-btn-filter active" id="filter-all" onclick="window.MLFilterSwitch('all', this)">All (${activeCount + inactiveCount})</button>
@@ -504,6 +529,7 @@ export const tabsLoadedMethods = {
 
         if (typeof container?.querySelector === 'function') {
             this.bindLoadedModelSelection?.(container);
+            this.bindTooltips?.(container);
         }
     },
 

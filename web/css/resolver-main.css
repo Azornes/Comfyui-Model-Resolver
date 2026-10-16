@@ -4308,6 +4308,74 @@
     color: var(--mr-text-muted);
 }
 
+#model-resolver-modal .mr-section-collapse-header-row,
+.mr-section-collapse-header-row {
+    display: flex;
+    align-items: center;
+    gap: var(--mr-spacing-6);
+    min-width: 0;
+}
+
+#model-resolver-modal .mr-section-collapse-btn,
+.mr-section-collapse-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--mr-spacing-6);
+    background: transparent;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    box-shadow: none;
+}
+
+#model-resolver-modal .mr-section-collapse-btn:hover .mr-loaded-models-title,
+.mr-section-collapse-btn:hover .mr-loaded-models-title {
+    color: #ffffff;
+}
+
+#model-resolver-modal .mr-section-collapse-btn:hover .mr-section-collapse-chevron,
+.mr-section-collapse-btn:hover .mr-section-collapse-chevron {
+    color: #ffffff;
+}
+
+#model-resolver-modal .mr-section-collapse-btn:focus-visible,
+.mr-section-collapse-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--mr-missing-control-focus-ring, rgba(114, 211, 138, 0.4));
+    border-radius: var(--mr-radius-sm, 4px);
+}
+
+#model-resolver-modal .mr-section-collapse-chevron,
+.mr-section-collapse-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 18px;
+    width: 18px;
+    height: 18px;
+    border: 0;
+    border-radius: 0;
+    color: var(--mr-text-secondary);
+    background: transparent;
+    box-shadow: none;
+    transition: transform 140ms ease, color 140ms ease;
+}
+
+#model-resolver-modal .mr-section-collapse-chevron svg,
+.mr-section-collapse-chevron svg {
+    width: 16px;
+    height: 16px;
+}
+
+#model-resolver-modal .mr-section-collapse-btn[aria-expanded="false"] .mr-section-collapse-chevron,
+.mr-section-collapse-btn[aria-expanded="false"] .mr-section-collapse-chevron {
+    transform: rotate(-90deg);
+}
+
 .mr-models-list {
     padding: var(--mr-spacing-8) var(--mr-spacing-12) var(--mr-spacing-10);
     display: flex;
@@ -4937,6 +5005,15 @@ button.mr-info-link:disabled {
     padding: 0 var(--mr-spacing-12) var(--mr-spacing-16);
 }
 
+#model-resolver-modal .mr-image-inspector-result > :first-child,
+.mr-image-inspector-result > :first-child,
+#model-resolver-modal .mr-image-inspector-result > .mr-image-prompt-transfer:first-child,
+.mr-image-inspector-result > .mr-image-prompt-transfer:first-child,
+#model-resolver-modal .mr-image-inspector-result > .mr-image-transfer:first-child,
+.mr-image-inspector-result > .mr-image-transfer:first-child {
+    margin-top: 0;
+}
+
 .mr-image-inspector-summary {
     padding-top: var(--mr-spacing-12);
     border-top: 1px solid var(--mr-border);
@@ -4944,9 +5021,7 @@ button.mr-info-link:disabled {
 
 #model-resolver-modal .mr-image-inspector-summary .mr-loaded-models-header,
 .mr-image-inspector-summary .mr-loaded-models-header {
-    padding-left: 0;
-    padding-right: 0;
-    padding-top: 0;
+    padding: 0;
     border-bottom: 0;
     margin-bottom: var(--mr-spacing-8);
 }
@@ -4987,9 +5062,9 @@ button.mr-info-link:disabled {
 
 #model-resolver-modal .mr-image-inspector-models .mr-loaded-models-header,
 .mr-image-inspector-models .mr-loaded-models-header {
-    padding-left: 0;
-    padding-right: 0;
-    padding-top: 0;
+    padding: 0;
+    border-bottom: 0;
+    align-items: flex-start;
 }
 
 #model-resolver-modal .mr-image-inspector-models .mr-models-list,
@@ -5062,6 +5137,94 @@ button.mr-info-link:disabled {
     right: 0;
     height: 1px;
     background: linear-gradient(90deg, rgba(114, 211, 138, 0.28), var(--mr-border) 34%, transparent 100%);
+}
+
+#model-resolver-modal .mr-image-inspector.is-tools-collapsed .mr-image-inspector-tools,
+.mr-image-inspector.is-tools-collapsed .mr-image-inspector-tools {
+    display: none;
+}
+
+#model-resolver-modal .mr-image-inspector.is-tools-collapsed .mr-image-inspector-header,
+.mr-image-inspector.is-tools-collapsed .mr-image-inspector-header {
+    padding-bottom: var(--mr-spacing-12);
+}
+
+#model-resolver-modal .mr-image-inspector-summary.is-collapsed .mr-image-inspector-info-table,
+.mr-image-inspector-summary.is-collapsed .mr-image-inspector-info-table {
+    display: none;
+}
+
+#model-resolver-modal .mr-image-inspector-summary.is-collapsed .mr-loaded-models-header,
+.mr-image-inspector-summary.is-collapsed .mr-loaded-models-header {
+    margin-bottom: 0;
+    padding: 0;
+}
+
+#model-resolver-modal .mr-image-prompt-transfer.is-collapsed .mr-image-prompt-list,
+.mr-image-prompt-transfer.is-collapsed .mr-image-prompt-list,
+#model-resolver-modal .mr-image-prompt-transfer.is-collapsed .mr-image-prompt-actions,
+.mr-image-prompt-transfer.is-collapsed .mr-image-prompt-actions,
+#model-resolver-modal .mr-image-prompt-transfer.is-collapsed .mr-error-text,
+.mr-image-prompt-transfer.is-collapsed .mr-error-text {
+    display: none;
+}
+
+#model-resolver-modal .mr-image-prompt-transfer.is-collapsed,
+.mr-image-prompt-transfer.is-collapsed {
+    margin-bottom: var(--mr-spacing-12);
+}
+
+#model-resolver-modal .mr-image-prompt-transfer.is-collapsed .mr-image-prompt-header,
+.mr-image-prompt-transfer.is-collapsed .mr-image-prompt-header {
+    margin-bottom: 0;
+}
+
+#model-resolver-modal .mr-image-transfer.is-collapsed .mr-image-transfer-mode,
+.mr-image-transfer.is-collapsed .mr-image-transfer-mode,
+#model-resolver-modal .mr-image-transfer.is-collapsed .mr-image-transfer-activity,
+.mr-image-transfer.is-collapsed .mr-image-transfer-activity,
+#model-resolver-modal .mr-image-transfer.is-collapsed .mr-image-transfer-category-list,
+.mr-image-transfer.is-collapsed .mr-image-transfer-category-list,
+#model-resolver-modal .mr-image-transfer.is-collapsed .mr-image-transfer-actions,
+.mr-image-transfer.is-collapsed .mr-image-transfer-actions,
+#model-resolver-modal .mr-image-transfer.is-collapsed .mr-image-transfer-loading,
+.mr-image-transfer.is-collapsed .mr-image-transfer-loading,
+#model-resolver-modal .mr-image-transfer.is-collapsed .mr-image-transfer-note,
+.mr-image-transfer.is-collapsed .mr-image-transfer-note,
+#model-resolver-modal .mr-image-transfer.is-collapsed .mr-image-inspector-loading,
+.mr-image-transfer.is-collapsed .mr-image-inspector-loading,
+#model-resolver-modal .mr-image-transfer.is-collapsed .mr-error-text,
+.mr-image-transfer.is-collapsed .mr-error-text {
+    display: none;
+}
+
+#model-resolver-modal .mr-image-transfer.is-collapsed,
+.mr-image-transfer.is-collapsed {
+    margin-bottom: var(--mr-spacing-12);
+}
+
+#model-resolver-modal .mr-image-transfer.is-collapsed .mr-image-transfer-header,
+.mr-image-transfer.is-collapsed .mr-image-transfer-header {
+    margin-bottom: 0;
+}
+
+#model-resolver-modal .mr-image-inspector-models.is-collapsed .mr-models-list,
+.mr-image-inspector-models.is-collapsed .mr-models-list,
+#model-resolver-modal .mr-image-inspector-models.is-collapsed .mr-models-list-pad,
+.mr-image-inspector-models.is-collapsed .mr-models-list-pad,
+#model-resolver-modal .mr-image-inspector-models.is-collapsed .mr-copy-section,
+.mr-image-inspector-models.is-collapsed .mr-copy-section,
+#model-resolver-modal .mr-image-inspector-models.is-collapsed .mr-loaded-filter-row,
+.mr-image-inspector-models.is-collapsed .mr-loaded-filter-row {
+    display: none;
+}
+
+#model-resolver-modal .mr-image-inspector-models.is-collapsed .mr-loaded-models-header,
+.mr-image-inspector-models.is-collapsed .mr-loaded-models-header {
+    margin-bottom: 0;
+    padding: 0;
+    border-bottom: 0;
+    align-items: flex-start;
 }
 
 .mr-image-prompt-header,

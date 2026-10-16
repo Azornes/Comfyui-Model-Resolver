@@ -1,5 +1,19 @@
 // icon_utils - Utility for loading SVG icons
-import { app } from "../../../scripts/app.js";
+let appInstance = null;
+async function getApp() {
+    if (appInstance) return appInstance;
+    if (typeof window !== "undefined" && window.app) {
+        appInstance = window.app;
+        return appInstance;
+    }
+    try {
+        const mod = await import("../../../scripts/app.js");
+        appInstance = mod?.app || null;
+    } catch {
+        // Not in ComfyUI environment
+    }
+    return appInstance;
+}
 
 const SVG_ICONS = {
     trash2: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M5 6l1 14a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1l1-14M10 10v7M14 10v7"></path></svg>`,
@@ -100,7 +114,10 @@ export function loadIcons(icons = {}, iconColor = "#dddddd", userColors = {}) {
         const svg = SVG_ICONS[name].replaceAll("{color}", color);
 
         const img = new Image();
-        img.onload = () => app.graph.setDirtyCanvas(true);
+        img.onload = async () => {
+            const app = await getApp();
+            app?.graph?.setDirtyCanvas(true);
+        };
         img.src = `data:image/svg+xml;base64,${btoa(svg)}`;
 
         icons[name] = img;

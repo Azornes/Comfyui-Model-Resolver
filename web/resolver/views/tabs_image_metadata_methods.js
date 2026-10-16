@@ -1,4 +1,5 @@
 import { copyTextWithFeedback, safeStorage } from "../utils/html_utils.js";
+import { getSvgIcon } from "../../utils/icon_utils.js";
 import {
     isExistingResolvedModel,
     toResolverContextModel,
@@ -15,6 +16,7 @@ const MAX_IMAGE_FILE_SIZE = 64 * 1024 * 1024;
 const MAX_WORKFLOW_FILE_SIZE = 16 * 1024 * 1024;
 const METADATA_TRANSFER_MODE_STORAGE_KEY = 'model_resolver_metadata_transfer_mode';
 const METADATA_TRANSFER_ACTIVITY_SCOPE_STORAGE_KEY = 'model_resolver_metadata_transfer_activity_scope';
+const METADATA_COLLAPSED_SECTIONS_STORAGE_KEY = 'model_resolver_metadata_collapsed_sections';
 const METADATA_PROMPT_ROLES = ['positive', 'negative'];
 const MAX_PROMPT_PREVIEW_LENGTH = 12_000;
 const COPY_ICON_HTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
@@ -84,6 +86,7 @@ function getImageInspectorState(dialog) {
             transfer: null,
             promptTransfer: null,
             lastTransfer: null,
+            collapsedSections: null,
         };
     }
     return dialog.imageInspectorState;
@@ -184,6 +187,84 @@ export const imageMetadataMethods = {
         return Boolean(workflowSignature) && transfer.workflowSignature === workflowSignature;
     },
 
+    getImageInspectorCollapsedSections(state = null) {
+        const rootState = getImageInspectorState(this);
+        const imageState = state || rootState;
+        if (rootState && rootState.collapsedSections instanceof Set) {
+            imageState.collapsedSections = rootState.collapsedSections;
+            return rootState.collapsedSections;
+        }
+        if (!(imageState.collapsedSections instanceof Set)) {
+            let initial = [];
+            const stored = safeStorage.getItem(METADATA_COLLAPSED_SECTIONS_STORAGE_KEY);
+            if (stored) {
+                try {
+                    initial = JSON.parse(stored);
+                } catch {
+                    initial = [];
+                }
+            }
+            const set = new Set(Array.isArray(initial) ? initial : []);
+            imageState.collapsedSections = set;
+            if (rootState) rootState.collapsedSections = set;
+        }
+        return imageState.collapsedSections;
+    },
+
+    isImageInspectorSectionCollapsed(sectionId, state = null) {
+        if (!sectionId) return false;
+        const collapsed = this.getImageInspectorCollapsedSections(state);
+        return collapsed instanceof Set ? collapsed.has(sectionId) : false;
+    },
+
+    toggleImageInspectorSection(sectionId) {
+        if (!sectionId) return;
+        const state = getImageInspectorState(this);
+        const collapsed = this.getImageInspectorCollapsedSections(state);
+        const nextCollapsed = !collapsed.has(sectionId);
+        if (nextCollapsed) {
+            collapsed.add(sectionId);
+        } else {
+            collapsed.delete(sectionId);
+        }
+        try {
+            safeStorage.setItem(
+                METADATA_COLLAPSED_SECTIONS_STORAGE_KEY,
+                JSON.stringify(Array.from(collapsed)),
+            );
+        } catch {
+            // ignore storage errors
+        }
+        this.applyImageInspectorSectionCollapsed(sectionId, nextCollapsed);
+    },
+
+    applyImageInspectorSectionCollapsed(sectionId, isCollapsed) {
+        const root = this.contentElement?.querySelector('.mr-image-inspector');
+        if (!root) return;
+
+        let container = null;
+        if (sectionId === 'tools') {
+            root.classList.toggle('is-tools-collapsed', isCollapsed);
+        } else if (sectionId === 'summary') {
+            container = root.querySelector('.mr-image-inspector-summary');
+        } else if (sectionId === 'prompt-transfer') {
+            container = root.querySelector('.mr-image-prompt-transfer');
+        } else if (sectionId === 'model-transfer') {
+            container = root.querySelector('.mr-image-transfer');
+        } else if (sectionId === 'models') {
+            container = root.querySelector('.mr-image-inspector-models');
+        }
+
+        if (container) {
+            container.classList.toggle('is-collapsed', isCollapsed);
+        }
+
+        const btn = root.querySelector(`[data-image-inspector-collapse="${sectionId}"]`);
+        if (btn) {
+            btn.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+        }
+    },
+
     loadImageMetadata() {
         if (!this.contentElement) return null;
         this.contentElement.style.overflowY = 'auto';
@@ -198,13 +279,20 @@ export const imageMetadataMethods = {
     renderImageMetadataShell() {
         if (!this.contentElement) return;
 
+        const isToolsCollapsed = this.isImageInspectorSectionCollapsed('tools');
         const existingRoot = this.contentElement.querySelector('.mr-image-inspector');
         if (!existingRoot) {
             this.contentElement.innerHTML = `
-                <div class="mr-image-inspector">
+                <div class="mr-image-inspector${isToolsCollapsed ? ' is-tools-collapsed' : ''}" data-inspector-section="tools">
                     <div class="mr-loaded-models-header mr-image-inspector-header">
                         <div class="mr-loaded-title-block">
-                            <h3 class="mr-loaded-models-title">Image Metadata ${this.getMetadataTooltipBadge('Drop an image or workflow JSON here, or paste JSON into the box below.', 'Image metadata help')}</h3>
+                            <div class="mr-section-collapse-header-row">
+                                <button type="button" class="mr-section-collapse-btn" data-image-inspector-collapse="tools" aria-expanded="${isToolsCollapsed ? 'false' : 'true'}" aria-label="Toggle Image Metadata section">
+                                    <span class="mr-section-collapse-chevron" aria-hidden="true">${getSvgIcon('chevronDown')}</span>
+                                    <span class="mr-loaded-models-title">Image Metadata</span>
+                                </button>
+                                ${this.getMetadataTooltipBadge('Drop an image or workflow JSON here, or paste JSON into the box below.', 'Image metadata help')}
+                            </div>
                         </div>
                     </div>
                     <div class="mr-image-inspector-tools">
@@ -222,6 +310,10 @@ export const imageMetadataMethods = {
                 </div>
             `;
             this.bindImageMetadataEvents();
+        } else {
+            existingRoot.classList.toggle('is-tools-collapsed', isToolsCollapsed);
+            const btn = existingRoot.querySelector('[data-image-inspector-collapse="tools"]');
+            if (btn) btn.setAttribute('aria-expanded', isToolsCollapsed ? 'false' : 'true');
         }
 
         this.bindTooltips?.(this.contentElement);
@@ -251,6 +343,14 @@ export const imageMetadataMethods = {
         let dragDepth = 0;
 
         root.addEventListener('click', (event) => {
+            const collapseToggle = event.target.closest?.('[data-image-inspector-collapse]');
+            if (collapseToggle) {
+                event.preventDefault();
+                event.stopPropagation();
+                this.toggleImageInspectorSection(collapseToggle.dataset.imageInspectorCollapse);
+                return;
+            }
+
             const categoryToggle = event.target.closest?.('[data-image-transfer-category-toggle]');
             if (categoryToggle) {
                 this.toggleMetadataTransferCategory(categoryToggle.dataset.imageTransferCategoryToggle);
@@ -632,20 +732,27 @@ export const imageMetadataMethods = {
             </tr>
         ` : '';
         const modelContainerId = `mr-image-inspector-models-${Date.now()}`;
+        const isSummaryCollapsed = this.isImageInspectorSectionCollapsed('summary', state);
+        const isModelsCollapsed = this.isImageInspectorSectionCollapsed('models', state);
 
         result.innerHTML = `
-            <section class="mr-image-inspector-summary">
+            <section class="mr-image-inspector-summary${isSummaryCollapsed ? ' is-collapsed' : ''}" data-inspector-section="summary">
                 <div class="mr-loaded-models-header">
                     <div class="mr-loaded-title-block">
-                        <h3 class="mr-loaded-models-title">Extracted Metadata</h3>
-                        <p class="mr-loaded-models-subtitle">Read-only information from the selected source.</p>
+                        <div class="mr-section-collapse-header-row">
+                            <button type="button" class="mr-section-collapse-btn" data-image-inspector-collapse="summary" aria-expanded="${isSummaryCollapsed ? 'false' : 'true'}" aria-label="Toggle Extracted Metadata section">
+                                <span class="mr-section-collapse-chevron" aria-hidden="true">${getSvgIcon('chevronDown')}</span>
+                                <span class="mr-loaded-models-title">Extracted Metadata</span>
+                            </button>
+                            ${this.getMetadataTooltipBadge('Read-only information from the selected source.', 'Extracted metadata help')}
+                        </div>
                     </div>
                 </div>
                 <table class="mr-info-table mr-image-inspector-info-table"><tbody>${rowsHtml}${parametersHtml}</tbody></table>
             </section>
             ${this.renderMetadataPromptTransferPanel(state)}
             ${this.renderMetadataTransferPanel(state)}
-            <section class="mr-image-inspector-models">
+            <section class="mr-image-inspector-models${isModelsCollapsed ? ' is-collapsed' : ''}" data-inspector-section="models">
                 <div id="${this.escapeHtml(modelContainerId)}"></div>
             </section>
         `;
@@ -654,8 +761,11 @@ export const imageMetadataMethods = {
         if (!metadata.workflow && civitaiModelData.total) {
             this.displayLoadedModels(modelContainer, civitaiModelData, {
                 title: 'Referenced Models',
-                subtitle: 'Models reported by embedded Civitai metadata.',
+                tooltip: 'Models reported by embedded Civitai metadata.',
                 includeContextMenu: false,
+                collapsible: true,
+                isCollapsed: isModelsCollapsed,
+                sectionId: 'models',
             });
         } else if (!metadata.workflow) {
             modelContainer.innerHTML = this.renderStatusMessage(
@@ -663,7 +773,13 @@ export const imageMetadataMethods = {
                 'info'
             );
         } else if (state.loadedModels) {
-            this.displayLoadedModels(modelContainer, state.loadedModels);
+            this.displayLoadedModels(modelContainer, state.loadedModels, {
+                title: 'Referenced Models',
+                tooltip: 'Models detected in the imported ComfyUI workflow.',
+                collapsible: true,
+                isCollapsed: isModelsCollapsed,
+                sectionId: 'models',
+            });
         } else {
             modelContainer.innerHTML = this.renderStatusMessage(
                 'No loaded model scan is available yet.',
@@ -953,12 +1069,17 @@ export const imageMetadataMethods = {
         const statusHtml = promptTransfer.error
             ? `<p class="mr-error-text">${this.escapeHtml(promptTransfer.error)}</p>`
             : '';
+        const isPromptCollapsed = this.isImageInspectorSectionCollapsed?.('prompt-transfer', imageState) || false;
 
         return `
-            <section class="mr-image-prompt-transfer">
+            <section class="mr-image-prompt-transfer${isPromptCollapsed ? ' is-collapsed' : ''}" data-inspector-section="prompt-transfer">
                 <div class="mr-image-prompt-header">
-                    <div>
-                        <h3 class="mr-loaded-models-title">Transfer prompts to current workflow ${this.getMetadataTooltipBadge(promptHelpText, 'Prompt transfer help')}</h3>
+                    <div class="mr-section-collapse-header-row">
+                        <button type="button" class="mr-section-collapse-btn" data-image-inspector-collapse="prompt-transfer" aria-expanded="${isPromptCollapsed ? 'false' : 'true'}" aria-label="Toggle prompt transfer section">
+                            <span class="mr-section-collapse-chevron" aria-hidden="true">${getSvgIcon('chevronDown')}</span>
+                            <span class="mr-loaded-models-title">Transfer prompts to current workflow</span>
+                        </button>
+                        ${this.getMetadataTooltipBadge(promptHelpText, 'Prompt transfer help')}
                     </div>
                 </div>
                 ${statusHtml}
@@ -1717,9 +1838,19 @@ export const imageMetadataMethods = {
                             ? 'The imported image has no embedded ComfyUI workflow.'
                             : 'Import a workflow with model metadata to enable Apply transfer.';
 
+        const isTransferCollapsed = this.isImageInspectorSectionCollapsed?.('model-transfer', state) || false;
+
         if (transfer.loading) {
             return `
-                <section class="mr-image-transfer mr-image-transfer-loading">
+                <section class="mr-image-transfer mr-image-transfer-loading${isTransferCollapsed ? ' is-collapsed' : ''}" data-inspector-section="model-transfer">
+                    <div class="mr-image-transfer-header">
+                        <div class="mr-section-collapse-header-row">
+                            <button type="button" class="mr-section-collapse-btn" data-image-inspector-collapse="model-transfer" aria-expanded="${isTransferCollapsed ? 'false' : 'true'}" aria-label="Toggle model transfer section">
+                                <span class="mr-section-collapse-chevron" aria-hidden="true">${getSvgIcon('chevronDown')}</span>
+                                <span class="mr-loaded-models-title">Transfer models to current workflow</span>
+                            </button>
+                        </div>
+                    </div>
                     <div class="mr-image-inspector-loading">Scanning the current workflow for target nodes...</div>
                     <p class="mr-image-transfer-note">${this.escapeHtml(sourceSummary)}</p>
                 </section>
@@ -1727,17 +1858,20 @@ export const imageMetadataMethods = {
         }
         if (transfer.error) {
             return `
-                <section class="mr-image-transfer">
+                <section class="mr-image-transfer${isTransferCollapsed ? ' is-collapsed' : ''}" data-inspector-section="model-transfer">
                     <div class="mr-image-transfer-header">
-                        <div>
-                            <h3 class="mr-loaded-models-title">Transfer models to current workflow</h3>
-                            <p class="mr-error-text">${this.escapeHtml(transfer.error)}</p>
+                        <div class="mr-section-collapse-header-row">
+                            <button type="button" class="mr-section-collapse-btn" data-image-inspector-collapse="model-transfer" aria-expanded="${isTransferCollapsed ? 'false' : 'true'}" aria-label="Toggle model transfer section">
+                                <span class="mr-section-collapse-chevron" aria-hidden="true">${getSvgIcon('chevronDown')}</span>
+                                <span class="mr-loaded-models-title">Transfer models to current workflow</span>
+                            </button>
                         </div>
                         <div class="mr-image-inspector-header-actions">
                             ${undoButton}
                             <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm" data-image-inspector-action="retry-transfer-targets">Retry</button>
                         </div>
                     </div>
+                    <p class="mr-error-text">${this.escapeHtml(transfer.error)}</p>
                     <p class="mr-image-transfer-note">${this.escapeHtml(sourceSummary)}</p>
                 </section>
             `;
@@ -1907,10 +2041,14 @@ export const imageMetadataMethods = {
                 : '',
         ].filter(Boolean).join('\n\n');
         return `
-            <section class="mr-image-transfer">
+            <section class="mr-image-transfer${isTransferCollapsed ? ' is-collapsed' : ''}" data-inspector-section="model-transfer">
                 <div class="mr-image-transfer-header">
-                    <div>
-                        <h3 class="mr-loaded-models-title">Transfer models to current workflow ${this.getMetadataTooltipBadge(transferHelpText, 'Model transfer help')}</h3>
+                    <div class="mr-section-collapse-header-row">
+                        <button type="button" class="mr-section-collapse-btn" data-image-inspector-collapse="model-transfer" aria-expanded="${isTransferCollapsed ? 'false' : 'true'}" aria-label="Toggle model transfer section">
+                            <span class="mr-section-collapse-chevron" aria-hidden="true">${getSvgIcon('chevronDown')}</span>
+                            <span class="mr-loaded-models-title">Transfer models to current workflow</span>
+                        </button>
+                        ${this.getMetadataTooltipBadge(transferHelpText, 'Model transfer help')}
                     </div>
                     <div class="mr-image-inspector-header-actions">
                         ${undoButton}
