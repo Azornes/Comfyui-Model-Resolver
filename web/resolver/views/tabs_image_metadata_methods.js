@@ -538,6 +538,10 @@ export const imageMetadataMethods = {
     },
 
     clearImageMetadata() {
+        if (typeof this._mlSelectionCleanup === 'function') {
+            this._mlSelectionCleanup();
+            this._mlSelectionCleanup = null;
+        }
         const state = getImageInspectorState(this);
         state.requestToken = `cleared-${Date.now()}`;
         state.metadata = null;
@@ -549,6 +553,10 @@ export const imageMetadataMethods = {
     },
 
     renderImageMetadataResult() {
+        if (typeof this._mlSelectionCleanup === 'function') {
+            this._mlSelectionCleanup();
+            this._mlSelectionCleanup = null;
+        }
         const result = this.contentElement?.querySelector('[data-image-inspector-result]');
         if (!result) return;
         const state = getImageInspectorState(this);

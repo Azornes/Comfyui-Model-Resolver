@@ -8,6 +8,10 @@ import {
     buildLoadedModelTokenStrings,
     groupLoadedModelsByCategory,
 } from "../utils/loaded_model_utils.js";
+import {
+    initLoadedModelSelection,
+    updateLoadedModelSelectionState,
+} from "../utils/loaded_model_selection.js";
 export const tabsLoadedMethods = {
     getTabButton(tab) {
         return {
@@ -58,6 +62,12 @@ export const tabsLoadedMethods = {
         if (this.activeTab !== 'loaded') {
             this._loadedModelsLoadToken = null;
             this._loadedModelsProgressToken = null;
+        }
+        if (this.activeTab !== 'loaded' && this.activeTab !== 'metadata') {
+            if (typeof this._mlSelectionCleanup === 'function') {
+                this._mlSelectionCleanup();
+                this._mlSelectionCleanup = null;
+            }
         }
         this.hideTooltip();
         this.animateTabContentTransition();
@@ -243,7 +253,11 @@ export const tabsLoadedMethods = {
                 ?.dataset?.mlCopyMode || 'all';
             const copyCode = copySection.querySelector?.('.mr-copy-code');
             if (copyCode) {
-                copyCode.textContent = strings[activeMode] || strings.all;
+                if (activeMode === 'selected') {
+                    copyCode.textContent = copySection.dataset.mlSelected || '';
+                } else {
+                    copyCode.textContent = strings[activeMode] || strings.all;
+                }
             }
         }
 
@@ -321,6 +335,9 @@ export const tabsLoadedMethods = {
             if (strengthElement) {
                 strengthElement.textContent = entry.strength.toFixed(2);
             }
+            if (chip && typeof this.getModelToken === 'function') {
+                chip.dataset.mlToken = this.getModelToken(model, model.category || 'unknown');
+            }
             updated = true;
         }
         if (!updated) return false;
@@ -329,6 +346,7 @@ export const tabsLoadedMethods = {
             this.contentElement,
             this.cachedLoadedModelsData.loaded_models
         );
+        this.updateLoadedModelSelectionState?.(this.contentElement);
         const workflow = this.getCurrentWorkflow?.();
         const workflowSignature = workflow
             ? this.getWorkflowSignature?.(workflow)
@@ -386,9 +404,9 @@ export const tabsLoadedMethods = {
                     <p class="mr-loaded-models-subtitle">${this.escapeHtml(modelSubtitle)}</p>
                 </div>
                 <div class="mr-loaded-filter-row">
-                    <button class="mr-btn-filter active" id="filter-all" onclick="window.MLFilterSwitch('all')">All (${activeCount + inactiveCount})</button>
-                    <button class="mr-btn-filter" id="filter-active" onclick="window.MLFilterSwitch('active')">Active (${activeCount})</button>
-                    <button class="mr-btn-filter" id="filter-inactive" onclick="window.MLFilterSwitch('inactive')">Inactive (${inactiveCount})</button>
+                    <button class="mr-btn-filter active" id="filter-all" onclick="window.MLFilterSwitch('all', this)">All (${activeCount + inactiveCount})</button>
+                    <button class="mr-btn-filter" id="filter-active" onclick="window.MLFilterSwitch('active', this)">Active (${activeCount})</button>
+                    <button class="mr-btn-filter" id="filter-inactive" onclick="window.MLFilterSwitch('inactive', this)">Inactive (${inactiveCount})</button>
                 </div>
             </div>
             <div class="mr-models-list mr-models-list-pad">
@@ -427,7 +445,8 @@ export const tabsLoadedMethods = {
                     const { name, strength } = this.getModelNameAndStrength(model);
                     const fullName = model.original_path || model.name || name;
                     const modelKey = this.getLoadedModelDomKey(model);
-                    html += `<span class="mr-model-chip" data-ml-loaded-model-key="${this.escapeHtml(modelKey)}"${modelContextAttrs(model)}${this.getModelPreviewTooltipAttrs(model, fullName)}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
+                    const token = this.getModelToken(model, category);
+                    html += `<span class="mr-model-chip" data-ml-token="${this.escapeHtml(token)}" data-ml-loaded-model-key="${this.escapeHtml(modelKey)}"${modelContextAttrs(model)}${this.getModelPreviewTooltipAttrs(model, fullName)}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
                 }
                 html += `</div></div>`;
             }
@@ -446,7 +465,8 @@ export const tabsLoadedMethods = {
                     const { name, strength } = this.getModelNameAndStrength(model);
                     const fullName = model.original_path || model.name || name;
                     const modelKey = this.getLoadedModelDomKey(model);
-                    html += `<span class="mr-model-chip" data-ml-loaded-model-key="${this.escapeHtml(modelKey)}"${modelContextAttrs(model)}${this.getModelPreviewTooltipAttrs(model, fullName)}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
+                    const token = this.getModelToken(model, category);
+                    html += `<span class="mr-model-chip" data-ml-token="${this.escapeHtml(token)}" data-ml-loaded-model-key="${this.escapeHtml(modelKey)}"${modelContextAttrs(model)}${this.getModelPreviewTooltipAttrs(model, fullName)}>${this.escapeHtml(name)}${strength !== null ? `<span class="mr-model-chip-strength">${this.escapeHtml(strength)}</span>` : ''}</span>`;
                 }
                 html += `</div></div>`;
             }
@@ -457,7 +477,7 @@ export const tabsLoadedMethods = {
         const copySectionId = 'mr-copy-' + Date.now();
         html += `
             </div>
-            <div id="${copySectionId}" class="mr-copy-section" data-ml-active="${this.escapeHtml(activeString)}" data-ml-inactive="${this.escapeHtml(inactiveString)}" data-ml-all="${this.escapeHtml(allString)}" data-ml-active-count="${activeCount}" data-ml-inactive-count="${inactiveCount}" data-ml-all-count="${activeCount + inactiveCount}">
+            <div id="${copySectionId}" class="mr-copy-section" data-ml-active="${this.escapeHtml(activeString)}" data-ml-inactive="${this.escapeHtml(inactiveString)}" data-ml-all="${this.escapeHtml(allString)}" data-ml-selected="" data-ml-active-count="${activeCount}" data-ml-inactive-count="${inactiveCount}" data-ml-all-count="${activeCount + inactiveCount}" data-ml-selected-count="0" data-ml-previous-mode="all">
                 <div class="mr-copy-toolbar">
                     <div class="mr-copy-heading">
                         <div class="mr-copy-label" id="${copySectionId}-label">Copy all</div>
@@ -467,6 +487,7 @@ export const tabsLoadedMethods = {
                         <button type="button" class="mr-btn-filter mr-copy-mode active" data-ml-copy-mode="all" onclick="window.MLSetCopyMode('${copySectionId}', 'all', this)">All</button>
                         <button type="button" class="mr-btn-filter mr-copy-mode" data-ml-copy-mode="active" onclick="window.MLSetCopyMode('${copySectionId}', 'active', this)">Active</button>
                         <button type="button" class="mr-btn-filter mr-copy-mode" data-ml-copy-mode="inactive" onclick="window.MLSetCopyMode('${copySectionId}', 'inactive', this)">Inactive</button>
+                        <button type="button" class="mr-btn-filter mr-copy-mode mr-copy-mode-selected" data-ml-copy-mode="selected" style="display: none;" onclick="window.MLSetCopyMode('${copySectionId}', 'selected', this)">Selected (<span class="mr-copy-selected-count">0</span>)</button>
                         <button class="mr-btn-filter mr-copy-main-btn" onclick="window.MLCopyCode('${copySectionId}', this)">${copyIcon}<span>Copy</span></button>
                     </div>
                 </div>
@@ -480,5 +501,23 @@ export const tabsLoadedMethods = {
         container.dataset.mlActiveString = activeString;
         container.dataset.mlInactiveString = inactiveString;
         container.dataset.mlAllString = allString;
+
+        if (typeof container?.querySelector === 'function') {
+            this.bindLoadedModelSelection?.(container);
+        }
+    },
+
+    bindLoadedModelSelection(container) {
+        if (typeof this._mlSelectionCleanup === 'function') {
+            this._mlSelectionCleanup();
+            this._mlSelectionCleanup = null;
+        }
+        const cleanup = initLoadedModelSelection(container, this);
+        this._mlSelectionCleanup = cleanup;
+        return cleanup;
+    },
+
+    updateLoadedModelSelectionState(container) {
+        return updateLoadedModelSelectionState(container);
     }
 };

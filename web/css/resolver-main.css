@@ -4305,6 +4305,25 @@
     font-family: var(--mr-font-family-mono);
     font-size: var(--mr-font-md);
     color: var(--mr-text);
+    cursor: pointer;
+    user-select: none;
+    outline: 1.5px solid transparent;
+    outline-offset: 1px;
+    transition: outline-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.mr-model-chip:hover {
+    background: #464646;
+}
+
+.mr-model-chip.is-selected {
+    outline-color: var(--mr-accent, #72d38a);
+    background: #3d453f;
+    box-shadow: 0 0 0 1px rgba(114, 211, 138, 0.25);
+}
+
+.mr-model-chip-list-inactive .mr-model-chip.is-selected {
+    opacity: 1;
 }
 
 .mr-model-chip-category {

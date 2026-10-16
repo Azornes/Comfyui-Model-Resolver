@@ -27,16 +27,32 @@ export function registerGlobalHelpers() {
         const section = document.getElementById(sectionId);
         if (!section) return;
 
-        const normalizedMode = ['all', 'active', 'inactive'].includes(mode) ? mode : 'all';
+        const normalizedMode = ['all', 'active', 'inactive', 'selected'].includes(mode) ? mode : 'all';
+        if (normalizedMode !== 'selected') {
+            section.dataset.mlPreviousMode = normalizedMode;
+        }
         const codeEl = section.querySelector('.mr-copy-code');
         const labelEl = section.querySelector('.mr-copy-label');
         const metaEl = section.querySelector('.mr-copy-meta');
-        const dataKey = normalizedMode === 'all' ? 'mlAll' : normalizedMode === 'active' ? 'mlActive' : 'mlInactive';
-        const countKey = normalizedMode === 'all' ? 'mlAllCount' : normalizedMode === 'active' ? 'mlActiveCount' : 'mlInactiveCount';
+        const dataKey = normalizedMode === 'all'
+            ? 'mlAll'
+            : normalizedMode === 'active'
+                ? 'mlActive'
+                : normalizedMode === 'inactive'
+                    ? 'mlInactive'
+                    : 'mlSelected';
+        const countKey = normalizedMode === 'all'
+            ? 'mlAllCount'
+            : normalizedMode === 'active'
+                ? 'mlActiveCount'
+                : normalizedMode === 'inactive'
+                    ? 'mlInactiveCount'
+                    : 'mlSelectedCount';
         const labelMap = {
             all: 'Copy all',
             active: 'Copy active',
-            inactive: 'Copy inactive'
+            inactive: 'Copy inactive',
+            selected: 'Copy selected'
         };
 
         if (codeEl) codeEl.textContent = section.dataset[dataKey] || '';
@@ -61,16 +77,22 @@ export function registerGlobalHelpers() {
         }, 1500);
     };
 
-    window.MLFilterSwitch = function(filter) {
-        const filterBtn = document.getElementById('filter-' + filter);
+    window.MLFilterSwitch = function(filter, clickedBtn = null) {
+        const root = clickedBtn?.closest?.('.mr-loaded-models-header')?.parentNode
+            || document;
+        const filterBtn = clickedBtn || document.getElementById('filter-' + filter);
         if (!filterBtn) return;
         
         // Update button states
-        document.querySelectorAll('.mr-btn-filter').forEach(b => b.classList.remove('active'));
+        root.querySelectorAll('.mr-btn-filter').forEach(b => {
+            if (b.id && b.id.startsWith('filter-')) {
+                b.classList.remove('active');
+            }
+        });
         filterBtn.classList.add('active');
         
         // Filter model sections
-        document.querySelectorAll('.mr-model-section').forEach(s => {
+        root.querySelectorAll('.mr-model-section').forEach(s => {
             const hasActive = s.getAttribute('data-ml-active') === 'true';
             const hasInactive = s.getAttribute('data-ml-inactive') === 'true';
             
@@ -92,7 +114,8 @@ export function registerGlobalHelpers() {
             }
         });
         
-        const copySection = document.querySelector('[id^="mr-copy-"]');
+        const copySection = root.querySelector?.('[id^="mr-copy-"]')
+            || document.querySelector('[id^="mr-copy-"]');
         if (copySection) {
             window.MLSetCopyMode(copySection.id, filter);
         }

@@ -114,6 +114,11 @@ export const lifecycleGraphMethods = {
         this.backdrop.style.display = "none";
         this.element.style.display = "none";
 
+        if (typeof this._mlSelectionCleanup === 'function') {
+            this._mlSelectionCleanup();
+            this._mlSelectionCleanup = null;
+        }
+
         if (wasDocked && collapseSidebar) {
             this.closeComfySidebar(dockContainer);
         }
