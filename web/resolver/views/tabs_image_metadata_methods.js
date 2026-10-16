@@ -204,7 +204,7 @@ export const imageMetadataMethods = {
                 <div class="mr-image-inspector">
                     <div class="mr-loaded-models-header mr-image-inspector-header">
                         <div class="mr-loaded-title-block">
-                            <h3 class="mr-loaded-models-title">Image Metadata ${this.getMetadataTooltipBadge('Paste JSON or drop a supported file anywhere in this panel.', 'Image metadata help')}</h3>
+                            <h3 class="mr-loaded-models-title">Image Metadata ${this.getMetadataTooltipBadge('Drop an image or workflow JSON here, or paste JSON into the box below.', 'Image metadata help')}</h3>
                         </div>
                     </div>
                     <div class="mr-image-inspector-tools">
@@ -214,7 +214,7 @@ export const imageMetadataMethods = {
                             <div class="mr-image-inspector-actions">
                                 <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm" data-image-inspector-action="analyze-paste" disabled>Analyze JSON</button>
                                 <button type="button" class="mr-btn mr-btn-primary mr-btn-sm" data-image-inspector-action="choose-file">Load file</button>
-                                <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm mr-image-inspector-clear" data-image-inspector-action="clear" data-tooltip="Clear imported metadata and refresh model information for the current workflow. Pasted JSON and the current workflow remain unchanged.">Clear</button>
+                                <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm mr-image-inspector-clear" data-image-inspector-action="clear" data-tooltip="Clear imported metadata and reload models from the current workflow.">Clear</button>
                             </div>
                         </div>
                     </div>
@@ -742,7 +742,7 @@ export const imageMetadataMethods = {
     getMetadataPromptCopyButton(prompt = {}) {
         if (!String(prompt.text || '').trim()) return '';
         return `
-            <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm mr-image-prompt-copy" data-image-prompt-copy aria-label="Copy visible prompt text" data-tooltip="Copy visible prompt text">
+            <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm mr-image-prompt-copy" data-image-prompt-copy aria-label="Copy prompt text" data-tooltip="Copy prompt text">
                 ${COPY_ICON_HTML} Copy
             </button>
         `;
@@ -863,13 +863,13 @@ export const imageMetadataMethods = {
         const sourceSummary = data.sourcePrompts.length
             ? `${data.sourcePrompts.length} editable prompt${data.sourcePrompts.length === 1 ? '' : 's'} found in the imported workflow.`
             : imageState.loading
-                ? 'Reading prompt text from the imported workflow...'
+                ? 'Reading prompts from the imported workflow...'
                 : imageState.metadata?.workflow
-                    ? 'No editable prompt text nodes were found in the imported workflow.'
-                    : 'Import an image or workflow JSON with prompt nodes to enable prompt transfer.';
+                    ? 'No editable prompt nodes found in the imported workflow.'
+                    : 'Import an image or workflow JSON to transfer prompts.';
         const targetSummary = data.targetPrompts.length
             ? `${data.targetPrompts.length} editable prompt field${data.targetPrompts.length === 1 ? '' : 's'} in the current workflow.`
-            : 'No editable prompt text fields were found in the current workflow.';
+            : 'No editable prompt fields found in the current workflow.';
         const hasApplicablePair = data.applicableSelectedRoleCount > 0;
         const applyDisabled = promptTransfer.applying
             || !hasApplicablePair
@@ -887,10 +887,10 @@ export const imageMetadataMethods = {
             `).join('');
             const sourceRoleHint = row.source?.role === row.role
                 ? 'Role detected from workflow connections.'
-                : 'Role not explicit; choose the source text for this slot.';
+                : 'Role not recognized automatically. Choose which imported prompt to use.';
             const targetRoleHint = row.target?.role === row.role
                 ? 'Positive/negative role detected from workflow connections.'
-                : 'Role not explicit; choose the target text field for this slot.';
+                : 'Role not recognized automatically. Choose which text field to replace.';
             const targetContextMenuAttrs = row.target
                 ? this.getMetadataPromptNodeContextMenuAttrs?.(row.target) || ''
                 : '';
@@ -942,14 +942,13 @@ export const imageMetadataMethods = {
             `;
         }).join('');
         const unclassifiedNote = data.unclassifiedSourceCount || data.unclassifiedTargetCount
-            ? 'Some prompts have no explicit role in the graph and remain selectable in both slots.'
-            : 'Positive and negative roles are detected from connected node input names whenever available.';
+            ? 'Prompts without an obvious role can be chosen manually for either slot.'
+            : 'Positive and negative roles are detected automatically from node connections.';
         const promptHelpText = [
             sourceSummary,
             targetSummary,
             unclassifiedNote,
-            'Select which prompt roles to replace, then choose the source and target text fields.',
-            'Select an imported prompt and a current text field.',
+            'Select which prompt roles to replace, then choose the source prompt and destination field.',
         ].join('\n\n');
         const statusHtml = promptTransfer.error
             ? `<p class="mr-error-text">${this.escapeHtml(promptTransfer.error)}</p>`
@@ -1482,7 +1481,7 @@ export const imageMetadataMethods = {
                 sourceSelectionKey: this.getMetadataTransferSourceSelectionKey(target.ref),
                 sourceUnavailable: hasIncompatibleSources,
                 sourceUnavailableReason: hasActivityMismatch
-                    ? 'No imported LoRA matches the selected activity scope.'
+                    ? 'No imported LoRA matches the active/inactive filter.'
                     : '',
                 acceptedFileTypes,
                 activityScope,
@@ -1630,7 +1629,7 @@ export const imageMetadataMethods = {
                 : '';
             const nextTitle = row.sourceUnavailable
                 ? row.sourceUnavailableReason
-                    || `No imported model matches this node's accepted file format${acceptedFormats ? `: ${acceptedFormats}` : ''}.`
+                    || `No imported model matches this node's accepted format${acceptedFormats ? `: ${acceptedFormats}` : ''}.`
                 : row.nextValue || row.nextLabel;
             const currentLabel = row.currentValue ? row.currentLabel : '(empty)';
             const importedClass = row.sourceUnavailable
@@ -1707,15 +1706,15 @@ export const imageMetadataMethods = {
             `${count} ${count === 1 ? singular : plural}`
         );
         const sourceSummary = sourceEntries.length
-            ? `${countText(sourceEntries.length, 'metadata model')} ready from the imported workflow.`
+            ? `${countText(sourceEntries.length, 'transferable model')} ready from the imported workflow.`
             : state?.loading === 'models'
-                ? 'Scanning the imported workflow for transferable models...'
+                ? 'Scanning the imported workflow for models...'
                 : state?.loading
                     ? 'Reading source workflow metadata...'
                     : state?.metadata?.workflow
                         ? 'No transferable model paths were found in the imported workflow.'
                         : state?.metadata
-                            ? 'The imported source has no embedded ComfyUI workflow.'
+                            ? 'The imported image has no embedded ComfyUI workflow.'
                             : 'Import a workflow with model metadata to enable Apply transfer.';
 
         if (transfer.loading) {
@@ -1898,14 +1897,13 @@ export const imageMetadataMethods = {
             inactive: 'Inactive only',
         };
         const transferHelpText = [
-            'Select the target nodes.',
             'Select a node row to include it in the transfer.',
             sourceSummary,
             sourceEntries.length
-                ? 'The current and imported models are shown in the same row. Choose a different imported model when a category contains multiple models.'
+                ? 'Each row pairs a current slot with an imported model. If multiple models match a category, choose the one you want from the dropdown.'
                 : 'Target nodes come from the current ComfyUI workflow. Import a source workflow with model metadata to enable Apply transfer.',
             activityScope !== 'all'
-                ? `Imported LoRAs: ${activityLabels[activityScope]}; current target slots remain eligible.`
+                ? `Imported LoRA filter: ${activityLabels[activityScope]}. Target slots in the workflow remain available.`
                 : '',
         ].filter(Boolean).join('\n\n');
         return `
