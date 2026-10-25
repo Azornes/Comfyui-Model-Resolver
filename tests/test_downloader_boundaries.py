@@ -11,7 +11,7 @@ from core.download.aria2_backend import (
     recover_aria2_missing_control_file,
     resume_download,
 )
-from core.download.orchestrator import find_active_download_for_path
+from core.download.orchestrator import download_file, find_active_download_for_path
 from core.path_utils import normalize_metadata_file_path
 
 
@@ -285,6 +285,107 @@ class DownloaderBoundaryTests(unittest.TestCase):
 
             self.assertFalse(os.path.exists(partial_path))
             self.assertTrue(os.path.exists(final_path))
+
+    def test_python_download_resumes_from_existing_partial_file(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dest_path = os.path.join(temp_dir, "model.safetensors")
+            partial_path = f"{dest_path}.part"
+            initial_data = b"0123456789"
+            with open(partial_path, "wb") as f:
+                f.write(initial_data)
+
+            remaining_data = b"ABCDEFGHIJ"
+            total_data = initial_data + remaining_data
+
+            mock_response = MagicMock()
+            mock_response.status_code = 206
+            mock_response.headers = {
+                "Content-Range": f"bytes 10-19/{len(total_data)}",
+                "Content-Length": "10",
+            }
+            mock_response.iter_content.return_value = [remaining_data]
+
+            with patch.object(downloader, "_download_backend_from_settings", return_value="python"), \
+                 patch.object(downloader, "request_public_url", return_value=(mock_response, "https://example.com/model.safetensors", {})) as mock_req, \
+                 patch.object(downloader, "write_model_resolver_metadata", return_value=""):
+                result = download_file(
+                    "https://example.com/model.safetensors",
+                    dest_path,
+                    "resume-test-1",
+                    dependencies=downloader,
+                )
+
+            self.assertTrue(result["success"], f"Download failed: {result}")
+            self.assertEqual(len(total_data), result["size"])
+            self.assertTrue(os.path.exists(dest_path))
+            self.assertFalse(os.path.exists(partial_path))
+            with open(dest_path, "rb") as f:
+                self.assertEqual(total_data, f.read())
+
+            sent_headers = mock_req.call_args.kwargs.get("headers", {})
+            self.assertEqual("bytes=10-", sent_headers.get("Range"))
+
+    def test_python_download_preserves_partial_file_on_read_timeout(self):
+        import requests
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dest_path = os.path.join(temp_dir, "model.safetensors")
+            partial_path = f"{dest_path}.part"
+
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.headers = {"Content-Length": "1000"}
+
+            def failing_iter_content(*args, **kwargs):
+                yield b"initial_chunk"
+                raise requests.exceptions.ReadTimeout("Read timed out")
+
+            mock_response.iter_content.side_effect = failing_iter_content
+
+            with patch.object(downloader, "_download_backend_from_settings", return_value="python"), \
+                 patch.object(downloader, "request_public_url", return_value=(mock_response, "https://example.com/model.safetensors", {})):
+                result = download_file(
+                    "https://example.com/model.safetensors",
+                    dest_path,
+                    "timeout-test-1",
+                    dependencies=downloader,
+                )
+
+            self.assertFalse(result["success"])
+            self.assertIn("Read timed out", result["error"])
+            self.assertFalse(os.path.exists(dest_path))
+            self.assertTrue(os.path.exists(partial_path))
+            with open(partial_path, "rb") as f:
+                self.assertEqual(b"initial_chunk", f.read())
+
+    def test_python_download_deletes_partial_file_on_explicit_cancel(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dest_path = os.path.join(temp_dir, "model.safetensors")
+            partial_path = f"{dest_path}.part"
+
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.headers = {"Content-Length": "1000"}
+
+            def cancelling_iter_content(*args, **kwargs):
+                downloader.cancelled_downloads.add("cancel-test-1")
+                yield b"chunk"
+
+            mock_response.iter_content.side_effect = cancelling_iter_content
+
+            with patch.object(downloader, "_download_backend_from_settings", return_value="python"), \
+                 patch.object(downloader, "request_public_url", return_value=(mock_response, "https://example.com/model.safetensors", {})):
+                result = download_file(
+                    "https://example.com/model.safetensors",
+                    dest_path,
+                    "cancel-test-1",
+                    dependencies=downloader,
+                )
+
+            self.assertFalse(result["success"])
+            self.assertFalse(os.path.exists(dest_path))
+            self.assertFalse(os.path.exists(partial_path))
+
 
 
 if __name__ == "__main__":

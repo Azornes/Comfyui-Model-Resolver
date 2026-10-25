@@ -170,7 +170,12 @@ def download_file(
         destination_directory = os.path.dirname(dest_path)
         if destination_directory:
             os.makedirs(destination_directory, exist_ok=True)
-        facade._delete_python_partial_download_file(partial_path)
+
+        existing_size = (
+            os.path.getsize(partial_path)
+            if os.path.isfile(partial_path)
+            else 0
+        )
 
         filename = facade.get_filename_from_path(dest_path)
         source_host = urlparse(url).hostname
@@ -190,30 +195,100 @@ def download_file(
         log.info(f"URL: {facade._strip_sensitive_url_params(url)}")
 
         request_headers = facade.build_download_headers(url, headers)
-        response, final_url, _final_headers = request_download_response(
-            facade,
-            download_id,
-            url,
-            headers=request_headers,
-            stream=True,
-            timeout=30,
-        )
-        response.raise_for_status()
+        if existing_size > 0:
+            request_headers["Range"] = f"bytes={existing_size}-"
+            log.info(
+                f"Found partial download ({facade.format_bytes(existing_size)}). "
+                "Requesting resume from server..."
+            )
+
+        try:
+            response, final_url, _final_headers = request_download_response(
+                facade,
+                download_id,
+                url,
+                headers=request_headers,
+                stream=True,
+                timeout=(20, 60),
+            )
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as http_err:
+            status_code = getattr(getattr(http_err, "response", None), "status_code", None)
+            if existing_size > 0 and status_code == 416:
+                log.warning(
+                    f"Server rejected byte range {existing_size}- (HTTP 416) for {filename}. "
+                    "Resetting partial file and restarting download from beginning."
+                )
+                facade._delete_python_partial_download_file(partial_path)
+                existing_size = 0
+                request_headers.pop("Range", None)
+                response, final_url, _final_headers = request_download_response(
+                    facade,
+                    download_id,
+                    url,
+                    headers=request_headers,
+                    stream=True,
+                    timeout=(20, 60),
+                )
+                response.raise_for_status()
+            else:
+                raise
+
         if final_url != url:
             log.debug("Validated download redirect target")
 
+        is_resumed = bool(
+            existing_size > 0 and getattr(response, "status_code", None) == 206
+        )
+        if not is_resumed and existing_size > 0:
+            log.info(
+                f"Server returned HTTP {getattr(response, 'status_code', None)} without partial content support. "
+                "Restarting download from beginning."
+            )
+            existing_size = 0
+
         total_size = facade.extract_response_file_size(response) or 0
+        if is_resumed and total_size <= existing_size:
+            content_len = int(response.headers.get("content-length", 0) or 0)
+            if content_len > 0:
+                total_size = existing_size + content_len
         total_size_str = facade.format_bytes(total_size) if total_size > 0 else "unknown"
-        log.info(f"Size: {total_size_str}")
+
+        downloaded = existing_size if is_resumed else 0
+        last_downloaded = downloaded
 
         with download_lock:
             download_progress[download_id]["total_size"] = total_size
+            download_progress[download_id]["downloaded"] = downloaded
             download_progress[download_id]["status"] = "downloading"
+            if total_size > 0 and downloaded > 0:
+                download_progress[download_id]["progress"] = int((downloaded / total_size) * 100)
 
-        downloaded = 0
+        if is_resumed:
+            resumed_pct = int((downloaded / total_size) * 100) if total_size > 0 else 0
+            log.info(
+                f"Resuming download: {filename} from {facade.format_bytes(downloaded)} / {total_size_str} ({resumed_pct}%)"
+            )
+        else:
+            log.info(f"Size: {total_size_str}")
+
         sha256_hasher = hashlib.sha256() if expected_sha256 else None
+        if is_resumed and sha256_hasher is not None:
+            log.info(
+                f"Hashing existing partial file ({facade.format_bytes(downloaded)}) for SHA256 integrity check..."
+            )
+            with open(partial_path, "rb") as existing_file:
+                while True:
+                    if download_id in cancelled_downloads:
+                        raise DownloadCancelled()
+                    existing_chunk = existing_file.read(4 * 1024 * 1024)
+                    if not existing_chunk:
+                        break
+                    sha256_hasher.update(existing_chunk)
+
         cancelled = False
-        with open(partial_path, "wb") as file_handle:
+        file_mode = "ab" if is_resumed else "wb"
+        with open(partial_path, file_mode) as file_handle:
             for chunk in response.iter_content(chunk_size=chunk_size):
                 if download_id in cancelled_downloads:
                     cancelled = True
@@ -354,7 +429,8 @@ def download_file(
                     download_progress[download_id]["metadata_path"] = metadata_path
 
         elapsed = time.time() - start_time
-        avg_speed = downloaded / elapsed if elapsed > 0 else 0
+        transferred_bytes = downloaded - (existing_size if is_resumed else 0)
+        avg_speed = transferred_bytes / elapsed if elapsed > 0 else 0
         log.info(f"✓ Download complete: {filename}")
         log.info(
             f"Size: {facade.format_bytes(downloaded)}, Time: {elapsed:.1f}s, "
@@ -371,17 +447,16 @@ def download_file(
 
     except requests.exceptions.RequestException as exc:
         error_msg = facade._sanitize_download_error(exc)
-        if hasattr(exc, "response") and exc.response is not None:
-            status_code = exc.response.status_code
-            if status_code in [401, 403]:
-                if "huggingface.co" in url:
-                    error_msg = f"Unauthorized (HTTP {status_code}): HuggingFace token may be required."
-                elif "civitai.com" in url:
-                    error_msg = f"Unauthorized (HTTP {status_code}): CivitAI API key may be required."
-                else:
-                    error_msg = f"Unauthorized (HTTP {status_code}): Authentication required."
-            elif status_code == 404:
-                error_msg = "Model not found (HTTP 404): The file may have been moved or deleted."
+        status_code = getattr(getattr(exc, "response", None), "status_code", None)
+        if status_code in [401, 403]:
+            if "huggingface.co" in url:
+                error_msg = f"Unauthorized (HTTP {status_code}): HuggingFace token may be required."
+            elif "civitai.com" in url:
+                error_msg = f"Unauthorized (HTTP {status_code}): CivitAI API key may be required."
+            else:
+                error_msg = f"Unauthorized (HTTP {status_code}): Authentication required."
+        elif status_code == 404:
+            error_msg = "Model not found (HTTP 404): The file may have been moved or deleted."
 
         with download_lock:
             download_progress[download_id]["status"] = "error"
@@ -391,7 +466,13 @@ def download_file(
         log.error(f"Error: {error_msg}")
 
         if not published:
-            facade._delete_python_partial_download_file(partial_path)
+            if status_code == 404:
+                facade._delete_python_partial_download_file(partial_path)
+            elif os.path.isfile(partial_path) and os.path.getsize(partial_path) > 0:
+                log.info(
+                    f"Partial download preserved: {facade.format_bytes(os.path.getsize(partial_path))} "
+                    f"at {partial_path}. Retrying will attempt to resume."
+                )
 
     except Exception as exc:
         error_msg = facade._sanitize_download_error(exc)
@@ -403,8 +484,11 @@ def download_file(
         log.error(f"Error: {error_msg}")
         log.error(f"Download error: {exc}", exc_info=True)
 
-        if not published:
-            facade._delete_python_partial_download_file(partial_path)
+        if not published and os.path.isfile(partial_path) and os.path.getsize(partial_path) > 0:
+            log.info(
+                f"Partial download preserved: {facade.format_bytes(os.path.getsize(partial_path))} "
+                f"at {partial_path}. Retrying will attempt to resume."
+            )
 
     finally:
         if response is not None:
