@@ -405,20 +405,27 @@ def extract_workflow_hash_metadata(workflow_json: Dict[str, Any]) -> Dict[str, D
 def get_workflow_hash_info_for_ref(
     workflow_hashes: Dict[str, Dict[str, Any]], model_ref: ModelReference
 ) -> Optional[Dict[str, Any]]:
-    if not workflow_hashes:
-        return None
-    original_path = model_ref.original_path
-    # Node/widget positions are reused after edits, and multi-model widgets
-    # share one position. Only model names/paths can identify a saved hash.
-    candidates = [
-        original_path,
-        get_filename_from_path(original_path),
-        model_ref.extra_value("filename", "") or "",
-        model_ref.extra_value("name", "") or "",
-    ]
-    for candidate in candidates:
-        if candidate and candidate in workflow_hashes:
-            return workflow_hashes[candidate]
+    if workflow_hashes:
+        original_path = model_ref.original_path
+        # Node/widget positions are reused after edits, and multi-model widgets
+        # share one position. Only model names/paths can identify a saved hash.
+        candidates = [
+            original_path,
+            get_filename_from_path(original_path),
+            model_ref.extra_value("filename", "") or "",
+            model_ref.extra_value("name", "") or "",
+        ]
+        for candidate in candidates:
+            if candidate and candidate in workflow_hashes:
+                return workflow_hashes[candidate]
+
+    # Custom-node adapters may carry the hash stored inside the node itself.
+    node_sha256 = normalize_sha256(model_ref.extra_value("workflow_sha256"))
+    if node_sha256:
+        return {
+            "sha256": node_sha256,
+            "source": model_ref.extra_value("hash_lookup_source") or "custom_node",
+        }
     return None
 
 

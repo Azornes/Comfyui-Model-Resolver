@@ -12,10 +12,14 @@ from .lora_manager import ADAPTER as LORA_MANAGER_ADAPTER
 from .rgthree_power_lora_loader import (
     ADAPTER as RGTHREE_POWER_LORA_LOADER_ADAPTER,
 )
+from .smart_model_loader_nova import (
+    ADAPTER as SMART_MODEL_LOADER_NOVA_ADAPTER,
+)
 
 CUSTOM_NODE_MODEL_ADAPTERS = (
     LORA_MANAGER_ADAPTER,
     RGTHREE_POWER_LORA_LOADER_ADAPTER,
+    SMART_MODEL_LOADER_NOVA_ADAPTER,
 )
 _ADAPTERS_BY_ID = {
     adapter.adapter_id: adapter for adapter in CUSTOM_NODE_MODEL_ADAPTERS
