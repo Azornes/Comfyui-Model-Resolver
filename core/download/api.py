@@ -16,6 +16,11 @@ import requests
 
 from ..aria2_installer import ARIA2_INSTALL_ROOT
 from ..log_system import create_module_logger
+from ..network_guard import (
+    get_connectivity_guard,
+    get_rate_limit_coordinator,
+    parse_retry_after,
+)
 from ..network_utils import (
     host_matches_domain,
     request_public_url,
@@ -45,7 +50,18 @@ from ..type_utils import (
 from ..type_utils import (
     format_size_bytes as format_bytes,
 )
-from . import aria2_backend, config, directories, huggingface_xet, metadata, orchestrator, previews, state, validation
+from . import (
+    aria2_backend,
+    config,
+    directories,
+    huggingface_xet,
+    metadata,
+    orchestrator,
+    previews,
+    state,
+    state_store,
+    validation,
+)
 
 try:
     import folder_paths
@@ -65,6 +81,9 @@ ARIA2_IDLE_STOP_SECONDS = 5 * 60
 MAX_ARIA2_URL_RECOVERY_ATTEMPTS = 2
 PYTHON_DOWNLOAD_MAX_RETRIES = 2
 PYTHON_DOWNLOAD_RETRY_DELAY = 0.5
+PYTHON_DOWNLOAD_CONNECT_TIMEOUT = 20
+PYTHON_DOWNLOAD_READ_TIMEOUT = 60
+PYTHON_DOWNLOAD_STALL_TIMEOUT = 60
 # Keep validation aligned with the install location used by the aria2 installer.
 # ARIA2_INSTALL_ROOT resolves the custom node package first, so paths reached
 # through a shared ComfyUI/custom_nodes symlink remain valid while external
@@ -101,6 +120,9 @@ context.ARIA2_IDLE_STOP_SECONDS = ARIA2_IDLE_STOP_SECONDS
 context.MAX_ARIA2_URL_RECOVERY_ATTEMPTS = MAX_ARIA2_URL_RECOVERY_ATTEMPTS
 context.PYTHON_DOWNLOAD_MAX_RETRIES = PYTHON_DOWNLOAD_MAX_RETRIES
 context.PYTHON_DOWNLOAD_RETRY_DELAY = PYTHON_DOWNLOAD_RETRY_DELAY
+context.PYTHON_DOWNLOAD_CONNECT_TIMEOUT = PYTHON_DOWNLOAD_CONNECT_TIMEOUT
+context.PYTHON_DOWNLOAD_READ_TIMEOUT = PYTHON_DOWNLOAD_READ_TIMEOUT
+context.PYTHON_DOWNLOAD_STALL_TIMEOUT = PYTHON_DOWNLOAD_STALL_TIMEOUT
 context.MANAGED_ARIA2_ROOT = MANAGED_ARIA2_ROOT
 context.HF_XET_ARIA2_AUTH_HOSTS = HF_XET_ARIA2_AUTH_HOSTS
 
@@ -121,12 +143,22 @@ context.aria2_action_locks = state.aria2_action_locks
 context.aria2_desired_states = state.aria2_desired_states
 context.xet_transfers = state.xet_transfers
 context.xet_transfers_lock = state.xet_transfers_lock
+context.python_download_controls = state.python_download_controls
+context.python_download_controls_lock = state.python_download_controls_lock
+context.register_python_download_control = state.register_python_download_control
+context.unregister_python_download_control = state.unregister_python_download_control
+context.pause_python_download = state.pause_python_download
+context.resume_python_download = state.resume_python_download
+context.is_python_download_active = state.is_python_download_active
 
 context.load_settings = load_settings
 context.normalize_download_backend = normalize_download_backend
 context.normalize_relative_subfolder = normalize_relative_subfolder
 context.generate_download_id = config.generate_download_id
 
+context.get_connectivity_guard = get_connectivity_guard
+context.get_rate_limit_coordinator = get_rate_limit_coordinator
+context.parse_retry_after = parse_retry_after
 context.host_matches_domain = host_matches_domain
 context.request_public_url = request_public_url
 context.validate_public_http_url = validate_public_http_url
@@ -268,6 +300,15 @@ context.Aria2Error = aria2_backend.Aria2Error
 context._find_free_port = aria2_backend.find_free_port
 context._parse_aria2_int = aria2_backend.parse_aria2_int
 context._resolve_aria2_completed_path = aria2_backend.resolve_aria2_completed_path
+context.resolve_proxy_url = _bind(aria2_backend.resolve_proxy_url)
+context._resolve_proxy_url = context.resolve_proxy_url
+
+context.save_download_spec = state_store.save_download_spec
+context.update_download_progress_state = state_store.update_download_progress_state
+context.remove_persisted_download = state_store.remove_persisted_download
+context.clear_completed_persisted_transfers = state_store.clear_completed_persisted_transfers
+context.get_persisted_spec = state_store.get_persisted_spec
+context.restore_persisted_downloads = _bind(state_store.restore_persisted_downloads)
 
 
 def _state_dependencies() -> state.DownloadStateDependencies:
@@ -284,6 +325,11 @@ def _state_dependencies() -> state.DownloadStateDependencies:
         force_remove_aria2_transfer=context._force_remove_aria2_transfer,
         thread_factory=threading.Thread,
         log=log,
+        delete_partial_download_files=context._delete_partial_download_files,
+        remove_persisted_download=context.remove_persisted_download,
+        clear_completed_persisted_transfers=context.clear_completed_persisted_transfers,
+        python_download_controls=context.python_download_controls,
+        python_download_controls_lock=context.python_download_controls_lock,
     )
 
 
@@ -383,3 +429,12 @@ resume_download = context.resume_download
 start_aria2_daemon = context.start_aria2_daemon
 stop_aria2_daemon = context.stop_aria2_daemon
 write_model_resolver_metadata = context.write_model_resolver_metadata
+
+try:
+    state_store.restore_persisted_downloads(
+        context.download_progress,
+        context.download_lock,
+        log_fn=log,
+    )
+except Exception as _restore_err:
+    log.warning(f"Failed to restore persisted downloads: {_restore_err}")

@@ -35,6 +35,7 @@ SETTINGS_SCHEMA: List[Dict[str, Any]] = [
     { "serverKey": "workflow_dependency_marker_enabled", "localKey": "ModelResolver.workflowDependencyMarkerEnabled", "type": "boolean", "default": False },
     { "serverKey": "download_backend", "localKey": "ModelResolver.downloadBackend", "type": "backend", "default": "python" },
     { "serverKey": "aria2c_path", "localKey": "ModelResolver.aria2cPath", "type": "string", "default": "" },
+    { "serverKey": "proxy_url", "localKey": "ModelResolver.proxyUrl", "type": "string", "default": "" },
     { "serverKey": "aria2_auto_stop_daemon", "localKey": "ModelResolver.aria2AutoStopDaemon", "type": "boolean", "default": True },
     { "serverKey": "download_sound_enabled", "localKey": "ModelResolver.downloadSoundEnabled", "type": "boolean", "default": True },
     { "serverKey": "download_path_mode", "localKey": "ModelResolver.downloadPathMode", "type": "pathMode", "default": "suggested" },
@@ -194,6 +195,7 @@ def normalize_settings(settings: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
     )
     data["download_backend"] = normalize_download_backend(data.get("download_backend"))
     data["aria2c_path"] = str(data.get("aria2c_path") or "").strip()
+    data["proxy_url"] = str(data.get("proxy_url") or "").strip()
     data["aria2_auto_stop_daemon"] = bool_setting(
         data.get("aria2_auto_stop_daemon"), True
     )

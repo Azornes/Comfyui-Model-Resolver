@@ -27,6 +27,18 @@ from core.path_utils import normalize_metadata_file_path
 
 
 class DownloaderBoundaryTests(unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+        from core.network_guard import get_connectivity_guard, get_rate_limit_coordinator
+        get_rate_limit_coordinator().clear()
+        get_connectivity_guard().clear()
+
+    def tearDown(self):
+        super().tearDown()
+        from core.network_guard import get_connectivity_guard, get_rate_limit_coordinator
+        get_rate_limit_coordinator().clear()
+        get_connectivity_guard().clear()
+
     def test_build_download_headers_cleans_values_and_adds_civitai_defaults(self):
         headers = downloader.build_download_headers(
             "https://civitai.com/api/download/models/123",

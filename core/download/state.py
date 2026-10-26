@@ -14,6 +14,79 @@ aria2_action_locks: Dict[str, Any] = {}
 aria2_desired_states: Dict[str, Dict[str, Any]] = {}
 xet_transfers: Dict[str, Dict[str, Any]] = {}
 xet_transfers_lock = threading.Lock()
+python_download_controls: Dict[str, threading.Event] = {}
+python_download_controls_lock = threading.Lock()
+
+
+def register_python_download_control(
+    download_id: str,
+    controls: Optional[Dict[str, threading.Event]] = None,
+    lock: Optional[Any] = None,
+) -> threading.Event:
+    """Register a threading.Event control for an active Python download."""
+    ctrls = python_download_controls if controls is None else controls
+    ctrl_lock = python_download_controls_lock if lock is None else lock
+    event = threading.Event()
+    event.set()
+    with ctrl_lock:
+        ctrls[download_id] = event
+    return event
+
+
+def unregister_python_download_control(
+    download_id: str,
+    controls: Optional[Dict[str, threading.Event]] = None,
+    lock: Optional[Any] = None,
+) -> None:
+    """Unregister the threading.Event control for a completed or cancelled Python download."""
+    ctrls = python_download_controls if controls is None else controls
+    ctrl_lock = python_download_controls_lock if lock is None else lock
+    with ctrl_lock:
+        ctrls.pop(download_id, None)
+
+
+def pause_python_download(
+    download_id: str,
+    controls: Optional[Dict[str, threading.Event]] = None,
+    lock: Optional[Any] = None,
+) -> bool:
+    """Pause an active Python download by clearing its control event."""
+    ctrls = python_download_controls if controls is None else controls
+    ctrl_lock = python_download_controls_lock if lock is None else lock
+    with ctrl_lock:
+        event = ctrls.get(download_id)
+        if event is not None:
+            event.clear()
+            return True
+    return False
+
+
+def resume_python_download(
+    download_id: str,
+    controls: Optional[Dict[str, threading.Event]] = None,
+    lock: Optional[Any] = None,
+) -> bool:
+    """Resume an active Python download by setting its control event."""
+    ctrls = python_download_controls if controls is None else controls
+    ctrl_lock = python_download_controls_lock if lock is None else lock
+    with ctrl_lock:
+        event = ctrls.get(download_id)
+        if event is not None:
+            event.set()
+            return True
+    return False
+
+
+def is_python_download_active(
+    download_id: str,
+    controls: Optional[Dict[str, threading.Event]] = None,
+    lock: Optional[Any] = None,
+) -> bool:
+    """Return True if the download has an active Python download control."""
+    ctrls = python_download_controls if controls is None else controls
+    ctrl_lock = python_download_controls_lock if lock is None else lock
+    with ctrl_lock:
+        return download_id in ctrls
 
 
 def create_initial_progress(
@@ -59,6 +132,11 @@ class DownloadStateDependencies:
     force_remove_aria2_transfer: Callable[..., Any]
     thread_factory: Callable[..., Any]
     log: Any
+    delete_partial_download_files: Optional[Callable[..., Any]] = None
+    remove_persisted_download: Optional[Callable[..., Any]] = None
+    clear_completed_persisted_transfers: Optional[Callable[..., Any]] = None
+    python_download_controls: Optional[Dict[str, threading.Event]] = None
+    python_download_controls_lock: Optional[Any] = None
 
 
 def get_progress(
@@ -87,9 +165,21 @@ def cancel_download(download_id: str, state: DownloadStateDependencies) -> bool:
     with state.aria2_lock:
         state.aria2_desired_states.pop(download_id, None)
 
+    py_controls = getattr(state, "python_download_controls", None)
+    if py_controls is None:
+        py_controls = python_download_controls
+    py_lock = getattr(state, "python_download_controls_lock", None)
+    if py_lock is None:
+        py_lock = python_download_controls_lock
+    with py_lock:
+        py_event = py_controls.get(download_id)
+        if py_event is not None:
+            py_event.set()
+
     transfer = state.aria2_transfers.get(download_id)
     if transfer and transfer.get("gid"):
-        state.thread_factory(
+        thread_factory = getattr(state, "thread_factory", None) or threading.Thread
+        thread_factory(
             target=state.force_remove_aria2_transfer,
             args=(download_id, transfer["gid"]),
             daemon=True,
@@ -104,6 +194,11 @@ def cancel_download(download_id: str, state: DownloadStateDependencies) -> bool:
             xet_cancel()
         except Exception as exc:
             state.log.warning(f"Could not cancel Hugging Face Xet transfer {download_id}: {exc}")
+
+    remove_persisted = getattr(state, "remove_persisted_download", None)
+    if callable(remove_persisted):
+        remove_persisted(download_id)
+
     return True
 
 
@@ -118,3 +213,17 @@ def clear_completed_downloads(state: DownloadStateDependencies):
         for download_id in to_remove:
             del state.download_progress[download_id]
             state.cancelled_downloads.discard(download_id)
+
+    py_controls = getattr(state, "python_download_controls", None)
+    if py_controls is None:
+        py_controls = python_download_controls
+    py_lock = getattr(state, "python_download_controls_lock", None)
+    if py_lock is None:
+        py_lock = python_download_controls_lock
+    with py_lock:
+        for download_id in to_remove:
+            py_controls.pop(download_id, None)
+
+    clear_persisted = getattr(state, "clear_completed_persisted_transfers", None)
+    if callable(clear_persisted):
+        clear_persisted()

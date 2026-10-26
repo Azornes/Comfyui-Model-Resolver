@@ -134,6 +134,15 @@ def download_file(
     cli_log_interval = facade.CLI_LOG_INTERVAL
     log = facade.log
 
+    active_settings = facade.load_settings() if callable(getattr(facade, "load_settings", None)) else {}
+    if not isinstance(active_settings, dict):
+        active_settings = {}
+    connect_timeout = getattr(facade, "PYTHON_DOWNLOAD_CONNECT_TIMEOUT", 20)
+    read_timeout = (
+        int(active_settings.get("download_stall_timeout") or 0)
+        or getattr(facade, "PYTHON_DOWNLOAD_READ_TIMEOUT", 60)
+    )
+
     expected_sha256 = facade._extract_expected_sha256(metadata)
 
     download_backend = facade._download_backend_from_settings()
@@ -179,6 +188,9 @@ def download_file(
     last_downloaded = 0
     last_cli_log = start_time
 
+    register_control = getattr(facade, "register_python_download_control", None)
+    control_event = register_control(download_id) if callable(register_control) else None
+
     with download_lock:
         download_progress[download_id] = create_initial_progress(
             url=url,
@@ -217,6 +229,37 @@ def download_file(
         log.info(f"Source: {source}")
         log.info(f"URL: {facade._strip_sensitive_url_params(url)}")
 
+        coordinator_fn = getattr(facade, "get_rate_limit_coordinator", None)
+        if callable(coordinator_fn):
+            rl = coordinator_fn()
+            if rl.is_rate_limited(url):
+                cooldown = int(rl.get_cooldown(url))
+                if cooldown > 0:
+                    error_msg = f"Rate limit exceeded (HTTP 429): please retry after {cooldown}s."
+                    with download_lock:
+                        download_progress[download_id]["status"] = "error"
+                        download_progress[download_id]["error"] = error_msg
+                        download_progress[download_id]["speed"] = 0
+                    result["error"] = error_msg
+                    log.error(f"✗ Download deferred: {filename}")
+                    log.error(f"Error: {error_msg}")
+                    return result
+
+        guard_fn = getattr(facade, "get_connectivity_guard", None)
+        if callable(guard_fn):
+            guard = guard_fn()
+            if guard.is_offline(url):
+                cooldown = int(guard.get_offline_cooldown(url))
+                error_msg = f"Network offline: destination in connectivity cooldown ({cooldown}s remaining)."
+                with download_lock:
+                    download_progress[download_id]["status"] = "error"
+                    download_progress[download_id]["error"] = error_msg
+                    download_progress[download_id]["speed"] = 0
+                result["error"] = error_msg
+                log.error(f"✗ Download failed: {filename}")
+                log.error(f"Error: {error_msg}")
+                return result
+
         request_headers = facade.build_download_headers(url, headers)
         if existing_size > 0:
             request_headers["Range"] = f"bytes={existing_size}-"
@@ -225,6 +268,7 @@ def download_file(
                 "Requesting resume from server..."
             )
 
+        is_already_complete = False
         try:
             response, final_url, _final_headers = request_download_response(
                 facade,
@@ -232,89 +276,131 @@ def download_file(
                 url,
                 headers=request_headers,
                 stream=True,
-                timeout=(20, 60),
+                timeout=(connect_timeout, read_timeout),
             )
             response.raise_for_status()
+            guard_fn = getattr(facade, "get_connectivity_guard", None)
+            if callable(guard_fn):
+                guard_fn().record_success(url)
         except requests.exceptions.HTTPError as http_err:
             status_code = getattr(getattr(http_err, "response", None), "status_code", None)
             if existing_size > 0 and status_code == 416:
-                log.warning(
-                    f"Server rejected byte range {existing_size}- (HTTP 416) for {filename}. "
-                    "Resetting partial file and restarting download from beginning."
-                )
-                facade._delete_python_partial_download_file(partial_path)
-                existing_size = 0
-                request_headers.pop("Range", None)
-                response, final_url, _final_headers = request_download_response(
-                    facade,
-                    download_id,
-                    url,
-                    headers=request_headers,
-                    stream=True,
-                    timeout=(20, 60),
-                )
-                response.raise_for_status()
+                known_remote_size = facade.extract_response_file_size(getattr(http_err, "response", None))
+                if known_remote_size is None or known_remote_size <= 0:
+                    try:
+                        check_headers = facade.build_download_headers(url, headers)
+                        check_headers.pop("Range", None)
+                        check_resp, _check_url, _ = facade.request_public_url(
+                            "HEAD",
+                            url,
+                            headers=check_headers,
+                            timeout=(connect_timeout, 15),
+                        )
+                        if getattr(check_resp, "status_code", None) == 200:
+                            known_remote_size = facade.extract_response_file_size(check_resp)
+                        check_resp.close()
+                    except Exception as head_exc:
+                        log.debug(f"HEAD size check on HTTP 416 failed: {head_exc}")
+                        known_remote_size = None
+
+                if (
+                    known_remote_size is not None
+                    and known_remote_size > 0
+                    and existing_size == known_remote_size
+                ):
+                    log.info(
+                        f"Server returned HTTP 416 for {filename}, but existing partial file "
+                        f"already matches full remote size ({facade.format_bytes(existing_size)}). "
+                        "Treating partial file as fully downloaded and proceeding to integrity check."
+                    )
+                    is_already_complete = True
+                    total_size = known_remote_size
+                    downloaded = existing_size
+                    is_resumed = True
+                    response = None
+                    final_url = url
+                else:
+                    log.warning(
+                        f"Server rejected byte range {existing_size}- (HTTP 416) for {filename}. "
+                        "Resetting partial file and restarting download from beginning."
+                    )
+                    facade._delete_python_partial_download_file(partial_path)
+                    existing_size = 0
+                    request_headers.pop("Range", None)
+                    response, final_url, _final_headers = request_download_response(
+                        facade,
+                        download_id,
+                        url,
+                        headers=request_headers,
+                        stream=True,
+                        timeout=(connect_timeout, read_timeout),
+                    )
+                    response.raise_for_status()
             else:
                 raise
 
-        if final_url != url:
-            log.debug("Validated download redirect target")
+        if not is_already_complete:
+            if final_url != url:
+                log.debug("Validated download redirect target")
 
-        is_resumed = bool(
-            existing_size > 0 and getattr(response, "status_code", None) == 206
-        )
-        if not is_resumed and existing_size > 0 and final_url and final_url != url:
-            log.info(
-                "Range request was not honored across redirect (HTTP 200). "
-                f"Retrying Range request directly on target URL for {filename}..."
+            is_resumed = bool(
+                existing_size > 0 and getattr(response, "status_code", None) == 206
             )
-            try:
-                response.close()
-            except Exception:
-                pass
-            try:
-                retry_resp, retry_final_url, _ = request_download_response(
-                    facade,
-                    download_id,
-                    final_url,
-                    headers=request_headers,
-                    stream=True,
-                    timeout=(20, 60),
+            if not is_resumed and existing_size > 0 and final_url and final_url != url:
+                log.info(
+                    "Range request was not honored across redirect (HTTP 200). "
+                    f"Retrying Range request directly on target URL for {filename}..."
                 )
-                retry_resp.raise_for_status()
-                if getattr(retry_resp, "status_code", None) == 206:
-                    response = retry_resp
-                    final_url = retry_final_url
-                    is_resumed = True
-                    log.info(
-                        f"Successfully resumed download from target URL at byte {existing_size}"
+                try:
+                    response.close()
+                except Exception:
+                    pass
+                try:
+                    retry_resp, retry_final_url, _ = request_download_response(
+                        facade,
+                        download_id,
+                        final_url,
+                        headers=request_headers,
+                        stream=True,
+                        timeout=(connect_timeout, read_timeout),
                     )
-                else:
-                    response = retry_resp
-            except Exception as retry_exc:
-                log.debug(f"Direct Range retry on target URL failed: {retry_exc}")
+                    retry_resp.raise_for_status()
+                    if getattr(retry_resp, "status_code", None) == 206:
+                        response = retry_resp
+                        final_url = retry_final_url
+                        is_resumed = True
+                        log.info(
+                            f"Successfully resumed download from target URL at byte {existing_size}"
+                        )
+                    else:
+                        response = retry_resp
+                except Exception as retry_exc:
+                    log.debug(f"Direct Range retry on target URL failed: {retry_exc}")
 
-        if not is_resumed and existing_size > 0:
-            log.info(
-                f"Server returned HTTP {getattr(response, 'status_code', None)} without partial content support. "
-                "Restarting download from beginning."
-            )
-            existing_size = 0
+            if not is_resumed and existing_size > 0:
+                log.info(
+                    f"Server returned HTTP {getattr(response, 'status_code', None)} without partial content support. "
+                    "Restarting download from beginning."
+                )
+                existing_size = 0
 
-        total_size = facade.extract_response_file_size(response) or 0
-        if is_resumed and total_size <= existing_size:
-            content_len = int(response.headers.get("content-length", 0) or 0)
-            if content_len > 0:
-                total_size = existing_size + content_len
+            total_size = facade.extract_response_file_size(response) or 0
+            if is_resumed and total_size <= existing_size:
+                content_len = int(response.headers.get("content-length", 0) or 0)
+                if content_len > 0:
+                    total_size = existing_size + content_len
+
+            downloaded = existing_size if is_resumed else 0
+            last_downloaded = downloaded
+
         total_size_str = facade.format_bytes(total_size) if total_size > 0 else "unknown"
-
-        downloaded = existing_size if is_resumed else 0
-        last_downloaded = downloaded
 
         with download_lock:
             download_progress[download_id]["total_size"] = total_size
             download_progress[download_id]["downloaded"] = downloaded
-            download_progress[download_id]["status"] = "downloading"
+            download_progress[download_id]["status"] = (
+                "verifying" if (expected_sha256 and is_already_complete) else "downloading"
+            )
             if total_size > 0 and downloaded > 0:
                 download_progress[download_id]["progress"] = int((downloaded / total_size) * 100)
 
@@ -340,135 +426,209 @@ def download_file(
                         break
                     sha256_hasher.update(existing_chunk)
 
-        max_stream_retries = getattr(facade, "PYTHON_DOWNLOAD_MAX_RETRIES", 2)
-        stream_retry_delay = getattr(facade, "PYTHON_DOWNLOAD_RETRY_DELAY", 0.5)
-        stream_attempts = 0
-
         cancelled = False
-        file_mode = "ab" if is_resumed else "wb"
-        with open(partial_path, file_mode) as file_handle:
-            while True:
-                try:
-                    for chunk in response.iter_content(chunk_size=chunk_size):
-                        if download_id in cancelled_downloads:
+        if is_already_complete:
+            with download_lock:
+                download_progress[download_id]["status"] = "verifying" if expected_sha256 else "completed"
+                download_progress[download_id]["progress"] = 100
+                download_progress[download_id]["speed"] = 0
+            if progress_callback:
+                progress_callback(downloaded, total_size)
+        else:
+            max_stream_retries = getattr(facade, "PYTHON_DOWNLOAD_MAX_RETRIES", 2)
+            stream_retry_delay = getattr(facade, "PYTHON_DOWNLOAD_RETRY_DELAY", 0.5)
+            stream_attempts = 0
+
+            file_mode = "ab" if is_resumed else "wb"
+            with open(partial_path, file_mode) as file_handle:
+                while True:
+                    try:
+                        for chunk in response.iter_content(chunk_size=chunk_size):
+                            if download_id in cancelled_downloads:
+                                cancelled = True
+                                break
+
+                            if control_event is not None and not control_event.is_set():
+                                file_handle.flush()
+                                with download_lock:
+                                    if download_id in download_progress:
+                                        download_progress[download_id]["status"] = "paused"
+                                        download_progress[download_id]["speed"] = 0
+                                update_store = getattr(facade, "update_download_progress_state", None)
+                                if callable(update_store):
+                                    update_store(
+                                        download_id,
+                                        status="paused",
+                                        downloaded=downloaded,
+                                        total_size=total_size,
+                                    )
+                                log.info(
+                                    f"Download paused: {filename} at "
+                                    f"{facade.format_bytes(downloaded)}"
+                                )
+
+                                while not control_event.is_set():
+                                    if download_id in cancelled_downloads or cancelled:
+                                        cancelled = True
+                                        break
+                                    control_event.wait(timeout=0.2)
+
+                                if cancelled:
+                                    break
+
+                                with download_lock:
+                                    if (
+                                        download_id in download_progress
+                                        and download_progress[download_id].get("status") == "paused"
+                                    ):
+                                        download_progress[download_id]["status"] = "downloading"
+                                if callable(update_store):
+                                    update_store(
+                                        download_id,
+                                        status="downloading",
+                                        downloaded=downloaded,
+                                        total_size=total_size,
+                                    )
+                                log.info(
+                                    f"Download resumed: {filename} from "
+                                    f"{facade.format_bytes(downloaded)}"
+                                )
+                                last_speed_update = time.time()
+                                last_downloaded = downloaded
+
+                            if chunk:
+                                file_handle.write(chunk)
+                                if sha256_hasher is not None:
+                                    sha256_hasher.update(chunk)
+                                downloaded += len(chunk)
+                                stream_attempts = 0
+
+                                current_time = time.time()
+                                time_delta = current_time - last_speed_update
+                                if time_delta >= 0.5:
+                                    bytes_delta = downloaded - last_downloaded
+                                    instant_speed = bytes_delta / time_delta if time_delta > 0 else 0
+                                    speed_history.append(instant_speed)
+                                    smoothed_speed = sum(speed_history) / len(speed_history) if speed_history else 0
+                                    last_speed_update = current_time
+                                    last_downloaded = downloaded
+
+                                    with download_lock:
+                                        download_progress[download_id]["downloaded"] = downloaded
+                                        download_progress[download_id]["speed"] = int(smoothed_speed)
+                                        if total_size > 0:
+                                            download_progress[download_id]["progress"] = int((downloaded / total_size) * 100)
+
+                                    if current_time - last_cli_log >= cli_log_interval:
+                                        last_cli_log = current_time
+                                        progress_pct = int((downloaded / total_size) * 100) if total_size > 0 else 0
+                                        downloaded_str = facade.format_bytes(downloaded)
+                                        total_str = facade.format_bytes(total_size) if total_size > 0 else "?"
+                                        speed_str = facade.format_bytes(int(smoothed_speed)) + "/s"
+                                        log.info(f"Progress: {downloaded_str} / {total_str} ({progress_pct}%) - {speed_str}")
+                                        update_store = getattr(facade, "update_download_progress_state", None)
+                                        if callable(update_store):
+                                            update_store(
+                                                download_id,
+                                                downloaded=downloaded,
+                                                total_size=total_size,
+                                            )
+                                else:
+                                    with download_lock:
+                                        download_progress[download_id]["downloaded"] = downloaded
+                                        if total_size > 0:
+                                            download_progress[download_id]["progress"] = int((downloaded / total_size) * 100)
+
+                                if progress_callback:
+                                    progress_callback(downloaded, total_size)
+
+                        if cancelled or download_id in cancelled_downloads:
+                            break
+
+                        # Check if stream closed prematurely
+                        if total_size > 0 and downloaded < total_size:
+                            raise requests.exceptions.RequestException(
+                                f"Connection closed prematurely ({facade.format_bytes(downloaded)} / {total_size_str})"
+                            )
+
+                        # Finished transferring all data
+                        break
+
+                    except (requests.exceptions.RequestException, OSError, TimeoutError) as stream_exc:
+                        if cancelled or download_id in cancelled_downloads:
                             cancelled = True
                             break
 
-                        if chunk:
-                            file_handle.write(chunk)
-                            if sha256_hasher is not None:
-                                sha256_hasher.update(chunk)
-                            downloaded += len(chunk)
-
-                            current_time = time.time()
-                            time_delta = current_time - last_speed_update
-                            if time_delta >= 0.5:
-                                bytes_delta = downloaded - last_downloaded
-                                instant_speed = bytes_delta / time_delta if time_delta > 0 else 0
-                                speed_history.append(instant_speed)
-                                smoothed_speed = sum(speed_history) / len(speed_history) if speed_history else 0
-                                last_speed_update = current_time
-                                last_downloaded = downloaded
-
-                                with download_lock:
-                                    download_progress[download_id]["downloaded"] = downloaded
-                                    download_progress[download_id]["speed"] = int(smoothed_speed)
-                                    if total_size > 0:
-                                        download_progress[download_id]["progress"] = int((downloaded / total_size) * 100)
-
-                                if current_time - last_cli_log >= cli_log_interval:
-                                    last_cli_log = current_time
-                                    progress_pct = int((downloaded / total_size) * 100) if total_size > 0 else 0
-                                    downloaded_str = facade.format_bytes(downloaded)
-                                    total_str = facade.format_bytes(total_size) if total_size > 0 else "?"
-                                    speed_str = facade.format_bytes(int(smoothed_speed)) + "/s"
-                                    log.info(f"Progress: {downloaded_str} / {total_str} ({progress_pct}%) - {speed_str}")
-                            else:
-                                with download_lock:
-                                    download_progress[download_id]["downloaded"] = downloaded
-                                    if total_size > 0:
-                                        download_progress[download_id]["progress"] = int((downloaded / total_size) * 100)
-
-                            if progress_callback:
-                                progress_callback(downloaded, total_size)
-
-                    if cancelled or download_id in cancelled_downloads:
-                        break
-
-                    # Check if stream closed prematurely
-                    if total_size > 0 and downloaded < total_size:
-                        raise requests.exceptions.RequestException(
-                            f"Connection closed prematurely ({facade.format_bytes(downloaded)} / {total_size_str})"
-                        )
-
-                    # Finished transferring all data
-                    break
-
-                except (requests.exceptions.RequestException, OSError, TimeoutError) as stream_exc:
-                    if cancelled or download_id in cancelled_downloads:
-                        cancelled = True
-                        break
-
-                    if stream_attempts < max_stream_retries:
-                        stream_attempts += 1
-                        file_handle.flush()
-                        try:
-                            response.close()
-                        except Exception:
-                            pass
-
-                        log.warning(
-                            f"Download stream interrupted for {filename} ({facade._sanitize_download_error(stream_exc)}); "
-                            f"auto-reconnecting and resuming from byte {downloaded} "
-                            f"(attempt {stream_attempts}/{max_stream_retries})..."
-                        )
-                        time.sleep(stream_retry_delay)
-
-                        resume_headers = facade.build_download_headers(url, headers)
-                        if downloaded > 0:
-                            resume_headers["Range"] = f"bytes={downloaded}-"
-
-                        reconnected = False
-                        if final_url and final_url != url:
+                        if stream_attempts < max_stream_retries:
+                            stream_attempts += 1
+                            file_handle.flush()
                             try:
-                                resume_resp, resume_final_url, _ = request_download_response(
-                                    facade,
-                                    download_id,
-                                    final_url,
-                                    headers=resume_headers,
-                                    stream=True,
-                                    timeout=(20, 60),
-                                )
-                                resume_resp.raise_for_status()
-                                if getattr(resume_resp, "status_code", None) == 206:
-                                    response = resume_resp
-                                    final_url = resume_final_url
-                                    reconnected = True
-                            except Exception as rec_exc:
-                                log.debug(f"Direct reconnect on target URL failed: {rec_exc}")
+                                response.close()
+                            except Exception:
+                                pass
 
-                        if not reconnected:
-                            try:
-                                resume_resp, resume_final_url, _ = request_download_response(
-                                    facade,
-                                    download_id,
-                                    url,
-                                    headers=resume_headers,
-                                    stream=True,
-                                    timeout=(20, 60),
-                                )
-                                resume_resp.raise_for_status()
-                                if getattr(resume_resp, "status_code", None) == 206 or downloaded == 0:
-                                    response = resume_resp
-                                    final_url = resume_final_url
-                                    reconnected = True
-                            except Exception as rec_exc:
-                                log.debug(f"Origin reconnect failed: {rec_exc}")
+                            is_stall = (
+                                isinstance(stream_exc, (requests.exceptions.Timeout, TimeoutError))
+                                or "read timed out" in str(stream_exc).lower()
+                                or "timed out" in str(stream_exc).lower()
+                            )
+                            stall_msg = (
+                                f"Download stream stalled without data for {read_timeout}s"
+                                if is_stall
+                                else f"Download stream interrupted ({facade._sanitize_download_error(stream_exc)})"
+                            )
+                            log.warning(
+                                f"{stall_msg} for {filename}; "
+                                f"auto-reconnecting and resuming from byte {downloaded} "
+                                f"(attempt {stream_attempts}/{max_stream_retries})..."
+                            )
+                            time.sleep(stream_retry_delay)
 
-                        if reconnected:
-                            continue
+                            resume_headers = facade.build_download_headers(url, headers)
+                            if downloaded > 0:
+                                resume_headers["Range"] = f"bytes={downloaded}-"
 
-                    raise
+                            reconnected = False
+                            if final_url and final_url != url:
+                                try:
+                                    resume_resp, resume_final_url, _ = request_download_response(
+                                        facade,
+                                        download_id,
+                                        final_url,
+                                        headers=resume_headers,
+                                        stream=True,
+                                        timeout=(connect_timeout, read_timeout),
+                                    )
+                                    resume_resp.raise_for_status()
+                                    if getattr(resume_resp, "status_code", None) == 206:
+                                        response = resume_resp
+                                        final_url = resume_final_url
+                                        reconnected = True
+                                except Exception as rec_exc:
+                                    log.debug(f"Direct reconnect on target URL failed: {rec_exc}")
+
+                            if not reconnected:
+                                try:
+                                    resume_resp, resume_final_url, _ = request_download_response(
+                                        facade,
+                                        download_id,
+                                        url,
+                                        headers=resume_headers,
+                                        stream=True,
+                                        timeout=(connect_timeout, read_timeout),
+                                    )
+                                    resume_resp.raise_for_status()
+                                    if getattr(resume_resp, "status_code", None) == 206 or downloaded == 0:
+                                        response = resume_resp
+                                        final_url = resume_final_url
+                                        reconnected = True
+                                except Exception as rec_exc:
+                                    log.debug(f"Origin reconnect failed: {rec_exc}")
+
+                            if reconnected:
+                                continue
+
+                        raise
 
         if cancelled or download_id in cancelled_downloads:
             with download_lock:
@@ -599,6 +759,14 @@ def download_file(
             resp = getattr(exc, "response", None)
             retry_hdr = resp.headers.get("Retry-After") if resp is not None else None
             retry_sec = parse_retry_after(retry_hdr) if retry_hdr else None
+            effective_delay = retry_sec or 60
+            coordinator_fn = getattr(facade, "get_rate_limit_coordinator", None)
+            if callable(coordinator_fn):
+                coordinator_fn().register_rate_limit(
+                    url,
+                    effective_delay,
+                    reason=f"Download rate limit (HTTP 429) for {facade.get_filename_from_path(dest_path)}",
+                )
             if retry_sec:
                 error_msg = f"Rate limit exceeded (HTTP 429): please retry after {retry_sec}s."
             else:
@@ -621,6 +789,9 @@ def download_file(
                 )
 
     except Exception as exc:
+        guard_fn = getattr(facade, "get_connectivity_guard", None)
+        if callable(guard_fn):
+            guard_fn().record_failure(url, exc)
         error_msg = facade._sanitize_download_error(exc)
         with download_lock:
             download_progress[download_id]["status"] = "error"
@@ -637,6 +808,9 @@ def download_file(
             )
 
     finally:
+        unregister_control = getattr(facade, "unregister_python_download_control", None)
+        if callable(unregister_control):
+            unregister_control(download_id)
         if response is not None:
             try:
                 response.close()
@@ -860,6 +1034,7 @@ def start_background_download(
     subfolder: str = "",
     base_directory: str = "",
     metadata: Optional[Dict[str, Any]] = None,
+    download_id: Optional[str] = None,
     dependencies: Any = None,
 ) -> str:
     """Start model validation and download in a background thread."""
@@ -872,7 +1047,7 @@ def start_background_download(
     download_lock = facade.download_lock
     log = facade.log
 
-    download_id = facade.generate_download_id()
+    effective_download_id = download_id or facade.generate_download_id()
     filename = facade.sanitize_download_filename(filename)
     subfolder = facade.normalize_relative_subfolder(subfolder)
     initial_directory = facade.get_download_directory(category, base_directory) or ""
@@ -885,14 +1060,15 @@ def start_background_download(
             download_progress,
             initial_path,
             os,
+            exclude_id=effective_download_id,
         )
-        if active_download_id:
+        if active_download_id and active_download_id != effective_download_id:
             log.info(
                 f"Reusing active download for {initial_path} "
                 f"(download_id={active_download_id})"
             )
             return active_download_id
-        download_progress[download_id] = create_initial_progress(
+        download_progress[effective_download_id] = create_initial_progress(
             url=url,
             path=initial_path,
             filename=filename,
@@ -901,43 +1077,76 @@ def start_background_download(
             start_time=time.time(),
         )
 
+    save_spec = getattr(facade, "save_download_spec", None)
+    if callable(save_spec):
+        save_spec(
+            effective_download_id,
+            {
+                "url": url,
+                "filename": filename,
+                "category": category,
+                "headers": headers or {},
+                "subfolder": subfolder,
+                "base_directory": base_directory,
+                "metadata": metadata or {},
+                "expected_sha256": (metadata or {}).get("sha256"),
+                "download_backend": facade._download_backend_from_settings(),
+                "path": initial_path,
+                "directory": initial_directory,
+                "status": "starting",
+                "created_at": time.time(),
+            },
+        )
+
     def run_download() -> None:
         try:
             with download_lock:
-                if download_id in facade.cancelled_downloads:
-                    download_progress[download_id].update(status="cancelled", speed=0)
-                    facade.cancelled_downloads.discard(download_id)
+                if effective_download_id in facade.cancelled_downloads:
+                    download_progress[effective_download_id].update(status="cancelled", speed=0)
+                    facade.cancelled_downloads.discard(effective_download_id)
+                    remove_persisted = getattr(facade, "remove_persisted_download", None)
+                    if callable(remove_persisted):
+                        remove_persisted(effective_download_id)
                     return
             result = facade.download_model(
                 url,
                 filename,
                 category,
-                download_id,
+                effective_download_id,
                 headers,
                 subfolder,
                 base_directory,
                 metadata,
             )
-            if not result.get("success"):
+            if result.get("success"):
+                remove_persisted = getattr(facade, "remove_persisted_download", None)
+                if callable(remove_persisted):
+                    remove_persisted(effective_download_id)
+            else:
+                cancelled = False
                 with download_lock:
-                    if download_id in download_progress:
+                    if effective_download_id in download_progress:
                         cancelled = (
-                            download_id in facade.cancelled_downloads
-                            or download_progress[download_id].get("status") == "cancelled"
+                            effective_download_id in facade.cancelled_downloads
+                            or download_progress[effective_download_id].get("status") == "cancelled"
                         )
-                        download_progress[download_id]["status"] = "cancelled" if cancelled else "error"
-                        facade.cancelled_downloads.discard(download_id)
-                        download_progress[download_id]["error"] = result.get(
+                        download_progress[effective_download_id]["status"] = "cancelled" if cancelled else "error"
+                        facade.cancelled_downloads.discard(effective_download_id)
+                        download_progress[effective_download_id]["error"] = result.get(
                             "error",
                             "Download failed",
                         )
                         if result.get("path"):
                             result_path = result["path"]
-                            download_progress[download_id]["path"] = result_path
-                            download_progress[download_id]["directory"] = os.path.dirname(result_path)
+                            download_progress[effective_download_id]["path"] = result_path
+                            download_progress[effective_download_id]["directory"] = os.path.dirname(result_path)
+                if cancelled:
+                    remove_persisted = getattr(facade, "remove_persisted_download", None)
+                    if callable(remove_persisted):
+                        remove_persisted(effective_download_id)
         except Exception as exc:
             with download_lock:
-                download_progress[download_id] = {
+                download_progress[effective_download_id] = {
                     "status": "error",
                     "progress": 0,
                     "total_size": 0,
@@ -953,4 +1162,4 @@ def start_background_download(
                 }
 
     facade.threading.Thread(target=run_download, daemon=True).start()
-    return download_id
+    return effective_download_id

@@ -46,3 +46,6 @@ model_resolver_settings.json
 node_modules/*
 eslint.config.mjs
 package.json
+
+# Download state persistence
+state/

@@ -26,6 +26,45 @@ def try_certifi_ca_path(*, dependencies: Any = None) -> str:
         return ""
 
 
+def resolve_proxy_url(
+    settings: Optional[Dict[str, Any]] = None,
+    *,
+    dependencies: Any = None,
+) -> str:
+    """Resolve active proxy URL from settings, environment variables, or system settings."""
+    facade = require_download_dependencies(dependencies, "aria2 backend")
+    active_settings = (
+        settings if isinstance(settings, dict) else facade.load_settings()
+    )
+    configured = str(
+        active_settings.get("proxy_url")
+        or active_settings.get("proxy")
+        or ""
+    ).strip()
+    if configured:
+        return configured
+
+    for env_var in (
+        "ALL_PROXY",
+        "all_proxy",
+        "HTTPS_PROXY",
+        "https_proxy",
+        "HTTP_PROXY",
+        "http_proxy",
+    ):
+        val = facade.os.environ.get(env_var, "").strip()
+        if val:
+            return val
+
+    try:
+        import urllib.request
+
+        proxies = urllib.request.getproxies()
+        return proxies.get("https") or proxies.get("http") or proxies.get("all") or ""
+    except Exception:
+        return ""
+
+
 def resolve_aria2c_executable(
     settings: Optional[Dict[str, Any]] = None,
     *,
@@ -852,6 +891,37 @@ def download_file_with_aria2(
         )
 
     try:
+        coordinator_fn = getattr(facade, "get_rate_limit_coordinator", None)
+        if callable(coordinator_fn):
+            rl = coordinator_fn()
+            if rl.is_rate_limited(url):
+                cooldown = int(rl.get_cooldown(url))
+                if cooldown > 0:
+                    error_msg = f"Rate limit exceeded (HTTP 429): please retry after {cooldown}s."
+                    with facade.download_lock:
+                        facade.download_progress[download_id]["status"] = "error"
+                        facade.download_progress[download_id]["error"] = error_msg
+                        facade.download_progress[download_id]["speed"] = 0
+                    result["error"] = error_msg
+                    log.error(f"✗ aria2 download deferred: {filename}")
+                    log.error(f"Error: {error_msg}")
+                    return result
+
+        guard_fn = getattr(facade, "get_connectivity_guard", None)
+        if callable(guard_fn):
+            guard = guard_fn()
+            if guard.is_offline(url):
+                cooldown = int(guard.get_offline_cooldown(url))
+                error_msg = f"Network offline: destination in connectivity cooldown ({cooldown}s remaining)."
+                with facade.download_lock:
+                    facade.download_progress[download_id]["status"] = "error"
+                    facade.download_progress[download_id]["error"] = error_msg
+                    facade.download_progress[download_id]["speed"] = 0
+                result["error"] = error_msg
+                log.error(f"✗ aria2 download failed: {filename}")
+                log.error(f"Error: {error_msg}")
+                return result
+
         facade.os.makedirs(facade.os.path.dirname(dest_path), exist_ok=True)
         facade._ensure_aria2_daemon(
             settings,
@@ -877,6 +947,9 @@ def download_file_with_aria2(
                 # disabled prevents sensitive headers from reaching another host.
                 "max-redirect": "0",
             }
+            proxy_url = facade._resolve_proxy_url(settings)
+            if proxy_url:
+                opts["all-proxy"] = proxy_url
             # Checksum and check-integrity are deliberately omitted from aria2 options.
             # On Windows, aria2c's single-threaded, unaccelerated software checksum
             # verification blocks download completion and freezes the process at 100%
@@ -1102,6 +1175,9 @@ def download_file_with_aria2(
                         "metadata_path": metadata_path,
                     }
                 )
+                guard_fn = getattr(facade, "get_connectivity_guard", None)
+                if callable(guard_fn):
+                    guard_fn().record_success(url)
                 elapsed = facade.time.time() - start_time
                 avg_speed = size / elapsed if elapsed > 0 else 0
                 log.info(f"✓ aria2 download complete: {filename}")
@@ -1185,6 +1261,14 @@ def download_file_with_aria2(
                             f"Could not refresh signed URL for {filename}: {refresh_exc}"
                         )
 
+                if "429" in str(error_msg):
+                    coordinator_fn = getattr(facade, "get_rate_limit_coordinator", None)
+                    if callable(coordinator_fn):
+                        coordinator_fn().register_rate_limit(
+                            url,
+                            60,
+                            reason=f"aria2 download rate limit (HTTP 429) for {filename}",
+                        )
                 with facade.download_lock:
                     facade.download_progress[download_id]["status"] = "error"
                     facade.download_progress[download_id]["error"] = error_msg
@@ -1205,6 +1289,9 @@ def download_file_with_aria2(
             facade.time.sleep(0.5)
 
     except Exception as exc:
+        guard_fn = getattr(facade, "get_connectivity_guard", None)
+        if callable(guard_fn):
+            guard_fn().record_failure(url, exc)
         if download_id in facade.cancelled_downloads:
             facade._delete_partial_download_files(dest_path)
             facade.cancelled_downloads.discard(download_id)
@@ -1484,27 +1571,94 @@ def _set_aria2_desired_download_state(
     dependencies: Any = None,
 ) -> Dict[str, Any]:
     facade = require_download_dependencies(dependencies, "aria2 backend")
-    if download_id in facade.cancelled_downloads:
+    cancelled = getattr(facade, "cancelled_downloads", None) or set()
+    if download_id in cancelled:
         return {"success": False, "error": "Download is being cancelled"}
-    return facade._queue_aria2_desired_state(
-        download_id,
-        status,
-    )
+    queue_fn = getattr(facade, "_queue_aria2_desired_state", None)
+    if callable(queue_fn):
+        return queue_fn(
+            download_id,
+            status,
+        )
+    return {"success": False, "error": "Download action is not available yet"}
 
 
 def pause_download(download_id: str, *, dependencies: Any = None) -> Dict[str, Any]:
-    """Pause an aria2 download. Built-in Python downloads cannot be paused."""
+    """Pause an aria2 or Python download."""
+    facade = require_download_dependencies(dependencies, "aria2 backend")
+    cancelled = getattr(facade, "cancelled_downloads", None) or set()
+    if download_id in cancelled:
+        return {"success": False, "error": "Download is being cancelled"}
+
+    is_py_active = getattr(facade, "is_python_download_active", None)
+    if callable(is_py_active) and is_py_active(download_id):
+        pause_py = getattr(facade, "pause_python_download", None)
+        if callable(pause_py):
+            pause_py(download_id)
+        set_status = getattr(facade, "_set_download_progress_status", None)
+        if callable(set_status):
+            set_status(download_id, "paused", speed=0)
+        update_store = getattr(facade, "update_download_progress_state", None)
+        if callable(update_store):
+            update_store(download_id, status="paused")
+        return {"success": True, "message": "Download paused"}
+
+    progress_info = getattr(facade, "download_progress", {}).get(download_id) or {}
+    if progress_info.get("status") == "paused":
+        return {"success": True, "message": "Download paused"}
+
     return _set_aria2_desired_download_state(
         download_id,
         "paused",
-        dependencies=dependencies,
+        dependencies=facade,
     )
 
 
 def resume_download(download_id: str, *, dependencies: Any = None) -> Dict[str, Any]:
-    """Resume a paused aria2 download."""
-    return _set_aria2_desired_download_state(
+    """Resume a paused aria2 or Python download or restart an interrupted download."""
+    facade = require_download_dependencies(dependencies, "aria2 backend")
+    cancelled = getattr(facade, "cancelled_downloads", None) or set()
+    if download_id in cancelled:
+        return {"success": False, "error": "Download is being cancelled"}
+
+    is_py_active = getattr(facade, "is_python_download_active", None)
+    if callable(is_py_active) and is_py_active(download_id):
+        resume_py = getattr(facade, "resume_python_download", None)
+        if callable(resume_py):
+            resume_py(download_id)
+        set_status = getattr(facade, "_set_download_progress_status", None)
+        if callable(set_status):
+            set_status(download_id, "downloading")
+        update_store = getattr(facade, "update_download_progress_state", None)
+        if callable(update_store):
+            update_store(download_id, status="downloading")
+        return {"success": True, "message": "Download resumed"}
+
+    result = _set_aria2_desired_download_state(
         download_id,
         "downloading",
-        dependencies=dependencies,
+        dependencies=facade,
     )
+    if result.get("success"):
+        return result
+
+    if result.get("error") == "Download action is not available yet":
+        get_spec_fn = getattr(facade, "get_persisted_spec", None)
+        if callable(get_spec_fn):
+            persisted_spec = get_spec_fn(download_id)
+            if persisted_spec and isinstance(persisted_spec, dict):
+                start_fn = getattr(facade, "start_background_download", None)
+                if callable(start_fn):
+                    start_fn(
+                        url=persisted_spec.get("url", ""),
+                        filename=persisted_spec.get("filename", ""),
+                        category=persisted_spec.get("category", ""),
+                        headers=persisted_spec.get("headers"),
+                        subfolder=persisted_spec.get("subfolder", ""),
+                        base_directory=persisted_spec.get("base_directory", ""),
+                        metadata=persisted_spec.get("metadata"),
+                        download_id=download_id,
+                    )
+                    return {"success": True, "message": "Download resumed"}
+
+    return result

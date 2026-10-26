@@ -210,11 +210,39 @@ def request_source_response(
     log_name: str = "Source API",
     raise_on_error: bool = False,
 ) -> Optional[requests.Response]:
-    """Perform a source request with optional transport-error propagation."""
+    """Perform a source request with rate limiting and connectivity guard support."""
     import time
 
     from .log_system import create_module_logger
+    from .network_guard import get_connectivity_guard, get_rate_limit_coordinator
+
     log = create_module_logger(__name__)
+
+    conn_guard = get_connectivity_guard()
+    if conn_guard.is_offline(url):
+        cooldown = int(conn_guard.get_offline_cooldown(url))
+        log.debug(
+            f"{log_name} request skipped (connectivity guard offline cooldown active): "
+            f"url={url}, remaining={cooldown}s"
+        )
+        if raise_on_error:
+            raise requests.exceptions.ConnectionError(
+                f"Network offline: destination in cooldown ({cooldown}s remaining)"
+            )
+        return None
+
+    rl_coordinator = get_rate_limit_coordinator()
+    if rl_coordinator.is_rate_limited(url) and not rl_coordinator.wait_if_needed(url, max_wait=2.0):
+        cooldown = int(rl_coordinator.get_cooldown(url))
+        log.warning(
+            f"{log_name} request skipped: rate limit cooldown active for {url} "
+            f"({cooldown}s remaining)"
+        )
+        if raise_on_error:
+            raise requests.exceptions.HTTPError(
+                f"Rate limit cooldown active: please retry after {cooldown}s"
+            )
+        return None
 
     request_params = {k: v for k, v in (params or {}).items() if v is not None}
     response = None
@@ -226,20 +254,31 @@ def request_source_response(
             else:
                 response = requests.get(url, params=request_params, headers=headers, timeout=timeout)
         except Exception as e:
+            conn_guard.record_failure(url, e)
             log.warning(f"{log_name} request failed: url={url}, error={e}")
             if raise_on_error:
                 raise
             return None
 
+        conn_guard.record_success(url)
+
         if response.status_code != 429 or attempt == max_attempts - 1:
+            if response.status_code == 429:
+                retry_after = response.headers.get("Retry-After")
+                rl_coordinator.register_rate_limit(
+                    url,
+                    retry_after,
+                    reason=f"{log_name} rate limit (HTTP 429)",
+                )
             break
 
         retry_after = response.headers.get("Retry-After")
-        try:
-            delay = float(retry_after) if retry_after else 1.2
-        except (TypeError, ValueError):
-            delay = 1.2
-        time.sleep(max(0.5, min(delay, 3.0)))
+        delay = rl_coordinator.register_rate_limit(
+            url,
+            retry_after,
+            reason=f"{log_name} rate limit (HTTP 429)",
+        )
+        time.sleep(max(0.5, min(float(delay), 3.0)))
 
     return response
 
