@@ -56,12 +56,15 @@ except ImportError:
 log = create_module_logger("core.downloader")
 
 SPEED_HISTORY_SIZE = 5
-CHUNK_SIZE = 1024 * 1024
+CHUNK_SIZE = 4 * 1024 * 1024
 CLI_LOG_INTERVAL = 5
 ARIA2_RPC_TIMEOUT = (2, 5)
 ARIA2_STATUS_RPC_RETRIES = 4
 ARIA2_STATUS_RPC_RETRY_DELAY = 0.15
 ARIA2_IDLE_STOP_SECONDS = 5 * 60
+MAX_ARIA2_URL_RECOVERY_ATTEMPTS = 2
+PYTHON_DOWNLOAD_MAX_RETRIES = 2
+PYTHON_DOWNLOAD_RETRY_DELAY = 0.5
 # Keep validation aligned with the install location used by the aria2 installer.
 # ARIA2_INSTALL_ROOT resolves the custom node package first, so paths reached
 # through a shared ComfyUI/custom_nodes symlink remain valid while external
@@ -95,10 +98,14 @@ context.ARIA2_RPC_TIMEOUT = ARIA2_RPC_TIMEOUT
 context.ARIA2_STATUS_RPC_RETRIES = ARIA2_STATUS_RPC_RETRIES
 context.ARIA2_STATUS_RPC_RETRY_DELAY = ARIA2_STATUS_RPC_RETRY_DELAY
 context.ARIA2_IDLE_STOP_SECONDS = ARIA2_IDLE_STOP_SECONDS
+context.MAX_ARIA2_URL_RECOVERY_ATTEMPTS = MAX_ARIA2_URL_RECOVERY_ATTEMPTS
+context.PYTHON_DOWNLOAD_MAX_RETRIES = PYTHON_DOWNLOAD_MAX_RETRIES
+context.PYTHON_DOWNLOAD_RETRY_DELAY = PYTHON_DOWNLOAD_RETRY_DELAY
 context.MANAGED_ARIA2_ROOT = MANAGED_ARIA2_ROOT
 context.HF_XET_ARIA2_AUTH_HOSTS = HF_XET_ARIA2_AUTH_HOSTS
 
 context.aria2_process = None
+context.aria2_recent_stderr = deque(maxlen=50)
 context.aria2_rpc_url = ""
 context.aria2_rpc_secret = ""
 context.aria2_rpc_lock = threading.Lock()
@@ -247,6 +254,16 @@ context._aria2_action_error_is_ok = aria2_backend.aria2_action_error_is_ok
 context._is_aria2_missing_control_file_error = (
     aria2_backend.is_aria2_missing_control_file_error
 )
+context._is_aria2_important_stderr = aria2_backend.is_aria2_important_stderr
+context.is_aria2_important_stderr = aria2_backend.is_aria2_important_stderr
+context._is_aria2_recoverable_url_error = (
+    aria2_backend.is_aria2_recoverable_url_error
+)
+context.is_aria2_recoverable_url_error = (
+    aria2_backend.is_aria2_recoverable_url_error
+)
+context._drain_aria2_stderr = _bind(aria2_backend.drain_aria2_stderr)
+context.drain_aria2_stderr = context._drain_aria2_stderr
 context.Aria2Error = aria2_backend.Aria2Error
 context._find_free_port = aria2_backend.find_free_port
 context._parse_aria2_int = aria2_backend.parse_aria2_int

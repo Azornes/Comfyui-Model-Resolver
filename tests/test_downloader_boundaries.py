@@ -1,19 +1,28 @@
+import io
 import os
 import tempfile
 import threading
 import unittest
+from collections import deque
 from types import SimpleNamespace
 from unittest.mock import MagicMock, call, patch
 
 from core.download.api import context as downloader
 from core.download.aria2_backend import (
     download_file_with_aria2,
+    drain_aria2_stderr,
+    is_aria2_important_stderr,
+    is_aria2_recoverable_url_error,
     pause_download,
     recover_aria2_missing_control_file,
     resume_download,
     start_background_sha256_verification,
 )
-from core.download.orchestrator import download_file, find_active_download_for_path
+from core.download.orchestrator import (
+    download_file,
+    find_active_download_for_path,
+    parse_retry_after,
+)
 from core.path_utils import normalize_metadata_file_path
 
 
@@ -482,6 +491,240 @@ class DownloaderBoundaryTests(unittest.TestCase):
 
             sidecar_meta = downloader.read_json_safe(sidecar_path, {})
             self.assertFalse(sidecar_meta.get("sha256_verified"))
+
+    def test_is_aria2_important_stderr(self):
+        self.assertTrue(is_aria2_important_stderr("Error: Write disk cache flush failure"))
+        self.assertTrue(is_aria2_important_stderr("cause: No space left on device"))
+        self.assertTrue(is_aria2_important_stderr("failed to write into the file: Access is denied."))
+        self.assertFalse(is_aria2_important_stderr("aria2 progress: 50% - 20 MB/s"))
+        self.assertFalse(is_aria2_important_stderr("Connecting to server 127.0.0.1:8000"))
+
+    def test_drain_aria2_stderr_reads_lines_without_blocking(self):
+        mock_process = MagicMock()
+        mock_process.stderr = io.BytesIO(
+            b"connecting to host\n"
+            b"no space left on device\n"
+            b"closing connection\n"
+        )
+        recent_lines = deque(maxlen=10)
+        drain_aria2_stderr(mock_process, recent_lines)
+        self.assertEqual(
+            list(recent_lines),
+            [
+                "connecting to host",
+                "no space left on device",
+                "closing connection",
+            ],
+        )
+
+    def test_is_aria2_recoverable_url_error(self):
+        self.assertTrue(is_aria2_recoverable_url_error("No URI available. See --max-tries option."))
+        self.assertTrue(is_aria2_recoverable_url_error("HTTP response header was bad or unexpected: 403 Forbidden"))
+        self.assertTrue(is_aria2_recoverable_url_error("Failed with status code 401"))
+        self.assertTrue(is_aria2_recoverable_url_error("Remote server returned 410 Gone"))
+        self.assertFalse(is_aria2_recoverable_url_error("Checksum mismatch error"))
+        self.assertFalse(is_aria2_recoverable_url_error("File already exists and cannot be overwritten"))
+
+    def test_aria2_download_recovers_from_expired_signed_url(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dest_path = os.path.join(temp_dir, "model_resumed.safetensors")
+            with open(dest_path, "wb") as f:
+                f.write(b"partially downloaded bytes")
+
+            mock_resolve = MagicMock(side_effect=[
+                ("https://cdn.example.com/expired-url", {"User-Agent": "test-ua"}),
+                ("https://cdn.example.com/fresh-url", {"User-Agent": "test-ua"}),
+            ])
+            mock_rpc = MagicMock(side_effect=[
+                "gid-1",       # 1st addUri
+                "OK",          # removeDownloadResult for gid-1
+                "gid-2",       # 2nd addUri
+            ])
+            mock_status = MagicMock(side_effect=[
+                {"status": "error", "errorMessage": "No URI available. See --max-tries option."},
+                {"status": "complete", "completedLength": "500", "totalLength": "500"},
+            ])
+
+            with patch.object(downloader, "_ensure_aria2_daemon"), \
+                 patch.object(downloader, "_resolve_download_url_for_aria2", mock_resolve), \
+                 patch.object(downloader, "_aria2_rpc", mock_rpc), \
+                 patch.object(downloader, "_aria2_tell_status", mock_status), \
+                 patch.object(downloader, "write_model_resolver_metadata", return_value=""), \
+                 patch.object(downloader, "_schedule_aria2_idle_stop"), \
+                 patch.object(downloader, "invalidate_model_caches"):
+
+                result = download_file_with_aria2(
+                    "https://civitai.com/api/download/models/999",
+                    dest_path,
+                    "url-refresh-test",
+                    dependencies=downloader,
+                )
+
+            self.assertTrue(result["success"])
+            self.assertEqual(mock_resolve.call_count, 2)
+            self.assertEqual(mock_rpc.call_args_list[0].args[0], "aria2.addUri")
+            self.assertEqual(mock_rpc.call_args_list[0].args[1][0], ["https://cdn.example.com/expired-url"])
+            self.assertEqual(mock_rpc.call_args_list[1].args, ("aria2.removeDownloadResult", ["gid-1"]))
+            self.assertEqual(mock_rpc.call_args_list[2].args[0], "aria2.addUri")
+            self.assertEqual(mock_rpc.call_args_list[2].args[1][0], ["https://cdn.example.com/fresh-url"])
+
+    def test_aria2_cancellation_shielding_prevents_orphaned_transfer(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dest_path = os.path.join(temp_dir, "cancelled.safetensors")
+            download_id = "test-shielded-cancel"
+            downloader.cancelled_downloads.add(download_id)
+
+            mock_rpc = MagicMock()
+            mock_resolve = MagicMock(return_value=("https://example.com/file.safetensors", {}))
+
+            with patch.object(downloader, "_ensure_aria2_daemon"), \
+                 patch.object(downloader, "_resolve_download_url_for_aria2", mock_resolve), \
+                 patch.object(downloader, "_aria2_rpc", mock_rpc), \
+                 patch.object(downloader, "_schedule_aria2_idle_stop"):
+
+                result = download_file_with_aria2(
+                    "https://example.com/file.safetensors",
+                    dest_path,
+                    download_id,
+                    dependencies=downloader,
+                )
+
+            self.assertFalse(result["success"])
+            self.assertEqual(result["error"], "Download cancelled")
+            self.assertEqual(mock_rpc.call_count, 0)
+
+    def test_parse_retry_after(self):
+        self.assertEqual(parse_retry_after("120"), 120)
+        self.assertEqual(parse_retry_after("0"), 1)
+        self.assertIsNone(parse_retry_after(""))
+        self.assertIsNone(parse_retry_after(None))
+        self.assertIsNone(parse_retry_after("invalid-text"))
+
+    def test_python_download_handles_rate_limit_429_with_retry_after(self):
+        import requests
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dest_path = os.path.join(temp_dir, "model.safetensors")
+            mock_resp = MagicMock()
+            mock_resp.status_code = 429
+            mock_resp.headers = {"Retry-After": "45"}
+            http_err = requests.exceptions.HTTPError(response=mock_resp)
+
+            with patch.object(downloader, "_download_backend_from_settings", return_value="python"), \
+                 patch.object(downloader, "request_public_url", side_effect=http_err):
+
+                result = download_file(
+                    "https://civitai.com/api/download/models/12345",
+                    dest_path,
+                    "rate-limit-test",
+                    dependencies=downloader,
+                )
+
+            self.assertFalse(result["success"])
+            self.assertIn("Rate limit exceeded (HTTP 429)", result["error"])
+            self.assertIn("45s", result["error"])
+
+    def test_python_download_resumes_via_direct_target_retry_when_redirect_drops_range(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dest_path = os.path.join(temp_dir, "model.safetensors")
+            partial_path = f"{dest_path}.part"
+            initial_data = b"0123456789"
+            with open(partial_path, "wb") as f:
+                f.write(initial_data)
+
+            # Response 1: from origin redirect, drops range -> returns 200
+            resp_redirected = MagicMock()
+            resp_redirected.status_code = 200
+            resp_redirected.headers = {"Content-Length": "20"}
+
+            # Response 2: from direct target URL with range -> returns 206
+            remaining_data = b"ABCDEFGHIJ"
+            total_data = initial_data + remaining_data
+            resp_direct = MagicMock()
+            resp_direct.status_code = 206
+            resp_direct.headers = {
+                "Content-Range": f"bytes 10-19/{len(total_data)}",
+                "Content-Length": "10",
+            }
+            resp_direct.iter_content.return_value = [remaining_data]
+
+            mock_request = MagicMock(side_effect=[
+                (resp_redirected, "https://cdn.example.com/direct-file", {}),
+                (resp_direct, "https://cdn.example.com/direct-file", {}),
+            ])
+
+            with patch.object(downloader, "_download_backend_from_settings", return_value="python"), \
+                 patch.object(downloader, "request_public_url", mock_request), \
+                 patch.object(downloader, "write_model_resolver_metadata", return_value=""):
+
+                result = download_file(
+                    "https://civitai.com/api/download/models/100",
+                    dest_path,
+                    "range-redirect-test",
+                    dependencies=downloader,
+                )
+
+            self.assertTrue(result["success"])
+            self.assertEqual(len(total_data), result["size"])
+            with open(dest_path, "rb") as f:
+                self.assertEqual(total_data, f.read())
+            self.assertEqual(mock_request.call_count, 2)
+            # Second call was direct to the CDN target
+            self.assertEqual(mock_request.call_args_list[1].args[1], "https://cdn.example.com/direct-file")
+
+    def test_python_download_auto_reconnects_on_stream_interruption(self):
+        import requests
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dest_path = os.path.join(temp_dir, "model_reconnect.safetensors")
+            chunk1 = b"AAAAA"
+            chunk2 = b"BBBBB"
+            total_data = chunk1 + chunk2
+
+            # Stream 1: yields chunk1 then drops connection
+            resp1 = MagicMock()
+            resp1.status_code = 200
+            resp1.headers = {"Content-Length": str(len(total_data))}
+
+            def failing_stream(*args, **kwargs):
+                yield chunk1
+                raise requests.exceptions.ConnectionError("Connection reset by peer")
+
+            resp1.iter_content.side_effect = failing_stream
+
+            # Stream 2: resumes with Range 206, yields chunk2
+            resp2 = MagicMock()
+            resp2.status_code = 206
+            resp2.headers = {
+                "Content-Range": f"bytes 5-9/{len(total_data)}",
+                "Content-Length": "5",
+            }
+            resp2.iter_content.return_value = [chunk2]
+
+            mock_request = MagicMock(side_effect=[
+                (resp1, "https://example.com/model.safetensors", {}),
+                (resp2, "https://example.com/model.safetensors", {}),
+            ])
+
+            with patch.object(downloader, "_download_backend_from_settings", return_value="python"), \
+                 patch.object(downloader, "request_public_url", mock_request), \
+                 patch.object(downloader, "write_model_resolver_metadata", return_value=""):
+
+                result = download_file(
+                    "https://example.com/model.safetensors",
+                    dest_path,
+                    "stream-reconnect-test",
+                    dependencies=downloader,
+                )
+
+            self.assertTrue(result["success"])
+            self.assertEqual(len(total_data), result["size"])
+            with open(dest_path, "rb") as f:
+                self.assertEqual(total_data, f.read())
+            self.assertEqual(mock_request.call_count, 2)
+            # Reconnected call should have requested Range from byte 5
+            second_call_headers = mock_request.call_args_list[1].kwargs.get("headers", {})
+            self.assertEqual(second_call_headers.get("Range"), "bytes=5-")
 
 
 

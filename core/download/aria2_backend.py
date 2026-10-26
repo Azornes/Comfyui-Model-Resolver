@@ -87,6 +87,84 @@ def parse_aria2_int(value: Any) -> int:
         return 0
 
 
+ARIA2_IMPORTANT_STDERR_MARKERS = (
+    "write disk cache flush failure",
+    "error when trying to flush write cache",
+    "failed to write into the file",
+    "failed to open the file",
+    "failed to seek the file",
+    "no space left on device",
+    "not enough space on the disk",
+    "input/output error",
+    "permission denied",
+    "access is denied",
+    "disk quota exceeded",
+)
+
+MAX_ARIA2_URL_RECOVERY_ATTEMPTS = 2
+
+
+def is_aria2_important_stderr(line: str) -> bool:
+    """Identify critical disk or permission error messages in aria2's stderr."""
+    lowered = line.lower()
+    return any(marker in lowered for marker in ARIA2_IMPORTANT_STDERR_MARKERS)
+
+
+def is_aria2_recoverable_url_error(error: Any) -> bool:
+    """Identify aria2 transfer errors that may be resolved by refreshing a signed URL."""
+    message = str(error or "").lower()
+    return (
+        "no uri available" in message
+        or "403 forbidden" in message
+        or "401 unauthorized" in message
+        or "410 gone" in message
+        or "status code 403" in message
+        or "status code 401" in message
+        or "bad or unexpected: 403" in message
+        or "bad or unexpected: 401" in message
+    )
+
+
+def drain_aria2_stderr(
+    process: Any,
+    recent_lines: Any = None,
+    *,
+    dependencies: Any = None,
+) -> None:
+    """Continuously drain aria2's stderr pipe so it never saturates Windows pipe buffers."""
+    if not process or not getattr(process, "stderr", None):
+        return
+    stderr = process.stderr
+    try:
+        while True:
+            raw_line = stderr.readline()
+            if not raw_line:
+                break
+            if isinstance(raw_line, bytes):
+                line = raw_line.decode("utf-8", errors="replace").rstrip()
+            else:
+                line = str(raw_line).rstrip()
+            if not line:
+                continue
+            if recent_lines is not None:
+                try:
+                    recent_lines.append(line)
+                except Exception:
+                    pass
+            if is_aria2_important_stderr(line):
+                log.warning(f"aria2: {line}")
+            else:
+                log.debug(f"aria2 stderr: {line}")
+    except Exception:
+        pass
+    finally:
+        try:
+            if stderr and not getattr(stderr, "closed", False):
+                stderr.close()
+        except Exception:
+            pass
+
+
 def is_aria2_missing_control_file_error(error: Any) -> bool:
     """Identify aria2's stale-output error caused by a missing .aria2 file."""
     message = str(error or "").lower()
@@ -440,6 +518,12 @@ def stop_aria2_daemon(
             except Exception:
                 pass
 
+        try:
+            if getattr(process, "stderr", None) and not getattr(process.stderr, "closed", False):
+                process.stderr.close()
+        except Exception:
+            pass
+
         facade.aria2_process = None
         facade.aria2_rpc_url = ""
         facade.aria2_rpc_secret = ""
@@ -557,6 +641,15 @@ def ensure_aria2_daemon(
                 process.terminate()
             except Exception:
                 pass
+        if (
+            process is not None
+            and getattr(process, "stderr", None)
+            and not getattr(process.stderr, "closed", False)
+        ):
+            try:
+                process.stderr.close()
+            except Exception:
+                pass
         facade.aria2_process = None
         facade.aria2_process_started_by_resolver = False
 
@@ -592,6 +685,7 @@ def ensure_aria2_daemon(
             creationflags = getattr(facade.subprocess, "CREATE_NO_WINDOW", 0)
 
         log.info(f"Starting aria2 RPC daemon from {executable}")
+        facade.aria2_recent_stderr = facade.deque(maxlen=50)
         facade.aria2_process = facade.subprocess.Popen(
             command,
             stdout=facade.subprocess.DEVNULL,
@@ -600,18 +694,22 @@ def ensure_aria2_daemon(
         )
         facade.aria2_process_started_by_resolver = True
 
+        drain_thread = facade.threading.Thread(
+            target=facade._drain_aria2_stderr,
+            args=(facade.aria2_process, facade.aria2_recent_stderr),
+            daemon=True,
+            name="aria2-stderr-drain",
+        )
+        drain_thread.start()
+
         start_time = facade.time.time()
         last_error = ""
         while facade.time.time() - start_time < 10:
             process = facade.aria2_process
             if process.poll() is not None:
-                stderr = ""
-                try:
-                    stderr = (
-                        process.stderr.read() if process.stderr else b""
-                    ).decode("utf-8", errors="replace")
-                except Exception:
-                    stderr = ""
+                facade.time.sleep(0.05)
+                recent = getattr(facade, "aria2_recent_stderr", None)
+                stderr = "\n".join(recent) if recent else ""
                 raise Aria2Error(
                     "aria2 RPC process exited early with code "
                     f"{process.returncode}: {stderr.strip()}"
@@ -736,6 +834,12 @@ def download_file_with_aria2(
     start_time = facade.time.time()
     filename = facade.get_filename_from_path(dest_path)
     expected_sha256 = facade._extract_expected_sha256(metadata)
+    max_url_recovery = getattr(
+        facade,
+        "MAX_ARIA2_URL_RECOVERY_ATTEMPTS",
+        MAX_ARIA2_URL_RECOVERY_ATTEMPTS,
+    )
+    url_recovery_attempts = 0
 
     with facade.download_lock:
         facade.download_progress[download_id] = create_initial_progress(
@@ -757,45 +861,60 @@ def download_file_with_aria2(
             headers,
         )
 
-        options: Dict[str, Any] = {
-            "dir": facade.os.path.dirname(dest_path),
-            "out": filename,
-            "continue": "true",
-            "max-connection-per-server": "4",
-            "split": "4",
-            "min-split-size": "1M",
-            "allow-overwrite": "true",
-            "auto-file-renaming": "false",
-            "file-allocation": "none",
-            "no-want-digest-header": "true",
-            # Redirects were already resolved and validated above. Keeping them
-            # disabled prevents sensitive headers from reaching another host.
-            "max-redirect": "0",
-        }
-        # Checksum and check-integrity are deliberately omitted from aria2 options.
-        # On Windows, aria2c's single-threaded, unaccelerated software checksum
-        # verification blocks download completion and freezes the process at 100%
-        # for many minutes on 20+ GB models. Instead, verification is handled
-        # asynchronously in the background via hardware-accelerated Python hashlib.
-        user_agent = facade._get_header_value(request_headers, "User-Agent")
-        referer = facade._get_header_value(request_headers, "Referer")
-        if user_agent:
-            options["user-agent"] = user_agent
-        if referer:
-            options["referer"] = referer
+        def build_transfer_options(target_headers: Dict[str, str]) -> Dict[str, Any]:
+            opts: Dict[str, Any] = {
+                "dir": facade.os.path.dirname(dest_path),
+                "out": filename,
+                "continue": "true",
+                "max-connection-per-server": "4",
+                "split": "4",
+                "min-split-size": "1M",
+                "allow-overwrite": "true",
+                "auto-file-renaming": "false",
+                "file-allocation": "none",
+                "no-want-digest-header": "true",
+                # Redirects were already resolved and validated above. Keeping them
+                # disabled prevents sensitive headers from reaching another host.
+                "max-redirect": "0",
+            }
+            # Checksum and check-integrity are deliberately omitted from aria2 options.
+            # On Windows, aria2c's single-threaded, unaccelerated software checksum
+            # verification blocks download completion and freezes the process at 100%
+            # for many minutes on 20+ GB models. Instead, verification is handled
+            # asynchronously in the background via hardware-accelerated Python hashlib.
+            user_agent = facade._get_header_value(target_headers, "User-Agent")
+            referer = facade._get_header_value(target_headers, "Referer")
+            if user_agent:
+                opts["user-agent"] = user_agent
+            if referer:
+                opts["referer"] = referer
 
-        header_values = [
-            f"{key}: {value}"
-            for key, value in request_headers.items()
-            if str(key).lower() not in {"user-agent", "referer"}
-        ]
-        if header_values:
-            options["header"] = header_values
+            header_values = [
+                f"{key}: {value}"
+                for key, value in target_headers.items()
+                if str(key).lower() not in {"user-agent", "referer"}
+            ]
+            if header_values:
+                opts["header"] = header_values
+            return opts
 
-        def add_aria2_transfer() -> str:
+        options = build_transfer_options(request_headers)
+
+        def add_aria2_transfer(
+            target_url: str = "",
+            target_options: Optional[Dict[str, Any]] = None,
+            *,
+            preserve_progress: bool = False,
+        ) -> str:
+            eff_url = target_url or aria2_url
+            eff_options = target_options if target_options is not None else options
+
+            if download_id in facade.cancelled_downloads:
+                raise Aria2Error("Download was cancelled")
+
             new_gid = facade._aria2_rpc(
                 "aria2.addUri",
-                [[aria2_url], options],
+                [[eff_url], eff_options],
             )
             if not isinstance(new_gid, str) or not new_gid:
                 raise Aria2Error("aria2 did not return a download gid")
@@ -805,18 +924,41 @@ def download_file_with_aria2(
                     "gid": new_gid,
                     "path": dest_path,
                 }
+
+            if download_id in facade.cancelled_downloads:
+                try:
+                    facade._aria2_rpc("aria2.forceRemove", [new_gid])
+                except Exception:
+                    pass
+                raise Aria2Error("Download was cancelled")
+
             with facade.download_lock:
-                facade.download_progress[download_id].update(
-                    {
-                        "aria2_gid": new_gid,
-                        "status": "downloading",
-                        "error": None,
-                        "progress": 0,
-                        "downloaded": 0,
-                        "total_size": 0,
-                        "speed": 0,
-                    }
+                progress_dict = facade.download_progress.setdefault(
+                    download_id,
+                    create_initial_progress(
+                        url=url,
+                        path=dest_path,
+                        filename=filename,
+                        directory=facade.os.path.dirname(dest_path),
+                        download_backend="aria2",
+                        start_time=start_time,
+                    ),
                 )
+                updates: Dict[str, Any] = {
+                    "aria2_gid": new_gid,
+                    "status": "downloading",
+                    "error": None,
+                }
+                if not preserve_progress:
+                    updates.update(
+                        {
+                            "progress": 0,
+                            "downloaded": 0,
+                            "total_size": 0,
+                            "speed": 0,
+                        }
+                    )
+                progress_dict.update(updates)
             return new_gid
 
         recovery_attempted = False
@@ -1000,8 +1142,49 @@ def download_file_with_aria2(
                         settings,
                     )
                     if recovered:
-                        gid = add_aria2_transfer()
+                        gid = add_aria2_transfer(
+                            aria2_url,
+                            options,
+                            preserve_progress=True,
+                        )
                         continue
+
+                if (
+                    url_recovery_attempts < max_url_recovery
+                    and download_id not in facade.cancelled_downloads
+                    and facade._is_aria2_recoverable_url_error(error_msg)
+                ):
+                    url_recovery_attempts += 1
+                    log.warning(
+                        f"aria2 transfer for {filename} failed with '{error_msg}'; "
+                        f"refreshing signed URL and resuming partial download "
+                        f"(attempt {url_recovery_attempts}/{max_url_recovery})"
+                    )
+                    try:
+                        facade._aria2_rpc("aria2.removeDownloadResult", [gid])
+                    except Exception:
+                        pass
+                    facade.time.sleep(1.0)
+                    try:
+                        facade._ensure_aria2_daemon(settings)
+                        aria2_url, request_headers = (
+                            facade._resolve_download_url_for_aria2(
+                                url,
+                                headers,
+                            )
+                        )
+                        options = build_transfer_options(request_headers)
+                        gid = add_aria2_transfer(
+                            aria2_url,
+                            options,
+                            preserve_progress=True,
+                        )
+                        continue
+                    except Exception as refresh_exc:
+                        log.warning(
+                            f"Could not refresh signed URL for {filename}: {refresh_exc}"
+                        )
+
                 with facade.download_lock:
                     facade.download_progress[download_id]["status"] = "error"
                     facade.download_progress[download_id]["error"] = error_msg
@@ -1022,6 +1205,11 @@ def download_file_with_aria2(
             facade.time.sleep(0.5)
 
     except Exception as exc:
+        if download_id in facade.cancelled_downloads:
+            facade._delete_partial_download_files(dest_path)
+            facade.cancelled_downloads.discard(download_id)
+            result["error"] = "Download cancelled"
+            return result
         error_msg = facade._sanitize_download_error(exc)
         with facade.download_lock:
             if download_id in facade.download_progress:
