@@ -28,6 +28,7 @@ from ..path_utils import (
     get_model_resolver_sidecar_path,
     get_path_identity,
     is_path_within,
+    read_json_safe,
     write_json_atomic,
 )
 from ..resolver import invalidate_model_caches
@@ -140,6 +141,7 @@ context.get_model_resolver_sidecar_path = get_model_resolver_sidecar_path
 context.get_path_identity = get_path_identity
 context.is_path_within = is_path_within
 context.write_json_atomic = write_json_atomic
+context.read_json_safe = read_json_safe
 context.get_category_folder_keys = get_category_folder_keys
 context.invalidate_model_caches = invalidate_model_caches
 
@@ -189,6 +191,10 @@ context._run_huggingface_xet_transfer = _bind(
 )
 
 context.download_file_with_aria2 = _bind(aria2_backend.download_file_with_aria2)
+context.start_background_sha256_verification = _bind(
+    aria2_backend.start_background_sha256_verification
+)
+context._start_background_sha256_verification = context.start_background_sha256_verification
 context.get_aria2_status = _bind(aria2_backend.get_aria2_status)
 context.pause_download = _bind(aria2_backend.pause_download)
 context.resume_download = _bind(aria2_backend.resume_download)

@@ -772,11 +772,11 @@ def download_file_with_aria2(
             # disabled prevents sensitive headers from reaching another host.
             "max-redirect": "0",
         }
-        if expected_sha256:
-            # Let aria2 verify the file as part of the transfer instead of
-            # requiring a second Python pass over a multi-gigabyte model.
-            options["checksum"] = f"sha-256={expected_sha256}"
-            options["check-integrity"] = "true"
+        # Checksum and check-integrity are deliberately omitted from aria2 options.
+        # On Windows, aria2c's single-threaded, unaccelerated software checksum
+        # verification blocks download completion and freezes the process at 100%
+        # for many minutes on 20+ GB models. Instead, verification is handled
+        # asynchronously in the background via hardware-accelerated Python hashlib.
         user_agent = facade._get_header_value(request_headers, "User-Agent")
         referer = facade._get_header_value(request_headers, "Referer")
         if user_agent:
@@ -968,6 +968,16 @@ def download_file_with_aria2(
                     f"Avg speed: {facade.format_bytes(int(avg_speed))}/s"
                 )
                 facade.invalidate_model_caches()
+
+                if expected_sha256:
+                    start_background_sha256_verification(
+                        completed_path,
+                        expected_sha256,
+                        download_id=download_id,
+                        metadata_path=metadata_path,
+                        dependencies=facade,
+                    )
+
                 return result
 
             if state == "error":
@@ -1028,6 +1038,86 @@ def download_file_with_aria2(
             facade.aria2_action_locks.pop(download_id, None)
             facade.aria2_desired_states.pop(download_id, None)
         facade._schedule_aria2_idle_stop()
+
+
+def start_background_sha256_verification(
+    completed_path: str,
+    expected_sha256: str,
+    *,
+    download_id: str = "",
+    metadata_path: Optional[str] = None,
+    dependencies: Any = None,
+) -> Optional[Any]:
+    """Verify downloaded model SHA256 in a background thread using hardware-accelerated Python hashlib."""
+    facade = require_download_dependencies(dependencies, "aria2 backend")
+    clean_expected = str(expected_sha256 or "").lower().strip()
+    if not clean_expected or not facade.os.path.isfile(completed_path):
+        return None
+
+    def _worker() -> None:
+        filename = facade.get_filename_from_path(completed_path)
+        log.debug(f"Starting background SHA256 verification for {filename}...")
+        try:
+            hasher = facade.hashlib.sha256()
+            with open(completed_path, "rb") as file_handle:
+                while True:
+                    chunk = file_handle.read(4 * 1024 * 1024)
+                    if not chunk:
+                        break
+                    hasher.update(chunk)
+            actual_sha256 = hasher.hexdigest().lower()
+
+            if actual_sha256 == clean_expected:
+                log.info(f"✓ Background SHA256 verified for: {filename}")
+                if download_id:
+                    with facade.download_lock:
+                        if download_id in facade.download_progress:
+                            facade.download_progress[download_id]["sha256_verified"] = True
+                            facade.download_progress[download_id]["sha256"] = actual_sha256
+                target_meta_path = (
+                    metadata_path
+                    or facade.get_model_resolver_sidecar_path(completed_path)
+                )
+                if target_meta_path and facade.os.path.isfile(target_meta_path):
+                    meta = facade.read_json_safe(target_meta_path, {})
+                    if isinstance(meta, dict):
+                        meta["sha256_verified"] = True
+                        meta["sha256"] = actual_sha256
+                        facade.write_json_atomic(target_meta_path, meta, indent=2)
+            else:
+                log.error(
+                    f"✗ SHA256 mismatch detected for {filename}! "
+                    f"Expected {clean_expected}, got {actual_sha256}"
+                )
+                if download_id:
+                    with facade.download_lock:
+                        if download_id in facade.download_progress:
+                            facade.download_progress[download_id]["sha256_verified"] = False
+                            facade.download_progress[download_id]["actual_sha256"] = actual_sha256
+                            facade.download_progress[download_id]["error"] = (
+                                f"SHA256 mismatch: expected {clean_expected}, got {actual_sha256}"
+                            )
+                target_meta_path = (
+                    metadata_path
+                    or facade.get_model_resolver_sidecar_path(completed_path)
+                )
+                if target_meta_path and facade.os.path.isfile(target_meta_path):
+                    meta = facade.read_json_safe(target_meta_path, {})
+                    if isinstance(meta, dict):
+                        meta["sha256_verified"] = False
+                        meta["actual_sha256"] = actual_sha256
+                        facade.write_json_atomic(target_meta_path, meta, indent=2)
+        except Exception as exc:
+            log.warning(f"Background SHA256 verification failed for {filename}: {exc}")
+
+    thread_name = f"mr-verify-sha256-{download_id or facade.get_filename_from_path(completed_path)}"
+    thread = facade.threading.Thread(
+        target=_worker,
+        name=thread_name,
+        daemon=True,
+    )
+    thread.start()
+    return thread
 
 
 def force_remove_aria2_transfer(

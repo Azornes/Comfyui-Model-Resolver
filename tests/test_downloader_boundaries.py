@@ -7,9 +7,11 @@ from unittest.mock import MagicMock, call, patch
 
 from core.download.api import context as downloader
 from core.download.aria2_backend import (
+    download_file_with_aria2,
     pause_download,
     recover_aria2_missing_control_file,
     resume_download,
+    start_background_sha256_verification,
 )
 from core.download.orchestrator import download_file, find_active_download_for_path
 from core.path_utils import normalize_metadata_file_path
@@ -385,6 +387,101 @@ class DownloaderBoundaryTests(unittest.TestCase):
             self.assertFalse(result["success"])
             self.assertFalse(os.path.exists(dest_path))
             self.assertFalse(os.path.exists(partial_path))
+
+    def test_aria2_options_omit_checksum_and_integrity_check(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dest_path = os.path.join(temp_dir, "model.safetensors")
+            mock_rpc = MagicMock()
+            mock_rpc.side_effect = ["test-gid", {}]
+
+            with patch.object(downloader, "_ensure_aria2_daemon"), \
+                 patch.object(downloader, "_resolve_download_url_for_aria2", return_value=("https://example.com/model.safetensors", {})), \
+                 patch.object(downloader, "_aria2_rpc", mock_rpc), \
+                 patch.object(downloader, "_aria2_tell_status", return_value={"status": "complete", "completedLength": "100", "totalLength": "100"}), \
+                 patch.object(downloader, "write_model_resolver_metadata", return_value=""), \
+                 patch.object(downloader, "_schedule_aria2_idle_stop"), \
+                 patch.object(downloader, "invalidate_model_caches"), \
+                 patch.object(downloader, "_start_background_sha256_verification"):
+
+                result = download_file_with_aria2(
+                    "https://example.com/model.safetensors",
+                    dest_path,
+                    "aria2-no-checksum-test",
+                    metadata={"sha256": "a" * 64},
+                    dependencies=downloader,
+                )
+
+            self.assertTrue(result["success"])
+            add_uri_options = mock_rpc.call_args_list[0].args[1][1]
+            self.assertNotIn("checksum", add_uri_options)
+            self.assertNotIn("check-integrity", add_uri_options)
+
+    def test_background_sha256_verification_success(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dest_path = os.path.join(temp_dir, "test_model.safetensors")
+            content = b"sample model weights for sha256 check"
+            with open(dest_path, "wb") as f:
+                f.write(content)
+
+            import hashlib
+            expected_sha = hashlib.sha256(content).hexdigest()
+            sidecar_path = f"{dest_path}.modelresolver.json"
+            downloader.write_json_atomic(sidecar_path, {"sha256": expected_sha})
+
+            download_id = "bg-verify-success"
+            with downloader.download_lock:
+                downloader.download_progress[download_id] = {"status": "completed"}
+
+            thread = start_background_sha256_verification(
+                dest_path,
+                expected_sha,
+                download_id=download_id,
+                metadata_path=sidecar_path,
+                dependencies=downloader,
+            )
+            self.assertIsNotNone(thread)
+            thread.join(timeout=5)
+
+            with downloader.download_lock:
+                progress = downloader.download_progress.get(download_id, {})
+                self.assertTrue(progress.get("sha256_verified"))
+                self.assertEqual(expected_sha, progress.get("sha256"))
+
+            sidecar_meta = downloader.read_json_safe(sidecar_path, {})
+            self.assertTrue(sidecar_meta.get("sha256_verified"))
+            self.assertEqual(expected_sha, sidecar_meta.get("sha256"))
+
+    def test_background_sha256_verification_mismatch(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dest_path = os.path.join(temp_dir, "test_corrupt.safetensors")
+            with open(dest_path, "wb") as f:
+                f.write(b"corrupted content")
+
+            expected_sha = "0" * 64
+            sidecar_path = f"{dest_path}.modelresolver.json"
+            downloader.write_json_atomic(sidecar_path, {"sha256": expected_sha})
+
+            download_id = "bg-verify-mismatch"
+            with downloader.download_lock:
+                downloader.download_progress[download_id] = {"status": "completed"}
+
+            thread = start_background_sha256_verification(
+                dest_path,
+                expected_sha,
+                download_id=download_id,
+                metadata_path=sidecar_path,
+                dependencies=downloader,
+            )
+            self.assertIsNotNone(thread)
+            thread.join(timeout=5)
+
+            with downloader.download_lock:
+                progress = downloader.download_progress.get(download_id, {})
+                self.assertFalse(progress.get("sha256_verified"))
+                self.assertIn("mismatch", progress.get("error", "").lower())
+
+            sidecar_meta = downloader.read_json_safe(sidecar_path, {})
+            self.assertFalse(sidecar_meta.get("sha256_verified"))
 
 
 
