@@ -13,6 +13,8 @@ test('download progress labels cover active, paused, checking, and terminal stat
   assert.equal(context.getDownloadProgressStatusLabel('downloading', 42.5, true), 'Finalizing');
   assert.equal(context.getDownloadProgressStatusLabel('starting'), 'Starting');
   assert.equal(context.getDownloadProgressStatusLabel('paused'), 'Paused');
+  assert.equal(context.getDownloadProgressStatusLabel('error'), 'Interrupted');
+  assert.equal(context.getDownloadProgressStatusLabel('refresh_error'), 'Interrupted');
   assert.equal(context.getDownloadProgressStatusLabel('completed_checking'), 'Checking');
   assert.equal(context.getDownloadProgressStatusLabel('cancelled'), 'cancelled');
   assert.equal(context.getDownloadProgressStatusLabel(''), 'Download');
@@ -26,6 +28,10 @@ test('download progress status distinguishes active and terminal states', () => 
   assert.equal(isActive('paused'), true);
   assert.equal(isActive('cancelling'), false);
   assert.equal(isActive('completed'), false);
+  assert.equal(isActive('error', true), true);
+  assert.equal(isActive('error', false), false);
+  assert.equal(isActive('refresh_error', true), true);
+  assert.equal(isActive('refresh_error', false), false);
   assert.equal(isActive('custom', true), true);
   assert.equal(isActive('custom', false), false);
 });

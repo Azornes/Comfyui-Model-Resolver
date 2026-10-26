@@ -1160,6 +1160,7 @@ export const queueMethods = {
                 cancel: '.mr-download-queue-cancel',
                 pause: '.mr-download-queue-pause',
                 resume: '.mr-download-queue-resume',
+                retry: '.mr-download-queue-retry',
                 openFolder: '.mr-download-queue-open-folder',
                 switchWorkflow: '.mr-download-queue-switch-workflow',
                 more: '.mr-download-queue-more',
@@ -1169,6 +1170,7 @@ export const queueMethods = {
             onCancel: downloadId => this.cancelDownload(downloadId),
             onPause: downloadId => this.pauseDownload(downloadId),
             onResume: downloadId => this.resumeDownload(downloadId),
+            onRetry: downloadId => this.retryDownload?.(downloadId),
             onOpenFolder: context => this.openContainingFolder?.(context),
             onSwitchWorkflow: context => this.switchToDownloadWorkflow?.(context),
             moreBinding: 'click',
@@ -1229,9 +1231,10 @@ export const queueMethods = {
             const backend = String(progress.download_backend || info.downloadBackend || '').toLowerCase();
             const isAria2 = backend === 'aria2';
             const isPaused = status === 'paused';
+            const isError = status === 'error' || status === 'refresh_error';
             const statusLabel = status === 'downloading'
                 ? (presentation.isFinalizing ? 'Finalizing' : '')
-                : (status === 'starting' ? 'Starting' : (isPaused ? 'Paused' : status.replace(/_/g, ' ')));
+                : (status === 'starting' ? 'Starting' : (isPaused ? 'Paused' : (isError ? 'Interrupted' : status.replace(/_/g, ' '))));
             const sizeTextBase = presentation.isFinalizing && logicalTotal
                 ? `Finalizing file: ${logicalDownloaded} / ${logicalTotal}`
                 : (presentation.totalSize ? `${downloaded} / ${total}` : downloaded);
@@ -1260,21 +1263,27 @@ export const queueMethods = {
             `<button type="button" class="mr-download-queue-action ${className}" data-download-id="${safeDownloadId}" data-tooltip="${label}" aria-label="${label}"${disabled ? ' disabled' : ''}>${renderIcon(iconName, 'mr-download-queue-action-icon')}</button>`
         );
 
-            html += `<div class="mr-queue-item mr-download-queue-item" data-download-id="${this.escapeHtml(downloadId)}"${contextData}>`;
+            html += `<div class="mr-queue-item mr-download-queue-item${isError ? ' mr-download-queue-item-error' : ''}" data-download-id="${this.escapeHtml(downloadId)}"${contextData}>`;
             html += `<div class="mr-download-queue-header">`;
             html += `<div class="mr-download-queue-heading">`;
             html += `<span class="mr-download-queue-filename" data-tooltip="${this.escapeHtml(filename)}">${this.escapeHtml(filename)}</span>`;
             if (statusLabel) {
-                html += `<span class="mr-download-queue-status">${this.escapeHtml(statusLabel)}</span>`;
+                const errorMessage = progress.error || info.statusSnapshot?.message || '';
+                const errorTooltip = isError && errorMessage ? ` data-tooltip="${this.escapeHtml(errorMessage)}"` : '';
+                html += `<span class="mr-download-queue-status${isError ? ' mr-download-queue-status-error' : ''}"${errorTooltip}>${this.escapeHtml(statusLabel)}</span>`;
             }
             html += `</div>`;
             html += `<div class="mr-download-queue-actions" role="group" aria-label="Download actions">`;
-            html += actionButton(
-                isPaused ? 'mr-download-queue-resume' : 'mr-download-queue-pause',
-                isPaused ? 'Resume download' : 'Pause download',
-                isPaused ? 'play' : 'pause',
-                !isAria2
-            );
+            if (isError) {
+                html += actionButton('mr-download-queue-retry', 'Retry download', 'play');
+            } else {
+                html += actionButton(
+                    isPaused ? 'mr-download-queue-resume' : 'mr-download-queue-pause',
+                    isPaused ? 'Resume download' : 'Pause download',
+                    isPaused ? 'play' : 'pause',
+                    !isAria2
+                );
+            }
             html += actionButton('mr-download-queue-cancel', 'Cancel download', 'x');
             html += actionButton('mr-download-queue-open-folder', 'Open download folder', 'folderOpen', !hasFolderAction);
             if (showWorkflowAction) {
@@ -1284,20 +1293,23 @@ export const queueMethods = {
             html += `</div>`;
             html += `</div>`;
             html += `<div class="mr-download-queue-progress">`;
-            html += `<div class="mr-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}" aria-label="Download progress"><div class="mr-progress-fill" style="width: ${percent}%;"></div></div>`;
+            html += `<div class="mr-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}" aria-label="Download progress"><div class="mr-progress-fill${isError ? ' mr-progress-fill-error' : ''}" style="width: ${percent}%;"></div></div>`;
             html += `<div class="mr-download-queue-stats">`;
             html += `<span class="mr-download-queue-size">${this.escapeHtml(sizeText)}</span>`;
             html += `<span class="mr-download-queue-stat-group">`;
-            if (speedText) {
+            if (speedText && !isError) {
                 html += `<span class="mr-download-queue-stat">${renderIcon('download', 'mr-download-queue-stat-icon')}<span>${this.escapeHtml(speedText)}</span></span>`;
             }
-            if (etaText) {
+            if (etaText && !isError) {
                 html += `<span class="mr-download-queue-stat"><span>${this.escapeHtml(etaText)}</span></span>`;
             }
-            if (connections > 0) {
+            if (connections > 0 && !isError) {
                 html += `<span class="mr-download-queue-stat" data-tooltip="Active download connections">${renderIcon('network', 'mr-download-queue-stat-icon')}<span>${connections}</span></span>`;
             }
-            if (!speedText && !etaText) {
+            if (isError) {
+                const errorMessage = progress.error || info.statusSnapshot?.message || 'Download interrupted';
+                html += `<span class="mr-download-queue-stat mr-download-queue-stat-error" data-tooltip="${this.escapeHtml(errorMessage)}"><span>${this.escapeHtml(errorMessage)}</span></span>`;
+            } else if (!speedText && !etaText) {
                 html += `<span class="mr-download-queue-stat mr-download-queue-stat-muted">${this.escapeHtml(statusLabel)}</span>`;
             }
             html += `</span>`;

@@ -27,6 +27,7 @@ export function bindDownloadActionHandlers(root, {
     onCancel = null,
     onPause = null,
     onResume = null,
+    onRetry = null,
     onOpenFolder = null,
     onSwitchWorkflow = null,
     onMore = null,
@@ -47,6 +48,7 @@ export function bindDownloadActionHandlers(root, {
     bindIdAction(selectors.cancel, onCancel);
     bindIdAction(selectors.pause, onPause);
     bindIdAction(selectors.resume, onResume);
+    bindIdAction(selectors.retry, onRetry);
 
     bindActionButtons(root, selectors.openFolder, (button) => {
         const context = resolveContext(button);

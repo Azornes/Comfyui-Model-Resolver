@@ -1132,6 +1132,7 @@ export const resolveDownloadMethods = {
                 cancel: '.cancel-download-btn, .cancel-download-btn-pending, .mr-download-queue-cancel',
                 pause: '.pause-download-btn, .mr-download-queue-pause',
                 resume: '.resume-download-btn, .mr-download-queue-resume',
+                retry: '.retry-download-btn, .mr-download-queue-retry',
                 openFolder: '.mr-download-queue-open-folder',
                 switchWorkflow: '.mr-download-queue-switch-workflow',
                 more: '.mr-download-queue-more',
@@ -1140,6 +1141,7 @@ export const resolveDownloadMethods = {
             onCancel: targetDownloadId => this.cancelDownload(targetDownloadId),
             onPause: targetDownloadId => this.pauseDownload(targetDownloadId),
             onResume: targetDownloadId => this.resumeDownload(targetDownloadId),
+            onRetry: targetDownloadId => this.retryDownload?.(targetDownloadId),
             onOpenFolder: context => this.openContainingFolder?.(context),
             onSwitchWorkflow: context => this.switchToDownloadWorkflow?.(context),
             onMore: (event, button) => {
@@ -1943,6 +1945,8 @@ export const resolveDownloadMethods = {
                 downloadDirectory: '',
                 baseDirectory,
                 sourceUrl: url,
+                pathMetadata,
+                downloadMetadata,
                 workflowKey,
                 workflowRouteKey,
                 workflowLabel,
@@ -1995,6 +1999,17 @@ export const resolveDownloadMethods = {
             }
 
             const downloadId = data.download_id;
+            if (missing) {
+                for (const [existingId, existingInfo] of Object.entries(this.activeDownloads || {})) {
+                    if (existingInfo?.missing === missing) {
+                        const existingStatus = String(existingInfo.lastStatus || existingInfo.lastProgress?.status || '').toLowerCase();
+                        if (existingStatus === 'error' || existingStatus === 'refresh_error') {
+                            delete this.activeDownloads[existingId];
+                            this.removeActiveDownloadRecovery?.(existingId);
+                        }
+                    }
+                }
+            }
             this.activeDownloads[downloadId] = {
                 missing,
                 progressDiv,
@@ -2006,6 +2021,8 @@ export const resolveDownloadMethods = {
                 downloadDirectory: data.directory || '',
                 baseDirectory,
                 sourceUrl: url,
+                pathMetadata,
+                downloadMetadata,
                 workflowKey,
                 workflowRouteKey,
                 workflowLabel,
@@ -2049,6 +2066,8 @@ export const resolveDownloadMethods = {
                 downloadDirectory: '',
                 baseDirectory,
                 sourceUrl: url,
+                pathMetadata,
+                downloadMetadata,
                 workflowKey,
                 workflowRouteKey,
                 workflowLabel,
@@ -2253,11 +2272,13 @@ export const resolveDownloadMethods = {
                     status: 'error',
                     message: progress.error || 'Download failed',
                     type: 'error',
-                    isActive: false
+                    isActive: true
                 });
+                info.lastStatus = 'error';
+                info.lastProgress = progress;
+                info.statusSnapshot = errorSnapshot;
                 this.renderDownloadSnapshot(downloadId, errorSnapshot, { progressDiv, downloadBtn });
-                delete this.activeDownloads[downloadId];
-                this.removeActiveDownloadRecovery?.(downloadId);
+                this.persistActiveDownloadRecovery?.(downloadId, this.activeDownloads[downloadId]);
                 this.updateDownloadAllButtonState();
                 this.updateQueuePanel?.();
                 this.refreshLocalMatchesUiForMissing?.(missing);
@@ -2279,18 +2300,20 @@ export const resolveDownloadMethods = {
                 const snapshot = this.rememberDownloadUiState(
                     downloadId,
                     info,
-                    { ...(info.lastProgress || {}), status: 'error' },
+                    { ...(info.lastProgress || {}), status: 'error', error: error.message },
                     {
                         status: 'error',
                         message: 'Connection lost - download may have failed',
                         type: 'error',
-                        isActive: false
+                        isActive: true
                     }
                 );
+                info.lastStatus = 'error';
+                info.lastProgress = { ...(info.lastProgress || {}), status: 'error', error: error.message };
+                info.statusSnapshot = snapshot;
                 this.renderDownloadSnapshot(downloadId, snapshot);
+                this.persistActiveDownloadRecovery?.(downloadId, this.activeDownloads[downloadId]);
             }
-            delete this.activeDownloads[downloadId];
-            this.removeActiveDownloadRecovery?.(downloadId);
             this.updateDownloadAllButtonState();
             this.updateQueuePanel?.();
         }
@@ -2314,6 +2337,40 @@ export const resolveDownloadMethods = {
      */
     cancelDownload(downloadId) {
         const info = this.activeDownloads[downloadId];
+        const currentStatus = String(
+            info?.pendingDownloadStatus
+            || info?.lastStatus
+            || info?.lastProgress?.status
+            || ''
+        ).toLowerCase();
+
+        if (currentStatus === 'error' || currentStatus === 'refresh_error') {
+            delete this.activeDownloads[downloadId];
+            this.removeActiveDownloadRecovery?.(downloadId);
+            if (info) {
+                const elements = this.resolveDownloadUiElements?.(info) || {};
+                const cancelledSnapshot = this.rememberDownloadUiState(
+                    downloadId,
+                    info,
+                    { ...(info.lastProgress || {}), status: 'cancelled' },
+                    {
+                        status: 'cancelled',
+                        message: 'Download dismissed',
+                        type: 'info',
+                        isActive: false
+                    }
+                );
+                this.renderDownloadSnapshot?.(downloadId, cancelledSnapshot, elements);
+                this.refreshLocalMatchesUiForMissing?.(info.missing);
+            }
+            this.updateDownloadAllButtonState?.();
+            this.updateQueuePanel?.();
+            this.fetchJson(`/model_resolver/cancel/${downloadId}`, {
+                method: 'POST'
+            }, 'Cancel download').catch(() => {});
+            return;
+        }
+
         if (info) {
             this.setPendingDownloadStatus(info, 'cancelling', 30000);
             const snapshot = this.rememberDownloadUiState(
@@ -2432,8 +2489,62 @@ export const resolveDownloadMethods = {
         });
     },
 
+    async retryDownload(downloadId) {
+        const info = this.activeDownloads?.[downloadId];
+        if (!info) return;
+
+        const missing = info.missing;
+        const sourceUrl = info.sourceUrl || missing?.download_source?.url || '';
+        const filename = info.filename || missing?.download_source?.filename || '';
+        const category = info.category || missing?.category || 'checkpoints';
+        const subfolder = info.subfolder || '';
+        const baseDirectory = info.baseDirectory || '';
+        const pathMetadata = info.pathMetadata || (missing && missing.download_source
+            ? this.getDownloadPathMetadata?.(missing, missing.download_source)
+            : null);
+        const downloadMetadata = info.downloadMetadata || (missing && missing.download_source
+            ? this.getDownloadMetadata?.(missing, missing.download_source, {
+                filename,
+                category,
+                url: sourceUrl,
+                pathMetadata
+            })
+            : null);
+
+        if (!sourceUrl) {
+            this.showNotification('Cannot retry download: missing download URL', 'error');
+            return;
+        }
+
+        delete this.activeDownloads[downloadId];
+        this.removeActiveDownloadRecovery?.(downloadId);
+
+        const elements = this.resolveDownloadUiElements?.(info) || {};
+        const btn = elements.downloadBtn || info.downloadBtn || null;
+
+        await this.executeDownloadRequest(missing, {
+            url: sourceUrl,
+            filename,
+            category,
+            subfolder,
+            baseDirectory,
+            pathMetadata,
+            downloadMetadata,
+            btn
+        });
+    },
+
     resumeDownload(downloadId) {
         const info = this.activeDownloads[downloadId];
+        const currentStatus = String(
+            info?.pendingDownloadStatus
+            || info?.lastStatus
+            || info?.lastProgress?.status
+            || ''
+        ).toLowerCase();
+        if (currentStatus === 'error' || currentStatus === 'refresh_error') {
+            return this.retryDownload(downloadId);
+        }
         const previousProgress = info?.lastProgress ? { ...info.lastProgress } : null;
         if (info) {
             this.setPendingDownloadStatus(info, 'downloading');

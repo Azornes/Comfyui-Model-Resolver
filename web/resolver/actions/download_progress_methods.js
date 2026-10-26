@@ -18,12 +18,13 @@ export const downloadProgressMethods = {
         }
         if (status === 'starting') return 'Starting';
         if (status === 'paused') return 'Paused';
+        if (status === 'error' || status === 'refresh_error') return 'Interrupted';
         if (status === 'completed_checking') return 'Checking';
         return String(status || '').replace(/_/g, ' ') || 'Download';
     },
 
     isDownloadProgressStatus(status = '', isActive = false) {
-        const terminalStatuses = new Set(['cancelling', 'cancelled', 'error', 'refresh_error', 'completed_checking', 'completed']);
+        const terminalStatuses = new Set(['cancelling', 'cancelled', 'completed_checking', 'completed']);
         return status === 'starting'
             || status === 'downloading'
             || status === 'paused'

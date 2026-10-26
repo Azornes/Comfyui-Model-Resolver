@@ -62,6 +62,7 @@ function createDownloadDialog(queueList, calls) {
     cancelDownload: id => calls.push(['cancel', id]),
     pauseDownload: id => calls.push(['pause', id]),
     resumeDownload: id => calls.push(['resume', id]),
+    retryDownload: id => calls.push(['retry', id]),
     openContainingFolder: context => calls.push(['folder', context.widget_name]),
     switchToDownloadWorkflow: context => calls.push(['workflow', context.widget_name]),
     setQueueDownloadsTab: () => {},
@@ -83,6 +84,7 @@ test('queue download controls trigger each action once and keep more as click-on
     'mr-download-queue-cancel',
     'mr-download-queue-pause',
     'mr-download-queue-resume',
+    'mr-download-queue-retry',
     'mr-download-queue-open-folder',
     'mr-download-queue-switch-workflow',
     'mr-download-queue-more',
@@ -103,12 +105,14 @@ test('queue download controls trigger each action once and keep more as click-on
   dispatchPointerAndClick(window, buttons[2]);
   dispatchPointerAndClick(window, buttons[3]);
   dispatchPointerAndClick(window, buttons[4]);
-  buttons[5].dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+  dispatchPointerAndClick(window, buttons[5]);
+  buttons[6].dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
 
   assert.deepEqual(calls, [
     ['cancel', 'download-1'],
     ['pause', 'download-1'],
     ['resume', 'download-1'],
+    ['retry', 'download-1'],
     ['folder', 'test-model'],
     ['workflow', 'test-model'],
   ]);
@@ -124,6 +128,7 @@ test('progress download controls support pending buttons and fallback download i
     'cancel-download-btn-pending',
     'pause-download-btn',
     'resume-download-btn',
+    'retry-download-btn',
     'mr-download-queue-open-folder',
     'mr-download-queue-switch-workflow',
     'mr-download-queue-more',
@@ -145,16 +150,19 @@ test('progress download controls support pending buttons and fallback download i
   buttons[3].dataset.downloadId = '';
   buttons[4].dataset.downloadId = '';
   buttons[5].dataset.downloadId = '';
+  buttons[6].dataset.downloadId = '';
   dispatchPointerAndClick(window, buttons[0]);
   dispatchPointerAndClick(window, buttons[1]);
   dispatchPointerAndClick(window, buttons[2]);
   dispatchPointerAndClick(window, buttons[3]);
   dispatchPointerAndClick(window, buttons[4]);
+  dispatchPointerAndClick(window, buttons[5]);
 
   assert.deepEqual(calls, [
     ['cancel', 'fallback-download'],
     ['pause', 'fallback-download'],
     ['resume', 'fallback-download'],
+    ['retry', 'fallback-download'],
     ['folder', 'test-model'],
     ['workflow', 'test-model'],
   ]);

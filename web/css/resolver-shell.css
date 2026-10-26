@@ -769,6 +769,29 @@
     border-radius: var(--mr-missing-chip-radius);
 }
 
+.mr-download-queue-item.mr-download-queue-item-error {
+    border-color: rgba(239, 68, 68, 0.35);
+}
+
+.mr-download-queue-status.mr-download-queue-status-error {
+    color: var(--mr-color-danger-bright, #ff4d4f);
+    background: var(--mr-badge-error-bg, rgba(239, 68, 68, 0.16));
+    border-color: var(--mr-badge-error-border, rgba(239, 68, 68, 0.34));
+}
+
+.mr-download-queue-progress .mr-progress-fill.mr-progress-fill-error {
+    background: var(--mr-color-danger-bright, #ff4d4f);
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+}
+
+.mr-download-queue-stat.mr-download-queue-stat-error {
+    max-width: 220px;
+    overflow: hidden;
+    color: var(--mr-color-danger-bright, #ff4d4f);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .mr-download-history-toolbar {
     display: flex;
     justify-content: flex-end;
