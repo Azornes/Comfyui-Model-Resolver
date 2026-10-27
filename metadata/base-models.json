@@ -800,6 +800,13 @@
       "aliases": [
         "krea 3"
       ]
+    },
+    {
+      "name": "MOSS Image",
+      "aliases": [
+        "moss",
+        "moss image"
+      ]
     }
   ]
 }

@@ -1,12 +1,9 @@
 {
-  "updated_at": "2026-10-16T13:14:28+00:00",
-  "last_checked_at": "2026-10-16T13:14:28+00:00",
-  "local_count": 118,
-  "new_models_added": 4,
+  "updated_at": "2026-10-27T00:34:35+00:00",
+  "last_checked_at": "2026-10-27T00:34:35+00:00",
+  "local_count": 119,
+  "new_models_added": 1,
   "new_models_added_list": [
-    "Flux.3 Klein",
-    "Flux.3 Klein-base",
-    "Krea 2 Turbo",
-    "Krea 3"
+    "MOSS Image"
   ]
 }
