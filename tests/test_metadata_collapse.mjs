@@ -308,6 +308,85 @@ test('handleImageMetadataPaste inspects workflow JSON file from clipboard', () =
     assert.strictEqual(inspectedWorkflowFile, jsonFile);
 });
 
+test('handleImageMetadataPaste inspects workflow TXT file from clipboard', () => {
+    const ctx = createMockContext();
+    const { root } = createMockPasteTarget(ctx);
+    let inspectedWorkflowFile = null;
+    ctx.inspectWorkflowFile = (file) => { inspectedWorkflowFile = file; };
+    const txtFile = { name: 'my_workflow.txt', type: 'text/plain', size: 512 };
+    const event = {
+        target: root,
+        preventDefault: () => {},
+        stopPropagation: () => {},
+        clipboardData: { files: [txtFile], items: [] },
+    };
+    assert.strictEqual(ctx.handleImageMetadataPaste(event), true);
+    assert.strictEqual(inspectedWorkflowFile, txtFile);
+});
+
+test('inspectImageMetadataFile routes .txt file to inspectWorkflowFile', async () => {
+    const ctx = createMockContext();
+    let routedWorkflowFile = null;
+    ctx.inspectWorkflowFile = (file) => { routedWorkflowFile = file; return 'routed'; };
+    const txtFile = { name: 'workflow.txt', type: 'text/plain', size: 256 };
+    const res = await ctx.inspectImageMetadataFile(txtFile);
+    assert.strictEqual(res, 'routed');
+    assert.strictEqual(routedWorkflowFile, txtFile);
+});
+
+test('inspectWorkflowFile parses JSON workflow from .txt file', async () => {
+    const ctx = createMockContext();
+    let inspectedPayload = null;
+    ctx.runImageMetadataInspection = (payload) => { inspectedPayload = payload; return payload; };
+    const workflowObj = { nodes: [{ id: 1, type: 'KSampler' }] };
+    const txtFile = {
+        name: 'workflow_export.txt',
+        type: 'text/plain',
+        size: 256,
+        text: async () => JSON.stringify(workflowObj),
+    };
+    const res = await ctx.inspectWorkflowFile(txtFile);
+    assert.ok(res);
+    assert.strictEqual(inspectedPayload?.source_type, 'workflow');
+    assert.strictEqual(inspectedPayload?.filename, 'workflow_export.txt');
+    assert.deepStrictEqual(inspectedPayload?.workflow, workflowObj);
+});
+
+test('inspectWorkflowFile parses markdown fenced JSON workflow from .txt file', async () => {
+    const ctx = createMockContext();
+    let inspectedPayload = null;
+    ctx.runImageMetadataInspection = (payload) => { inspectedPayload = payload; return payload; };
+    const workflowObj = { nodes: [{ id: 2, type: 'VAELoader' }] };
+    const fencedContent = '```json\n' + JSON.stringify(workflowObj) + '\n```';
+    const txtFile = {
+        name: 'shared_workflow.txt',
+        type: 'text/plain',
+        size: 512,
+        text: async () => fencedContent,
+    };
+    const res = await ctx.inspectWorkflowFile(txtFile);
+    assert.ok(res);
+    assert.deepStrictEqual(inspectedPayload?.workflow, workflowObj);
+});
+
+test('inspectWorkflowFile shows error notification when .txt file does not contain valid JSON', async () => {
+    const ctx = createMockContext();
+    let notification = null;
+    ctx.showNotification = (msg, type) => { notification = { msg, type }; };
+    const txtFile = {
+        name: 'notes.txt',
+        type: 'text/plain',
+        size: 100,
+        text: async () => 'This is just a simple text note, not a JSON workflow.',
+    };
+    const res = await ctx.inspectWorkflowFile(txtFile);
+    assert.strictEqual(res, null);
+    assert.deepStrictEqual(notification, {
+        msg: 'The text file does not contain valid workflow JSON.',
+        type: 'error',
+    });
+});
+
 test('handleImageMetadataPaste inspects workflow JSON text from clipboard', () => {
     const ctx = createMockContext();
     const { root, textarea } = createMockPasteTarget(ctx);

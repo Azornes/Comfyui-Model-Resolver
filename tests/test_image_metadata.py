@@ -185,6 +185,19 @@ def test_json_inspection_accepts_ui_and_api_workflows():
     assert api_result["workflow_node_count"] == 2
 
 
+def test_json_inspection_accepts_fenced_markdown_and_bom_workflow_text():
+    raw_ui = '```json\n{"nodes": [{"id": 1, "type": "CheckpointLoaderSimple", "widgets_values": []}]}\n```'
+    result = inspect_workflow_json(raw_ui, filename="workflow.txt")
+    assert result["workflow_format"] == UI_WORKFLOW_FORMAT
+    assert result["workflow_node_count"] == 1
+    assert result["filename"] == "workflow.txt"
+
+    bom_api = "\ufeff" + json.dumps(api_workflow())
+    bom_result = inspect_workflow_json(bom_api, filename="api_workflow.txt")
+    assert bom_result["workflow_format"] == API_WORKFLOW_FORMAT
+    assert bom_result["workflow_node_count"] == 2
+
+
 def test_json_inspection_rejects_unrelated_json():
     with pytest.raises(ValueError, match="Unsupported workflow JSON"):
         inspect_workflow_json({"settings": {"theme": "dark"}})

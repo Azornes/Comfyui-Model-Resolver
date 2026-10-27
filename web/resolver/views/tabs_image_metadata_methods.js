@@ -120,7 +120,61 @@ function isWorkflowFile(file) {
     const name = String(file?.name || '').toLowerCase();
     return file?.type === 'application/json'
         || file?.type === 'text/json'
-        || name.endsWith('.json');
+        || file?.type === 'text/plain'
+        || name.endsWith('.json')
+        || name.endsWith('.txt');
+}
+
+function readFileAsText(file) {
+    if (typeof file?.text === 'function') {
+        return file.text();
+    }
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('Could not read the workflow file.'));
+        reader.readAsText(file);
+    });
+}
+
+export function extractJsonFromText(rawText) {
+    if (!rawText || typeof rawText !== 'string') return null;
+    let text = rawText.replace(/^\uFEFF/, '').trim();
+    if (!text) return null;
+
+    if (text.startsWith('```')) {
+        const firstLineEnd = text.indexOf('\n');
+        if (firstLineEnd !== -1) {
+            const lastFence = text.lastIndexOf('```');
+            if (lastFence > firstLineEnd) {
+                text = text.slice(firstLineEnd + 1, lastFence).trim();
+            }
+        }
+    }
+
+    try {
+        return JSON.parse(text);
+    } catch {
+        const firstBrace = text.indexOf('{');
+        const lastBrace = text.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace > firstBrace) {
+            try {
+                return JSON.parse(text.slice(firstBrace, lastBrace + 1));
+            } catch {
+                // Ignore nested extraction failure.
+            }
+        }
+        const firstBracket = text.indexOf('[');
+        const lastBracket = text.lastIndexOf(']');
+        if (firstBracket !== -1 && lastBracket > firstBracket) {
+            try {
+                return JSON.parse(text.slice(firstBracket, lastBracket + 1));
+            } catch {
+                // Ignore nested extraction failure.
+            }
+        }
+        return null;
+    }
 }
 
 function readFileAsDataUrl(file) {
@@ -385,12 +439,12 @@ export const imageMetadataMethods = {
                                     <span class="mr-section-collapse-chevron" aria-hidden="true">${getSvgIcon('chevronDown')}</span>
                                     <span class="mr-loaded-models-title">Image Metadata</span>
                                 </button>
-                                ${this.getMetadataTooltipBadge('Drop or paste (Ctrl+V) an image, Civitai link, or workflow JSON here, or paste JSON into the box below.', 'Image metadata help')}
+                                ${this.getMetadataTooltipBadge('Drop or paste (Ctrl+V) an image, Civitai link, or workflow JSON/text file here, or paste JSON into the box below.', 'Image metadata help')}
                             </div>
                         </div>
                     </div>
                     <div class="mr-image-inspector-tools">
-                        <input type="file" accept="image/png,image/jpeg,image/webp,application/json,.json" hidden data-image-inspector-input="file">
+                        <input type="file" accept="image/png,image/jpeg,image/webp,application/json,.json,text/plain,.txt" hidden data-image-inspector-input="file">
                         <div class="mr-image-inspector-paste">
                             <textarea id="mr-image-inspector-json-text" class="mr-image-inspector-textarea" rows="3" aria-label="Paste workflow JSON" placeholder="Paste a ComfyUI workflow JSON or Civitai image link (e.g. https://civitai.red/images/145110824)..."></textarea>
                             <div class="mr-image-inspector-actions">
@@ -736,30 +790,19 @@ export const imageMetadataMethods = {
             return true;
         }
 
-        if (
-            (trimmed.startsWith('{') && trimmed.endsWith('}'))
-            || (trimmed.startsWith('[') && trimmed.endsWith(']'))
-        ) {
-            let parsed = null;
-            try {
-                parsed = JSON.parse(trimmed);
-            } catch {
-                // Ignore parse errors for non-JSON text.
-            }
-
-            if (parsed && typeof parsed === 'object') {
-                event.preventDefault?.();
-                event.stopPropagation?.();
-                const textarea = root.querySelector('.mr-image-inspector-textarea');
-                if (textarea) {
-                    textarea.value = trimmed;
-                    if (typeof Event === 'function') {
-                        textarea.dispatchEvent(new Event('input', { bubbles: true }));
-                    }
+        const parsedWorkflow = extractJsonFromText(trimmed);
+        if (parsedWorkflow && typeof parsedWorkflow === 'object') {
+            event.preventDefault?.();
+            event.stopPropagation?.();
+            const textarea = root.querySelector('.mr-image-inspector-textarea');
+            if (textarea) {
+                textarea.value = trimmed;
+                if (typeof Event === 'function') {
+                    textarea.dispatchEvent(new Event('input', { bubbles: true }));
                 }
-                void this.inspectPastedWorkflow(trimmed);
-                return true;
             }
+            void this.inspectPastedWorkflow(trimmed);
+            return true;
         }
 
         if (targetIsTextarea) {
@@ -779,7 +822,7 @@ export const imageMetadataMethods = {
         if (isWorkflowFile(file)) {
             return this.inspectWorkflowFile(file);
         }
-        this.showNotification('Select an image or a workflow JSON file.', 'warning');
+        this.showNotification('Select an image, workflow JSON, or workflow text file.', 'warning');
         return null;
     },
 
@@ -807,15 +850,28 @@ export const imageMetadataMethods = {
             return null;
         }
         try {
-            const text = await file.text();
-            const workflow = JSON.parse(text);
+            const raw = await readFileAsText(file);
+            const text = (raw || '').replace(/^\uFEFF/, '').trim();
+            const civitaiImageId = extractCivitaiImageId(text);
+            if (civitaiImageId) {
+                return this.inspectCivitaiImage(civitaiImageId, text);
+            }
+            const workflow = extractJsonFromText(text);
+            if (!workflow || typeof workflow !== 'object') {
+                throw new Error('Not valid JSON');
+            }
             return this.runImageMetadataInspection({
                 source_type: 'workflow',
                 filename: file.name || 'Pasted workflow.json',
                 workflow,
             });
         } catch (error) {
-            this.showNotification(error.message || 'The workflow file is not valid JSON.', 'error');
+            const name = String(file?.name || '').toLowerCase();
+            const isTxt = name.endsWith('.txt') || file?.type === 'text/plain';
+            const msg = isTxt
+                ? 'The text file does not contain valid workflow JSON.'
+                : (error.message && error.message !== 'Not valid JSON' ? error.message : 'The workflow file is not valid JSON.');
+            this.showNotification(msg, 'error');
             return null;
         }
     },

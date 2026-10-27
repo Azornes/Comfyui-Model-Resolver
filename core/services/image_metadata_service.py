@@ -643,9 +643,29 @@ def inspect_image_bytes(
 def _parse_workflow_json_text(value: str) -> Any:
     if len(value.encode("utf-8")) > MAX_WORKFLOW_JSON_BYTES:
         raise ValueError("Workflow JSON is too large")
+    text = value.lstrip("\ufeff").strip()
+    if text.startswith("```"):
+        first_newline = text.find("\n")
+        last_fence = text.rfind("```")
+        if first_newline != -1 and last_fence > first_newline:
+            text = text[first_newline + 1 : last_fence].strip()
     try:
-        return json.loads(value)
+        return json.loads(text)
     except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        first_brace = text.find("{")
+        last_brace = text.rfind("}")
+        if first_brace != -1 and last_brace > first_brace:
+            try:
+                return json.loads(text[first_brace : last_brace + 1])
+            except (TypeError, ValueError, json.JSONDecodeError):
+                pass
+        first_bracket = text.find("[")
+        last_bracket = text.rfind("]")
+        if first_bracket != -1 and last_bracket > first_bracket:
+            try:
+                return json.loads(text[first_bracket : last_bracket + 1])
+            except (TypeError, ValueError, json.JSONDecodeError):
+                pass
         raise ValueError("Workflow JSON is not valid JSON") from exc
 
 

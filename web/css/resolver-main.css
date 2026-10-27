@@ -5437,7 +5437,7 @@ button.mr-info-link:disabled {
     padding: var(--mr-spacing-4) var(--mr-spacing-8);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: var(--mr-radius-md, var(--mr-radius-lg));
-    background: rgba(0, 0, 0, 0.16);
+    background: rgba(255, 255, 255, 0.045);
     color: var(--mr-text);
     font-family: var(--mr-font-family-mono);
     font-size: var(--mr-font-xs);
