@@ -1415,6 +1415,38 @@ test('node context integration preserves existing menu hooks and refreshes after
   ]);
 });
 
+test('node context integration respects isNodeContextMenuEnabled when disabled', () => {
+  const configureNodeContextMenu = eval(`(${extractMethod(modelResolverSource, 'configureNodeContextMenu')})`);
+  class NodeType {}
+  NodeType.prototype.getExtraMenuOptions = function(_canvas, options) {
+    options.push({ content: 'Original action' });
+    return options;
+  };
+
+  const model = {
+    node_id: 8,
+    widget_index: 0,
+    widget_name: 'ckpt_name',
+    original_path: 'model.safetensors',
+    full_path: 'E:\\models\\model.safetensors',
+    category: 'checkpoints',
+    exists: true,
+  };
+  const resolver = {
+    isNodeContextMenuEnabled: () => false,
+    getResolvedModelsForNodeContextMenu: () => [model],
+  };
+
+  configureNodeContextMenu.call(resolver, NodeType);
+  const node = new NodeType();
+  const options = [];
+  const result = node.getExtraMenuOptions(null, options);
+
+  assert.equal(result, options);
+  assert.equal(options.length, 1);
+  assert.equal(options[0].content, 'Original action');
+});
+
 test('node context integration injects the menu when a node overrides getMenuOptions', () => {
   const configureNodeContextMenu = eval(`(${extractMethod(modelResolverSource, 'configureNodeContextMenu')})`);
   class NodeType {}

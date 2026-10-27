@@ -8,6 +8,7 @@ import { isSidebarButtonActive } from "./utils/dom_patch_utils.js";
 import { fetchJson as fetchJsonRequest } from "./utils/api_client.js";
 import { ResolverManagerDialog } from "./resolver_dialog.js";
 import { showNotification } from "../utils/notification_utils.js";
+import { getSvgIcon } from "../utils/icon_utils.js";
 import { safeStorage } from "./utils/html_utils.js";
 import {
     serializeKeybindingCombo,
@@ -17,6 +18,8 @@ import {
 import {
     buildModelResolverNodeMenu,
     getImmediateModelsForNode,
+    getResolvedModelFilename,
+    getResolvedModelMenuLabel,
     getResolvedModelsForNode,
     isExistingResolvedModel,
     matchesWorkflowModelReference,
@@ -31,6 +34,39 @@ import {
 
 const log = createModuleLogger('model_resolver');
 export const MODEL_RESOLVER_OPEN_COMMAND_ID = "ModelResolver.OpenModelResolver";
+export const MODEL_RESOLVER_NODE_TOOLBOX_COMMAND_ID = "ModelResolver.NodeActions";
+
+const MODEL_REFERENCE_WIDGET_NAMES = new Set([
+    "lora",
+    "lora_name",
+    "ckpt_name",
+    "checkpoint",
+    "checkpoint_name",
+    "vae_name",
+    "clip_name",
+    "clip_name1",
+    "clip_name2",
+    "clip_name3",
+    "clip_name4",
+    "control_net_name",
+    "cnet",
+    "model_name",
+    "model_path",
+    "unet_name",
+    "gguf_name",
+    "upscale_model_name",
+    "style_model_name",
+    "gligen_name",
+    "audio_encoder_name",
+    "bg_removal_name",
+    "photomaker_model_name",
+    "sam_model_name",
+    "text_encoder",
+    "existing_lora",
+    "hypernetwork_name",
+]);
+
+const MODEL_FILE_EXTENSION_PATTERN = /\.(ckpt|pt2?|bin|pth|safetensors|pkl|sft|onnx|gguf)(?:$|[?#])/i;
 export const MODEL_RESOLVER_OPEN_DEFAULT_KEYBINDING = Object.freeze({
     commandId: MODEL_RESOLVER_OPEN_COMMAND_ID,
     combo: Object.freeze({ key: "|", ctrl: true, shift: true }),
@@ -79,6 +115,127 @@ function applyStoredFrontendLoggingPreference() {
     }
 }
 
+export function ensureSidebarTabIconStyle() {
+    if (typeof document === "undefined" || document.getElementById("mr-sidebar-tab-icon-style")) return;
+    const style = document.createElement("style");
+    style.id = "mr-sidebar-tab-icon-style";
+    style.textContent = `
+        .mr-sidebar-tab-icon,
+        [data-testid="comfyui-model-resolver-tab-button"] i,
+        [data-testid*="model-resolver"] i,
+        .comfyui-model-resolver-tab-button i,
+        #model-resolver-button .mr-topbar-tab-icon,
+        .mr-node-toolbar-icon {
+            display: inline-block !important;
+            width: 20px !important;
+            height: 20px !important;
+            font-size: 20px !important;
+            line-height: 1 !important;
+            vertical-align: middle !important;
+            background-color: currentColor !important;
+            -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='1.85' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 17V7l4-2.5 4 3.5 4-3.5L20 7v10l-3.5 2V11L12 15 7.5 11v8L4 17z' fill='%23fff' fill-opacity='0.16'/%3E%3C/svg%3E") no-repeat center / contain !important;
+            mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='1.85' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 17V7l4-2.5 4 3.5 4-3.5L20 7v10l-3.5 2V11L12 15 7.5 11v8L4 17z' fill='%23fff' fill-opacity='0.16'/%3E%3C/svg%3E") no-repeat center / contain !important;
+        }
+
+        .mr-sidebar-tab-icon::before,
+        [data-testid="comfyui-model-resolver-tab-button"] i::before,
+        [data-testid*="model-resolver"] i::before,
+        .comfyui-model-resolver-tab-button i::before,
+        #model-resolver-button i::before,
+        .mr-node-toolbar-icon::before {
+            content: none !important;
+            display: none !important;
+        }
+
+        .comfyui-selection-toolbox .mr-node-toolbar-icon {
+            width: 18px !important;
+            height: 18px !important;
+            font-size: 18px !important;
+        }
+
+        .comfyui-selection-toolbox button:hover .mr-node-toolbar-icon,
+        button:has(.mr-node-toolbar-icon):hover .mr-node-toolbar-icon {
+            color: var(--mr-accent, #72d38a) !important;
+        }
+
+        .litecontextmenu.mr-node-selection-context-menu {
+            z-index: 10000 !important;
+        }
+
+        .mr-node-selection-context-menu .litemenu-title {
+            padding-left: 26px !important;
+            position: relative !important;
+            font-weight: 600 !important;
+        }
+
+        .mr-node-selection-context-menu .litemenu-title::before {
+            content: '' !important;
+            position: absolute !important;
+            left: 7px !important;
+            top: 50% !important;
+            transform: translateY(-50%) !important;
+            width: 14px !important;
+            height: 14px !important;
+            background-color: var(--mr-accent, #72d38a) !important;
+            -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='1.85' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 17V7l4-2.5 4 3.5 4-3.5L20 7v10l-3.5 2V11L12 15 7.5 11v8L4 17z' fill='%23fff' fill-opacity='0.16'/%3E%3C/svg%3E") no-repeat center / contain !important;
+            mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='1.85' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 17V7l4-2.5 4 3.5 4-3.5L20 7v10l-3.5 2V11L12 15 7.5 11v8L4 17z' fill='%23fff' fill-opacity='0.16'/%3E%3C/svg%3E") no-repeat center / contain !important;
+        }
+
+        .litegraph .litemenu-entry.mr-node-ctx-item,
+        .litegraph .litemenu-entry.mr-model-resolver-node-menu {
+            padding-left: 26px !important;
+            position: relative !important;
+        }
+
+        .litegraph .litemenu-entry.mr-node-ctx-item::before,
+        .litegraph .litemenu-entry.mr-model-resolver-node-menu::before {
+            content: '' !important;
+            position: absolute !important;
+            left: 7px !important;
+            top: 50% !important;
+            transform: translateY(-50%) !important;
+            width: 14px !important;
+            height: 14px !important;
+            background-color: currentColor !important;
+            opacity: 0.85 !important;
+            pointer-events: none !important;
+            display: inline-block !important;
+        }
+
+        .litegraph .litemenu-entry.mr-node-ctx-item:hover::before,
+        .litegraph .litemenu-entry.mr-model-resolver-node-menu:hover::before {
+            opacity: 1 !important;
+        }
+
+        .litegraph .litemenu-entry.mr-node-ctx-show-in-resolver::before {
+            -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E") no-repeat center / contain !important;
+            mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E") no-repeat center / contain !important;
+        }
+
+        .litegraph .litemenu-entry.mr-node-ctx-show-info::before {
+            -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 16v-4'/%3E%3Cpath d='M12 8h.01'/%3E%3C/svg%3E") no-repeat center / contain !important;
+            mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 16v-4'/%3E%3Cpath d='M12 8h.01'/%3E%3C/svg%3E") no-repeat center / contain !important;
+        }
+
+        .litegraph .litemenu-entry.mr-node-ctx-open-folder::before {
+            -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2'/%3E%3C/svg%3E") no-repeat center / contain !important;
+            mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2'/%3E%3C/svg%3E") no-repeat center / contain !important;
+        }
+
+        .litegraph .litemenu-entry.mr-node-ctx-open-resolver::before,
+        .litegraph .litemenu-entry.mr-model-resolver-node-menu::before {
+            -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='1.85' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 17V7l4-2.5 4 3.5 4-3.5L20 7v10l-3.5 2V11L12 15 7.5 11v8L4 17z' fill='%23fff' fill-opacity='0.16'/%3E%3C/svg%3E") no-repeat center / contain !important;
+            mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='1.85' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 17V7l4-2.5 4 3.5 4-3.5L20 7v10l-3.5 2V11L12 15 7.5 11v8L4 17z' fill='%23fff' fill-opacity='0.16'/%3E%3C/svg%3E") no-repeat center / contain !important;
+        }
+
+        .litegraph .litemenu-entry.mr-node-ctx-model::before {
+            -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z'/%3E%3Cpath d='m3.3 7 8.7 5 8.7-5'/%3E%3Cpath d='M12 22V12'/%3E%3C/svg%3E") no-repeat center / contain !important;
+            mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z'/%3E%3Cpath d='m3.3 7 8.7 5 8.7-5'/%3E%3Cpath d='M12 22V12'/%3E%3C/svg%3E") no-repeat center / contain !important;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
 // Main extension class
 export class ModelResolver {
     constructor() {
@@ -107,6 +264,7 @@ export class ModelResolver {
         this.customNodeModelAdapterStates = new WeakMap();
         this.missingModelsPopupObserver = null;
         this.nativeMissingModelsPending = false;
+        this.lastSelectionToolboxNode = null;
         this.nativeMissingModelsAutoOpened = false;
         this.nativeMissingModelStorePromise = null;
         this.nativeMissingModelStore = null;
@@ -120,6 +278,7 @@ export class ModelResolver {
     setup = async () => {
         window.ModelResolver = this;
         applyStoredFrontendLoggingPreference();
+        ensureSidebarTabIconStyle();
         loadStylesWhenNeeded();
 
         // Remove any existing button
@@ -158,9 +317,10 @@ export class ModelResolver {
         }
 
         try {
+            ensureSidebarTabIconStyle();
             registerSidebarTab.call(app.extensionManager, {
                 id: this.sidebarTabId,
-                icon: "mdi mdi-link-variant",
+                icon: "mr-sidebar-tab-icon",
                 title: "Resolver",
                 tooltip: this.openTooltip,
                 type: "custom",
@@ -282,16 +442,27 @@ export class ModelResolver {
         }
         this.openTooltipTargets = liveTargets;
 
-        document.querySelectorAll(`.${this.sidebarTabId}-tab-button`).forEach((button) => {
+        document.querySelectorAll(`[data-testid="${this.sidebarTabId}-tab-button"], .${this.sidebarTabId}-tab-button`).forEach((button) => {
             if (button instanceof HTMLElement) {
                 this.applyTooltipToElement(button);
+                const icon = button.querySelector("i, span.mdi, span.icon, .side-bar-button-icon");
+                if (icon && !icon.classList.contains("mr-sidebar-tab-icon")) {
+                    icon.classList.add("mr-sidebar-tab-icon");
+                }
             }
         });
     }
 
     getSidebarButton() {
-        const button = document.querySelector(`.${this.sidebarTabId}-tab-button`);
-        return button instanceof HTMLElement ? button : null;
+        const button = document.querySelector(`[data-testid="${this.sidebarTabId}-tab-button"], .${this.sidebarTabId}-tab-button`);
+        if (button instanceof HTMLElement) {
+            const icon = button.querySelector("i, span.mdi, span.icon, .side-bar-button-icon");
+            if (icon && !icon.classList.contains("mr-sidebar-tab-icon")) {
+                icon.classList.add("mr-sidebar-tab-icon");
+            }
+            return button;
+        }
+        return null;
     }
 
     getVisibleResolverButton() {
@@ -311,6 +482,237 @@ export class ModelResolver {
         }
 
         this.handleResolverButtonClick();
+    }
+
+    isNodeWithModels(node) {
+        if (!node) return false;
+
+        try {
+            const models = this.getResolvedModelsForNodeContextMenu(node);
+            if (Array.isArray(models) && models.length > 0) {
+                return true;
+            }
+        } catch (_) {
+            // ignore
+        }
+
+        if (this.isCustomNodeModelNode(node)) {
+            return true;
+        }
+
+        if (Array.isArray(node.widgets)) {
+            for (const widget of node.widgets) {
+                if (!widget) continue;
+                const name = String(widget.name || "").toLowerCase();
+                if (MODEL_REFERENCE_WIDGET_NAMES.has(name)) {
+                    return true;
+                }
+                const val = typeof widget.value === "string" ? widget.value.trim() : "";
+                if (val && MODEL_FILE_EXTENSION_PATTERN.test(val)) {
+                    return true;
+                }
+                if (this.isCustomNodeModelWidget?.(node, widget.name)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    isCustomNodeModelNode(node) {
+        return Boolean(getCustomNodeModelAdapter(node));
+    }
+
+    getSelectedNode() {
+        const canvas = app.canvas;
+        if (canvas?.selected_nodes) {
+            const nodes = Object.values(canvas.selected_nodes);
+            if (nodes.length > 0) return nodes[0];
+        }
+        if (canvas?.current_node) {
+            return canvas.current_node;
+        }
+        if (canvas?.selectedItems) {
+            for (const item of canvas.selectedItems) {
+                if (item && (item.comfyClass || item.type || item.widgets)) return item;
+            }
+        }
+        return this.lastSelectionToolboxNode || null;
+    }
+
+    async handleNodeSelectionToolboxClick() {
+        const node = this.getSelectedNode();
+        if (!node) {
+            this.activateResolverButton();
+            return;
+        }
+
+        let models = this.getResolvedModelsForNodeContextMenu(node);
+        if (!models || models.length === 0) {
+            const data = await this.ensureCurrentNodeContextAnalysis();
+            if (data) {
+                models = this.getResolvedModelsForNodeContextMenu(node);
+            }
+        }
+
+        if ((!models || models.length === 0) && Array.isArray(node.widgets)) {
+            for (const widget of node.widgets) {
+                if (!widget || typeof widget.value !== "string") continue;
+                const val = widget.value.trim();
+                if (!val || ["none", "null", "undefined"].includes(val.toLowerCase())) continue;
+                const name = String(widget.name || "").toLowerCase();
+                if (MODEL_REFERENCE_WIDGET_NAMES.has(name) || MODEL_FILE_EXTENSION_PATTERN.test(val)) {
+                    models = [{
+                        name: val,
+                        filename: getResolvedModelFilename({ original_path: val }),
+                        original_path: val,
+                        widget_name: widget.name,
+                        exists: false,
+                        resolution_pending: true,
+                    }];
+                    break;
+                }
+            }
+        }
+
+        const owner = this;
+        const handlers = {
+            showInResolver: async (model) => {
+                const resolvedModel = await owner.resolveNodeContextMenuModel(model);
+                if (resolvedModel) {
+                    owner.showResolvedNodeModelInResolver(resolvedModel);
+                } else {
+                    owner.openResolverManager();
+                }
+            },
+            showInfo: async (model) => {
+                const resolvedModel = await owner.resolveNodeContextMenuModel(model);
+                if (resolvedModel) {
+                    if (!owner.dialog) {
+                        owner.dialog = new ResolverManagerDialog();
+                        window.ModelResolverDialog = owner.dialog;
+                    }
+                    owner.dialog?.showModelInfo(toResolverContextModel(resolvedModel));
+                }
+            },
+            openContainingFolder: async (model) => {
+                const resolvedModel = await owner.resolveNodeContextMenuModel(model);
+                if (resolvedModel) {
+                    if (!owner.dialog) {
+                        owner.dialog = new ResolverManagerDialog();
+                        window.ModelResolverDialog = owner.dialog;
+                    }
+                    owner.dialog?.openContainingFolder(toResolverContextModel(resolvedModel));
+                }
+            },
+        };
+
+        const resolvedModels = (models || []).filter(model => (
+            isExistingResolvedModel(model) || model.resolution_pending === true
+        ));
+
+        let options;
+        if (resolvedModels.length === 1) {
+            const model = resolvedModels[0];
+            options = [
+                {
+                    content: "Show in Model Resolver",
+                    className: "mr-node-ctx-item mr-node-ctx-show-in-resolver",
+                    callback: () => handlers.showInResolver(model),
+                },
+                {
+                    content: "Show info",
+                    className: "mr-node-ctx-item mr-node-ctx-show-info",
+                    callback: () => handlers.showInfo(model),
+                },
+                {
+                    content: "Open containing folder",
+                    className: "mr-node-ctx-item mr-node-ctx-open-folder",
+                    callback: () => handlers.openContainingFolder(model),
+                },
+                null,
+                {
+                    content: "Open Model Resolver",
+                    className: "mr-node-ctx-item mr-node-ctx-open-resolver",
+                    callback: () => owner.activateResolverButton(),
+                },
+            ];
+        } else if (resolvedModels.length > 1) {
+            options = resolvedModels.map(model => {
+                const label = getResolvedModelMenuLabel(model, c => owner.dialog?.getCategoryDisplayName?.(c));
+                return {
+                    title: label,
+                    content: label,
+                    className: "mr-node-ctx-item mr-node-ctx-model",
+                    has_submenu: true,
+                    submenu: {
+                        options: [
+                            {
+                                content: "Show in Model Resolver",
+                                className: "mr-node-ctx-item mr-node-ctx-show-in-resolver",
+                                callback: () => handlers.showInResolver(model),
+                            },
+                            {
+                                content: "Show info",
+                                className: "mr-node-ctx-item mr-node-ctx-show-info",
+                                callback: () => handlers.showInfo(model),
+                            },
+                            {
+                                content: "Open containing folder",
+                                className: "mr-node-ctx-item mr-node-ctx-open-folder",
+                                callback: () => handlers.openContainingFolder(model),
+                            },
+                        ],
+                    },
+                };
+            });
+            options.push(null);
+            options.push({
+                content: "Open Model Resolver",
+                className: "mr-node-ctx-item mr-node-ctx-open-resolver",
+                callback: () => owner.activateResolverButton(),
+            });
+        } else {
+            options = [
+                {
+                    content: "Open Model Resolver",
+                    className: "mr-node-ctx-item mr-node-ctx-open-resolver",
+                    callback: () => owner.activateResolverButton(),
+                },
+            ];
+        }
+
+        const event = window.event;
+        let x = event?.clientX;
+        let y = event?.clientY;
+
+        if (!x || !y) {
+            const btn = document.querySelector(".mr-node-toolbar-icon")?.closest("button") || document.activeElement;
+            if (btn?.getBoundingClientRect) {
+                const rect = btn.getBoundingClientRect();
+                x = Math.round(rect.left);
+                y = Math.round(rect.bottom + 4);
+            } else if (node?.pos) {
+                x = window.innerWidth / 2;
+                y = window.innerHeight / 2;
+            }
+        }
+
+        const ContextMenuClass = window.LiteGraph?.ContextMenu || (typeof LiteGraph !== "undefined" ? LiteGraph.ContextMenu : null);
+        if (ContextMenuClass) {
+            const menuEvent = (event && event.clientX) ? event : { clientX: x, clientY: y, pageX: x, pageY: y };
+            new ContextMenuClass(options, {
+                event: menuEvent,
+                left: x,
+                top: y,
+                title: "Model Resolver",
+                className: "dark mr-node-selection-context-menu",
+                scale: 1,
+            }, window);
+        } else {
+            this.activateResolverButton();
+        }
     }
 
     getNodeContextWorkflowState() {
@@ -532,6 +934,7 @@ export class ModelResolver {
         const originalGetExtraMenuOptions = target.getExtraMenuOptions;
         const originalGetMenuOptions = target.getMenuOptions;
         const addModelResolverMenu = (node, targetOptions) => {
+            if (typeof owner.isNodeContextMenuEnabled === 'function' && !owner.isNodeContextMenuEnabled()) return;
             if (!Array.isArray(targetOptions)) return;
             if (targetOptions.some(option => (
                 String(option?.className || '').includes('mr-model-resolver-node-menu')
@@ -791,7 +1194,7 @@ export class ModelResolver {
 
     handleSidebarButtonClick(event) {
         const target = event.target instanceof Element ? event.target : null;
-        const button = target?.closest(`.${this.sidebarTabId}-tab-button`);
+        const button = target?.closest(`[data-testid="${this.sidebarTabId}-tab-button"], .${this.sidebarTabId}-tab-button`);
         if (!(button instanceof HTMLElement)) return;
         if (!this.dialog?.isVisible()) return;
         if (this.dialog.pendingDockToSidebar) return;
@@ -855,7 +1258,7 @@ export class ModelResolver {
 
             // Create button group with Model Resolver button
             const ModelResolverButton = new ComfyButton({
-                icon: "link-variant",
+                icon: "link-variant mr-topbar-tab-icon",
                 action: this.handleResolverButtonClick,
                 content: "Model Resolver",
                 classList: "comfyui-button comfyui-menu-mobile-collapse"
@@ -1025,6 +1428,15 @@ export class ModelResolver {
     isWorkflowDependencyMarkerEnabled() {
         return safeStorage.getItem('ModelResolver.workflowDependencyMarkerEnabled') === 'true';
     }
+
+    isNodeToolboxIconEnabled() {
+        return safeStorage.getItem('ModelResolver.nodeToolboxIconEnabled') !== 'false';
+    }
+
+    isNodeContextMenuEnabled() {
+        return safeStorage.getItem('ModelResolver.nodeContextMenuEnabled') !== 'false';
+    }
+
 
     setupWorkflowHashMetadataInjection() {
         window.__ModelResolverWorkflowHashMetadataOwner = this;
@@ -2080,7 +2492,7 @@ export class ModelResolver {
         // Create a floating button as fallback for legacy ComfyUI versions
         this.resolverButton = $el("button", {
             id: this.buttonId,
-            textContent: "🔗 Model Resolver",
+            innerHTML: `${getSvgIcon("modelResolver", "currentColor", "mr-floating-btn-icon")}<span>Model Resolver</span>`,
             onclick: this.handleResolverButtonClick,
             className: "model-resolver-floating-button"
         });

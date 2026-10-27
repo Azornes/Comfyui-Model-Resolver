@@ -6,6 +6,7 @@
 
 import { app } from "../../../scripts/app.js";
 import {
+    MODEL_RESOLVER_NODE_TOOLBOX_COMMAND_ID,
     MODEL_RESOLVER_OPEN_COMMAND_ID,
     MODEL_RESOLVER_OPEN_DEFAULT_KEYBINDING,
     ModelResolver as ModelResolverClass,
@@ -24,7 +25,20 @@ app.registerExtension({
             label: "Open Model Resolver",
             function: () => modelResolver.activateResolverButton(),
         },
+        {
+            id: MODEL_RESOLVER_NODE_TOOLBOX_COMMAND_ID,
+            label: "Model Resolver",
+            icon: "mr-node-toolbar-icon",
+            function: () => modelResolver.handleNodeSelectionToolboxClick(),
+        },
     ],
+    getSelectionToolboxCommands(item) {
+        if (modelResolver.isNodeToolboxIconEnabled() && modelResolver.isNodeWithModels(item)) {
+            modelResolver.lastSelectionToolboxNode = item;
+            return [MODEL_RESOLVER_NODE_TOOLBOX_COMMAND_ID];
+        }
+        return [];
+    },
     keybindings: [
         MODEL_RESOLVER_OPEN_DEFAULT_KEYBINDING,
     ],

@@ -4,7 +4,7 @@ function getResolvedModelPath(model = {}) {
     return String(model.full_path || model.path || model.resolved_path || '').trim();
 }
 
-function getResolvedModelFilename(model = {}) {
+export function getResolvedModelFilename(model = {}) {
     const source = String(
         model.name
         || model.filename
@@ -24,7 +24,7 @@ function getResolvedModelCategoryLabel(model = {}, formatCategory = null) {
     return String(formatted || category).toUpperCase();
 }
 
-function getResolvedModelMenuLabel(model = {}, formatCategory = null) {
+export function getResolvedModelMenuLabel(model = {}, formatCategory = null) {
     const category = getResolvedModelCategoryLabel(model, formatCategory);
     const widgetName = String(model.widget_name || '').trim();
     const filename = getResolvedModelFilename(model);
@@ -58,14 +58,17 @@ function createModelActions(model, handlers = {}) {
     return [
         {
             content: 'Show in Model Resolver',
+            className: 'mr-node-ctx-item mr-node-ctx-show-in-resolver',
             callback: () => handlers.showInResolver?.(model),
         },
         {
             content: 'Show info',
+            className: 'mr-node-ctx-item mr-node-ctx-show-info',
             callback: () => handlers.showInfo?.(model),
         },
         {
             content: 'Open containing folder',
+            className: 'mr-node-ctx-item mr-node-ctx-open-folder',
             callback: () => handlers.openContainingFolder?.(model),
         },
     ];
@@ -298,6 +301,7 @@ export function buildModelResolverNodeMenu(models = [], handlers = {}, options =
         ? createModelActions(resolvedModels[0], handlers)
         : resolvedModels.map(model => ({
             title: getResolvedModelMenuLabel(model, options.formatCategory),
+            className: 'mr-node-ctx-item mr-node-ctx-model',
             has_submenu: true,
             submenu: {
                 options: createModelActions(model, handlers),

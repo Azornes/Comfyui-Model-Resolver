@@ -622,7 +622,7 @@ export const dialogShellMethods = {
         requestAnimationFrame(() => {
             if (!this.pendingDockToSidebar || this.docked) return;
 
-            const button = document.querySelector(`.${this.sidebarTabId}-tab-button`);
+            const button = document.querySelector(`[data-testid="${this.sidebarTabId}-tab-button"], .${this.sidebarTabId}-tab-button`);
             if (button instanceof HTMLElement) {
                 const isActive = isSidebarButtonActive(button);
 
@@ -727,7 +727,7 @@ export const dialogShellMethods = {
         requestAnimationFrame(() => {
             if (dockContainer && !dockContainer.isConnected) return;
 
-            const button = document.querySelector(`.${this.sidebarTabId}-tab-button`);
+            const button = document.querySelector(`[data-testid="${this.sidebarTabId}-tab-button"], .${this.sidebarTabId}-tab-button`);
             if (!(button instanceof HTMLElement)) return;
 
             const isActive = isSidebarButtonActive(button);

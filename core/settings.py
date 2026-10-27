@@ -33,6 +33,8 @@ SETTINGS_SCHEMA: List[Dict[str, Any]] = [
     { "serverKey": "auto_open_on_missing", "localKey": "ModelResolver.autoOpenOnMissing", "type": "boolean", "default": False },
     { "serverKey": "workflow_hash_metadata_enabled", "localKey": "ModelResolver.workflowHashMetadataEnabled", "type": "boolean", "default": True },
     { "serverKey": "workflow_dependency_marker_enabled", "localKey": "ModelResolver.workflowDependencyMarkerEnabled", "type": "boolean", "default": False },
+    { "serverKey": "node_toolbox_icon_enabled", "localKey": "ModelResolver.nodeToolboxIconEnabled", "type": "boolean", "default": True },
+    { "serverKey": "node_context_menu_enabled", "localKey": "ModelResolver.nodeContextMenuEnabled", "type": "boolean", "default": True },
     { "serverKey": "download_backend", "localKey": "ModelResolver.downloadBackend", "type": "backend", "default": "python" },
     { "serverKey": "aria2c_path", "localKey": "ModelResolver.aria2cPath", "type": "string", "default": "" },
     { "serverKey": "proxy_url", "localKey": "ModelResolver.proxyUrl", "type": "string", "default": "" },
@@ -192,6 +194,12 @@ def normalize_settings(settings: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
     )
     data["workflow_dependency_marker_enabled"] = bool_setting(
         data.get("workflow_dependency_marker_enabled"), False
+    )
+    data["node_toolbox_icon_enabled"] = bool_setting(
+        data.get("node_toolbox_icon_enabled"), True
+    )
+    data["node_context_menu_enabled"] = bool_setting(
+        data.get("node_context_menu_enabled"), True
     )
     data["download_backend"] = normalize_download_backend(data.get("download_backend"))
     data["aria2c_path"] = str(data.get("aria2c_path") or "").strip()

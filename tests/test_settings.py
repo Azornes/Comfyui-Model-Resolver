@@ -27,6 +27,22 @@ class SettingsTests(unittest.TestCase):
             ]
         )
 
+    def test_node_toolbox_icon_defaults_to_enabled(self):
+        self.assertTrue(normalize_settings({})["node_toolbox_icon_enabled"])
+        self.assertFalse(
+            normalize_settings({"node_toolbox_icon_enabled": "false"})[
+                "node_toolbox_icon_enabled"
+            ]
+        )
+
+    def test_node_context_menu_defaults_to_enabled(self):
+        self.assertTrue(normalize_settings({})["node_context_menu_enabled"])
+        self.assertFalse(
+            normalize_settings({"node_context_menu_enabled": "false"})[
+                "node_context_menu_enabled"
+            ]
+        )
+
     def test_auto_open_on_missing_defaults_to_disabled(self):
         self.assertFalse(normalize_settings({})["auto_open_on_missing"])
         self.assertTrue(

@@ -38,8 +38,15 @@ test('frontend entrypoint registers the ComfyUI extension contract', () => {
     /api\.fetchApi\(\s*["']\/model_resolver\/workflow-model-hashes["']/
   );
   assert.match(resolverSource, /id:\s*MODEL_RESOLVER_OPEN_COMMAND_ID/);
+  assert.match(resolverSource, /id:\s*MODEL_RESOLVER_NODE_TOOLBOX_COMMAND_ID/);
   assert.match(resolverSource, /function:\s*\(\)\s*=>\s*modelResolver\.activateResolverButton\(\)/);
+  assert.match(resolverSource, /function:\s*\(\)\s*=>\s*modelResolver\.handleNodeSelectionToolboxClick\(\)/);
   assert.match(resolverSource, /keybindings:\s*\[\s*MODEL_RESOLVER_OPEN_DEFAULT_KEYBINDING/);
+  assert.match(modelResolverSource, /isNodeWithModels\(node\)/);
+  assert.match(modelResolverSource, /handleNodeSelectionToolboxClick\(\)/);
+  assert.match(modelResolverSource, /isNodeToolboxIconEnabled\(\)/);
+  assert.match(modelResolverSource, /isNodeContextMenuEnabled\(\)/);
+  assert.match(resolverSource, /modelResolver\.isNodeToolboxIconEnabled\(\)/);
 
   const hookPatterns = {
     setup: /\bsetup\s*:/,
@@ -47,6 +54,7 @@ test('frontend entrypoint registers the ComfyUI extension contract', () => {
     nodeCreated: /\bnodeCreated\s*\(/,
     loadedGraphNode: /\bloadedGraphNode\s*\(/,
     afterConfigureGraph: /\bafterConfigureGraph\s*\(/,
+    getSelectionToolboxCommands: /\bgetSelectionToolboxCommands\s*\(/,
   };
   for (const [hook, pattern] of Object.entries(hookPatterns)) {
     assert.match(

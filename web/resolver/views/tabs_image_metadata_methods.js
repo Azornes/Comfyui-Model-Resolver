@@ -1371,7 +1371,8 @@ export const imageMetadataMethods = {
                     <div class="mr-image-prompt-grid">
                         <div class="mr-image-prompt-side${targetContextMenuAttrs ? ' is-context-menu' : ''}"${targetContextMenuAttrs}>
                             <span class="mr-image-prompt-side-label">
-                                Current text field
+                                <span class="mr-image-transfer-label-icon mr-image-transfer-label-icon-current" aria-hidden="true">${getSvgIcon('workflow')}</span>
+                                <span>Current text field</span>
                                 ${this.getMetadataTooltipBadge(targetRoleHint, `Current ${row.role} prompt role information`)}
                             </span>
                             ${targetHtml}
@@ -1379,7 +1380,8 @@ export const imageMetadataMethods = {
                         <span class="mr-image-prompt-arrow" aria-hidden="true">→</span>
                         <div class="mr-image-prompt-side">
                             <span class="mr-image-prompt-side-label">
-                                Imported
+                                <span class="mr-image-transfer-label-icon mr-image-transfer-label-icon-imported" aria-hidden="true">${getSvgIcon('import')}</span>
+                                <span>Imported</span>
                                 ${this.getMetadataTooltipBadge(sourceRoleHint, `Imported ${row.role} prompt role information`)}
                             </span>
                             ${sourceHtml}
@@ -2123,12 +2125,18 @@ export const imageMetadataMethods = {
             return `
                 <div class="mr-image-transfer-change${row.unchanged ? ' is-unchanged' : ''}">
                     <div class="mr-image-transfer-change-side">
-                        <span class="mr-image-transfer-change-label">Current</span>
+                        <span class="mr-image-transfer-change-label">
+                            <span class="mr-image-transfer-label-icon mr-image-transfer-label-icon-current" aria-hidden="true">${getSvgIcon('workflow')}</span>
+                            <span>Current</span>
+                        </span>
                         <span class="mr-image-transfer-model-value is-current" title="${this.escapeHtml(currentTitle)}"${currentModelAttrs}>${this.escapeHtml(currentLabel)}</span>
                     </div>
                     <span class="mr-image-transfer-change-arrow" aria-hidden="true">→</span>
                     <div class="mr-image-transfer-change-side mr-image-transfer-change-side-imported">
-                        <span class="mr-image-transfer-change-label">Imported</span>
+                        <span class="mr-image-transfer-change-label">
+                            <span class="mr-image-transfer-label-icon mr-image-transfer-label-icon-imported" aria-hidden="true">${getSvgIcon('import')}</span>
+                            <span>Imported</span>
+                        </span>
                         ${importedValueHtml}
                     </div>
                 </div>
@@ -2260,12 +2268,18 @@ export const imageMetadataMethods = {
                 return `
                     <div class="mr-image-transfer-change is-unselected">
                         <div class="mr-image-transfer-change-side">
-                            <span class="mr-image-transfer-change-label">Current${this.escapeHtml(slotLabel)}</span>
+                            <span class="mr-image-transfer-change-label">
+                                <span class="mr-image-transfer-label-icon mr-image-transfer-label-icon-current" aria-hidden="true">${getSvgIcon('workflow')}</span>
+                                <span>Current${this.escapeHtml(slotLabel)}</span>
+                            </span>
                             <span class="mr-image-transfer-model-value is-current" title="${this.escapeHtml(currentValue || currentLabel)}"${currentModelAttrs}>${this.escapeHtml(currentLabel)}</span>
                         </div>
                         <span class="mr-image-transfer-change-arrow" aria-hidden="true">→</span>
                         <div class="mr-image-transfer-change-side mr-image-transfer-change-side-imported">
-                            <span class="mr-image-transfer-change-label">Imported</span>
+                            <span class="mr-image-transfer-change-label">
+                                <span class="mr-image-transfer-label-icon mr-image-transfer-label-icon-imported" aria-hidden="true">${getSvgIcon('import')}</span>
+                                <span>Imported</span>
+                            </span>
                             <span class="mr-image-transfer-model-value is-placeholder">Select node</span>
                         </div>
                     </div>

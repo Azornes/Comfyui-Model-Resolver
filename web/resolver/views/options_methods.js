@@ -475,6 +475,24 @@ export const optionsMethods = {
                                                 <span class="mr-options-switch"></span>
                                             </span>
                                         </label>
+                                        <label class="mr-options-toggle-row">
+                                            <div class="mr-options-toggle-copy">
+                                                <span class="mr-options-toggle-title">Show action button above model nodes <span class="mr-tooltip-badge" data-tooltip="When enabled, an action button appears in the selection toolbar above selected model nodes for quick access to Model Resolver actions.">?</span></span>
+                                            </div>
+                                            <span class="mr-options-toggle-control">
+                                                <input id="mr-options-node-toolbox-icon" class="mr-options-switch-input" type="checkbox" ${tokens.node_toolbox_icon_enabled !== false ? 'checked' : ''}>
+                                                <span class="mr-options-switch"></span>
+                                            </span>
+                                        </label>
+                                        <label class="mr-options-toggle-row">
+                                            <div class="mr-options-toggle-copy">
+                                                <span class="mr-options-toggle-title">Show Model Resolver in node context menu <span class="mr-tooltip-badge" data-tooltip="When enabled, right-clicking a model node in the graph includes Model Resolver actions in its context menu.">?</span></span>
+                                            </div>
+                                            <span class="mr-options-toggle-control">
+                                                <input id="mr-options-node-context-menu" class="mr-options-switch-input" type="checkbox" ${tokens.node_context_menu_enabled !== false ? 'checked' : ''}>
+                                                <span class="mr-options-switch"></span>
+                                            </span>
+                                        </label>
                                         <div class="mr-options-db-actions">
                                             <button id="mr-options-add-dependency-node" type="button" class="mr-btn mr-btn-secondary">${getSvgIcon('circlePlus')} Add opener node</button>
                                         </div>
@@ -967,6 +985,8 @@ export const optionsMethods = {
         const autoOpenOnMissingInput = this.contentElement.querySelector('#mr-options-auto-open-on-missing');
         const workflowHashMetadataInput = this.contentElement.querySelector('#mr-options-workflow-hash-metadata');
         const workflowDependencyMarkerInput = this.contentElement.querySelector('#mr-options-workflow-dependency-marker');
+        const nodeToolboxIconInput = this.contentElement.querySelector('#mr-options-node-toolbox-icon');
+        const nodeContextMenuInput = this.contentElement.querySelector('#mr-options-node-context-menu');
         const addDependencyNodeBtn = this.contentElement.querySelector('#mr-options-add-dependency-node');
         const downloadBackendInput = this.contentElement.querySelector('#mr-options-download-backend');
         const aria2cPathInput = this.contentElement.querySelector('#mr-options-aria2c-path');
@@ -1098,6 +1118,8 @@ export const optionsMethods = {
             autoOpenOnMissingInput,
             workflowHashMetadataInput,
             workflowDependencyMarkerInput,
+            nodeToolboxIconInput,
+            nodeContextMenuInput,
             downloadBackendInput,
             aria2cPathInput,
             aria2AutoStopInput,
@@ -3554,6 +3576,8 @@ export const optionsMethods = {
                     auto_open_on_missing: Boolean(autoOpenOnMissingInput?.checked),
                     workflow_hash_metadata_enabled: Boolean(workflowHashMetadataInput?.checked),
                     workflow_dependency_marker_enabled: Boolean(workflowDependencyMarkerInput?.checked),
+                    node_toolbox_icon_enabled: Boolean(nodeToolboxIconInput?.checked),
+                    node_context_menu_enabled: Boolean(nodeContextMenuInput?.checked),
                     download_backend: downloadBackend,
                     aria2c_path: aria2cPathInput?.value?.trim() || '',
                     aria2_auto_stop_daemon: Boolean(aria2AutoStopInput?.checked),

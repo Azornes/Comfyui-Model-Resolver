@@ -5371,7 +5371,7 @@ button.mr-info-link:disabled {
 .mr-image-prompt-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 18px minmax(0, 1fr);
-    align-items: center;
+    align-items: stretch;
     gap: var(--mr-spacing-10);
 }
 
@@ -5380,6 +5380,9 @@ button.mr-info-link:disabled {
     flex-direction: column;
     gap: var(--mr-spacing-6);
     min-width: 0;
+    min-height: 0;
+    height: 100%;
+    box-sizing: border-box;
 }
 
 .mr-image-prompt-side.is-context-menu {
@@ -5387,9 +5390,13 @@ button.mr-info-link:disabled {
 }
 
 .mr-image-prompt-side-label {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--mr-spacing-4);
     color: var(--mr-text-muted);
     font-size: var(--mr-font-xs);
     font-weight: 650;
+    line-height: 1;
 }
 
 .mr-image-prompt-select {
@@ -5453,6 +5460,7 @@ button.mr-info-link:disabled {
 }
 
 .mr-image-prompt-arrow {
+    align-self: center;
     color: var(--mr-accent);
     font-size: var(--mr-font-lg);
     font-weight: 700;
@@ -5460,8 +5468,15 @@ button.mr-info-link:disabled {
 }
 
 .mr-image-prompt-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    box-sizing: border-box;
+    flex: 1 1 auto;
+    min-height: 80px;
     margin: 0;
-    padding: var(--mr-spacing-8);
+    padding: var(--mr-spacing-10) var(--mr-spacing-8);
     border: 1px dashed var(--mr-border);
     border-radius: var(--mr-radius-md, var(--mr-radius-lg));
     color: var(--mr-text-muted);
@@ -6182,8 +6197,34 @@ button.mr-info-link:disabled {
 }
 
 .mr-image-transfer-change-label {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--mr-spacing-4);
     color: var(--mr-text-muted);
     font-size: var(--mr-font-xs);
+    line-height: 1;
+}
+
+.mr-image-transfer-label-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.mr-image-transfer-label-icon svg {
+    width: 12px;
+    height: 12px;
+    display: block;
+}
+
+.mr-image-transfer-label-icon-current {
+    color: var(--mr-color-success, #72d38a);
+}
+
+.mr-image-transfer-label-icon-imported {
+    color: var(--mr-color-primary, #5af);
 }
 
 .mr-image-transfer-change-arrow {
