@@ -17,6 +17,7 @@ from .metadata_model_utils import normalize_models
 log = create_module_logger(__name__)
 
 from .path_utils import get_filename_from_path
+from .type_utils import NON_MODEL_EXTENSIONS
 
 try:
     from rapidfuzz import fuzz as rapidfuzz_fuzz
@@ -137,6 +138,10 @@ def find_matches(
             candidate_filename = get_filename_from_path(candidate_path)
 
         if not candidate_filename:
+            continue
+
+        candidate_ext = os.path.splitext(candidate_filename)[1].lower()
+        if candidate_ext and candidate_ext in NON_MODEL_EXTENSIONS:
             continue
 
         # Normalize candidate path separators based on current OS

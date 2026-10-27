@@ -95,6 +95,35 @@ class ScannerTests(unittest.TestCase):
 
         self.assertEqual([model.filename for model in models], ["quantized.gguf"])
 
+    @patch("os.walk")
+    @patch("os.path.exists")
+    @patch("os.path.isdir")
+    def test_scan_directory_with_empty_extensions_filters_non_model_files(
+        self, mock_isdir, mock_exists, mock_walk
+    ):
+        mock_exists.return_value = True
+        mock_isdir.return_value = True
+        mock_walk.return_value = [
+            (
+                "/models/prompt_expansion",
+                [],
+                [
+                    "valid_model.safetensors",
+                    "README.md",
+                    "license.txt",
+                    "config.json",
+                    "script.py",
+                    ".gitkeep",
+                ],
+            )
+        ]
+
+        models = scan_directory(
+            "/models/prompt_expansion", set(), "prompt_expansion"
+        )
+
+        self.assertEqual([model.filename for model in models], ["valid_model.safetensors"])
+
     @patch("core.scanner.folder_paths")
     @patch("core.scanner.get_model_files")
     def test_find_local_file_path(self, mock_get_files, mock_folder_paths):

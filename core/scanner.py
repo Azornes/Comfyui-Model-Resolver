@@ -21,6 +21,7 @@ from .path_utils import (
     normalize_folder_path_values,
     normalize_string_values,
 )
+from .type_utils import MODEL_EXTENSIONS, NON_MODEL_EXTENSIONS
 
 # Import folder_paths lazily - it may not be available until ComfyUI is initialized
 try:
@@ -139,7 +140,18 @@ def scan_directory(
                 # Categories with explicit extensions must keep those boundaries.
                 # Custom nodes may register aliases such as model_gguf against the
                 # diffusion_models roots, but only .gguf files belong to that alias.
-                if len(extensions or set()) == 0 or file_ext in extensions:
+                # When no explicit extensions are specified (e.g. folder_paths.add_model_folder_path
+                # defaults to an empty set), fallback to known model extensions and reject
+                # non-model files (such as README.md, .txt, .json).
+                if extensions:
+                    is_candidate = file_ext in extensions
+                else:
+                    is_candidate = (
+                        file_ext in MODEL_EXTENSIONS
+                        and file_ext not in NON_MODEL_EXTENSIONS
+                    )
+
+                if is_candidate:
                     full_path = os.path.join(root, filename)
 
                     # Calculate relative path from base directory

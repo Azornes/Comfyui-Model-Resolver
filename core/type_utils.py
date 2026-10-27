@@ -63,7 +63,61 @@ MODEL_EXTENSIONS = {
     ".gguf",
     ".pb",
     ".pickle",
+    ".engine",
+    ".patch",
+    ".tflite",
 }
+
+NON_MODEL_EXTENSIONS = {
+    ".md",
+    ".markdown",
+    ".mdown",
+    ".txt",
+    ".rst",
+    ".py",
+    ".pyc",
+    ".pyo",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".ini",
+    ".cfg",
+    ".gitkeep",
+    ".gitignore",
+    ".gitattributes",
+    ".html",
+    ".htm",
+    ".css",
+    ".js",
+    ".sh",
+    ".bat",
+    ".cmd",
+    ".ps1",
+    ".log",
+    ".pdf",
+    ".doc",
+    ".docx",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    ".gif",
+    ".bmp",
+    ".svg",
+    ".zip",
+    ".tar",
+    ".gz",
+    ".7z",
+    ".rar",
+}
+
+
+def is_model_extension(extension: str) -> bool:
+    """Return True if extension matches known model formats and is not a non-model file."""
+    ext = str(extension or "").strip().lower()
+    return ext in MODEL_EXTENSIONS and ext not in NON_MODEL_EXTENSIONS
+
 
 
 NUMERIC_PRECISION_SUFFIXES = (

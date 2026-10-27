@@ -56,6 +56,16 @@ class MatcherTests(unittest.TestCase):
         matches_filtered = find_matches("sd_xl_base_1.0.safetensors", candidates, threshold=0.7)
         self.assertEqual(1, len(matches_filtered))
 
+    def test_find_matches_skips_non_model_candidates(self):
+        candidates = [
+            {"filename": "README.md"},
+            {"filename": "notes.txt"},
+            {"filename": "valid_vae.safetensors"},
+        ]
+        matches = find_matches("sdxl_vae.safetensors", candidates)
+        self.assertEqual(1, len(matches))
+        self.assertEqual("valid_vae.safetensors", matches[0].filename)
+
     def test_model_family_normalization_ignores_precision_and_quantization(self):
         self.assertEqual(
             "qwen3vl 4b abliterated",
