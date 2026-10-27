@@ -11,20 +11,37 @@ const PROMPT_WIDGET_NAMES = new Set([
     'text_negative',
     'text_a',
     'text_b',
+    'text_c',
+    'text_d',
     'text_g',
     'text_l',
     'text_1',
     'text_2',
+    'string_a',
+    'string_b',
+    'string_c',
+    'string_d',
+    'string_g',
+    'string_l',
+    'string_1',
+    'string_2',
+    'string_positive',
+    'string_negative',
+    'value',
+    'clip_l',
+    'clip_g',
+    't5xxl',
+    't5',
 ]);
 
-const PROMPT_NODE_TYPE_PATTERN = /(?:clip.*text|text.*encode|primitive.*string|string.*multiline|text.*multiline|multiline.*text|conditioning.*text|textinput)/i;
+const PROMPT_NODE_TYPE_PATTERN = /(?:clip.*text|text.*encode|primitive.*string|string.*multiline|text.*multiline|multiline.*text|conditioning.*text|textinput|string.*concat|text.*concat|string.*combine|text.*combine|string.*format|text.*format)/i;
 const PROMPT_NODE_TYPE_SCORE_RULES = [
     { pattern: /(?:clip.*text|text.*encode)/i, score: 500 },
     { pattern: /conditioning.*text/i, score: 420 },
-    { pattern: /(?:primitive.*string|string.*multiline|text.*multiline|multiline.*text|textinput)/i, score: 320 },
+    { pattern: /(?:primitive.*string|string.*multiline|text.*multiline|multiline.*text|textinput|string.*concat|text.*concat|string.*combine|text.*combine|string.*format|text.*format)/i, score: 320 },
 ];
 const SCALAR_WIDGET_TYPES = new Set(['STRING', 'INT', 'FLOAT', 'BOOLEAN']);
-const PROMPT_INPUT_NAMES = new Set(['text', 'prompt', 'text_input', 'string']);
+const PROMPT_INPUT_NAMES = new Set(['text', 'prompt', 'text_input', 'string', 'value']);
 const TEXT_WIDGET_TYPES = new Set(['STRING', 'TEXT']);
 const NON_TEXT_WIDGET_TYPES = new Set([
     'BOOLEAN',
@@ -38,7 +55,7 @@ const NON_TEXT_WIDGET_TYPES = new Set([
     'SELECT',
     'SLIDER',
 ]);
-const NON_PROMPT_WIDGET_NAME_PATTERN = /^(?:after_generate|batch(?:_size)?|cfg|control_after_generate|counter|denoise|extension|filename(?:_prefix)?|folder|format|height|list|mode|output(?:_name|_path)?|path|prefix|sampler|scheduler|seed|steps|suffix|width)$/i;
+const NON_PROMPT_WIDGET_NAME_PATTERN = /^(?:after_generate|batch(?:_size)?|cfg|checkpoint_name|ckpt_name|clip_name|control_after_generate|counter|delimiter|denoise|device|extension|filename(?:_prefix)?|folder|format|height|list|lora_name|mode|model_name|output(?:_name|_path)?|path|prefix|sampler|scheduler|seed|sep|separator|steps|suffix|unet_name|vae_name|weight_dtype|width)$/i;
 
 function normalizePromptName(value) {
     return String(value ?? '')
@@ -49,6 +66,7 @@ function normalizePromptName(value) {
 }
 
 function getInputName(input = {}) {
+    if (typeof input === 'string') return input.trim();
     return String(
         input?.name
         || input?.widget_name
@@ -79,7 +97,9 @@ function isPromptInputName(value) {
         || PROMPT_INPUT_NAMES.has(token)
         || token.includes('prompt')
         || token.startsWith('text_')
-        || token.endsWith('_text');
+        || token.endsWith('_text')
+        || token.startsWith('string_')
+        || token.endsWith('_string');
 }
 
 function isWidgetInput(input = {}) {
@@ -113,6 +133,11 @@ function getWidgetNames(node = {}, valueCount = 0) {
 
     const widgetInputs = getWidgetInputs(node);
     widgetInputs.forEach((input, index) => setName(index, input));
+
+    if (node.widgets_values_named && typeof node.widgets_values_named === 'object') {
+        const namedKeys = Object.keys(node.widgets_values_named);
+        namedKeys.forEach((key, index) => setName(index, key));
+    }
 
     const scalarInputs = (Array.isArray(node.inputs) ? node.inputs : [])
         .filter(input => input && input.link == null && (
@@ -312,6 +337,17 @@ function isPromptPathInput(entry, input = {}) {
         || type === 'NUMBER'
         || type === 'SELECT'
         || type === 'SLIDER'
+        || type === 'CLIP'
+        || type === 'MODEL'
+        || type === 'VAE'
+        || type === 'IMAGE'
+        || type === 'LATENT'
+        || type === 'MASK'
+        || type === 'CONTROL_NET'
+        || type === 'NOISE'
+        || type === 'SIGMAS'
+        || type === 'SAMPLER'
+        || type === 'GUIDER'
     ) {
         return false;
     }
@@ -411,7 +447,8 @@ function isTextLikeDescriptor(descriptor = {}) {
     const type = getDescriptorWidgetType(descriptor);
     return TEXT_WIDGET_TYPES.has(type)
         || type.includes('STRING')
-        || type.includes('TEXT');
+        || type.includes('TEXT')
+        || (!type && typeof descriptor.value === 'string');
 }
 
 function isPromptTextDescriptor(descriptor = {}, { node = {}, hasGraphPromptRole = false } = {}) {
@@ -424,6 +461,8 @@ function isPromptTextDescriptor(descriptor = {}, { node = {}, hasGraphPromptRole
         || name.includes('prompt')
         || name.startsWith('text_')
         || name.endsWith('_text')
+        || name.startsWith('string_')
+        || name.endsWith('_string')
     );
     if (isNonTextWidgetType(type) || hasWidgetChoices(descriptor)) return false;
     if (NON_PROMPT_WIDGET_NAME_PATTERN.test(name)) return false;
@@ -443,7 +482,7 @@ function getPromptLabelScore(value, role = '') {
     let score = 0;
     if (role && getRoleFromLabel(label) === role) score += 180;
     if (token.includes('prompt')) score += 110;
-    if (token === 'text' || token.includes('text')) score += 35;
+    if (token === 'text' || token.includes('text') || token === 'string' || token.includes('string')) score += 35;
     return score;
 }
 
@@ -502,12 +541,78 @@ function findWorkflowNodeForPrompt(workflow = {}, prompt = {}) {
         ?.nodes?.find(node => String(node?.id) === nodeId) || null;
 }
 
+function getNodeWidgetValue(node = {}, name = '', index = -1) {
+    if (name && node.widgets_values_named && typeof node.widgets_values_named === 'object') {
+        if (Object.prototype.hasOwnProperty.call(node.widgets_values_named, name)) {
+            const v = node.widgets_values_named[name];
+            if (v != null) return String(v);
+        }
+    }
+    if (Array.isArray(node.widgets_values) && index >= 0 && index < node.widgets_values.length) {
+        const v = node.widgets_values[index];
+        if (v != null) return String(v);
+    }
+    return '';
+}
+
+function resolveUpstreamPromptText(entry, linkId, entriesByNodeKey, sourcesByLink, visited = new Set(), depth = 0) {
+    if (!linkId || depth > 10) return '';
+    const sourceNodeKey = sourcesByLink.get(`${entry.graphKey}:${String(linkId)}`);
+    if (!sourceNodeKey || visited.has(sourceNodeKey)) return '';
+    visited.add(sourceNodeKey);
+
+    const sourceEntry = entriesByNodeKey.get(sourceNodeKey);
+    if (!sourceEntry) return '';
+    const node = sourceEntry.node;
+    if (!node || typeof node !== 'object') return '';
+
+    const nodeType = String(node.type || node.comfyClass || '').trim();
+
+    // StringConcatenate / text concat / combine nodes
+    if (/(?:string|text).*(?:concat|combine)/i.test(nodeType)) {
+        const inputA = (node.inputs || []).find(i => /^(?:string|text)[_-]?a$/i.test(getInputName(i)));
+        const stringA = (inputA && inputA.link != null && inputA.link !== '')
+            ? resolveUpstreamPromptText(sourceEntry, inputA.link, entriesByNodeKey, sourcesByLink, visited, depth + 1)
+            : getNodeWidgetValue(node, 'string_a', 0);
+
+        const inputB = (node.inputs || []).find(i => /^(?:string|text)[_-]?b$/i.test(getInputName(i)));
+        const stringB = (inputB && inputB.link != null && inputB.link !== '')
+            ? resolveUpstreamPromptText(sourceEntry, inputB.link, entriesByNodeKey, sourcesByLink, visited, depth + 1)
+            : getNodeWidgetValue(node, 'string_b', 1);
+
+        const delimiter = getNodeWidgetValue(node, 'delimiter', 2);
+        if (stringA && stringB) return `${stringA}${delimiter}${stringB}`;
+        return stringA || stringB || '';
+    }
+
+    // Generic text/string nodes
+    for (const key of ['text', 'string', 'value', 'prompt']) {
+        const inputKey = (node.inputs || []).find(i => normalizePromptName(getInputName(i)) === key);
+        if (inputKey && inputKey.link != null && inputKey.link !== '') {
+            const resolved = resolveUpstreamPromptText(sourceEntry, inputKey.link, entriesByNodeKey, sourcesByLink, visited, depth + 1);
+            if (resolved) return resolved;
+        }
+        const val = getNodeWidgetValue(node, key, 0);
+        if (val && String(val).trim()) return String(val);
+    }
+
+    if (Array.isArray(node.widgets_values)) {
+        for (let i = 0; i < node.widgets_values.length; i++) {
+            const v = node.widgets_values[i];
+            if (typeof v === 'string' && v.trim()) return v;
+        }
+    }
+
+    return '';
+}
+
 export function extractWorkflowPrompts(workflow = {}) {
     const entries = collectWorkflowNodeEntries(workflow);
     if (!entries.length) return [];
 
     const { sourcesByLink } = buildGraphConnections(entries, workflow);
     const roleCandidatesByNodeKey = buildRoleCandidatesFromGraph(entries, sourcesByLink);
+    const entriesByNodeKey = new Map(entries.map(e => [e.nodeKey, e]));
 
     const prompts = [];
     for (const entry of entries) {
@@ -524,8 +629,7 @@ export function extractWorkflowPrompts(workflow = {}) {
 
             const isUnnamedTextFallback = !descriptor.name
                 && !descriptor.input
-                && stringDescriptorCount === 1
-                && (isDedicatedTextNode(node) || nodeRoleCandidates.length === 1);
+                && (isDedicatedTextNode(node) || (stringDescriptorCount === 1 && nodeRoleCandidates.length === 1));
             const candidate = Boolean(
                 isPromptTextDescriptor(descriptor, {
                     node,
@@ -540,6 +644,16 @@ export function extractWorkflowPrompts(workflow = {}) {
                 getRoleFromLabel(descriptor.name),
             ]);
             const widgetInput = descriptor.input || getWidgetInput(node, descriptor.index, descriptor.name);
+            const isLinked = Boolean(
+                widgetInput
+                && widgetInput.link != null
+                && widgetInput.link !== ''
+            );
+            const resolvedText = isLinked
+                ? resolveUpstreamPromptText(entry, widgetInput.link, entriesByNodeKey, sourcesByLink)
+                : '';
+            const finalPromptText = (text && text.trim()) ? text : (resolvedText || text);
+
             prompts.push({
                 id: promptIdentity(entry, descriptor),
                 node_id: node.id,
@@ -547,17 +661,14 @@ export function extractWorkflowPrompts(workflow = {}) {
                 node_title: String(node.title || '').trim(),
                 widget_index: descriptor.index,
                 widget_name: descriptor.name,
-                text,
+                text: finalPromptText,
                 role: combinedRole.role,
                 role_candidates: combinedRole.roleCandidates,
                 is_top_level: entry.isTopLevel,
                 subgraph_id: entry.subgraphId,
                 subgraph_name: entry.subgraphName,
-                linked: Boolean(
-                    widgetInput
-                    && widgetInput.link != null
-                    && widgetInput.link !== ''
-                ),
+                linked: isLinked,
+                has_resolved_text: Boolean(resolvedText),
             });
         }
     }

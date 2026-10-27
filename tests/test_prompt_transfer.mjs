@@ -607,3 +607,83 @@ test('metadata prompt transfer replaces both selected prompt fields in the curre
     else globalThis.window = previousWindow;
   }
 });
+
+test('workflow prompt extraction resolves linked text from upstream StringConcatenate and recognizes widget names', () => {
+  const workflow = {
+    nodes: [
+      {
+        id: 3,
+        type: 'CLIPLoader',
+        widgets_values: ['qwen.safetensors', 'moss_image', 'default'],
+        widgets_values_named: { clip_name: 'qwen.safetensors', type: 'moss_image', device: 'default' },
+        outputs: [{ name: 'CLIP', type: 'CLIP', links: [2, 3] }],
+      },
+      {
+        id: 5,
+        type: 'CLIPTextEncode',
+        title: 'Positive Condition',
+        widgets_values: [''],
+        widgets_values_named: { text: '' },
+        inputs: [
+          { name: 'clip', type: 'CLIP', link: 2 },
+          { name: 'text', type: 'STRING', widget: { name: 'text' }, link: 1 },
+        ],
+        outputs: [{ name: 'CONDITIONING', type: 'CONDITIONING', links: [8] }],
+      },
+      {
+        id: 6,
+        type: 'CLIPTextEncode',
+        title: 'Negative Prompt',
+        widgets_values: ['bad anatomy, extra limbs'],
+        widgets_values_named: { text: 'bad anatomy, extra limbs' },
+        inputs: [{ name: 'clip', type: 'CLIP', link: 3 }],
+        outputs: [{ name: 'CONDITIONING', type: 'CONDITIONING', links: [9] }],
+      },
+      {
+        id: 250,
+        type: 'StringConcatenate',
+        widgets_values: ['Testowy promptaasdas', '', ''],
+        widgets_values_named: { string_a: 'Testowy promptaasdas', string_b: '', delimiter: '' },
+        outputs: [{ name: 'STRING', type: 'STRING', links: [1] }],
+      },
+      {
+        id: '22_17',
+        type: 'KSampler',
+        inputs: [
+          { name: 'positive', type: 'CONDITIONING', link: 8 },
+          { name: 'negative', type: 'CONDITIONING', link: 9 },
+        ],
+      },
+    ],
+    links: [
+      [1, 250, 0, 5, 1, 'STRING'],
+      [2, 3, 0, 5, 0, 'CLIP'],
+      [3, 3, 0, 6, 0, 'CLIP'],
+      [8, 5, 0, '22_17', 1, 'CONDITIONING'],
+      [9, 6, 0, '22_17', 2, 'CONDITIONING'],
+    ],
+  };
+
+  const prompts = extractWorkflowPrompts(workflow);
+  assert.equal(prompts.some(p => p.node_id === 3), false);
+
+  const node5 = prompts.find(p => p.node_id === 5);
+  assert.ok(node5);
+  assert.equal(node5.role, 'positive');
+  assert.equal(node5.text, 'Testowy promptaasdas');
+  assert.equal(node5.linked, true);
+  assert.equal(node5.has_resolved_text, true);
+
+  const node250 = prompts.find(p => p.node_id === 250 && p.widget_name === 'string_a');
+  assert.ok(node250);
+  assert.equal(node250.role, 'positive');
+  assert.equal(node250.text, 'Testowy promptaasdas');
+  assert.equal(node250.linked, false);
+
+  const context = createContext(workflow, createRoleWorkflow('current pos', 'current neg'));
+  const transferData = context.getMetadataPromptTransferData(context.imageInspectorState);
+  assert.equal(transferData.rows[0].role, 'positive');
+  assert.equal(transferData.rows[0].source.text, 'Testowy promptaasdas');
+  assert.equal(transferData.rows[1].role, 'negative');
+  assert.equal(transferData.rows[1].source.text, 'bad anatomy, extra limbs');
+});

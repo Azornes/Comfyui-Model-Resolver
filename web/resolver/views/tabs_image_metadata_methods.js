@@ -1188,7 +1188,7 @@ export const imageMetadataMethods = {
         const imageState = state || getImageInspectorState(this);
         const promptTransfer = this.getMetadataPromptTransferState(imageState);
         const sourcePrompts = extractWorkflowPrompts(imageState.metadata?.workflow || {})
-            .filter(prompt => !prompt.linked && String(prompt.text || '').trim());
+            .filter(prompt => (!prompt.linked || prompt.has_resolved_text) && String(prompt.text || '').trim());
         if (!sourcePrompts.length && imageState.metadata?.civitai_metadata) {
             const cm = imageState.metadata.civitai_metadata;
             if (cm.prompt && typeof cm.prompt === 'string' && cm.prompt.trim()) {
