@@ -111,6 +111,8 @@ def download_file(
     metadata: Optional[Dict[str, Any]] = None,
     category: str = "",
     dependencies: Any = None,
+    *,
+    expected_sha256: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Download a file from URL with progress tracking and speed calculation.
@@ -143,7 +145,9 @@ def download_file(
         or getattr(facade, "PYTHON_DOWNLOAD_READ_TIMEOUT", 60)
     )
 
-    expected_sha256 = facade._extract_expected_sha256(metadata)
+    expected_sha256 = (
+        expected_sha256 or facade._extract_expected_sha256(metadata)
+    )
 
     download_backend = facade._download_backend_from_settings()
     if download_backend != "aria2":
@@ -417,6 +421,23 @@ def download_file(
             log.info(
                 f"Hashing existing partial file ({facade.format_bytes(downloaded)}) for SHA256 integrity check..."
             )
+            with download_lock:
+                if download_id in download_progress:
+                    download_progress[download_id].update({
+                        "status": "verifying",
+                        "progress": 0,
+                        "downloaded": 0,
+                        "total_size": downloaded,
+                        "speed": 0,
+                        "expected_sha256": expected_sha256,
+                    })
+
+            verify_start = time.time()
+            verified_bytes = 0
+            last_verify_speed_update = verify_start
+            last_verified_bytes = 0
+            verify_speed_history = deque(maxlen=5)
+
             with open(partial_path, "rb") as existing_file:
                 while True:
                     if download_id in cancelled_downloads:
@@ -425,6 +446,37 @@ def download_file(
                     if not existing_chunk:
                         break
                     sha256_hasher.update(existing_chunk)
+                    verified_bytes += len(existing_chunk)
+
+                    now = time.time()
+                    dt = now - last_verify_speed_update
+                    if dt >= 0.5:
+                        db = verified_bytes - last_verified_bytes
+                        speed = db / dt if dt > 0 else 0
+                        verify_speed_history.append(speed)
+                        avg_speed = sum(verify_speed_history) / len(verify_speed_history)
+                        last_verify_speed_update = now
+                        last_verified_bytes = verified_bytes
+                        pct = int((verified_bytes / downloaded) * 100) if downloaded > 0 else 0
+                        with download_lock:
+                            if download_id in download_progress:
+                                download_progress[download_id].update({
+                                    "status": "verifying",
+                                    "progress": pct,
+                                    "downloaded": verified_bytes,
+                                    "total_size": downloaded,
+                                    "speed": int(avg_speed),
+                                })
+
+            with download_lock:
+                if download_id in download_progress:
+                    download_progress[download_id].update({
+                        "status": "downloading",
+                        "progress": int((downloaded / total_size) * 100) if total_size > 0 else 0,
+                        "downloaded": downloaded,
+                        "total_size": total_size,
+                        "speed": 0,
+                    })
 
         cancelled = False
         if is_already_complete:
