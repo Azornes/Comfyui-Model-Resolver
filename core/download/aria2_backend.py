@@ -858,6 +858,7 @@ def download_file_with_aria2(
     metadata: Optional[Dict[str, Any]] = None,
     category: str = "",
     *,
+    expected_sha256: Optional[str] = None,
     dependencies: Any = None,
 ) -> Dict[str, Any]:
     """Download a file with an aria2c JSON-RPC process."""
@@ -872,7 +873,9 @@ def download_file_with_aria2(
     }
     start_time = facade.time.time()
     filename = facade.get_filename_from_path(dest_path)
-    expected_sha256 = facade._extract_expected_sha256(metadata)
+    expected_sha256 = (
+        expected_sha256 or facade._extract_expected_sha256(metadata)
+    )
     max_url_recovery = getattr(
         facade,
         "MAX_ARIA2_URL_RECOVERY_ATTEMPTS",
@@ -1144,6 +1147,126 @@ def download_file_with_aria2(
                     if facade.os.path.exists(completed_path)
                     else downloaded
                 )
+                clean_expected = str(expected_sha256 or "").lower().strip()
+
+                if clean_expected and facade.os.path.isfile(completed_path):
+                    with facade.download_lock:
+                        if download_id in facade.download_progress:
+                            facade.download_progress[download_id].update(
+                                {
+                                    "status": "verifying",
+                                    "progress": 0,
+                                    "downloaded": 0,
+                                    "total_size": size,
+                                    "speed": 0,
+                                    "path": completed_path,
+                                    "directory": facade.os.path.dirname(completed_path),
+                                    "expected_sha256": clean_expected,
+                                }
+                            )
+                    log.info(
+                        f"aria2 transfer complete for {filename}; verifying SHA256 integrity..."
+                    )
+
+                    verify_fn = getattr(
+                        facade,
+                        "verify_download_sha256_with_progress",
+                        None,
+                    ) or verify_download_sha256_with_progress
+
+                    is_match, actual_sha256, is_cancelled = verify_fn(
+                        completed_path,
+                        clean_expected,
+                        download_id=download_id,
+                        size=size,
+                        dependencies=facade,
+                    )
+
+                    if is_cancelled or download_id in facade.cancelled_downloads:
+                        facade._delete_partial_download_files(completed_path)
+                        facade.cancelled_downloads.discard(download_id)
+                        with facade.download_lock:
+                            if download_id in facade.download_progress:
+                                facade.download_progress[download_id]["status"] = "cancelled"
+                                facade.download_progress[download_id]["speed"] = 0
+                        result["error"] = "Download cancelled"
+                        return result
+
+                    if not is_match:
+                        log.error(
+                            f"✗ SHA256 mismatch detected for {filename}! "
+                            f"Expected {clean_expected}, got {actual_sha256}"
+                        )
+                        bad_path = f"{completed_path}.badsha"
+                        try:
+                            facade.os.replace(completed_path, bad_path)
+                        except OSError as exc:
+                            log.warning(
+                                f"Could not preserve SHA256-mismatched download at {bad_path}: {exc}"
+                            )
+                            bad_path = ""
+
+                        error_msg = f"SHA256 mismatch: expected {clean_expected}, got {actual_sha256}"
+                        if bad_path:
+                            error_msg += f"; file kept at {bad_path}"
+                            sidecar_model_path = (
+                                bad_path
+                                if facade.os.path.exists(completed_path)
+                                else completed_path
+                            )
+                            try:
+                                payload = facade.build_model_resolver_metadata(
+                                    sidecar_model_path,
+                                    {"sha256": actual_sha256, "size": size},
+                                    category,
+                                )
+                                payload.update(
+                                    {
+                                        "expected_sha256": clean_expected,
+                                        "sha256_verified": False,
+                                    }
+                                )
+                                sidecar_meta_path = (
+                                    facade.get_model_resolver_sidecar_path(
+                                        sidecar_model_path
+                                    )
+                                )
+                                facade.write_json_atomic(
+                                    sidecar_meta_path, payload, indent=2
+                                )
+                            except Exception as exc:
+                                log.warning(
+                                    f"Could not save metadata for {bad_path}: {exc}"
+                                )
+
+                        with facade.download_lock:
+                            if download_id in facade.download_progress:
+                                facade.download_progress[download_id].update(
+                                    {
+                                        "status": "error",
+                                        "error": error_msg,
+                                        "speed": 0,
+                                        "sha256": actual_sha256,
+                                        "actual_sha256": actual_sha256,
+                                        "expected_sha256": clean_expected,
+                                        "sha256_verified": False,
+                                        "path": bad_path or completed_path,
+                                    }
+                                )
+
+                        result.update(
+                            {
+                                "success": False,
+                                "error": error_msg,
+                                "path": bad_path or completed_path,
+                                "size": size,
+                                "sha256": actual_sha256,
+                                "expected_sha256": clean_expected,
+                                "sha256_verified": False,
+                            }
+                        )
+                        return result
+
                 metadata_path = facade.write_model_resolver_metadata(
                     completed_path,
                     metadata or {},
@@ -1151,6 +1274,13 @@ def download_file_with_aria2(
                     url,
                     create_preview=True,
                 )
+                if metadata_path and facade.os.path.isfile(metadata_path) and clean_expected:
+                    meta = facade.read_json_safe(metadata_path, {})
+                    if isinstance(meta, dict):
+                        meta["sha256_verified"] = True
+                        meta["sha256"] = clean_expected
+                        facade.write_json_atomic(metadata_path, meta, indent=2)
+
                 with facade.download_lock:
                     facade.download_progress[download_id].update(
                         {
@@ -1161,6 +1291,9 @@ def download_file_with_aria2(
                             "speed": 0,
                             "path": completed_path,
                             "directory": facade.os.path.dirname(completed_path),
+                            "sha256_verified": True if clean_expected else None,
+                            "sha256": clean_expected or None,
+                            "expected_sha256": clean_expected or None,
                         }
                     )
                     if metadata_path:
@@ -1173,6 +1306,8 @@ def download_file_with_aria2(
                         "path": completed_path,
                         "size": size,
                         "metadata_path": metadata_path,
+                        "sha256_verified": True if clean_expected else None,
+                        "sha256": clean_expected or None,
                     }
                 )
                 guard_fn = getattr(facade, "get_connectivity_guard", None)
@@ -1186,15 +1321,6 @@ def download_file_with_aria2(
                     f"Avg speed: {facade.format_bytes(int(avg_speed))}/s"
                 )
                 facade.invalidate_model_caches()
-
-                if expected_sha256:
-                    start_background_sha256_verification(
-                        completed_path,
-                        expected_sha256,
-                        download_id=download_id,
-                        metadata_path=metadata_path,
-                        dependencies=facade,
-                    )
 
                 return result
 
@@ -1315,6 +1441,86 @@ def download_file_with_aria2(
         facade._schedule_aria2_idle_stop()
 
 
+def verify_download_sha256_with_progress(
+    completed_path: str,
+    expected_sha256: str,
+    *,
+    download_id: str = "",
+    size: int = 0,
+    dependencies: Any = None,
+) -> tuple[bool, str, bool]:
+    """Verify downloaded model SHA256 while streaming progress to download_progress.
+
+    Returns (is_match, actual_sha256, is_cancelled).
+    """
+    facade = require_download_dependencies(dependencies, "aria2 backend")
+    clean_expected = str(expected_sha256 or "").lower().strip()
+    if not clean_expected or not facade.os.path.isfile(completed_path):
+        return True, "", False
+
+    filename = facade.get_filename_from_path(completed_path)
+    file_size = (
+        size
+        or (
+            facade.os.path.getsize(completed_path)
+            if facade.os.path.isfile(completed_path)
+            else 0
+        )
+    )
+    hasher = facade.hashlib.sha256()
+
+    start_t = facade.time.time()
+    last_ui_update = start_t
+    last_cli_log = start_t
+    verified_bytes = 0
+    last_verified_bytes = 0
+
+    with open(completed_path, "rb") as file_handle:
+        while True:
+            if download_id and download_id in facade.cancelled_downloads:
+                return False, "", True
+
+            chunk = file_handle.read(4 * 1024 * 1024)
+            if not chunk:
+                break
+            hasher.update(chunk)
+            verified_bytes += len(chunk)
+
+            now = facade.time.time()
+            if now - last_ui_update >= 0.25:
+                time_delta = now - last_ui_update
+                bytes_delta = verified_bytes - last_verified_bytes
+                verify_speed = int(bytes_delta / time_delta) if time_delta > 0 else 0
+                last_ui_update = now
+                last_verified_bytes = verified_bytes
+                pct = int((verified_bytes / file_size) * 100) if file_size > 0 else 0
+
+                if download_id:
+                    with facade.download_lock:
+                        if download_id in facade.download_progress:
+                            facade.download_progress[download_id].update(
+                                {
+                                    "status": "verifying",
+                                    "progress": pct,
+                                    "downloaded": verified_bytes,
+                                    "total_size": file_size,
+                                    "speed": verify_speed,
+                                }
+                            )
+
+            if now - last_cli_log >= facade.CLI_LOG_INTERVAL:
+                last_cli_log = now
+                pct = int((verified_bytes / file_size) * 100) if file_size > 0 else 0
+                log.info(
+                    f"Verifying SHA256 for {filename}: "
+                    f"{facade.format_bytes(verified_bytes)} / {facade.format_bytes(file_size)} "
+                    f"({pct}%)"
+                )
+
+    actual_sha256 = hasher.hexdigest().lower()
+    return (actual_sha256 == clean_expected), actual_sha256, False
+
+
 def start_background_sha256_verification(
     completed_path: str,
     expected_sha256: str,
@@ -1333,26 +1539,29 @@ def start_background_sha256_verification(
         filename = facade.get_filename_from_path(completed_path)
         log.debug(f"Starting background SHA256 verification for {filename}...")
         try:
-            hasher = facade.hashlib.sha256()
-            with open(completed_path, "rb") as file_handle:
-                while True:
-                    chunk = file_handle.read(4 * 1024 * 1024)
-                    if not chunk:
-                        break
-                    hasher.update(chunk)
-            actual_sha256 = hasher.hexdigest().lower()
+            is_match, actual_sha256, is_cancelled = verify_download_sha256_with_progress(
+                completed_path,
+                expected_sha256,
+                download_id=download_id,
+                dependencies=facade,
+            )
+            if is_cancelled:
+                return
 
-            if actual_sha256 == clean_expected:
+            target_meta_path = (
+                metadata_path
+                or facade.get_model_resolver_sidecar_path(completed_path)
+            )
+            if is_match:
                 log.info(f"✓ Background SHA256 verified for: {filename}")
                 if download_id:
                     with facade.download_lock:
                         if download_id in facade.download_progress:
+                            facade.download_progress[download_id]["status"] = "completed"
+                            facade.download_progress[download_id]["progress"] = 100
+                            facade.download_progress[download_id]["speed"] = 0
                             facade.download_progress[download_id]["sha256_verified"] = True
                             facade.download_progress[download_id]["sha256"] = actual_sha256
-                target_meta_path = (
-                    metadata_path
-                    or facade.get_model_resolver_sidecar_path(completed_path)
-                )
                 if target_meta_path and facade.os.path.isfile(target_meta_path):
                     meta = facade.read_json_safe(target_meta_path, {})
                     if isinstance(meta, dict):
@@ -1364,18 +1573,21 @@ def start_background_sha256_verification(
                     f"✗ SHA256 mismatch detected for {filename}! "
                     f"Expected {clean_expected}, got {actual_sha256}"
                 )
+                bad_path = f"{completed_path}.badsha"
+                try:
+                    facade.os.replace(completed_path, bad_path)
+                except OSError:
+                    bad_path = ""
+                error_msg = f"SHA256 mismatch: expected {clean_expected}, got {actual_sha256}"
+                if bad_path:
+                    error_msg += f"; file kept at {bad_path}"
                 if download_id:
                     with facade.download_lock:
                         if download_id in facade.download_progress:
+                            facade.download_progress[download_id]["status"] = "error"
                             facade.download_progress[download_id]["sha256_verified"] = False
                             facade.download_progress[download_id]["actual_sha256"] = actual_sha256
-                            facade.download_progress[download_id]["error"] = (
-                                f"SHA256 mismatch: expected {clean_expected}, got {actual_sha256}"
-                            )
-                target_meta_path = (
-                    metadata_path
-                    or facade.get_model_resolver_sidecar_path(completed_path)
-                )
+                            facade.download_progress[download_id]["error"] = error_msg
                 if target_meta_path and facade.os.path.isfile(target_meta_path):
                     meta = facade.read_json_safe(target_meta_path, {})
                     if isinstance(meta, dict):

@@ -1291,9 +1291,11 @@ export const resolveDownloadMethods = {
                 : '';
             const label = displayProgress.isFinalizing
                 ? 'Finalizing download...'
-                : (status === 'paused'
-                    ? `Paused ${percentLabel}`.trim()
-                    : (percentLabel ? `Downloading ${percentLabel}` : 'Starting download...'));
+                : (status === 'verifying'
+                    ? (percentLabel ? `Verifying SHA ${percentLabel}` : 'Verifying SHA-256...')
+                    : (status === 'paused'
+                        ? `Paused ${percentLabel}`.trim()
+                        : (percentLabel ? `Downloading ${percentLabel}` : 'Starting download...')));
             if (downloadBtn.classList.contains('search-download-btn')) {
                 this.ensureSearchDownloadButtonIcon(downloadBtn);
                 downloadBtn.setAttribute('data-tooltip', label);
@@ -1301,9 +1303,11 @@ export const resolveDownloadMethods = {
             } else {
                 downloadBtn.textContent = displayProgress.isFinalizing
                     ? 'Finalizing...'
-                    : (status === 'paused'
-                        ? 'Paused'
-                        : (Number.isFinite(percent) && percent > 0 ? `${Math.round(percent)}%` : 'Starting...'));
+                    : (status === 'verifying'
+                        ? (Number.isFinite(percent) && percent > 0 ? `SHA ${Math.round(percent)}%` : 'Verifying...')
+                        : (status === 'paused'
+                            ? 'Paused'
+                            : (Number.isFinite(percent) && percent > 0 ? `${Math.round(percent)}%` : 'Starting...')));
             }
         } else if (status === 'cancelling') {
             downloadBtn.disabled = true;
@@ -2210,7 +2214,7 @@ export const resolveDownloadMethods = {
             const { missing, category } = info;
             const downloadFolderContext = this.getDownloadFolderContext(progress, info);
 
-            if (progress.status === 'downloading' || progress.status === 'starting' || progress.status === 'paused') {
+            if (progress.status === 'downloading' || progress.status === 'starting' || progress.status === 'paused' || progress.status === 'verifying') {
                 this.renderDownloadSnapshot(downloadId, snapshot, { progressDiv, downloadBtn });
                 if (typeof this.requestQueuePanelUpdate === 'function') {
                     this.requestQueuePanelUpdate();
@@ -2282,6 +2286,7 @@ export const resolveDownloadMethods = {
                 this.updateDownloadAllButtonState();
                 this.updateQueuePanel?.();
                 this.refreshLocalMatchesUiForMissing?.(missing);
+                this.showNotification(progress.error || 'Download failed', 'error');
 
             } else if (progress.status === 'cancelled') {
                 this.finalizeCancelledDownloadFrontend?.(downloadId, info, progress);

@@ -605,6 +605,139 @@ class DownloaderBoundaryTests(unittest.TestCase):
             self.assertEqual(result["error"], "Download cancelled")
             self.assertEqual(mock_rpc.call_count, 0)
 
+    def test_aria2_download_sha256_verification_success(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dest_path = os.path.join(temp_dir, "model_verified.safetensors")
+            content = b"valid model file content for aria2 verification"
+            with open(dest_path, "wb") as f:
+                f.write(content)
+
+            expected_sha = hashlib.sha256(content).hexdigest()
+            download_id = "test-aria2-verify-success"
+
+            mock_resolve = MagicMock(return_value=("https://example.com/model.safetensors", {}))
+            mock_rpc = MagicMock(return_value="gid-verify-1")
+            mock_status = MagicMock(return_value={
+                "status": "complete",
+                "completedLength": str(len(content)),
+                "totalLength": str(len(content)),
+            })
+
+            with patch.object(downloader, "_ensure_aria2_daemon"), \
+                 patch.object(downloader, "_resolve_download_url_for_aria2", mock_resolve), \
+                 patch.object(downloader, "_aria2_rpc", mock_rpc), \
+                 patch.object(downloader, "_aria2_tell_status", mock_status), \
+                 patch.object(downloader, "write_model_resolver_metadata", return_value=""), \
+                 patch.object(downloader, "_schedule_aria2_idle_stop"), \
+                 patch.object(downloader, "invalidate_model_caches"):
+
+                result = download_file_with_aria2(
+                    "https://example.com/model.safetensors",
+                    dest_path,
+                    download_id,
+                    expected_sha256=expected_sha,
+                    dependencies=downloader,
+                )
+
+            self.assertTrue(result["success"])
+            self.assertEqual(dest_path, result["path"])
+            self.assertTrue(os.path.isfile(dest_path))
+            with downloader.download_lock:
+                progress = downloader.download_progress.get(download_id, {})
+                self.assertEqual("completed", progress.get("status"))
+                self.assertTrue(progress.get("sha256_verified"))
+                self.assertEqual(expected_sha, progress.get("sha256"))
+
+    def test_aria2_download_sha256_verification_mismatch(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dest_path = os.path.join(temp_dir, "model_corrupt.safetensors")
+            content = b"corrupted model file content"
+            with open(dest_path, "wb") as f:
+                f.write(content)
+
+            expected_sha = "f" * 64
+            download_id = "test-aria2-verify-mismatch"
+
+            mock_resolve = MagicMock(return_value=("https://example.com/model.safetensors", {}))
+            mock_rpc = MagicMock(return_value="gid-verify-2")
+            mock_status = MagicMock(return_value={
+                "status": "complete",
+                "completedLength": str(len(content)),
+                "totalLength": str(len(content)),
+            })
+
+            with patch.object(downloader, "_ensure_aria2_daemon"), \
+                 patch.object(downloader, "_resolve_download_url_for_aria2", mock_resolve), \
+                 patch.object(downloader, "_aria2_rpc", mock_rpc), \
+                 patch.object(downloader, "_aria2_tell_status", mock_status), \
+                 patch.object(downloader, "write_model_resolver_metadata", return_value=""), \
+                 patch.object(downloader, "_schedule_aria2_idle_stop"), \
+                 patch.object(downloader, "invalidate_model_caches"):
+
+                result = download_file_with_aria2(
+                    "https://example.com/model.safetensors",
+                    dest_path,
+                    download_id,
+                    expected_sha256=expected_sha,
+                    dependencies=downloader,
+                )
+
+            self.assertFalse(result["success"])
+            self.assertIn("sha256 mismatch", result["error"].lower())
+            self.assertFalse(os.path.exists(dest_path))
+            bad_path = f"{dest_path}.badsha"
+            self.assertTrue(os.path.isfile(bad_path))
+
+            with downloader.download_lock:
+                progress = downloader.download_progress.get(download_id, {})
+                self.assertEqual("error", progress.get("status"))
+                self.assertFalse(progress.get("sha256_verified"))
+                self.assertIn("mismatch", progress.get("error", "").lower())
+
+    def test_aria2_download_sha256_verification_cancelled(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dest_path = os.path.join(temp_dir, "model_cancelled.safetensors")
+            content = b"content being verified"
+            with open(dest_path, "wb") as f:
+                f.write(content)
+
+            download_id = "test-aria2-verify-cancel"
+            mock_resolve = MagicMock(return_value=("https://example.com/model.safetensors", {}))
+            mock_rpc = MagicMock(return_value="gid-verify-3")
+            mock_status = MagicMock(return_value={
+                "status": "complete",
+                "completedLength": str(len(content)),
+                "totalLength": str(len(content)),
+            })
+
+            def mock_verify(*args, **kwargs):
+                return False, "", True
+
+            with patch.object(downloader, "_ensure_aria2_daemon"), \
+                 patch.object(downloader, "_resolve_download_url_for_aria2", mock_resolve), \
+                 patch.object(downloader, "_aria2_rpc", mock_rpc), \
+                 patch.object(downloader, "_aria2_tell_status", mock_status), \
+                 patch.object(downloader, "verify_download_sha256_with_progress", mock_verify), \
+                 patch.object(downloader, "write_model_resolver_metadata", return_value=""), \
+                 patch.object(downloader, "_schedule_aria2_idle_stop"), \
+                 patch.object(downloader, "invalidate_model_caches"):
+
+                result = download_file_with_aria2(
+                    "https://example.com/model.safetensors",
+                    dest_path,
+                    download_id,
+                    expected_sha256="expected_sha",
+                    dependencies=downloader,
+                )
+
+            self.assertFalse(result["success"])
+            self.assertEqual("Download cancelled", result["error"])
+            self.assertFalse(os.path.exists(dest_path))
+            with downloader.download_lock:
+                progress = downloader.download_progress.get(download_id, {})
+                self.assertEqual("cancelled", progress.get("status"))
+
     def test_parse_retry_after(self):
         self.assertEqual(parse_retry_after("120"), 120)
         self.assertEqual(parse_retry_after("0"), 1)

@@ -1231,13 +1231,28 @@ export const queueMethods = {
             const backend = String(progress.download_backend || info.downloadBackend || '').toLowerCase();
             const isAria2 = backend === 'aria2';
             const isPaused = status === 'paused';
+            const isVerifying = status === 'verifying';
             const isError = status === 'error' || status === 'refresh_error';
+            const errorMessage = progress.error || info.statusSnapshot?.message || '';
+            const isShaMismatch = isError && String(errorMessage).toLowerCase().includes('sha256');
             const statusLabel = status === 'downloading'
                 ? (presentation.isFinalizing ? 'Finalizing' : '')
-                : (status === 'starting' ? 'Starting' : (isPaused ? 'Paused' : (isError ? 'Interrupted' : status.replace(/_/g, ' '))));
-            const sizeTextBase = presentation.isFinalizing && logicalTotal
-                ? `Finalizing file: ${logicalDownloaded} / ${logicalTotal}`
-                : (presentation.totalSize ? `${downloaded} / ${total}` : downloaded);
+                : (isVerifying
+                    ? 'Verifying SHA-256'
+                    : (status === 'starting'
+                        ? 'Starting'
+                        : (isPaused
+                            ? 'Paused'
+                            : (isShaMismatch
+                                ? 'SHA-256 mismatch'
+                                : (isError
+                                    ? 'Interrupted'
+                                    : status.replace(/_/g, ' '))))));
+            const sizeTextBase = isVerifying
+                ? `Verifying integrity: ${downloaded} / ${total}`
+                : (presentation.isFinalizing && logicalTotal
+                    ? `Finalizing file: ${logicalDownloaded} / ${logicalTotal}`
+                    : (presentation.totalSize ? `${downloaded} / ${total}` : downloaded));
             const sizeText = presentation.totalSize ? `${sizeTextBase} (${percentLabel}%)` : sizeTextBase;
             const speed = Number(progress.speed) || 0;
             const speedText = speed > 0 ? `${this.formatBytes(speed)}/s` : '';
@@ -1268,9 +1283,11 @@ export const queueMethods = {
             html += `<div class="mr-download-queue-heading">`;
             html += `<span class="mr-download-queue-filename" data-tooltip="${this.escapeHtml(filename)}">${this.escapeHtml(filename)}</span>`;
             if (statusLabel) {
-                const errorMessage = progress.error || info.statusSnapshot?.message || '';
                 const errorTooltip = isError && errorMessage ? ` data-tooltip="${this.escapeHtml(errorMessage)}"` : '';
-                html += `<span class="mr-download-queue-status${isError ? ' mr-download-queue-status-error' : ''}"${errorTooltip}>${this.escapeHtml(statusLabel)}</span>`;
+                const statusClass = isError
+                    ? ' mr-download-queue-status-error'
+                    : (isVerifying ? ' mr-download-queue-status-verifying' : '');
+                html += `<span class="mr-download-queue-status${statusClass}"${errorTooltip}>${this.escapeHtml(statusLabel)}</span>`;
             }
             html += `</div>`;
             html += `<div class="mr-download-queue-actions" role="group" aria-label="Download actions">`;
@@ -1281,7 +1298,7 @@ export const queueMethods = {
                     isPaused ? 'mr-download-queue-resume' : 'mr-download-queue-pause',
                     isPaused ? 'Resume download' : 'Pause download',
                     isPaused ? 'play' : 'pause',
-                    !isAria2
+                    !isAria2 || isVerifying
                 );
             }
             html += actionButton('mr-download-queue-cancel', 'Cancel download', 'x');
@@ -1293,12 +1310,14 @@ export const queueMethods = {
             html += `</div>`;
             html += `</div>`;
             html += `<div class="mr-download-queue-progress">`;
-            html += `<div class="mr-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}" aria-label="Download progress"><div class="mr-progress-fill${isError ? ' mr-progress-fill-error' : ''}" style="width: ${percent}%;"></div></div>`;
+            html += `<div class="mr-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}" aria-label="Download progress"><div class="mr-progress-fill${isError ? ' mr-progress-fill-error' : (isVerifying ? ' mr-progress-fill-verifying' : '')}" style="width: ${percent}%;"></div></div>`;
             html += `<div class="mr-download-queue-stats">`;
             html += `<span class="mr-download-queue-size">${this.escapeHtml(sizeText)}</span>`;
             html += `<span class="mr-download-queue-stat-group">`;
             if (speedText && !isError) {
-                html += `<span class="mr-download-queue-stat">${renderIcon('download', 'mr-download-queue-stat-icon')}<span>${this.escapeHtml(speedText)}</span></span>`;
+                const speedIcon = isVerifying ? 'hash' : 'download';
+                const speedTooltip = isVerifying ? 'Hashing speed' : 'Download speed';
+                html += `<span class="mr-download-queue-stat" data-tooltip="${speedTooltip}">${renderIcon(speedIcon, 'mr-download-queue-stat-icon')}<span>${this.escapeHtml(speedText)}</span></span>`;
             }
             if (etaText && !isError) {
                 html += `<span class="mr-download-queue-stat"><span>${this.escapeHtml(etaText)}</span></span>`;

@@ -230,6 +230,12 @@ context._run_huggingface_xet_transfer = _bind(
 )
 
 context.download_file_with_aria2 = _bind(aria2_backend.download_file_with_aria2)
+context.verify_download_sha256_with_progress = _bind(
+    aria2_backend.verify_download_sha256_with_progress
+)
+context._verify_download_sha256_with_progress = (
+    context.verify_download_sha256_with_progress
+)
 context.start_background_sha256_verification = _bind(
     aria2_backend.start_background_sha256_verification
 )

@@ -784,6 +784,17 @@
     box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
 }
 
+.mr-download-queue-status.mr-download-queue-status-verifying {
+    color: var(--mr-color-code-blue, #38bdf8);
+    background: rgba(56, 189, 248, 0.16);
+    border-color: rgba(56, 189, 248, 0.34);
+}
+
+.mr-download-queue-progress .mr-progress-fill.mr-progress-fill-verifying {
+    background: var(--mr-color-code-blue, #38bdf8);
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+}
+
 .mr-download-queue-stat.mr-download-queue-stat-error {
     max-width: 220px;
     overflow: hidden;
