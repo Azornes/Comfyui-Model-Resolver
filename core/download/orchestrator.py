@@ -680,6 +680,8 @@ def download_file(
                     download_progress[download_id]["status"] = "error"
                     download_progress[download_id]["error"] = error_msg
                     download_progress[download_id]["sha256_verified"] = False
+                    if bad_path:
+                        download_progress[download_id]["bad_path"] = bad_path
                 result.update(
                     {
                         "error": error_msg,

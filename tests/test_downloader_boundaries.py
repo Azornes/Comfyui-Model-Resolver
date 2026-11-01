@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, call, patch
 
 from core.download.api import context as downloader
 from core.download.aria2_backend import (
+    delete_badsha_download,
     download_file_with_aria2,
     drain_aria2_stderr,
     is_aria2_important_stderr,
@@ -737,6 +738,49 @@ class DownloaderBoundaryTests(unittest.TestCase):
             with downloader.download_lock:
                 progress = downloader.download_progress.get(download_id, {})
                 self.assertEqual("cancelled", progress.get("status"))
+
+    def test_delete_badsha_download_removes_badsha_file_and_sidecar(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            bad_path = os.path.join(temp_dir, "test_corrupt.safetensors.badsha")
+            with open(bad_path, "wb") as f:
+                f.write(b"corrupt data")
+            
+            aria2_path = f"{bad_path}.aria2"
+            with open(aria2_path, "wb") as f:
+                f.write(b"aria2 state")
+
+            bad_sidecar = f"{bad_path}.modelresolver.json"
+            downloader.write_json_atomic(bad_sidecar, {"sha256_verified": False})
+
+            orig_sidecar = os.path.join(temp_dir, "test_corrupt.safetensors.modelresolver.json")
+            downloader.write_json_atomic(orig_sidecar, {"sha256_verified": False})
+
+            download_id = "test-delete-badsha-1"
+            with downloader.download_lock:
+                downloader.download_progress[download_id] = {
+                    "status": "error",
+                    "bad_path": bad_path,
+                }
+
+            result = delete_badsha_download(download_id=download_id, dependencies=downloader)
+            self.assertTrue(result["success"])
+            self.assertFalse(os.path.exists(bad_path))
+            self.assertFalse(os.path.exists(aria2_path))
+            self.assertFalse(os.path.exists(bad_sidecar))
+            self.assertFalse(os.path.exists(orig_sidecar))
+            with downloader.download_lock:
+                self.assertNotIn(download_id, downloader.download_progress)
+
+    def test_delete_badsha_download_rejects_non_badsha_file(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            safe_model = os.path.join(temp_dir, "safe_model.safetensors")
+            with open(safe_model, "wb") as f:
+                f.write(b"safe model data")
+
+            result = delete_badsha_download(path=safe_model, dependencies=downloader)
+            self.assertFalse(result["success"])
+            self.assertIn("only files ending with .badsha", result["error"].lower())
+            self.assertTrue(os.path.exists(safe_model))
 
     def test_parse_retry_after(self):
         self.assertEqual(parse_retry_after("120"), 120)

@@ -392,9 +392,19 @@ export const resolveDownloadMethods = {
 
     renderDownloadStatusMessage(message, type, progress = {}, info = {}) {
         const contextMenuModel = this.getDownloadFolderContext(progress, info);
+        const errorMessage = String(progress.error || info.statusSnapshot?.message || message || '').toLowerCase();
+        const hasBadsha = Boolean(progress.bad_path || errorMessage.includes('sha256') || errorMessage.includes('.badsha'));
+        const downloadId = info.downloadId || progress.download_id || '';
+        let extraHtml = '';
+        if (type === 'error' && hasBadsha && downloadId) {
+            const safeDownloadId = this.escapeHtml(downloadId);
+            const deleteLabel = 'Delete corrupted (.badsha) file';
+            extraHtml = `<button type="button" class="mr-download-queue-action mr-delete-badsha-btn mr-download-queue-delete-badsha" data-download-id="${safeDownloadId}" data-tooltip="${deleteLabel}" aria-label="${deleteLabel}">${getSvgIcon('trash2', 'currentColor', 'mr-download-queue-action-icon')}</button>`;
+        }
         return this.renderStatusMessage(message, type, {
             contextMenuModel,
-            contextMenuTooltip: 'Right-click to open download folder'
+            contextMenuTooltip: 'Right-click to open download folder',
+            extraHtml,
         });
     },
 
@@ -1112,6 +1122,47 @@ export const resolveDownloadMethods = {
         return { progressDiv, downloadBtn };
     },
 
+        async deleteBadDownload(downloadId) {
+        if (!downloadId) return;
+        const info = this.activeDownloads?.[downloadId];
+        const badPath = info?.lastProgress?.bad_path || info?.statusSnapshot?.progress?.bad_path || '';
+        try {
+            const res = await this.fetchJson(
+                `/model_resolver/delete_bad_download/${encodeURIComponent(downloadId)}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: badPath })
+                },
+                'Delete corrupted download'
+            );
+            if (res && res.success) {
+                this.showNotification('Corrupted (.badsha) file deleted', 'info');
+                delete this.activeDownloads?.[downloadId];
+                this.removeActiveDownloadRecovery?.(downloadId);
+                this.updateDownloadAllButtonState?.();
+                this.updateQueuePanel?.();
+                if (info?.missing) {
+                    const elements = this.resolveDownloadUiElements(info);
+                    if (elements.progressDiv) {
+                        elements.progressDiv.classList.add('mr-is-hidden');
+                        elements.progressDiv.classList.remove('mr-is-visible');
+                        elements.progressDiv.innerHTML = '';
+                    }
+                    if (elements.downloadBtn) {
+                        this.restoreDownloadButtonReadyState(elements.downloadBtn);
+                    }
+                    this.refreshLocalMatchesUiForMissing?.(info.missing);
+                }
+            } else {
+                this.showNotification(res?.error || 'Failed to delete corrupted file', 'error');
+            }
+        } catch (err) {
+            console.error('Model Resolver: Failed to delete corrupted download:', err);
+            this.showNotification('Failed to delete corrupted file: ' + err.message, 'error');
+        }
+    },
+
     attachDownloadActionHandlers(progressDiv, downloadId) {
         if (!progressDiv) return;
         const getDownloadContext = (button) => {
@@ -1133,6 +1184,7 @@ export const resolveDownloadMethods = {
                 pause: '.pause-download-btn, .mr-download-queue-pause',
                 resume: '.resume-download-btn, .mr-download-queue-resume',
                 retry: '.retry-download-btn, .mr-download-queue-retry',
+                deleteBadsha: '.mr-download-queue-delete-badsha, .mr-delete-badsha-btn',
                 openFolder: '.mr-download-queue-open-folder',
                 switchWorkflow: '.mr-download-queue-switch-workflow',
                 more: '.mr-download-queue-more',
@@ -1142,6 +1194,7 @@ export const resolveDownloadMethods = {
             onPause: targetDownloadId => this.pauseDownload(targetDownloadId),
             onResume: targetDownloadId => this.resumeDownload(targetDownloadId),
             onRetry: targetDownloadId => this.retryDownload?.(targetDownloadId),
+            onDeleteBadsha: targetDownloadId => this.deleteBadDownload?.(targetDownloadId),
             onOpenFolder: context => this.openContainingFolder?.(context),
             onSwitchWorkflow: context => this.switchToDownloadWorkflow?.(context),
             onMore: (event, button) => {

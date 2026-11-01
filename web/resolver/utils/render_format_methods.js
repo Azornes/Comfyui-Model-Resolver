@@ -141,11 +141,13 @@ export const renderFormatMethods = {
         const className = contextMenuAttrs
             ? `mr-status mr-status-${type} mr-download-folder-context`
             : `mr-status mr-status-${type}`;
+        const extraHtml = options?.extraHtml ? `<span class="mr-status-extra">${options.extraHtml}</span>` : '';
 
         return `
             <div class="${className}"${contextMenuAttrs}>
                 <span class="mr-status-icon">${icon}</span>
-                <span>${message}</span>
+                <span class="mr-status-text">${message}</span>
+                ${extraHtml}
             </div>
         `;
     },

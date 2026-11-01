@@ -60,6 +60,22 @@ def register_download_routes(context: RouteContext):
     )
     register_service_route(
         context,
+        path="/model_resolver/delete_bad_download/{download_id}",
+        methods=("post",),
+        error_prefix="delete bad download",
+        operation=service.delete_bad_download,
+        return_success_on_error=True,
+    )
+    register_service_route(
+        context,
+        path="/model_resolver/delete_bad_download",
+        methods=("post",),
+        error_prefix="delete bad download",
+        operation=service.delete_bad_download,
+        return_success_on_error=True,
+    )
+    register_service_route(
+        context,
         path="/model_resolver/aria2/status",
         methods=("get", "post"),
         error_prefix="aria2 status",

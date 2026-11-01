@@ -155,6 +155,7 @@ def register_routes(self):
             from ..download.api import (
                 cancel_download,
                 clear_completed_downloads,
+                delete_badsha_download,
                 get_all_progress,
                 get_aria2_status,
                 get_download_directory,

@@ -301,6 +301,102 @@ def delete_xet_partial_file(
     )
 
 
+def delete_badsha_download(
+    download_id: str = "",
+    path: Optional[str] = None,
+    *,
+    dependencies: Any = None,
+) -> Dict[str, Any]:
+    """Delete a corrupted download with .badsha suffix and its associated metadata."""
+    facade = require_download_dependencies(dependencies, "aria2 backend")
+    target_bad_path = ""
+
+    if download_id:
+        with facade.download_lock:
+            progress = facade.download_progress.get(download_id, {})
+            target_bad_path = progress.get("bad_path") or ""
+            if not target_bad_path:
+                candidate = progress.get("path") or ""
+                if candidate.lower().endswith(".badsha"):
+                    target_bad_path = candidate
+                elif candidate and facade.os.path.isfile(f"{candidate}.badsha"):
+                    target_bad_path = f"{candidate}.badsha"
+
+    if not target_bad_path and path:
+        target_bad_path = str(path).strip()
+
+    if not target_bad_path:
+        return {"success": False, "error": "No .badsha file path found"}
+
+    normalized = facade.os.path.normpath(target_bad_path)
+    if not normalized.lower().endswith(".badsha"):
+        return {
+            "success": False,
+            "error": "Only files ending with .badsha can be deleted through this operation",
+        }
+
+    check_roots = getattr(facade, "is_path_in_configured_model_roots", None)
+    if callable(check_roots):
+        in_model_roots = check_roots(normalized)
+        if not in_model_roots:
+            import tempfile
+            temp_dir = facade.os.path.normpath(tempfile.gettempdir()).lower()
+            if not normalized.lower().startswith(temp_dir):
+                return {
+                    "success": False,
+                    "error": "Access denied: file is outside configured model directories",
+                }
+
+    removed_files = []
+    candidates = [
+        normalized,
+        f"{normalized}.aria2",
+        f"{normalized}.modelresolver.json",
+    ]
+    if normalized.lower().endswith(".badsha"):
+        original_base = normalized[:-7]
+        sidecar_orig = facade.get_model_resolver_sidecar_path(original_base)
+        if sidecar_orig and facade.os.path.isfile(sidecar_orig):
+            meta = facade.read_json_safe(sidecar_orig, {})
+            if isinstance(meta, dict) and meta.get("sha256_verified") is False:
+                candidates.append(sidecar_orig)
+
+    for p in candidates:
+        if facade.os.path.isfile(p):
+            try:
+                facade.os.remove(p)
+                removed_files.append(p)
+                log.info(f"Deleted corrupted download artifact: {p}")
+            except OSError as exc:
+                log.warning(f"Could not remove {p}: {exc}")
+
+    if download_id:
+        with facade.download_lock:
+            if download_id in facade.download_progress:
+                facade.download_progress.pop(download_id, None)
+            facade.cancelled_downloads.discard(download_id)
+
+    remove_persisted = getattr(facade, "remove_persisted_download", None)
+    if callable(remove_persisted) and download_id:
+        try:
+            remove_persisted(download_id)
+        except Exception:
+            pass
+
+    invalidate_fn = getattr(facade, "invalidate_model_caches", None)
+    if callable(invalidate_fn):
+        try:
+            invalidate_fn()
+        except Exception:
+            pass
+
+    return {
+        "success": True,
+        "removed_files": removed_files,
+        "path": normalized,
+    }
+
+
 def aria2_action_error_is_ok(status: str, message: str) -> bool:
     """Recognize idempotent aria2 pause/resume errors."""
     lowered = str(message or "").lower()

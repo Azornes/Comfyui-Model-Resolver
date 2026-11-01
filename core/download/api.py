@@ -230,6 +230,7 @@ context._run_huggingface_xet_transfer = _bind(
 )
 
 context.download_file_with_aria2 = _bind(aria2_backend.download_file_with_aria2)
+context.delete_badsha_download = _bind(aria2_backend.delete_badsha_download)
 context.verify_download_sha256_with_progress = _bind(
     aria2_backend.verify_download_sha256_with_progress
 )
@@ -355,10 +356,19 @@ def clear_completed_downloads():
     return state.clear_completed_downloads(_state_dependencies())
 
 
+def delete_badsha_download(download_id: str = "", path: Optional[str] = None) -> Dict[str, Any]:
+    return aria2_backend.delete_badsha_download(
+        download_id=download_id,
+        path=path,
+        dependencies=context,
+    )
+
+
 context.get_progress = get_progress
 context.get_all_progress = get_all_progress
 context.cancel_download = cancel_download
 context.clear_completed_downloads = clear_completed_downloads
+context.delete_badsha_download = delete_badsha_download
 
 
 class _BoundHuggingFaceXetProgressAdapter(
@@ -409,6 +419,7 @@ get_existing_model_preview_path = context.get_existing_model_preview_path
 __all__ = [
     "cancel_download",
     "clear_completed_downloads",
+    "delete_badsha_download",
     "download_file",
     "download_model",
     "get_all_progress",

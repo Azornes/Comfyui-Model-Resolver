@@ -26,6 +26,7 @@ class DownloadService:
         self.clear_completed_downloads_fn = context.require(
             "clear_completed_downloads"
         )
+        self.delete_badsha_download_fn = context.require("delete_badsha_download")
         self.get_all_progress_fn = context.require("get_all_progress")
         self.get_aria2_status_fn = context.require("get_aria2_status")
         self.get_civarchive_model_details = context.require(
@@ -381,6 +382,20 @@ class DownloadService:
         """Clear completed and failed downloads from progress memory."""
         self.clear_completed_downloads_fn()
         return self.web.json_response({"success": True})
+
+    async def delete_bad_download(self, request):
+        """Delete a corrupted (.badsha) download file and its metadata."""
+        download_id = request.match_info.get("download_id") or ""
+        path = None
+        if request.can_read_body:
+            try:
+                data = await request.json()
+                if isinstance(data, dict):
+                    path = data.get("path") or data.get("bad_path")
+            except Exception:
+                pass
+        result = self.delete_badsha_download_fn(download_id=download_id, path=path)
+        return self._json_result_with_success_status(result)
 
     async def aria2_status(self, request):
         """Report aria2 availability using optional request settings."""

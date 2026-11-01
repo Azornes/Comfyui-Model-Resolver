@@ -979,6 +979,20 @@
     color: var(--mr-color-danger-bright);
 }
 
+#model-resolver-modal .mr-download-queue-delete-badsha {
+    color: var(--mr-color-danger-bright, #ff4d4f);
+}
+
+#model-resolver-modal .mr-download-queue-delete-badsha:hover {
+    color: #ff7875;
+    background: rgba(239, 68, 68, 0.16);
+}
+
+.mr-status .mr-delete-badsha-btn {
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
 .mr-download-queue-progress {
     gap: var(--mr-spacing-8);
     margin-top: var(--mr-spacing-3);

@@ -1161,6 +1161,7 @@ export const queueMethods = {
                 pause: '.mr-download-queue-pause',
                 resume: '.mr-download-queue-resume',
                 retry: '.mr-download-queue-retry',
+                deleteBadsha: '.mr-download-queue-delete-badsha',
                 openFolder: '.mr-download-queue-open-folder',
                 switchWorkflow: '.mr-download-queue-switch-workflow',
                 more: '.mr-download-queue-more',
@@ -1171,6 +1172,7 @@ export const queueMethods = {
             onPause: downloadId => this.pauseDownload(downloadId),
             onResume: downloadId => this.resumeDownload(downloadId),
             onRetry: downloadId => this.retryDownload?.(downloadId),
+            onDeleteBadsha: downloadId => this.deleteBadDownload?.(downloadId),
             onOpenFolder: context => this.openContainingFolder?.(context),
             onSwitchWorkflow: context => this.switchToDownloadWorkflow?.(context),
             moreBinding: 'click',
@@ -1293,6 +1295,9 @@ export const queueMethods = {
             html += `<div class="mr-download-queue-actions" role="group" aria-label="Download actions">`;
             if (isError) {
                 html += actionButton('mr-download-queue-retry', 'Retry download', 'play');
+                if (isShaMismatch || Boolean(progress.bad_path)) {
+                    html += actionButton('mr-download-queue-delete-badsha', 'Delete corrupted (.badsha) file', 'trash2');
+                }
             } else {
                 html += actionButton(
                     isPaused ? 'mr-download-queue-resume' : 'mr-download-queue-pause',
