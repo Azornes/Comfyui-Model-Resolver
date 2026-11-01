@@ -782,6 +782,22 @@ class DownloaderBoundaryTests(unittest.TestCase):
             self.assertIn("only files ending with .badsha", result["error"].lower())
             self.assertTrue(os.path.exists(safe_model))
 
+    def test_delete_badsha_download_idempotent_when_already_cleared(self):
+        result = delete_badsha_download(download_id="already-removed-id", dependencies=downloader)
+        self.assertTrue(result["success"])
+        self.assertTrue(result.get("already_removed"))
+
+    def test_delete_badsha_download_finds_badsha_from_base_path(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base_model = os.path.join(temp_dir, "base_model.safetensors")
+            badsha_file = f"{base_model}.badsha"
+            with open(badsha_file, "wb") as f:
+                f.write(b"corrupt payload")
+
+            result = delete_badsha_download(path=base_model, dependencies=downloader)
+            self.assertTrue(result["success"])
+            self.assertFalse(os.path.exists(badsha_file))
+
     def test_parse_retry_after(self):
         self.assertEqual(parse_retry_after("120"), 120)
         self.assertEqual(parse_retry_after("0"), 1)

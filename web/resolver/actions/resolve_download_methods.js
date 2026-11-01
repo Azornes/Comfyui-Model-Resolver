@@ -504,6 +504,21 @@ export const resolveDownloadMethods = {
         return next;
     },
 
+    clearDownloadSnapshot(downloadId, missing = null) {
+        const store = this.getDownloadProgressStore?.();
+        if (store instanceof Map) {
+            const missingKey = missing ? this.getDownloadStateKey(missing) : null;
+            for (const [key, snap] of Array.from(store.entries())) {
+                if (
+                    (downloadId && String(snap?.downloadId || '') === String(downloadId))
+                    || (missingKey && key === missingKey)
+                ) {
+                    store.delete(key);
+                }
+            }
+        }
+    },
+
     cloneLocalMatches(matches = []) {
         if (!Array.isArray(matches)) return [];
         try {
@@ -1122,12 +1137,32 @@ export const resolveDownloadMethods = {
         return { progressDiv, downloadBtn };
     },
 
-        async deleteBadDownload(downloadId) {
+    async deleteBadDownload(downloadId) {
         if (!downloadId) return;
-        const info = this.activeDownloads?.[downloadId];
-        const badPath = info?.lastProgress?.bad_path || info?.statusSnapshot?.progress?.bad_path || '';
+        const activeInfo = this.activeDownloads?.[downloadId];
+        let snapshotInfo = null;
+        const store = this.getDownloadProgressStore?.();
+        if (store instanceof Map) {
+            for (const [, snap] of store.entries()) {
+                if (String(snap?.downloadId || '') === String(downloadId)) {
+                    snapshotInfo = snap;
+                    break;
+                }
+            }
+        }
+        const info = activeInfo || snapshotInfo || null;
+        const missing = activeInfo?.missing || snapshotInfo?.missing || null;
+        const badPath = activeInfo?.lastProgress?.bad_path
+            || activeInfo?.statusSnapshot?.progress?.bad_path
+            || snapshotInfo?.progress?.bad_path
+            || snapshotInfo?.bad_path
+            || activeInfo?.downloadPath
+            || snapshotInfo?.downloadPath
+            || '';
+
+        let res = null;
         try {
-            const res = await this.fetchJson(
+            res = await this.fetchJson(
                 `/model_resolver/delete_bad_download/${encodeURIComponent(downloadId)}`,
                 {
                     method: 'POST',
@@ -1136,30 +1171,55 @@ export const resolveDownloadMethods = {
                 },
                 'Delete corrupted download'
             );
-            if (res && res.success) {
-                this.showNotification('Corrupted (.badsha) file deleted', 'info');
-                delete this.activeDownloads?.[downloadId];
-                this.removeActiveDownloadRecovery?.(downloadId);
-                this.updateDownloadAllButtonState?.();
-                this.updateQueuePanel?.();
-                if (info?.missing) {
-                    const elements = this.resolveDownloadUiElements(info);
-                    if (elements.progressDiv) {
-                        elements.progressDiv.classList.add('mr-is-hidden');
-                        elements.progressDiv.classList.remove('mr-is-visible');
-                        elements.progressDiv.innerHTML = '';
-                    }
-                    if (elements.downloadBtn) {
-                        this.restoreDownloadButtonReadyState(elements.downloadBtn);
-                    }
-                    this.refreshLocalMatchesUiForMissing?.(info.missing);
-                }
-            } else {
-                this.showNotification(res?.error || 'Failed to delete corrupted file', 'error');
-            }
         } catch (err) {
-            console.error('Model Resolver: Failed to delete corrupted download:', err);
-            this.showNotification('Failed to delete corrupted file: ' + err.message, 'error');
+            console.warn('Model Resolver: Delete bad download request error:', err);
+        }
+
+        const wasSuccess = Boolean(res && res.success);
+        delete this.activeDownloads?.[downloadId];
+        this.removeActiveDownloadRecovery?.(downloadId);
+        this.clearDownloadSnapshot(downloadId, missing);
+
+        const targetMissing = missing || info?.missing || null;
+        if (targetMissing) {
+            const elements = this.resolveDownloadUiElements(info || { missing: targetMissing });
+            if (elements.progressDiv) {
+                elements.progressDiv.classList.add('mr-is-hidden');
+                elements.progressDiv.classList.remove('mr-is-visible');
+                elements.progressDiv.innerHTML = '';
+            }
+            if (elements.downloadBtn) {
+                this.restoreDownloadButtonReadyState(elements.downloadBtn);
+            }
+            this.refreshLocalMatchesUiForMissing?.(targetMissing);
+        }
+
+        const root = this.contentElement || (typeof document !== 'undefined' ? document : null);
+        if (root?.querySelectorAll) {
+            const safeId = String(downloadId).replace(/["\\]/g, '\\$&');
+            const queueItems = root.querySelectorAll(`.mr-download-queue-item[data-download-id="${safeId}"]`);
+            for (const item of queueItems) {
+                const progressSlot = item.closest?.('.mr-download-progress-slot');
+                if (progressSlot) {
+                    progressSlot.classList.add('mr-is-hidden');
+                    progressSlot.classList.remove('mr-is-visible');
+                    progressSlot.innerHTML = '';
+                } else {
+                    item.remove();
+                }
+            }
+        }
+
+        this.updateDownloadAllButtonState?.();
+        this.updateQueuePanel?.();
+
+        if (wasSuccess) {
+            this.showNotification(
+                res?.already_removed ? 'Corrupted download removed' : 'Corrupted (.badsha) file deleted',
+                'info'
+            );
+        } else if (res?.error) {
+            this.showNotification(res.error, 'warning');
         }
     },
 
@@ -2394,46 +2454,76 @@ export const resolveDownloadMethods = {
      * Cancel an active download
      */
     cancelDownload(downloadId) {
-        const info = this.activeDownloads[downloadId];
+        const info = this.activeDownloads?.[downloadId];
+        let snapshotInfo = null;
+        if (!info) {
+            const store = this.getDownloadProgressStore?.();
+            if (store instanceof Map) {
+                for (const [, snap] of store.entries()) {
+                    if (String(snap?.downloadId || '') === String(downloadId)) {
+                        snapshotInfo = snap;
+                        break;
+                    }
+                }
+            }
+        }
+        const effectiveInfo = info || snapshotInfo || null;
         const currentStatus = String(
-            info?.pendingDownloadStatus
-            || info?.lastStatus
-            || info?.lastProgress?.status
+            effectiveInfo?.pendingDownloadStatus
+            || effectiveInfo?.lastStatus
+            || effectiveInfo?.lastProgress?.status
+            || effectiveInfo?.status
             || ''
         ).toLowerCase();
 
         if (currentStatus === 'error' || currentStatus === 'refresh_error') {
-            delete this.activeDownloads[downloadId];
+            delete this.activeDownloads?.[downloadId];
             this.removeActiveDownloadRecovery?.(downloadId);
-            if (info) {
-                const elements = this.resolveDownloadUiElements?.(info) || {};
-                const cancelledSnapshot = this.rememberDownloadUiState(
-                    downloadId,
-                    info,
-                    { ...(info.lastProgress || {}), status: 'cancelled' },
-                    {
-                        status: 'cancelled',
-                        message: 'Download dismissed',
-                        type: 'info',
-                        isActive: false
-                    }
-                );
-                this.renderDownloadSnapshot?.(downloadId, cancelledSnapshot, elements);
-                this.refreshLocalMatchesUiForMissing?.(info.missing);
+            this.clearDownloadSnapshot(downloadId, effectiveInfo?.missing);
+
+            const targetMissing = effectiveInfo?.missing || null;
+            if (targetMissing) {
+                const elements = this.resolveDownloadUiElements?.(effectiveInfo || { missing: targetMissing }) || {};
+                if (elements.progressDiv) {
+                    elements.progressDiv.classList.add('mr-is-hidden');
+                    elements.progressDiv.classList.remove('mr-is-visible');
+                    elements.progressDiv.innerHTML = '';
+                }
+                if (elements.downloadBtn) {
+                    this.restoreDownloadButtonReadyState?.(elements.downloadBtn);
+                }
+                this.refreshLocalMatchesUiForMissing?.(targetMissing);
             }
+
+            const root = this.contentElement || (typeof document !== 'undefined' ? document : null);
+            if (root?.querySelectorAll) {
+                const safeId = String(downloadId).replace(/["\\]/g, '\\$&');
+                const queueItems = root.querySelectorAll(`.mr-download-queue-item[data-download-id="${safeId}"]`);
+                for (const item of queueItems) {
+                    const progressSlot = item.closest?.('.mr-download-progress-slot');
+                    if (progressSlot) {
+                        progressSlot.classList.add('mr-is-hidden');
+                        progressSlot.classList.remove('mr-is-visible');
+                        progressSlot.innerHTML = '';
+                    } else {
+                        item.remove();
+                    }
+                }
+            }
+
             this.updateDownloadAllButtonState?.();
             this.updateQueuePanel?.();
-            this.fetchJson(`/model_resolver/cancel/${downloadId}`, {
+            this.fetchJson(`/model_resolver/cancel/${encodeURIComponent(downloadId)}`, {
                 method: 'POST'
             }, 'Cancel download').catch(() => {});
             return;
         }
 
-        if (info) {
-            this.setPendingDownloadStatus(info, 'cancelling', 30000);
+        if (effectiveInfo) {
+            this.setPendingDownloadStatus(effectiveInfo, 'cancelling', 30000);
             const snapshot = this.rememberDownloadUiState(
                 downloadId,
-                info,
+                effectiveInfo,
                 { ...(info.lastProgress || {}), status: 'cancelling' },
                 {
                     status: 'cancelling',
@@ -2442,7 +2532,7 @@ export const resolveDownloadMethods = {
                     isActive: true
                 }
             );
-            const elements = this.resolveDownloadUiElements(info);
+            const elements = this.resolveDownloadUiElements(effectiveInfo);
             this.renderDownloadSnapshot(downloadId, snapshot, elements);
             this.updateQueuePanel?.();
         }
@@ -2453,7 +2543,7 @@ export const resolveDownloadMethods = {
             // The request only acknowledges cancellation. Progress polling
             // releases the file and enables retry when the worker has stopped.
         }).catch((error) => {
-            this.clearPendingDownloadStatus(info);
+            if (effectiveInfo) this.clearPendingDownloadStatus(effectiveInfo);
             console.error('Model Resolver: Cancel error:', error);
             this.showNotification('Failed to cancel download', 'error');
         });

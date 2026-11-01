@@ -323,9 +323,31 @@ def delete_badsha_download(
                     target_bad_path = f"{candidate}.badsha"
 
     if not target_bad_path and path:
-        target_bad_path = str(path).strip()
+        cand = str(path).strip()
+        if cand.lower().endswith(".badsha"):
+            target_bad_path = cand
+        elif cand and facade.os.path.isfile(f"{cand}.badsha"):
+            target_bad_path = f"{cand}.badsha"
+        elif cand:
+            target_bad_path = cand
 
     if not target_bad_path:
+        if download_id:
+            with facade.download_lock:
+                facade.download_progress.pop(download_id, None)
+                facade.cancelled_downloads.discard(download_id)
+            remove_persisted = getattr(facade, "remove_persisted_download", None)
+            if callable(remove_persisted):
+                try:
+                    remove_persisted(download_id)
+                except Exception:
+                    pass
+            return {
+                "success": True,
+                "already_removed": True,
+                "message": "Corrupted download already removed",
+                "removed_files": [],
+            }
         return {"success": False, "error": "No .badsha file path found"}
 
     normalized = facade.os.path.normpath(target_bad_path)
