@@ -8075,6 +8075,101 @@ test('result removal is opt-in, removes only its row, and survives rerendering',
   window.happyDOM.close();
 });
 
+test('removing a search result row automatically removes its local hash match from missing matches', () => {
+  const window = new Window();
+  const container = window.document.createElement('div');
+  const render = eval(`(${extractMethod(searchPanelMethodsSource, 'renderSearchResultsTable')})`);
+  const display = eval(`(${extractMethod(resolveDownloadMethodsSource, 'displaySearchResults')})`);
+  const sync = eval(`(${extractMethod(resolveDownloadMethodsSource, 'syncVisibleSearchResultsLocalMatches')})`);
+  const wire = new Function('bindEventOnce', `return (${extractMethod(resolveDownloadMethodsSource, 'wireSearchDownloadButtons')});`)(
+    (element, type, handler) => {
+      if (element.bound) return;
+      element.bound = true;
+      element.addEventListener(type, handler);
+    }
+  );
+  const sha1 = '1'.repeat(64);
+  const sha2 = '2'.repeat(64);
+  const hashMatch1 = { filename: 'local1.safetensors', sha256: sha1, match_type: 'hash', hash_lookup_source: 'civitai', confidence: 100 };
+  const hashMatch2 = { filename: 'local2.safetensors', sha256: sha2, match_type: 'hash', hash_lookup_source: 'civitai', confidence: 100 };
+  const exactMatch = { filename: 'original.safetensors', confidence: 100, match_type: 'exact' };
+
+  const state = {
+    results: {
+      custom: [
+        { sourceKey: 'civitai', model: 'First', downloadUrl: 'url1', sha256: sha1 },
+        { sourceKey: 'civitai', model: 'Second', downloadUrl: 'url2', sha256: sha2 },
+      ],
+      local_hash_matches: [hashMatch1, hashMatch2],
+    },
+  };
+  const missing = {
+    original_path: 'original.safetensors',
+    matches: [exactMatch, hashMatch1, hashMatch2],
+  };
+
+  let refreshedUiCount = 0;
+  const dialog = {
+    getWorkflowScopedQueueKey: () => 'workflow',
+    getSearchStateForWorkflow: () => state,
+    persistSearchStateForWorkflow(_key, _missing, value) { Object.assign(state, value); },
+    displaySearchResults: display,
+    renderSearchResultsTable: render,
+    wireSearchDownloadButtons: wire,
+    syncVisibleSearchResultsLocalMatches: sync,
+    shouldDisplayKnownDownloadSource: () => false,
+    renderSearchProgress: () => '',
+    hasActiveSearchProgress: () => false,
+    prepareSearchResultRow: (_missing, row) => row,
+    getCustomUrlResultTableRow: (_missing, result) => ({
+      sourceKey: result.sourceKey,
+      model: result.model,
+      downloadUrl: result.downloadUrl,
+      sha256: result.sha256,
+      result,
+      localHashMatchIdentities: [result.sha256],
+    }),
+    patchSearchResultsContainer(element, html) { element.innerHTML = html; },
+    renderStatusMessage: message => `<p>${message}</p>`,
+    getSearchResultsTableLayout: () => ({ sourcePx: 100, matchPx: 60, sizePx: 60, actionsPx: 100, tableMinPx: 500 }),
+    renderSearchSourcePill: () => 'CivitAI',
+    escapeHtml: value => String(value),
+    getVersionedModelName: name => name,
+    renderVersionedModelNameHtml: name => name,
+    getContextMenuAttrs: () => '',
+    getSearchResultSha256: result => result?.sha256 || '',
+    getLocalMatchHash: match => match?.sha256 || '',
+    getLocalMatchIdentity: match => match?.sha256 || match?.filename || '',
+    getMissingModelKey: () => 'missing-1',
+    mergeLocalMatches: (a, b) => {
+      const seen = new Set();
+      const res = [];
+      [...a, ...b].forEach(m => {
+        const id = m.sha256 || m.filename;
+        if (!seen.has(id)) { seen.add(id); res.push(m); }
+      });
+      return res;
+    },
+    refreshLocalMatchesUiForMissing() { refreshedUiCount++; },
+    setLocalMatchesInAnalysisCache() {},
+  };
+
+  display.call(dialog, missing, state, container);
+  assert.equal(missing.matches.length, 3);
+
+  container.querySelector('.search-toggle-remove-btn').click();
+  const removeButtons = container.querySelectorAll('.search-remove-result-btn');
+  assert.equal(removeButtons.length, 2);
+
+  removeButtons[1].click();
+
+  assert.equal(missing.matches.length, 2);
+  assert.deepEqual(missing.matches.map(m => m.filename), ['original.safetensors', 'local1.safetensors']);
+  assert.equal(refreshedUiCount > 0, true);
+
+  window.happyDOM.close();
+});
+
 test('search result table exposes linked local hash targets for exact matches', () => {
   const renderSearchResultsTable = eval(`(${extractMethod(searchPanelMethodsSource, 'renderSearchResultsTable')})`);
   const dialog = {

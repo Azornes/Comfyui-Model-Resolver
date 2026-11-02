@@ -842,15 +842,51 @@ export const resolveDownloadMethods = {
     restoreSearchLocalHashMatchesForMissing(missing) {
         if (!missing) return missing;
 
-        const state = this.searchResultCache?.get(this.getMissingSearchKey(missing));
-        const hashMatches = Array.isArray(state?.results?.local_hash_matches)
+        const workflowKey = this.getWorkflowScopedQueueKey?.();
+        const state = (workflowKey ? this.getSearchStateForWorkflow?.(workflowKey, missing) : null)
+            || this.searchResultCache?.get?.(this.getMissingSearchKey?.(missing))
+            || null;
+        const allHashMatches = Array.isArray(state?.results?.local_hash_matches)
             ? state.results.local_hash_matches
             : [];
-        if (!hashMatches.length) return missing;
+        if (!allHashMatches.length) return missing;
+
+        const removedKeys = new Set(state?.removedSearchResultKeys || []);
+        let hashMatchesToRestore = allHashMatches;
+
+        if (removedKeys.size > 0) {
+            const visibleHashes = new Set();
+            const results = state.results || {};
+            const checkResult = (result, sourceKey) => {
+                if (!result || typeof result !== 'object') return;
+                const rowKey = `${sourceKey}:${result.download_url || result.downloadUrl || result.url || result.openUrl || `${result.name || result.model}:${result.filename}`}`;
+                if (removedKeys.has(rowKey)) return;
+                const sha = normalizeSha256(this.getSearchResultSha256?.(result) || result.sha256 || result.hash);
+                if (sha) visibleHashes.add(sha);
+            };
+
+            checkResult(results.popular, 'popular');
+            checkResult(results.model_list, 'model-list');
+            (Array.isArray(results.huggingface) ? results.huggingface : [results.huggingface]).forEach(r => checkResult(r, 'huggingface'));
+            (Array.isArray(results.civitai) ? results.civitai : [results.civitai]).forEach(r => checkResult(r, 'civitai'));
+            (Array.isArray(results.civarchive) ? results.civarchive : [results.civarchive]).forEach(r => checkResult(r, 'civarchive'));
+            (Array.isArray(results.lora_manager_archive) ? results.lora_manager_archive : [results.lora_manager_archive]).forEach(r => checkResult(r, 'lora-archive'));
+            (Array.isArray(results.custom) ? results.custom : []).forEach(r => checkResult(r, r?.source || 'custom'));
+            if (missing.download_source) {
+                checkResult(missing.download_source, missing.download_source.source || 'workflow');
+            }
+
+            hashMatchesToRestore = allHashMatches.filter(match => {
+                const matchHash = normalizeSha256(this.getLocalMatchHash?.(match) || match.sha256);
+                return matchHash && visibleHashes.has(matchHash);
+            });
+        }
+
+        if (!hashMatchesToRestore.length) return missing;
 
         missing.matches = this.mergeLocalMatches(
             Array.isArray(missing.matches) ? missing.matches : [],
-            this.cloneLocalMatches(hashMatches)
+            this.cloneLocalMatches(hashMatchesToRestore)
         );
         return missing;
     },
@@ -1015,6 +1051,32 @@ export const resolveDownloadMethods = {
                 for (const item of list) {
                     if (this.getMissingModelKey(item) !== missingKey) continue;
                     item.matches = this.mergeLocalMatches(item.matches || [], matches);
+                }
+            };
+
+            patchList(data?.missing_models);
+            patchList(data?.resolved_models);
+        };
+
+        patchAnalysisData(this.cachedAnalysisData);
+        const workflowKey = this.getWorkflowScopedQueueKey?.();
+        const cached = workflowKey ? this.workflowAnalysisCaches?.get(workflowKey) : null;
+        if (cached?.data) {
+            patchAnalysisData(cached.data);
+        }
+    },
+
+    setLocalMatchesInAnalysisCache(missing, matches = []) {
+        if (!missing || !Array.isArray(matches)) return;
+
+        const missingKey = this.getMissingModelKey(missing);
+        const patchAnalysisData = (data) => {
+            const patchList = (list) => {
+                if (!Array.isArray(list)) return;
+
+                for (const item of list) {
+                    if (this.getMissingModelKey(item) !== missingKey) continue;
+                    item.matches = [...matches];
                 }
             };
 
@@ -1713,10 +1775,11 @@ export const resolveDownloadMethods = {
                 return currentMissing.matches || [];
             }
             const refreshedMatches = Array.isArray(data.matches) ? data.matches : [];
-            const matches = this.preserveActiveDownloadLocalMatches?.(
+            let matches = this.preserveActiveDownloadLocalMatches?.(
                 currentMissing,
                 refreshedMatches
             ) || refreshedMatches;
+            matches = this.restoreSearchLocalHashMatchesForMissing?.({ ...currentMissing, matches })?.matches || matches;
             currentMissing.matches = matches;
             missing.matches = matches;
             if (currentMissing.is_urn) {
@@ -2815,6 +2878,9 @@ export const resolveDownloadMethods = {
                 custom: nextCustom,
                 local_hash_matches: localHashMatches
             };
+            if (Array.isArray(data.local_hash_matches) && data.local_hash_matches.length) {
+                this.applyLocalHashMatchesFromSearchResponse?.(missing, data, { workflowKey });
+            }
             if (state.removedSearchResultKeys?.length) {
                 const restoredKeys = new Set(customResults.map(item => {
                     const customRow = this.getCustomUrlResultTableRow(missing, item);
@@ -4270,9 +4336,82 @@ export const resolveDownloadMethods = {
         const html = `${progressHtml}${statusHtml}${tableHtml}`;
         this.patchSearchResultsContainer(container, html);
 
+        this.syncVisibleSearchResultsLocalMatches?.(missing, rows, state);
+
         this.wireSearchProgressCancelButtons?.(container, missing, state);
         this.wireSearchProgressRetryButtons?.(container, missing, state);
         this.wireSearchDownloadButtons(container, missing);
+    },
+
+    syncVisibleSearchResultsLocalMatches(missing, rows = [], state = null) {
+        if (!missing) return;
+
+        const visibleHashes = new Set();
+        const visibleIdentities = new Set();
+        for (const row of rows) {
+            if (!row) continue;
+            const rowHash = normalizeSha256(
+                this.getSearchResultSha256?.(row.result || row)
+                || row.detailsContext?.sha256
+                || row.result?.sha256
+                || row.sha256
+            );
+            if (rowHash) visibleHashes.add(rowHash);
+            if (Array.isArray(row.localHashMatchIdentities)) {
+                row.localHashMatchIdentities.forEach(id => {
+                    const normalized = String(id || '').trim();
+                    if (normalized) visibleIdentities.add(normalized);
+                });
+            }
+        }
+
+        const isSearchHashMatch = (match) => Boolean(
+            match?.hash_lookup_source
+            || (match?.hash_match && match?.match_type === 'hash')
+        );
+
+        const allCandidateHashMatches = Array.isArray(state?.results?.local_hash_matches)
+            ? state.results.local_hash_matches
+            : [];
+        const activeHashMatches = allCandidateHashMatches.filter(match => {
+            const matchHash = normalizeSha256(this.getLocalMatchHash?.(match) || match?.sha256);
+            const matchIdentity = this.getLocalMatchIdentity?.(match);
+            return (matchHash && visibleHashes.has(matchHash))
+                || (matchIdentity && visibleIdentities.has(matchIdentity));
+        });
+
+        const missingKey = this.getMissingModelKey?.(missing);
+        const currentMissing = (this.missingModels || [])
+            .find(item => this.getMissingModelKey?.(item) === missingKey)
+            || missing;
+        const currentMatches = Array.isArray(currentMissing.matches)
+            ? currentMissing.matches
+            : (Array.isArray(missing.matches) ? missing.matches : []);
+
+        const retainedMatches = currentMatches.filter(match => {
+            if (!isSearchHashMatch(match)) return true;
+            const matchHash = normalizeSha256(this.getLocalMatchHash?.(match) || match?.sha256);
+            const matchIdentity = this.getLocalMatchIdentity?.(match);
+            return (matchHash && visibleHashes.has(matchHash))
+                || (matchIdentity && visibleIdentities.has(matchIdentity));
+        });
+
+        const mergedMatches = this.mergeLocalMatches
+            ? this.mergeLocalMatches(retainedMatches, activeHashMatches)
+            : [...retainedMatches, ...activeHashMatches];
+
+        const matchesChanged = mergedMatches.length !== currentMatches.length
+            || mergedMatches.some((m, idx) => (
+                (this.getLocalMatchIdentity?.(m) || m.filename || m.path)
+                !== (this.getLocalMatchIdentity?.(currentMatches[idx]) || currentMatches[idx]?.filename || currentMatches[idx]?.path)
+            ));
+
+        if (matchesChanged) {
+            currentMissing.matches = mergedMatches;
+            missing.matches = mergedMatches;
+            this.setLocalMatchesInAnalysisCache?.(currentMissing, mergedMatches);
+            this.refreshLocalMatchesUiForMissing?.(currentMissing);
+        }
     },
 
     /**

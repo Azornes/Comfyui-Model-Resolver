@@ -32,35 +32,43 @@ export const searchHashMethods = {
             if (!(match.hash_match || match.match_type === 'hash' || match.hash_lookup_source)) return;
             addHash(this.getLocalMatchHash?.(match) || match.sha256 || match.hash);
         };
-        const addResult = (result) => {
+        const addResult = (result, sourceKey = '') => {
             if (Array.isArray(result)) {
-                result.forEach(addResult);
+                result.forEach(r => addResult(r, sourceKey));
                 return;
             }
             if (!result || typeof result !== 'object') return;
+            if (sourceKey && removedRowKeys.size > 0) {
+                const rowKey = `${sourceKey}:${result.download_url || result.downloadUrl || result.url || result.openUrl || `${result.name || result.model}:${result.filename}`}`;
+                if (removedRowKeys.has(rowKey)) return;
+            }
             const matchType = String(result.match_type || '').toLowerCase();
             if (!(result.hash_verified || result.hash_verified_sha256 || matchType === 'hash')) return;
             addHash(this.getSearchResultSha256?.(result) || result.sha256 || result.hash);
         };
 
-        (Array.isArray(missing.matches) ? missing.matches : []).forEach(addMatch);
+        const workflowKey = this.getWorkflowScopedQueueKey?.();
+        const searchState = results
+            ? null
+            : (
+                (workflowKey ? this.getSearchStateForWorkflow?.(workflowKey, missing) : null)
+                || this.getSearchState?.(missing)
+                || this.searchResultCache?.get?.(this.getMissingSearchKey?.(missing))
+            );
+        const removedRowKeys = new Set(searchState?.removedSearchResultKeys || []);
+        const stateResults = results || searchState?.results || {};
 
-        const stateResults = results
-            || this.getSearchState?.(missing)?.results
-            || this.searchResultCache?.get?.(this.getMissingSearchKey?.(missing))?.results
-            || {};
+        (Array.isArray(missing.matches) ? missing.matches : []).forEach(addMatch);
         (Array.isArray(stateResults.local_hash_matches) ? stateResults.local_hash_matches : []).forEach(addMatch);
 
-        [
-            missing.download_source,
-            stateResults.popular,
-            stateResults.model_list,
-            stateResults.huggingface,
-            stateResults.civitai,
-            stateResults.civarchive,
-            stateResults.lora_manager_archive,
-            ...(Array.isArray(stateResults.custom) ? stateResults.custom : [])
-        ].forEach(addResult);
+        addResult(missing.download_source, missing.download_source?.source || 'workflow');
+        addResult(stateResults.popular, 'popular');
+        addResult(stateResults.model_list, 'model-list');
+        addResult(stateResults.huggingface, 'huggingface');
+        addResult(stateResults.civitai, 'civitai');
+        addResult(stateResults.civarchive, 'civarchive');
+        addResult(stateResults.lora_manager_archive, 'lora-archive');
+        (Array.isArray(stateResults.custom) ? stateResults.custom : []).forEach(r => addResult(r, r?.source || 'custom'));
 
         return hashes;
     },
@@ -132,6 +140,7 @@ export const searchHashMethods = {
         return String(
             match.sha256
             || match.hash
+            || match.hash_lookup_sha256
             || modelHash
             || ''
         ).trim();
