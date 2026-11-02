@@ -6828,6 +6828,59 @@ test('native Xet progress polling refreshes every 200 milliseconds', () => {
   assert.equal(getDownloadProgressPollDelay({ status: 'paused', download_backend: 'huggingface_xet' }), 1500);
 });
 
+test('reused download_id tracks multiple missing model targets and completes all', async () => {
+  globalThis.playDownloadSuccessSound = () => {};
+  const poll = eval(`(${extractMethod(resolveDownloadMethodsSource, 'pollDownloadProgress')})`);
+  const missing1 = { node_id: 105, widget_index: 0, original_path: 'model.safetensors' };
+  const missing2 = { node_id: 105, widget_index: 1, original_path: 'model.safetensors' };
+  const rendered = [];
+  const refreshed = [];
+  const refreshedAfter = [];
+
+  const dialog = {
+    activeDownloads: {
+      'dl-1': {
+        missing: missing1,
+        missingTargets: [missing1, missing2],
+        category: 'text_encoders',
+        filename: 'model.safetensors',
+      }
+    },
+    fetchJson: async () => ({
+      status: 'completed',
+      filename: 'model.safetensors',
+      path: 'E:/models/text_encoders/model.safetensors',
+      directory: 'E:/models/text_encoders',
+    }),
+    applyPendingDownloadStatus: (_info, p) => p,
+    getDownloadFolderContext: () => null,
+    rememberDownloadUiState: (_id, info, progress, opts) => ({ missing: info.missing, progress, ...opts }),
+    resolveDownloadUiElements: () => ({ progressDiv: null, downloadBtn: null }),
+    renderDownloadSnapshot: (_id, snapshot) => rendered.push(snapshot),
+    refreshLocalMatchesUiForMissing: (m) => refreshed.push(m),
+    rememberDownloadSubfolderAfterCompletion: () => {},
+    rememberCompletedDownloadHistory: () => {},
+    removeActiveDownloadRecovery: () => {},
+    updateDownloadAllButtonState: () => {},
+    updateQueuePanel: () => {},
+    showNotification: () => {},
+    getDownloadWorkflowScopeIdentity: () => '',
+    async refreshAfterDownload(m) { refreshedAfter.push(m); },
+  };
+
+  await poll.call(dialog, 'dl-1');
+
+  assert.equal(dialog.activeDownloads['dl-1'], undefined);
+  assert.equal(rendered.length, 2);
+  assert.equal(refreshed.length, 2);
+  assert.deepEqual(refreshed, [missing1, missing2]);
+
+  // Allow setTimeout 500 for refreshAfterDownload
+  await new Promise(r => setTimeout(r, 600));
+  assert.equal(refreshedAfter.length, 2);
+  assert.deepEqual(refreshedAfter, [missing1, missing2]);
+});
+
 test('active download folder context opens the existing directory before the target file exists', () => {
   const getDownloadFolderContext = eval(`(${extractMethod(resolveDownloadMethodsSource, 'getDownloadFolderContext')})`);
   const directory = 'E:\\ComfyUI\\models\\text_encoders\\QWEN\\test';

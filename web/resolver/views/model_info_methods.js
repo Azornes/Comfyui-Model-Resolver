@@ -440,7 +440,6 @@ export const modelInfoMethods = {
         return [
             'local_model',
             'local_match',
-            'download_folder',
             'download_queue',
             'download_history',
             ''

@@ -1920,6 +1920,15 @@ def pause_download(download_id: str, *, dependencies: Any = None) -> Dict[str, A
     if download_id in cancelled:
         return {"success": False, "error": "Download is being cancelled"}
 
+    progress_info = getattr(facade, "download_progress", {}).get(download_id) or {}
+    status = str(progress_info.get("status") or "").lower()
+    if status == "completed":
+        return {"success": False, "error": "Download has already completed", "status": "completed"}
+    if status == "cancelled":
+        return {"success": False, "error": "Download has been cancelled", "status": "cancelled"}
+    if status == "paused":
+        return {"success": True, "message": "Download paused"}
+
     is_py_active = getattr(facade, "is_python_download_active", None)
     if callable(is_py_active) and is_py_active(download_id):
         pause_py = getattr(facade, "pause_python_download", None)
@@ -1931,10 +1940,6 @@ def pause_download(download_id: str, *, dependencies: Any = None) -> Dict[str, A
         update_store = getattr(facade, "update_download_progress_state", None)
         if callable(update_store):
             update_store(download_id, status="paused")
-        return {"success": True, "message": "Download paused"}
-
-    progress_info = getattr(facade, "download_progress", {}).get(download_id) or {}
-    if progress_info.get("status") == "paused":
         return {"success": True, "message": "Download paused"}
 
     return _set_aria2_desired_download_state(
@@ -1950,6 +1955,13 @@ def resume_download(download_id: str, *, dependencies: Any = None) -> Dict[str, 
     cancelled = getattr(facade, "cancelled_downloads", None) or set()
     if download_id in cancelled:
         return {"success": False, "error": "Download is being cancelled"}
+
+    progress_info = getattr(facade, "download_progress", {}).get(download_id) or {}
+    status = str(progress_info.get("status") or "").lower()
+    if status == "completed":
+        return {"success": True, "message": "Download is already completed", "status": "completed"}
+    if status == "downloading":
+        return {"success": True, "message": "Download is already running"}
 
     is_py_active = getattr(facade, "is_python_download_active", None)
     if callable(is_py_active) and is_py_active(download_id):

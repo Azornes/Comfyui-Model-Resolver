@@ -1140,11 +1140,9 @@ export const resolveDownloadMethods = {
         const missingKey = this.getDownloadMissingIdentity(missing);
 
         for (const [downloadId, info] of Object.entries(this.activeDownloads || {})) {
-            if (
-                info?.missing
-                && this.isDownloadInCurrentWorkflowScope(info)
-                && this.getDownloadMissingIdentity(info.missing) === missingKey
-            ) {
+            const matchesMissing = (info?.missing && this.getDownloadMissingIdentity(info.missing) === missingKey)
+                || (Array.isArray(info?.missingTargets) && info.missingTargets.some(t => this.getDownloadMissingIdentity(t) === missingKey));
+            if (matchesMissing && this.isDownloadInCurrentWorkflowScope(info)) {
                 return { downloadId, info };
             }
         }
@@ -1155,11 +1153,11 @@ export const resolveDownloadMethods = {
         if (!missing) return [];
         const missingKey = this.getDownloadMissingIdentity(missing);
         return Object.entries(this.activeDownloads || {})
-            .filter(([, info]) => (
-                info?.missing
-                && this.isDownloadInCurrentWorkflowScope(info)
-                && this.getDownloadMissingIdentity(info.missing) === missingKey
-            ))
+            .filter(([, info]) => {
+                const matchesMissing = (info?.missing && this.getDownloadMissingIdentity(info.missing) === missingKey)
+                    || (Array.isArray(info?.missingTargets) && info.missingTargets.some(t => this.getDownloadMissingIdentity(t) === missingKey));
+                return matchesMissing && this.isDownloadInCurrentWorkflowScope(info);
+            })
             .map(([downloadId, info]) => ({ downloadId, info }));
     },
 
@@ -2179,6 +2177,34 @@ export const resolveDownloadMethods = {
             }
 
             const downloadId = data.download_id;
+            const existingDownload = this.activeDownloads?.[downloadId];
+            if (existingDownload) {
+                if (!Array.isArray(existingDownload.missingTargets)) {
+                    existingDownload.missingTargets = existingDownload.missing ? [existingDownload.missing] : [];
+                }
+                if (missing && !existingDownload.missingTargets.includes(missing)) {
+                    existingDownload.missingTargets.push(missing);
+                }
+                const latestProgress = existingDownload.lastProgress || {
+                    status: existingDownload.lastStatus || 'starting',
+                    progress: 0,
+                    filename,
+                    path: data.path || '',
+                    directory: data.directory || '',
+                    download_backend: data.download_backend || ''
+                };
+                const snapshot = this.rememberDownloadUiState(
+                    downloadId,
+                    { ...existingDownload, missing },
+                    latestProgress,
+                    { isActive: true }
+                );
+                this.updateDownloadAllButtonState();
+                this.updateQueuePanel?.();
+                this.renderDownloadSnapshot(downloadId, snapshot);
+                return;
+            }
+
             if (missing) {
                 for (const [existingId, existingInfo] of Object.entries(this.activeDownloads || {})) {
                     if (existingInfo?.missing === missing) {
@@ -2192,6 +2218,7 @@ export const resolveDownloadMethods = {
             }
             this.activeDownloads[downloadId] = {
                 missing,
+                missingTargets: missing ? [missing] : [],
                 progressDiv,
                 downloadBtn: btn,
                 category,
@@ -2385,13 +2412,19 @@ export const resolveDownloadMethods = {
             // let a stale progress response recreate a globally finalized bar.
             if (this.activeDownloads?.[downloadId] !== info) return;
             progress = this.applyPendingDownloadStatus(info, progress);
-            const snapshot = this.rememberDownloadUiState(downloadId, info, progress, { isActive: true });
-            const { progressDiv, downloadBtn } = this.resolveDownloadUiElements(info);
-            const { missing, category } = info;
+            const targets = Array.isArray(info.missingTargets) && info.missingTargets.length
+                ? info.missingTargets
+                : (info.missing ? [info.missing] : []);
+            const { category } = info;
             const downloadFolderContext = this.getDownloadFolderContext(progress, info);
 
             if (progress.status === 'downloading' || progress.status === 'starting' || progress.status === 'paused' || progress.status === 'verifying') {
-                this.renderDownloadSnapshot(downloadId, snapshot, { progressDiv, downloadBtn });
+                for (const targetMissing of targets) {
+                    const targetInfo = targetMissing === info.missing ? info : { ...info, missing: targetMissing };
+                    const snapshot = this.rememberDownloadUiState(downloadId, targetInfo, progress, { isActive: true });
+                    const elements = this.resolveDownloadUiElements(targetInfo);
+                    this.renderDownloadSnapshot(downloadId, snapshot, elements);
+                }
                 if (typeof this.requestQueuePanelUpdate === 'function') {
                     this.requestQueuePanelUpdate();
                 } else {
@@ -2403,65 +2436,80 @@ export const resolveDownloadMethods = {
                 setTimeout(() => this.pollDownloadProgress(downloadId), pollDelay);
 
             } else if (progress.status === 'cancelling') {
-                this.renderDownloadSnapshot(downloadId, snapshot, { progressDiv, downloadBtn });
+                for (const targetMissing of targets) {
+                    const targetInfo = targetMissing === info.missing ? info : { ...info, missing: targetMissing };
+                    const snapshot = this.rememberDownloadUiState(downloadId, targetInfo, progress, { isActive: true });
+                    const elements = this.resolveDownloadUiElements(targetInfo);
+                    this.renderDownloadSnapshot(downloadId, snapshot, elements);
+                }
                 this.updateQueuePanel?.();
                 setTimeout(() => this.pollDownloadProgress(downloadId), 500);
 
             } else if (progress.status === 'completed') {
                 const alreadyExists = Boolean(progress.already_exists);
-                const completedSnapshot = this.rememberDownloadUiState(downloadId, info, progress, {
-                    status: 'completed_checking',
-                    message: alreadyExists
-                        ? (progress.message || 'This model is already downloaded. Checking local matches...')
-                        : 'Download complete. Checking local matches...',
-                    type: 'success',
-                    isActive: false
-                });
-                this.renderDownloadSnapshot(downloadId, completedSnapshot, { progressDiv, downloadBtn });
+                for (const targetMissing of targets) {
+                    const targetInfo = targetMissing === info.missing ? info : { ...info, missing: targetMissing };
+                    const completedSnapshot = this.rememberDownloadUiState(downloadId, targetInfo, progress, {
+                        status: 'completed_checking',
+                        message: alreadyExists
+                            ? (progress.message || 'This model is already downloaded. Checking local matches...')
+                            : 'Download complete. Checking local matches...',
+                        type: 'success',
+                        isActive: false
+                    });
+                    const elements = this.resolveDownloadUiElements(targetInfo);
+                    this.renderDownloadSnapshot(downloadId, completedSnapshot, elements);
+                    this.refreshLocalMatchesUiForMissing?.(targetMissing);
+                }
                 this.rememberDownloadSubfolderAfterCompletion(info, progress);
                 this.rememberCompletedDownloadHistory?.(downloadId, info, progress);
                 delete this.activeDownloads[downloadId];
                 this.removeActiveDownloadRecovery?.(downloadId);
                 this.updateDownloadAllButtonState();
                 this.updateQueuePanel?.();
-                this.refreshLocalMatchesUiForMissing?.(missing);
-                if (!alreadyExists) playDownloadSuccessSound();
+                if (!alreadyExists && typeof playDownloadSuccessSound === 'function') playDownloadSuccessSound();
                 this.showNotification(alreadyExists
                     ? `Already downloaded: ${progress.filename}`
                     : `Downloaded: ${progress.filename}`, 'success', {
                     contextMenuModel: downloadFolderContext
                 });
 
-                // Refresh local matches only for this downloaded missing model.
+                // Refresh local matches for all target missing models.
                 // Small delay to ensure file system is updated.
                 setTimeout(async () => {
-                    const currentElements = this.resolveDownloadUiElements(info);
-                    await this.refreshAfterDownload(missing, progress.filename, {
-                        progressDiv: currentElements.progressDiv,
-                        downloadBtn: currentElements.downloadBtn,
-                        category,
-                        downloadPath: progress.path || info.downloadPath || '',
-                        downloadDirectory: progress.directory || info.downloadDirectory || '',
-                        workflowScope: this.getDownloadWorkflowScopeIdentity(info),
-                        alreadyExists
-                    });
+                    for (const targetMissing of targets) {
+                        const targetInfo = targetMissing === info.missing ? info : { ...info, missing: targetMissing };
+                        const currentElements = this.resolveDownloadUiElements(targetInfo);
+                        await this.refreshAfterDownload(targetMissing, progress.filename, {
+                            progressDiv: currentElements.progressDiv,
+                            downloadBtn: currentElements.downloadBtn,
+                            category,
+                            downloadPath: progress.path || info.downloadPath || '',
+                            downloadDirectory: progress.directory || info.downloadDirectory || '',
+                            workflowScope: this.getDownloadWorkflowScopeIdentity(info),
+                            alreadyExists
+                        });
+                    }
                 }, 500);
 
             } else if (progress.status === 'error') {
-                const errorSnapshot = this.rememberDownloadUiState(downloadId, info, progress, {
-                    status: 'error',
-                    message: progress.error || 'Download failed',
-                    type: 'error',
-                    isActive: true
-                });
+                for (const targetMissing of targets) {
+                    const targetInfo = targetMissing === info.missing ? info : { ...info, missing: targetMissing };
+                    const errorSnapshot = this.rememberDownloadUiState(downloadId, targetInfo, progress, {
+                        status: 'error',
+                        message: progress.error || 'Download failed',
+                        type: 'error',
+                        isActive: true
+                    });
+                    const elements = this.resolveDownloadUiElements(targetInfo);
+                    this.renderDownloadSnapshot(downloadId, errorSnapshot, elements);
+                    this.refreshLocalMatchesUiForMissing?.(targetMissing);
+                }
                 info.lastStatus = 'error';
                 info.lastProgress = progress;
-                info.statusSnapshot = errorSnapshot;
-                this.renderDownloadSnapshot(downloadId, errorSnapshot, { progressDiv, downloadBtn });
                 this.persistActiveDownloadRecovery?.(downloadId, this.activeDownloads[downloadId]);
                 this.updateDownloadAllButtonState();
                 this.updateQueuePanel?.();
-                this.refreshLocalMatchesUiForMissing?.(missing);
                 this.showNotification(progress.error || 'Download failed', 'error');
 
             } else if (progress.status === 'cancelled') {
@@ -2660,9 +2708,47 @@ export const resolveDownloadMethods = {
             method: 'POST'
         }, 'Pause download').then(() => {
             this.showNotification('Download paused', 'info');
-        }).catch((error) => {
+        }).catch(async (error) => {
             console.error('Model Resolver: Pause error:', error);
-            const cancellationInProgress = /being cancelled|cancell?ing/i.test(String(error?.message || ''));
+            const errStr = String(error?.message || '').toLowerCase();
+            const cancellationInProgress = /being cancelled|cancell?ing/i.test(errStr);
+            const alreadyCompleted = /already completed/i.test(errStr);
+            if (alreadyCompleted) {
+                try {
+                    const latest = await this.fetchJson(`/model_resolver/progress/${downloadId}`, { silent: true }, 'Get download progress');
+                    if (latest?.status === 'completed') {
+                        delete this.activeDownloads?.[downloadId];
+                        this.removeActiveDownloadRecovery?.(downloadId);
+                        const targets = Array.isArray(info?.missingTargets) && info.missingTargets.length
+                            ? info.missingTargets
+                            : (info?.missing ? [info.missing] : []);
+                        for (const targetMissing of targets) {
+                            const targetInfo = { ...(info || {}), missing: targetMissing };
+                            const completedSnapshot = this.rememberDownloadUiState(downloadId, targetInfo, latest, {
+                                status: 'completed',
+                                message: 'Download complete. Exact local match is ready.',
+                                type: 'success',
+                                isActive: false
+                            });
+                            const elements = this.resolveDownloadUiElements(targetInfo);
+                            this.renderDownloadSnapshot(downloadId, completedSnapshot, elements);
+                            this.refreshLocalMatchesUiForMissing?.(targetMissing);
+                            this.refreshAfterDownload?.(targetMissing, latest.filename, {
+                                progressDiv: elements.progressDiv,
+                                downloadBtn: elements.downloadBtn,
+                                category: info?.category || '',
+                                downloadPath: latest.path || info?.downloadPath || '',
+                                downloadDirectory: latest.directory || info?.downloadDirectory || '',
+                                workflowScope: this.getDownloadWorkflowScopeIdentity(info || {})
+                            });
+                        }
+                        this.updateDownloadAllButtonState();
+                        this.updateQueuePanel?.();
+                        this.showNotification(`Download complete: ${latest.filename || 'Model'}`, 'success');
+                        return;
+                    }
+                } catch (_) {}
+            }
             if (info && cancellationInProgress) {
                 this.setPendingDownloadStatus(info, 'cancelling', 30000);
                 const snapshot = this.rememberDownloadUiState(
@@ -2780,8 +2866,46 @@ export const resolveDownloadMethods = {
             method: 'POST'
         }, 'Resume download').then(() => {
             this.showNotification('Download resumed', 'success');
-        }).catch((error) => {
+        }).catch(async (error) => {
             console.error('Model Resolver: Resume error:', error);
+            const errStr = String(error?.message || '').toLowerCase();
+            const alreadyCompleted = /already completed/i.test(errStr);
+            if (alreadyCompleted) {
+                try {
+                    const latest = await this.fetchJson(`/model_resolver/progress/${downloadId}`, { silent: true }, 'Get download progress');
+                    if (latest?.status === 'completed') {
+                        delete this.activeDownloads?.[downloadId];
+                        this.removeActiveDownloadRecovery?.(downloadId);
+                        const targets = Array.isArray(info?.missingTargets) && info.missingTargets.length
+                            ? info.missingTargets
+                            : (info?.missing ? [info.missing] : []);
+                        for (const targetMissing of targets) {
+                            const targetInfo = { ...(info || {}), missing: targetMissing };
+                            const completedSnapshot = this.rememberDownloadUiState(downloadId, targetInfo, latest, {
+                                status: 'completed',
+                                message: 'Download complete. Exact local match is ready.',
+                                type: 'success',
+                                isActive: false
+                            });
+                            const elements = this.resolveDownloadUiElements(targetInfo);
+                            this.renderDownloadSnapshot(downloadId, completedSnapshot, elements);
+                            this.refreshLocalMatchesUiForMissing?.(targetMissing);
+                            this.refreshAfterDownload?.(targetMissing, latest.filename, {
+                                progressDiv: elements.progressDiv,
+                                downloadBtn: elements.downloadBtn,
+                                category: info?.category || '',
+                                downloadPath: latest.path || info?.downloadPath || '',
+                                downloadDirectory: latest.directory || info?.downloadDirectory || '',
+                                workflowScope: this.getDownloadWorkflowScopeIdentity(info || {})
+                            });
+                        }
+                        this.updateDownloadAllButtonState();
+                        this.updateQueuePanel?.();
+                        this.showNotification(`Download complete: ${latest.filename || 'Model'}`, 'success');
+                        return;
+                    }
+                } catch (_) {}
+            }
             if (info && previousProgress) {
                 this.clearPendingDownloadStatus(info);
                 const snapshot = this.rememberDownloadUiState(

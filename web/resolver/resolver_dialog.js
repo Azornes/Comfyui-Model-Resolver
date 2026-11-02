@@ -308,6 +308,7 @@ export class ResolverManagerDialog extends ComfyDialog {
             notify: typeof this.showNotification === 'function'
                 ? this.showNotification.bind(this)
                 : null,
+            logError: options?.silent ? null : console.error,
         });
     }
 
