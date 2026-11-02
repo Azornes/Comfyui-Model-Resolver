@@ -6078,12 +6078,22 @@ button.mr-info-link:disabled {
     opacity: 0.5;
 }
 
+.mr-image-transfer-node-target {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--mr-spacing-8);
+    min-width: 0;
+    width: 100%;
+}
+
 .mr-image-transfer-node-select {
     appearance: none;
     display: flex;
     align-items: center;
     gap: var(--mr-spacing-10);
     min-width: 0;
+    flex: 1 1 auto;
     width: 100%;
     padding: 0;
     border: 0;
@@ -6093,6 +6103,18 @@ button.mr-info-link:disabled {
     cursor: pointer;
     font: inherit;
     text-align: left;
+}
+
+#model-resolver-modal .mr-image-transfer-node-locate {
+    padding: var(--mr-spacing-2) var(--mr-spacing-6);
+    flex-shrink: 0;
+    opacity: 0.75;
+    transition: var(--mr-missing-control-transition, background 0.15s ease, border-color 0.15s ease, color 0.15s ease), opacity 0.15s ease;
+}
+
+#model-resolver-modal .mr-image-transfer-node-locate:hover,
+#model-resolver-modal .mr-image-transfer-node-locate:focus-visible {
+    opacity: 1;
 }
 
 .mr-image-transfer-node-select:disabled {

@@ -742,3 +742,205 @@ test('workflow node context keeps Locate Node but hides model info', () => {
   assert.equal(visibility.showInfo, false);
   assert.equal(visibility.locateNode, true);
 });
+
+test('multi-category target node keeps selections, previews, and transfer targets isolated per category', async () => {
+  const context = createTransferContext();
+  const loadedModels = {
+    loaded_models: [
+      {
+        category: 'upscale_models',
+        node_id: 1512,
+        node_type: 'Settings',
+        widget_index: 0,
+        original_path: '2x-AnimeSharpV4_RCAN.pth',
+        active: true,
+        connected: true,
+        is_top_level: true,
+      },
+      {
+        category: 'diffusion_models',
+        node_id: 1512,
+        node_type: 'Settings',
+        widget_index: 1,
+        original_path: 'DasimaMinimaxH3_slot1.safetensors',
+        active: true,
+        connected: true,
+        is_top_level: true,
+      },
+      {
+        category: 'diffusion_models',
+        node_id: 1512,
+        node_type: 'Settings',
+        widget_index: 2,
+        original_path: 'DasimaMinimaxH3_slot2.safetensors',
+        active: true,
+        connected: true,
+        is_top_level: true,
+      },
+      {
+        category: 'text_encoders',
+        node_id: 1512,
+        node_type: 'Settings',
+        widget_index: 3,
+        original_path: 'qwen3vl_32b.safetensors',
+        active: true,
+        connected: true,
+        is_top_level: true,
+      },
+    ],
+  };
+
+  const targetGroups = context.getMetadataTransferTargetGroups(loadedModels);
+  assert.equal(targetGroups.length, 3);
+  const upscaleGroup = targetGroups.find(g => g.category === 'upscale_models');
+  const diffusionGroup = targetGroups.find(g => g.category === 'diffusion_models');
+  const textEncGroup = targetGroups.find(g => g.category === 'text_encoders');
+  assert.ok(upscaleGroup && diffusionGroup && textEncGroup);
+  assert.equal(upscaleGroup.nodes[0].targetKey, 'upscale_models:top:1512');
+  assert.equal(diffusionGroup.nodes[0].targetKey, 'diffusion_models:top:1512');
+  assert.equal(textEncGroup.nodes[0].targetKey, 'text_encoders:top:1512');
+  assert.equal(upscaleGroup.nodes[0].refs.length, 1);
+  assert.equal(diffusionGroup.nodes[0].refs.length, 2);
+  assert.equal(textEncGroup.nodes[0].refs.length, 1);
+
+  const state = {
+    loadedModels: {
+      loaded_models: [
+        { category: 'upscale_models', original_path: 'imported-upscale.pth' },
+        { category: 'diffusion_models', original_path: 'imported-diffusion.safetensors' },
+        { category: 'text_encoders', original_path: 'imported-clip.safetensors' },
+      ],
+    },
+    transfer: {
+      mode: 'replace',
+      activityScope: 'all',
+      targetGroups,
+      selectedNodeKeys: new Set(),
+      sourceSelections: {},
+    },
+  };
+  context.imageInspectorState = state;
+  context.renderMetadataTransferPanelInPlace = () => true;
+
+  // Initially none selected
+  let html = context.renderMetadataTransferPanel(state);
+  assert.match(html, /<button[^>]*data-image-transfer-target="upscale_models:top:1512"[^>]*aria-pressed="false"/);
+  assert.match(html, /<button[^>]*data-image-transfer-target="diffusion_models:top:1512"[^>]*aria-pressed="false"/);
+
+  // Toggle ONLY upscale_models
+  context.toggleMetadataTransferNode('upscale_models:top:1512');
+  assert.deepEqual(Array.from(state.transfer.selectedNodeKeys), ['upscale_models:top:1512']);
+
+  // Preview rows should contain ONLY upscale models
+  const previewRows = context.getMetadataTransferPreviewRows(state);
+  assert.equal(previewRows.length, 1);
+  assert.equal(previewRows[0].category, 'upscale_models');
+  assert.equal(previewRows[0].targetKey, 'upscale_models:top:1512');
+  assert.equal(previewRows[0].currentValue, '2x-AnimeSharpV4_RCAN.pth');
+
+  // Rendered panel should mark upscale as selected and diffusion as unselected
+  html = context.renderMetadataTransferPanel(state);
+  assert.match(html, /<button[^>]*data-image-transfer-target="upscale_models:top:1512"[^>]*aria-pressed="true"/);
+  assert.match(html, /<button[^>]*data-image-transfer-target="diffusion_models:top:1512"[^>]*aria-pressed="false"/);
+  assert.match(html, /<button[^>]*data-image-transfer-target="text_encoders:top:1512"[^>]*aria-pressed="false"/);
+
+  // In the upscale node preview, diffusion model strings must NOT appear
+  const upscaleSection = html.slice(
+    html.indexOf('data-image-transfer-category="upscale_models"'),
+    html.indexOf('data-image-transfer-category="diffusion_models"')
+  );
+  assert.match(upscaleSection, /2x-AnimeSharpV4_RCAN\.pth/);
+  assert.doesNotMatch(upscaleSection, /DasimaMinimaxH3/);
+  assert.doesNotMatch(upscaleSection, /qwen3vl_32b/);
+
+  // Apply transfer should send ONLY the upscale target ref
+  let appliedPayload = null;
+  context.getCurrentWorkflow = () => ({ signature: 'wf-1512' });
+  context.getWorkflowSignature = () => 'wf-1512';
+  context.fetchJson = async (url, options) => {
+    if (url.includes('transfer-models')) {
+      appliedPayload = JSON.parse(options.body);
+      return { success: true, updated: 1, workflow: { signature: 'wf-1512-updated' } };
+    }
+    return { loaded_models: [] };
+  };
+  context.updateWorkflowInComfyUI = async () => true;
+
+  await context.applyMetadataTransfer();
+  assert.ok(appliedPayload);
+  assert.equal(appliedPayload.target_refs.length, 1);
+  assert.equal(appliedPayload.target_refs[0].category, 'upscale_models');
+  assert.equal(appliedPayload.target_refs[0].node_id, 1512);
+  assert.equal(appliedPayload.target_refs[0].widget_index, 0);
+});
+
+test('metadata transfer renders locate button for target nodes', () => {
+  const context = createTransferContext();
+  const state = createTransferState([
+    { category: 'text_encoders', original_path: 'imported.safetensors' },
+  ]);
+
+  const html = context.renderMetadataTransferPanel(state);
+
+  assert.match(html, /class="[^"]*mr-image-transfer-node-target[^"]*"/);
+  assert.match(html, /data-image-transfer-locate/);
+  assert.match(html, /data-node-id="1"/);
+  assert.match(html, /data-tooltip="Center this node in the ComfyUI graph\."/);
+  assert.match(html, /aria-label="Center CLIPLoader in the ComfyUI graph"/);
+  assert.match(html, /class="mr-node-chip-icon"/);
+});
+
+test('metadata transfer locate button triggers locateNodeInGraph and does not toggle node selection', () => {
+  const context = createTransferContext();
+  let clickListener = null;
+  const mockRoot = {
+    dataset: {},
+    addEventListener: (type, listener) => {
+      if (type === 'click') clickListener = listener;
+    },
+    removeEventListener: () => {},
+    querySelector: sel => (sel === '.mr-image-inspector' ? mockRoot : null),
+  };
+  context.contentElement = mockRoot;
+
+  let locatedTarget = null;
+  context.locateNodeInGraph = (nodeId, options) => {
+    locatedTarget = { nodeId, ...options };
+  };
+
+  let toggledNode = null;
+  context.toggleMetadataTransferNode = (target) => {
+    toggledNode = target;
+  };
+
+  context.bindImageMetadataEvents();
+  assert.ok(clickListener);
+
+  const locateButton = {
+    dataset: {
+      imageTransferLocate: '',
+      nodeId: '1512',
+      subgraphId: 'sub-42',
+      isTopLevel: 'false',
+    },
+  };
+  locateButton.closest = selector => (selector.includes('data-image-transfer-locate') ? locateButton : null);
+
+  let defaultPrevented = false;
+  let propagationStopped = false;
+  clickListener({
+    target: locateButton,
+    preventDefault: () => { defaultPrevented = true; },
+    stopPropagation: () => { propagationStopped = true; },
+  });
+
+  assert.equal(defaultPrevented, true);
+  assert.equal(propagationStopped, true);
+  assert.deepEqual(locatedTarget, {
+    nodeId: 1512,
+    subgraphId: 'sub-42',
+    isTopLevel: false,
+  });
+  assert.equal(toggledNode, null);
+});
+

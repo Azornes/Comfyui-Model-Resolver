@@ -29,7 +29,7 @@ from ..workflow.formats import normalize_workflow_payload
 
 log = create_module_logger(__name__)
 
-MAX_IMAGE_BYTES = 64 * 1024 * 1024
+MAX_IMAGE_BYTES = 256 * 1024 * 1024
 MAX_WORKFLOW_JSON_BYTES = 16 * 1024 * 1024
 MAX_PARAMETERS_LENGTH = 12_000
 EXIF_IFD_TAG = 34665
@@ -80,13 +80,29 @@ def _metadata_json_value(value: Any) -> Any:
         text = current.strip()
         if not text:
             return current
+        if text.startswith(";"):
+            lines = [
+                line.strip()
+                for line in text.splitlines()
+                if line.strip() and not line.strip().startswith(";")
+            ]
+            text = "\n".join(lines).strip()
+        if not text:
+            return current
         if text[0] not in "[{\"":
-            prefix, separator, remainder = text.partition(":")
+            prefix, separator, remainder = "", "", ""
+            for candidate_sep in (":", "="):
+                p, s, r = text.partition(candidate_sep)
+                if s and (not separator or len(p) < len(prefix)):
+                    prefix, separator, remainder = p, s, r
             if separator and prefix.strip().lower() in {
                 "prompt",
                 "workflow",
                 "comfy",
                 "comfyui",
+                "comment",
+                "description",
+                "usercomment",
             }:
                 text = remainder.strip()
             else:
@@ -96,7 +112,16 @@ def _metadata_json_value(value: Any) -> Any:
         try:
             parsed = json.loads(text)
         except (TypeError, ValueError, json.JSONDecodeError):
-            return current
+            unescaped = (
+                text.replace(r"\=", "=")
+                .replace(r"\;", ";")
+                .replace(r"\#", "#")
+                .replace(r"\\", "\\")
+            )
+            try:
+                parsed = json.loads(unescaped)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                return current
         if not isinstance(parsed, str):
             return parsed
         current = parsed
@@ -149,20 +174,20 @@ def _read_image_bytes(data_url: str) -> bytes:
     if encoded.startswith("data:"):
         header, separator, encoded = encoded.partition(",")
         if not separator or ";base64" not in header.lower():
-            raise ValueError("Image payload must be a base64 data URL")
+            raise ValueError("Media payload must be a base64 data URL")
     encoded = "".join(encoded.split())
     if not encoded:
-        raise ValueError("Image payload is empty")
+        raise ValueError("Media payload is empty")
     if len(encoded) > ((MAX_IMAGE_BYTES + 2) * 4 // 3) + 16:
-        raise ValueError("Image payload is too large")
+        raise ValueError("Media payload is too large")
     try:
         raw = base64.b64decode(encoded, validate=True)
     except (binascii.Error, ValueError) as exc:
-        raise ValueError("Image payload is not valid base64") from exc
+        raise ValueError("Media payload is not valid base64") from exc
     if not raw:
-        raise ValueError("Image payload is empty")
+        raise ValueError("Media payload is empty")
     if len(raw) > MAX_IMAGE_BYTES:
-        raise ValueError("Image payload is too large")
+        raise ValueError("Media payload is too large")
     return raw
 
 
@@ -209,13 +234,18 @@ def _find_embedded_workflow(metadata: Mapping[str, Any]):
         "comfy",
         "extra_pnginfo",
         "extra_metadata",
+        "comment",
+        "description",
+        "usercomment",
+        "graph",
     )
     candidates = []
     seen = set()
-    for key in priority_keys:
-        if key in metadata:
-            candidates.append((key, metadata[key]))
-            seen.add(key)
+    for priority_key in priority_keys:
+        for key, value in metadata.items():
+            if str(key).strip().lower() == priority_key and key not in seen:
+                candidates.append((key, value))
+                seen.add(key)
     candidates.extend(
         (key, value)
         for key, value in metadata.items()
@@ -228,7 +258,7 @@ def _find_embedded_workflow(metadata: Mapping[str, Any]):
                 normalized, workflow_format = normalize_workflow_payload(candidate)
             except ValueError:
                 continue
-            return normalized, workflow_format, key
+            return normalized, workflow_format, str(key)
     return None, None, ""
 
 
@@ -575,13 +605,243 @@ def _metadata_summary(
     }
 
 
+def _extract_raw_container_metadata(raw: bytes) -> dict[str, Any]:
+    """Scan container bytes for embedded ComfyUI workflow JSON payloads."""
+    extracted: dict[str, Any] = {}
+    if not raw or len(raw) < 16:
+        return extracted
+
+    # 1. Search for Matroska/WebM EBML COMMENT tag
+    if raw.startswith(b"\x1aE\xdf\xa3"):
+        comment_idx = raw.find(b"COMMENT")
+        while comment_idx != -1 and comment_idx < len(raw) - 16:
+            tag_offset = comment_idx + 7
+            if tag_offset + 2 <= len(raw) and raw[tag_offset : tag_offset + 2] == b"\x44\x87":
+                vint_offset = tag_offset + 2
+                if vint_offset + 4 <= len(raw):
+                    vint = int.from_bytes(raw[vint_offset : vint_offset + 4], "big")
+                    n_octets = (32 - vint.bit_length()) // 8 + 1 if vint else 1
+                    if n_octets <= 4:
+                        shift = 8 * (4 - n_octets)
+                        length = (vint >> shift) & ~(1 << (7 * n_octets))
+                        data_start = vint_offset + n_octets
+                        data_end = data_start + length
+                        if data_end <= len(raw):
+                            try:
+                                payload = raw[data_start:data_end].decode("utf-8", errors="replace")
+                                extracted["comment"] = payload
+                            except Exception:
+                                pass
+            comment_idx = raw.find(b"COMMENT", comment_idx + 1)
+
+    # 2. General search for workflow JSON fragments: "nodes": or "class_type":
+    markers = (b'"nodes":', b'"class_type":', b'"workflow":', b'"prompt":')
+    for marker in markers:
+        if "workflow" in extracted or "prompt" in extracted:
+            break
+        pos = raw.find(marker)
+        scan_limit = 0
+        while pos != -1 and scan_limit < 3:
+            scan_limit += 1
+            start = raw.rfind(b"{", max(0, pos - 200), pos)
+            if start != -1:
+                depth = 0
+                in_string = False
+                escape = False
+                end = -1
+                max_scan = min(start + 16 * 1024 * 1024, len(raw))
+                for i in range(start, max_scan):
+                    b = raw[i : i + 1]
+                    if in_string:
+                        if escape:
+                            escape = False
+                        elif b == b"\\":
+                            escape = True
+                        elif b == b'"':
+                            in_string = False
+                    else:
+                        if b == b'"':
+                            in_string = True
+                        elif b == b"{":
+                            depth += 1
+                        elif b == b"}":
+                            depth -= 1
+                            if depth == 0:
+                                end = i + 1
+                                break
+                if end != -1:
+                    try:
+                        candidate_text = raw[start:end].decode("utf-8", errors="replace")
+                        parsed = json.loads(candidate_text)
+                        if isinstance(parsed, Mapping):
+                            normalized, _fmt = normalize_workflow_payload(parsed)
+                            if normalized:
+                                extracted["workflow"] = candidate_text
+                                break
+                    except Exception:
+                        pass
+            pos = raw.find(marker, pos + 1)
+
+    return extracted
+
+
+def inspect_container_bytes(
+    raw: bytes,
+    filename: str = "",
+    *,
+    api_key: Optional[str] = None,
+) -> dict[str, Any]:
+    """Inspect a video/audio container without writing it or executing its workflow."""
+    metadata: dict[str, Any] = {}
+    width = 0
+    height = 0
+    mode = ""
+    duration = None
+    media_type = "media"
+    format_name = ""
+
+    ext = os.path.splitext(filename)[1].lower() if filename else ""
+
+    try:
+        import av
+
+        with av.open(io.BytesIO(raw)) as container:
+            if container.metadata:
+                for k, v in container.metadata.items():
+                    metadata[str(k)] = _safe_metadata_value(v, tag_name=str(k))
+
+            for stream in container.streams:
+                if stream.metadata:
+                    for k, v in stream.metadata.items():
+                        metadata.setdefault(
+                            f"{stream.type}:{k}",
+                            _safe_metadata_value(v, tag_name=str(k)),
+                        )
+                        metadata.setdefault(
+                            str(k),
+                            _safe_metadata_value(v, tag_name=str(k)),
+                        )
+
+            video_stream = next((s for s in container.streams if s.type == "video"), None)
+            audio_stream = next((s for s in container.streams if s.type == "audio"), None)
+
+            if video_stream is not None:
+                media_type = "video"
+            elif audio_stream is not None:
+                media_type = "audio"
+
+            raw_format = (container.format.name or media_type).upper().split(",")[0].strip()
+            if "MATROSKA" in raw_format:
+                format_name = "WEBM" if ext == ".webm" else "MKV"
+            elif "MOV" in raw_format or "MP4" in raw_format:
+                format_name = "MP4" if ext in {".mp4", ".m4v"} else "MOV"
+            else:
+                format_name = raw_format
+
+            if container.duration is not None and getattr(av, "time_base", None):
+                try:
+                    duration = round(float(container.duration / av.time_base), 2)
+                except Exception:
+                    duration = None
+
+            if video_stream is not None:
+                width = int(video_stream.width or 0)
+                height = int(video_stream.height or 0)
+                pix_fmt = getattr(video_stream.format, "name", "") if video_stream.format else ""
+                codec = getattr(video_stream.codec_context, "name", "") if getattr(video_stream, "codec_context", None) else ""
+                mode = f"{codec} ({pix_fmt})" if codec and pix_fmt else (pix_fmt or codec or "video")
+            elif audio_stream is not None:
+                sample_rate = getattr(audio_stream, "rate", 0) or 0
+                channels = getattr(audio_stream, "channels", 0) or 0
+                codec = getattr(audio_stream.codec_context, "name", "") if getattr(audio_stream, "codec_context", None) else ""
+                mode = f"{codec} ({channels} ch, {sample_rate} Hz)" if codec else f"{channels} ch, {sample_rate} Hz"
+    except Exception as av_exc:
+        log.debug(f"PyAV container extraction failed for {filename}: {av_exc}")
+
+    if not any(str(k).strip().lower() in ("workflow", "prompt") for k in metadata):
+        raw_metadata = _extract_raw_container_metadata(raw)
+        for k, v in raw_metadata.items():
+            metadata.setdefault(k, v)
+
+    if not format_name:
+        if ext in {".mp4", ".m4v"}:
+            format_name = "MP4"
+            media_type = "video"
+        elif ext == ".webm":
+            format_name = "WEBM"
+            media_type = "video"
+        elif ext == ".mkv":
+            format_name = "MKV"
+            media_type = "video"
+        elif ext == ".mov":
+            format_name = "MOV"
+            media_type = "video"
+        elif ext == ".flac":
+            format_name = "FLAC"
+            media_type = "audio"
+        elif ext in {".mp3", ".wav", ".ogg", ".opus"}:
+            format_name = ext.lstrip(".").upper()
+            media_type = "audio"
+        else:
+            format_name = "MEDIA"
+
+    civitai_metadata, civitai_resources = _extract_civitai_metadata(metadata)
+    if civitai_resources:
+        civitai_resources = resolve_civitai_resource_filenames(
+            civitai_resources, api_key=api_key
+        )
+    if civitai_metadata:
+        metadata.setdefault(
+            "Civitai metadata",
+            json.dumps(civitai_metadata, ensure_ascii=False),
+        )
+    if civitai_resources:
+        metadata.setdefault(
+            "Civitai resources",
+            json.dumps(civitai_resources, ensure_ascii=False),
+        )
+
+    workflow, workflow_format, workflow_source = _find_embedded_workflow(metadata)
+
+    return {
+        "source_type": media_type,
+        "filename": filename or f"Dropped {media_type}",
+        "image": {
+            "format": format_name,
+            "width": width,
+            "height": height,
+            "mode": mode,
+            "duration": duration,
+            "media_type": media_type,
+        },
+        "metadata": _metadata_summary(
+            metadata,
+            workflow_format=workflow_format,
+            workflow_source=workflow_source,
+        ),
+        "workflow": workflow,
+        "workflow_format": workflow_format or "",
+        "workflow_source": workflow_source,
+        "workflow_node_count": len(workflow.get("nodes", []))
+        if isinstance(workflow, Mapping)
+        else 0,
+        "civitai_metadata": civitai_metadata,
+        "civitai_resources": civitai_resources,
+        "civitai_workflow": (
+            str(civitai_metadata.get("workflow", ""))
+            if isinstance(civitai_metadata.get("workflow"), str)
+            else ""
+        ),
+    }
+
+
 def inspect_image_bytes(
     raw: bytes,
     filename: str = "",
     *,
     api_key: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Inspect a supported image without writing it or executing its workflow."""
+    """Inspect a supported image or media file without writing it or executing its workflow."""
     try:
         from PIL import Image
 
@@ -634,10 +894,14 @@ def inspect_image_bytes(
                     else ""
                 ),
             }
-    except ValueError:
-        raise
-    except Exception as exc:
-        raise ValueError(f"Could not read image metadata: {exc}") from exc
+    except Exception as img_exc:
+        try:
+            return inspect_container_bytes(raw, filename=filename, api_key=api_key)
+        except Exception as container_exc:
+            raise ValueError(f"Could not read metadata: {container_exc or img_exc}") from container_exc
+
+
+inspect_media_bytes = inspect_image_bytes
 
 
 def _parse_workflow_json_text(value: str) -> Any:
@@ -921,7 +1185,7 @@ class ImageMetadataService:
             return self.web.json_response({"error": str(exc)}, status=400)
 
         try:
-            if source_type == "image":
+            if source_type in {"image", "media", "video", "audio"}:
                 data_url = data.get("data_url")
                 if not isinstance(data_url, str):
                     raise ValueError("Image data is required")
@@ -974,7 +1238,7 @@ class ImageMetadataService:
                     api_key=civitai_key or None,
                 )
             else:
-                raise ValueError("Metadata source type must be image, workflow, or civitai")
+                raise ValueError("Metadata source type must be image, media, video, audio, workflow, or civitai")
         except (TypeError, ValueError) as exc:
             return self.web.json_response({"error": str(exc)}, status=400)
         except Exception as exc:

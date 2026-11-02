@@ -64,6 +64,48 @@ def jpeg_with_nested_user_comment(comment):
     return output.getvalue()
 
 
+def mp4_with_metadata(metadata):
+    import av
+    import numpy as np
+
+    buf = io.BytesIO()
+    with av.open(buf, mode="w", format="mp4", options={"movflags": "use_metadata_tags"}) as c:
+        for k, v in metadata.items():
+            c.metadata[k] = v if isinstance(v, str) else json.dumps(v)
+        s = c.add_stream("h264", rate=24)
+        s.width = 64
+        s.height = 64
+        s.pix_fmt = "yuv420p"
+        f = av.VideoFrame.from_ndarray(np.zeros((64, 64, 3), dtype=np.uint8), format="rgb24")
+        f.pts = 0
+        for p in s.encode(f):
+            c.mux(p)
+        for p in s.encode(None):
+            c.mux(p)
+    return buf.getvalue()
+
+
+def webm_with_metadata(metadata):
+    import av
+    import numpy as np
+
+    buf = io.BytesIO()
+    with av.open(buf, mode="w", format="webm") as c:
+        for k, v in metadata.items():
+            c.metadata[k] = v if isinstance(v, str) else json.dumps(v)
+        s = c.add_stream("vp9", rate=24)
+        s.width = 64
+        s.height = 64
+        s.pix_fmt = "yuv420p"
+        f = av.VideoFrame.from_ndarray(np.zeros((64, 64, 3), dtype=np.uint8), format="rgb24")
+        f.pts = 0
+        for p in s.encode(f):
+            c.mux(p)
+        for p in s.encode(None):
+            c.mux(p)
+    return buf.getvalue()
+
+
 def test_api_workflow_is_detected_and_normalized_for_existing_analyzer():
     api = api_workflow()
 
@@ -152,7 +194,11 @@ def test_jpeg_nested_exif_reads_civitai_metadata_and_resources():
         f"Civitai metadata: {json.dumps(civitai_metadata)}"
     )
 
-    result = inspect_image_bytes(jpeg_with_nested_user_comment(comment), "civitai.jpg")
+    with patch(
+        "core.services.image_metadata_service.execute_provider_json_request",
+        return_value=None,
+    ):
+        result = inspect_image_bytes(jpeg_with_nested_user_comment(comment), "civitai.jpg")
 
     assert "EXIF:UserComment" in result["metadata"]["keys"]
     assert "Civitai metadata" in result["metadata"]["keys"]
@@ -226,6 +272,105 @@ async def test_metadata_service_accepts_image_data_url():
     assert response.status == 200
     assert body["workflow_format"] == API_WORKFLOW_FORMAT
     assert body["workflow_node_count"] == 2
+
+
+def test_mp4_metadata_reads_comfyui_workflow():
+    workflow_payload = {
+        "nodes": [
+            {
+                "id": 1,
+                "type": "CheckpointLoaderSimple",
+                "widgets_values": ["model.safetensors"],
+            }
+        ]
+    }
+    mp4_bytes = mp4_with_metadata({"workflow": json.dumps(workflow_payload)})
+    result = inspect_image_bytes(mp4_bytes, "animation.mp4")
+
+    assert result["source_type"] == "video"
+    assert result["image"]["format"] == "MP4"
+    assert result["image"]["width"] == 64
+    assert result["image"]["height"] == 64
+    assert result["workflow_format"] == UI_WORKFLOW_FORMAT
+    assert result["workflow_node_count"] == 1
+    assert result["metadata"]["has_workflow"] is True
+
+
+def test_webm_metadata_reads_comfyui_workflow():
+    workflow_payload = {
+        "nodes": [
+            {
+                "id": 1,
+                "type": "KSampler",
+                "widgets_values": [123, 20],
+            }
+        ]
+    }
+    webm_bytes = webm_with_metadata({"WORKFLOW": json.dumps(workflow_payload)})
+    result = inspect_image_bytes(webm_bytes, "clip.webm")
+
+    assert result["source_type"] == "video"
+    assert result["image"]["format"] == "WEBM"
+    assert result["workflow_format"] == UI_WORKFLOW_FORMAT
+    assert result["workflow_node_count"] == 1
+
+
+def test_media_raw_byte_fallback_extracts_workflow():
+    workflow_payload = {
+        "nodes": [
+            {
+                "id": 10,
+                "type": "VAELoader",
+                "widgets_values": ["vae.safetensors"],
+            }
+        ]
+    }
+    raw = (
+        b"some_random_mp4_box_bytes"
+        + json.dumps(workflow_payload).encode("utf-8")
+        + b"trailing_raw_container_data"
+    )
+    result = inspect_image_bytes(raw, "raw_video.mp4")
+
+    assert result["image"]["format"] == "MP4"
+    assert result["workflow_format"] == UI_WORKFLOW_FORMAT
+    assert result["workflow_node_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_metadata_service_accepts_video_source_type():
+    workflow_payload = {
+        "nodes": [
+            {
+                "id": 1,
+                "type": "CheckpointLoaderSimple",
+                "widgets_values": ["model.safetensors"],
+            }
+        ]
+    }
+    raw = mp4_with_metadata({"workflow": json.dumps(workflow_payload)})
+    data_url = "data:video/mp4;base64," + base64.b64encode(raw).decode("ascii")
+    request = SimpleNamespace(
+        json=AsyncMock(
+            return_value={
+                "source_type": "video",
+                "filename": "render.mp4",
+                "data_url": data_url,
+            }
+        )
+    )
+    service = ImageMetadataService(
+        RouteContext({"asyncio": asyncio, "web": web})
+    )
+
+    response = await service.inspect_metadata(request)
+    body = json.loads(response.text)
+
+    assert response.status == 200
+    assert body["source_type"] == "video"
+    assert body["image"]["format"] == "MP4"
+    assert body["workflow_format"] == UI_WORKFLOW_FORMAT
+    assert body["workflow_node_count"] == 1
 
 
 def civitai_html_payload(meta=None, resources=None, img_data=None):

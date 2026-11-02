@@ -14,6 +14,8 @@ _WORKFLOW_CONTAINER_KEYS = (
     "extra_pnginfo",
     "extra_metadata",
     "graph",
+    "comment",
+    "description",
 )
 
 

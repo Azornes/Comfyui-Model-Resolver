@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { imageMetadataMethods, extractCivitaiImageId } from '../web/resolver/views/tabs_image_metadata_methods.js';
+import {
+    imageMetadataMethods,
+    extractCivitaiImageId,
+    isMediaFile,
+    isImageFile,
+    isWorkflowFile,
+} from '../web/resolver/views/tabs_image_metadata_methods.js';
 import { tabsLoadedMethods } from '../web/resolver/views/tabs_loaded_methods.js';
 
 globalThis.window = globalThis;
@@ -41,7 +47,6 @@ test('image metadata sections default to expanded', () => {
 
 test('toggling section marks it collapsed and persists state', () => {
     const ctx = createMockContext();
-    const state = {};
     ctx.toggleImageInspectorSection('prompt-transfer');
     assert.strictEqual(ctx.isImageInspectorSectionCollapsed('prompt-transfer'), true);
     assert.strictEqual(ctx.isImageInspectorSectionCollapsed('model-transfer'), false);
@@ -631,6 +636,61 @@ test('getMetadataTransferModelLabel appends friendly model name in brackets when
     };
     assert.strictEqual(ctx.getMetadataTransferModelLabel(modelSameName), 'Cinematic Krea2');
 });
+
+test('isMediaFile recognizes videos, audio and images', () => {
+    assert.strictEqual(isMediaFile({ name: 'animation.mp4', type: 'video/mp4' }), true);
+    assert.strictEqual(isMediaFile({ name: 'clip.webm', type: 'video/webm' }), true);
+    assert.strictEqual(isMediaFile({ name: 'render.mkv', type: 'video/x-matroska' }), true);
+    assert.strictEqual(isMediaFile({ name: 'audio.flac', type: 'audio/flac' }), true);
+    assert.strictEqual(isMediaFile({ name: 'song.mp3', type: 'audio/mpeg' }), true);
+    assert.strictEqual(isMediaFile({ name: 'photo.png', type: 'image/png' }), true);
+    assert.strictEqual(isMediaFile({ name: 'photo.webp', type: 'image/webp' }), true);
+    assert.strictEqual(isMediaFile({ name: 'unknown.xyz', type: 'application/octet-stream' }), false);
+    assert.strictEqual(isMediaFile(null), false);
+
+    // isImageFile delegates to isMediaFile
+    assert.strictEqual(isImageFile({ name: 'video.mp4' }), true);
+    assert.strictEqual(isWorkflowFile({ name: 'workflow.json' }), true);
+});
+
+test('inspectImageMetadataFile routes video files to inspectImageFile', async () => {
+    const ctx = createMockContext();
+    let inspectedFile = null;
+    ctx.inspectImageFile = (file) => {
+        inspectedFile = file;
+        return { success: true };
+    };
+    const mp4File = { name: 'comfy.mp4', type: 'video/mp4', size: 1024 };
+    const res = await ctx.inspectImageMetadataFile(mp4File);
+    assert.strictEqual(res?.success, true);
+    assert.strictEqual(inspectedFile?.name, 'comfy.mp4');
+});
+
+test('handleImageMetadataPaste accepts video and audio data URLs', () => {
+    const ctx = createMockContext();
+    const { root } = createMockPasteTarget(ctx);
+    let payload = null;
+    ctx.runImageMetadataInspection = (p) => { payload = p; };
+    let defaultPrevented = false;
+    let propagationStopped = false;
+    const event = {
+        target: root,
+        preventDefault: () => { defaultPrevented = true; },
+        stopPropagation: () => { propagationStopped = true; },
+        clipboardData: {
+            files: [],
+            items: [],
+            getData: () => 'data:video/mp4;base64,AAAA',
+        },
+    };
+    assert.strictEqual(ctx.handleImageMetadataPaste(event), true);
+    assert.strictEqual(defaultPrevented, true);
+    assert.strictEqual(propagationStopped, true);
+    assert.strictEqual(payload?.source_type, 'image');
+    assert.strictEqual(payload?.filename, 'Pasted media');
+    assert.strictEqual(payload?.data_url, 'data:video/mp4;base64,AAAA');
+});
+
 
 
 

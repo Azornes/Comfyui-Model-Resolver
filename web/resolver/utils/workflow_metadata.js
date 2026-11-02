@@ -1,8 +1,12 @@
 const WORKFLOW_CONTAINER_KEYS = new Set([
     'comfy',
     'comfyui',
+    'comment',
+    'description',
     'extra_metadata',
     'extra_pnginfo',
+    'graph',
+    'prompt',
     'workflow'
 ]);
 

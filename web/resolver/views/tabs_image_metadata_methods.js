@@ -12,7 +12,7 @@ import {
     updateWorkflowPromptValue,
 } from "../utils/prompt_utils.js";
 
-const MAX_IMAGE_FILE_SIZE = 64 * 1024 * 1024;
+const MAX_IMAGE_FILE_SIZE = 256 * 1024 * 1024;
 const MAX_WORKFLOW_FILE_SIZE = 16 * 1024 * 1024;
 const METADATA_TRANSFER_MODE_STORAGE_KEY = 'model_resolver_metadata_transfer_mode';
 const METADATA_TRANSFER_ACTIVITY_SCOPE_STORAGE_KEY = 'model_resolver_metadata_transfer_activity_scope';
@@ -110,13 +110,20 @@ function cloneWorkflowSnapshot(workflow) {
     }
 }
 
-function isImageFile(file) {
+export function isMediaFile(file) {
     const name = String(file?.name || '').toLowerCase();
-    return String(file?.type || '').startsWith('image/')
-        || /\.(png|jpe?g|webp)$/i.test(name);
+    const type = String(file?.type || '').toLowerCase();
+    return type.startsWith('image/')
+        || type.startsWith('video/')
+        || type.startsWith('audio/')
+        || /\.(png|jpe?g|webp|gif|tiff?|bmp|avif|mp4|webm|mkv|mov|avi|m4v|flac|mp3|wav|ogg|opus|m4a|aac)$/i.test(name);
 }
 
-function isWorkflowFile(file) {
+export function isImageFile(file) {
+    return isMediaFile(file);
+}
+
+export function isWorkflowFile(file) {
     const name = String(file?.name || '').toLowerCase();
     return file?.type === 'application/json'
         || file?.type === 'text/json'
@@ -439,12 +446,12 @@ export const imageMetadataMethods = {
                                     <span class="mr-section-collapse-chevron" aria-hidden="true">${getSvgIcon('chevronDown')}</span>
                                     <span class="mr-loaded-models-title">Image Metadata</span>
                                 </button>
-                                ${this.getMetadataTooltipBadge('Drop or paste (Ctrl+V) an image, Civitai link, or workflow JSON/text file here, or paste JSON into the box below.', 'Image metadata help')}
+                                ${this.getMetadataTooltipBadge('Drop or paste (Ctrl+V) an image, video, audio, Civitai link, or workflow JSON/text file here, or paste JSON into the box below.', 'Metadata help')}
                             </div>
                         </div>
                     </div>
                     <div class="mr-image-inspector-tools">
-                        <input type="file" accept="image/png,image/jpeg,image/webp,application/json,.json,text/plain,.txt" hidden data-image-inspector-input="file">
+                        <input type="file" accept="image/*,video/*,audio/*,application/json,.json,text/plain,.txt,.mp4,.webm,.mkv,.mov,.avi,.m4v,.flac,.mp3,.wav,.ogg,.opus" hidden data-image-inspector-input="file">
                         <div class="mr-image-inspector-paste">
                             <textarea id="mr-image-inspector-json-text" class="mr-image-inspector-textarea" rows="3" aria-label="Paste workflow JSON" placeholder="Paste a ComfyUI workflow JSON or Civitai image link (e.g. https://civitai.red/images/145110824)..."></textarea>
                             <div class="mr-image-inspector-actions">
@@ -562,9 +569,25 @@ export const imageMetadataMethods = {
                 return;
             }
 
-            const nodeChip = event.target.closest?.('[data-image-transfer-node]');
+            const locateBtn = event.target.closest?.('[data-image-transfer-locate]');
+            if (locateBtn) {
+                event.preventDefault();
+                event.stopPropagation();
+                const rawNodeId = locateBtn.dataset.nodeId;
+                const numericNodeId = Number(rawNodeId);
+                void this.locateNodeInGraph?.(Number.isNaN(numericNodeId) ? rawNodeId : numericNodeId, {
+                    subgraphId: locateBtn.dataset.subgraphId || '',
+                    isTopLevel: locateBtn.dataset.isTopLevel !== 'false',
+                });
+                return;
+            }
+
+            const nodeChip = event.target.closest?.('[data-image-transfer-target], [data-image-transfer-node]');
             if (nodeChip) {
-                this.toggleMetadataTransferNode(nodeChip.dataset.imageTransferNode);
+                this.toggleMetadataTransferNode(
+                    nodeChip.dataset.imageTransferTarget || nodeChip.dataset.imageTransferNode,
+                    nodeChip.dataset.imageTransferCategory
+                );
                 return;
             }
 
@@ -779,12 +802,12 @@ export const imageMetadataMethods = {
         const text = clipboardData.getData?.('text/plain') || '';
         const trimmed = text.trim();
 
-        if (/^data:image\/(png|jpeg|jpg|webp);base64,/i.test(trimmed)) {
+        if (/^data:(image|video|audio)\/[a-zA-Z0-9.\-_+]+;base64,/i.test(trimmed)) {
             event.preventDefault?.();
             event.stopPropagation?.();
             void this.runImageMetadataInspection({
                 source_type: 'image',
-                filename: 'Pasted image',
+                filename: 'Pasted media',
                 data_url: trimmed,
             });
             return true;
@@ -816,30 +839,30 @@ export const imageMetadataMethods = {
     },
 
     async inspectImageMetadataFile(file) {
-        if (isImageFile(file)) {
+        if (isMediaFile(file) || isImageFile(file)) {
             return this.inspectImageFile(file);
         }
         if (isWorkflowFile(file)) {
             return this.inspectWorkflowFile(file);
         }
-        this.showNotification('Select an image, workflow JSON, or workflow text file.', 'warning');
+        this.showNotification('Select an image, video, audio, workflow JSON, or workflow text file.', 'warning');
         return null;
     },
 
     async inspectImageFile(file) {
         if (file.size > MAX_IMAGE_FILE_SIZE) {
-            this.showNotification('The image is too large to inspect (maximum 64 MB).', 'error');
+            this.showNotification('The file is too large to inspect (maximum 256 MB).', 'error');
             return null;
         }
         try {
             const dataUrl = await readFileAsDataUrl(file);
             return this.runImageMetadataInspection({
                 source_type: 'image',
-                filename: file.name || 'Pasted image.png',
+                filename: file.name || 'Pasted media',
                 data_url: dataUrl,
             });
         } catch (error) {
-            this.showNotification(error.message || 'Could not read the image file.', 'error');
+            this.showNotification(error.message || 'Could not read the file.', 'error');
             return null;
         }
     },
@@ -1057,10 +1080,16 @@ export const imageMetadataMethods = {
             ? metadata.metadata.keys.join(', ')
             : '—';
         const parameters = String(metadata.metadata?.parameters || '').trim();
+        const isVideo = metadata.source_type === 'video' || image.media_type === 'video' || /\.(mp4|webm|mkv|mov|avi|m4v)$/i.test(metadata.filename || '');
+        const isAudio = metadata.source_type === 'audio' || image.media_type === 'audio' || /\.(flac|mp3|wav|ogg|opus|m4a)$/i.test(metadata.filename || '');
+        const formatLabel = isVideo ? 'Video format' : (isAudio ? 'Audio format' : 'Image format');
+        const modeLabel = isVideo ? 'Pixel format / codec' : (isAudio ? 'Audio info' : 'Color mode');
+
         const rows = [
             ['Source file', metadata.filename || '—'],
-            image.format ? ['Image format', imageFormat] : null,
+            image.format ? [formatLabel, imageFormat] : null,
             image.width && image.height ? ['Dimensions', dimensions] : null,
+            image.duration ? ['Duration', `${Number(image.duration).toFixed(1)}s`] : null,
             ['Workflow format', workflowFormat],
             ['Workflow source', metadata.workflow_source || '—'],
             ['Workflow nodes', metadata.workflow
@@ -1070,7 +1099,7 @@ export const imageMetadataMethods = {
             civitaiResources.length
                 ? ['Civitai resources', countLabel(civitaiResources.length, 'resource')]
                 : null,
-            image.mode ? ['Color mode', image.mode] : null,
+            image.mode ? [modeLabel, image.mode] : null,
             ['Metadata keys', metadataKeys],
         ].filter(Boolean);
         const rowsHtml = rows.map(([label, value]) => `
@@ -1626,6 +1655,8 @@ export const imageMetadataMethods = {
             let node = categoryGroup.nodes.get(nodeKey);
             if (!node) {
                 node = {
+                    category,
+                    targetKey: `${category}:${nodeKey}`,
                     nodeKey,
                     nodeId: model.node_id,
                     nodeType: String(model.node_type || '').trim(),
@@ -1650,6 +1681,26 @@ export const imageMetadataMethods = {
             category: group.category,
             nodes: Array.from(group.nodes.values()),
         }));
+    },
+
+    isMetadataTransferNodeSelected(selectedNodeKeys, node = {}, category = '') {
+        if (!selectedNodeKeys) return false;
+        const set = selectedNodeKeys instanceof Set ? selectedNodeKeys : new Set(selectedNodeKeys);
+        const normalizedCategory = normalizeTransferCategory(category || node?.category);
+        const nodeKey = String(node?.nodeKey || '');
+        const targetKey = String(node?.targetKey || (normalizedCategory && nodeKey ? `${normalizedCategory}:${nodeKey}` : ''));
+
+        if (targetKey && set.has(targetKey)) {
+            return true;
+        }
+        if (nodeKey && set.has(nodeKey)) {
+            return true;
+        }
+        return false;
+    },
+
+    getLocateIconHtml() {
+        return `<span class="mr-node-chip-icon" aria-hidden="true">${getSvgIcon('locate')}</span>`;
     },
 
     getMetadataTransferModelValue(model = {}) {
@@ -1888,9 +1939,10 @@ export const imageMetadataMethods = {
         for (const group of targetGroups) {
             const category = normalizeTransferCategory(group.category);
             for (const node of group.nodes || []) {
-                if (!selectedNodeKeys.has(node.nodeKey)) continue;
+                if (!this.isMetadataTransferNodeSelected(selectedNodeKeys, node, category)) continue;
+                const targetKey = node.targetKey || `${category}:${node.nodeKey}`;
                 for (const ref of node.refs || []) {
-                    const target = { category, node, ref, activityScope };
+                    const target = { category, node, ref, activityScope, targetKey };
                     target.acceptedFileTypes = this.getMetadataTransferAcceptedFileTypes(target);
                     target.compatibleSources = this.getMetadataTransferCompatibleSourcesForTarget(
                         target,
@@ -1977,6 +2029,7 @@ export const imageMetadataMethods = {
             return {
                 category: target.category,
                 nodeKey: target.node.nodeKey,
+                targetKey: target.targetKey || `${target.category}:${target.node.nodeKey}`,
                 refKey: this.getMetadataTransferSourceSelectionKey(target.ref),
                 nodeName,
                 nodeId: target.node.nodeId,
@@ -2008,10 +2061,11 @@ export const imageMetadataMethods = {
 
         const selectedNodes = new Map();
         for (const target of selectedTargets) {
-            let entry = selectedNodes.get(target.node.nodeKey);
+            const groupKey = target.targetKey || `${target.category}:${target.node.nodeKey}`;
+            let entry = selectedNodes.get(groupKey);
             if (!entry) {
-                entry = { node: target.node, targets: [] };
-                selectedNodes.set(target.node.nodeKey, entry);
+                entry = { node: target.node, category: target.category, targets: [] };
+                selectedNodes.set(groupKey, entry);
             }
             entry.targets.push(target);
         }
@@ -2281,10 +2335,11 @@ export const imageMetadataMethods = {
         }
 
         const previewRows = this.getMetadataTransferPreviewRows(state);
-        const previewRowsByNodeKey = new Map();
+        const previewRowsByTargetKey = new Map();
         for (const row of previewRows) {
-            if (!previewRowsByNodeKey.has(row.nodeKey)) previewRowsByNodeKey.set(row.nodeKey, []);
-            previewRowsByNodeKey.get(row.nodeKey).push(row);
+            const key = row.targetKey || `${row.category}:${row.nodeKey}`;
+            if (!previewRowsByTargetKey.has(key)) previewRowsByTargetKey.set(key, []);
+            previewRowsByTargetKey.get(key).push(row);
         }
         const collapsedCategories = transfer.collapsedCategories instanceof Set
             ? transfer.collapsedCategories
@@ -2342,8 +2397,10 @@ export const imageMetadataMethods = {
                 `;
             }).join('');
         };
-        const renderNode = node => {
-            const selected = selectedNodeKeys.has(node.nodeKey);
+        const renderNode = (node, category) => {
+            const normalizedCategory = normalizeTransferCategory(category || node.category);
+            const targetKey = node.targetKey || `${normalizedCategory}:${node.nodeKey}`;
+            const selected = this.isMetadataTransferNodeSelected(selectedNodeKeys, node, normalizedCategory);
             const scopeLabel = node.isTopLevel
                 ? ''
                 : ` · ${node.subgraphName || node.subgraphId || 'subgraph'}`;
@@ -2360,24 +2417,49 @@ export const imageMetadataMethods = {
                 subgraph_name: node.subgraphName,
                 is_top_level: node.isTopLevel,
             }, 'Right-click to locate this node in the workflow') || '';
-            const nodePreviewRows = previewRowsByNodeKey.get(node.nodeKey) || [];
+            const nodePreviewRows = previewRowsByTargetKey.get(targetKey)
+                || (previewRowsByTargetKey.get(node.nodeKey) && previewRows.every(r => r.nodeKey === node.nodeKey) ? previewRowsByTargetKey.get(node.nodeKey) : [])
+                || [];
             const previewHtml = selected
                 ? nodePreviewRows.length
                     ? this.renderMetadataTransferPreview(nodePreviewRows)
                     : '<p class="mr-image-transfer-empty">No imported LoRAs match the selected activity scope.</p>'
                 : renderUnselectedPreview(node);
+            const canLocate = node.nodeId !== undefined && node.nodeId !== null && node.nodeId !== '';
+            const locateTooltip = node.isTopLevel === false
+                ? 'Open this subgraph and center the node in the ComfyUI graph.'
+                : 'Center this node in the ComfyUI graph.';
+            const locateButtonHtml = canLocate
+                ? `
+                    <button type="button"
+                        class="mr-node-chip is-locatable mr-missing-row-locate mr-image-transfer-node-locate"
+                        data-image-transfer-locate
+                        data-node-id="${this.escapeHtml(String(node.nodeId))}"
+                        data-subgraph-id="${this.escapeHtml(String(node.subgraphId || ''))}"
+                        data-is-top-level="${node.isTopLevel ? 'true' : 'false'}"
+                        data-tooltip="${this.escapeHtml(locateTooltip)}"
+                        aria-label="Center ${this.escapeHtml(nodeName)} in the ComfyUI graph">
+                        ${this.getLocateIconHtml()}
+                    </button>
+                `
+                : '';
             return `
                 <div class="mr-image-transfer-node-row${selected ? ' is-selected' : ''}" ${contextMenuAttrs}>
-                    <button type="button" class="mr-image-transfer-node-select"
-                        data-image-transfer-node="${this.escapeHtml(node.nodeKey)}"
-                        aria-pressed="${selected ? 'true' : 'false'}"
-                        aria-disabled="false">
-                        <span class="mr-image-transfer-node-check" aria-hidden="true">${selected ? '✓' : ''}</span>
-                        <span class="mr-image-transfer-node-details">
-                            <span class="mr-image-transfer-node-name">${this.escapeHtml(nodeName)} · Node ${this.escapeHtml(node.nodeId)}${this.escapeHtml(scopeLabel)}</span>
-                            <span class="mr-image-transfer-node-meta">${this.escapeHtml(nodeType)} · ${countText(node.refs.length, 'model slot')} · <span class="mr-image-transfer-node-status ${node.active ? 'is-active' : 'is-inactive'}">${node.active ? 'Active' : 'Inactive'}</span></span>
-                        </span>
-                    </button>
+                    <div class="mr-image-transfer-node-target">
+                        <button type="button" class="mr-image-transfer-node-select"
+                            data-image-transfer-node="${this.escapeHtml(node.nodeKey)}"
+                            data-image-transfer-target="${this.escapeHtml(targetKey)}"
+                            data-image-transfer-category="${this.escapeHtml(normalizedCategory)}"
+                            aria-pressed="${selected ? 'true' : 'false'}"
+                            aria-disabled="false">
+                            <span class="mr-image-transfer-node-check" aria-hidden="true">${selected ? '✓' : ''}</span>
+                            <span class="mr-image-transfer-node-details">
+                                <span class="mr-image-transfer-node-name">${this.escapeHtml(nodeName)} · Node ${this.escapeHtml(node.nodeId)}${this.escapeHtml(scopeLabel)}</span>
+                                <span class="mr-image-transfer-node-meta">${this.escapeHtml(nodeType)} · ${countText(node.refs.length, 'model slot')} · <span class="mr-image-transfer-node-status ${node.active ? 'is-active' : 'is-inactive'}">${node.active ? 'Active' : 'Inactive'}</span></span>
+                            </span>
+                        </button>
+                        ${locateButtonHtml}
+                    </div>
                     <div class="mr-image-transfer-node-preview">${previewHtml}</div>
                 </div>
             `;
@@ -2388,7 +2470,9 @@ export const imageMetadataMethods = {
                 const nodes = Array.isArray(group.nodes) ? group.nodes : [];
                 const isAvailable = sourceEntries.length === 0 || sourceCategories.has(group.category);
                 const isUnavailable = sourceEntries.length > 0 && !isAvailable;
-                const selectedCount = nodes.filter(node => selectedNodeKeys.has(node.nodeKey)).length;
+                const selectedCount = nodes.filter(node => (
+                    this.isMetadataTransferNodeSelected(selectedNodeKeys, node, group.category)
+                )).length;
                 const categoryLabel = getCategoryLabel(group.category);
                 const collapsed = collapsedCategories.has(group.category);
                 return `
@@ -2404,7 +2488,7 @@ export const imageMetadataMethods = {
                                 ${isUnavailable ? '<span class="mr-image-transfer-unavailable-pill">No source model</span>' : ''}
                             </span>
                         </div>
-                        ${collapsed ? '' : `<div class="mr-image-transfer-category-nodes">${nodes.map(renderNode).join('')}</div>`}
+                        ${collapsed ? '' : `<div class="mr-image-transfer-category-nodes">${nodes.map(node => renderNode(node, group.category)).join('')}</div>`}
                     </section>
                 `;
             }).join('')
@@ -2412,11 +2496,17 @@ export const imageMetadataMethods = {
 
         const mode = normalizeTransferMode(transfer.mode);
         const activityScope = normalizeTransferActivityScope(transfer.activityScope);
-        const allTargetNodes = targetGroups.flatMap(group => group.nodes || []);
-        const allTargetNodeKeys = new Set(allTargetNodes.map(node => node.nodeKey));
-        const selectedTargetCount = Array.from(selectedNodeKeys)
-            .filter(nodeKey => allTargetNodeKeys.has(nodeKey))
-            .length;
+        const allTargetNodes = targetGroups.flatMap(group => (
+            (group.nodes || []).map(node => ({
+                node,
+                category: group.category,
+                targetKey: node.targetKey || `${group.category}:${node.nodeKey}`,
+            }))
+        ));
+        const allTargetKeys = new Set(allTargetNodes.map(item => item.targetKey));
+        const selectedTargetCount = allTargetNodes.filter(item => (
+            this.isMetadataTransferNodeSelected(selectedNodeKeys, item.node, item.category)
+        )).length;
         const selectionSourceText = sourceEntries.length
             ? countText(sourceEntries.length, 'metadata model')
             : 'No source workflow imported';
@@ -2486,7 +2576,7 @@ export const imageMetadataMethods = {
                         </label>
                     `).join('')}
                     <div class="mr-image-transfer-selection-tools">
-                        <span class="mr-loaded-total">${selectedTargetCount}/${allTargetNodeKeys.size}</span>
+                        <span class="mr-loaded-total">${selectedTargetCount}/${allTargetKeys.size}</span>
                         <button type="button" class="mr-btn mr-btn-secondary mr-btn-sm mr-image-transfer-clear-selection" data-image-inspector-action="clear-transfer-targets">Clear selection</button>
                     </div>
                 </div>
@@ -2615,9 +2705,14 @@ export const imageMetadataMethods = {
             state.transfer.targetModels = targetModels;
             state.transfer.targetGroups = this.getMetadataTransferTargetGroups(targetModels);
             const targetNodeKeys = new Set(
-                state.transfer.targetGroups.flatMap(group => (
-                    (group.nodes || []).map(node => node.nodeKey)
-                ))
+                state.transfer.targetGroups.flatMap(group => {
+                    const category = normalizeTransferCategory(group.category);
+                    return (group.nodes || []).flatMap(node => [
+                        node.targetKey,
+                        node.targetKey || `${category}:${node.nodeKey}`,
+                        node.nodeKey,
+                    ]).filter(Boolean);
+                })
             );
             state.transfer.selectedNodeKeys = new Set(
                 Array.from(state.transfer.selectedNodeKeys || [])
@@ -2660,19 +2755,38 @@ export const imageMetadataMethods = {
         this.renderMetadataTransferPanelInPlace();
     },
 
-    toggleMetadataTransferNode(nodeKey) {
+    toggleMetadataTransferNode(key, category = '') {
         const state = getImageInspectorState(this);
-        if (!state.transfer || !nodeKey) return;
-        const nodeGroups = (state.transfer.targetGroups || [])
-            .flatMap(group => group.nodes || [])
-            .filter(node => node.nodeKey === String(nodeKey));
-        if (!nodeGroups.length) return;
+        if (!state.transfer || !key) return;
+        const normalizedKey = String(key).trim();
+        const normalizedCategory = normalizeTransferCategory(category);
+        const targetNodes = (state.transfer.targetGroups || []).flatMap(group => {
+            const groupCategory = normalizeTransferCategory(group.category);
+            return (group.nodes || []).map(node => {
+                const targetKey = node.targetKey || (groupCategory && node.nodeKey ? `${groupCategory}:${node.nodeKey}` : node.nodeKey);
+                return { node, category: groupCategory, targetKey };
+            });
+        });
+        const matched = targetNodes.find(item => item.targetKey === normalizedKey)
+            || (normalizedCategory
+                ? targetNodes.find(item => item.category === normalizedCategory && item.node.nodeKey === normalizedKey)
+                : null)
+            || targetNodes.find(item => item.node.nodeKey === normalizedKey);
+        if (!matched) return;
+
+        const effectiveKey = (targetNodes.some(item => item.targetKey === normalizedKey))
+            ? normalizedKey
+            : (normalizedCategory && matched.node.nodeKey === normalizedKey
+                ? `${normalizedCategory}:${matched.node.nodeKey}`
+                : normalizedKey);
 
         const selected = new Set(state.transfer.selectedNodeKeys || []);
-        if (selected.has(String(nodeKey))) {
-            selected.delete(String(nodeKey));
+        if (selected.has(effectiveKey)) {
+            selected.delete(effectiveKey);
+        } else if (selected.has(matched.node.nodeKey) && effectiveKey !== matched.node.nodeKey) {
+            selected.delete(matched.node.nodeKey);
         } else {
-            selected.add(String(nodeKey));
+            selected.add(effectiveKey);
         }
         state.transfer.selectedNodeKeys = selected;
         this.renderMetadataTransferPanelInPlace();
@@ -2759,7 +2873,7 @@ export const imageMetadataMethods = {
         for (const group of transfer.targetGroups || []) {
             const category = normalizeTransferCategory(group.category);
             for (const node of group.nodes || []) {
-                if (!selectedNodeKeys.has(node.nodeKey)) continue;
+                if (!this.isMetadataTransferNodeSelected(selectedNodeKeys, node, category)) continue;
                 for (const ref of node.refs || []) {
                     const refKey = ref.transferKey || this.getMetadataTransferSourceSelectionKey(ref);
                     if (targetRefKeys.has(refKey)) continue;
@@ -2779,7 +2893,13 @@ export const imageMetadataMethods = {
                     } else {
                         sourceIndexes.set(category, sourceIndex + 1);
                     }
-                    const target = { category, node, ref, activityScope };
+                    const target = {
+                        category,
+                        node,
+                        ref,
+                        activityScope,
+                        targetKey: node.targetKey || `${category}:${node.nodeKey}`,
+                    };
                     target.acceptedFileTypes = this.getMetadataTransferAcceptedFileTypes(target);
                     target.compatibleSources = this.getMetadataTransferCompatibleSourcesForTarget(
                         target,
