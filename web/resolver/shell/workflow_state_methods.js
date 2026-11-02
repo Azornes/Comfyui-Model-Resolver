@@ -691,7 +691,11 @@ export const workflowStateMethods = {
             nextRoute,
             nextMissingSignature || nextSignature
         );
-        const preserveSearchCache = Boolean(this.preserveSearchCacheAcrossNextWorkflowSync);
+        const sameRoute = Boolean(nextRoute && nextRoute === this.activeWorkflowRouteKey);
+        const preserveSearchCache = Boolean(
+            this.preserveSearchCacheAcrossNextWorkflowSync
+            || sameRoute
+        );
         const previousSearchCache = preserveSearchCache
             ? this.cloneSearchResultCache(this.searchResultCache, {
                 preserveActive: true,
@@ -730,6 +734,17 @@ export const workflowStateMethods = {
         this.activeWorkflowSignature = nextSignature;
         this.activeMissingWorkflowSignature = nextMissingSignature;
         this.restorePendingQueueForActiveWorkflow();
+        if (sameRoute && previousKey && (!this.pendingResolutions || !this.pendingResolutions.length)) {
+            const previousPending = this.workflowPendingSelections?.get?.(previousKey);
+            if (Array.isArray(previousPending) && previousPending.length) {
+                this.pendingResolutions = this.clonePendingResolutions(previousPending);
+                this.savePendingQueueForActiveWorkflow?.();
+                this.rebuildPendingIndex?.();
+                this.updateApplyPendingButton?.();
+                this.updateQueuePanel?.();
+                this.updateQueueVisibility?.();
+            }
+        }
         this.restoreAnalysisCacheForActiveWorkflow();
         this.restoreLoadedModelsCacheForActiveWorkflow();
         this.restoreSearchCacheForActiveWorkflow();
@@ -756,6 +771,13 @@ export const workflowStateMethods = {
         }
         this.preserveSearchCacheAcrossNextWorkflowSync = false;
         this.restoreDownloadTargetSelectionsForActiveWorkflow();
+        if (sameRoute && previousKey && (!this.downloadTargetSelections || !this.downloadTargetSelections.size)) {
+            const previousTargets = this.workflowDownloadTargetSelections?.get?.(previousKey);
+            if (previousTargets && previousTargets.size) {
+                this.downloadTargetSelections = this.cloneDownloadTargetSelections(previousTargets);
+                this.saveDownloadTargetSelectionsForActiveWorkflow?.();
+            }
+        }
         if (preservedActiveSearchMissingModels.length) {
             this.syncSearchProgressAfterResume?.(preservedActiveSearchMissingModels, { workflowKey: nextKey });
         }
@@ -816,6 +838,14 @@ export const workflowStateMethods = {
 
     scheduleActiveWorkflowRefresh(reason = 'workflow-change') {
         if (!this.isVisible() || Number(this._applyWorkflowRefreshSuppressionDepth || 0) > 0) return;
+        if (this._isOpeningContent) return;
+        if (
+            this._lastOpenContentTimestamp
+            && (Date.now() - this._lastOpenContentTimestamp < 800)
+            && ['window-focus', 'visibility-change'].includes(reason)
+        ) {
+            return;
+        }
 
         const generation = (this._workflowRefreshGeneration || 0) + 1;
         this._workflowRefreshGeneration = generation;
@@ -924,13 +954,10 @@ export const workflowStateMethods = {
             tab: this.activeTab
         });
 
-        const preserveWorkflowContent = (
-            !routeChanged
-            && String(reason || '').startsWith('node-')
-        );
+        const preserveWorkflowContent = !routeChanged;
 
         this.preserveSearchCacheAcrossNextWorkflowSync = Boolean(
-            !routeChanged && reason === 'node-widget-change'
+            !routeChanged
         );
         this.syncWorkflowScopedQueue(workflow);
 
@@ -951,7 +978,7 @@ export const workflowStateMethods = {
         } else if (this.activeTab === 'metadata') {
             if (this.contentElement) this.contentElement.style.overflowY = 'auto';
             await this.openMetadataTransfer?.({
-                preserveContent: !routeChanged && String(reason || '').startsWith('node-'),
+                preserveContent: !routeChanged,
             });
         }
     }

@@ -3388,6 +3388,114 @@ test('workflow synchronization carries searched results across a strength-only s
   assert.equal(dialog.preserveSearchCacheAcrossNextWorkflowSync, false);
 });
 
+test('same route signature update carries forward pending resolutions and download target selections', () => {
+  const syncWorkflowScopedQueue = eval(
+    `(${extractMethod(workflowStateMethodsSource, 'syncWorkflowScopedQueue')})`
+  );
+  const workflow = { nodes: [{ id: 1, type: 'LoraLoader' }] };
+  const queuedItem = { missing_key: 'lora:test', target_path: 'E:/models/test.safetensors' };
+  const savedTarget = { category: 'loras', subfolder: 'anime' };
+  const pendingSelections = new Map([
+    ['workflow-a\nold-signature', [queuedItem]],
+  ]);
+  const targetSelections = new Map([
+    ['workflow-a\nold-signature', new Map([['missing-1', savedTarget]])],
+  ]);
+  let queueVisibilityUpdated = false;
+  const dialog = {
+    activeWorkflowRouteKey: 'workflow-a',
+    activeWorkflowSignature: 'old-signature',
+    activeMissingWorkflowSignature: 'old-missing-signature',
+    workflowPendingSelections: pendingSelections,
+    workflowDownloadTargetSelections: targetSelections,
+    pendingResolutions: [queuedItem],
+    downloadTargetSelections: new Map([['missing-1', savedTarget]]),
+    searchResultCache: new Map(),
+    getCurrentWorkflow: () => workflow,
+    getActiveWorkflowRouteKey: () => 'workflow-a',
+    getWorkflowSignature: () => 'new-signature',
+    getMissingWorkflowSignature: () => 'new-missing-signature',
+    getWorkflowScopedQueueKey(route = dialog.activeWorkflowRouteKey, signature = dialog.activeMissingWorkflowSignature || dialog.activeWorkflowSignature) {
+      return `${route}\n${signature}`;
+    },
+    cloneSearchResultCache(cache) { return new Map(cache); },
+    clonePendingResolutions(list) { return list.map(item => ({ ...item })); },
+    cloneDownloadTargetSelections(map) { return new Map(map); },
+    savePendingQueueForActiveWorkflow() {
+      const key = this.getWorkflowScopedQueueKey();
+      this.workflowPendingSelections.set(key, this.clonePendingResolutions(this.pendingResolutions));
+    },
+    saveAnalysisCacheForActiveWorkflow() {},
+    saveLoadedModelsCacheForActiveWorkflow() {},
+    saveSearchCacheForActiveWorkflow() {},
+    saveDownloadTargetSelectionsForActiveWorkflow() {
+      const key = this.getWorkflowScopedQueueKey();
+      this.workflowDownloadTargetSelections.set(key, this.cloneDownloadTargetSelections(this.downloadTargetSelections));
+    },
+    clearWorkflowScopedState() {
+      this.pendingResolutions = [];
+      this.downloadTargetSelections = new Map();
+    },
+    restorePendingQueueForActiveWorkflow() {
+      const key = this.getWorkflowScopedQueueKey();
+      this.pendingResolutions = this.workflowPendingSelections.get(key) || [];
+    },
+    restoreAnalysisCacheForActiveWorkflow() {},
+    restoreLoadedModelsCacheForActiveWorkflow() {},
+    restoreSearchCacheForActiveWorkflow() {},
+    restoreDownloadTargetSelectionsForActiveWorkflow() {
+      const key = this.getWorkflowScopedQueueKey();
+      this.downloadTargetSelections = this.workflowDownloadTargetSelections.get(key) || new Map();
+    },
+    rebuildPendingIndex() {},
+    updateApplyPendingButton() {},
+    updateQueuePanel() {},
+    updateQueueVisibility() { queueVisibilityUpdated = true; },
+  };
+  syncWorkflowScopedQueue.call(dialog, workflow);
+  assert.equal(dialog.pendingResolutions.length, 1);
+  assert.deepEqual(dialog.pendingResolutions[0], queuedItem);
+  assert.equal(dialog.downloadTargetSelections.get('missing-1'), savedTarget);
+  assert.equal(queueVisibilityUpdated, true);
+});
+
+test('refreshForActiveWorkflowChange preserves content for window-focus and visibility on the same route', async () => {
+  const log = { debug() {} };
+  const refreshForActiveWorkflowChange = eval(
+    `(${extractMethod(workflowStateMethodsSource, 'refreshForActiveWorkflowChange')})`
+  );
+  const workflow = { nodes: [{ id: 10, type: 'CheckpointLoaderSimple' }] };
+  let loadArguments = null;
+  const dialog = {
+    _workflowRefreshGeneration: 1,
+    activeWorkflowRouteKey: 'workflow-a',
+    activeWorkflowSignature: 'old-signature',
+    activeMissingWorkflowSignature: 'old-missing-signature',
+    activeTab: 'missing',
+    contentElement: { style: {} },
+    isVisible: () => true,
+    getActiveWorkflowRouteKey: () => 'workflow-a',
+    getCurrentWorkflow: () => workflow,
+    getWorkflowSignature: () => 'new-signature',
+    getMissingWorkflowSignature: () => 'new-missing-signature',
+    syncWorkflowScopedQueue() {},
+    async loadWorkflowData(...args) {
+      loadArguments = args;
+    },
+  };
+  await refreshForActiveWorkflowChange.call(dialog, {
+    reason: 'window-focus',
+    expectedRoute: 'workflow-a',
+    previousSignature: 'old-signature',
+    attempt: 8,
+    generation: 1,
+    candidateRoute: 'workflow-a',
+    candidateSignature: 'new-signature',
+  });
+  assert.equal(loadArguments[0], workflow);
+  assert.deepEqual(loadArguments[1], { preserveContent: true });
+});
+
 test('pending node context model resolves against the current workflow analysis before action', async () => {
   const resolveNodeContextMenuModel = eval(`(${extractMethod(modelResolverSource, 'resolveNodeContextMenuModel')})`);
   const pendingModel = {

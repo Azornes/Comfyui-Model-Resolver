@@ -886,8 +886,9 @@ test('metadata transfer renders locate button for target nodes', () => {
   assert.match(html, /data-image-transfer-locate/);
   assert.match(html, /data-node-id="1"/);
   assert.match(html, /data-tooltip="Center this node in the ComfyUI graph\."/);
-  assert.match(html, /aria-label="Center CLIPLoader in the ComfyUI graph"/);
+  assert.match(html, /aria-label="Center CLIPLoader · Node 1[^"]* in the ComfyUI graph"/);
   assert.match(html, /class="mr-node-chip-icon"/);
+  assert.match(html, /class="mr-missing-row-node-label">CLIPLoader · Node 1/);
 });
 
 test('metadata transfer locate button triggers locateNodeInGraph and does not toggle node selection', () => {

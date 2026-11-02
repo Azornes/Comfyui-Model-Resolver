@@ -14,53 +14,73 @@ export const lifecycleGraphMethods = {
     },
 
     async showContent(workflow = null, { restoreFullscreen = true, preserveCurrentView = false } = {}) {
-        this.backdrop.style.display = "none";
-        this.element.style.display = "flex";
-        void this.loadFooterVersion();
-        if (!this.docked) {
-            this.scheduleModalViewportClamp();
+        this._isOpeningContent = true;
+        if (this._workflowRefreshTimer) {
+            clearTimeout(this._workflowRefreshTimer);
+            this._workflowRefreshTimer = null;
+        }
+        if (this._workflowRefreshRetryTimer) {
+            clearTimeout(this._workflowRefreshRetryTimer);
+            this._workflowRefreshRetryTimer = null;
         }
 
-        // Update button state in case there are active downloads
-        this.updateDownloadAllButtonState();
+        try {
+            this.backdrop.style.display = "none";
+            this.element.style.display = "flex";
+            void this.loadFooterVersion();
+            if (!this.docked) {
+                this.scheduleModalViewportClamp();
+            }
 
-        // On first open: load settings from server so tokens are available on
-        // every browser without re-entering them.
-        if (!this._serverSettingsLoaded) {
-            this._serverSettingsLoaded = true;
-            await this.loadSettingsFromServer();
-        }
+            // Update button state in case there are active downloads
+            this.updateDownloadAllButtonState();
 
-        // Ensure all models are loaded for dropdown
-        await this.ensureCapabilitiesLoaded();
-        await this.ensureBaseModelsLoaded();
-        await this.ensureAllModelsLoaded();
-        await this.ensureDownloadDirectoriesLoaded();
+            // On first open: load settings from server so tokens are available on
+            // every browser without re-entering them.
+            if (!this._serverSettingsLoaded) {
+                this._serverSettingsLoaded = true;
+                await this.loadSettingsFromServer();
+            }
 
-        const fs = safeStorage.getItem('model_resolver_modal_fullscreen');
-        if (!this.docked && restoreFullscreen && fs === '1') this.setFullScreen(true);
+            // Ensure all models are loaded for dropdown
+            await this.ensureCapabilitiesLoaded();
+            await this.ensureBaseModelsLoaded();
+            await this.ensureAllModelsLoaded();
+            await this.ensureDownloadDirectoriesLoaded();
 
-        // Attach drag handle event listener (only once)
-        this.attachDragHandleIfNeeded();
+            const fs = safeStorage.getItem('model_resolver_modal_fullscreen');
+            if (!this.docked && restoreFullscreen && fs === '1') this.setFullScreen(true);
 
-        if (!preserveCurrentView) {
-            this.activeTab = this.restoreActiveTab();
-        }
-        this.updateTabButtonStates();
-        this.updateQueueVisibility();
-        this.syncWorkflowScopedQueue(workflow || this.getCurrentWorkflow());
-        await this.restoreActiveDownloadsFromBackend?.();
+            // Attach drag handle event listener (only once)
+            this.attachDragHandleIfNeeded();
 
-        if (preserveCurrentView) return;
+            if (!preserveCurrentView) {
+                this.activeTab = this.restoreActiveTab();
+            }
+            this.updateTabButtonStates();
+            this.updateQueueVisibility();
+            this.syncWorkflowScopedQueue(workflow || this.getCurrentWorkflow());
+            await this.restoreActiveDownloadsFromBackend?.();
 
-        if (this.activeTab === 'missing') {
-            await this.loadWorkflowData(workflow);
-        } else if (this.activeTab === 'loaded') {
-            this.switchTab('loaded', { force: true });
-        } else if (this.activeTab === 'metadata') {
-            this.switchTab('metadata', { force: true });
-        } else {
-            this.switchTab('options', { force: true });
+            if (preserveCurrentView) return;
+
+            if (this.activeTab === 'missing') {
+                const hasExistingBrowser = Boolean(
+                    this.contentElement?.querySelector?.('.mr-missing-browser')
+                );
+                await this.loadWorkflowData(workflow, {
+                    preserveContent: hasExistingBrowser
+                });
+            } else if (this.activeTab === 'loaded') {
+                await this.switchTab('loaded', { force: true, animate: false, workflow });
+            } else if (this.activeTab === 'metadata') {
+                await this.switchTab('metadata', { force: true, animate: false });
+            } else {
+                await this.switchTab('options', { force: true, animate: false });
+            }
+        } finally {
+            this._isOpeningContent = false;
+            this._lastOpenContentTimestamp = Date.now();
         }
     },
 
@@ -122,6 +142,12 @@ export const lifecycleGraphMethods = {
         if (typeof this._metadataPasteCleanup === 'function') {
             this._metadataPasteCleanup();
             this._metadataPasteCleanup = null;
+        }
+
+        if (typeof this.contentElement?.getAnimations === 'function') {
+            for (const anim of this.contentElement.getAnimations()) {
+                anim.cancel();
+            }
         }
 
         if (wasDocked && collapseSidebar) {

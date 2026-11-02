@@ -2927,6 +2927,11 @@ export const queueMethods = {
         if (!this.contentElement?.animate) return;
 
         try {
+            if (typeof this.contentElement.getAnimations === 'function') {
+                for (const anim of this.contentElement.getAnimations()) {
+                    anim.cancel();
+                }
+            }
             this.contentElement.animate(
                 [
                     { opacity: 0.72, transform: 'translateY(7px)' },

@@ -38,7 +38,7 @@ export const tabsLoadedMethods = {
         });
     },
 
-    switchTab(tab, { force = false } = {}) {
+    switchTab(tab, { force = false, animate = true, workflow = null } = {}) {
         const nextTab = this.getValidTab(tab);
         const nextTabButton = this.getTabButton(nextTab);
         if (
@@ -76,7 +76,9 @@ export const tabsLoadedMethods = {
             }
         }
         this.hideTooltip();
-        this.animateTabContentTransition();
+        if (animate) {
+            this.animateTabContentTransition();
+        }
         this.updateTabButtonStates();
         this.updateQueueVisibility();
 
@@ -85,13 +87,13 @@ export const tabsLoadedMethods = {
                 this.contentElement.style.overflowY = 'auto';
             }
             this.setMissingFooterControlsVisible(true);
-            return this.loadWorkflowData();
+            return this.loadWorkflowData(workflow);
         } else if (this.activeTab === 'loaded') {
             if (this.contentElement) {
                 this.contentElement.style.overflowY = 'auto';
             }
             this.setMissingFooterControlsVisible(false);
-            return this.loadLoadedModels();
+            return this.loadLoadedModels(workflow);
         } else if (this.activeTab === 'metadata') {
             if (this.contentElement) {
                 this.contentElement.style.overflowY = 'auto';

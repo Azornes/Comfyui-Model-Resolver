@@ -5083,7 +5083,7 @@ button.mr-info-link:disabled {
 .mr-image-inspector-models .mr-copy-section {
     padding-left: 0;
     padding-right: 0;
-    background: transparent;
+    background: var(--mr-bg, #121212);
 }
 
 .mr-image-inspector-loading {
@@ -6081,20 +6081,18 @@ button.mr-info-link:disabled {
 .mr-image-transfer-node-target {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: var(--mr-spacing-8);
+    gap: var(--mr-spacing-10);
     min-width: 0;
     width: 100%;
+    cursor: pointer;
 }
 
 .mr-image-transfer-node-select {
     appearance: none;
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: var(--mr-spacing-10);
-    min-width: 0;
-    flex: 1 1 auto;
-    width: 100%;
+    justify-content: center;
+    flex-shrink: 0;
     padding: 0;
     border: 0;
     background: transparent;
@@ -6105,16 +6103,15 @@ button.mr-info-link:disabled {
     text-align: left;
 }
 
-#model-resolver-modal .mr-image-transfer-node-locate {
-    padding: var(--mr-spacing-2) var(--mr-spacing-6);
-    flex-shrink: 0;
-    opacity: 0.75;
-    transition: var(--mr-missing-control-transition, background 0.15s ease, border-color 0.15s ease, color 0.15s ease), opacity 0.15s ease;
+.mr-image-transfer-node-header {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    max-width: 100%;
 }
 
-#model-resolver-modal .mr-image-transfer-node-locate:hover,
-#model-resolver-modal .mr-image-transfer-node-locate:focus-visible {
-    opacity: 1;
+#model-resolver-modal .mr-image-transfer-node-locate {
+    flex-shrink: 0;
 }
 
 .mr-image-transfer-node-select:disabled {
@@ -6147,6 +6144,7 @@ button.mr-info-link:disabled {
     background: var(--mr-accent);
 }
 
+.mr-image-transfer-node-target:hover .mr-image-transfer-node-select:not(:disabled) .mr-image-transfer-node-check,
 .mr-image-transfer-node-select:hover:not(:disabled) .mr-image-transfer-node-check {
     border-color: rgba(114, 211, 138, 0.62);
 }

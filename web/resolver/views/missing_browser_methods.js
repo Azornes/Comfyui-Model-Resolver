@@ -962,10 +962,19 @@ export const missingBrowserMethods = {
 
         const currentDetail = currentBrowser.querySelector('.mr-missing-detail-pane');
         const nextDetail = nextBrowser.querySelector('.mr-missing-detail-pane');
+        const activeElement = typeof document !== 'undefined' ? document.activeElement : null;
+        const isDetailActive = Boolean(
+            currentDetail && (
+                (activeElement && currentDetail.contains(activeElement) && (
+                    ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeElement.tagName) || activeElement.isContentEditable
+                ))
+                || currentDetail.querySelector('.mr-tree-picker-dropdown:not([hidden]), [data-ml-dropdown-open], .mr-combo-list:not([hidden]), [aria-expanded="true"]')
+            )
+        );
         this._missingBrowserDetailPreserved = Boolean(
             currentDetail
             && nextDetail
-            && currentDetail.outerHTML === nextDetail.outerHTML
+            && (isDetailActive || currentDetail.outerHTML === nextDetail.outerHTML)
         );
         if (currentDetail && nextDetail && !this._missingBrowserDetailPreserved) {
             currentDetail.innerHTML = nextDetail.innerHTML;

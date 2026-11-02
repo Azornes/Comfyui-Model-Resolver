@@ -2429,36 +2429,46 @@ export const imageMetadataMethods = {
             const locateTooltip = node.isTopLevel === false
                 ? 'Open this subgraph and center the node in the ComfyUI graph.'
                 : 'Center this node in the ComfyUI graph.';
-            const locateButtonHtml = canLocate
+            const nodeDisplayTitle = nodeName === `Node ${node.nodeId}`
+                ? `${nodeName}${scopeLabel}`
+                : `${nodeName} · Node ${node.nodeId}${scopeLabel}`;
+            const locateNodeHtml = canLocate
                 ? `
                     <button type="button"
-                        class="mr-node-chip is-locatable mr-missing-row-locate mr-image-transfer-node-locate"
+                        class="mr-node-chip is-locatable mr-missing-row-node mr-missing-row-locate mr-image-transfer-node-locate"
                         data-image-transfer-locate
                         data-node-id="${this.escapeHtml(String(node.nodeId))}"
                         data-subgraph-id="${this.escapeHtml(String(node.subgraphId || ''))}"
                         data-is-top-level="${node.isTopLevel ? 'true' : 'false'}"
                         data-tooltip="${this.escapeHtml(locateTooltip)}"
-                        aria-label="Center ${this.escapeHtml(nodeName)} in the ComfyUI graph">
-                        ${this.getLocateIconHtml()}
+                        aria-label="Center ${this.escapeHtml(nodeDisplayTitle)} in the ComfyUI graph">
+                        ${this.getLocateIconHtml()}<span class="mr-missing-row-node-label">${this.escapeHtml(nodeDisplayTitle)}</span>
                     </button>
                 `
-                : '';
+                : `
+                    <span class="mr-missing-row-node mr-image-transfer-node-name">${this.escapeHtml(nodeDisplayTitle)}</span>
+                `;
             return `
                 <div class="mr-image-transfer-node-row${selected ? ' is-selected' : ''}" ${contextMenuAttrs}>
-                    <div class="mr-image-transfer-node-target">
+                    <div class="mr-image-transfer-node-target"
+                        data-image-transfer-node="${this.escapeHtml(node.nodeKey)}"
+                        data-image-transfer-target="${this.escapeHtml(targetKey)}"
+                        data-image-transfer-category="${this.escapeHtml(normalizedCategory)}">
                         <button type="button" class="mr-image-transfer-node-select"
                             data-image-transfer-node="${this.escapeHtml(node.nodeKey)}"
                             data-image-transfer-target="${this.escapeHtml(targetKey)}"
                             data-image-transfer-category="${this.escapeHtml(normalizedCategory)}"
                             aria-pressed="${selected ? 'true' : 'false'}"
+                            aria-label="Select ${this.escapeHtml(nodeDisplayTitle)} for model transfer"
                             aria-disabled="false">
                             <span class="mr-image-transfer-node-check" aria-hidden="true">${selected ? '✓' : ''}</span>
-                            <span class="mr-image-transfer-node-details">
-                                <span class="mr-image-transfer-node-name">${this.escapeHtml(nodeName)} · Node ${this.escapeHtml(node.nodeId)}${this.escapeHtml(scopeLabel)}</span>
-                                <span class="mr-image-transfer-node-meta">${this.escapeHtml(nodeType)} · ${countText(node.refs.length, 'model slot')} · <span class="mr-image-transfer-node-status ${node.active ? 'is-active' : 'is-inactive'}">${node.active ? 'Active' : 'Inactive'}</span></span>
-                            </span>
                         </button>
-                        ${locateButtonHtml}
+                        <div class="mr-image-transfer-node-details">
+                            <div class="mr-image-transfer-node-header">
+                                ${locateNodeHtml}
+                            </div>
+                            <span class="mr-image-transfer-node-meta">${this.escapeHtml(nodeType)} · ${countText(node.refs.length, 'model slot')} · <span class="mr-image-transfer-node-status ${node.active ? 'is-active' : 'is-inactive'}">${node.active ? 'Active' : 'Inactive'}</span></span>
+                        </div>
                     </div>
                     <div class="mr-image-transfer-node-preview">${previewHtml}</div>
                 </div>
