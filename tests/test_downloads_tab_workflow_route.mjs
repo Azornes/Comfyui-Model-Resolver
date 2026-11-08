@@ -1769,7 +1769,7 @@ test('rgthree Power Lora Loader updates strength without reloading workflow anal
   ]);
 });
 
-test('rgthree Power Lora Loader detects removals made through its context menu', async () => {
+test('rgthree Power Lora Loader detects removals when canvas is dirtied', async () => {
   const configureCustomNodeModelAdapter = eval(
     `(${extractMethod(modelResolverSource, 'configureCustomNodeModelAdapter')})`
   );
@@ -1807,12 +1807,64 @@ test('rgthree Power Lora Loader detects removals made through its context menu',
 
   configureCustomNodeModelAdapter.call(resolver, node);
   node.widgets.splice(1, 1);
+  node.setDirtyCanvas(true, true);
   await Promise.resolve();
 
   assert.deepEqual(calls, [
     'context-analysis',
     'dialog-refresh:node-widget-change',
   ]);
+});
+
+test('rgthree Power Lora Loader does not monkey-patch widgets.splice or cause recursion on reactive proxies', () => {
+  const configureCustomNodeModelAdapter = eval(
+    `(${extractMethod(modelResolverSource, 'configureCustomNodeModelAdapter')})`
+  );
+  const getCustomNodeModelListSignature = eval(
+    `(${extractMethod(modelResolverSource, 'getCustomNodeModelListSignature')})`
+  );
+  const getCustomNodeModelStrengthSignature = eval(
+    `(${extractMethod(modelResolverSource, 'getCustomNodeModelStrengthSignature')})`
+  );
+  const rawWidgets = [
+    { name: 'lora_1', value: { on: true, lora: 'first.safetensors', strength: 1 } },
+  ];
+  const reactiveWidgets = new Proxy(rawWidgets, {
+    get(target, prop, receiver) {
+      if (prop === 'splice') {
+        return function(...args) {
+          return target[prop].apply(this, args);
+        };
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+    set(target, prop, value) {
+      target[prop] = value;
+      return true;
+    },
+  });
+
+  const node = {
+    comfyClass: 'Power Lora Loader (rgthree)',
+    widgets: reactiveWidgets,
+    setDirtyCanvas() {},
+  };
+  const resolver = {
+    customNodeModelAdapterStates: new WeakMap(),
+    getCustomNodeModelListSignature,
+    getCustomNodeModelStrengthSignature,
+    scheduleNodeContextMenuAnalysis: () => {},
+    dialog: {
+      isWorkflowRefreshSuppressed: () => false,
+      scheduleActiveWorkflowRefresh: () => {},
+    },
+  };
+
+  configureCustomNodeModelAdapter.call(resolver, node);
+  assert.strictEqual(node.widgets.splice.__modelResolverCustomNodeAdapter, undefined);
+  assert.doesNotThrow(() => {
+    node.widgets.splice(0, 1);
+  });
 });
 
 test('rgthree dynamic lora widgets bypass the generic full workflow refresh', () => {

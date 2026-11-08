@@ -32,31 +32,17 @@ function observePowerLoraLoader(node, notify) {
         typeof node.setDirtyCanvas !== 'function'
         || node.setDirtyCanvas.__modelResolverCustomNodeAdapter
     ) {
-        if (!Array.isArray(node.widgets)) return;
-    } else {
-        const originalSetDirtyCanvas = node.setDirtyCanvas;
-        const wrappedSetDirtyCanvas = function() {
-            const result = originalSetDirtyCanvas.apply(this, arguments);
-            queueInspection();
-            return result;
-        };
-        wrappedSetDirtyCanvas.__modelResolverCustomNodeAdapter = true;
-        node.setDirtyCanvas = wrappedSetDirtyCanvas;
+        return;
     }
 
-    if (
-        typeof node.widgets.splice === 'function'
-        && !node.widgets.splice.__modelResolverCustomNodeAdapter
-    ) {
-        const originalSplice = node.widgets.splice;
-        const wrappedSplice = function() {
-            const result = originalSplice.apply(this, arguments);
-            queueInspection();
-            return result;
-        };
-        wrappedSplice.__modelResolverCustomNodeAdapter = true;
-        node.widgets.splice = wrappedSplice;
-    }
+    const originalSetDirtyCanvas = node.setDirtyCanvas;
+    const wrappedSetDirtyCanvas = function() {
+        const result = originalSetDirtyCanvas.apply(this, arguments);
+        queueInspection();
+        return result;
+    };
+    wrappedSetDirtyCanvas.__modelResolverCustomNodeAdapter = true;
+    node.setDirtyCanvas = wrappedSetDirtyCanvas;
 }
 
 export const rgthreePowerLoraLoaderAdapter = Object.freeze({
