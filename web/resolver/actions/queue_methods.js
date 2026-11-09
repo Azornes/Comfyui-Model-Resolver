@@ -125,7 +125,7 @@ export const queueMethods = {
         ]);
 
         // Scrollable list
-        this.queueList = $el("div#queue-list.mr-queue-list");
+        this.queueList = $el("div.mr-queue-list", { id: "queue-list" });
         this.queueList.addEventListener('click', (event) => {
             const button = event.target instanceof Element
                 ? event.target.closest('.mr-queue-remove')
