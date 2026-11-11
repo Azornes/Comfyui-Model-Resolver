@@ -1,4 +1,4 @@
-import { $el, ComfyDialog } from "../../../../scripts/ui.js";
+const { $el, ComfyDialog } = window.comfyAPI.ui;
 import { api } from "../../../../scripts/api.js";
 import { safeStorage } from "./utils/html_utils.js";
 import { showNotification as showNotificationUtils } from "../utils/notification_utils.js";

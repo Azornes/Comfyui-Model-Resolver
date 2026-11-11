@@ -1,6 +1,6 @@
 import { app } from "../../../../scripts/app.js";
 import { api } from "../../../../scripts/api.js";
-import { $el } from "../../../../scripts/ui.js";
+const { $el } = window.comfyAPI.ui;
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { logger as frontendLogger } from "../log_system/logger.js";
 import { loadStylesWhenNeeded } from "../utils/css_loader.js";
@@ -1252,9 +1252,9 @@ export class ModelResolver {
     async registerTopbarButton() {
         // Try to use new ComfyUI button system (like ComfyUI Manager does)
         try {
-            // Dynamic imports for ComfyUI's button components
-            const { ComfyButtonGroup } = await import("../../../../scripts/ui/components/buttonGroup.js");
-            const { ComfyButton } = await import("../../../../scripts/ui/components/button.js");
+            // Access ComfyUI's button components from comfyAPI
+            const { ComfyButtonGroup } = window.comfyAPI.buttonGroup;
+            const { ComfyButton } = window.comfyAPI.button;
 
             // Create button group with Model Resolver button
             const ModelResolverButton = new ComfyButton({

@@ -1,5 +1,5 @@
-// @ts-ignore
-import { $el } from "../../../scripts/ui.js";
+
+const { $el } = window.comfyAPI.ui;
 import { createModuleLogger } from "../log_system/log_funcs.js";
 import { withErrorHandling, createValidationError, createNetworkError } from "./error_handler.js";
 const log = createModuleLogger('resource_manager');

@@ -1,5 +1,5 @@
 import { app } from "../../../../../scripts/app.js";
-import { $el } from "../../../../../scripts/ui.js";
+const { $el } = window.comfyAPI.ui;
 import { getSvgIcon } from "../../utils/icon_utils.js";
 import { startSplitterDrag } from "../utils/splitter_drag.js";
 import { syncElementAttributes } from "../utils/dom_patch_utils.js";

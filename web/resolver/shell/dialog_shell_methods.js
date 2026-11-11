@@ -1,5 +1,5 @@
 import { app } from "../../../../../scripts/app.js";
-import { $el } from "../../../../../scripts/ui.js";
+const { $el } = window.comfyAPI.ui;
 import { getSvgIcon } from "../../utils/icon_utils.js";
 import { isSidebarButtonActive } from "../utils/dom_patch_utils.js";
 import { safeStorage } from "../utils/html_utils.js";
