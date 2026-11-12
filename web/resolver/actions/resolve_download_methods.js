@@ -1138,8 +1138,17 @@ export const resolveDownloadMethods = {
     getActiveDownloadEntryForMissing(missing) {
         if (!missing) return null;
         const missingKey = this.getDownloadMissingIdentity(missing);
+        const terminalStatuses = new Set(['cancelled', 'completed']);
 
         for (const [downloadId, info] of Object.entries(this.activeDownloads || {})) {
+            const status = String(
+                info?.pendingDownloadStatus
+                || info?.lastProgress?.status
+                || info?.lastStatus
+                || info?.status
+                || ''
+            ).toLowerCase();
+            if (terminalStatuses.has(status)) continue;
             const matchesMissing = (info?.missing && this.getDownloadMissingIdentity(info.missing) === missingKey)
                 || (Array.isArray(info?.missingTargets) && info.missingTargets.some(t => this.getDownloadMissingIdentity(t) === missingKey));
             if (matchesMissing && this.isDownloadInCurrentWorkflowScope(info)) {
@@ -1152,8 +1161,17 @@ export const resolveDownloadMethods = {
     getActiveDownloadEntriesForMissing(missing) {
         if (!missing) return [];
         const missingKey = this.getDownloadMissingIdentity(missing);
+        const terminalStatuses = new Set(['cancelled', 'completed']);
         return Object.entries(this.activeDownloads || {})
             .filter(([, info]) => {
+                const status = String(
+                    info?.pendingDownloadStatus
+                    || info?.lastProgress?.status
+                    || info?.lastStatus
+                    || info?.status
+                    || ''
+                ).toLowerCase();
+                if (terminalStatuses.has(status)) return false;
                 const matchesMissing = (info?.missing && this.getDownloadMissingIdentity(info.missing) === missingKey)
                     || (Array.isArray(info?.missingTargets) && info.missingTargets.some(t => this.getDownloadMissingIdentity(t) === missingKey));
                 return matchesMissing && this.isDownloadInCurrentWorkflowScope(info);
@@ -2076,6 +2094,26 @@ export const resolveDownloadMethods = {
                 }
             }
 
+            for (const downloadId of Object.keys(this.activeDownloads || {})) {
+                if (!activeIds.has(String(downloadId))) {
+                    const deadInfo = this.activeDownloads[downloadId];
+                    const deadStatus = String(
+                        deadInfo?.pendingDownloadStatus
+                        || deadInfo?.lastStatus
+                        || deadInfo?.lastProgress?.status
+                        || ''
+                    ).toLowerCase();
+                    if (
+                        deadStatus === 'cancelling'
+                        || deadStatus === 'cancelled'
+                        || !deadInfo?.missing
+                        || deadInfo?.missing?.node_type === 'Backend download'
+                    ) {
+                        this.finalizeCancelledDownloadFrontend?.(downloadId, deadInfo);
+                    }
+                }
+            }
+
             this.rebindActiveDownloadMissingModels();
             this.updateDownloadAllButtonState?.();
             this.updateQueuePanel?.({ force: true });
@@ -2206,10 +2244,18 @@ export const resolveDownloadMethods = {
             }
 
             if (missing) {
+                const targetKey = this.getDownloadMissingIdentity(missing);
                 for (const [existingId, existingInfo] of Object.entries(this.activeDownloads || {})) {
-                    if (existingInfo?.missing === missing) {
-                        const existingStatus = String(existingInfo.lastStatus || existingInfo.lastProgress?.status || '').toLowerCase();
-                        if (existingStatus === 'error' || existingStatus === 'refresh_error') {
+                    const matchesIdentity = (existingInfo?.missing && this.getDownloadMissingIdentity(existingInfo.missing) === targetKey)
+                        || (existingInfo?.filename && existingInfo.filename === filename && existingInfo.category === category);
+                    if (matchesIdentity) {
+                        const existingStatus = String(
+                            existingInfo.pendingDownloadStatus
+                            || existingInfo.lastStatus
+                            || existingInfo.lastProgress?.status
+                            || ''
+                        ).toLowerCase();
+                        if (existingStatus === 'error' || existingStatus === 'refresh_error' || existingStatus === 'cancelling' || existingStatus === 'cancelled') {
                             delete this.activeDownloads[existingId];
                             this.removeActiveDownloadRecovery?.(existingId);
                         }
@@ -2443,6 +2489,12 @@ export const resolveDownloadMethods = {
                     this.renderDownloadSnapshot(downloadId, snapshot, elements);
                 }
                 this.updateQueuePanel?.();
+                info._cancellingPollCount = (info._cancellingPollCount || 0) + 1;
+                if (info._cancellingPollCount >= 6) {
+                    delete info._cancellingPollCount;
+                    this.finalizeCancelledDownloadFrontend?.(downloadId, info, progress);
+                    return;
+                }
                 setTimeout(() => this.pollDownloadProgress(downloadId), 500);
 
             } else if (progress.status === 'completed') {
@@ -2524,8 +2576,14 @@ export const resolveDownloadMethods = {
         } catch (error) {
             console.error('Model Resolver: Progress poll error:', error);
             const info = this.activeDownloads[downloadId];
-            // Update UI to show error state instead of just disappearing
             if (info) {
+                const isCancelling = info.pendingDownloadStatus === 'cancelling'
+                    || String(info.lastStatus || '').toLowerCase() === 'cancelling'
+                    || String(info.lastProgress?.status || '').toLowerCase() === 'cancelling';
+                if (isCancelling || error?.status === 404) {
+                    this.finalizeCancelledDownloadFrontend?.(downloadId, info);
+                    return;
+                }
                 const snapshot = this.rememberDownloadUiState(
                     downloadId,
                     info,
@@ -2587,43 +2645,8 @@ export const resolveDownloadMethods = {
             || ''
         ).toLowerCase();
 
-        if (currentStatus === 'error' || currentStatus === 'refresh_error') {
-            delete this.activeDownloads?.[downloadId];
-            this.removeActiveDownloadRecovery?.(downloadId);
-            this.clearDownloadSnapshot(downloadId, effectiveInfo?.missing);
-
-            const targetMissing = effectiveInfo?.missing || null;
-            if (targetMissing) {
-                const elements = this.resolveDownloadUiElements?.(effectiveInfo || { missing: targetMissing }) || {};
-                if (elements.progressDiv) {
-                    elements.progressDiv.classList.add('mr-is-hidden');
-                    elements.progressDiv.classList.remove('mr-is-visible');
-                    elements.progressDiv.innerHTML = '';
-                }
-                if (elements.downloadBtn) {
-                    this.restoreDownloadButtonReadyState?.(elements.downloadBtn);
-                }
-                this.refreshLocalMatchesUiForMissing?.(targetMissing);
-            }
-
-            const root = this.contentElement || (typeof document !== 'undefined' ? document : null);
-            if (root?.querySelectorAll) {
-                const safeId = String(downloadId).replace(/["\\]/g, '\\$&');
-                const queueItems = root.querySelectorAll(`.mr-download-queue-item[data-download-id="${safeId}"]`);
-                for (const item of queueItems) {
-                    const progressSlot = item.closest?.('.mr-download-progress-slot');
-                    if (progressSlot) {
-                        progressSlot.classList.add('mr-is-hidden');
-                        progressSlot.classList.remove('mr-is-visible');
-                        progressSlot.innerHTML = '';
-                    } else {
-                        item.remove();
-                    }
-                }
-            }
-
-            this.updateDownloadAllButtonState?.();
-            this.updateQueuePanel?.();
+        if (currentStatus === 'error' || currentStatus === 'refresh_error' || currentStatus === 'cancelling' || currentStatus === 'cancelled') {
+            this.finalizeCancelledDownloadFrontend?.(downloadId, effectiveInfo);
             this.fetchJson(`/model_resolver/cancel/${encodeURIComponent(downloadId)}`, {
                 method: 'POST'
             }, 'Cancel download').catch(() => {});
@@ -2631,11 +2654,11 @@ export const resolveDownloadMethods = {
         }
 
         if (effectiveInfo) {
-            this.setPendingDownloadStatus(effectiveInfo, 'cancelling', 30000);
+            this.setPendingDownloadStatus(effectiveInfo, 'cancelling', 5000);
             const snapshot = this.rememberDownloadUiState(
                 downloadId,
                 effectiveInfo,
-                { ...(info.lastProgress || {}), status: 'cancelling' },
+                { ...(effectiveInfo.lastProgress || {}), status: 'cancelling', speed: 0 },
                 {
                     status: 'cancelling',
                     message: 'Cancelling download...',
@@ -2648,13 +2671,31 @@ export const resolveDownloadMethods = {
             this.updateQueuePanel?.();
         }
 
-        this.fetchJson(`/model_resolver/cancel/${downloadId}`, {
+        const cancelTimerKey = `_cancelTimer_${downloadId}`;
+        clearTimeout(this[cancelTimerKey]);
+        this[cancelTimerKey] = setTimeout(() => {
+            delete this[cancelTimerKey];
+            if (this.activeDownloads?.[downloadId]) {
+                this.finalizeCancelledDownloadFrontend?.(downloadId, effectiveInfo);
+            }
+        }, 4000);
+
+        this.fetchJson(`/model_resolver/cancel/${encodeURIComponent(downloadId)}`, {
             method: 'POST'
-        }, 'Cancel download').then(() => {
-            // The request only acknowledges cancellation. Progress polling
-            // releases the file and enables retry when the worker has stopped.
+        }, 'Cancel download').then((res) => {
+            if (res?.cancelled || res?.status === 'cancelled' || res?.status === 'not_found') {
+                clearTimeout(this[cancelTimerKey]);
+                delete this[cancelTimerKey];
+                this.finalizeCancelledDownloadFrontend?.(downloadId, effectiveInfo);
+            }
         }).catch((error) => {
+            clearTimeout(this[cancelTimerKey]);
+            delete this[cancelTimerKey];
             if (effectiveInfo) this.clearPendingDownloadStatus(effectiveInfo);
+            if (error?.status === 404) {
+                this.finalizeCancelledDownloadFrontend?.(downloadId, effectiveInfo);
+                return;
+            }
             console.error('Model Resolver: Cancel error:', error);
             this.showNotification('Failed to cancel download', 'error');
         });

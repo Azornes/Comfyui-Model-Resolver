@@ -172,7 +172,7 @@ def update_model_path(workflow: Dict[str, Any], resolution: Resolution) -> bool:
         # (Top-level subgraph instances have subgraph_id set but are in workflow.nodes)
         nodes = workflow.get("nodes", [])
         for n in nodes:
-            if n.get("id") == node_id:
+            if str(n.get("id")) == str(node_id):
                 # Found in top-level - this is a subgraph instance node
                 search_in_subgraph = False
                 break
@@ -193,7 +193,7 @@ def update_model_path(workflow: Dict[str, Any], resolution: Resolution) -> bool:
             if subgraph.get("id") == subgraph_id:
                 subgraph_nodes = subgraph.get("nodes", [])
                 for n in subgraph_nodes:
-                    if n.get("id") == node_id:
+                    if str(n.get("id")) == str(node_id):
                         node = n
                         break
                 break
@@ -201,7 +201,7 @@ def update_model_path(workflow: Dict[str, Any], resolution: Resolution) -> bool:
         # Find in top-level nodes
         nodes = workflow.get("nodes", [])
         for n in nodes:
-            if n.get("id") == node_id:
+            if str(n.get("id")) == str(node_id):
                 node = n
                 break
 

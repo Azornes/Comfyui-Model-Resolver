@@ -329,6 +329,55 @@ export const workflowUpdateMethods = {
         }
     },
 
+    findGraphWidgetForResolution(graphNode, workflowNode, resolution) {
+        if (!graphNode || !Array.isArray(graphNode.widgets)) return null;
+
+        const widgets = graphNode.widgets;
+        const origPath = resolution?.original_path;
+        const nestedKey = resolution?.nested_key;
+        const widgetName = resolution?.widget_name;
+        const widgetIndex = Number(resolution?.widget_index);
+
+        // 1. Content match for dictionary values (e.g. rgthree Power Lora Loader where widget.value = { lora: '...', on: true, ... })
+        if (nestedKey && origPath) {
+            const match = widgets.find(w => w?.value && typeof w.value === 'object' && w.value[nestedKey] === origPath);
+            if (match) return match;
+        }
+
+        // 2. Direct string value match
+        if (origPath) {
+            const match = widgets.find(w => w?.value === origPath);
+            if (match) return match;
+        }
+
+        // 3. Widget name match
+        if (widgetName) {
+            const match = widgets.find(w => w?.name === widgetName);
+            if (match) return match;
+        }
+
+        // 4. For rgthree Power Lora Loader, match against lora widgets by index
+        if (graphNode.type === 'Power Lora Loader (rgthree)') {
+            const loraWidgets = widgets.filter(w => /^lora_\d+$/.test(w?.name));
+            if (Number.isInteger(widgetIndex) && widgetIndex >= 0 && widgetIndex < loraWidgets.length) {
+                return loraWidgets[widgetIndex];
+            }
+        }
+
+        // 5. Match serializable widgets by index (excluding non-serialized UI decorations like dividers, headers, buttons)
+        const serializableWidgets = widgets.filter(w => w && w.options?.serialize !== false && w.type !== 'button');
+        if (Number.isInteger(widgetIndex) && widgetIndex >= 0 && widgetIndex < serializableWidgets.length) {
+            return serializableWidgets[widgetIndex];
+        }
+
+        // 6. Direct index fallback
+        if (Number.isInteger(widgetIndex) && widgetIndex >= 0 && widgetIndex < widgets.length) {
+            return widgets[widgetIndex];
+        }
+
+        return null;
+    },
+
     applyWorkflowResolutionValuesToGraph(workflow, resolutions = []) {
         const graph = app?.graph;
         if (!graph || !workflow || !Array.isArray(resolutions) || !resolutions.length) {
@@ -350,7 +399,9 @@ export const workflowUpdateMethods = {
             const workflowNode = this.findWorkflowNodeForResolution(workflow, resolution);
             const graphNode = graph.getNodeById?.(resolution.node_id)
                 || graphNodes.find(node => String(node?.id) === nodeId);
-            const widget = graphNode?.widgets?.[widgetIndex];
+            const widget = typeof this.findGraphWidgetForResolution === 'function'
+                ? this.findGraphWidgetForResolution(graphNode, workflowNode, resolution)
+                : graphNode?.widgets?.[widgetIndex];
             if (!workflowNode || !graphNode || !widget || !Array.isArray(workflowNode.widgets_values)) {
                 return false;
             }
@@ -371,6 +422,10 @@ export const workflowUpdateMethods = {
                 const oldValue = widget.value;
                 const nextValue = this.cloneWorkflowWidgetValue(value);
                 widget.value = nextValue;
+                if (typeof widget.setLora === 'function') {
+                    const loraPath = nextValue && typeof nextValue === 'object' ? nextValue.lora : nextValue;
+                    if (loraPath) widget.setLora(loraPath);
+                }
 
                 if (Array.isArray(graphNode.widgets_values)) {
                     graphNode.widgets_values[widgetIndex] = this.cloneWorkflowWidgetValue(value);
@@ -381,6 +436,14 @@ export const workflowUpdateMethods = {
                 } catch (error) {
                     console.warn('Model Resolver: node rejected a linked widget update:', error);
                 }
+
+                if (typeof widget.callback === 'function') {
+                    try {
+                        widget.callback(widget.value, app?.canvas, graphNode, null, null);
+                    } catch (_e) {}
+                }
+
+                graphNode.setDirtyCanvas?.(true, true);
             }
         } finally {
             graph.afterChange?.();

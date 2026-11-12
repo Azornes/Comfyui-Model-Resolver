@@ -1540,6 +1540,10 @@ def download_file_with_aria2(
             facade._delete_partial_download_files(dest_path)
             facade.cancelled_downloads.discard(download_id)
             result["error"] = "Download cancelled"
+            with facade.download_lock:
+                if download_id in facade.download_progress:
+                    facade.download_progress[download_id]["status"] = "cancelled"
+                    facade.download_progress[download_id]["speed"] = 0
             return result
         error_msg = facade._sanitize_download_error(exc)
         with facade.download_lock:
@@ -1740,6 +1744,11 @@ def force_remove_aria2_transfer(
         )
     except Exception as exc:
         log.warning(f"Could not cancel aria2 download {download_id}: {exc}")
+        with facade.download_lock:
+            if download_id in facade.download_progress:
+                facade.download_progress[download_id]["status"] = "cancelled"
+                facade.download_progress[download_id]["speed"] = 0
+                facade.cancelled_downloads.discard(download_id)
 
 
 def get_aria2_action_lock(

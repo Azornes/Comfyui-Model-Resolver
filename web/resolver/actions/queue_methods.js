@@ -321,8 +321,18 @@ export const queueMethods = {
         const entries = Object.entries(this.activeDownloads || {});
         if (!entries.length) return [];
 
+        const terminalStatuses = new Set(['cancelled', 'completed']);
         return entries
-            .filter(([, info]) => Boolean(info?.missing))
+            .filter(([, info]) => {
+                if (!info?.missing) return false;
+                const status = String(
+                    info.lastProgress?.status
+                    || info.lastStatus
+                    || info.status
+                    || ''
+                ).toLowerCase();
+                return !terminalStatuses.has(status);
+            })
             .map(([downloadId, info]) => ({ downloadId, info }));
     },
 
@@ -2231,6 +2241,13 @@ export const queueMethods = {
                 this.savePendingQueueForActiveWorkflow();
                 this.updateApplyPendingButton();
                 this.updateQueuePanel();
+
+                for (const appliedSelection of appliedSelections) {
+                    const currentMissing = (this.missingModels || []).find(
+                        item => this.getMissingModelKey(item) === appliedSelection.missing_key
+                    ) || appliedSelection;
+                    this.updateSelectedBarForMissing?.(currentMissing);
+                }
 
                 const selectionCount = appliedSelections.length;
                 const refText = applyResolutions.length > selectionCount

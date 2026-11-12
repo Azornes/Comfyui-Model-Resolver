@@ -156,12 +156,20 @@ def get_all_progress(state: DownloadStateDependencies) -> Dict[str, Dict[str, An
 
 def cancel_download(download_id: str, state: DownloadStateDependencies) -> bool:
     """Cancel a download in progress."""
+    dest_path = ""
     with state.download_lock:
         progress = state.download_progress.get(download_id)
         if not progress or progress.get("status") in {"completed", "error", "cancelled"}:
             return True
-        state.cancelled_downloads.add(download_id)
-        progress.update(status="cancelling", speed=0)
+        if progress.get("status") == "cancelling":
+            # Force-cancel if already in cancelling state
+            progress.update(status="cancelled", speed=0)
+            state.cancelled_downloads.discard(download_id)
+            dest_path = str(progress.get("path") or "")
+        else:
+            state.cancelled_downloads.add(download_id)
+            progress.update(status="cancelling", speed=0)
+            dest_path = str(progress.get("path") or "")
     with state.aria2_lock:
         state.aria2_desired_states.pop(download_id, None)
 
@@ -198,6 +206,14 @@ def cancel_download(download_id: str, state: DownloadStateDependencies) -> bool:
     remove_persisted = getattr(state, "remove_persisted_download", None)
     if callable(remove_persisted):
         remove_persisted(download_id)
+
+    if dest_path:
+        delete_fn = getattr(state, "delete_partial_download_files", None)
+        if callable(delete_fn):
+            try:
+                delete_fn(dest_path)
+            except Exception as exc:
+                state.log.debug(f"Could not remove partial download files for {dest_path}: {exc}")
 
     return True
 

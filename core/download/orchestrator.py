@@ -84,7 +84,7 @@ def find_active_download_for_path(
     normalized_target = os_module.path.normcase(
         os_module.path.abspath(target_path)
     )
-    terminal_statuses = {"completed", "error", "cancelled"}
+    terminal_statuses = {"completed", "error", "cancelled", "cancelling"}
     for download_id, progress in download_progress.items():
         if download_id == exclude_id or not isinstance(progress, dict):
             continue
@@ -1180,9 +1180,10 @@ def start_background_download(
                 cancelled = False
                 with download_lock:
                     if effective_download_id in download_progress:
+                        current_status = download_progress[effective_download_id].get("status")
                         cancelled = (
                             effective_download_id in facade.cancelled_downloads
-                            or download_progress[effective_download_id].get("status") == "cancelled"
+                            or current_status in {"cancelled", "cancelling"}
                         )
                         download_progress[effective_download_id]["status"] = "cancelled" if cancelled else "error"
                         facade.cancelled_downloads.discard(effective_download_id)
@@ -1200,20 +1201,30 @@ def start_background_download(
                         remove_persisted(effective_download_id)
         except Exception as exc:
             with download_lock:
-                download_progress[effective_download_id] = {
-                    "status": "error",
-                    "progress": 0,
-                    "total_size": 0,
-                    "downloaded": 0,
-                    "filename": filename,
-                    "path": "",
-                    "directory": "",
-                    "url": url,
-                    "error": str(exc),
-                    "speed": 0,
-                    "start_time": time.time(),
-                    "download_backend": facade._download_backend_from_settings(),
-                }
+                current_status = download_progress.get(effective_download_id, {}).get("status")
+                is_cancelled = (
+                    effective_download_id in facade.cancelled_downloads
+                    or current_status in {"cancelled", "cancelling"}
+                )
+                if is_cancelled and effective_download_id in download_progress:
+                    download_progress[effective_download_id]["status"] = "cancelled"
+                    download_progress[effective_download_id]["speed"] = 0
+                    facade.cancelled_downloads.discard(effective_download_id)
+                else:
+                    download_progress[effective_download_id] = {
+                        "status": "error",
+                        "progress": 0,
+                        "total_size": 0,
+                        "downloaded": 0,
+                        "filename": filename,
+                        "path": "",
+                        "directory": "",
+                        "url": url,
+                        "error": str(exc),
+                        "speed": 0,
+                        "start_time": time.time(),
+                        "download_backend": facade._download_backend_from_settings(),
+                    }
 
     facade.threading.Thread(target=run_download, daemon=True).start()
     return effective_download_id

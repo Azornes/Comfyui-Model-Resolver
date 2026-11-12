@@ -863,8 +863,8 @@ export const missingBrowserMethods = {
                     </div>
                 </section>
                 <div class="mr-missing-browser-splitter" role="separator" aria-orientation="vertical" aria-label="Resize missing model panes" tabindex="0"></div>
-                <section class="mr-missing-detail-pane" aria-label="Missing model details">
-                    ${detailMissing ? this.renderMissingModel(detailMissing, detailIndex) : this.renderStatusMessage('Select a missing model to inspect details.', 'info')}
+                <section class="mr-missing-detail-pane" aria-label="Missing model details" data-missing-key="${this.escapeHtml(detailMissing ? this.getMissingModelKey(detailMissing) : '')}">
+                    ${detailMissing ? this.renderMissingModel(detailMissing, detailIndex) : this.renderStatusMessage(rawMissingCount === 0 && hiddenResolvedCount > 0 ? 'All missing models in this workflow are resolved. Check "Show resolved" to inspect them.' : 'Select a missing model to inspect details.', 'info')}
                 </section>
             </div>
         `;
@@ -962,13 +962,18 @@ export const missingBrowserMethods = {
 
         const currentDetail = currentBrowser.querySelector('.mr-missing-detail-pane');
         const nextDetail = nextBrowser.querySelector('.mr-missing-detail-pane');
+        const currentMissingKey = currentDetail?.dataset?.missingKey || '';
+        const nextMissingKey = nextDetail?.dataset?.missingKey || '';
+        const isSameModel = Boolean(currentMissingKey && currentMissingKey === nextMissingKey);
         const activeElement = typeof document !== 'undefined' ? document.activeElement : null;
         const isDetailActive = Boolean(
-            currentDetail && (
+            isSameModel
+            && currentDetail
+            && (
                 (activeElement && currentDetail.contains(activeElement) && (
                     ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeElement.tagName) || activeElement.isContentEditable
                 ))
-                || currentDetail.querySelector('.mr-tree-picker-dropdown:not([hidden]), [data-ml-dropdown-open], .mr-combo-list:not([hidden]), [aria-expanded="true"]')
+                || currentDetail.querySelector('.mr-tree-picker-dropdown:not([hidden]), [data-ml-dropdown-open], .mr-combo-list:not([hidden]), [aria-haspopup][aria-expanded="true"], [role="combobox"][aria-expanded="true"]')
             )
         );
         this._missingBrowserDetailPreserved = Boolean(
@@ -976,8 +981,11 @@ export const missingBrowserMethods = {
             && nextDetail
             && (isDetailActive || currentDetail.outerHTML === nextDetail.outerHTML)
         );
-        if (currentDetail && nextDetail && !this._missingBrowserDetailPreserved) {
-            currentDetail.innerHTML = nextDetail.innerHTML;
+        if (currentDetail && nextDetail) {
+            currentDetail.dataset.missingKey = nextMissingKey;
+            if (!this._missingBrowserDetailPreserved) {
+                currentDetail.innerHTML = nextDetail.innerHTML;
+            }
         }
         return true;
     },
@@ -1231,10 +1239,14 @@ export const missingBrowserMethods = {
         const selectedMissing = sortedMissingModels.find(missing => this.getMissingModelKey(missing) === this.selectedMissingModelKey);
         const detailPreserved = this._missingBrowserDetailPreserved === true;
         this._missingBrowserDetailPreserved = false;
-        if (!selectedMissing || detailPreserved) return;
+        if (!selectedMissing) return;
 
-        const selectedIndex = sortedMissingModels.indexOf(selectedMissing);
-        this.wireMissingModelDetail(container, selectedMissing, selectedIndex);
+        if (!detailPreserved) {
+            const selectedIndex = sortedMissingModels.indexOf(selectedMissing);
+            this.wireMissingModelDetail(container, selectedMissing, selectedIndex);
+        } else {
+            this.updateSelectedBarForMissing?.(selectedMissing);
+        }
     },
 
     wireMissingBrowserSplitter(container) {
@@ -2415,7 +2427,7 @@ export const missingBrowserMethods = {
         this.syncBatchSelectionForMissingModels(visibleMissingModels);
 
         // Check if there are active downloads
-        const activeCount = Object.keys(this.activeDownloads).length;
+        const activeCount = this.getActiveQueuePanelDownloads?.().length ?? Object.keys(this.activeDownloads).length;
         const hasAny100Match = visibleMissingModels.some(missing =>
             classifyLocalMatches(missing.matches || []).perfectMatches.length > 0
         );
@@ -2541,9 +2553,10 @@ export const missingBrowserMethods = {
             const selectedMissing = sortedMissingModels.find(missing => this.getMissingModelKey(missing) === this.selectedMissingModelKey);
             const detailIndex = sortedMissingModels.indexOf(selectedMissing);
 
+            detailPane.dataset.missingKey = selectedMissing ? this.getMissingModelKey(selectedMissing) : '';
             detailPane.innerHTML = selectedMissing
                 ? this.renderMissingModel(selectedMissing, detailIndex)
-                : this.renderStatusMessage('Select a missing model to inspect details.', 'info');
+                : this.renderStatusMessage(rawMissingCount === 0 && hiddenResolvedCount > 0 ? 'All missing models in this workflow are resolved. Check "Show resolved" to inspect them.' : 'Select a missing model to inspect details.', 'info');
 
             if (selectedMissing) {
                 this.wireMissingModelDetail(container, selectedMissing, detailIndex);

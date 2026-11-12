@@ -26,7 +26,7 @@ class DownloadService:
         self.clear_completed_downloads_fn = context.require(
             "clear_completed_downloads"
         )
-        self.delete_badsha_download_fn = context.require("delete_badsha_download")
+        self.delete_badsha_download_fn = context.get("delete_badsha_download")
         self.get_all_progress_fn = context.require("get_all_progress")
         self.get_aria2_status_fn = context.require("get_aria2_status")
         self.get_civarchive_model_details = context.require(
@@ -394,6 +394,11 @@ class DownloadService:
                     path = data.get("path") or data.get("bad_path")
             except Exception:
                 pass
+        if not callable(self.delete_badsha_download_fn):
+            return self.web.json_response(
+                {"success": False, "error": "delete_badsha_download unavailable"},
+                status=500,
+            )
         result = self.delete_badsha_download_fn(download_id=download_id, path=path)
         return self._json_result_with_success_status(result)
 
