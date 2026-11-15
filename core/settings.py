@@ -15,6 +15,7 @@ from .type_utils import normalize_alphanumeric_key, normalize_download_category,
 
 DOWNLOAD_PATH_MODES = {"suggested", "template", "manual"}
 DOWNLOAD_BACKENDS = {"python", "aria2"}
+SIDECAR_LAYOUTS = {"beside", "hidden"}
 
 SETTINGS_SCHEMA: List[Dict[str, Any]] = [
     { "serverKey": "civitai_key", "localKey": "ModelResolver.civitaiApiKey", "type": "string", "default": "" },
@@ -43,6 +44,7 @@ SETTINGS_SCHEMA: List[Dict[str, Any]] = [
     { "serverKey": "download_path_mode", "localKey": "ModelResolver.downloadPathMode", "type": "pathMode", "default": "suggested" },
     { "serverKey": "download_path_templates", "localKey": "ModelResolver.downloadPathTemplates", "type": "json", "default": {} },
     { "serverKey": "base_model_path_mappings", "localKey": "ModelResolver.baseModelPathMappings", "type": "json", "default": {} },
+    { "serverKey": "sidecar_layout", "localKey": "ModelResolver.sidecarLayout", "type": "string", "default": "beside" },
     { "serverKey": "frontend_logs_enabled", "localKey": "ModelResolver.frontendLogsEnabled", "type": "frontendLogsEnabled", "default": True },
     { "serverKey": "backend_logs_enabled", "localKey": "ModelResolver.backendLogsEnabled", "type": "backendLogsEnabled", "default": True },
     { "serverKey": "frontend_log_level", "localKey": "ModelResolver.frontendLogLevel", "type": "string", "default": "ERROR" },
@@ -225,9 +227,18 @@ def normalize_settings(settings: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
     data["base_model_path_mappings"] = normalize_base_model_path_mappings(
         data.get("base_model_path_mappings")
     )
+    sidecar_layout = str(data.get("sidecar_layout") or "").strip().lower()
+    data["sidecar_layout"] = "hidden" if sidecar_layout == "hidden" else "beside"
     for key in DEFAULT_ROOT_KEYS.values():
         data[key] = str(data.get(key) or "").strip()
     return data
+
+
+def get_sidecar_layout(settings: Optional[Mapping[str, Any]] = None) -> str:
+    """Return normalized sidecar layout ('beside' or 'hidden')."""
+    if settings is not None:
+        return "hidden" if str(settings.get("sidecar_layout") or "").strip().lower() == "hidden" else "beside"
+    return "hidden" if str(load_settings().get("sidecar_layout") or "").strip().lower() == "hidden" else "beside"
 
 
 def load_settings() -> Dict[str, Any]:

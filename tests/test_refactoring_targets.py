@@ -163,6 +163,9 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
             ("GET", "/model_resolver/path-template-suggestions"),
             ("GET", "/model_resolver/capabilities"),
             ("GET", "/model_resolver/subfolders/{category}"),
+            ("GET", "/model_resolver/placement/check"),
+            ("GET", "/model_resolver/placement/look"),
+            ("POST", "/model_resolver/placement/move"),
         },
     }
 
@@ -282,6 +285,9 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
             ("GET", "/model_resolver/capabilities"),
             ("GET", "/model_resolver/version"),
             ("GET", "/model_resolver/subfolders/{category}"),
+            ("GET", "/model_resolver/placement/check"),
+            ("GET", "/model_resolver/placement/look"),
+            ("POST", "/model_resolver/placement/move"),
             ("GET", "/model_resolver/logs/backend/export"),
             ("GET", "/model_resolver/settings"),
             ("POST", "/model_resolver/settings"),

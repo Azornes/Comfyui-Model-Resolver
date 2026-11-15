@@ -175,6 +175,16 @@ export const optionsMethods = {
                 .map(level => `<option value="${level}" ${level === selected ? 'selected' : ''}>${level}</option>`)
                 .join('');
         };
+        const sidecarLayoutValues = [
+            { id: 'beside', label: 'Beside model file (Standard ComfyUI)' },
+            { id: 'hidden', label: 'Hidden directory (.cmr/)' }
+        ];
+        const renderSidecarLayoutOptions = (selectedValue) => {
+            const selected = selectedValue === 'hidden' ? 'hidden' : 'beside';
+            return sidecarLayoutValues
+                .map(layout => `<option value="${layout.id}" ${layout.id === selected ? 'selected' : ''}>${layout.label}</option>`)
+                .join('');
+        };
         this.contentElement.innerHTML = `
             <div class="mr-options-wrap">
                 <div class="mr-options-shell">
@@ -256,6 +266,13 @@ export const optionsMethods = {
                                     </span>
                                     <span class="mr-options-nav-meta">08</span>
                                 </button>
+                                <button type="button" class="mr-options-nav-btn" data-target="mr-options-section-misplaced">
+                                    <span class="mr-options-nav-main">
+                                        <span class="mr-options-nav-icon" aria-hidden="true">${getSvgIcon('archive')}</span>
+                                        <span>Misplaced Models</span>
+                                    </span>
+                                    <span class="mr-options-nav-meta">09</span>
+                                </button>
                             </div>
                         </div>
                         <div class="mr-options-sidebar-group">
@@ -266,7 +283,7 @@ export const optionsMethods = {
                                         <span class="mr-options-nav-icon" aria-hidden="true">${getSvgIcon('wrench')}</span>
                                         <span>Maintenance</span>
                                     </span>
-                                    <span class="mr-options-nav-meta">09</span>
+                                    <span class="mr-options-nav-meta">10</span>
                                 </button>
                             </div>
                         </div>
@@ -372,6 +389,14 @@ export const optionsMethods = {
                                             </div>
                                             <select id="mr-options-download-path-mode" class="mr-options-input">
                                                 ${renderPathModeOptions(tokens.download_path_mode)}
+                                            </select>
+                                        </div>
+                                        <div class="mr-options-number-row mr-options-wide-row">
+                                            <div class="mr-options-number-copy">
+                                                <span class="mr-options-label">Metadata & preview storage layout <span class="mr-tooltip-badge" data-tooltip="Choose where model metadata and previews are stored. Beside keeps files next to the model file. Hidden places them in a hidden .cmr/ directory inside the model's folder.">?</span></span>
+                                            </div>
+                                            <select id="mr-options-sidecar-layout" class="mr-options-input">
+                                                ${renderSidecarLayoutOptions(tokens.sidecar_layout)}
                                             </select>
                                         </div>
                                         <div class="mr-options-subsection-head">
@@ -955,6 +980,37 @@ export const optionsMethods = {
                                 </div>
                             </div>
                         </section>
+                        <section id="mr-options-section-misplaced" class="mr-options-card mr-options-section mr-options-section-fill is-hidden">
+                            <div class="mr-options-section-head">
+                                <button id="mr-options-misplaced-collapse-toggle" type="button" class="mr-options-section-title mr-options-collapse-title" aria-expanded="true" aria-controls="mr-options-misplaced-controls">
+                                    <span>Misplaced Models (Tidy)</span>
+                                    <span class="mr-options-collapse-chevron" aria-hidden="true">${getSvgIcon('chevronDown')}</span>
+                                </button>
+                            </div>
+                            <div class="mr-options-grid">
+                                <div class="mr-options-panel">
+                                    <div class="mr-options-stack mr-options-misplaced-stack">
+                                        <div id="mr-options-misplaced-controls" class="mr-options-misplaced-controls">
+                                            <div class="mr-options-db-summary mr-options-misplaced-summary">
+                                                <div class="mr-options-db-row">
+                                                    <span class="mr-options-overview-stat-icon" aria-hidden="true">${getSvgIcon('search')}</span>
+                                                    <span class="mr-options-overview-stat-copy"><span>Models scanned</span><strong id="mr-options-misplaced-scanned">0</strong></span>
+                                                </div>
+                                                <div class="mr-options-db-row">
+                                                    <span class="mr-options-overview-stat-icon" aria-hidden="true">${getSvgIcon('triangleAlert')}</span>
+                                                    <span class="mr-options-overview-stat-copy"><span>Misplaced</span><strong id="mr-options-misplaced-count">0</strong></span>
+                                                </div>
+                                            </div>
+                                            <div class="mr-options-db-actions">
+                                                <button id="mr-options-misplaced-scan-btn" type="button" class="mr-btn mr-btn-secondary">${getSvgIcon('refreshCw')} Scan for Misplaced Models</button>
+                                            </div>
+                                            <div id="mr-options-misplaced-status" class="mr-options-db-message">Click Scan to detect model files stored in the wrong category folder.</div>
+                                        </div>
+                                        <div id="mr-options-misplaced-results" class="mr-options-audit-results" hidden></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
                     </div>
                 </div>
             </div>
@@ -1001,6 +1057,7 @@ export const optionsMethods = {
         const downloadSoundInput = this.contentElement.querySelector('#mr-options-download-sound');
         const aria2SettingEls = Array.from(this.contentElement.querySelectorAll('.mr-options-aria2-setting'));
         const downloadPathModeInput = this.contentElement.querySelector('#mr-options-download-path-mode');
+        const sidecarLayoutInput = this.contentElement.querySelector('#mr-options-sidecar-layout');
         const defaultRootSelectInputs = Array.from(this.contentElement.querySelectorAll('.mr-options-default-root'));
         const templatePresetInputs = Array.from(this.contentElement.querySelectorAll('.mr-options-template-preset'));
         const templateCustomInputs = Array.from(this.contentElement.querySelectorAll('.mr-options-template-custom'));
@@ -1053,6 +1110,14 @@ export const optionsMethods = {
         const metadataSizeCollapseToggle = this.contentElement.querySelector('#mr-options-metadata-size-collapse-toggle');
         const metadataSizeControls = this.contentElement.querySelector('#mr-options-metadata-size-controls');
         const metadataSizeStack = this.contentElement.querySelector('.mr-options-metadata-size-stack');
+        const misplacedScanBtn = this.contentElement.querySelector('#mr-options-misplaced-scan-btn');
+        const misplacedStatusEl = this.contentElement.querySelector('#mr-options-misplaced-status');
+        const misplacedResultsEl = this.contentElement.querySelector('#mr-options-misplaced-results');
+        const misplacedScannedEl = this.contentElement.querySelector('#mr-options-misplaced-scanned');
+        const misplacedCountEl = this.contentElement.querySelector('#mr-options-misplaced-count');
+        const misplacedCollapseToggle = this.contentElement.querySelector('#mr-options-misplaced-collapse-toggle');
+        const misplacedControls = this.contentElement.querySelector('#mr-options-misplaced-controls');
+        const misplacedStack = this.contentElement.querySelector('.mr-options-misplaced-stack');
         const metadataBuildStartBtn = this.contentElement.querySelector('#mr-options-metadata-build-start');
         const metadataBuildCancelBtn = this.contentElement.querySelector('#mr-options-metadata-build-cancel');
         const metadataBuildStatus = this.contentElement.querySelector('#mr-options-metadata-build-status');
@@ -1465,6 +1530,140 @@ export const optionsMethods = {
                 setMetadataSizeAuditBusy(false);
             }
         };
+
+        const setMisplacedBusy = (busy) => setControlsBusyState(misplacedScanBtn, busy);
+        const setMisplacedStatus = (text, mode = '') => setElementStatusText(misplacedStatusEl, text, mode);
+
+        const renderMisplacedResults = (misplacedList = []) => {
+            if (!misplacedResultsEl) return;
+            if (!Array.isArray(misplacedList) || !misplacedList.length) {
+                misplacedResultsEl.hidden = false;
+                misplacedResultsEl.innerHTML = '<div class="mr-options-audit-empty">No misplaced models found. All scanned models are in their expected folders!</div>';
+                return;
+            }
+
+            const rows = misplacedList.map((item, index) => {
+                const modelLabel = item.filename || item.path || 'Model';
+                const modelPath = item.path || '';
+                const currentCat = item.current_category || '';
+                const detectedCat = item.detected_category || '';
+                const baseModel = item.base_model ? ` (${item.base_model})` : '';
+                const targetPath = item.target_path || '';
+                const worksBadge = item.works_anyway
+                    ? '<span class="mr-badge mr-badge-subtle" title="Loads anyway via compatibility loader">Works anyway</span>'
+                    : '';
+                return `
+                    <tr class="mr-options-audit-row" data-misplaced-index="${index}">
+                        <td>
+                            <div class="mr-options-audit-model">${this.escapeHtml(modelLabel)}</div>
+                            <div class="mr-options-audit-path" title="${this.escapeHtml(modelPath)}">${this.escapeHtml(modelPath)}</div>
+                        </td>
+                        <td><span class="mr-badge is-invalid">${this.escapeHtml(currentCat)}</span></td>
+                        <td><span class="mr-badge is-valid">${this.escapeHtml(detectedCat)}${this.escapeHtml(baseModel)}</span> ${worksBadge}</td>
+                        <td>
+                            <div class="mr-options-audit-path" title="${this.escapeHtml(targetPath)}">${this.escapeHtml(targetPath)}</div>
+                        </td>
+                        <td style="white-space: nowrap;">
+                            <button type="button" class="mr-btn mr-btn-primary mr-btn-sm mr-misplaced-move-btn"
+                                data-path="${this.escapeHtml(modelPath)}"
+                                data-target-cat="${this.escapeHtml(detectedCat)}">
+                                Move to ${this.escapeHtml(detectedCat)}
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            misplacedResultsEl.innerHTML = `
+                <div class="mr-options-audit-table-wrap">
+                    <table class="mr-options-audit-table">
+                        <thead>
+                            <tr>
+                                <th>Model</th>
+                                <th>Current Folder</th>
+                                <th>Detected Kind</th>
+                                <th>Destination</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+            `;
+            misplacedResultsEl.hidden = false;
+
+            misplacedResultsEl.querySelectorAll('.mr-misplaced-move-btn').forEach((btn) => {
+                btn.addEventListener('click', async () => {
+                    const path = btn.dataset.path;
+                    const targetCat = btn.dataset.targetCat;
+                    btn.disabled = true;
+                    btn.textContent = 'Moving...';
+                    try {
+                        const res = await this.fetchJson('/model_resolver/placement/move', {
+                            method: 'POST',
+                            body: JSON.stringify({ path, target_category: targetCat })
+                        }, 'Move misplaced model');
+                        if (res && res.success) {
+                            this.showNotification(`Successfully moved to ${targetCat}`, 'success');
+                            const row = btn.closest('tr');
+                            if (row) {
+                                row.innerHTML = `<td colspan="5" class="mr-options-audit-empty" style="color: var(--mr-success-color, #10b981);">
+                                    ${getSvgIcon('circleCheckBig')} Moved to ${this.escapeHtml(res.target_path || targetCat)}
+                                </td>`;
+                            }
+                            if (misplacedCountEl) {
+                                const currentCount = parseInt(misplacedCountEl.textContent.replace(/,/g, ''), 10) || 1;
+                                misplacedCountEl.textContent = formatAuditNumber(Math.max(0, currentCount - 1));
+                            }
+                        }
+                    } catch (err) {
+                        btn.disabled = false;
+                        btn.textContent = `Move to ${targetCat}`;
+                        this.showNotification(`Could not move model: ${err.message}`, 'error');
+                    }
+                });
+            });
+        };
+
+        const runMisplacedScan = async () => {
+            setMisplacedBusy(true);
+            setMisplacedStatus('Scanning model files and headers...', 'is-pending');
+            if (misplacedResultsEl) misplacedResultsEl.hidden = true;
+            try {
+                const data = await this.fetchJson('/model_resolver/placement/check?rescan=true', {}, 'Scan misplaced models');
+                const count = Number(data?.misplaced_count || 0);
+                const scanned = Number(data?.total_scanned || 0);
+                if (misplacedScannedEl) misplacedScannedEl.textContent = formatAuditNumber(scanned);
+                if (misplacedCountEl) misplacedCountEl.textContent = formatAuditNumber(count);
+                renderMisplacedResults(data?.misplaced || []);
+                if (count > 0) {
+                    setMisplacedStatus(`Found ${count.toLocaleString()} misplaced model${count === 1 ? '' : 's'} in wrong folders.`, 'is-invalid');
+                    this.showNotification(`Found ${count} misplaced model(s)`, 'warning');
+                } else {
+                    setMisplacedStatus(`Scanned ${scanned.toLocaleString()} model${scanned === 1 ? '' : 's'}. All models are in their correct folders!`, 'is-valid');
+                    this.showNotification('All models are in their correct folders', 'success');
+                }
+            } catch (err) {
+                setMisplacedStatus(err.message || 'Misplaced models scan failed.', 'is-invalid');
+            } finally {
+                setMisplacedBusy(false);
+            }
+        };
+
+        if (misplacedScanBtn) {
+            misplacedScanBtn.addEventListener('click', runMisplacedScan);
+        }
+
+        if (misplacedCollapseToggle && misplacedControls) {
+            misplacedCollapseToggle.addEventListener('click', () => {
+                const isExpanded = misplacedCollapseToggle.getAttribute('aria-expanded') === 'true';
+                misplacedCollapseToggle.setAttribute('aria-expanded', isExpanded ? 'false' : 'true');
+                misplacedControls.hidden = isExpanded;
+                if (misplacedStack) {
+                    misplacedStack.classList.toggle('is-controls-collapsed', isExpanded);
+                }
+            });
+        }
 
         const setMetadataBuildBusy = (busy) => {
             setControlsBusyState(metadataBuildStartBtn, busy, metadataBuildCancelBtn);
@@ -2802,6 +3001,7 @@ export const optionsMethods = {
                 'mr-options-main-fill-section',
                 targetId === 'mr-options-section-metadata-audit'
                     || targetId === 'mr-options-section-metadata-build'
+                    || targetId === 'mr-options-section-misplaced'
             );
             setActiveNav(targetId);
         };
@@ -3551,6 +3751,7 @@ export const optionsMethods = {
                 const baseModelPathMappings = collectBaseModelPathMappings();
                 const downloadBackend = this.normalizeDownloadBackend(downloadBackendInput?.value || tokens.download_backend);
                 const downloadPathMode = this.normalizeDownloadPathMode(downloadPathModeInput?.value || tokens.download_path_mode);
+                const sidecarLayout = sidecarLayoutInput?.value === 'hidden' ? 'hidden' : 'beside';
                 const defaultRootSettings = {};
                 defaultRootSelectInputs.forEach((select) => {
                     const settingKey = select.dataset.settingKey;
@@ -3583,6 +3784,7 @@ export const optionsMethods = {
                     aria2_auto_stop_daemon: Boolean(aria2AutoStopInput?.checked),
                     download_sound_enabled: Boolean(downloadSoundInput?.checked),
                     download_path_mode: downloadPathMode,
+                    sidecar_layout: sidecarLayout,
                     download_path_templates: downloadPathTemplates,
                     base_model_path_mappings: baseModelPathMappings,
                     ...defaultRootSettings,

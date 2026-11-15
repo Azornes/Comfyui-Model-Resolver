@@ -19,6 +19,50 @@ _log = None
 MODEL_RESOLVER_METADATA_SUFFIX = ".modelresolver.json"
 MODEL_RESOLVER_METADATA_SCHEMA = "comfyui-model-resolver"
 MODEL_RESOLVER_METADATA_SCHEMA_VERSION = 1
+PRIMARY_HIDDEN_DIR = ".cmr"
+HIDDEN_SIDECAR_DIRS = (".cmr", ".amb")
+SIDECAR_LAYOUTS = ("beside", "hidden")
+
+_SIDECAR_LAYOUT_OVERRIDE: Optional[str] = None
+
+
+def set_sidecar_layout_override(layout: Optional[str]) -> None:
+    """Set in-memory sidecar layout override for testing or session use."""
+    global _SIDECAR_LAYOUT_OVERRIDE
+    if layout is not None:
+        val = str(layout).strip().lower()
+        _SIDECAR_LAYOUT_OVERRIDE = "hidden" if val == "hidden" else "beside"
+    else:
+        _SIDECAR_LAYOUT_OVERRIDE = None
+
+
+def get_configured_sidecar_layout() -> str:
+    """Return the active sidecar layout ('beside' or 'hidden')."""
+    if _SIDECAR_LAYOUT_OVERRIDE is not None:
+        return _SIDECAR_LAYOUT_OVERRIDE
+    try:
+        from .settings import load_settings
+
+        settings = load_settings()
+        val = str(settings.get("sidecar_layout") or "").strip().lower()
+        return "hidden" if val == "hidden" else "beside"
+    except Exception:
+        return "beside"
+
+
+def ensure_hidden_directory(directory: str) -> str:
+    """Ensure directory exists and set FILE_ATTRIBUTE_HIDDEN on Windows."""
+    if not directory:
+        return ""
+    os.makedirs(directory, exist_ok=True)
+    if os.name == "nt":
+        try:
+            import ctypes
+
+            ctypes.windll.kernel32.SetFileAttributesW(directory, 0x02)
+        except (OSError, AttributeError):
+            pass
+    return directory
 
 _EXTERNAL_METADATA_PREFERRED_FIELDS = {
     "notes",
@@ -331,7 +375,10 @@ def write_json_atomic(
 
     dir_name = os.path.dirname(file_path)
     if dir_name:
-        os.makedirs(dir_name, exist_ok=True)
+        if os.path.basename(dir_name) in HIDDEN_SIDECAR_DIRS:
+            ensure_hidden_directory(dir_name)
+        else:
+            os.makedirs(dir_name, exist_ok=True)
 
     fd, tmp_path = tempfile.mkstemp(
         prefix=f".{os.path.basename(file_path)}.",
@@ -1447,13 +1494,50 @@ def find_external_metadata_sidecar_path(
                 continue
             return path
 
+    for hidden_dir in HIDDEN_SIDECAR_DIRS:
+        if dir_entries is not None and os.path.normcase(hidden_dir) not in dir_entries:
+            continue
+        hidden_folder = os.path.join(directory, hidden_dir)
+        for name in possible_names:
+            if name:
+                path = os.path.join(hidden_folder, name)
+                if os.path.normcase(os.path.abspath(path)) == normalized_model_path:
+                    continue
+                if not os.path.isfile(path):
+                    continue
+                if (
+                    has_stem_collision
+                    and name in legacy_names
+                    and not _metadata_sidecar_matches_model(path, model_path)
+                ):
+                    continue
+                return path
+
     return ""
 
 
-def get_model_resolver_sidecar_path(model_path: str) -> str:
-    """Return the sidecar path exclusively owned by Model Resolver."""
+def get_model_resolver_sidecar_path(
+    model_path: str,
+    layout: Optional[str] = None,
+) -> str:
+    """Return the sidecar path exclusively owned by Model Resolver.
+
+    If an existing sidecar file is found on disk (either beside the model or in a
+    supported hidden folder like .cmr or .amb), that path is returned to maintain
+    in-place updates. Otherwise, the returned path is determined by the
+    configured or requested ``layout`` ('beside' or 'hidden').
+    """
     directory = os.path.dirname(model_path)
     filename = get_filename_from_path(model_path)
+    if layout is None:
+        existing = find_model_resolver_sidecar_path(model_path)
+        if existing:
+            return existing
+        layout = get_configured_sidecar_layout()
+
+    target_layout = "hidden" if str(layout).strip().lower() == "hidden" else "beside"
+    if target_layout == "hidden":
+        return os.path.join(directory, PRIMARY_HIDDEN_DIR, f"{filename}{MODEL_RESOLVER_METADATA_SUFFIX}")
     return os.path.join(directory, f"{filename}{MODEL_RESOLVER_METADATA_SUFFIX}")
 
 
@@ -1461,20 +1545,48 @@ def find_model_resolver_sidecar_path(
     model_path: str,
     dir_entries: Optional[Set[str]] = None,
 ) -> str:
-    """Return the existing Model Resolver sidecar path, if present."""
+    """Return the existing Model Resolver sidecar path, if present.
+
+    Checks both the beside location and supported hidden folders (.cmr, .amb).
+    """
     if not model_path:
         return ""
+    directory = os.path.dirname(model_path)
     filename = get_filename_from_path(model_path)
     expected_name = f"{filename}{MODEL_RESOLVER_METADATA_SUFFIX}"
-    if dir_entries is not None and os.path.normcase(expected_name) not in dir_entries:
-        return ""
-    metadata_path = get_model_resolver_sidecar_path(model_path)
     normalized_model_path = os.path.normcase(os.path.abspath(model_path))
-    if (
-        os.path.normcase(os.path.abspath(metadata_path)) != normalized_model_path
-        and os.path.isfile(metadata_path)
-    ):
-        return metadata_path
+
+    active_layout = get_configured_sidecar_layout()
+
+    beside_path = os.path.join(directory, expected_name)
+    hidden_paths = [
+        os.path.join(directory, hidden_dir, expected_name)
+        for hidden_dir in HIDDEN_SIDECAR_DIRS
+    ]
+
+    candidates = (
+        [*hidden_paths, beside_path]
+        if active_layout == "hidden"
+        else [beside_path, *hidden_paths]
+    )
+
+    for candidate in candidates:
+        cand_dir = os.path.dirname(candidate)
+        if dir_entries is not None:
+            if cand_dir == directory:
+                if os.path.normcase(expected_name) not in dir_entries:
+                    continue
+            else:
+                hidden_folder_name = os.path.basename(cand_dir)
+                if os.path.normcase(hidden_folder_name) not in dir_entries:
+                    continue
+
+        if (
+            os.path.normcase(os.path.abspath(candidate)) != normalized_model_path
+            and os.path.isfile(candidate)
+        ):
+            return candidate
+
     return ""
 
 
@@ -1716,9 +1828,17 @@ def _get_safe_sidecar_path(
     model_path = os.path.realpath(os.path.abspath(raw_model_path))
     model_dir = os.path.realpath(os.path.dirname(model_path))
     metadata_path = os.path.realpath(sidecar_factory(model_path))
+    meta_dir = os.path.realpath(os.path.dirname(metadata_path))
+    is_direct_or_hidden = (
+        meta_dir == model_dir
+        or (
+            os.path.basename(meta_dir) in HIDDEN_SIDECAR_DIRS
+            and os.path.realpath(os.path.dirname(meta_dir)) == model_dir
+        )
+    )
     if (
         not model_dir
-        or os.path.dirname(metadata_path) != model_dir
+        or not is_direct_or_hidden
         or metadata_path == model_path
         or not is_path_within(metadata_path, model_dir)
     ):

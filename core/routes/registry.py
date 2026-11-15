@@ -140,6 +140,7 @@ def register_routes(self):
             from .loaded_models import register_loaded_model_routes
             from .metadata import register_metadata_routes
             from .model_details import register_model_details_routes
+            from .placement import register_placement_routes
             from .search_support import register_search_support_routes
             from .settings import register_settings_routes
             from .source_search import register_source_search_routes
@@ -272,6 +273,7 @@ def register_routes(self):
             register_search_support_routes(route_context)
             register_download_routes(route_context)
             register_directory_routes(route_context)
+            register_placement_routes(route_context)
 
         register_settings_routes(routes, web, json_api_endpoint)
         self.routes_setup = True
