@@ -28,6 +28,7 @@ from ..network_utils import (
 )
 from ..path_utils import (
     calculate_file_sha256,
+    check_safetensors_damage,
     get_comfy_root_path,
     get_filename_from_path,
     get_model_resolver_sidecar_path,
@@ -221,6 +222,7 @@ context._download_preview_image_with_system_trust = _bind(
     previews._download_preview_image_with_system_trust
 )
 context.get_existing_model_preview_path = previews.get_existing_model_preview_path
+context.check_safetensors_damage = check_safetensors_damage
 
 context._download_huggingface_xet = _bind(
     huggingface_xet.download_huggingface_xet

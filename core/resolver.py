@@ -63,6 +63,7 @@ MODEL_EXTENSIONS = tuple(_MODEL_EXTENSIONS)
 
 
 from .path_utils import (
+    calculate_file_sha256,
     find_metadata_sidecar_path,
     get_directory_entry_set,
     get_filename_from_path,
@@ -359,6 +360,23 @@ def _collect_workflow_hash_entries(value: Any) -> List[Dict[str, Any]]:
                 elif isinstance(nested, dict):
                     for item in nested.values():
                         entries.extend(_workflow_hash_entry_candidates(item))
+            # Support flat mapping: { filename: { hash, size } } or { filename: "hash_string" }
+            # (as stored by Anomalous Model Browser and other tools)
+            for candidate_key, candidate_val in raw.items():
+                if candidate_key in ("models", "by_path", "by_node"):
+                    continue
+                if isinstance(candidate_val, dict):
+                    entry = dict(candidate_val)
+                    if not any(
+                        entry.get(k)
+                        for k in ("path", "original_path", "filename", "name", "file_name")
+                    ):
+                        entry["filename"] = candidate_key
+                    entries.extend(_workflow_hash_entry_candidates(entry))
+                elif isinstance(candidate_val, str):
+                    norm = normalize_sha256(candidate_val)
+                    if norm:
+                        entries.append({"filename": candidate_key, "sha256": norm})
             entries.extend(_workflow_hash_entry_candidates(raw))
         elif isinstance(raw, list):
             for item in raw:
@@ -383,6 +401,12 @@ def extract_workflow_hash_metadata(workflow_json: Dict[str, Any]) -> Dict[str, D
         if not sha256:
             continue
         normalized = {**entry, "sha256": sha256}
+        size_raw = entry.get("size") if entry.get("size") is not None else entry.get("file_size")
+        if size_raw is not None:
+            try:
+                normalized["size"] = int(size_raw)
+            except (ValueError, TypeError):
+                pass
         for candidate in (
             entry.get("path"),
             entry.get("original_path"),
@@ -395,6 +419,8 @@ def extract_workflow_hash_metadata(workflow_json: Dict[str, Any]) -> Dict[str, D
                 continue
             index[text] = normalized
             index[get_filename_from_path(text)] = normalized
+            index[text.replace("\\", "/")] = normalized
+            index[text.replace("/", "\\")] = normalized
         node_id = entry.get("node_id")
         widget_index = entry.get("widget_index")
         if node_id is not None and widget_index is not None:
@@ -632,12 +658,13 @@ def search_local_matches_by_hash(
     category: Optional[str] = None,
     max_matches: int = 20,
     force_rescan: bool = False,
+    expected_size: Optional[int] = None,
 ) -> List[ModelMatch]:
     """
     Find local models whose sidecar .metadata.json contains the given SHA256.
 
-    This intentionally does not hash model files. It only reads metadata sidecars
-    next to models already discovered by the scanner.
+    If not found in sidecars, but an expected file size is provided, dynamically
+    hashes only candidates whose byte size matches exactly.
     """
     normalized_hash = normalize_sha256(sha256)
     if not normalized_hash:
@@ -645,6 +672,55 @@ def search_local_matches_by_hash(
 
     index = _get_local_hash_match_cache(force_rescan=force_rescan)
     matches = list(index.get(normalized_hash, []))
+
+    if not matches and expected_size is not None and expected_size > 0:
+        try:
+            available_models = get_model_files(force_rescan=force_rescan)
+            if category and category != "unknown":
+                category_matches = [m for m in available_models if m.category == category]
+                non_category = [m for m in available_models if m.category != category]
+                available_models = category_matches + non_category
+            size_matches = []
+            for candidate in available_models:
+                if not candidate.path or not os.path.isfile(candidate.path):
+                    continue
+                try:
+                    if os.path.getsize(candidate.path) == expected_size:
+                        size_matches.append(candidate)
+                except OSError:
+                    continue
+
+            for candidate in size_matches:
+                try:
+                    computed_hash = calculate_file_sha256(candidate.path)
+                    if computed_hash and normalize_sha256(computed_hash) == normalized_hash:
+                        matched_item = ModelMatch.from_mapping(
+                            {
+                                "model": candidate,
+                                "filename": candidate.filename,
+                                "similarity": 1.0,
+                                "confidence": 100.0,
+                                "match_type": "hash",
+                                "hash_match": True,
+                                "matched_by_hash": True,
+                                "matched_by_size": True,
+                                "hash_lookup_source": "size_matched_hash",
+                                "size": expected_size,
+                            }
+                        )
+                        matches.append(matched_item)
+                        if index is not None:
+                            index.setdefault(normalized_hash, []).append(matched_item)
+                        log.info(
+                            f"Resolved unindexed local model by size ({expected_size} bytes) + SHA256: "
+                            f"{candidate.path} -> {normalized_hash}"
+                        )
+                except Exception as exc:
+                    log.debug(
+                        f"Could not compute SHA256 for size match candidate {candidate.path}: {exc}"
+                    )
+        except Exception as scan_exc:
+            log.debug(f"Error during on-demand size-matched hash check: {scan_exc}")
 
     if category and category != "unknown":
         matches.sort(
@@ -1073,13 +1149,14 @@ def analyze_and_find_matches(
             missing.reference,
         )
         if hash_info:
-            updates.update(
-                {
-                    "workflow_sha256": normalize_sha256(hash_info.get("sha256")),
-                    "hash_lookup_source": hash_info.get("source")
-                    or "workflow_metadata",
-                }
-            )
+            hash_updates = {
+                "workflow_sha256": normalize_sha256(hash_info.get("sha256")),
+                "hash_lookup_source": hash_info.get("source")
+                or "workflow_metadata",
+            }
+            if hash_info.get("size"):
+                hash_updates["workflow_file_size"] = hash_info["size"]
+            updates.update(hash_updates)
 
         # Handle URNs: mark for async resolution by frontend. No sync CivitAI
         # calls happen here; the frontend resolves them asynchronously.
@@ -1174,6 +1251,7 @@ def analyze_and_find_matches(
         workflow_sha256 = normalize_sha256(
             model_ref.extra_value("workflow_sha256")
         )
+        workflow_file_size = model_ref.extra_value("workflow_file_size")
         hash_matches: List[ModelMatch] = []
         if workflow_sha256:
             hash_matches = collect_local_hash_matches_for_result(
@@ -1187,6 +1265,7 @@ def analyze_and_find_matches(
                 filename=get_filename_from_path(
                     model_ref.reference.original_path or ""
                 ),
+                expected_size=workflow_file_size,
             )
 
         if not target_for_matching:

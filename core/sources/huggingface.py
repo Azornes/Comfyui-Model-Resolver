@@ -63,11 +63,13 @@ _author_index_lock = threading.RLock()
 
 def clear_search_cache():
     """Clear cached HuggingFace search results and in-memory indexes."""
-    global _search_cache, _author_index_cache
+    global _search_cache, _author_index_cache, _HF_CARD_METADATA_CACHE
     _search_cache.clear()
     clear_remote_size_cache()
     with _author_index_lock:
         _author_index_cache.clear()
+    with _HF_CARD_METADATA_LOCK:
+        _HF_CARD_METADATA_CACHE.clear()
 
 
 _report_progress = get_progress_reporter("HuggingFace progress callback")
@@ -567,6 +569,107 @@ def _normalize_huggingface_details_file(
     }
 
 
+HF_IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp")
+_HF_CARD_METADATA_CACHE: Dict[str, Dict[str, Any]] = {}
+_HF_CARD_METADATA_LOCK = threading.RLock()
+
+
+def extract_huggingface_card_metadata(
+    model_data: Dict[str, Any],
+    repo_id: str,
+    branch: str = "main",
+) -> Dict[str, Any]:
+    card_data = (
+        model_data.get("cardData")
+        if isinstance(model_data.get("cardData"), dict)
+        else {}
+    )
+    widgets = card_data.get("widget") or []
+    if isinstance(widgets, dict):
+        widgets = [widgets]
+    elif not isinstance(widgets, list):
+        widgets = []
+
+    images = []
+    for item in widgets:
+        if isinstance(item, dict):
+            output = item.get("output")
+            img_url = output.get("url") if isinstance(output, dict) else None
+            if img_url and isinstance(img_url, str):
+                if not img_url.startswith(("http://", "https://")):
+                    img_url = f"https://huggingface.co/{repo_id}/resolve/{branch}/{quote(img_url.lstrip('/'))}"
+                images.append({"url": img_url})
+
+    if not images:
+        siblings = model_data.get("siblings") or []
+        for sib in siblings:
+            if isinstance(sib, dict):
+                rfilename = str(sib.get("rfilename") or "")
+                if rfilename.lower().endswith(HF_IMAGE_EXTENSIONS):
+                    img_url = f"https://huggingface.co/{repo_id}/resolve/{branch}/{quote(rfilename)}"
+                    images.append({"url": img_url})
+                    if len(images) >= 3:
+                        break
+
+    instance_prompt = card_data.get("instance_prompt")
+    trained_words = []
+    if isinstance(instance_prompt, str) and instance_prompt.strip():
+        trained_words = [instance_prompt.strip()]
+    elif isinstance(instance_prompt, list):
+        trained_words = [str(w).strip() for w in instance_prompt if str(w).strip()]
+
+    example_prompts = []
+    for item in widgets:
+        if isinstance(item, dict):
+            text = str(item.get("text") or "").strip()
+            if text and text not in example_prompts:
+                example_prompts.append(text)
+
+    preview_url = images[0]["url"] if images else ""
+
+    return {
+        "images": images,
+        "preview_url": preview_url,
+        "trained_words": trained_words,
+        "example_prompts": example_prompts,
+        "base_model": card_data.get("base_model") or "",
+    }
+
+
+def get_huggingface_card_metadata(
+    repo_id: str,
+    headers: Optional[Dict[str, str]] = None,
+    branch: str = "main",
+) -> Dict[str, Any]:
+    normalized_repo_id = str(repo_id or "").strip().strip("/")
+    if not normalized_repo_id:
+        return {}
+    cache_key = f"{normalized_repo_id}@{branch}"
+    with _HF_CARD_METADATA_LOCK:
+        if cache_key in _HF_CARD_METADATA_CACHE:
+            return _HF_CARD_METADATA_CACHE[cache_key]
+
+    try:
+        url = f"{HF_API_URL}/models/{normalized_repo_id}?expand[]=cardData&expand[]=siblings"
+        response_data = execute_provider_json_request(
+            "HuggingFace model card metadata",
+            url,
+            headers=headers,
+            timeout=15,
+        )
+        if isinstance(response_data, dict):
+            result = extract_huggingface_card_metadata(
+                response_data, normalized_repo_id, branch
+            )
+            with _HF_CARD_METADATA_LOCK:
+                _HF_CARD_METADATA_CACHE[cache_key] = result
+            return result
+    except Exception as exc:
+        log.debug(f"Could not fetch HF card metadata for {normalized_repo_id}: {exc}")
+
+    return {}
+
+
 def get_huggingface_model_details(
     repo_id: str,
     file_path: str = "",
@@ -626,7 +729,7 @@ def get_huggingface_model_details(
     try:
         response_data = execute_provider_json_request(
             "HuggingFace model details",
-            f"{HF_API_URL}/models/{normalized_repo_id}",
+            f"{HF_API_URL}/models/{normalized_repo_id}?expand[]=cardData&expand[]=siblings",
             headers=headers,
             timeout=15,
         )
@@ -641,6 +744,9 @@ def get_huggingface_model_details(
         model_data.get("cardData")
         if isinstance(model_data.get("cardData"), dict)
         else {}
+    )
+    card_meta = extract_huggingface_card_metadata(
+        model_data, normalized_repo_id, normalized_branch
     )
     tags = model_data.get("tags") if isinstance(model_data.get("tags"), list) else []
     repo_url = f"https://huggingface.co/{normalized_repo_id}"
@@ -658,13 +764,13 @@ def get_huggingface_model_details(
         "published_at": model_data.get("createdAt") or "",
         "updated_at": model_data.get("lastModified") or "",
         "description": "",
-        "trained_words": [],
+        "trained_words": card_meta.get("trained_words") or [],
         "stats": {
             "downloads": model_data.get("downloads", 0),
             "thumbsUpCount": model_data.get("likes", 0),
         },
         "files": normalized_files,
-        "images": [],
+        "images": card_meta.get("images") or [],
         "url": tree_url,
     }
     owner = normalized_repo_id.split("/", 1)[0]
@@ -701,7 +807,9 @@ def get_huggingface_model_details(
         "branch": normalized_branch,
         "versions": [version],
         "selected_version": version,
-        "images": [],
+        "images": card_meta.get("images") or [],
+        "preview_url": card_meta.get("preview_url") or "",
+        "trained_words": card_meta.get("trained_words") or [],
     }
 
 
@@ -1585,6 +1693,9 @@ def build_huggingface_custom_result(
     page_url = (
         f"https://huggingface.co/{repo_id}/blob/{branch}/{quote_url_path(file_path)}"
     )
+    card_meta = get_huggingface_card_metadata(repo_id, headers=headers, branch=branch)
+    preview_url = card_meta.get("preview_url") or ""
+    trained_words = card_meta.get("trained_words") or []
     return build_model_result(
         "huggingface",
         model_id=repo_id,
@@ -1605,5 +1716,7 @@ def build_huggingface_custom_result(
         page_url=page_url,
         version_url=page_url,
         custom_url=True,
+        preview_url=preview_url,
+        trained_words=trained_words,
     )
 

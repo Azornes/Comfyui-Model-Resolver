@@ -1385,6 +1385,30 @@ def download_file_with_aria2(
                         )
                         return result
 
+                if not clean_expected:
+                    damage = facade.check_safetensors_damage(completed_path)
+                    if damage:
+                        error_msg = f"Safetensors file is corrupted or truncated ({damage})"
+                        log.error(f"✗ Aria2 download rejected: {completed_path} - {error_msg}")
+                        with facade.download_lock:
+                            if download_id in facade.download_progress:
+                                facade.download_progress[download_id].update(
+                                    {
+                                        "status": "error",
+                                        "error": error_msg,
+                                        "speed": 0,
+                                        "sha256_verified": False,
+                                    }
+                                )
+                        result.update(
+                            {
+                                "success": False,
+                                "error": error_msg,
+                                "sha256_verified": False,
+                            }
+                        )
+                        return result
+
                 metadata_path = facade.write_model_resolver_metadata(
                     completed_path,
                     metadata or {},

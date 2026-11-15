@@ -440,6 +440,76 @@ def read_safetensors_header(
     return None
 
 
+def check_safetensors_damage(
+    file_path: str,
+    max_header_size: int = SAFETENSORS_HEADER_MAX_BYTES,
+) -> str:
+    """
+    Fast integrity check for a .safetensors file by inspecting its header and tensor offsets.
+    Does not read tensor data payloads.
+
+    Returns:
+        "" (empty string) if file appears healthy,
+        "short" if file is smaller than 8 bytes or unreadable,
+        "header_size" if header length exceeds bounds or file length,
+        "header" if header JSON is corrupted or invalid,
+        "truncated" if a tensor's data offsets extend beyond actual file size.
+    """
+    if not file_path or not str(file_path).lower().endswith((".safetensors", ".sft")):
+        return ""
+
+    try:
+        size = os.path.getsize(file_path)
+    except (OSError, ValueError):
+        return "short"
+
+    if size < 8:
+        return "short"
+
+    try:
+        with open(file_path, "rb") as handle:
+            head = handle.read(8)
+            if len(head) < 8:
+                return "short"
+            header_size = int.from_bytes(head, byteorder="little", signed=False)
+            if (
+                header_size <= 0
+                or header_size > max_header_size
+                or 8 + header_size > size
+            ):
+                return "header_size"
+            header_bytes = handle.read(header_size)
+            if len(header_bytes) != header_size:
+                return "header_size"
+            header = json.loads(header_bytes.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError):
+        return "header"
+    except Exception:
+        return "header"
+
+    if not isinstance(header, dict):
+        return "header"
+
+    data_size = size - 8 - header_size
+    for name, tensor in header.items():
+        if name == "__metadata__":
+            continue
+        if not isinstance(tensor, dict):
+            return "header"
+        offsets = tensor.get("data_offsets")
+        if not (
+            isinstance(offsets, (list, tuple))
+            and len(offsets) == 2
+            and all(isinstance(v, int) for v in offsets)
+            and 0 <= offsets[0] <= offsets[1]
+        ):
+            return "header"
+        if offsets[1] > data_size:
+            return "truncated"
+
+    return ""
+
+
 def extract_safetensors_header_sha256(
     file_path: str,
     max_header_size: int = SAFETENSORS_HEADER_MAX_BYTES,

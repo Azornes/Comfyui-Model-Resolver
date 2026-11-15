@@ -16,17 +16,27 @@ def collect_local_hash_matches_for_result(
     force_rescan: bool = False,
     source: str = "download_source",
     filename: str = "",
+    expected_size: Optional[int] = None,
 ) -> List[ModelMatch]:
     """Find local matches and add the shared hash-lookup result fields."""
     if not sha256:
         return []
 
-    matches = search_local_matches_by_hash(
-        sha256,
-        category=category,
-        max_matches=max_matches,
-        force_rescan=force_rescan,
-    )
+    try:
+        matches = search_local_matches_by_hash(
+            sha256,
+            category=category,
+            max_matches=max_matches,
+            force_rescan=force_rescan,
+            expected_size=expected_size,
+        )
+    except TypeError:
+        matches = search_local_matches_by_hash(
+            sha256,
+            category=category,
+            max_matches=max_matches,
+            force_rescan=force_rescan,
+        )
     return [
         match.with_extra(
             hash_lookup_source=source,

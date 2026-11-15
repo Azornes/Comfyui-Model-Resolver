@@ -359,6 +359,35 @@ def create_model_preview(
     source = metadata if isinstance(metadata, dict) else {}
     preview_url, media_type = _first_model_preview_asset(source)
     if not preview_url:
+        hf_url = (
+            source.get("url")
+            or source.get("download_url")
+            or source.get("model_url")
+            or source.get("page_url")
+            or ""
+        )
+        repo_id = source.get("repo_id") or source.get("repo")
+        branch = source.get("branch") or "main"
+        if not repo_id and hf_url:
+            from ..sources.huggingface import parse_huggingface_url
+
+            parsed = parse_huggingface_url(hf_url)
+            if parsed:
+                repo_id = parsed.repo
+                branch = parsed.branch or branch
+        if repo_id:
+            try:
+                from ..sources.huggingface import get_huggingface_card_metadata
+
+                card_meta = get_huggingface_card_metadata(repo_id, branch=branch)
+                candidate_url = card_meta.get("preview_url")
+                if candidate_url:
+                    preview_url = candidate_url
+                    media_type = "image"
+            except Exception as e:
+                log.debug(f"Could not resolve HF preview for {repo_id}: {e}")
+
+    if not preview_url:
         return existing_path
 
     existing_type = _preview_media_type(existing_path) if existing_path else ""

@@ -330,6 +330,13 @@ class SearchOrchestrator:
                         "Checking local metadata hashes",
                         94,
                     )
+                    source_size = None
+                    raw_size = source_result.get("size")
+                    if raw_size is not None:
+                        try:
+                            source_size = int(raw_size)
+                        except (ValueError, TypeError):
+                            pass
                     try:
                         hash_matches = collect_local_hash_matches_for_result(
                             sha256,
@@ -343,6 +350,7 @@ class SearchOrchestrator:
                                 or source_result.get("path")
                                 or filename
                             ),
+                            expected_size=source_size,
                         )
                     except Exception as hash_error:
                         self.logger.warning(

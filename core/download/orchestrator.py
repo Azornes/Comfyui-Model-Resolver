@@ -816,6 +816,22 @@ def download_file(
                 log.error(f"✗ Download rejected: {filename} - {error_msg}")
                 return result
 
+        damage = facade.check_safetensors_damage(partial_path)
+        if damage:
+            error_msg = f"Safetensors file is corrupted or truncated ({damage})"
+            with download_lock:
+                download_progress[download_id]["status"] = "error"
+                download_progress[download_id]["error"] = error_msg
+                download_progress[download_id]["sha256_verified"] = False
+            result.update(
+                {
+                    "error": error_msg,
+                    "sha256_verified": False,
+                }
+            )
+            log.error(f"✗ Download rejected: {filename} - {error_msg}")
+            return result
+
         os.replace(partial_path, dest_path)
         published = True
 
