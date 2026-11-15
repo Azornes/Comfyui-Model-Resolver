@@ -64,6 +64,15 @@ def analyze_references(
         if not name:
             continue
 
+        active = lora_item.get("active", lora_item.get("enabled", True))
+        if active is False or str(active).strip().lower() in ("false", "0"):
+            continue
+        try:
+            if float(lora_item.get("strength", 1.0)) == 0.0:
+                continue
+        except (TypeError, ValueError):
+            pass
+
         lora_exists = False
         lora_full_path = None
         if name in lora_lookup:

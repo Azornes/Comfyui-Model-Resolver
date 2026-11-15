@@ -20,6 +20,12 @@ class ModelResolverExtension:
             "Building local metadata..."
         )
         self.search_result_timestamps = {}
+        try:
+            from .workflow.lora_stack_patch import patch_lora_stack_nodes
+
+            patch_lora_stack_nodes()
+        except Exception:
+            pass
 
     def _update_analysis_progress(
         self,

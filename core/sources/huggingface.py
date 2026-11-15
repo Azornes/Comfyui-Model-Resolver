@@ -36,7 +36,17 @@ from ..type_utils import (
 from .common import probe_remote_file_size, resolve_file_size
 
 HF_API_URL = "https://huggingface.co/api"
-HF_AUTHOR_FALLBACKS = ["Comfy-Org", "Kijai"]
+HF_AUTHOR_FALLBACKS = [
+    "Comfy-Org",
+    "Kijai",
+    "city96",
+    "alibaba-pai",
+    "QuantStack",
+    "lodestones",
+    "black-forest-labs",
+    "nunchaku-ai",
+    "comfyanonymous",
+]
 BRAVE_SEARCH_API_URL = "https://api.search.brave.com/res/v1/web/search"
 HF_AUTHOR_INDEX_CACHE_TTL_SECONDS = 24 * 60 * 60
 HF_AUTHOR_INDEX_CACHE_VERSION = 2

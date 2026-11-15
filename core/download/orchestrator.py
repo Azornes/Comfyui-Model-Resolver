@@ -10,6 +10,77 @@ class DownloadCancelled(Exception):
     """The caller cancelled before the download response became available."""
 
 
+def format_huggingface_auth_error(
+    url: str,
+    status_code: int,
+    exc: Exception,
+    headers: Optional[Dict[str, str]] = None,
+) -> str:
+    """Format user-friendly error message for Hugging Face authorization/gated repo failures."""
+    import os
+    import urllib.parse
+
+    parsed = urllib.parse.urlparse(url)
+    path_parts = [p for p in parsed.path.strip("/").split("/") if p]
+    repo = f"{path_parts[0]}/{path_parts[1]}" if len(path_parts) >= 2 else ""
+    repo_url = f"https://huggingface.co/{repo}" if repo else "https://huggingface.co"
+
+    resp = getattr(exc, "response", None)
+    resp_text = resp.text if resp is not None and hasattr(resp, "text") else ""
+    error_text = f"{exc} {resp_text}".lower()
+
+    is_gated = any(
+        marker in error_text
+        for marker in (
+            "gated",
+            "request access",
+            "ask for access",
+            "authorized list",
+            "restricted",
+            "agreement",
+            "agree",
+            "accept its terms",
+            "accept the terms",
+            "license agreement",
+        )
+    )
+
+    has_token = False
+    if headers:
+        has_token = any(
+            "bearer" in str(v).lower()
+            for k, v in headers.items()
+            if "auth" in k.lower()
+        )
+    if not has_token:
+        has_token = bool(os.environ.get("HF_TOKEN"))
+
+    if is_gated and repo:
+        if has_token:
+            return (
+                f"The Hugging Face repository '{repo}' is gated and requires agreeing to its license agreement. "
+                f"Please visit {repo_url} to accept the model agreement, then retry the download."
+            )
+        return (
+            f"The Hugging Face repository '{repo}' is gated and requires agreeing to its license agreement. "
+            f"1. Visit {repo_url} to accept the license agreement. "
+            f"2. Add your Hugging Face token in Model Resolver settings or set the HF_TOKEN environment variable."
+        )
+
+    if repo:
+        if has_token:
+            return (
+                f"Unauthorized (HTTP {status_code}) for Hugging Face repository '{repo}'. "
+                f"The token may be invalid or lacks access. Manage tokens at https://huggingface.co/settings/tokens"
+            )
+        return (
+            f"Unauthorized (HTTP {status_code}) for Hugging Face repository '{repo}'. "
+            f"A Hugging Face token is required. Create one at https://huggingface.co/settings/tokens and add it in Model Resolver settings."
+        )
+
+    return f"Unauthorized (HTTP {status_code}): HuggingFace token may be required."
+
+
 def parse_retry_after(value: Optional[str]) -> Optional[int]:
     """Parse HTTP Retry-After header into integer seconds."""
     if not value or not str(value).strip():
@@ -802,7 +873,9 @@ def download_file(
         status_code = getattr(getattr(exc, "response", None), "status_code", None)
         if status_code in [401, 403]:
             if "huggingface.co" in url:
-                error_msg = f"Unauthorized (HTTP {status_code}): HuggingFace token may be required."
+                error_msg = format_huggingface_auth_error(
+                    url, status_code, exc, headers=headers
+                )
             elif "civitai.com" in url:
                 error_msg = f"Unauthorized (HTTP {status_code}): CivitAI API key may be required."
             else:

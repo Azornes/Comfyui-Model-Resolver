@@ -109,6 +109,12 @@ NODE_TYPE_MODEL_WIDGET_CATEGORIES = {
     "LowVRAMAudioVAELoader": {0: "checkpoints"},
     "LTXVGemmaCLIPModelLoader": {0: "text_encoders"},
     "LTXAVTextEncoderLoader": {0: "text_encoders", 1: "checkpoints"},
+    "ModelPreviewOverrideKJ": {5: "vae_approx"},
+    "ModelPreviewOverride": {5: "vae_approx"},
+    "Model Preview Override": {5: "vae_approx"},
+    "Model Preview Override KJ": {5: "vae_approx"},
+    "LTX2SamplingPreviewOverride": {5: "vae_approx"},
+    "LTX2 Sampling Preview Override": {5: "vae_approx"},
 }
 NODE_TYPE_MODEL_WIDGET_CATEGORIES.update(get_custom_node_widget_categories())
 
@@ -119,6 +125,14 @@ NODE_TYPE_TO_CATEGORY_HINTS = {
     if widget_map
 }
 NODE_TYPE_TO_CATEGORY_HINTS.update(get_custom_node_category_hints())
+NODE_TYPE_TO_CATEGORY_HINTS.update({
+    "LoadLoraModel": "loras",
+    "LoadLoraTextEncoder": "loras",
+    "Load LoRA (Model)": "loras",
+    "Load LoRA (Text Encoder)": "loras",
+    "Load LoRA (Model and CLIP)": "loras",
+    "Load LoRA": "loras",
+})
 
 # Model category hints by widget/input name. Workflow JSON does not always preserve
 # widget names, but when it does this catches custom loaders without a node-type entry.
@@ -147,6 +161,7 @@ MODEL_WIDGET_NAME_TO_CATEGORY = {
     "photomaker_model_name": "photomaker",
     "sam_model_name": "sams",
     "text_encoder": "text_encoders",
+    "tiny_vae": "vae_approx",
     "hypernetwork_name": "hypernetworks",
 }
 
@@ -199,6 +214,7 @@ WORKFLOW_MODEL_WIDGET_NAMES = {
     "model_file",
     "file_name",
     "filename",
+    *MODEL_WIDGET_NAME_TO_CATEGORY.keys(),
 }
 
 

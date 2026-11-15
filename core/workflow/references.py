@@ -393,8 +393,69 @@ def get_node_model_info(
             for ref in custom_model_refs
         ]
 
+    # Check for disabled dynamic LoRA stack rows in LoadLoraModel / widgets_values_named
+    disabled_lora_names = set()
+    disabled_widget_indices = set()
+
+    def _is_disabled_flag(val: Any) -> bool:
+        if val is False:
+            return True
+        if isinstance(val, (int, float)) and val == 0:
+            return True
+        return isinstance(val, str) and val.strip().lower() in (
+            "false",
+            "0",
+            "off",
+            "disable",
+            "disabled",
+        )
+
+    def _is_zero_strength(val: Any) -> bool:
+        try:
+            return float(val) == 0.0
+        except (TypeError, ValueError):
+            return False
+
+    named_widgets = node.get("widgets_values_named")
+    if not isinstance(named_widgets, dict) and isinstance(node.get("widgets_values"), dict):
+        named_widgets = node.get("widgets_values")
+    if isinstance(named_widgets, dict):
+        for k, v in named_widgets.items():
+            if isinstance(v, str) and (k.endswith(".lora_name") or k.endswith(".lora")):
+                prefix = k.rsplit(".", 1)[0]
+                enabled_val = named_widgets.get(f"{prefix}.enabled", True)
+                strength_val = named_widgets.get(
+                    f"{prefix}.strength",
+                    named_widgets.get(f"{prefix}.strength_model", 1.0),
+                )
+                if _is_disabled_flag(enabled_val) or _is_zero_strength(strength_val):
+                    disabled_lora_names.add(v.strip().lower())
+
+    if node_type in {
+        "LoadLoraModel",
+        "LoadLoraTextEncoder",
+        "Load LoRA (Model)",
+        "Load LoRA (Text Encoder)",
+        "Load LoRA (Model and CLIP)",
+        "Load LoRA",
+    } and (isinstance(widgets_values, list) and len(widgets_values) >= 3):
+            row_idx = 1 if (not isinstance(widgets_values[0], bool) and isinstance(widgets_values[0], int)) else 0
+            while row_idx + 2 < len(widgets_values):
+                lora_val = widgets_values[row_idx]
+                strength_val = widgets_values[row_idx + 1]
+                enabled_val = widgets_values[row_idx + 2]
+                if _is_disabled_flag(enabled_val) or _is_zero_strength(strength_val):
+                    disabled_widget_indices.add(row_idx)
+                    if isinstance(lora_val, str) and lora_val.strip():
+                        disabled_lora_names.add(lora_val.strip().lower())
+                row_idx += 3
+
     # For each widget value, check if it looks like a model file or URN
     for idx, value in enumerate(widgets_values):
+        if idx in disabled_widget_indices:
+            continue
+        if isinstance(value, str) and value.strip().lower() in disabled_lora_names:
+            continue
         if dynamic_widgets.is_dynamic_non_model_widget(node, idx):
             continue
         widget_name = (
@@ -477,6 +538,7 @@ def get_node_model_info(
             model_widget_folder_key_hints
             or get_node_model_widget_category_hint(node_type, idx)
             or schema_output_category_hint
+            or (NODE_TYPE_TO_CATEGORY_HINTS.get(node_type) and is_model_filename(value))
         )
         named_model_file_widget = bool(
             is_workflow_model_widget_candidate(node, idx)
@@ -550,6 +612,9 @@ def get_node_model_info(
 
                         if isinstance(value.get("on"), bool):
                             ref["active"] = value.get("on")
+
+                        if value.get("on") is False or _is_zero_strength(value.get("strength", 1.0)):
+                            continue
 
                     model_refs.append(ref)
             continue

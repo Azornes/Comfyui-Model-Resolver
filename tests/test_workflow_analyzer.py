@@ -1779,6 +1779,112 @@ class WorkflowModelInventoryCacheTests(unittest.TestCase):
 
         self.assertEqual(2, analyze_models.call_count)
 
+    def test_model_preview_override_array_widgets(self):
+        workflow = {
+            "nodes": [
+                {
+                    "id": 100,
+                    "type": "ModelPreviewOverrideKJ",
+                    "title": "Model Preview Override",
+                    "mode": 0,
+                    "widgets_values": [1024, 80, True, 1, 12, "taeh3.safetensors"],
+                }
+            ]
+        }
+        refs = analysis.analyze_workflow_models(workflow, available_models=[])
+        self.assertEqual(len(refs), 1)
+        self.assertEqual(refs[0].original_path, "taeh3.safetensors")
+        self.assertEqual(refs[0].category, "vae_approx")
+
+    def test_model_preview_override_named_widgets(self):
+        workflow = {
+            "nodes": [
+                {
+                    "id": 101,
+                    "type": "CustomNodeUnknown",
+                    "title": "Some Preview Node",
+                    "mode": 0,
+                    "widgets_values": ["taef1.safetensors"],
+                    "inputs": [
+                        {"name": "tiny_vae", "type": "COMBO", "widget": {"name": "tiny_vae"}}
+                    ],
+                }
+            ]
+        }
+        refs = analysis.analyze_workflow_models(workflow, available_models=[])
+        self.assertEqual(len(refs), 1)
+        self.assertEqual(refs[0].original_path, "taef1.safetensors")
+        self.assertEqual(refs[0].category, "vae_approx")
+
+
+    def test_load_lora_model_disabled_named_rows_ignored(self):
+        workflow = {
+            "nodes": [
+                {
+                    "id": 10,
+                    "type": "LoadLoraModel",
+                    "title": "Load LoRA (Model)",
+                    "mode": 0,
+                    "widgets_values": ["disabled_lora.safetensors", "active_lora.safetensors"],
+                    "widgets_values_named": {
+                        "loras.0.lora_name": "disabled_lora.safetensors",
+                        "loras.0.strength": 1.0,
+                        "loras.0.enabled": False,
+                        "loras.1.lora_name": "active_lora.safetensors",
+                        "loras.1.strength": 0.8,
+                        "loras.1.enabled": True,
+                    },
+                }
+            ]
+        }
+        refs = analysis.analyze_workflow_models(workflow, available_models=[])
+        filenames = [ref.original_path for ref in refs]
+        self.assertNotIn("disabled_lora.safetensors", filenames)
+        self.assertIn("active_lora.safetensors", filenames)
+
+    def test_load_lora_model_disabled_positional_rows_ignored(self):
+        workflow = {
+            "nodes": [
+                {
+                    "id": 11,
+                    "type": "LoadLoraModel",
+                    "title": "Load LoRA (Model)",
+                    "mode": 0,
+                    # [count, name0, strength0, enabled0, name1, strength1, enabled1]
+                    "widgets_values": [
+                        2,
+                        "disabled_row.safetensors", 1.0, False,
+                        "active_row.safetensors", 0.9, True,
+                    ],
+                }
+            ]
+        }
+        refs = analysis.analyze_workflow_models(workflow, available_models=[])
+        filenames = [ref.original_path for ref in refs]
+        self.assertNotIn("disabled_row.safetensors", filenames)
+        self.assertIn("active_row.safetensors", filenames)
+
+    def test_load_lora_model_zero_strength_ignored(self):
+        workflow = {
+            "nodes": [
+                {
+                    "id": 12,
+                    "type": "LoadLoraModel",
+                    "title": "Load LoRA (Model)",
+                    "mode": 0,
+                    "widgets_values": [
+                        2,
+                        "zero_strength.safetensors", 0.0, True,
+                        "active_row.safetensors", 0.9, True,
+                    ],
+                }
+            ]
+        }
+        refs = analysis.analyze_workflow_models(workflow, available_models=[])
+        filenames = [ref.original_path for ref in refs]
+        self.assertNotIn("zero_strength.safetensors", filenames)
+        self.assertIn("active_row.safetensors", filenames)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -59,7 +59,18 @@ class HuggingFaceSourceTests(unittest.TestCase):
         self.assertEqual("https://huggingface.co/Comfy-Org/example", results[0].url)
 
     def test_known_author_fallbacks_include_comfy_org_and_kijai(self):
-        self.assertEqual(["Comfy-Org", "Kijai"], HF_AUTHOR_FALLBACKS)
+        for author in [
+            "Comfy-Org",
+            "Kijai",
+            "city96",
+            "alibaba-pai",
+            "QuantStack",
+            "lodestones",
+            "black-forest-labs",
+            "nunchaku-ai",
+            "comfyanonymous",
+        ]:
+            self.assertIn(author, HF_AUTHOR_FALLBACKS)
 
     def test_known_author_status_reports_each_author_file_count(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -90,9 +101,15 @@ class HuggingFaceSourceTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            with patch(
-                "core.sources.huggingface.HF_AUTHOR_INDEX_CACHE_PATH",
-                str(index_path),
+            with (
+                patch(
+                    "core.sources.huggingface.HF_AUTHOR_INDEX_CACHE_PATH",
+                    str(index_path),
+                ),
+                patch(
+                    "core.sources.huggingface.HF_AUTHOR_FALLBACKS",
+                    ["Comfy-Org", "Kijai"],
+                ),
             ):
                 status = get_known_author_fallback_indexes_status()
 
