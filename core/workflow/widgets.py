@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from ..custom_nodes import (
     get_custom_node_category_hints,
     get_custom_node_widget_categories,
+    resolve_ast_node_widget_category,
 )
 from ..type_utils import unique_ordered_strings
 
@@ -115,6 +116,14 @@ NODE_TYPE_MODEL_WIDGET_CATEGORIES = {
     "Model Preview Override KJ": {5: "vae_approx"},
     "LTX2SamplingPreviewOverride": {5: "vae_approx"},
     "LTX2 Sampling Preview Override": {5: "vae_approx"},
+    "WanVideoModelLoader": {0: "diffusion_models"},
+    "WanVideoTextEncoderLoader": {0: "text_encoders"},
+    "WanVideoVAELoader": {0: "vae"},
+    "MiniMaxModelLoader": {0: "diffusion_models"},
+    "MiniMaxH3Loader": {0: "latent_upscale_models"},
+    "MMAudioModelLoader": {0: "audio_encoders"},
+    "MMAudioFeatureLoader": {0: "audio_encoders"},
+    "MMAudioVAELoader": {0: "vae"},
 }
 NODE_TYPE_MODEL_WIDGET_CATEGORIES.update(get_custom_node_widget_categories())
 
@@ -163,6 +172,10 @@ MODEL_WIDGET_NAME_TO_CATEGORY = {
     "text_encoder": "text_encoders",
     "tiny_vae": "vae_approx",
     "hypernetwork_name": "hypernetworks",
+    "wan_video_name": "diffusion_models",
+    "minimax_name": "diffusion_models",
+    "h3_name": "latent_upscale_models",
+    "mmaudio_name": "audio_encoders",
 }
 
 MODEL_OUTPUT_TYPE_TO_CATEGORY = {
@@ -206,6 +219,9 @@ NESTED_MODEL_KEYS = {
     "bg_removal_name": "background_removal",
     "photomaker_model_name": "photomaker",
     "text_encoder": "text_encoders",
+    "wan_video_name": "diffusion_models",
+    "minimax_name": "diffusion_models",
+    "mmaudio_name": "audio_encoders",
 }
 
 WORKFLOW_MODEL_WIDGET_NAMES = {
@@ -312,10 +328,12 @@ def get_widget_name_hint(node: Dict[str, Any], widget_index: int) -> str:
 
 
 def is_workflow_model_widget_candidate(node: Dict[str, Any], widget_index: int) -> bool:
-    return any(
+    if any(
         normalize_widget_name(candidate) in WORKFLOW_MODEL_WIDGET_NAMES
         for candidate in get_widget_name_candidates(node, widget_index)
-    )
+    ):
+        return True
+    return bool(resolve_ast_node_widget_category(node.get("type", ""), widget_index=widget_index))
 
 
 def _ordered_unique_categories(values: List[Any]) -> List[str]:
@@ -330,6 +348,13 @@ def get_widget_category_hint(
         category = MODEL_WIDGET_NAME_TO_CATEGORY.get(normalize_widget_name(candidate))
         if category:
             return category
+    node_type = node.get("type", "")
+    for candidate in get_widget_name_candidates(node, widget_index):
+        ast_category = resolve_ast_node_widget_category(
+            node_type, widget_index=widget_index, widget_name=candidate
+        )
+        if ast_category:
+            return ast_category
     return None
 
 
@@ -337,7 +362,10 @@ def get_node_model_widget_category_hint(
     node_type: str, widget_index: int
 ) -> Optional[str]:
     """Return the model category for a known model selector widget."""
-    return NODE_TYPE_MODEL_WIDGET_CATEGORIES.get(node_type, {}).get(widget_index)
+    hint = NODE_TYPE_MODEL_WIDGET_CATEGORIES.get(node_type, {}).get(widget_index)
+    if hint:
+        return hint
+    return resolve_ast_node_widget_category(node_type, widget_index=widget_index)
 
 
 def get_node_output_category_hint(node: Dict[str, Any]) -> Optional[str]:

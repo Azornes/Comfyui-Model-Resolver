@@ -62,6 +62,11 @@ function createModelActions(model, handlers = {}) {
             callback: () => handlers.showInResolver?.(model),
         },
         {
+            content: 'Use on Canvas',
+            className: 'mr-node-ctx-item mr-node-ctx-use-on-canvas',
+            callback: () => handlers.useOnCanvas?.(model),
+        },
+        {
             content: 'Show info',
             className: 'mr-node-ctx-item mr-node-ctx-show-info',
             callback: () => handlers.showInfo?.(model),

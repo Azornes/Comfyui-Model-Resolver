@@ -25,6 +25,7 @@ import {
     toResolverContextModel,
 } from "./node_context_menu.js";
 import { NodeModelPopover } from "./node_popover.js";
+import { addModelLoaderToCanvas } from "./utils/canvas_node_utils.js";
 import {
     getCustomNodeModelAdapter,
     getCustomNodeModelListSignature as createCustomNodeModelListSignature,
@@ -596,6 +597,10 @@ export class ModelResolver {
                     owner.openResolverManager();
                 }
             },
+            useOnCanvas: async (model) => {
+                const resolvedModel = await owner.resolveNodeContextMenuModel(model);
+                await addModelLoaderToCanvas(resolvedModel || model);
+            },
             showInfo: async (model) => {
                 const resolvedModel = await owner.resolveNodeContextMenuModel(model);
                 if (resolvedModel) {
@@ -890,6 +895,10 @@ export class ModelResolver {
                     if (resolvedModel) {
                         owner.showResolvedNodeModelInResolver(resolvedModel);
                     }
+                },
+                useOnCanvas: async model => {
+                    const resolvedModel = await owner.resolveNodeContextMenuModel(model);
+                    await addModelLoaderToCanvas(resolvedModel || model);
                 },
                 showInfo: async model => {
                     const resolvedModel = await owner.resolveNodeContextMenuModel(model);

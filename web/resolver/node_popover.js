@@ -155,6 +155,10 @@ export function renderNodeModelPopoverHtml({ node = null, models = [], formatCat
                             data-action="search"
                             data-tooltip="Show in Model Resolver"
                             aria-label="Show in Model Resolver">${getSvgIcon('search')}</button>
+                        <button type="button" class="mr-node-popover-action-btn mr-action-use"
+                            data-action="use"
+                            data-tooltip="Use on Canvas"
+                            aria-label="Use on Canvas">${getSvgIcon('circlePlus')}</button>
                         <button type="button" class="mr-node-popover-action-btn mr-action-info"
                             data-action="info"
                             data-tooltip="Show info"
@@ -318,6 +322,9 @@ export class NodeModelPopover {
             if (action === 'search') {
                 this.close();
                 this.handlers.showInResolver?.(model);
+            } else if (action === 'use') {
+                this.close();
+                this.handlers.useOnCanvas?.(model);
             } else if (action === 'info') {
                 this.close();
                 this.handlers.showInfo?.(model);

@@ -11,6 +11,7 @@ import {
     normalizeSourceKey,
 } from "../utils/source_labels.js";
 import { getCivitaiModelUrl } from "../globals.js";
+import { addModelLoaderToCanvas } from "../utils/canvas_node_utils.js";
 export const modelInfoMethods = {
     escapeHtml,
     escapeJsString,
@@ -64,8 +65,10 @@ export const modelInfoMethods = {
             && model?.node_id !== undefined
             && model?.node_id !== null
             && model?.node_id !== '';
+        const showUseOnCanvas = this.canUseModelOnCanvas(model);
         this.setContextMenuItemVisible('showInfo', isSourceModelContext);
         this.setContextMenuItemVisible('showMore', canShowMore);
+        this.setContextMenuItemVisible('useOnCanvas', showUseOnCanvas);
         this.setContextMenuItemVisible('suggestSubfolder', showSuggestSubfolder);
         this.setContextMenuItemVisible('source', showSourceLink);
         this.setContextMenuItemVisible('civitai', false);
@@ -73,7 +76,7 @@ export const modelInfoMethods = {
         this.setContextMenuItemVisible('switchWorkflow', showSwitchWorkflow);
         this.setContextMenuItemVisible('compareHashes', showCompareHashes);
         this.setContextMenuItemVisible('openFolder', showOpenFolder);
-        this.setContextMenuDividerVisible('source', showSourceLink && (isSourceModelContext || canShowMore || showSuggestSubfolder));
+        this.setContextMenuDividerVisible('source', showSourceLink && (isSourceModelContext || canShowMore || showUseOnCanvas || showSuggestSubfolder));
         this.setContextMenuDividerVisible(
             'workflow',
             (showLocateNode || showSwitchWorkflow) && (isSourceModelContext || canShowMore || showSourceLink)
@@ -124,6 +127,8 @@ export const modelInfoMethods = {
 
         if (action === 'source' || action === 'civitai') {
             this.openModelSourceLink(model);
+        } else if (action === 'useOnCanvas') {
+            this.useModelOnCanvas(model);
         } else if (action === 'openFolder') {
             this.openContainingFolder(model);
         } else if (action === 'compareHashes') {
@@ -199,6 +204,20 @@ export const modelInfoMethods = {
         if (rect.bottom > window.innerHeight) {
             this.contextMenu.style.top = `${Math.max(10, window.innerHeight - rect.height - 10)}px`;
         }
+    },
+
+    canUseModelOnCanvas(model) {
+        if (!model) return false;
+        const isFolderOnlyContext = model?.context_scope === 'download_folder' || model?.context_scope === 'download_root';
+        if (isFolderOnlyContext) return false;
+        return Boolean(
+            model.full_path || model.path || model.resolved_path || model.filename || model.name || model.original_path
+        );
+    },
+
+    async useModelOnCanvas(model) {
+        if (!model) return null;
+        return await addModelLoaderToCanvas(model);
     },
 
     getContextMenuSourceConfig(key = '') {
@@ -956,6 +975,7 @@ export const modelInfoMethods = {
         // Add close handlers
         const closeBtn = dialog.querySelector('.mr-info-dialog-close');
         const footerCloseBtn = dialog.querySelector('.mr-info-dialog-close-btn');
+        const useBtn = dialog.querySelector('.mr-info-dialog-use-btn');
         const backdrop = dialog.querySelector('.mr-info-dialog-backdrop');
 
         if (closeBtn) {
@@ -963,6 +983,11 @@ export const modelInfoMethods = {
         }
         if (footerCloseBtn) {
             footerCloseBtn.addEventListener('click', () => this.closeInfoDialog(dialog));
+        }
+        if (useBtn) {
+            useBtn.addEventListener('click', async () => {
+                await this.useModelOnCanvas(modelData);
+            });
         }
         if (backdrop) {
             backdrop.addEventListener('click', (e) => {
@@ -1107,6 +1132,7 @@ export const modelInfoMethods = {
                     </div>
                 </div>
                 <div class="mr-info-dialog-footer">
+                    <button type="button" class="mr-btn mr-btn-primary mr-info-dialog-use-btn" title="Create a loader node on canvas for this model">${getSvgIcon('circlePlus', 'currentColor', 'mr-btn-icon')}<span>Use on Canvas</span></button>
                     <button class="mr-btn mr-btn-secondary mr-info-dialog-close-btn">Close</button>
                 </div>
                 <div class="mr-info-dialog-resize-handle" aria-hidden="true"></div>
