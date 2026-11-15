@@ -147,6 +147,37 @@ class HuggingFaceXetProgressAdapter:
             transfer_total_size,
         )
 
+    def set_description(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def set_postfix_str(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def set_postfix(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def refresh(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+    def __enter__(self) -> "HuggingFaceXetProgressAdapter":
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        self.close()
+
+    def __getattr__(self, name: str) -> Any:
+        # huggingface_hub calls tqdm setters from inside hf_xet's progress callback,
+        # where any AttributeError (e.g. set_postfix_str, added in 1.2x) kills
+        # every later progress report for the download -- the bar freezes at
+        # a few percent until the file finishes. Treat unknown tqdm setters as
+        # no-ops rather than chase each new one.
+        if name.startswith("set_"):
+            return lambda *args, **kwargs: None
+        raise AttributeError(f"{type(self).__name__} has no attribute {name!r}")
+
 
 def run_huggingface_xet_transfer(
     incomplete_path: Path,

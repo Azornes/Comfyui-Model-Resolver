@@ -55,6 +55,7 @@ from . import (
     aria2_backend,
     config,
     directories,
+    hf_worker_downloader,
     huggingface_xet,
     metadata,
     orchestrator,
@@ -223,6 +224,12 @@ context._download_preview_image_with_system_trust = _bind(
 )
 context.get_existing_model_preview_path = previews.get_existing_model_preview_path
 context.check_safetensors_damage = check_safetensors_damage
+
+context._download_huggingface_worker = _bind(
+    hf_worker_downloader.download_huggingface_worker
+)
+context.download_huggingface_worker = context._download_huggingface_worker
+context.is_hf_worker_supported = hf_worker_downloader.is_hf_worker_supported
 
 context._download_huggingface_xet = _bind(
     huggingface_xet.download_huggingface_xet

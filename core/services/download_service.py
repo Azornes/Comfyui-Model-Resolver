@@ -331,10 +331,9 @@ class DownloadService:
                 metadata=download_metadata,
                 expected_sha256=download_metadata.get("sha256"),
             )
+            download_id = self.start_background_download(**download_spec.to_kwargs())
         except (TypeError, ValueError) as exc:
             return self.web.json_response({"error": str(exc)}, status=400)
-
-        download_id = self.start_background_download(**download_spec.to_kwargs())
 
         return self.web.json_response(
             {

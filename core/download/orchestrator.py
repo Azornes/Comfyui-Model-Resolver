@@ -222,6 +222,18 @@ def download_file(
 
     download_backend = facade._download_backend_from_settings()
     if download_backend != "aria2":
+        if hasattr(facade, "_download_huggingface_worker"):
+            worker_result = facade._download_huggingface_worker(
+                url,
+                dest_path,
+                download_id,
+                headers=headers,
+                metadata=metadata,
+                category=category,
+            )
+            if worker_result is not None:
+                return worker_result
+
         xet_result = facade._download_huggingface_xet(
             url,
             dest_path,
@@ -1211,18 +1223,10 @@ def start_background_download(
     parts = []
     for piece in (subfolder or "", filename or ""):
         if not isinstance(piece, str):
-            return {
-                "success": False,
-                "download_id": download_id,
-                "error": "Invalid file name",
-            }
+            raise ValueError("Invalid file name")
         parts.extend(p for p in piece.replace("\\", "/").split("/") if p not in ("", "."))
     if any(p == ".." or ":" in p or "\0" in p for p in parts):
-        return {
-            "success": False,
-            "download_id": download_id,
-            "error": f"Invalid file name: {filename}",
-        }
+        raise ValueError(f"Invalid file name: {filename}")
 
     subfolder = facade.normalize_relative_subfolder(subfolder)
     initial_directory = facade.get_download_directory(category, base_directory) or ""
