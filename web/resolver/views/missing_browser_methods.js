@@ -43,6 +43,65 @@ export const missingBrowserMethods = {
         };
     },
 
+    getMissingLocateTargets(missing = {}) {
+        const rawRefs = Array.isArray(missing?.all_node_refs) && missing.all_node_refs.length > 0
+            ? missing.all_node_refs
+            : [missing];
+        const targets = [];
+        const seen = new Set();
+        for (const ref of rawRefs) {
+            const target = this.getMissingLocateTarget(ref);
+            if (target && target.nodeId !== undefined && target.nodeId !== null && target.nodeId !== '') {
+                const key = `${target.isTopLevel ? 'top' : 'sub'}:${target.subgraphId || ''}:${target.nodeId}`;
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    targets.push(target);
+                }
+            }
+        }
+        if (targets.length === 0) {
+            const fallback = this.getMissingLocateTarget(missing);
+            if (fallback && fallback.nodeId !== undefined && fallback.nodeId !== null && fallback.nodeId !== '') {
+                targets.push(fallback);
+            }
+        }
+        return targets;
+    },
+
+    cycleLocateMissingModel(missing = {}) {
+        const targets = this.getMissingLocateTargets(missing);
+        if (!targets || targets.length === 0) {
+            this.showNotification('Cannot locate node - node ID not available', 'error');
+            return;
+        }
+
+        const modelKey = typeof this.getMissingModelKey === 'function'
+            ? this.getMissingModelKey(missing)
+            : (missing.name || missing.filename || '');
+        this._missingJumpIndices = this._missingJumpIndices || new Map();
+        const currentIndex = typeof missing._jumpIndex === 'number'
+            ? missing._jumpIndex
+            : (this._missingJumpIndices.get(modelKey) ?? -1);
+        const nextIndex = (currentIndex + 1) % targets.length;
+        missing._jumpIndex = nextIndex;
+        if (modelKey) {
+            this._missingJumpIndices.set(modelKey, nextIndex);
+        }
+
+        const target = targets[nextIndex];
+        const cycleLabel = targets.length > 1 ? `${nextIndex + 1}/${targets.length}` : '';
+        const locateOptions = {
+            subgraphId: target.subgraphId || '',
+            isTopLevel: target.isTopLevel
+        };
+        if (cycleLabel) {
+            locateOptions.cycleLabel = cycleLabel;
+        }
+
+        const numericNodeId = Number(target.nodeId);
+        this.locateNodeInGraph(Number.isNaN(numericNodeId) ? target.nodeId : numericNodeId, locateOptions);
+    },
+
     getMissingReferenceCount(missing = {}) {
         if (Array.isArray(missing.all_node_refs) && missing.all_node_refs.length > 0) {
             return missing.all_node_refs.length;
@@ -83,6 +142,12 @@ export const missingBrowserMethods = {
             : locateTarget.isTopLevel === false
             ? 'Open this subgraph and center the node in the ComfyUI graph.'
             : 'Center this node in the ComfyUI graph.';
+        const fullLocateTooltip = extraReferenceCount > 0
+            ? `${locateTooltip} This missing model is used by ${referenceCount} workflow references. Click repeatedly to cycle through them.`
+            : locateTooltip;
+        const locateAriaLabel = extraReferenceCount > 0
+            ? `Center node for ${text} in the ComfyUI graph (click repeatedly to cycle)`
+            : `Center ${text} in the ComfyUI graph`;
 
         return {
             label: nodeLabel,
@@ -90,9 +155,8 @@ export const missingBrowserMethods = {
             canLocate: nodeId !== '',
             locateTarget,
             referenceCount,
-            locateTooltip: extraReferenceCount > 0
-                ? `${locateTooltip} This missing model is used by ${referenceCount} workflow references; this centers the first one.`
-                : locateTooltip
+            locateTooltip: fullLocateTooltip,
+            locateAriaLabel
         };
     },
 
@@ -574,7 +638,7 @@ export const missingBrowserMethods = {
         const locateTarget = nodeDisplay.locateTarget || this.getMissingLocateTarget(missing);
         const nodeId = locateTarget.nodeId ?? '';
         const rowNodeHtml = nodeDisplay.canLocate
-            ? `<button type="button" class="mr-node-chip is-locatable mr-missing-row-node mr-missing-row-locate" data-node-id="${this.escapeHtml(String(nodeId))}" data-subgraph-id="${this.escapeHtml(String(locateTarget.subgraphId || ''))}" data-is-top-level="${locateTarget.isTopLevel ? 'true' : 'false'}" data-tooltip="${this.escapeHtml(nodeDisplay.locateTooltip)}" aria-label="Center ${this.escapeHtml(nodeDisplay.text)} in the ComfyUI graph">${this.getLocateIconHtml()}<span class="mr-missing-row-node-label">${this.escapeHtml(nodeDisplay.text)}</span></button>`
+            ? `<button type="button" class="mr-node-chip is-locatable mr-missing-row-node mr-missing-row-locate" data-missing-key="${this.escapeHtml(key)}" data-node-id="${this.escapeHtml(String(nodeId))}" data-subgraph-id="${this.escapeHtml(String(locateTarget.subgraphId || ''))}" data-is-top-level="${locateTarget.isTopLevel ? 'true' : 'false'}" data-tooltip="${this.escapeHtml(nodeDisplay.locateTooltip)}" aria-label="${this.escapeHtml(nodeDisplay.locateAriaLabel || `Center ${nodeDisplay.text} in the ComfyUI graph`)}">${this.getLocateIconHtml()}<span class="mr-missing-row-node-label">${this.escapeHtml(nodeDisplay.text)}</span></button>`
             : `<span class="mr-missing-row-node">${this.escapeHtml(nodeDisplay.text)}</span>`;
 
         return `
@@ -1083,6 +1147,15 @@ export const missingBrowserMethods = {
             button.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
+                const missingKey = button.dataset.missingKey || button.closest('.mr-missing-list-row')?.dataset?.missingKey;
+                const currentData = getCurrentData();
+                const currentMissing = missingKey && typeof this.getMissingModelKey === 'function'
+                    ? (currentData?.missing_models || sortedMissingModels || []).find(m => this.getMissingModelKey(m) === missingKey)
+                    : null;
+                if (currentMissing && typeof this.cycleLocateMissingModel === 'function') {
+                    this.cycleLocateMissingModel(currentMissing);
+                    return;
+                }
                 const rawNodeId = button.dataset.nodeId;
                 const numericNodeId = Number(rawNodeId);
                 this.locateNodeInGraph(Number.isNaN(numericNodeId) ? rawNodeId : numericNodeId, {
@@ -1801,13 +1874,20 @@ export const missingBrowserMethods = {
 
         const locateId = `locate-${detailDomKey}`;
         const locateBtn = container.querySelector(`#${locateId}`);
-        const locateTarget = this.getMissingLocateTarget(missing);
-        if (locateBtn && locateTarget.nodeId !== undefined && locateTarget.nodeId !== null && locateTarget.nodeId !== '') {
+        const locateTargets = typeof this.getMissingLocateTargets === 'function'
+            ? this.getMissingLocateTargets(missing)
+            : [this.getMissingLocateTarget(missing)];
+        if (locateBtn && locateTargets.length > 0) {
             locateBtn.addEventListener('click', () => {
-                this.locateNodeInGraph(locateTarget.nodeId, {
-                    subgraphId: locateTarget.subgraphId || '',
-                    isTopLevel: locateTarget.isTopLevel
-                });
+                if (typeof this.cycleLocateMissingModel === 'function') {
+                    this.cycleLocateMissingModel(missing);
+                } else {
+                    const locateTarget = locateTargets[0];
+                    this.locateNodeInGraph(locateTarget.nodeId, {
+                        subgraphId: locateTarget.subgraphId || '',
+                        isTopLevel: locateTarget.isTopLevel
+                    });
+                }
             });
         }
 

@@ -422,7 +422,9 @@ export const lifecycleGraphMethods = {
 
             const graphLabel = target.subgraphId || graph?.id || '';
             const scopeText = graphLabel && graph !== app.graph ? ` in subgraph ${target.subgraphName || graphLabel}` : '';
-            this.showNotification(`Focused on Node #${nodeId} (${node.type})${scopeText}`, 'info');
+            const cycleText = locateOptions.cycleLabel ? ` [${locateOptions.cycleLabel}]` : '';
+            const nodeType = node.type || 'Node';
+            this.showNotification(`Focused on Node #${nodeId} (${nodeType})${scopeText}${cycleText}`, 'info');
         } catch (e) {
             console.error('Model Resolver: Error locating node:', e);
             this.showNotification('Error locating node: ' + e.message, 'error');

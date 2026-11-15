@@ -789,6 +789,7 @@ export const workflowStateMethods = {
         this.cachedAnalysisData = null;
         this.cachedLoadedModelsSignature = null;
         this.cachedLoadedModelsData = null;
+        this._missingJumpIndices?.clear();
         this._analysisProgressToken = null;
         this._workflowDataLoadToken = null;
         this._loadedModelsLoadToken = null;

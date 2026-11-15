@@ -131,11 +131,15 @@ export const modelInfoMethods = {
         } else if (action === 'switchWorkflow') {
             this.switchToDownloadWorkflow(model);
         } else if (action === 'locateNode') {
-            const locateTarget = this.getMissingLocateTarget(model);
-            this.locateNodeInGraph(locateTarget.nodeId, {
-                subgraphId: locateTarget.subgraphId || '',
-                isTopLevel: locateTarget.isTopLevel
-            });
+            if (typeof this.cycleLocateMissingModel === 'function') {
+                this.cycleLocateMissingModel(model);
+            } else {
+                const locateTarget = this.getMissingLocateTarget(model);
+                this.locateNodeInGraph(locateTarget.nodeId, {
+                    subgraphId: locateTarget.subgraphId || '',
+                    isTopLevel: locateTarget.isTopLevel
+                });
+            }
         } else if (action === 'showInfo') {
             this.showModelInfo(model);
         } else if (action === 'showMore') {

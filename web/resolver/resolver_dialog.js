@@ -70,6 +70,7 @@ export class ResolverManagerDialog extends ComfyDialog {
         this.cachedLoadedModelsSignature = null;
         this.selectedMissingModelKey = null;
         this.pendingWorkflowModelSelection = null;
+        this._missingJumpIndices = new Map();
         this.batchSelectedMissingKeys = new Set();
         this.lastBatchSelectedMissingKey = null;
         this.activeFooterMenu = null;
@@ -192,6 +193,15 @@ export class ResolverManagerDialog extends ComfyDialog {
                     innerHTML: getSvgIcon('database', 'currentColor', 'mr-context-menu-item-svg')
                 }),
                 $el("span", { textContent: "Show More" })
+            ]),
+            $el("div.mr-context-menu-item.mr-context-menu-action-use-on-canvas", {
+                "data-menu-action": "useOnCanvas",
+                onclick: () => this.handleContextMenuAction('useOnCanvas')
+            }, [
+                $el("span.mr-context-menu-item-icon", {
+                    innerHTML: getSvgIcon('circlePlus', 'currentColor', 'mr-context-menu-item-svg')
+                }),
+                $el("span", { textContent: "Use on Canvas" })
             ]),
             $el("div.mr-context-menu-item.mr-context-menu-action-suggest-subfolder", {
                 "data-menu-action": "suggestSubfolder",
