@@ -5,6 +5,8 @@ Search the ComfyUI Manager model-list.json database with fuzzy matching.
 """
 
 import hashlib
+import importlib.util
+import json
 import os
 from typing import Any, Dict, List, Optional
 
@@ -87,6 +89,109 @@ def _get_remote_model_list_info() -> Dict[str, Any]:
     }
 
 
+def find_local_manager_model_list_path() -> Optional[str]:
+    """Find the path to model-list.json in locally installed ComfyUI-Manager if available."""
+    roots = []
+    try:
+        import folder_paths
+
+        roots = list(folder_paths.get_folder_paths("custom_nodes") or [])
+    except Exception:
+        pass
+
+    try:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        custom_nodes_parent = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
+        if os.path.isdir(custom_nodes_parent) and custom_nodes_parent not in roots:
+            roots.append(custom_nodes_parent)
+    except Exception:
+        pass
+
+    for root in roots:
+        try:
+            if not os.path.isdir(root):
+                continue
+            for name in sorted(os.listdir(root)):
+                if "manager" in name.lower():
+                    candidate = os.path.join(root, name, "model-list.json")
+                    if os.path.isfile(candidate) and os.path.getsize(candidate) > 0:
+                        return candidate
+        except OSError:
+            continue
+
+    try:
+        spec = importlib.util.find_spec("comfyui_manager")
+        if spec and spec.submodule_search_locations:
+            for location in spec.submodule_search_locations:
+                candidate = os.path.join(location, "model-list.json")
+                if os.path.isfile(candidate) and os.path.getsize(candidate) > 0:
+                    return candidate
+    except (ImportError, ValueError, AttributeError):
+        pass
+
+    return None
+
+
+def sync_model_list_from_local_manager(force: bool = False) -> Optional[Dict[str, Any]]:
+    """Sync model-list.json from a locally installed ComfyUI-Manager instance if present."""
+    local_mgr_path = find_local_manager_model_list_path()
+    if not local_mgr_path:
+        return None
+
+    try:
+        local_mgr_mtime = os.path.getmtime(local_mgr_path)
+        meta = _read_model_list_meta()
+        existing_source = meta.get("source", "")
+        existing_mtime = meta.get("local_manager_mtime", 0.0)
+
+        if (
+            not force
+            and existing_source == "local_manager"
+            and existing_mtime == local_mgr_mtime
+            and catalog_mgr.get_local_count() > 0
+        ):
+            return None
+
+        with open(local_mgr_path, encoding="utf-8") as f:
+            data = json.load(f)
+
+        models = data.get("models", []) if isinstance(data, dict) else []
+        if not isinstance(models, list) or not models:
+            return None
+
+        with open(local_mgr_path, "rb") as f:
+            content = f.read()
+        header = f"blob {len(content)}\0".encode()
+        sha = hashlib.sha1(header + content).hexdigest()
+
+        meta_updates = {
+            "source": "local_manager",
+            "source_path": local_mgr_path,
+            "local_manager_mtime": local_mgr_mtime,
+            "sha": sha,
+            "size": len(content),
+            "model_count": len(models),
+            "updated_at": _utc_now_iso(),
+        }
+        catalog_mgr.sync_catalog(data, meta_updates, indent=2)
+        global _model_list_cache
+        _model_list_cache = models
+        log.info(
+            f"Synced {len(models)} models from local ComfyUI-Manager: {local_mgr_path}"
+        )
+        return {
+            **get_model_list_update_status(check_remote=False),
+            "updated": True,
+            "source": "local_manager",
+            "local_path": local_mgr_path,
+        }
+    except Exception as e:
+        log.warning(
+            f"Could not sync model-list from local ComfyUI-Manager ({local_mgr_path}): {e}"
+        )
+        return None
+
+
 def reload_model_list():
     """Clear in-memory cache so the next search reads model-list.json again."""
     global _model_list_cache
@@ -102,7 +207,14 @@ def _load_model_list() -> List[Dict]:
         return _model_list_cache
 
     data = catalog_mgr.read_data()
-    _model_list_cache = data.get("models", [])
+    models = data.get("models", []) if isinstance(data, dict) else []
+    if not models:
+        synced = sync_model_list_from_local_manager()
+        if synced:
+            data = catalog_mgr.read_data()
+            models = data.get("models", []) if isinstance(data, dict) else []
+
+    _model_list_cache = models
     log.info(
         f"Loaded {len(_model_list_cache)} models from model-list.json"
     )
@@ -147,33 +259,46 @@ def get_model_list_update_status(check_remote: bool = False) -> Dict[str, Any]:
 
 
 def update_model_list_from_remote() -> Dict[str, Any]:
-    """Download the latest ComfyUI-Manager model-list.json and refresh cache."""
-    remote = _get_remote_model_list_info()
-    download_url = remote.get("download_url") or MODEL_LIST_SOURCE_URL
-    data = _fetch_json_url(download_url)
-    models = data.get("models", []) if isinstance(data, dict) else []
-    if not isinstance(models, list) or not models:
-        raise ValueError("Downloaded model-list.json does not contain a non-empty models list")
+    """Download the latest ComfyUI-Manager model-list.json and refresh cache, falling back to local manager if network fails."""
+    try:
+        remote = _get_remote_model_list_info()
+        download_url = remote.get("download_url") or MODEL_LIST_SOURCE_URL
+        data = _fetch_json_url(download_url)
+        models = data.get("models", []) if isinstance(data, dict) else []
+        if not isinstance(models, list) or not models:
+            raise ValueError("Downloaded model-list.json does not contain a non-empty models list")
 
-    meta = {
-        "source": "Comfy-Org/ComfyUI-Manager",
-        "source_url": MODEL_LIST_SOURCE_URL,
-        "github_url": remote.get("html_url")
-        or "https://github.com/Comfy-Org/ComfyUI-Manager/blob/main/model-list.json",
-        "sha": remote.get("sha") or "",
-        "size": remote.get("size") or 0,
-        "model_count": len(models),
-        "updated_at": _utc_now_iso(),
-    }
-    catalog_mgr.sync_catalog(data, meta, indent=2)
-    reload_model_list()
+        meta = {
+            "source": "Comfy-Org/ComfyUI-Manager",
+            "source_url": MODEL_LIST_SOURCE_URL,
+            "github_url": remote.get("html_url")
+            or "https://github.com/Comfy-Org/ComfyUI-Manager/blob/main/model-list.json",
+            "sha": remote.get("sha") or "",
+            "size": remote.get("size") or 0,
+            "model_count": len(models),
+            "updated_at": _utc_now_iso(),
+        }
+        catalog_mgr.sync_catalog(data, meta, indent=2)
+        reload_model_list()
 
-    return {
-        **get_model_list_update_status(check_remote=False),
-        "updated": True,
-        "remote_sha": meta["sha"],
-        "remote_size": meta["size"],
-    }
+        return {
+            **get_model_list_update_status(check_remote=False),
+            "updated": True,
+            "remote_sha": meta["sha"],
+            "remote_size": meta["size"],
+        }
+    except Exception as remote_err:
+        log.warning(
+            f"Remote update of model-list.json failed ({remote_err}); checking for local ComfyUI-Manager fallback..."
+        )
+        synced = sync_model_list_from_local_manager(force=True)
+        if synced:
+            return {
+                **synced,
+                "fallback_to_local": True,
+                "warning": f"Remote update failed ({remote_err}). Successfully updated from local ComfyUI-Manager.",
+            }
+        raise
 
 
 

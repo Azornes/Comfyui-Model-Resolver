@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import re
+import struct
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 from .type_utils import normalize_alphanumeric_key
@@ -532,11 +533,137 @@ def _canonical_base_model_from_text(value: Any) -> str:
 
 
 
+_GGUF_SCALARS = {
+    0: "B", 1: "b", 2: "H", 3: "h", 4: "I", 5: "i",
+    6: "f", 7: "?", 10: "Q", 11: "q", 12: "d",
+}
+
+GGUF_DIFFUSION_ARCHITECTURES = {
+    "flux": "Flux.1 D",
+    "sd1": "SD 1.5",
+    "sdxl": "SDXL 1.0",
+    "sd3": "SD 3",
+    "aura": "AuraFlow",
+    "cosmos": "Cosmos",
+    "ltxv": "LTXV",
+    "hyvid": "Hunyuan Video",
+    "wan": "Wan Video",
+    "lumina2": "Lumina",
+    "qwen_image": "Qwen Image",
+    "chroma": "Chroma",
+}
+
+
+def parse_gguf_metadata(data: bytes, max_kv: int = 500) -> Optional[Dict[str, Any]]:
+    """Parse key-value metadata from a GGUF byte buffer without loading tensor data."""
+    if len(data) < 24 or data[:4] != b"GGUF":
+        return None
+
+    at = 4
+    meta: Dict[str, Any] = {}
+    try:
+        version = struct.unpack("<I", data[at:at + 4])[0]
+        at += 4
+        if version < 2:
+            return None
+        _tensor_count = struct.unpack("<Q", data[at:at + 8])[0]
+        at += 8
+        kv_count = struct.unpack("<Q", data[at:at + 8])[0]
+        at += 8
+
+        def take(n: int) -> bytes:
+            nonlocal at
+            if at + n > len(data):
+                raise EOFError("Buffer truncated")
+            chunk = data[at:at + n]
+            at += n
+            return chunk
+
+        def read_text() -> str:
+            length = struct.unpack("<Q", take(8))[0]
+            if length > 10 * 1024 * 1024:
+                raise ValueError("String too long")
+            return take(length).decode("utf-8", "replace")
+
+        def read_value(val_type: int) -> Any:
+            if val_type in _GGUF_SCALARS:
+                fmt = "<" + _GGUF_SCALARS[val_type]
+                size = struct.calcsize(fmt)
+                return struct.unpack(fmt, take(size))[0]
+            if val_type == 8:
+                return read_text()
+            if val_type == 9:
+                item_type = struct.unpack("<I", take(4))[0]
+                count = struct.unpack("<Q", take(8))[0]
+                items = []
+                for _ in range(count):
+                    v = read_value(item_type)
+                    if len(items) < 20:
+                        items.append(v)
+                return items
+            raise ValueError(f"Unknown GGUF value type {val_type}")
+
+        limit = min(kv_count, max_kv)
+        for _ in range(limit):
+            key = read_text()
+            val_type = struct.unpack("<I", take(4))[0]
+            val = read_value(val_type)
+            meta[key] = val
+
+        return meta
+    except (EOFError, ValueError, struct.error):
+        return meta if meta else None
+
+
+def read_gguf_header(file_path: str, max_bytes: int = 16 * 1024 * 1024) -> Optional[Dict[str, Any]]:
+    """Read GGUF metadata key-values from the start of a .gguf file."""
+    if not file_path or not str(file_path).lower().endswith(".gguf"):
+        return None
+    try:
+        if not os.path.isfile(file_path):
+            return None
+        with open(file_path, "rb") as f:
+            data = f.read(max_bytes)
+        return parse_gguf_metadata(data)
+    except Exception as e:
+        _get_log().debug(f"Could not read GGUF header for {file_path}: {e}")
+        return None
+
+
+def infer_gguf_base_model(file_path: str) -> str:
+    """Infer a likely base model from GGUF metadata."""
+    meta = read_gguf_header(file_path)
+    if not isinstance(meta, dict):
+        return ""
+
+    arch = str(meta.get("general.architecture") or "").strip().lower()
+    if arch in GGUF_DIFFUSION_ARCHITECTURES:
+        return GGUF_DIFFUSION_ARCHITECTURES[arch]
+
+    canonical = _canonical_base_model_from_text(arch)
+    if canonical:
+        return canonical
+
+    name = str(meta.get("general.name") or "").strip()
+    if name:
+        canonical_name = _canonical_base_model_from_text(name)
+        if canonical_name:
+            return canonical_name
+
+    return ""
+
+
 def infer_safetensors_base_model(
     file_path: str,
     max_tensor_keys: int = 500,
 ) -> str:
-    """Infer a likely base model from safetensors metadata and tensor names."""
+    """Infer a likely base model from safetensors or GGUF metadata and tensor names."""
+    if not file_path:
+        return ""
+
+    if str(file_path).lower().endswith(".gguf"):
+        return infer_gguf_base_model(file_path)
+
     header_json = read_safetensors_header(file_path)
     if not isinstance(header_json, dict):
         return ""
@@ -579,6 +706,22 @@ def infer_safetensors_base_model(
             if "kontext" in architecture:
                 return "Flux.1 Kontext"
             return "Flux.1 D"
+        if "wan" in architecture:
+            return "Wan Video"
+        if "hunyuan" in architecture or "hyvid" in architecture:
+            return "Hunyuan Video"
+        if "cosmos" in architecture:
+            return "Cosmos"
+        if "qwen" in architecture:
+            return "Qwen Image"
+        if "lumina" in architecture:
+            return "Lumina"
+        if "auraflow" in architecture or "aura" in architecture:
+            return "AuraFlow"
+        if "ltxv" in architecture:
+            return "LTXV"
+        if "chroma" in architecture:
+            return "Chroma"
         alias_match = _canonical_base_model_from_text(architecture)
         if alias_match:
             return alias_match
@@ -604,8 +747,35 @@ def infer_safetensors_base_model(
         or "model.diffusion_model.input_blocks.0.0.weight" in keys_text
     ):
         return "SD 1.5"
+    if "individual_token_refiner" in keys_text:
+        return "Hunyuan Video"
+    if "adaln_modulation_self_attn" in keys_text:
+        return "Cosmos"
+    if any(k in keys_text for k in ("img_mod_1", "txt_norm", "img_mlp_net")):
+        return "Qwen Image"
+    if "blocks.0.self_attn" in keys_text and "blocks.0.cross_attn" in keys_text:
+        return "Wan Video"
+    if "single_transformer_blocks" in keys_text and "x_embedder" in keys_text:
+        return "AuraFlow"
+    if "distilled_guidance_layer" in keys_text:
+        return "Chroma"
 
     return ""
+
+
+def infer_model_base_model(file_path: str) -> str:
+    """Infer a likely base model from either safetensors or GGUF metadata."""
+    if not file_path:
+        return ""
+    lower = file_path.lower()
+    if lower.endswith(".gguf"):
+        return infer_gguf_base_model(file_path)
+    if lower.endswith((".safetensors", ".sft")):
+        return infer_safetensors_base_model(file_path)
+    result = infer_safetensors_base_model(file_path)
+    if result:
+        return result
+    return infer_gguf_base_model(file_path)
 
 
 def _parse_safetensors_metadata_value(value: Any) -> Any:

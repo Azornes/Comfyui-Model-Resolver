@@ -184,6 +184,38 @@ def test_extract_workflow_urls_includes_all_serialized_subgraph_nodes():
     }
 
 
+def test_extract_workflow_urls_supports_anomalous_model_sources():
+    workflow = {
+        "nodes": [
+            {
+                "id": "1",
+                "type": "CheckpointLoaderSimple",
+                "widgets_values": ["flux1-dev.safetensors"],
+            }
+        ],
+        "extra": {
+            "anomalous_model_sources": {
+                "flux1-dev.safetensors": "https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/flux1-dev.safetensors",
+                "12_my_lora.safetensors": {
+                    "url": "https://civitai.com/api/download/models/99999",
+                    "directory": "loras",
+                },
+            }
+        },
+    }
+
+    url_map = resolver_core.extract_workflow_urls(workflow)
+
+    assert "flux1-dev.safetensors" in url_map
+    assert url_map["flux1-dev.safetensors"]["url"] == "https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/flux1-dev.safetensors"
+    assert url_map["flux1-dev.safetensors"]["source"] == "anomalous_model_sources"
+
+    assert "my_lora.safetensors" in url_map
+    assert url_map["my_lora.safetensors"]["url"] == "https://civitai.com/api/download/models/99999"
+    assert url_map["my_lora.safetensors"]["directory"] == "loras"
+    assert url_map["my_lora.safetensors"]["source"] == "anomalous_model_sources"
+
+
 def test_subgraph_widget_indexes_support_named_inputs_and_links():
     node = {
         **_loader_node(),

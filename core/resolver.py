@@ -768,7 +768,70 @@ def extract_workflow_urls(workflow_json: Dict[str, Any]) -> Dict[str, Dict[str, 
                         "source": "node_properties",
                     }
 
-    # 2. Extract URLs via regex from workflow JSON
+    # 2. Extract from workflow extra.anomalous_model_sources or extra.model_sources
+    source_containers = []
+    if isinstance(workflow_json, dict):
+        extra = workflow_json.get("extra")
+        if isinstance(extra, dict):
+            for key in ("anomalous_model_sources", "model_sources"):
+                val = extra.get(key)
+                if isinstance(val, dict):
+                    source_containers.append(val)
+        for key in ("anomalous_model_sources", "model_sources"):
+            val = workflow_json.get(key)
+            if isinstance(val, dict):
+                source_containers.append(val)
+
+    for sources_dict in source_containers:
+        for raw_key, source_entry in sources_dict.items():
+            if not raw_key:
+                continue
+            raw_url = ""
+            directory = ""
+            if isinstance(source_entry, str):
+                raw_url = source_entry.strip()
+            elif isinstance(source_entry, dict):
+                raw_url = str(
+                    source_entry.get("url")
+                    or source_entry.get("download_url")
+                    or source_entry.get("model_url")
+                    or ""
+                ).strip()
+                directory = str(
+                    source_entry.get("directory")
+                    or source_entry.get("folder")
+                    or source_entry.get("save_path")
+                    or ""
+                ).strip()
+
+            if not raw_url:
+                continue
+
+            cleaned_key = str(raw_key).replace("\\", "/").strip()
+            filename = get_filename_from_path(cleaned_key)
+            if "_" in filename:
+                prefix, remainder = filename.split("_", 1)
+                if prefix.isdigit() and any(
+                    remainder.lower().endswith(ext) for ext in MODEL_EXTENSIONS
+                ):
+                    filename = remainder
+
+            normalized_url = normalize_workflow_download_url(raw_url)
+            entry_payload = {
+                "url": normalized_url,
+                "model_url": raw_url,
+                "directory": directory,
+                "source": "anomalous_model_sources",
+            }
+
+            for name_variant in (filename, get_filename_from_path(cleaned_key), cleaned_key):
+                if name_variant and (
+                    name_variant not in url_map
+                    or url_map[name_variant].get("source") not in ("node_properties", "anomalous_model_sources")
+                ):
+                    url_map[name_variant] = dict(entry_payload)
+
+    # 3. Extract URLs via regex from workflow JSON
     urls_found = URL_PATTERN.findall(workflow_str)
 
     # Clean URLs (remove trailing characters that may have been captured)
@@ -800,13 +863,16 @@ def extract_workflow_urls(workflow_json: Dict[str, Any]) -> Dict[str, Dict[str, 
 
     # 4. Match URLs to model filenames
     for model in model_files:
-        # Keep authoritative node.properties URLs only when they point to the file.
+        # Keep authoritative node.properties or anomalous_model_sources URLs.
         # Some workflows store a repo/model-page URL there and a concrete file URL
         # elsewhere in the JSON; in that case the file URL is the usable download.
         if (
             model in url_map
             and url_map[model].get("url")
-            and workflow_url_points_to_file(url_map[model].get("url"), model)
+            and (
+                url_map[model].get("source") == "anomalous_model_sources"
+                or workflow_url_points_to_file(url_map[model].get("url"), model)
+            )
         ):
             continue
 
