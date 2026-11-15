@@ -1296,6 +1296,62 @@ def normalize_category_to_model_type(category: str) -> str:
     return type_map.get(normalized, normalized.rstrip("s"))
 
 
+def resolve_civitai_file_component(
+    file_type: Optional[str],
+    parent_model_type: Optional[str] = "",
+    primary: Optional[bool] = None,
+    category_hint: Optional[str] = None,
+) -> Tuple[str, bool, str]:
+    """
+    Resolve a CivitAI file's component nature, effective model type, and companion role.
+
+    CivitAI model versions can package multiple files under one parent model entry
+    (e.g., a Checkpoint version bundling companion Text Encoders, VAEs, or diffusion weights).
+    When resolving an individual file, this function checks the file's declared type
+    and local category hint so that companion components are not misidentified as
+    the parent Checkpoint.
+
+    Returns:
+        (effective_model_type, is_companion, component_type)
+        e.g. ('text_encoder', True, 'Text Encoder')
+             ('vae', True, 'VAE')
+             ('diffusion_model', True/False, 'Diffusion Model')
+             ('checkpoint', False, '')
+    """
+    raw_type = str(file_type or "").strip()
+    raw_lower = raw_type.lower()
+    parent_type = str(parent_model_type or "").strip()
+    parent_lower = parent_type.lower()
+    norm_cat = normalize_download_category(category_hint or "") if category_hint else ""
+
+    if raw_lower in ("text encoder", "text_encoder", "textencoder"):
+        return ("text_encoder", True, "Text Encoder")
+
+    if raw_lower in ("vae", "taesd"):
+        return ("vae", True, "VAE")
+
+    if raw_lower in ("diffusion model", "diffusion_model", "unet"):
+        is_comp = (primary is False and parent_lower in ("checkpoint", "checkpoints"))
+        return ("diffusion_model", is_comp, "Diffusion Model")
+
+    if raw_lower in ("config",):
+        return ("config", True, "Config")
+
+    if raw_lower in ("negative", "negative embedding"):
+        return ("embedding", True, "Negative Embedding")
+
+    # If the file type from CivitAI is generic, missing, or 'model', but local category is specific:
+    if norm_cat in ("text_encoders", "clip", "clip_vision") and parent_lower in (
+        "checkpoint", "checkpoints", "diffusion_model", "diffusion_models"
+    ):
+        return ("text_encoder", True, "Text Encoder")
+    if norm_cat == "vae" and parent_lower in ("checkpoint", "checkpoints"):
+        return ("vae", True, "VAE")
+
+    norm_parent = normalize_category_to_model_type(parent_type) or parent_lower
+    return (norm_parent or "checkpoint", False, "")
+
+
 def check_credential_preconditions(value: Optional[str], token_name: str) -> Optional[Dict[str, Any]]:
     """
     Check whether a credential, such as a token or key, is not empty.

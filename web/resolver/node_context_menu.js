@@ -16,7 +16,7 @@ export function getResolvedModelFilename(model = {}) {
     return getFilenameFromPath(source) || source;
 }
 
-function getResolvedModelCategoryLabel(model = {}, formatCategory = null) {
+export function getResolvedModelCategoryLabel(model = {}, formatCategory = null) {
     const category = String(model.category || 'unknown').trim() || 'unknown';
     const formatted = typeof formatCategory === 'function'
         ? formatCategory(category)

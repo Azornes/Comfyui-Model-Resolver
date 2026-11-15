@@ -120,6 +120,13 @@ class CivitAISearchService(ModelServiceDependencies):
             "sha256_source",
             "hashes",
             "hash_status",
+            "component_type",
+            "is_companion_file",
+            "is_required_component",
+            "parent_model_name",
+            "parent_model_type",
+            "parent_model_id",
+            "file_type",
         )
 
         def add_local_metadata_fields(payload, result):
@@ -156,6 +163,9 @@ class CivitAISearchService(ModelServiceDependencies):
 
         if not file_path:
             file_path = find_local_file_path(filename, category)
+
+        if not category and file_path:
+            category = path_utils.infer_category_from_path(file_path)
 
         if file_path:
             file_path = path_utils.normalize_absolute_path(
@@ -258,11 +268,58 @@ class CivitAISearchService(ModelServiceDependencies):
                 except Exception:
                     size_value = None
 
-            model_type = (
-                result.get("model_type")
-                or result.get("type")
-                or infer_model_type_from_category(category)
+            comp_type = result.get("component_type") or ""
+            is_comp = bool(
+                result.get("is_companion_file")
+                or result.get("is_required_component")
             )
+            raw_model_type = (
+                result.get("model_type") or result.get("type") or ""
+            )
+            if category in ("text_encoders", "clip", "clip_vision") and str(
+                raw_model_type
+            ).lower() in ("checkpoint", "checkpoints", ""):
+                model_type = "text_encoder"
+                is_comp = True
+                if not comp_type:
+                    comp_type = "Text Encoder"
+            elif category == "vae" and str(raw_model_type).lower() in (
+                "checkpoint",
+                "checkpoints",
+                "",
+            ):
+                model_type = "vae"
+                is_comp = True
+                if not comp_type:
+                    comp_type = "VAE"
+            elif comp_type:
+                from ..type_utils import resolve_civitai_file_component
+
+                (
+                    resolved_type,
+                    comp_flag,
+                    detected_comp_type,
+                ) = resolve_civitai_file_component(
+                    result.get("file_type") or comp_type,
+                    parent_model_type=result.get("parent_model_type", ""),
+                    category_hint=category,
+                )
+                model_type = (
+                    resolved_type
+                    or raw_model_type
+                    or infer_model_type_from_category(category)
+                )
+                is_comp = is_comp or comp_flag
+                comp_type = comp_type or detected_comp_type
+            else:
+                model_type = (
+                    raw_model_type
+                    or infer_model_type_from_category(category)
+                )
+
+            parent_model_name = result.get("parent_model_name") or ""
+            if is_comp and not parent_model_name:
+                parent_model_name = result.get("model_name") or ""
 
             response = {
                 "filename": result.get("filename") or filename,
@@ -287,6 +344,12 @@ class CivitAISearchService(ModelServiceDependencies):
                 "model_id": result.get("model_id"),
                 "model_name": result.get("model_name") or clean_name,
                 "model_type": model_type,
+                "component_type": comp_type,
+                "is_companion_file": is_comp,
+                "is_required_component": is_comp,
+                "parent_model_name": parent_model_name,
+                "parent_model_type": result.get("parent_model_type") or "",
+                "file_type": result.get("file_type") or "",
                 "version_id": result.get("version_id"),
                 "version_name": result.get("version_name", ""),
                 "sha256": result.get("sha256") or provided_hash,
@@ -526,6 +589,12 @@ class CivitAISearchService(ModelServiceDependencies):
                     version_description=version_description,
                     extra_fields={
                         "type": model_type,
+                        "component_type": result.get("component_type") or "",
+                        "is_companion_file": bool(result.get("is_companion_file")),
+                        "is_required_component": bool(result.get("is_required_component")),
+                        "parent_model_name": result.get("parent_model_name") or "",
+                        "parent_model_type": result.get("parent_model_type") or "",
+                        "file_type": result.get("file_type") or "",
                         "model_id": result.get("model_id"),
                         "version_id": result.get("version_id"),
                         "version_name": result.get("version_name", ""),

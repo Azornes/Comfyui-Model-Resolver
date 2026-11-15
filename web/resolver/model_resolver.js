@@ -19,12 +19,12 @@ import {
     buildModelResolverNodeMenu,
     getImmediateModelsForNode,
     getResolvedModelFilename,
-    getResolvedModelMenuLabel,
     getResolvedModelsForNode,
     isExistingResolvedModel,
     matchesWorkflowModelReference,
     toResolverContextModel,
 } from "./node_context_menu.js";
+import { NodeModelPopover } from "./node_popover.js";
 import {
     getCustomNodeModelAdapter,
     getCustomNodeModelListSignature as createCustomNodeModelListSignature,
@@ -557,22 +557,28 @@ export class ModelResolver {
         }
 
         if ((!models || models.length === 0) && Array.isArray(node.widgets)) {
-            for (const widget of node.widgets) {
+            const fallbackModels = [];
+            for (let i = 0; i < node.widgets.length; i++) {
+                const widget = node.widgets[i];
                 if (!widget || typeof widget.value !== "string") continue;
                 const val = widget.value.trim();
                 if (!val || ["none", "null", "undefined"].includes(val.toLowerCase())) continue;
                 const name = String(widget.name || "").toLowerCase();
                 if (MODEL_REFERENCE_WIDGET_NAMES.has(name) || MODEL_FILE_EXTENSION_PATTERN.test(val)) {
-                    models = [{
+                    fallbackModels.push({
                         name: val,
                         filename: getResolvedModelFilename({ original_path: val }),
                         original_path: val,
                         widget_name: widget.name,
+                        widget_index: i,
+                        node_id: node.id,
                         exists: false,
                         resolution_pending: true,
-                    }];
-                    break;
+                    });
                 }
+            }
+            if (fallbackModels.length > 0) {
+                models = fallbackModels;
             }
         }
 
@@ -581,6 +587,10 @@ export class ModelResolver {
             showInResolver: async (model) => {
                 const resolvedModel = await owner.resolveNodeContextMenuModel(model);
                 if (resolvedModel) {
+                    if (!owner.dialog) {
+                        owner.dialog = new ResolverManagerDialog();
+                        window.ModelResolverDialog = owner.dialog;
+                    }
                     owner.showResolvedNodeModelInResolver(resolvedModel);
                 } else {
                     owner.openResolverManager();
@@ -606,89 +616,25 @@ export class ModelResolver {
                     owner.dialog?.openContainingFolder(toResolverContextModel(resolvedModel));
                 }
             },
+            openResolver: () => {
+                owner.activateResolverButton();
+            },
         };
 
         const resolvedModels = (models || []).filter(model => (
-            isExistingResolvedModel(model) || model.resolution_pending === true
+            isExistingResolvedModel(model)
+            || model.resolution_pending === true
+            || Boolean(model.original_path || model.filename || model.name)
         ));
-
-        let options;
-        if (resolvedModels.length === 1) {
-            const model = resolvedModels[0];
-            options = [
-                {
-                    content: "Show in Model Resolver",
-                    className: "mr-node-ctx-item mr-node-ctx-show-in-resolver",
-                    callback: () => handlers.showInResolver(model),
-                },
-                {
-                    content: "Show info",
-                    className: "mr-node-ctx-item mr-node-ctx-show-info",
-                    callback: () => handlers.showInfo(model),
-                },
-                {
-                    content: "Open containing folder",
-                    className: "mr-node-ctx-item mr-node-ctx-open-folder",
-                    callback: () => handlers.openContainingFolder(model),
-                },
-                null,
-                {
-                    content: "Open Model Resolver",
-                    className: "mr-node-ctx-item mr-node-ctx-open-resolver",
-                    callback: () => owner.activateResolverButton(),
-                },
-            ];
-        } else if (resolvedModels.length > 1) {
-            options = resolvedModels.map(model => {
-                const label = getResolvedModelMenuLabel(model, c => owner.dialog?.getCategoryDisplayName?.(c));
-                return {
-                    title: label,
-                    content: label,
-                    className: "mr-node-ctx-item mr-node-ctx-model",
-                    has_submenu: true,
-                    submenu: {
-                        options: [
-                            {
-                                content: "Show in Model Resolver",
-                                className: "mr-node-ctx-item mr-node-ctx-show-in-resolver",
-                                callback: () => handlers.showInResolver(model),
-                            },
-                            {
-                                content: "Show info",
-                                className: "mr-node-ctx-item mr-node-ctx-show-info",
-                                callback: () => handlers.showInfo(model),
-                            },
-                            {
-                                content: "Open containing folder",
-                                className: "mr-node-ctx-item mr-node-ctx-open-folder",
-                                callback: () => handlers.openContainingFolder(model),
-                            },
-                        ],
-                    },
-                };
-            });
-            options.push(null);
-            options.push({
-                content: "Open Model Resolver",
-                className: "mr-node-ctx-item mr-node-ctx-open-resolver",
-                callback: () => owner.activateResolverButton(),
-            });
-        } else {
-            options = [
-                {
-                    content: "Open Model Resolver",
-                    className: "mr-node-ctx-item mr-node-ctx-open-resolver",
-                    callback: () => owner.activateResolverButton(),
-                },
-            ];
-        }
 
         const event = window.event;
         let x = event?.clientX;
         let y = event?.clientY;
 
+        const btn = document.querySelector(".mr-node-toolbar-icon")?.closest("button")
+            || (event?.target?.closest ? event.target.closest("button") : null);
+
         if (!x || !y) {
-            const btn = document.querySelector(".mr-node-toolbar-icon")?.closest("button") || document.activeElement;
             if (btn?.getBoundingClientRect) {
                 const rect = btn.getBoundingClientRect();
                 x = Math.round(rect.left);
@@ -699,20 +645,15 @@ export class ModelResolver {
             }
         }
 
-        const ContextMenuClass = window.LiteGraph?.ContextMenu || (typeof LiteGraph !== "undefined" ? LiteGraph.ContextMenu : null);
-        if (ContextMenuClass) {
-            const menuEvent = (event && event.clientX) ? event : { clientX: x, clientY: y, pageX: x, pageY: y };
-            new ContextMenuClass(options, {
-                event: menuEvent,
-                left: x,
-                top: y,
-                title: "Model Resolver",
-                className: "dark mr-node-selection-context-menu",
-                scale: 1,
-            }, window);
-        } else {
-            this.activateResolverButton();
-        }
+        NodeModelPopover.toggle({
+            node,
+            models: resolvedModels,
+            handlers,
+            formatCategory: c => owner.dialog?.getCategoryDisplayName?.(c),
+            anchorElement: btn?.getBoundingClientRect ? btn : null,
+            point: (x && y) ? { x, y } : null,
+            owner,
+        });
     }
 
     getNodeContextWorkflowState() {

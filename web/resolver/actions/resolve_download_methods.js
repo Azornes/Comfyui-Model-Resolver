@@ -940,15 +940,61 @@ export const resolveDownloadMethods = {
 
             // A full missing-model refresh creates new model objects, while the
             // progress poller still holds the object captured when the download
-            // started. Rebind it by the verified download/path match so the next
-            // polling tick cannot repaint Local Matches from stale state.
+            // started. Only rebind when this missing model represents the same
+            // model slot being downloaded; unrelated models that merely have this
+            // downloading file as an alternative match must never steal it.
             const activeEntry = this.activeDownloads?.[activeDownload.download_id];
             if (
                 activeEntry
                 && (!this.isDownloadInCurrentWorkflowScope || this.isDownloadInCurrentWorkflowScope(activeEntry, workflowScope))
-                && activeEntry.missing !== missing
             ) {
-                activeEntry.missing = missing;
+                const getIdentity = (m) => {
+                    if (!m) return '';
+                    if (typeof this.getDownloadMissingIdentity === 'function') {
+                        return this.getDownloadMissingIdentity(m) || '';
+                    }
+                    if (typeof this.getMissingModelKey === 'function') {
+                        return this.getMissingModelKey(m) || '';
+                    }
+                    if (typeof this.getMissingSearchKey === 'function') {
+                        return this.getMissingSearchKey(m) || '';
+                    }
+                    return String(m.search_key || m.key || '');
+                };
+
+                const currentMissingKey = getIdentity(activeEntry.missing);
+                const nextMissingKey = getIdentity(missing);
+                const sameIdentity = Boolean(currentMissingKey && nextMissingKey && currentMissingKey === nextMissingKey);
+
+                const targetIdx = Array.isArray(activeEntry.missingTargets)
+                    ? activeEntry.missingTargets.findIndex(t => getIdentity(t) === nextMissingKey)
+                    : -1;
+                if (targetIdx >= 0) {
+                    activeEntry.missingTargets[targetIdx] = missing;
+                }
+
+                const normCat = (cat) => {
+                    if (!cat) return '';
+                    return (this.normalizeDownloadCategory?.(cat) || String(cat)).trim().toLowerCase();
+                };
+                const entryCat = normCat(activeEntry.category || activeEntry.missing?.category);
+                const missingCat = normCat(missing.category);
+                const categoriesMatch = !entryCat || !missingCat || entryCat === missingCat;
+
+                const getBaseName = (val) => String(val || '').split(/[\\/]+/).pop().trim().toLowerCase();
+                const entryFile = getBaseName(activeEntry.filename || activeEntry.missing?.original_path || activeEntry.missing?.filename);
+                const missingFile = getBaseName(missing.original_path || missing.filename || missing.name);
+                const filesMatch = !entryFile || !missingFile || entryFile === missingFile;
+
+                const isExactMatch = Number(match.confidence) === 100 || match.exact === true;
+
+                const isPrimaryTarget = sameIdentity
+                    || (targetIdx >= 0)
+                    || (categoriesMatch && filesMatch && isExactMatch);
+
+                if (isPrimaryTarget && activeEntry.missing !== missing) {
+                    activeEntry.missing = missing;
+                }
             }
         }
         if (!downloadingMatches.length) {
@@ -1137,7 +1183,8 @@ export const resolveDownloadMethods = {
 
     getActiveDownloadEntryForMissing(missing) {
         if (!missing) return null;
-        const missingKey = this.getDownloadMissingIdentity(missing);
+        const getIdentity = (m) => (this.getDownloadMissingIdentity?.(m) || this.getMissingModelKey?.(m) || this.getMissingSearchKey?.(m) || '');
+        const missingKey = getIdentity(missing);
         const terminalStatuses = new Set(['cancelled', 'completed']);
 
         for (const [downloadId, info] of Object.entries(this.activeDownloads || {})) {
@@ -1149,9 +1196,9 @@ export const resolveDownloadMethods = {
                 || ''
             ).toLowerCase();
             if (terminalStatuses.has(status)) continue;
-            const matchesMissing = (info?.missing && this.getDownloadMissingIdentity(info.missing) === missingKey)
-                || (Array.isArray(info?.missingTargets) && info.missingTargets.some(t => this.getDownloadMissingIdentity(t) === missingKey));
-            if (matchesMissing && this.isDownloadInCurrentWorkflowScope(info)) {
+            const matchesMissing = (info?.missing && getIdentity(info.missing) === missingKey)
+                || (Array.isArray(info?.missingTargets) && info.missingTargets.some(t => getIdentity(t) === missingKey));
+            if (matchesMissing && (!this.isDownloadInCurrentWorkflowScope || this.isDownloadInCurrentWorkflowScope(info))) {
                 return { downloadId, info };
             }
         }
@@ -1160,7 +1207,8 @@ export const resolveDownloadMethods = {
 
     getActiveDownloadEntriesForMissing(missing) {
         if (!missing) return [];
-        const missingKey = this.getDownloadMissingIdentity(missing);
+        const getIdentity = (m) => (this.getDownloadMissingIdentity?.(m) || this.getMissingModelKey?.(m) || this.getMissingSearchKey?.(m) || '');
+        const missingKey = getIdentity(missing);
         const terminalStatuses = new Set(['cancelled', 'completed']);
         return Object.entries(this.activeDownloads || {})
             .filter(([, info]) => {
@@ -1172,9 +1220,9 @@ export const resolveDownloadMethods = {
                     || ''
                 ).toLowerCase();
                 if (terminalStatuses.has(status)) return false;
-                const matchesMissing = (info?.missing && this.getDownloadMissingIdentity(info.missing) === missingKey)
-                    || (Array.isArray(info?.missingTargets) && info.missingTargets.some(t => this.getDownloadMissingIdentity(t) === missingKey));
-                return matchesMissing && this.isDownloadInCurrentWorkflowScope(info);
+                const matchesMissing = (info?.missing && getIdentity(info.missing) === missingKey)
+                    || (Array.isArray(info?.missingTargets) && info.missingTargets.some(t => getIdentity(t) === missingKey));
+                return matchesMissing && (!this.isDownloadInCurrentWorkflowScope || this.isDownloadInCurrentWorkflowScope(info));
             })
             .map(([downloadId, info]) => ({ downloadId, info }));
     },
@@ -1189,7 +1237,15 @@ export const resolveDownloadMethods = {
                 { isActive: true }
             );
         }
-        return this.getDownloadProgressStore().get(this.getDownloadStateKey(missing)) || null;
+        const snapshot = this.getDownloadProgressStore().get(this.getDownloadStateKey(missing)) || null;
+        if (snapshot) {
+            const status = String(snapshot.status || snapshot.progress?.status || '').toLowerCase();
+            if (this.isDownloadProgressStatus(status, snapshot.isActive)) {
+                this.getDownloadProgressStore().delete(this.getDownloadStateKey(missing));
+                return null;
+            }
+        }
+        return snapshot;
     },
 
     resolveDownloadUiElements(target = {}) {
@@ -2004,12 +2060,25 @@ export const resolveDownloadMethods = {
                     const filenameMatches = candidates.filter(model => (
                         getFilename(model.download_source?.filename)
                         || getFilename(model.original_path)
-                    ) === filename);
+                    ) === filename && (!info.category || !model.category || this.normalizeDownloadCategory?.(model.category) === this.normalizeDownloadCategory?.(info.category)));
                     replacement = filenameMatches.length === 1 ? filenameMatches[0] : null;
                 }
             }
 
-            if (replacement) info.missing = replacement;
+            if (replacement) {
+                info.missing = replacement;
+                if (Array.isArray(info.missingTargets)) {
+                    const oldKey = missingKey;
+                    const newKey = this.getMissingModelKey?.(replacement) || '';
+                    const getTargetKey = (t) => this.getDownloadMissingIdentity?.(t) || this.getMissingModelKey?.(t) || '';
+                    const idx = info.missingTargets.findIndex(t => (
+                        getTargetKey(t) === oldKey || getTargetKey(t) === newKey
+                    ));
+                    if (idx >= 0) {
+                        info.missingTargets[idx] = replacement;
+                    }
+                }
+            }
         }
     },
 
@@ -2097,20 +2166,7 @@ export const resolveDownloadMethods = {
             for (const downloadId of Object.keys(this.activeDownloads || {})) {
                 if (!activeIds.has(String(downloadId))) {
                     const deadInfo = this.activeDownloads[downloadId];
-                    const deadStatus = String(
-                        deadInfo?.pendingDownloadStatus
-                        || deadInfo?.lastStatus
-                        || deadInfo?.lastProgress?.status
-                        || ''
-                    ).toLowerCase();
-                    if (
-                        deadStatus === 'cancelling'
-                        || deadStatus === 'cancelled'
-                        || !deadInfo?.missing
-                        || deadInfo?.missing?.node_type === 'Backend download'
-                    ) {
-                        this.finalizeCancelledDownloadFrontend?.(downloadId, deadInfo);
-                    }
+                    this.finalizeCancelledDownloadFrontend?.(downloadId, deadInfo);
                 }
             }
 
@@ -2244,9 +2300,10 @@ export const resolveDownloadMethods = {
             }
 
             if (missing) {
-                const targetKey = this.getDownloadMissingIdentity(missing);
+                const getTargetKey = (t) => this.getDownloadMissingIdentity?.(t) || this.getMissingModelKey?.(t) || '';
+                const targetKey = getTargetKey(missing);
                 for (const [existingId, existingInfo] of Object.entries(this.activeDownloads || {})) {
-                    const matchesIdentity = (existingInfo?.missing && this.getDownloadMissingIdentity(existingInfo.missing) === targetKey)
+                    const matchesIdentity = (existingInfo?.missing && getTargetKey(existingInfo.missing) === targetKey)
                         || (existingInfo?.filename && existingInfo.filename === filename && existingInfo.category === category);
                     if (matchesIdentity) {
                         const existingStatus = String(
@@ -2458,6 +2515,8 @@ export const resolveDownloadMethods = {
             // let a stale progress response recreate a globally finalized bar.
             if (this.activeDownloads?.[downloadId] !== info) return;
             progress = this.applyPendingDownloadStatus(info, progress);
+            info.lastProgress = progress;
+            info.lastStatus = progress.status || info.lastStatus || 'starting';
             const targets = Array.isArray(info.missingTargets) && info.missingTargets.length
                 ? info.missingTargets
                 : (info.missing ? [info.missing] : []);

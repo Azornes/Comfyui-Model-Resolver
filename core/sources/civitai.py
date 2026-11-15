@@ -32,6 +32,7 @@ from ..path_utils import (
     extract_safetensors_header_metadata,
     find_metadata_sidecar_path,
     get_filename_from_path,
+    infer_category_from_path,
     infer_safetensors_base_model,
     read_json_safe,
     read_merged_model_metadata,
@@ -54,6 +55,7 @@ from ..type_utils import (
     normalize_model_image,
     normalize_sha256,
     parse_size_to_bytes,
+    resolve_civitai_file_component,
     resolve_model_category,
     select_primary_model_file,
 )
@@ -170,25 +172,45 @@ def build_civitai_result_payload(
     match_type: str,
     version_name: Optional[str] = None,
     confidence: Optional[float] = None,
+    category_hint: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build the shared CivitAI result fields used by search entry points."""
     hashes = file_info.get("hashes") if isinstance(file_info.get("hashes"), dict) else {}
     sha256 = extract_file_sha256(file_info)
+    effective_download_url = file_info.get("downloadUrl") or download_url
+
+    raw_file_type = file_info.get("type") or ""
+    effective_model_type, is_comp, comp_type = resolve_civitai_file_component(
+        raw_file_type,
+        parent_model_type=model_type,
+        primary=file_info.get("primary"),
+        category_hint=category_hint,
+    )
+    final_type = effective_model_type if is_comp else (model_type or effective_model_type)
+
     payload = {
         "model_id": model_id,
         "version_id": version_id,
         "name": model_name,
-        "type": model_type,
+        "type": final_type,
+        "model_type": final_type,
         "filename": filename,
         "url": f"https://civitai.com/models/{model_id}?modelVersionId={version_id}",
-        "download_url": download_url,
+        "download_url": effective_download_url,
         "size": size,
         "base_model": base_model,
         "tags": tags or [],
         "match_type": match_type,
         "sha256": sha256,
         "hashes": hashes,
+        "parent_model_name": model_name,
+        "parent_model_type": model_type,
+        "file_type": raw_file_type,
     }
+    if is_comp:
+        payload["component_type"] = comp_type
+        payload["is_companion_file"] = True
+        payload["is_required_component"] = True
     if version_name is not None:
         payload["version_name"] = version_name
     if confidence is not None:
@@ -1644,7 +1666,10 @@ def _enrich_model_info_with_details(
 
     selected_version = as_dict(details.get("selected_version"))
     result["model_name"] = result.get("model_name") or details.get("name")
-    result["model_type"] = result.get("model_type") or details.get("type")
+    if not result.get("component_type") and not result.get("is_companion_file"):
+        result["model_type"] = result.get("model_type") or details.get("type")
+    result["parent_model_name"] = details.get("name") or result.get("parent_model_name") or ""
+    result["parent_model_type"] = details.get("type") or result.get("parent_model_type") or ""
     result["description"] = (
         result.get("description")
         or selected_version.get("description")
@@ -1846,6 +1871,8 @@ def get_model_info_by_hash(
                 ),
                 None,
             )
+            raw_file_type = ""
+            primary_val = None
             if matching_file:
                 result["filename"] = matching_file.get("name") or matching_file.get("filename") or ""
                 matching_size = extract_file_size(matching_file)
@@ -1855,6 +1882,28 @@ def get_model_info_by_hash(
                     else matching_file.get("size")
                 )
                 result["hashes"] = matching_file.get("hashes") or {}
+                if matching_file.get("downloadUrl"):
+                    result["download_url"] = matching_file.get("downloadUrl")
+                raw_file_type = matching_file.get("type") or ""
+                primary_val = matching_file.get("primary")
+                result["file_type"] = raw_file_type
+                result["primary"] = bool(primary_val)
+
+            parent_name = model_info.get("name") or ""
+            parent_type = model_info.get("type") or ""
+            effective_type, is_comp, comp_type = resolve_civitai_file_component(
+                raw_file_type,
+                parent_model_type=parent_type,
+                primary=primary_val,
+            )
+            result["model_type"] = effective_type
+            result["parent_model_name"] = parent_name
+            result["parent_model_type"] = parent_type
+            result["parent_model_id"] = model_id
+            if is_comp:
+                result["component_type"] = comp_type
+                result["is_companion_file"] = True
+                result["is_required_component"] = True
 
             result = _enrich_model_info_with_details(
                 result,
@@ -2354,6 +2403,35 @@ def _metadata_to_model_info(metadata: Dict[str, Any]) -> Dict[str, Any]:
     if version_description == model_description:
         version_description = ""
 
+    raw_file_info = as_dict(metadata.get("file_info")) or as_dict(metadata.get("matching_file"))
+    raw_file_type = (
+        metadata.get("file_type")
+        or raw_file_info.get("type")
+        or metadata.get("component_type")
+        or ""
+    )
+    raw_parent_type = (
+        metadata.get("parent_model_type")
+        or model_info.get("type", "")
+        or civitai_data.get("type", "")
+    )
+    raw_category = metadata.get("category") or ""
+    effective_type, is_comp, comp_type = resolve_civitai_file_component(
+        raw_file_type,
+        parent_model_type=raw_parent_type,
+        primary=metadata.get("primary"),
+        category_hint=raw_category,
+    )
+    stored_model_type = (
+        metadata.get("model_type")
+        or metadata.get("sub_type")
+        or metadata.get("type")
+    )
+    if stored_model_type and stored_model_type.lower() not in ("checkpoint", "checkpoints"):
+        final_model_type = stored_model_type
+    else:
+        final_model_type = effective_type
+
     return {
         "source": details_source,
         "details_source": details_source,
@@ -2366,7 +2444,13 @@ def _metadata_to_model_info(metadata: Dict[str, Any]) -> Dict[str, Any]:
             metadata.get("file_name"),
         )
         or "",
-        "model_type": model_info.get("type", "") or civitai_data.get("type", ""),
+        "model_type": final_model_type,
+        "component_type": comp_type or metadata.get("component_type") or "",
+        "is_companion_file": bool(is_comp or metadata.get("is_companion_file") or metadata.get("is_required_component")),
+        "is_required_component": bool(is_comp or metadata.get("is_required_component")),
+        "parent_model_name": metadata.get("parent_model_name") or model_info.get("name") or "",
+        "parent_model_type": raw_parent_type,
+        "file_type": raw_file_type,
         "version_id": version_id,
         "version_name": first_non_empty(
             metadata.get("version_name"),
@@ -2433,6 +2517,31 @@ def _metadata_to_model_info(metadata: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _adjust_component_metadata_from_path(result: Dict[str, Any], file_path: str) -> None:
+    if not isinstance(result, dict) or not file_path:
+        return
+    category_from_path = infer_category_from_path(file_path)
+    current_type = str(result.get("model_type", "")).strip().lower()
+    if category_from_path in ("text_encoders", "clip", "clip_vision") and current_type in ("checkpoint", "checkpoints", ""):
+        result["model_type"] = "text_encoder"
+        result["is_companion_file"] = True
+        result["is_required_component"] = True
+        if not result.get("component_type"):
+            result["component_type"] = "Text Encoder"
+        if not result.get("parent_model_name"):
+            result["parent_model_name"] = result.get("model_name") or ""
+    elif category_from_path == "vae" and current_type in ("checkpoint", "checkpoints", ""):
+        result["model_type"] = "vae"
+        result["is_companion_file"] = True
+        result["is_required_component"] = True
+        if not result.get("component_type"):
+            result["component_type"] = "VAE"
+        if not result.get("parent_model_name"):
+            result["parent_model_name"] = result.get("model_name") or ""
+    if not result.get("category") and category_from_path:
+        result["category"] = category_from_path
+
+
 def get_model_info_for_file(
     file_path: str, api_key: Optional[str] = None, local_only: bool = False
 ) -> Optional[Dict[str, Any]]:
@@ -2465,6 +2574,7 @@ def get_model_info_for_file(
             result["location"] = _format_model_location(file_path)
             _apply_safetensors_header_metadata(result, file_path)
             _apply_inferred_base_model(result, file_path)
+            _adjust_component_metadata_from_path(result, file_path)
             if not result.get("size"):
                 try:
                     result["size"] = os.path.getsize(file_path)
@@ -2502,6 +2612,7 @@ def get_model_info_for_file(
         result["location"] = _format_model_location(file_path)
         _apply_safetensors_header_metadata(result, file_path)
         _apply_inferred_base_model(result, file_path)
+        _adjust_component_metadata_from_path(result, file_path)
         if not result.get("size"):
             try:
                 result["size"] = os.path.getsize(file_path)

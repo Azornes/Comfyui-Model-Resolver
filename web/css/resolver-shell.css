@@ -1366,6 +1366,362 @@ button:has(.mr-node-toolbar-icon):hover .mr-node-toolbar-icon {
     mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z'/%3E%3Cpath d='m3.3 7 8.7 5 8.7-5'/%3E%3Cpath d='M12 22V12'/%3E%3C/svg%3E") no-repeat center / contain !important;
 }
 
+/* ==========================================================================
+   Node Model Popover (Selection Toolbox Quick Actions)
+   ========================================================================== */
+
+.mr-node-popover {
+    position: fixed;
+    z-index: var(--mr-z-context-menu-popup, 100002);
+    min-width: 320px;
+    max-width: 480px;
+    width: max-content;
+    background: var(--mr-panel-bg, #202020);
+    border: 1px solid var(--mr-border, rgba(255, 255, 255, 0.1));
+    border-radius: var(--mr-radius-xl, 8px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: var(--mr-text, #f3f3f3);
+    font-family: var(--mr-font-family-sans, system-ui, sans-serif);
+    font-size: var(--mr-font-base, 13px);
+    line-height: 1.4;
+    overflow: hidden;
+    animation: mrPopoverFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.mr-node-popover ::selection {
+    background: rgba(114, 211, 138, 0.35);
+    color: #fff;
+}
+
+@keyframes mrPopoverFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-4px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.mr-node-popover-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--mr-spacing-8, 8px);
+    padding: 8px 12px;
+    background: var(--mr-surface-glass-03, rgba(255, 255, 255, 0.035));
+    border-bottom: 1px solid var(--mr-divider, rgba(255, 255, 255, 0.08));
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.mr-node-popover-title-group {
+    display: flex;
+    align-items: center;
+    gap: var(--mr-spacing-6, 6px);
+    min-width: 0;
+}
+
+.mr-node-popover-logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    color: var(--mr-color-success, #72d38a);
+    flex-shrink: 0;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.mr-node-popover-logo svg {
+    width: 14px;
+    height: 14px;
+}
+
+.mr-node-popover-title {
+    font-weight: 600;
+    font-size: var(--mr-font-base, 13px);
+    color: var(--mr-text, #f3f3f3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
+}
+
+.mr-node-popover-count {
+    font-size: var(--mr-font-xs, 10px);
+    font-weight: 500;
+    color: var(--mr-text-muted, #aaa);
+    background: rgba(255, 255, 255, 0.07);
+    padding: 1px 6px;
+    border-radius: var(--mr-radius-md, 4px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    white-space: nowrap;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.mr-node-popover-close-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--mr-text-dim, #777);
+    border-radius: var(--mr-radius-md, 4px);
+    cursor: pointer;
+    transition: color 0.12s, background 0.12s;
+    flex-shrink: 0;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.mr-node-popover-close-btn:hover {
+    color: var(--mr-text, #fff);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.mr-node-popover-close-btn svg {
+    width: 12px;
+    height: 12px;
+}
+
+.mr-node-popover-body {
+    max-height: clamp(160px, 50vh, 360px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin;
+    padding: 2px 0;
+}
+
+.mr-node-popover-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 4px 12px;
+    transition: background 0.12s ease;
+}
+
+.mr-node-popover-row:not(:last-child) {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.mr-node-popover-row:hover {
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.mr-node-popover-model {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1 1 auto;
+    gap: 2px;
+    cursor: text;
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+.mr-node-popover-model-name {
+    font-weight: 600;
+    color: var(--mr-text, #f3f3f3);
+    font-size: var(--mr-font-base, 13px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+.mr-node-popover-model-sub {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--mr-font-xs, 10px);
+    color: var(--mr-text-muted, #999);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+.mr-node-popover-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 5px;
+    border-radius: var(--mr-radius-md, 4px);
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    line-height: 1.25;
+    flex-shrink: 0;
+    user-select: none;
+    -webkit-user-select: none;
+}
+}
+
+.mr-node-popover-tag--lora {
+    color: var(--mr-type-lora-text, #d7ffcb);
+    background: rgba(var(--mr-type-lora-rgb, 194, 255, 174), 0.13);
+    border: 1px solid rgba(var(--mr-type-lora-rgb, 194, 255, 174), 0.28);
+}
+
+.mr-node-popover-tag--model {
+    color: var(--mr-type-model-text, #dbcfff);
+    background: rgba(var(--mr-type-model-rgb, 179, 157, 219), 0.13);
+    border: 1px solid rgba(var(--mr-type-model-rgb, 179, 157, 219), 0.28);
+}
+
+.mr-node-popover-tag--vae {
+    color: var(--mr-type-vae-text, #ffb8b8);
+    background: rgba(var(--mr-type-vae-rgb, 255, 110, 110), 0.13);
+    border: 1px solid rgba(var(--mr-type-vae-rgb, 255, 110, 110), 0.28);
+}
+
+.mr-node-popover-tag--controlnet {
+    color: var(--mr-type-controlnet-text, #b1f4db);
+    background: rgba(var(--mr-type-controlnet-rgb, 110, 231, 183), 0.13);
+    border: 1px solid rgba(var(--mr-type-controlnet-rgb, 110, 231, 183), 0.28);
+}
+
+.mr-node-popover-tag--clip {
+    color: var(--mr-type-clip-text, #ffe678);
+    background: rgba(var(--mr-type-clip-rgb, 255, 213, 0), 0.13);
+    border: 1px solid rgba(var(--mr-type-clip-rgb, 255, 213, 0), 0.28);
+}
+
+.mr-node-popover-tag--conditioning {
+    color: var(--mr-type-conditioning-text, #ffd08c);
+    background: rgba(var(--mr-type-conditioning-rgb, 255, 169, 49), 0.13);
+    border: 1px solid rgba(var(--mr-type-conditioning-rgb, 255, 169, 49), 0.28);
+}
+
+.mr-node-popover-tag--image {
+    color: var(--mr-type-image-text, #b9dcff);
+    background: rgba(var(--mr-type-image-rgb, 100, 181, 246), 0.13);
+    border: 1px solid rgba(var(--mr-type-image-rgb, 100, 181, 246), 0.28);
+}
+
+.mr-node-popover-tag--generic {
+    color: var(--mr-type-generic-text, #d6d6d6);
+    background: rgba(var(--mr-type-generic-rgb, 176, 176, 176), 0.12);
+    border: 1px solid rgba(var(--mr-type-generic-rgb, 176, 176, 176), 0.22);
+}
+
+.mr-node-popover-subfolder,
+.mr-node-popover-widget-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+.mr-node-popover-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.mr-node-popover-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    min-height: 24px;
+    max-width: 24px;
+    max-height: 24px;
+    padding: 0;
+    margin: 0;
+    border: 1px solid var(--mr-missing-control-border, rgba(255, 255, 255, 0.105));
+    border-radius: var(--mr-missing-control-radius, 6px);
+    background: var(--mr-missing-control-bg, rgba(255, 255, 255, 0.035));
+    color: var(--mr-text, #f3f3f3);
+    box-shadow: var(--mr-missing-control-shadow, inset 0 1px 0 rgba(255, 255, 255, 0.02));
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.mr-node-popover-action-btn:hover:not(:disabled) {
+    background: var(--mr-missing-control-bg-hover, rgba(255, 255, 255, 0.08));
+    border-color: var(--mr-missing-control-border-hover, rgba(255, 255, 255, 0.2));
+    color: #fff;
+    transform: translateY(-1px);
+}
+
+.mr-node-popover-action-btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.mr-node-popover-action-btn svg {
+    width: 13px;
+    height: 13px;
+    display: block;
+    pointer-events: none;
+}
+
+.mr-node-popover-empty {
+    padding: 18px 16px;
+    text-align: center;
+    color: var(--mr-text-dim, #777);
+    font-size: var(--mr-font-sm, 11px);
+}
+
+.mr-node-popover-footer {
+    padding: 6px 12px;
+    border-top: 1px solid var(--mr-divider, rgba(255, 255, 255, 0.08));
+    background: var(--mr-surface-glass-02, rgba(255, 255, 255, 0.02));
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.mr-node-popover-open-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    width: 100%;
+    padding: 6px 10px;
+    font-size: var(--mr-font-sm, 11px);
+    font-weight: 500;
+    color: var(--mr-text-secondary, #ccc);
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--mr-radius-lg, 6px);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.mr-node-popover-open-btn:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.mr-node-popover-open-btn svg {
+    width: 13px;
+    height: 13px;
+    color: var(--mr-color-success, #72d38a);
+}
+
 .mr-sidebar-dock-panel {
     box-sizing: border-box;
     width: 100%;

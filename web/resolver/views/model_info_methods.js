@@ -1006,6 +1006,7 @@ export const modelInfoMethods = {
                     <div class="mr-info-dialog-body mr-hidden-initial">
                         <div class="mr-info-area">
                             <span class="mr-info-tag mr-info-type"></span>
+                            <span class="mr-info-tag mr-info-component-tag mr-hidden-initial"></span>
                             <span class="mr-info-tag mr-info-basemodel"></span>
                         </div>
                         <div class="mr-info-tags-row mr-hidden-initial">
@@ -1017,6 +1018,14 @@ export const modelInfoMethods = {
                                 <tr class="mr-info-file-row">
                                     <td>${this.renderInfoFieldLabel('file', 'File', 'The model file name found locally or returned by CivitAI.')}</td>
                                     <td><span class="mr-info-file"></span></td>
+                                </tr>
+                                <tr class="mr-info-component-row mr-hidden-initial">
+                                    <td>${this.renderInfoFieldLabel('wrench', 'Component', 'Role of this file within the parent model package (e.g. Required Text Encoder or VAE).')}</td>
+                                    <td><span class="mr-info-component"></span></td>
+                                </tr>
+                                <tr class="mr-info-parentmodel-row mr-hidden-initial">
+                                    <td>${this.renderInfoFieldLabel('box', 'Parent Model', 'The main model package on CivitAI hosting this companion component.')}</td>
+                                    <td><span class="mr-info-parent-model"></span></td>
                                 </tr>
                                 <tr class="mr-info-basemodel-row">
                                     <td>${this.renderInfoFieldLabel('box', 'Base Model', 'Base model this resource was made for, for example SD1.5, SDXL or Flux.')}</td>
@@ -1240,6 +1249,16 @@ export const modelInfoMethods = {
         return this.normalizeInfoTags(
             sources.flatMap(source => this.normalizeInfoTags(source))
         );
+    },
+
+    formatComponentType(value = '') {
+        const raw = String(value || '').trim();
+        if (!raw) return '';
+        const normalized = raw.toLowerCase().replace(/[\s_-]+/g, ' ');
+        if (normalized.includes('text encoder') || normalized === 'clip') return 'Text Encoder';
+        if (normalized.includes('vae')) return 'VAE';
+        if (normalized.includes('diffusion')) return 'Diffusion Model';
+        return raw.charAt(0).toUpperCase() + raw.slice(1);
     },
 
     formatInfoDialogSize(data = {}) {
@@ -2057,6 +2076,7 @@ export const modelInfoMethods = {
 
     updateInfoDialogDescriptionSection(dialog, {
         value = '',
+        noticeHtml = '',
         contentSelector,
         actionsSelector,
         toggleSelector
@@ -2065,7 +2085,7 @@ export const modelInfoMethods = {
         if (!descEl) return;
 
         const row = descEl.closest('tr');
-        if (!value) {
+        if (!value && !noticeHtml) {
             this.setInfoTableRowVisible(row, false);
             return;
         }
@@ -2080,10 +2100,10 @@ export const modelInfoMethods = {
         }
 
         const fallbackText = this.escapeHtml(String(value).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
-        const finalHtml = sanitizedHtml && sanitizedHtml.trim() ? sanitizedHtml : `<p>${fallbackText}</p>`;
+        const finalHtml = sanitizedHtml && sanitizedHtml.trim() ? sanitizedHtml : (fallbackText ? `<p>${fallbackText}</p>` : '');
         const textOnly = finalHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 
-        descEl.innerHTML = finalHtml;
+        descEl.innerHTML = (noticeHtml || '') + finalHtml;
         descEl.classList.remove('is-expanded');
 
         const shouldCollapse = textOnly.length > 520 || finalHtml.length > 900;
@@ -2120,15 +2140,36 @@ export const modelInfoMethods = {
         if (titleEl) {
             const modelName = data.model_name || data.modelName || data.name || data.filename || 'Unknown Model';
             const versionName = data.version_name || data.versionName || '';
-            titleEl.innerHTML = this.renderVersionedModelNameHtml(modelName, versionName) || this.escapeHtml(modelName);
+            let titleHtml = this.renderVersionedModelNameHtml(modelName, versionName) || this.escapeHtml(modelName);
+            const compType = data.component_type || (data.is_companion_file ? 'Required Component' : '');
+            if (compType) {
+                const formattedComp = this.formatComponentType(compType);
+                titleHtml += `<span class="mr-model-component-title"> · ${this.escapeHtml(formattedComp)}</span>`;
+            }
+            titleEl.innerHTML = titleHtml;
         }
 
         // Update type tag
         const typeTag = dialog.querySelector('.mr-info-type');
         if (typeTag) {
             const modelType = data.model_type || data.modelType || '';
-            typeTag.textContent = modelType.toUpperCase();
+            typeTag.textContent = modelType.replace(/_/g, ' ').toUpperCase();
             typeTag.className = `mr-info-tag mr-info-type ${this.getModelTypeColorClass(modelType)}`;
+        }
+
+        // Update component tag
+        const componentTag = dialog.querySelector('.mr-info-component-tag');
+        if (componentTag) {
+            const isComponent = Boolean(data.is_companion_file || data.is_required_component || data.component_type);
+            if (isComponent) {
+                const label = data.is_required_component !== false ? 'REQUIRED COMPONENT' : 'COMPONENT';
+                componentTag.textContent = label;
+                componentTag.classList.remove('mr-hidden-initial');
+                componentTag.style.display = '';
+            } else {
+                componentTag.classList.add('mr-hidden-initial');
+                componentTag.style.display = 'none';
+            }
         }
 
         // Update base model tag
@@ -2167,6 +2208,36 @@ export const modelInfoMethods = {
         const fileEl = dialog.querySelector('.mr-info-file');
         if (fileEl && data.filename) {
             fileEl.textContent = data.filename;
+        }
+
+        // Update component row
+        const componentEl = dialog.querySelector('.mr-info-component');
+        if (componentEl) {
+            const compType = data.component_type || (data.is_companion_file ? 'Required Component' : '');
+            const row = componentEl.closest('tr');
+            if (compType) {
+                const formattedComp = this.formatComponentType(compType);
+                const roleNote = data.is_required_component ? ' <small class="mr-info-muted">(Required for parent model)</small>' : '';
+                componentEl.innerHTML = `<span class="mr-info-component-badge">${this.escapeHtml(formattedComp)}</span>${roleNote}`;
+                this.setInfoTableRowVisible(row, true);
+            } else {
+                this.setInfoTableRowVisible(row, false);
+            }
+        }
+
+        // Update parent model row
+        const parentModelEl = dialog.querySelector('.mr-info-parent-model');
+        if (parentModelEl) {
+            const parentName = data.parent_model_name || data.parentModelName || '';
+            const parentType = data.parent_model_type || data.parentModelType || '';
+            const row = parentModelEl.closest('tr');
+            if (parentName) {
+                const typeSuffix = parentType ? ` <span class="mr-info-tag -type-${parentType.toLowerCase()}">${this.escapeHtml(parentType.toUpperCase())}</span>` : '';
+                parentModelEl.innerHTML = `${this.escapeHtml(parentName)}${typeSuffix}`;
+                this.setInfoTableRowVisible(row, true);
+            } else {
+                this.setInfoTableRowVisible(row, false);
+            }
         }
 
         // Update location
@@ -2299,8 +2370,24 @@ export const modelInfoMethods = {
         const versionDescription = data.version_description
             || data.versionDescription
             || '';
+
+        let componentNoticeHtml = '';
+        if (data.component_type || data.is_companion_file) {
+            const compType = this.formatComponentType(data.component_type || 'Component');
+            const parentName = data.parent_model_name || data.model_name || data.modelName || 'main model';
+            componentNoticeHtml = `
+                <div class="mr-info-component-notice">
+                    <span class="mr-info-notice-icon">${getSvgIcon('info', 'currentColor', 'mr-info-label-icon')}</span>
+                    <div class="mr-info-notice-body">
+                        <strong>${this.escapeHtml(compType)}:</strong> This file is a companion component required for <em>${this.escapeHtml(parentName)}</em>. It is not the checkpoint base model itself.
+                    </div>
+                </div>
+            `;
+        }
+
         this.updateInfoDialogDescriptionSection(dialog, {
             value: modelDescription,
+            noticeHtml: componentNoticeHtml,
             contentSelector: '.mr-info-model-description',
             actionsSelector: '.mr-info-description-actions:not(.mr-info-version-description-actions)',
             toggleSelector: '.mr-info-description-toggle:not(.mr-info-version-description-toggle)'

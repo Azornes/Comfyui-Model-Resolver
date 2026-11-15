@@ -201,6 +201,50 @@ def is_path_in_configured_model_roots(
     )
 
 
+def infer_category_from_path(
+    path_value: Any,
+    folder_paths_module: Optional[Any] = None,
+) -> str:
+    """
+    Infer the ComfyUI download/model category for a given file or directory path.
+
+    Checks configured ComfyUI folder_paths roots first, then falls back to
+    path segment analysis.
+    """
+    if not path_value:
+        return ""
+
+    from .type_utils import CATEGORY_MAP, normalize_download_category
+
+    fp = _get_folder_paths_module(folder_paths_module)
+    if fp is not None:
+        folder_names_and_paths = getattr(fp, "folder_names_and_paths", None)
+        if isinstance(folder_names_and_paths, dict):
+            for name, entry in folder_names_and_paths.items():
+                if str(name).strip().lower() in {"custom_nodes", "configs"}:
+                    continue
+                paths = []
+                if isinstance(entry, (list, tuple)) and len(entry) >= 1:
+                    paths = normalize_folder_path_values(entry[0])
+                elif isinstance(entry, dict):
+                    paths = normalize_folder_path_values(
+                        entry.get("paths") or entry.get("path")
+                    )
+                elif isinstance(entry, str):
+                    paths = [entry]
+                for root in paths:
+                    if root and is_path_within(path_value, root):
+                        return normalize_download_category(name)
+
+    # Path segment fallback
+    norm_path = str(path_value).replace("\\", "/").lower()
+    segments = [s.strip() for s in norm_path.split("/") if s.strip()]
+    for seg in reversed(segments[:-1]):
+        if seg in CATEGORY_MAP:
+            return normalize_download_category(seg)
+    return ""
+
+
 def prefer_local_base_directory(
     candidate: str,
     current: str,

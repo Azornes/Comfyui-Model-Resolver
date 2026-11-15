@@ -506,4 +506,27 @@ def build_model_resolver_metadata(
         payload["model_type"] = lora_manager_type
         payload["sub_type"] = lora_manager_type
 
+    comp_type = _first_present(source.get("component_type"), details.get("component_type"))
+    is_companion = bool(
+        source.get("is_companion_file")
+        or source.get("is_required_component")
+        or details.get("is_companion_file")
+        or details.get("is_required_component")
+        or comp_type
+    )
+    if is_companion:
+        payload["is_companion_file"] = True
+        payload["is_required_component"] = True
+        if comp_type:
+            payload["component_type"] = str(comp_type)
+        parent_model_name = _first_present(source.get("parent_model_name"), details.get("parent_model_name"))
+        if parent_model_name:
+            payload["parent_model_name"] = str(parent_model_name)
+        parent_model_type = _first_present(source.get("parent_model_type"), details.get("parent_model_type"))
+        if parent_model_type:
+            payload["parent_model_type"] = str(parent_model_type)
+        file_type = _first_present(source.get("file_type"), details.get("file_type"), file_info.get("type"))
+        if file_type:
+            payload["file_type"] = str(file_type)
+
     return payload
