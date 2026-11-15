@@ -854,7 +854,7 @@ export const searchPanelMethods = {
     },
 
     getValidTab(tab) {
-        return ['missing', 'loaded', 'metadata', 'options'].includes(tab) ? tab : 'missing';
+        return ['missing', 'loaded', 'export', 'metadata', 'options'].includes(tab) ? tab : 'missing';
     },
 
     restoreActiveTab() {

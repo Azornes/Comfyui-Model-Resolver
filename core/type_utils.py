@@ -1373,6 +1373,8 @@ def get_category_folder_keys(category: str) -> list[str]:
     """
     Returns associated ComfyUI folder names for a given category.
     """
+    if not isinstance(category, str) or category.strip().lower() in {"custom_nodes", "configs"}:
+        return []
     folder_key = normalize_download_category(category)
     keys = [folder_key]
     if folder_key == "diffusion_models":

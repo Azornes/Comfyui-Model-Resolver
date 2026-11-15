@@ -17,13 +17,14 @@ export const tabsLoadedMethods = {
         return {
             missing: this.missingTab,
             loaded: this.loadedTab,
+            export: this.exportTab,
             metadata: this.metadataTab,
             options: this.optionsTab
         }[tab] || null;
     },
 
     updateTabButtonStates() {
-        ['missing', 'loaded', 'metadata', 'options'].forEach((tab) => {
+        ['missing', 'loaded', 'export', 'metadata', 'options'].forEach((tab) => {
             const button = this.getTabButton(tab);
             if (!button) return;
             const isActive = tab === this.activeTab;
@@ -94,6 +95,12 @@ export const tabsLoadedMethods = {
             }
             this.setMissingFooterControlsVisible(false);
             return this.loadLoadedModels(workflow);
+        } else if (this.activeTab === 'export') {
+            if (this.contentElement) {
+                this.contentElement.style.overflowY = 'auto';
+            }
+            this.setMissingFooterControlsVisible(false);
+            return this.loadExportTab(workflow);
         } else if (this.activeTab === 'metadata') {
             if (this.contentElement) {
                 this.contentElement.style.overflowY = 'auto';

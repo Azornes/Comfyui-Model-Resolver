@@ -10,6 +10,7 @@ import { modelInfoMethods } from "./views/model_info_methods.js";
 import { missingBrowserMethods } from "./views/missing_browser_methods.js";
 import { optionsMethods } from "./views/options_methods.js";
 import { tabsLoadedMethods } from "./views/tabs_loaded_methods.js";
+import { tabsExportMethods } from "./views/tabs_export_methods.js";
 import { imageMetadataMethods } from "./views/tabs_image_metadata_methods.js";
 import { downloadTargetMethods } from "./search/download_target_methods.js";
 import { searchPanelMethods } from "./search/search_panel.js";
@@ -366,6 +367,7 @@ applyDialogMethods(
     downloadTargetMethods,
     optionsMethods,
     tabsLoadedMethods,
+    tabsExportMethods,
     imageMetadataMethods,
     queueMethods,
     queueStorageMethods,

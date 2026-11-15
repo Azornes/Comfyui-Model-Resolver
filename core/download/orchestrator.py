@@ -910,6 +910,22 @@ def download_model(
             "download_id": download_id,
             "error": "Unsupported model file extension",
         }
+    parts = []
+    for piece in (subfolder or "", filename or ""):
+        if not isinstance(piece, str):
+            return {
+                "success": False,
+                "download_id": download_id,
+                "error": "Invalid file name",
+            }
+        parts.extend(p for p in piece.replace("\\", "/").split("/") if p not in ("", "."))
+    if any(p == ".." or ":" in p or "\0" in p for p in parts):
+        return {
+            "success": False,
+            "download_id": download_id,
+            "error": f"Invalid file name: {filename}",
+        }
+
     subfolder = facade.normalize_relative_subfolder(subfolder)
 
     dest_dir = facade.get_download_directory(category, base_directory)
@@ -1103,6 +1119,22 @@ def start_background_download(
 
     effective_download_id = download_id or facade.generate_download_id()
     filename = facade.sanitize_download_filename(filename)
+    parts = []
+    for piece in (subfolder or "", filename or ""):
+        if not isinstance(piece, str):
+            return {
+                "success": False,
+                "download_id": download_id,
+                "error": "Invalid file name",
+            }
+        parts.extend(p for p in piece.replace("\\", "/").split("/") if p not in ("", "."))
+    if any(p == ".." or ":" in p or "\0" in p for p in parts):
+        return {
+            "success": False,
+            "download_id": download_id,
+            "error": f"Invalid file name: {filename}",
+        }
+
     subfolder = facade.normalize_relative_subfolder(subfolder)
     initial_directory = facade.get_download_directory(category, base_directory) or ""
     if initial_directory and subfolder:

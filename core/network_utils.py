@@ -5,12 +5,34 @@ from __future__ import annotations
 import ipaddress
 import socket
 from typing import Any, Dict, Iterable, Optional, Set, Tuple
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 import requests
 
 REDIRECT_STATUS_CODES = {301, 302, 303, 307, 308}
 SENSITIVE_REDIRECT_HEADERS = {"authorization", "cookie", "proxy-authorization"}
+SECRET_QUERY_PARAMS = {
+    "token", "key", "api_key", "apikey", "access_token",
+    "auth", "hf_token", "sig", "signature",
+}
+
+
+def strip_secrets(url: str) -> str:
+    """Remove credential query parameters (token=, key=, ...) from a URL."""
+    if not url or not isinstance(url, str):
+        return ""
+    url = url.strip()
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return url
+    if parsed.scheme not in ("http", "https"):
+        return url
+    query = [
+        (k, v) for k, v in parse_qsl(parsed.query, keep_blank_values=True)
+        if k.lower() not in SECRET_QUERY_PARAMS
+    ]
+    return urlunparse(parsed._replace(query=urlencode(query)))
 
 
 class UnsafeUrlError(ValueError):

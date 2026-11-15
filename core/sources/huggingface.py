@@ -463,21 +463,21 @@ def parse_huggingface_url(url: str) -> Optional[HuggingFaceFileReference]:
         parts = url[5:].split("/", 2)
         if len(parts) >= 3:
             return HuggingFaceFileReference(
-                repo=f"{parts[0]}/{parts[1]}",
-                filename=parts[2],
+                repo=unquote(f"{parts[0]}/{parts[1]}"),
+                filename=unquote(parts[2]),
             )
         return None
 
     parsed = urlparse(url)
-    if not host_matches_domain(parsed.hostname, "huggingface.co"):
+    if not host_matches_domain(parsed.hostname, "huggingface.co", "hf.co"):
         return None
 
     match = re.match(r"^/([^/]+/[^/]+)/(resolve|blob)/([^/]+)/(.+)$", parsed.path)
     if match:
         return HuggingFaceFileReference(
-            repo=match.group(1),
-            branch=match.group(3),
-            filename=match.group(4),
+            repo=unquote(match.group(1)),
+            branch=unquote(match.group(3)),
+            filename=unquote(match.group(4)),
         )
 
     return None

@@ -123,6 +123,11 @@ class DownloadService:
         category = self.normalize_download_category(
             category_value
         )
+        if not category or category.strip().lower() in {"custom_nodes", "configs"}:
+            return self.web.json_response(
+                {"error": f"Not a valid model category: {category_value}"},
+                status=400,
+            )
         path_metadata = data.get("path_metadata", {})
         if path_metadata is None:
             path_metadata = {}
@@ -213,7 +218,7 @@ class DownloadService:
             )
 
         headers = {}
-        if self.host_matches_domain(download_host, "huggingface.co"):
+        if self.host_matches_domain(download_host, "huggingface.co", "hf.co"):
             if hf_token:
                 headers["Authorization"] = f"Bearer {hf_token}"
         elif self.host_matches_domain(
@@ -231,7 +236,7 @@ class DownloadService:
         inferred_source = ""
         if self.host_matches_domain(download_host, "civitai.com", "civitai.red"):
             inferred_source = "civitai"
-        elif self.host_matches_domain(download_host, "huggingface.co"):
+        elif self.host_matches_domain(download_host, "huggingface.co", "hf.co"):
             inferred_source = "huggingface"
 
         source_name = str(metadata_source or inferred_source).strip().lower()

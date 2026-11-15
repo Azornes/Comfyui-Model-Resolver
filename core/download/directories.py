@@ -6,6 +6,8 @@ from typing import Any, List, Optional
 from ..path_utils import normalize_folder_path_values
 from .dependencies import require_download_dependencies
 
+BLOCKED_DOWNLOAD_FOLDERS = {"custom_nodes", "configs"}
+
 
 def get_download_directory(
     category: str,
@@ -14,6 +16,9 @@ def get_download_directory(
     dependencies: Any = None,
 ) -> Optional[str]:
     """Get the appropriate download directory for a model category."""
+    if not isinstance(category, str) or category.strip().lower() in BLOCKED_DOWNLOAD_FOLDERS:
+        return None
+
     facade = require_download_dependencies(dependencies, "download directory")
     folder_paths = facade.folder_paths
 
@@ -28,6 +33,8 @@ def get_download_directory(
             return None
 
     folder_keys = facade.get_category_folder_keys(category)
+    if not folder_keys:
+        return None
     folder_key = folder_keys[0]
 
     def _normalize(path_value: str) -> str:

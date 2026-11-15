@@ -133,6 +133,7 @@ def register_routes(self):
             from .custom_url import register_custom_url_routes
             from .directories import register_directory_routes
             from .downloads import register_download_routes
+            from .exporter import register_exporter_routes
             from .hashes import register_hash_routes
             from .helpers import create_route_helpers
             from .image_metadata import register_image_metadata_routes
@@ -257,6 +258,7 @@ def register_routes(self):
         register_workflow_analysis_routes(route_context)
         register_workflow_transfer_routes(route_context)
         register_hash_routes(route_context)
+        register_exporter_routes(route_context)
         register_metadata_routes(route_context)
         register_image_metadata_routes(route_context)
         register_loaded_model_routes(route_context)
