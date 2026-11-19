@@ -220,7 +220,54 @@ def download_file(
         expected_sha256 or facade._extract_expected_sha256(metadata)
     )
 
+    def _defer_before_transport(error_msg: str, log_prefix: str) -> Dict[str, Any]:
+        filename = facade.get_filename_from_path(dest_path)
+        now = time.time()
+        with download_lock:
+            download_progress[download_id] = create_initial_progress(
+                url=url,
+                path=dest_path,
+                filename=filename,
+                directory=os.path.dirname(dest_path),
+                download_backend=download_backend,
+                start_time=now,
+            )
+            download_progress[download_id]["status"] = "error"
+            download_progress[download_id]["error"] = error_msg
+            download_progress[download_id]["speed"] = 0
+        log.error(f"✗ {log_prefix}: {filename}")
+        log.error(f"Error: {error_msg}")
+        return {
+            "success": False,
+            "download_id": download_id,
+            "path": dest_path,
+            "error": error_msg,
+            "size": 0,
+        }
+
     download_backend = facade._download_backend_from_settings()
+
+    coordinator_fn = getattr(facade, "get_rate_limit_coordinator", None)
+    if callable(coordinator_fn):
+        rl = coordinator_fn()
+        if rl.is_rate_limited(url):
+            cooldown = int(rl.get_cooldown(url))
+            if cooldown > 0:
+                return _defer_before_transport(
+                    f"Rate limit exceeded (HTTP 429): please retry after {cooldown}s.",
+                    "Download deferred",
+                )
+
+    guard_fn = getattr(facade, "get_connectivity_guard", None)
+    if callable(guard_fn):
+        guard = guard_fn()
+        if guard.is_offline(url):
+            cooldown = int(guard.get_offline_cooldown(url))
+            return _defer_before_transport(
+                f"Network offline: destination in connectivity cooldown ({cooldown}s remaining).",
+                "Download failed",
+            )
+
     if download_backend != "aria2":
         if hasattr(facade, "_download_huggingface_worker"):
             worker_kwargs = {

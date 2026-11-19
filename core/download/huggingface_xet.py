@@ -305,10 +305,16 @@ def download_huggingface_xet(
 ) -> Optional[Dict[str, Any]]:
     """Download Hugging Face Xet files with the official hf_xet transport."""
     facade = require_download_dependencies(dependencies, "Hugging Face Xet")
+    raw_parsed = urlparse(str(url or ""))
+    if not (
+        facade.host_matches_domain(raw_parsed.hostname, "huggingface.co", "hf.co")
+        and "/resolve/" in raw_parsed.path
+    ):
+        return None
     validated_url = facade.validate_public_http_url(url)
     parsed_url = urlparse(validated_url)
     if not (
-        facade.host_matches_domain(parsed_url.hostname, "huggingface.co")
+        facade.host_matches_domain(parsed_url.hostname, "huggingface.co", "hf.co")
         and "/resolve/" in parsed_url.path
     ):
         return None

@@ -35,6 +35,7 @@ export const CATEGORY_ALIASES = Object.freeze(
     "geometry_estimation": "geometry_estimation",
     "geometry_estimation_model": "geometry_estimation",
     "gligen": "gligen",
+    "h3_upscaler": "latent_upscale_models",
     "hypernetwork": "hypernetworks",
     "hypernetworks": "hypernetworks",
     "ip_adapter": "ipadapter",
@@ -43,6 +44,10 @@ export const CATEGORY_ALIASES = Object.freeze(
     "latent_upscale_models": "latent_upscale_models",
     "lora": "loras",
     "loras": "loras",
+    "minimax": "diffusion_models",
+    "minimax_h3": "latent_upscale_models",
+    "mmaudio": "audio_encoders",
+    "mmaudio_model": "audio_encoders",
     "model_gguf": "diffusion_models",
     "model_patch": "model_patches",
     "model_patches": "model_patches",
@@ -75,6 +80,9 @@ export const CATEGORY_ALIASES = Object.freeze(
     "upscaler": "upscale_models",
     "vae": "vae",
     "vae_approx": "vae_approx",
+    "wan": "diffusion_models",
+    "wan_video": "diffusion_models",
+    "wanvideo": "diffusion_models",
     "yolo": "ultralytics"
 }
 );

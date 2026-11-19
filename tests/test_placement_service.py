@@ -62,7 +62,8 @@ class PlacementServiceTests(unittest.IsolatedAsyncioTestCase):
         req = MagicMock()
         req.query = {"path": "/models/checkpoints/my_lora.safetensors"}
 
-        with patch("core.services.placement_service.classify_model_file") as mock_classify, \
+        with patch("core.path_utils.is_path_in_configured_model_roots", return_value=True), \
+             patch("core.services.placement_service.classify_model_file") as mock_classify, \
              patch("core.services.placement_service.check_model_misplacement") as mock_misplace:
             mock_classify.return_value = {
                 "kind": "loras",
