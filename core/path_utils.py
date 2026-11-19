@@ -502,7 +502,12 @@ def check_safetensors_damage(
         "header" if header JSON is corrupted or invalid,
         "truncated" if a tensor's data offsets extend beyond actual file size.
     """
-    if not file_path or not str(file_path).lower().endswith((".safetensors", ".sft")):
+    if not file_path:
+        return ""
+    lower_path = str(file_path).lower()
+    if lower_path.endswith(".part"):
+        lower_path = lower_path[:-5]
+    if not lower_path.endswith((".safetensors", ".sft")):
         return ""
 
     try:
@@ -702,7 +707,16 @@ def parse_gguf_metadata(data: bytes, max_kv: int = 500) -> Optional[Dict[str, An
                 raise ValueError("String too long")
             return take(length).decode("utf-8", "replace")
 
-        def read_value(val_type: int) -> Any:
+        _MAX_ARRAY_DEPTH = 4
+        _MAX_NON_SCALAR_ARRAY_ITEMS = 4096
+
+        def skip_text() -> None:
+            length = struct.unpack("<Q", take(8))[0]
+            if length > 10 * 1024 * 1024:
+                raise ValueError("String too long")
+            take(length)
+
+        def read_value(val_type: int, depth: int = 0) -> Any:
             if val_type in _GGUF_SCALARS:
                 fmt = "<" + _GGUF_SCALARS[val_type]
                 size = struct.calcsize(fmt)
@@ -710,11 +724,34 @@ def parse_gguf_metadata(data: bytes, max_kv: int = 500) -> Optional[Dict[str, An
             if val_type == 8:
                 return read_text()
             if val_type == 9:
+                if depth >= _MAX_ARRAY_DEPTH:
+                    raise ValueError("GGUF array nesting too deep")
                 item_type = struct.unpack("<I", take(4))[0]
                 count = struct.unpack("<Q", take(8))[0]
+                if item_type in _GGUF_SCALARS:
+                    fmt = "<" + _GGUF_SCALARS[item_type]
+                    elem_size = struct.calcsize(fmt)
+                    keep = min(count, 20)
+                    items = [struct.unpack(fmt, take(elem_size))[0] for _ in range(keep)]
+                    remaining = count - keep
+                    if remaining > 0:
+                        take(remaining * elem_size)
+                    return items
+                if count > _MAX_NON_SCALAR_ARRAY_ITEMS:
+                    # Skip oversized string/nested arrays (e.g. tokenizer.ggml.tokens)
+                    # without stalling or blowing memory; stop parsing further keys if truncated.
+                    if item_type == 8:
+                        items = []
+                        for idx in range(count):
+                            if idx < 20:
+                                items.append(read_text())
+                            else:
+                                skip_text()
+                        return items
+                    raise ValueError("GGUF array too large")
                 items = []
                 for _ in range(count):
-                    v = read_value(item_type)
+                    v = read_value(item_type, depth + 1)
                     if len(items) < 20:
                         items.append(v)
                 return items
@@ -728,7 +765,7 @@ def parse_gguf_metadata(data: bytes, max_kv: int = 500) -> Optional[Dict[str, An
             meta[key] = val
 
         return meta
-    except (EOFError, ValueError, struct.error):
+    except (EOFError, ValueError, struct.error, RecursionError):
         return meta if meta else None
 
 

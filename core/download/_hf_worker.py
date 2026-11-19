@@ -22,15 +22,28 @@ def log(message: str, **fields) -> None:
 class _ProgressTqdm:
     """tqdm-compatible shim for hf_hub_download's tqdm_class hook."""
 
+    _active_max_total: int = 0
+
     def __init__(self, *args, **kwargs):
         self.total = kwargs.get("total") or 0
         self._reconstruction_n = 0
         self._transfer_n = 0
         self.n = 0
         self._last_emit = 0.0
+        if self.total and self.total > _ProgressTqdm._active_max_total:
+            _ProgressTqdm._active_max_total = self.total
+
+    def _is_primary_bar(self) -> bool:
+        if _ProgressTqdm._active_max_total <= 0:
+            return True
+        if not self.total:
+            return False
+        return self.total >= _ProgressTqdm._active_max_total
 
     def _report(self, force: bool = False) -> None:
         self.n = max(self._reconstruction_n, self._transfer_n)
+        if not self._is_primary_bar():
+            return
         now = time.monotonic()
         if force or now - self._last_emit >= 0.2:
             self._last_emit = now
@@ -147,6 +160,7 @@ def main() -> None:
         is_gated = any(m in err_lower for m in _GATED_MARKERS)
         if token and status in (401, 403) and not is_gated:
             log(f"Token rejected for repository (HTTP {status}), retrying anonymously...")
+            _ProgressTqdm._active_max_total = 0
             try:
                 path = huggingface_hub.hf_hub_download(
                     repo_id=repo_id,
@@ -165,8 +179,21 @@ def main() -> None:
     except Exception as e:
         err_lower = str(e).lower()
         is_gated = any(m in err_lower for m in _GATED_MARKERS)
-        if token and ("401" in err_lower or "403" in err_lower) and not is_gated:
+        resp_status = getattr(getattr(e, "response", None), "status_code", None)
+        is_auth_error = resp_status in (401, 403) or any(
+            marker in err_lower
+            for marker in (
+                "401 client error",
+                "403 client error",
+                "http 401",
+                "http 403",
+                "invalid username or password",
+                "unauthorized",
+            )
+        )
+        if token and is_auth_error and not is_gated:
             log("Token error, retrying anonymously...")
+            _ProgressTqdm._active_max_total = 0
             try:
                 path = huggingface_hub.hf_hub_download(
                     repo_id=repo_id,

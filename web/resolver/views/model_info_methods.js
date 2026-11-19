@@ -66,7 +66,7 @@ export const modelInfoMethods = {
             && model?.node_id !== null
             && model?.node_id !== '';
         const showSwapModel = isLoadedModelContext || isWorkflowNodeContext;
-        const showUseOnCanvas = this.canUseModelOnCanvas(model);
+        const showUseOnCanvas = Boolean(this.canUseModelOnCanvas?.(model));
         this.setContextMenuItemVisible('showInfo', isSourceModelContext);
         this.setContextMenuItemVisible('showMore', canShowMore);
         this.setContextMenuItemVisible('useOnCanvas', showUseOnCanvas);

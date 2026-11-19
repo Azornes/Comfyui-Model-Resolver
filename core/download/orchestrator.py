@@ -223,14 +223,28 @@ def download_file(
     download_backend = facade._download_backend_from_settings()
     if download_backend != "aria2":
         if hasattr(facade, "_download_huggingface_worker"):
-            worker_result = facade._download_huggingface_worker(
-                url,
-                dest_path,
-                download_id,
-                headers=headers,
-                metadata=metadata,
-                category=category,
-            )
+            worker_kwargs = {
+                "headers": headers,
+                "metadata": metadata,
+                "category": category,
+            }
+            if expected_sha256:
+                worker_kwargs["expected_sha256"] = expected_sha256
+            try:
+                worker_result = facade._download_huggingface_worker(
+                    url,
+                    dest_path,
+                    download_id,
+                    **worker_kwargs,
+                )
+            except TypeError:
+                worker_kwargs.pop("expected_sha256", None)
+                worker_result = facade._download_huggingface_worker(
+                    url,
+                    dest_path,
+                    download_id,
+                    **worker_kwargs,
+                )
             if worker_result is not None:
                 return worker_result
 
@@ -515,7 +529,7 @@ def download_file(
                     total_size = existing_size + content_len
 
             cd_header = getattr(response, "headers", {}).get("content-disposition")
-            if cd_header:
+            if cd_header and not is_resumed:
                 from .validation import (
                     extract_filename_from_content_disposition,
                     is_allowed_model_download_filename,
@@ -531,10 +545,25 @@ def download_file(
                         or current_filename in ("model", "download", "file")
                     )
                 ):
-                    dest_path = os.path.join(os.path.dirname(dest_path), server_filename)
-                    partial_path = f"{dest_path}.part"
-                    filename = server_filename
-                    log.info(f"Using server-provided filename from Content-Disposition: {server_filename}")
+                    candidate_dest = os.path.join(os.path.dirname(dest_path), server_filename)
+                    if not os.path.exists(candidate_dest):
+                        with download_lock:
+                            conflict_id = find_active_download_for_path(
+                                download_progress,
+                                candidate_dest,
+                                os,
+                                exclude_id=download_id,
+                            )
+                            if not conflict_id:
+                                dest_path = candidate_dest
+                                partial_path = f"{dest_path}.part"
+                                filename = server_filename
+                                result["path"] = dest_path
+                                download_progress[download_id]["path"] = dest_path
+                                download_progress[download_id]["filename"] = filename
+                                log.info(
+                                    f"Using server-provided filename from Content-Disposition: {server_filename}"
+                                )
 
             downloaded = existing_size if is_resumed else 0
             last_downloaded = downloaded
@@ -889,6 +918,11 @@ def download_file(
 
         damage = facade.check_safetensors_damage(partial_path)
         if damage:
+            try:
+                if os.path.exists(partial_path):
+                    os.remove(partial_path)
+            except OSError:
+                pass
             error_msg = f"Safetensors file is corrupted or truncated ({damage})"
             with download_lock:
                 download_progress[download_id]["status"] = "error"

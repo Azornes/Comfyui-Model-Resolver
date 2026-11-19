@@ -429,11 +429,17 @@ def get_node_model_info(
             if isinstance(v, str) and (k.endswith(".lora_name") or k.endswith(".lora")):
                 prefix = k.rsplit(".", 1)[0]
                 enabled_val = named_widgets.get(f"{prefix}.enabled", True)
-                strength_val = named_widgets.get(
+                has_clip_strength = f"{prefix}.strength_clip" in named_widgets
+                strength_model_val = named_widgets.get(
                     f"{prefix}.strength",
                     named_widgets.get(f"{prefix}.strength_model", 1.0),
                 )
-                if _is_disabled_flag(enabled_val) or _is_zero_strength(strength_val):
+                strength_clip_val = named_widgets.get(f"{prefix}.strength_clip", 1.0)
+                is_zero = (
+                    _is_zero_strength(strength_model_val)
+                    and (_is_zero_strength(strength_clip_val) if has_clip_strength else True)
+                )
+                if _is_disabled_flag(enabled_val) or is_zero:
                     disabled_lora_names.add(v.strip().lower())
 
     if node_type in {
@@ -441,19 +447,23 @@ def get_node_model_info(
         "LoadLoraTextEncoder",
         "Load LoRA (Model)",
         "Load LoRA (Text Encoder)",
-        "Load LoRA (Model and CLIP)",
-        "Load LoRA",
     } and (isinstance(widgets_values, list) and len(widgets_values) >= 3):
-            row_idx = 1 if (not isinstance(widgets_values[0], bool) and isinstance(widgets_values[0], int)) else 0
-            while row_idx + 2 < len(widgets_values):
-                lora_val = widgets_values[row_idx]
-                strength_val = widgets_values[row_idx + 1]
-                enabled_val = widgets_values[row_idx + 2]
-                if _is_disabled_flag(enabled_val) or _is_zero_strength(strength_val):
-                    disabled_widget_indices.add(row_idx)
-                    if isinstance(lora_val, str) and lora_val.strip():
-                        disabled_lora_names.add(lora_val.strip().lower())
-                row_idx += 3
+        row_idx = 1 if (not isinstance(widgets_values[0], bool) and isinstance(widgets_values[0], int)) else 0
+        while row_idx + 2 < len(widgets_values):
+            strength_val = widgets_values[row_idx + 1]
+            enabled_val = widgets_values[row_idx + 2]
+            if _is_disabled_flag(enabled_val) or _is_zero_strength(strength_val):
+                disabled_widget_indices.add(row_idx)
+            row_idx += 3
+    elif node_type in {
+        "LoraLoader",
+        "Load LoRA",
+        "Load LoRA (Model and CLIP)",
+    } and (isinstance(widgets_values, list) and len(widgets_values) >= 3):
+        # Standard LoraLoader uses [lora_name, strength_model, strength_clip]:
+        # only disabled when BOTH model and CLIP strengths are zero.
+        if _is_zero_strength(widgets_values[1]) and _is_zero_strength(widgets_values[2]):
+            disabled_widget_indices.add(0)
 
     # For each widget value, check if it looks like a model file or URN
     for idx, value in enumerate(widgets_values):

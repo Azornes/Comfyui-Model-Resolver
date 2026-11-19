@@ -20,8 +20,10 @@ export function getModelPreviewUrl(model = {}) {
     ).trim();
     if (!modelPath) return '';
 
-    const endpoint = (typeof api !== 'undefined' && typeof api?.apiURL === 'function')
-        ? api.apiURL('/model_resolver/model-preview')
+    const apiRef = (typeof api !== 'undefined' && api)
+        || (typeof window !== 'undefined' ? window.app?.api : null);
+    const endpoint = typeof apiRef?.apiURL === 'function'
+        ? apiRef.apiURL('/model_resolver/model-preview')
         : '/model_resolver/model-preview';
 
     return `${endpoint}?path=${encodeURIComponent(modelPath)}`;
@@ -140,6 +142,14 @@ export function renderNodeModelPopoverHtml({ node = null, models = [], formatCat
     } else {
         rowsHtml = models.map((model, index) => {
             const details = getModelDisplayDetails(model, formatCategory);
+            const isMissingOrPending = model?.exists === false || Boolean(model?.resolution_pending);
+            const hasLocalPath = !isMissingOrPending && Boolean(
+                model?.exists
+                || model?.resolved_path
+                || model?.full_path
+                || model?.path
+                || model?.original_path
+            );
             return `
                 <div class="mr-node-popover-row" data-model-index="${index}">
                     <div class="mr-node-popover-model" data-tooltip="${escapeHtml(details.tooltip)}"${details.previewUrl ? ` data-tooltip-image="${escapeHtml(details.previewUrl)}"` : ''}>
@@ -155,18 +165,18 @@ export function renderNodeModelPopoverHtml({ node = null, models = [], formatCat
                             data-action="search"
                             data-tooltip="Show in Model Resolver"
                             aria-label="Show in Model Resolver">${getSvgIcon('search')}</button>
-                        <button type="button" class="mr-node-popover-action-btn mr-action-use"
+                        ${hasLocalPath ? `<button type="button" class="mr-node-popover-action-btn mr-action-use"
                             data-action="use"
                             data-tooltip="Use on Canvas"
-                            aria-label="Use on Canvas">${getSvgIcon('circlePlus')}</button>
+                            aria-label="Use on Canvas">${getSvgIcon('circlePlus')}</button>` : ''}
                         <button type="button" class="mr-node-popover-action-btn mr-action-info"
                             data-action="info"
                             data-tooltip="Show info"
                             aria-label="Show info">${getSvgIcon('info')}</button>
-                        <button type="button" class="mr-node-popover-action-btn mr-action-folder"
+                        ${hasLocalPath ? `<button type="button" class="mr-node-popover-action-btn mr-action-folder"
                             data-action="folder"
                             data-tooltip="Open containing folder"
-                            aria-label="Open containing folder">${getSvgIcon('folderOpen')}</button>
+                            aria-label="Open containing folder">${getSvgIcon('folderOpen')}</button>` : ''}
                     </div>
                 </div>
             `;

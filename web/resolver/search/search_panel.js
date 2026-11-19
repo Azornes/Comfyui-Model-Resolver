@@ -1334,7 +1334,7 @@ export const searchPanelMethods = {
                 const progress = state?.sourceProgress?.[source];
                 if (!source || !progress?.retryable || state?.activeSearchRunId) return;
                 button.disabled = true;
-                const refreshAnimation = this.startRefreshButtonAnimation(button);
+                const refreshAnimation = this.startRefreshButtonAnimation?.(button);
                 try {
                     await this.searchOnline(missing, {
                         workflowKey,
@@ -1342,7 +1342,7 @@ export const searchPanelMethods = {
                         forceSearch: true
                     });
                 } finally {
-                    refreshAnimation?.cancel();
+                    refreshAnimation?.cancel?.();
                     button.disabled = false;
                 }
             });

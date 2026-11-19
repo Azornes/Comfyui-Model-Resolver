@@ -394,6 +394,10 @@ export const tabsExportMethods = {
                     body: JSON.stringify({ full_path: entry.full_path })
                 })).json();
 
+            if (!data?.job_id) {
+                throw new Error(data?.error || 'Could not start hash job');
+            }
+
             while (true) {
                 if (!button.isConnected) return;
                 await new Promise((resolve) => setTimeout(resolve, 800));
@@ -514,7 +518,7 @@ export const tabsExportMethods = {
                     helperNode.properties = {
                         ...(helperNode.properties || {}),
                         cnr_id: 'comfyui-model-resolver',
-                        aux_id: 'darek-k/comfyui-model-resolver',
+                        aux_id: 'Azornes/Comfyui-Model-Resolver',
                         'Node name for S&R': 'ModelResolverDependency'
                     };
                     const titleHeight = LG?.NODE_TITLE_HEIGHT || 30;

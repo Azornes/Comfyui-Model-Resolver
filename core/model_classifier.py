@@ -372,13 +372,12 @@ def classify_safetensors_base(
             "label_emb_0_0",
             "lora_te1_",
             "lora_te2_",
-            "lora_unet_input_blocks",
-            "lora_unet_output_blocks",
         )
     ):
         return "SDXL", True
 
-    # Cross-attention context width
+    # Cross-attention context width (must run before generic UNet LoRA block prefixes,
+    # since OpenAI-style SD 1.5 LoRAs also use lora_unet_input_blocks / output_blocks).
     for key, value in header.items():
         low = key.lower().replace(".", "_")
         if "attn2_to_k" not in low or not isinstance(value, dict):
@@ -393,6 +392,8 @@ def classify_safetensors_base(
         return "SD 1.5", True
     if "input_blocks_1_1_transformer_blocks" in text or "lora_unet_down_blocks" in text:
         return "SD 1.5", False
+    if "lora_unet_input_blocks" in text or "lora_unet_output_blocks" in text:
+        return "SDXL", False
 
     return "", False
 
@@ -505,15 +506,28 @@ def get_target_root_for_category(
     elif norm_target == "text_encoders":
         candidates_to_try.append("clip")
 
-    roots: List[str] = []
+    existing_roots: List[str] = []
+    fallback_roots: List[str] = []
     get_folder_paths = getattr(fp, "get_folder_paths", None)
     if callable(get_folder_paths):
         for candidate_key in candidates_to_try:
-            found = get_folder_paths(candidate_key) or []
-            roots.extend([os.path.abspath(r) for r in found if os.path.isdir(r)])
-            if roots:
+            try:
+                found = get_folder_paths(candidate_key) or []
+            except Exception:
+                found = []
+            for raw_root in found:
+                if not raw_root:
+                    continue
+                abs_root = os.path.abspath(raw_root)
+                if os.path.isdir(abs_root):
+                    if abs_root not in existing_roots:
+                        existing_roots.append(abs_root)
+                elif abs_root not in fallback_roots:
+                    fallback_roots.append(abs_root)
+            if existing_roots or fallback_roots:
                 break
 
+    roots = existing_roots or fallback_roots
     if not roots:
         # Fallback to configured model roots matching category name
         for root in get_configured_model_roots(fp):
@@ -526,8 +540,12 @@ def get_target_root_for_category(
     try:
         src_dev = os.stat(source_path).st_dev
         for root in roots:
-            if os.stat(root).st_dev == src_dev:
-                return root
+            stat_target = root if os.path.exists(root) else os.path.dirname(root)
+            try:
+                if stat_target and os.stat(stat_target).st_dev == src_dev:
+                    return root
+            except OSError:
+                continue
     except OSError:
         pass
 
@@ -578,10 +596,14 @@ def check_model_misplacement(
     if not target_root:
         return None
 
-    # Derive relative subfolder within category root
+    # Derive relative subfolder within the deepest matching category root
     filename = os.path.basename(file_path)
     subfolder = ""
-    configured_roots = get_configured_model_roots(folder_paths_module)
+    configured_roots = sorted(
+        get_configured_model_roots(folder_paths_module),
+        key=lambda r: len(os.path.abspath(r)),
+        reverse=True,
+    )
     for root in configured_roots:
         if is_path_within(file_path, root):
             rel_dir = os.path.dirname(os.path.relpath(file_path, root))
@@ -682,13 +704,14 @@ def find_model_sidecars(model_path: str) -> List[Tuple[str, str, bool]]:
                 sidecars.append((candidate, suffix, False))
 
     # Hidden sidecars in .cmr or .amb
-    for hidden_dir in HIDDEN_SIDECAR_DIRS:
-        h_dir_path = os.path.join(folder, hidden_dir)
-        if os.path.isdir(h_dir_path):
-            for suffix in ALL_SIDECAR_SUFFIXES:
-                candidate = os.path.join(h_dir_path, stem + suffix)
-                if os.path.isfile(candidate):
-                    sidecars.append((candidate, suffix, True))
+    if not has_other_model_with_stem:
+        for hidden_dir in HIDDEN_SIDECAR_DIRS:
+            h_dir_path = os.path.join(folder, hidden_dir)
+            if os.path.isdir(h_dir_path):
+                for suffix in ALL_SIDECAR_SUFFIXES:
+                    candidate = os.path.join(h_dir_path, stem + suffix)
+                    if os.path.isfile(candidate):
+                        sidecars.append((candidate, suffix, True))
 
     return sidecars
 
@@ -745,21 +768,58 @@ def move_misplaced_model(
     target_root = get_target_root_for_category(
         norm_target_cat, norm_source, folder_paths_module
     )
-    if not target_root or not os.path.isdir(target_root):
+    if not target_root:
         raise ValueError(f"Could not resolve destination root for category: {target_category}")
+    norm_target_root = os.path.abspath(target_root)
 
     # Determine relative subfolder if not provided
     if subfolder is None:
         subfolder = ""
-        configured_roots = get_configured_model_roots(folder_paths_module)
+        configured_roots = sorted(
+            get_configured_model_roots(folder_paths_module),
+            key=lambda r: len(os.path.abspath(r)),
+            reverse=True,
+        )
         for root in configured_roots:
             if is_path_within(norm_source, root):
                 rel_dir = os.path.dirname(os.path.relpath(norm_source, root))
                 if rel_dir and rel_dir != ".":
                     subfolder = rel_dir
                 break
+    else:
+        if not isinstance(subfolder, str):
+            raise ValueError("Invalid subfolder")
+        raw_sub = subfolder.strip()
+        if raw_sub:
+            if (
+                "\0" in raw_sub
+                or os.path.isabs(raw_sub)
+                or raw_sub.startswith(("/", "\\"))
+            ):
+                raise ValueError(f"Invalid subfolder path: {subfolder}")
+            parts = [p for p in raw_sub.replace("\\", "/").split("/") if p not in ("", ".")]
+            if any(p == ".." or ":" in p for p in parts):
+                raise ValueError(f"Invalid subfolder path: {subfolder}")
+            subfolder = os.path.join(*parts) if parts else ""
+        else:
+            subfolder = ""
 
-    target_dir = os.path.join(target_root, subfolder) if subfolder else target_root
+    target_dir = os.path.abspath(os.path.join(norm_target_root, subfolder)) if subfolder else norm_target_root
+    if not is_path_within(target_dir, norm_target_root):
+        raise ValueError(f"Target directory escapes destination root: {subfolder}")
+
+    # No-op if the file is already located in the exact destination directory
+    if os.path.normcase(os.path.abspath(os.path.dirname(norm_source))) == os.path.normcase(target_dir):
+        return {
+            "success": True,
+            "source_path": norm_source,
+            "target_path": norm_source,
+            "target_category": norm_target_cat,
+            "moved_files": [],
+            "left_behind": [],
+            "already_in_place": True,
+        }
+
     os.makedirs(target_dir, exist_ok=True)
 
     filename = os.path.basename(norm_source)

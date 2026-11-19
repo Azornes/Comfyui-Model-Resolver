@@ -42,6 +42,8 @@ CATEGORY_ORDER = [
 _hash_jobs: Dict[str, Dict[str, Any]] = {}
 _hash_cache: Dict[tuple, str] = {}
 _hash_lock = threading.Lock()
+_MAX_HASH_JOBS = 128
+_MAX_HASH_CACHE = 512
 
 
 def _category_sort_key(category: str):
@@ -102,7 +104,8 @@ def build_model_links_markdown(models: List[Dict[str, Any]]) -> str:
     for category in categories:
         lines += [f"**{category}**", ""]
         for model in groups[category]:
-            filename = _display_path(model["name"])[-1]
+            parts = _display_path(model["name"])
+            filename = parts[-1] if parts else model["name"]
             url = strip_secrets(model.get("url") or "")
             if url:
                 lines.append(f"- [{_markdown_link_text(filename)}]({_markdown_url(url)})")
@@ -117,8 +120,10 @@ def build_model_links_markdown(models: List[Dict[str, Any]]) -> str:
         child_prefix = "│   " + ("    " if last_category else "│   ")
         for model_index, model in enumerate(groups[category]):
             last_model = model_index == len(groups[category]) - 1
-            lines.append(f"{child_prefix}{'└──' if last_model else '├──'} {'/'.join(_display_path(model['name']))}")
-    lines += ["```", "", "*Prepared with [Model Resolver](https://github.com/darek-k/comfyui-model-resolver)*"]
+            parts = _display_path(model["name"])
+            display_name = "/".join(parts) if parts else model["name"]
+            lines.append(f"{child_prefix}{'└──' if last_model else '├──'} {display_name}")
+    lines += ["```", "", "*Prepared with [Model Resolver](https://github.com/Azornes/Comfyui-Model-Resolver)*"]
     return "\n".join(lines)
 
 
@@ -175,7 +180,7 @@ def find_download_source(
         # CivArchive hash lookup
         try:
             from .sources.civarchive import search_civarchive_for_file
-            civarchive_match = search_civarchive_for_file(sha256, filename)
+            civarchive_match = search_civarchive_for_file(filename, sha256=sha256)
             if civarchive_match and civarchive_match.download_url:
                 return {
                     "url": civarchive_match.download_url,
@@ -220,7 +225,7 @@ def find_download_source(
         # Model list database (ComfyUI Manager list)
         try:
             from .sources.model_list import search_model_list
-            ml_match = search_model_list(filename, category=category)
+            ml_match = search_model_list(filename, exact_only=True)
             if ml_match and ml_match.match_mode == "exact" and ml_match.download_url:
                 return {
                     "url": ml_match.download_url,
@@ -234,7 +239,7 @@ def find_download_source(
         # HuggingFace filename search
         try:
             from .sources.huggingface import search_huggingface_for_file
-            hf_file_match = search_huggingface_for_file(filename, category=category)
+            hf_file_match = search_huggingface_for_file(filename, exact_only=True)
             if hf_file_match and hf_file_match.match_mode == "exact" and hf_file_match.download_url:
                 return {
                     "url": hf_file_match.download_url,
@@ -248,7 +253,11 @@ def find_download_source(
         # CivitAI filename search
         try:
             from .sources.civitai import search_civitai_for_file
-            civ_file_match = search_civitai_for_file(filename, category=category)
+            civ_file_match = search_civitai_for_file(
+                filename,
+                exact_only=True,
+                model_type=category or None,
+            )
             if (
                 civ_file_match
                 and civ_file_match.match_mode == "exact"
@@ -298,8 +307,10 @@ def compute_sha256(path: str, job_id: Optional[str] = None) -> str:
     """SHA-256 of a file, cached by path, size and modification time."""
     stat = os.stat(path)
     cache_key = (os.path.normcase(os.path.realpath(path)), stat.st_size, stat.st_mtime)
-    if cache_key in _hash_cache:
-        return _hash_cache[cache_key]
+    with _hash_lock:
+        cached = _hash_cache.get(cache_key)
+        if cached is not None:
+            return cached
 
     digest = hashlib.sha256()
     done = 0
@@ -316,14 +327,31 @@ def compute_sha256(path: str, job_id: Optional[str] = None) -> str:
                         _hash_jobs[job_id]["progress"] = done / stat.st_size
 
     sha256 = digest.hexdigest()
-    _hash_cache[cache_key] = sha256
+    with _hash_lock:
+        if len(_hash_cache) >= _MAX_HASH_CACHE:
+            _hash_cache.pop(next(iter(_hash_cache)), None)
+        _hash_cache[cache_key] = sha256
     return sha256
+
+
+def _prune_hash_jobs_locked() -> None:
+    """Keep the background hash job registry bounded."""
+    if len(_hash_jobs) < _MAX_HASH_JOBS:
+        return
+    terminal_ids = [
+        jid
+        for jid, info in _hash_jobs.items()
+        if info.get("status") in ("done", "error")
+    ]
+    for jid in terminal_ids[: max(1, len(_hash_jobs) - _MAX_HASH_JOBS + 1)]:
+        _hash_jobs.pop(jid, None)
 
 
 def start_hash_job(path: str) -> str:
     """Hash a local model file in the background, then look the hash up."""
     job_id = uuid.uuid4().hex[:12]
     with _hash_lock:
+        _prune_hash_jobs_locked()
         _hash_jobs[job_id] = {
             "status": "hashing",
             "progress": 0.0,
@@ -349,7 +377,7 @@ def start_hash_job(path: str) -> str:
                     "url": strip_secrets(result["url"]),
                     "source": result.get("source", ""),
                     "url_source": result.get("url_source", ""),
-                    "match_type": "hash",
+                    "match_type": result.get("match_type") or "hash",
                 }
             else:
                 result = None

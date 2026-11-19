@@ -144,10 +144,11 @@ test('node context menu builds empty, single, and grouped menus with optional ha
   }, {
     formatCategory: () => 'Diffusion models',
   });
-  assert.equal(single.submenu.options.length, 3);
+  assert.equal(single.submenu.options.length, 4);
   single.submenu.options[0].callback();
   single.submenu.options[1].callback();
   single.submenu.options[2].callback();
+  single.submenu.options[3].callback();
   assert.deepEqual(calls, [['resolver', 'pending.gguf']]);
 
   const grouped = buildModelResolverNodeMenu([
@@ -156,7 +157,7 @@ test('node context menu builds empty, single, and grouped menus with optional ha
   ]);
   assert.equal(grouped.submenu.options.length, 2);
   assert.equal(grouped.submenu.options[0].has_submenu, true);
-  assert.equal(grouped.submenu.options[0].submenu.options.length, 3);
+  assert.equal(grouped.submenu.options[0].submenu.options.length, 4);
 });
 
 test('node context conversion prefers resolved paths and derives safe display fields', () => {

@@ -68,6 +68,7 @@ def download_huggingface_worker(
     category: str = "",
     *,
     dependencies: Any = None,
+    expected_sha256: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Download a HuggingFace file using the isolated worker subprocess.
@@ -111,7 +112,10 @@ def download_huggingface_worker(
     staging = _staging_dir(dest_dir, download_id)
     start_time = time.time()
 
-    expected_sha256 = facade._extract_expected_sha256(metadata) if hasattr(facade, "_extract_expected_sha256") else None
+    expected_sha256 = (
+        expected_sha256
+        or (facade._extract_expected_sha256(metadata) if hasattr(facade, "_extract_expected_sha256") else None)
+    )
     if not expected_sha256:
         try:
             from ..sources.huggingface import get_huggingface_file_sha256
@@ -270,10 +274,19 @@ def download_huggingface_worker(
         proc.wait(timeout=_PROCESS_JOIN_TIMEOUT)
     except subprocess.TimeoutExpired:
         proc.kill()
+    stderr_reader.join(timeout=1.0)
+    stderr_text = "".join(stderr_lines).strip()
 
     if error_msg or not result_path or not os.path.exists(result_path):
         _remove_staging(staging)
-        final_err = error_msg or "Download failed without error message"
+        if stderr_text:
+            log.debug(f"[hf-worker stderr] {stderr_text}")
+        stderr_tail = stderr_text.splitlines()[-1].strip() if stderr_text else ""
+        final_err = error_msg or (
+            f"Worker process failed: {stderr_tail}"
+            if stderr_tail
+            else "Download failed without error message"
+        )
         with facade.download_lock:
             state = facade.download_progress.get(download_id)
             if state is not None:
@@ -283,9 +296,87 @@ def download_huggingface_worker(
         log.error(f"✗ Hugging Face worker download failed: {filename} - {final_err}")
         return {"success": False, "download_id": download_id, "path": dest_path, "error": final_err}
 
+    # Verify safetensors header & tensor bounds before publishing
+    if hasattr(facade, "check_safetensors_damage"):
+        damage = facade.check_safetensors_damage(result_path)
+        if damage:
+            _remove_staging(staging)
+            error_msg = f"Safetensors file is corrupted or truncated ({damage})"
+            with facade.download_lock:
+                state = facade.download_progress.get(download_id)
+                if state is not None:
+                    state["status"] = "error"
+                    state["error"] = error_msg
+                    state["speed"] = 0
+                    state["sha256_verified"] = False
+            log.error(f"✗ Hugging Face worker download rejected: {filename} - {error_msg}")
+            return {
+                "success": False,
+                "download_id": download_id,
+                "path": dest_path,
+                "error": error_msg,
+                "sha256_verified": False,
+            }
+
+    # Compute actual SHA-256 when expected_sha256 is present to verify file integrity
+    actual_sha256: Optional[str] = None
+    sha256_verified: Optional[bool] = None
+    if expected_sha256:
+        with facade.download_lock:
+            state = facade.download_progress.get(download_id)
+            if state is not None:
+                state["status"] = "verifying"
+                state["speed"] = 0
+        try:
+            import hashlib
+            hasher = hashlib.sha256()
+            with open(result_path, "rb") as fh:
+                while True:
+                    chunk = fh.read(8 * 1024 * 1024)
+                    if not chunk:
+                        break
+                    hasher.update(chunk)
+            actual_sha256 = hasher.hexdigest().lower()
+            expected_norm = str(expected_sha256).strip().lower()
+            if actual_sha256 != expected_norm:
+                _remove_staging(staging)
+                error_msg = (
+                    f"SHA256 mismatch: expected {expected_norm[:16]}..., "
+                    f"got {actual_sha256[:16]}..."
+                )
+                with facade.download_lock:
+                    state = facade.download_progress.get(download_id)
+                    if state is not None:
+                        state["status"] = "error"
+                        state["error"] = error_msg
+                        state["speed"] = 0
+                        state["sha256"] = actual_sha256
+                        state["expected_sha256"] = expected_norm
+                        state["sha256_verified"] = False
+                log.error(f"✗ Hugging Face worker download rejected: {filename} - {error_msg}")
+                return {
+                    "success": False,
+                    "download_id": download_id,
+                    "path": dest_path,
+                    "error": error_msg,
+                    "sha256": actual_sha256,
+                    "expected_sha256": expected_norm,
+                    "sha256_verified": False,
+                }
+            sha256_verified = True
+        except Exception as hash_exc:
+            log.warning(f"Could not verify SHA256 for {filename}: {hash_exc}")
+
     try:
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-        os.replace(result_path, dest_path)
+        try:
+            os.replace(result_path, dest_path)
+        except OSError as replace_err:
+            import errno
+            if replace_err.errno == errno.EXDEV:
+                shutil.move(result_path, dest_path)
+            else:
+                raise
     except Exception as e:
         _remove_staging(staging)
         with facade.download_lock:
@@ -295,20 +386,19 @@ def download_huggingface_worker(
                 state["error"] = f"Could not move downloaded file into place: {e}"
         return {"success": False, "download_id": download_id, "path": dest_path, "error": str(e)}
 
+    # Only remove our isolated per-download staging directory; never wipe the
+    # global ~/.cache/huggingface/hub repo folder (breaks concurrent downloads
+    # from the same repo and deletes other tools' cached models).
     _remove_staging(staging)
-    try:
-        from .hf_cache import clear_hf_cache_for_repo
-        clear_hf_cache_for_repo(repo_id)
-    except Exception as e:
-        log.debug(f"HF cache cleanup skipped: {e}")
     file_size = os.path.getsize(dest_path) if os.path.exists(dest_path) else total_size
 
+    verified_sha256 = actual_sha256 if sha256_verified else None
     metadata_path = None
     if hasattr(facade, "write_model_resolver_metadata"):
         metadata_for_sidecar = dict(metadata) if isinstance(metadata, dict) else {}
-        if expected_sha256:
-            metadata_for_sidecar["sha256"] = expected_sha256
-            metadata_for_sidecar["hash"] = expected_sha256
+        if verified_sha256:
+            metadata_for_sidecar["sha256"] = verified_sha256
+            metadata_for_sidecar["hash"] = verified_sha256
         metadata_path = facade.write_model_resolver_metadata(
             dest_path,
             metadata_for_sidecar,
@@ -325,10 +415,11 @@ def download_huggingface_worker(
             state["downloaded"] = file_size
             state["total_size"] = file_size
             state["speed"] = 0
-            if expected_sha256:
-                state["sha256"] = expected_sha256
+            if verified_sha256:
+                state["sha256"] = verified_sha256
                 state["expected_sha256"] = expected_sha256
-                state["sha256_source"] = "huggingface_api"
+                state["sha256_verified"] = True
+                state["sha256_source"] = "verified_file"
             if metadata_path:
                 state["metadata_path"] = metadata_path
 
@@ -342,6 +433,7 @@ def download_huggingface_worker(
         "path": dest_path,
         "size": file_size,
         "metadata_path": metadata_path,
-        "sha256": expected_sha256,
+        "sha256": verified_sha256,
         "expected_sha256": expected_sha256,
+        "sha256_verified": sha256_verified,
     }

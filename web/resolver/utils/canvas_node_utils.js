@@ -58,26 +58,66 @@ export function calculateCanvasCenterPosition(canvas = null) {
 export function assignModelPathToNode(node, modelPath, preferredKey = null) {
     if (!node || !Array.isArray(node.widgets)) return false;
 
-    const filename = String(modelPath || "").replace(/\\/g, "/");
-    const basename = filename.split("/").pop();
+    const normalizedPath = String(modelPath || "").trim().replace(/\\/g, "/");
+    if (!normalizedPath) return false;
+    const isAbsolutePath = /^([a-zA-Z]:\/|\/)/.test(normalizedPath);
+    const basename = normalizedPath.split("/").pop() || normalizedPath;
+    const fallbackValue = isAbsolutePath ? basename : normalizedPath;
 
     const findWidget = (key) =>
         node.widgets.find((w) => String(w?.name || "").trim().toLowerCase() === key.toLowerCase());
+
+    const applyWidgetValue = (widget, nextValue) => {
+        const prevValue = widget.value;
+        widget.value = nextValue;
+        try {
+            const canvas = typeof window !== "undefined" ? window.app?.canvas : null;
+            widget.callback?.(nextValue, canvas, node, node.pos, null);
+        } catch {
+            // Ignore widget callback errors from third-party nodes
+        }
+        try {
+            node.onWidgetChanged?.(widget.name, nextValue, prevValue, widget);
+        } catch {
+            // Ignore node change hook errors
+        }
+    };
 
     const trySetWidget = (widget) => {
         if (!widget) return false;
         const values = widget.options?.values;
         if (Array.isArray(values) && values.length) {
-            const match = values.find((v) => {
-                const valStr = String(v?.value ?? v?.name ?? v ?? "").replace(/\\/g, "/");
-                return valStr === filename || valStr.split("/").pop() === basename;
-            });
+            const getOptionText = (v) => String(v?.value ?? v?.name ?? v ?? "").replace(/\\/g, "/");
+            // 1. Exact relative path match (case-sensitive, then case-insensitive)
+            let match = values.find((v) => getOptionText(v) === normalizedPath);
+            if (match === undefined) {
+                const lowerNorm = normalizedPath.toLowerCase();
+                match = values.find((v) => getOptionText(v).toLowerCase() === lowerNorm);
+            }
+            // 2. Suffix path match when full absolute path was provided
+            if (match === undefined && isAbsolutePath) {
+                const lowerNorm = normalizedPath.toLowerCase();
+                match = values.find((v) => {
+                    const opt = getOptionText(v).toLowerCase();
+                    return opt && lowerNorm.endsWith("/" + opt);
+                });
+            }
+            // 3. Basename fallback only when unambiguous (or exact basename)
+            if (match === undefined) {
+                const lowerBase = basename.toLowerCase();
+                const baseMatches = values.filter(
+                    (v) => (getOptionText(v).split("/").pop() || "").toLowerCase() === lowerBase
+                );
+                if (baseMatches.length === 1) {
+                    match = baseMatches[0];
+                }
+            }
             if (match !== undefined) {
-                widget.value = match?.value ?? match?.name ?? match;
+                applyWidgetValue(widget, match?.value ?? match?.name ?? match);
                 return true;
             }
         }
-        widget.value = filename;
+        applyWidgetValue(widget, fallbackValue);
         return true;
     };
 
@@ -135,7 +175,7 @@ const resolveModelToNodeStore = async () => {
 };
 
 export async function addModelLoaderToCanvas(modelOrInfo, options = {}) {
-    const graph = window.app?.graph || window.app?.canvas?.graph;
+    const graph = window.app?.canvas?.graph || window.app?.graph;
     const liteGraph = window.LiteGraph || globalThis.LiteGraph;
     if (!graph || typeof liteGraph?.createNode !== "function") {
         showNotification("LiteGraph is not available on this canvas.", "error");
@@ -144,7 +184,16 @@ export async function addModelLoaderToCanvas(modelOrInfo, options = {}) {
 
     const modelPath = typeof modelOrInfo === "string"
         ? modelOrInfo
-        : (modelOrInfo?.full_path || modelOrInfo?.path || modelOrInfo?.resolved_path || modelOrInfo?.filename || modelOrInfo?.name || modelOrInfo?.original_path || "");
+        : (
+            modelOrInfo?.relative_path
+            || modelOrInfo?.original_path
+            || modelOrInfo?.filename
+            || modelOrInfo?.name
+            || modelOrInfo?.full_path
+            || modelOrInfo?.path
+            || modelOrInfo?.resolved_path
+            || ""
+        );
     const rawCategory = typeof modelOrInfo === "string"
         ? (options.category || "checkpoints")
         : (modelOrInfo?.category || options.category || "checkpoints");

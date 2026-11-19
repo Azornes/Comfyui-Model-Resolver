@@ -49,42 +49,81 @@ def patch_lora_stack_nodes() -> None:
         if not classes_to_patch:
             return
 
-        @classmethod
-        def _validate_dynamic_loras(cls: Any, *args: Any, **kwargs: Any) -> Any:
-            loras = kwargs.get("loras")
-            if loras is None and args:
-                for arg in args:
-                    if isinstance(arg, list) and (not arg or isinstance(arg[0], dict)):
-                        loras = arg
-                        break
-            if isinstance(loras, list):
-                try:
-                    import folder_paths
-                except Exception:
-                    folder_paths = None
-
-                for row in loras:
-                    if not isinstance(row, dict):
-                        continue
-                    enabled = row.get("enabled", True)
-                    if enabled is False or str(enabled).strip().lower() in ("false", "0"):
-                        continue
-                    strength = row.get("strength", 1.0)
+        def _make_validator(original_validate: Any) -> Any:
+            @classmethod
+            def _validate_dynamic_loras(cls: Any, *args: Any, **kwargs: Any) -> Any:
+                loras = kwargs.get("loras")
+                if loras is None and args:
+                    for arg in args:
+                        if isinstance(arg, list) and (not arg or isinstance(arg[0], dict)):
+                            loras = arg
+                            break
+                if isinstance(loras, list):
                     try:
-                        if float(strength) == 0.0:
+                        import folder_paths
+                    except Exception:
+                        folder_paths = None
+
+                    available_normalized = None
+                    if folder_paths:
+                        try:
+                            raw_available = folder_paths.get_filename_list("loras") or []
+                            available_normalized = {
+                                str(item).replace("\\", "/") for item in raw_available
+                            }
+                        except Exception:
+                            available_normalized = None
+
+                    for row in loras:
+                        if not isinstance(row, dict):
                             continue
-                    except (TypeError, ValueError):
+                        enabled = row.get("enabled", True)
+                        if enabled is False or str(enabled).strip().lower() in (
+                            "false",
+                            "0",
+                            "off",
+                            "disable",
+                            "disabled",
+                        ):
+                            continue
+                        strength = row.get("strength", row.get("strength_model", 1.0))
+                        has_clip = "strength_clip" in row
+                        try:
+                            model_zero = float(strength) == 0.0
+                        except (TypeError, ValueError):
+                            model_zero = False
+                        try:
+                            clip_zero = float(row.get("strength_clip", 1.0)) == 0.0
+                        except (TypeError, ValueError):
+                            clip_zero = False
+                        if model_zero and (clip_zero if has_clip else True):
+                            continue
+                        lora_name = row.get("lora_name")
+                        if not lora_name or not isinstance(lora_name, str):
+                            continue
+                        cleaned_name = lora_name.strip()
+                        if not cleaned_name or cleaned_name.lower() == "none":
+                            continue
+                        if available_normalized is not None:
+                            normalized_name = cleaned_name.replace("\\", "/")
+                            if normalized_name not in available_normalized:
+                                return f"Value not in list: {lora_name}"
+
+                if callable(original_validate):
+                    non_lora_kwargs = {k: v for k, v in kwargs.items() if k != "loras"}
+                    try:
+                        if non_lora_kwargs:
+                            return original_validate(**non_lora_kwargs)
+                    except TypeError:
                         pass
-                    lora_name = row.get("lora_name")
-                    if lora_name and folder_paths:
-                        available = folder_paths.get_filename_list("loras")
-                        if lora_name not in available:
-                            return f"Value not in list: {lora_name}"
-            return True
+                return True
+
+            return _validate_dynamic_loras
 
         for target_cls in classes_to_patch:
             if not getattr(target_cls, "_model_resolver_patched", False):
-                target_cls.validate_inputs = _validate_dynamic_loras
+                existing_validate = target_cls.__dict__.get("validate_inputs")
+                target_cls.validate_inputs = _make_validator(existing_validate)
                 target_cls._model_resolver_patched = True
     except Exception as e:
         log.debug(f"Failed to patch lora stack nodes: {e}")

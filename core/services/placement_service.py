@@ -56,6 +56,14 @@ class PlacementService:
         if not path:
             return self.web.json_response({"error": "path parameter is required"}, status=400)
 
+        from ..path_utils import is_path_in_configured_model_roots
+
+        if not is_path_in_configured_model_roots(path):
+            return self.web.json_response(
+                {"error": "Model path is outside configured model roots"},
+                status=403,
+            )
+
         classification = await self.asyncio.to_thread(classify_model_file, path)
         misplacement = await self.asyncio.to_thread(check_model_misplacement, path)
 
@@ -67,12 +75,18 @@ class PlacementService:
 
     async def move_model(self, request) -> Any:
         """Move a misplaced model and its sidecars safely to target category."""
-        payload: Dict[str, Any] = await read_optional_object_payload(request)
-        path = read_text_field(payload, "path", contract_name="Placement move path")
-        target_category = read_text_field(
-            payload, "target_category", contract_name="Placement move target_category"
-        )
-        subfolder = str(payload.get("subfolder") or "").strip() or None
+        try:
+            payload: Dict[str, Any] = await read_optional_object_payload(request)
+            path = read_text_field(payload, "path", contract_name="Placement move path")
+            target_category = read_text_field(
+                payload, "target_category", contract_name="Placement move target_category"
+            )
+            raw_subfolder = payload.get("subfolder")
+            if raw_subfolder is not None and not isinstance(raw_subfolder, str):
+                raise TypeError("Placement move subfolder must be a string")
+            subfolder = raw_subfolder.strip() if isinstance(raw_subfolder, str) and raw_subfolder.strip() else None
+        except (TypeError, ValueError) as exc:
+            return self.web.json_response({"error": str(exc)}, status=400)
 
         try:
             result = await self.asyncio.to_thread(

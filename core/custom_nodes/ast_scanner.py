@@ -19,14 +19,18 @@ _schema_lock = threading.RLock()
 # Built-in fallbacks for standard ComfyUI nodes or known multi-model loaders
 _BUILTIN_NODE_WIDGET_SCHEMA_HINTS: Dict[str, List[Dict[str, Any]]] = {
     "LTXAVTextEncoderLoader": [
-        {"name": "text_encoder", "folders": ["text_encoders"]},
-        {"name": "ckpt_name", "folders": ["checkpoints"]},
+        {"name": "text_encoder", "index": 0, "folders": ["text_encoders"]},
+        {"name": "ckpt_name", "index": 1, "folders": ["checkpoints"]},
     ],
     "CheckpointLoader": [
-        {"name": "config_name", "folders": ["configs"]},
-        {"name": "ckpt_name", "folders": ["checkpoints"]},
+        {"name": "config_name", "index": 0, "folders": ["configs"]},
+        {"name": "ckpt_name", "index": 1, "folders": ["checkpoints"]},
     ],
 }
+
+# Primitive ComfyUI input types that serialize as node widgets (all other string
+# types like MODEL, CLIP, VAE, IMAGE, LATENT, CONDITIONING are connection sockets).
+_PRIMITIVE_WIDGET_TYPES = frozenset({"INT", "FLOAT", "STRING", "BOOLEAN", "COMBO"})
 
 
 def _dedupe_preserve_order(values: List[str]) -> List[str]:
@@ -165,6 +169,7 @@ def _extract_widget_schema_from_input_types_ast(
         return []
 
     schema: List[Dict[str, Any]] = []
+    current_widget_index = 0
     for key_node, section_expr in zip(top_dict.keys, top_dict.values, strict=False):
         if not isinstance(key_node, ast.Constant) or not isinstance(key_node.value, str):
             continue
@@ -184,6 +189,15 @@ def _extract_widget_schema_from_input_types_ast(
             if isinstance(widget_value_expr, ast.Tuple) and widget_value_expr.elts:
                 first_expr = widget_value_expr.elts[0]
 
+            # Connection-only sockets (e.g. ("MODEL",), ("CLIP",), ("IMAGE",)) do not
+            # occupy serialized widget slots in ComfyUI workflow widgets_values.
+            if (
+                isinstance(first_expr, ast.Constant)
+                and isinstance(first_expr.value, str)
+                and first_expr.value.upper() not in _PRIMITIVE_WIDGET_TYPES
+            ):
+                continue
+
             folders = _extract_folder_names_from_ast_expr(first_expr, folder_vars)
             if folders:
                 normalized_folders = _dedupe_preserve_order(
@@ -192,8 +206,11 @@ def _extract_widget_schema_from_input_types_ast(
                 if normalized_folders:
                     schema.append({
                         "name": widget_name,
+                        "index": current_widget_index,
                         "folders": normalized_folders,
                     })
+
+            current_widget_index += 1
 
     return schema
 
@@ -281,30 +298,51 @@ def scan_custom_node_widget_schemas(
                 except Exception:
                     continue
 
+                file_class_schemas: Dict[str, List[Dict[str, Any]]] = {}
+                node_class_aliases: Dict[str, List[str]] = {}
+
                 for node in tree.body:
-                    if not isinstance(node, ast.ClassDef):
-                        continue
-                    input_types_fn = None
-                    for child in node.body:
-                        if isinstance(child, ast.FunctionDef) and child.name == "INPUT_TYPES":
-                            input_types_fn = child
-                            break
-                    if input_types_fn is None:
-                        continue
+                    if isinstance(node, ast.ClassDef):
+                        input_types_fn = None
+                        for child in node.body:
+                            if isinstance(child, ast.FunctionDef) and child.name == "INPUT_TYPES":
+                                input_types_fn = child
+                                break
+                        if input_types_fn is None:
+                            continue
 
-                    schema = _extract_widget_schema_from_input_types_ast(input_types_fn)
-                    if not schema:
-                        continue
+                        schema = _extract_widget_schema_from_input_types_ast(input_types_fn)
+                        if not schema:
+                            continue
+                        file_class_schemas[node.name] = schema
+                    elif isinstance(node, ast.Assign):
+                        is_mapping_assign = any(
+                            isinstance(t, ast.Name) and t.id == "NODE_CLASS_MAPPINGS"
+                            for t in node.targets
+                        )
+                        if is_mapping_assign and isinstance(node.value, ast.Dict):
+                            for k_node, v_node in zip(node.value.keys, node.value.values, strict=False):
+                                if (
+                                    isinstance(k_node, ast.Constant)
+                                    and isinstance(k_node.value, str)
+                                    and isinstance(v_node, ast.Name)
+                                ):
+                                    node_class_aliases.setdefault(v_node.id, []).append(k_node.value)
 
-                    existing = hints.get(node.name)
+                def _register_schema(type_key: str, schema_entries: List[Dict[str, Any]]) -> None:
+                    existing = hints.get(type_key)
                     if not existing:
-                        hints[node.name] = schema
-                        continue
-
+                        hints[type_key] = schema_entries
+                        return
                     existing_scored = sum(1 for item in existing if item.get("folders"))
-                    schema_scored = sum(1 for item in schema if item.get("folders"))
+                    schema_scored = sum(1 for item in schema_entries if item.get("folders"))
                     if schema_scored > existing_scored:
-                        hints[node.name] = schema
+                        hints[type_key] = schema_entries
+
+                for class_name, schema in file_class_schemas.items():
+                    _register_schema(class_name, schema)
+                    for alias in node_class_aliases.get(class_name, []):
+                        _register_schema(alias, schema)
 
     return hints
 
@@ -361,11 +399,20 @@ def resolve_ast_node_widget_category(
                 if folders:
                     return folders[0]
 
-    # Second attempt: match by widget_index if in range
-    if widget_index is not None and 0 <= widget_index < len(hints):
-        entry = hints[widget_index]
-        folders = entry.get("folders") or []
-        if folders:
-            return folders[0]
+    # Second attempt: match by explicit widget_index when recorded on schema entries
+    if widget_index is not None:
+        has_explicit_indices = any("index" in entry for entry in hints)
+        if has_explicit_indices:
+            for entry in hints:
+                if entry.get("index") == widget_index:
+                    folders = entry.get("folders") or []
+                    if folders:
+                        return folders[0]
+            return None
+        if 0 <= widget_index < len(hints):
+            entry = hints[widget_index]
+            folders = entry.get("folders") or []
+            if folders:
+                return folders[0]
 
     return None
