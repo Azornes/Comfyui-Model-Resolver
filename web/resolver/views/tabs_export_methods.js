@@ -1,11 +1,16 @@
-import { escapeHtml } from "../utils/html_utils.js";
-import { app } from "../../../../scripts/app.js";
-import { api } from "../../../../scripts/api.js";
+import { escapeHtml, safeStorage } from "../utils/html_utils.js";
+import { app } from "../../../../../scripts/app.js";
+import { api } from "../../../../../scripts/api.js";
 
 export const tabsExportMethods = {
     findLiveNodes(res) {
         if (!app?.graph) return [];
         const results = [];
+        const resolveNode = (graph, id) => {
+            if (!graph || id == null) return null;
+            return graph.getNodeById?.(id)
+                || (Number.isFinite(Number(id)) ? graph.getNodeById?.(Number(id)) : null);
+        };
 
         if (res.is_top_level === false && res.subgraph_id) {
             const stack = [app.graph];
@@ -16,7 +21,7 @@ export const tabsExportMethods = {
                 seen.add(graph);
 
                 if (graph.id === res.subgraph_id) {
-                    const node = graph.getNodeById?.(res.node_id);
+                    const node = resolveNode(graph, res.node_id);
                     if (node) results.push(node);
                 }
 
@@ -25,7 +30,7 @@ export const tabsExportMethods = {
                 }
             }
         } else {
-            const node = app.graph.getNodeById?.(res.node_id);
+            const node = resolveNode(app.graph, res.node_id);
             if (node) results.push(node);
         }
 
@@ -63,7 +68,57 @@ export const tabsExportMethods = {
 
         // Collect all models: missing models and loaded models
         const missing = Array.isArray(this.missingModels) ? this.missingModels : [];
-        const loadedInventory = (this.workflowLoadedModelCaches?.get(this.getWorkflowKey(workflow)) || {}).models || [];
+
+        const workflowSignature = this.getWorkflowSignature?.(workflow);
+        let loadedModelsData = this.getCachedLoadedModelsForSignature?.(workflowSignature);
+        if (!loadedModelsData && this.workflowLoadedModelCaches) {
+            const queueKey = this.getWorkflowKey ? this.getWorkflowKey(workflow) : this.getWorkflowScopedQueueKey?.();
+            const cached = queueKey ? this.workflowLoadedModelCaches.get(queueKey) : null;
+            if (cached?.data?.loaded_models) {
+                loadedModelsData = cached.data;
+            } else if (Array.isArray(cached?.models)) {
+                loadedModelsData = { loaded_models: cached.models };
+            }
+        }
+        if (!loadedModelsData && Array.isArray(this.cachedLoadedModelsData?.loaded_models)) {
+            loadedModelsData = this.cachedLoadedModelsData;
+        }
+
+        if (!loadedModelsData) {
+            if (this.contentElement) {
+                this.contentElement.innerHTML = '<div class="mr-export-header"><p class="mr-export-hint">Scanning workflow models...</p></div>';
+            }
+            try {
+                loadedModelsData = this.fetchJson
+                    ? await this.fetchJson(
+                        '/model_resolver/loaded',
+                        {
+                            method: 'POST',
+                            body: JSON.stringify({ workflow })
+                        },
+                        'Scan workflow models for export'
+                    )
+                    : await (await api.fetchApi('/model_resolver/loaded', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ workflow })
+                    })).json();
+
+                if (loadedModelsData && workflowSignature) {
+                    this.cachedLoadedModelsSignature = workflowSignature;
+                    this.cachedLoadedModelsData = loadedModelsData;
+                    this.saveLoadedModelsCacheForActiveWorkflow?.();
+                }
+            } catch (error) {
+                console.warn('Model Resolver: failed to fetch loaded models for export', error);
+            }
+        }
+
+        if (this.activeTab !== 'export' || !this.contentElement) return;
+
+        const loadedInventory = Array.isArray(loadedModelsData?.loaded_models)
+            ? loadedModelsData.loaded_models
+            : (Array.isArray(loadedModelsData?.models) ? loadedModelsData.models : []);
 
         const seenKeys = new Set();
         const entries = [];
@@ -72,14 +127,28 @@ export const tabsExportMethods = {
             const originalPath = item.original_path || item.name || item.filename || '';
             const category = item.category || 'unknown';
             const key = `${category}|${originalPath}`;
-            if (!originalPath || seenKeys.has(key)) continue;
+            if (!originalPath) continue;
+
+            const fullPath = item.full_path || item.path || item.resolved_path || '';
+            if (seenKeys.has(key)) {
+                const existing = entries.find((e) => `${e.category}|${e.original_path}` === key);
+                if (existing) {
+                    const existingRefs = existing.all_node_refs || [existing];
+                    const newRefs = item.all_node_refs || [item];
+                    existing.all_node_refs = [...existingRefs, ...newRefs];
+                    if (!existing.full_path && fullPath) {
+                        existing.full_path = fullPath;
+                    }
+                }
+                continue;
+            }
             seenKeys.add(key);
 
             entries.push({
                 ...item,
                 original_path: originalPath,
                 category: category,
-                full_path: item.full_path || item.path || '',
+                full_path: fullPath,
                 all_node_refs: item.all_node_refs || [item]
             });
         }
@@ -116,7 +185,10 @@ export const tabsExportMethods = {
 
         const loadOption = (name) => {
             try {
-                return localStorage.getItem(`ModelResolver.export.${name}`) !== 'false';
+                const stored = safeStorage
+                    ? safeStorage.getItem(`ModelResolver.export.${name}`)
+                    : localStorage.getItem(`ModelResolver.export.${name}`);
+                return stored !== 'false';
             } catch {
                 return true;
             }
@@ -211,8 +283,13 @@ export const tabsExportMethods = {
 
         this.contentElement.querySelectorAll('[data-export-option]').forEach((box) => {
             box.addEventListener('change', () => {
+                const val = box.checked ? 'true' : 'false';
                 try {
-                    localStorage.setItem(`ModelResolver.export.${box.dataset.exportOption}`, box.checked ? 'true' : 'false');
+                    if (safeStorage) {
+                        safeStorage.setItem(`ModelResolver.export.${box.dataset.exportOption}`, val);
+                    } else {
+                        localStorage.setItem(`ModelResolver.export.${box.dataset.exportOption}`, val);
+                    }
                 } catch {
                     // Ignore localStorage issues
                 }
@@ -252,28 +329,45 @@ export const tabsExportMethods = {
         }
 
         try {
-            const response = await api.fetchApi('/model_resolver/export/lookup', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    models: pending.map(({ entry }) => ({
-                        filename: entry.original_path,
-                        category: entry.category,
-                        existing_url: entry.workflow_url || '',
-                        sha256: entry.workflow_sha256 || entry.sha256 || ''
-                    }))
-                })
-            });
-            const result = await response.json();
-            if (this.activeTab !== 'export' || !this.contentElement.isConnected) return;
-            (result.links || []).forEach((link, i) => {
-                const { entry, index } = pending[i];
+            const result = this.fetchJson
+                ? await this.fetchJson('/model_resolver/export/lookup', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        models: pending.map(({ entry }) => ({
+                            filename: entry.original_path,
+                            category: entry.category,
+                            existing_url: entry.workflow_url || '',
+                            sha256: entry.workflow_sha256 || entry.sha256 || ''
+                        }))
+                    })
+                }, 'Export link lookup')
+                : await (await api.fetchApi('/model_resolver/export/lookup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        models: pending.map(({ entry }) => ({
+                            filename: entry.original_path,
+                            category: entry.category,
+                            existing_url: entry.workflow_url || '',
+                            sha256: entry.workflow_sha256 || entry.sha256 || ''
+                        }))
+                    })
+                })).json();
+
+            if (this.activeTab !== 'export' || !this.contentElement?.isConnected) return;
+            (result?.links || []).forEach((link, i) => {
+                const target = pending[i];
+                if (!target) return;
+                const { entry, index } = target;
                 const input = inputOf(index);
                 if (input && input.value.trim()) return; // User already typed a URL
                 if (link) {
                     setLink(index, link);
                 } else {
                     this.exportLinks[keyOf(entry)] = null;
+                    if (sourceOf(index)) {
+                        sourceOf(index).textContent = 'no public link';
+                    }
                 }
             });
         } catch (error) {
@@ -289,18 +383,24 @@ export const tabsExportMethods = {
         const label = button.textContent;
         button.disabled = true;
         try {
-            const response = await api.fetchApi('/model_resolver/export/hash', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ full_path: entry.full_path })
-            });
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.error || `API error: ${response.status}`);
+            const data = this.fetchJson
+                ? await this.fetchJson('/model_resolver/export/hash', {
+                    method: 'POST',
+                    body: JSON.stringify({ full_path: entry.full_path })
+                }, 'Start export hash')
+                : await (await api.fetchApi('/model_resolver/export/hash', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ full_path: entry.full_path })
+                })).json();
 
             while (true) {
+                if (!button.isConnected) return;
                 await new Promise((resolve) => setTimeout(resolve, 800));
-                const pollResp = await api.fetchApi(`/model_resolver/export/hash/${data.job_id}`);
-                const job = await pollResp.json();
+                if (!button.isConnected) return;
+                const job = this.fetchJson
+                    ? await this.fetchJson(`/model_resolver/export/hash/${data.job_id}`, { silent: true }, 'Poll export hash')
+                    : await (await api.fetchApi(`/model_resolver/export/hash/${data.job_id}`)).json();
                 if (job.status === 'hashing') {
                     button.textContent = `Hashing ${Math.round((job.progress || 0) * 100)}%`;
                 } else if (job.status === 'looking_up') {
@@ -333,15 +433,20 @@ export const tabsExportMethods = {
         let markdown = '';
         if (options.note) {
             try {
-                const response = await api.fetchApi('/model_resolver/export/markdown', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        models: models.map(({ name, url, directory }) => ({ name, url, directory }))
-                    })
-                });
-                const data = await response.json();
-                if (!response.ok) throw new Error(data.error || `API error: ${response.status}`);
+                const data = this.fetchJson
+                    ? await this.fetchJson('/model_resolver/export/markdown', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            models: models.map(({ name, url, directory }) => ({ name, url, directory }))
+                        })
+                    }, 'Build export markdown')
+                    : await (await api.fetchApi('/model_resolver/export/markdown', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            models: models.map(({ name, url, directory }) => ({ name, url, directory }))
+                        })
+                    })).json();
                 markdown = data.markdown;
             } catch (error) {
                 this.showNotification('Could not build the model links note: ' + error.message, 'error');

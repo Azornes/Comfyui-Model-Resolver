@@ -65,6 +65,7 @@ export const modelInfoMethods = {
             && model?.node_id !== undefined
             && model?.node_id !== null
             && model?.node_id !== '';
+        const showSwapModel = isLoadedModelContext || isWorkflowNodeContext;
         const showUseOnCanvas = this.canUseModelOnCanvas(model);
         this.setContextMenuItemVisible('showInfo', isSourceModelContext);
         this.setContextMenuItemVisible('showMore', canShowMore);
@@ -73,13 +74,14 @@ export const modelInfoMethods = {
         this.setContextMenuItemVisible('source', showSourceLink);
         this.setContextMenuItemVisible('civitai', false);
         this.setContextMenuItemVisible('locateNode', showLocateNode);
+        this.setContextMenuItemVisible('swapModel', showSwapModel);
         this.setContextMenuItemVisible('switchWorkflow', showSwitchWorkflow);
         this.setContextMenuItemVisible('compareHashes', showCompareHashes);
         this.setContextMenuItemVisible('openFolder', showOpenFolder);
         this.setContextMenuDividerVisible('source', showSourceLink && (isSourceModelContext || canShowMore || showUseOnCanvas || showSuggestSubfolder));
         this.setContextMenuDividerVisible(
             'workflow',
-            (showLocateNode || showSwitchWorkflow) && (isSourceModelContext || canShowMore || showSourceLink)
+            (showLocateNode || showSwitchWorkflow || showSwapModel) && (isSourceModelContext || canShowMore || showSourceLink)
         );
         this.setContextMenuDividerVisible('folder', (showCompareHashes || showOpenFolder) && (isSourceModelContext || canShowMore || showSourceLink || showSwitchWorkflow));
         this.updateContextMenuSourceItem(sourceLink);
@@ -135,6 +137,8 @@ export const modelInfoMethods = {
             this.compareLocalModelHashesWithCurrentFinding(model);
         } else if (action === 'switchWorkflow') {
             this.switchToDownloadWorkflow(model);
+        } else if (action === 'swapModel') {
+            this.openModelSwapDialog?.(model);
         } else if (action === 'locateNode') {
             if (typeof this.cycleLocateMissingModel === 'function') {
                 this.cycleLocateMissingModel(model);

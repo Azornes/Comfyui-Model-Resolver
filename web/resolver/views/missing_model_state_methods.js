@@ -1,17 +1,28 @@
 import { normalizeSourceKey } from '../utils/source_labels.js';
 
 export const missingModelStateMethods = {
-    getBestLocalMatch(missing = {}, minConfidence = 0) {
+    getBestLocalMatch(missing = {}, minConfidence = 0, { excludeMismatch = false } = {}) {
         const matches = Array.isArray(missing.matches) ? missing.matches : [];
+        const isMismatch = match => Boolean(match?.category_mismatch || match?.extra?.category_mismatch);
         return matches
-            .filter(match => Number(match.confidence) >= minConfidence)
-            .sort((a, b) => Number(b.confidence || 0) - Number(a.confidence || 0))[0] || null;
+            .filter(match => {
+                if (Number(match.confidence) < minConfidence) return false;
+                if (excludeMismatch && isMismatch(match)) return false;
+                return true;
+            })
+            .sort((a, b) => {
+                const aMis = isMismatch(a) ? 1 : 0;
+                const bMis = isMismatch(b) ? 1 : 0;
+                if (aMis !== bMis) return aMis - bMis;
+                return Number(b.confidence || 0) - Number(a.confidence || 0);
+            })[0] || null;
     },
 
     getMissingModelSummaryStats(missingModels = []) {
         return missingModels.reduce((stats, missing) => {
             const best = this.getBestLocalMatch(missing, 70);
-            if (best?.confidence === 100) {
+            const isMismatch = best && Boolean(best.category_mismatch || best.extra?.category_mismatch);
+            if (best?.confidence === 100 && !isMismatch) {
                 stats.exact += 1;
             } else if (best) {
                 stats.partial += 1;

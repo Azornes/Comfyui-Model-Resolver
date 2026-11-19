@@ -87,6 +87,19 @@ def _http_error_message(status: int | None, has_token: bool) -> str | None:
     return None
 
 
+_GATED_MARKERS = (
+    "gated",
+    "restricted",
+    "authorized list",
+    "ask for access",
+    "request access",
+    "agreement",
+    "license",
+    "terms",
+    "conditions",
+)
+
+
 def main() -> None:
     raw_input = sys.stdin.readline()
     if not raw_input:
@@ -130,8 +143,44 @@ def main() -> None:
         emit("done", path=path)
     except HfHubHTTPError as e:
         status = getattr(e.response, "status_code", None)
+        err_lower = str(e).lower()
+        is_gated = any(m in err_lower for m in _GATED_MARKERS)
+        if token and status in (401, 403) and not is_gated:
+            log(f"Token rejected for repository (HTTP {status}), retrying anonymously...")
+            try:
+                path = huggingface_hub.hf_hub_download(
+                    repo_id=repo_id,
+                    filename=filename,
+                    revision=revision,
+                    local_dir=local_dir,
+                    token=False,
+                    tqdm_class=_ProgressTqdm,
+                )
+                log("anonymous download finished", elapsed=round(time.time() - t0, 2))
+                emit("done", path=path)
+                return
+            except Exception as anon_exc:
+                log(f"Anonymous retry failed: {anon_exc}")
         emit("error", message=_http_error_message(status, bool(token)) or str(e), status=status)
     except Exception as e:
+        err_lower = str(e).lower()
+        is_gated = any(m in err_lower for m in _GATED_MARKERS)
+        if token and ("401" in err_lower or "403" in err_lower) and not is_gated:
+            log("Token error, retrying anonymously...")
+            try:
+                path = huggingface_hub.hf_hub_download(
+                    repo_id=repo_id,
+                    filename=filename,
+                    revision=revision,
+                    local_dir=local_dir,
+                    token=False,
+                    tqdm_class=_ProgressTqdm,
+                )
+                log("anonymous download finished", elapsed=round(time.time() - t0, 2))
+                emit("done", path=path)
+                return
+            except Exception as anon_exc:
+                log(f"Anonymous retry failed: {anon_exc}")
         emit("error", message=str(e))
 
 

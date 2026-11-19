@@ -60,17 +60,43 @@ class CustomUrlService(ModelServiceDependencies):
         def _build_direct_custom_download_result(url, source, expected_filename=""):
             from urllib.parse import urlparse
 
-            if not looks_like_model_file(url, expected_filename):
-                return None
+            from ..download.validation import extract_filename_from_content_disposition
 
-            parsed = urlparse(url)
             filename = (
-                get_filename_from_path(parsed.path)
-                or get_filename_from_path(expected_filename)
-                or "model"
+                get_filename_from_path(expected_filename)
+                if (expected_filename and "." in get_filename_from_path(expected_filename))
+                else ""
             )
-            if expected_filename and "." in get_filename_from_path(expected_filename):
-                filename = get_filename_from_path(expected_filename)
+            if not filename:
+                parsed = urlparse(url)
+                candidate_url_filename = get_filename_from_path(parsed.path)
+                if candidate_url_filename and "." in candidate_url_filename:
+                    filename = candidate_url_filename
+
+            if not filename or not looks_like_model_file(url, filename):
+                try:
+                    import requests
+
+                    headers = {"User-Agent": "Mozilla/5.0"}
+                    resp = requests.head(url, headers=headers, timeout=5, allow_redirects=True)
+                    cd = resp.headers.get("content-disposition")
+                    if cd:
+                        cd_filename = extract_filename_from_content_disposition(cd)
+                        if cd_filename and looks_like_model_file(url, cd_filename):
+                            filename = cd_filename
+                except Exception:
+                    pass
+
+            if not filename:
+                parsed = urlparse(url)
+                filename = (
+                    get_filename_from_path(parsed.path)
+                    or get_filename_from_path(expected_filename)
+                    or "model"
+                )
+
+            if not looks_like_model_file(url, filename):
+                return None
             source = str(source or "custom").strip().lower()
             source_label = {
                 "civarchive": "CivArchive",
@@ -236,11 +262,28 @@ class CustomUrlService(ModelServiceDependencies):
                     civitai_key or None,
                 )
             if not result and version_id:
+                resolved_filename = expected_filename
+                if not resolved_filename:
+                    try:
+                        import requests
+
+                        from ..download.validation import extract_filename_from_content_disposition
+
+                        probe_url = get_civitai_download_url(version_id, civitai_key or None)
+                        resp = requests.head(probe_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=5, allow_redirects=True)
+                        cd = resp.headers.get("content-disposition")
+                        if cd:
+                            cd_filename = extract_filename_from_content_disposition(cd)
+                            if cd_filename and looks_like_model_file(probe_url, cd_filename):
+                                resolved_filename = cd_filename
+                    except Exception:
+                        pass
+
                 result = build_model_result(
                     "civitai",
                     version_id=version_id,
-                    name=expected_filename or f"CivitAI version {version_id}",
-                    filename=expected_filename or f"civitai-{version_id}",
+                    name=resolved_filename or f"CivitAI version {version_id}",
+                    filename=resolved_filename or f"civitai-{version_id}",
                     url=normalized_url,
                     version_url=normalized_url,
                     download_url=get_civitai_download_url(

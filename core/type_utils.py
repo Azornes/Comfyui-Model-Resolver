@@ -5,6 +5,7 @@ Unified helper functions for safe data type casting and normalization.
 """
 
 import math
+import os
 import re
 from typing import Any, Dict, List
 
@@ -359,6 +360,14 @@ CATEGORY_MAP = {
     "seedvr2": "seedvr2",
     "seedvr2_dit": "seedvr2",
     "seedvr2_vae": "seedvr2",
+    "wan": "diffusion_models",
+    "wanvideo": "diffusion_models",
+    "wan_video": "diffusion_models",
+    "minimax": "diffusion_models",
+    "minimax_h3": "latent_upscale_models",
+    "h3_upscaler": "latent_upscale_models",
+    "mmaudio": "audio_encoders",
+    "mmaudio_model": "audio_encoders",
     "default": "upscale_models",
 }
 
@@ -1573,5 +1582,88 @@ def utc_now_iso() -> str:
     """Return the current UTC timestamp formatted as ISO 8601 string without microseconds."""
     from datetime import datetime, timezone
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def guess_category_from_filename(filename: Optional[str]) -> Optional[str]:
+    """
+    Infer model category from filename heuristics (Wan 2.1/2.2, Minimax, MMAudio,
+    ControlNet, LoRA, upscalers, audio encoders, VAE, etc.).
+    """
+    if not filename:
+        return None
+    name = os.path.basename(str(filename).replace("\\", "/")).strip().lower()
+    if not name:
+        return None
+
+    # ControlNet
+    if "controlnet" in name or "control_net" in name:
+        return "controlnet"
+
+    # LoRA / LyCORIS
+    if "lora" in name or "lycoris" in name:
+        return "loras"
+
+    # CLIP Vision
+    if (
+        "clip_vision" in name
+        or ("clip" in name and "vision" in name)
+        or "clip-vit-" in name
+        or "clip_vit_" in name
+        or "clipvith" in re.sub(r"[^a-z0-9]+", "", name)
+        or "clipvitg" in re.sub(r"[^a-z0-9]+", "", name)
+    ):
+        return "clip_vision"
+
+    # Audio Encoders / MMAudio
+    if (
+        any(k in name for k in ("mmaudio", "vocoder", "whisper", "wav2vec", "audio_encoder"))
+        or ("audio" in name and "encoder" in name)
+    ):
+        return "audio_encoders"
+
+    # Latent Upscaler / Minimax H3
+    if (
+        ("latent" in name and ("upscale" in name or "upscaler" in name))
+        or "h3_upscaler" in name
+        or "h3-upscaler" in name
+        or "minimax_h3" in name
+        or "minimaxh3" in name
+    ):
+        return "latent_upscale_models"
+
+    # Wan 2.1 / Wan 2.2 video and diffusion models
+    if any(k in name for k in ("wan2.1", "wan2_1", "wan2.2", "wan2_2", "wan_2", "wan2", "wanvideo")):
+        if "vae" in name:
+            return "vae"
+        if "clip" in name or "t5" in name or "text_encoder" in name:
+            return "text_encoders"
+        return "diffusion_models"
+
+    # MiniMax models
+    if "minimax" in name:
+        if "fun_controlnet" in name:
+            return "model_patches"
+        return "diffusion_models"
+
+    # Text Encoders
+    if any(k in name for k in ("text_encoder", "text-encoder", "umt5", "t5xxl", "t5_xxl")) or (
+        "qwen" in name and ("8b" in name or "vl" in name or "text" in name)
+    ):
+        return "text_encoders"
+
+    # VAE / VAE Approx
+    if (
+        any(k in name for k in ("vae_approx", "tinyvae", "tiny_vae", "taesd"))
+        or name.startswith("tae")
+    ):
+        return "vae_approx"
+    if "vae" in name:
+        return "vae"
+
+    # Upscale Models
+    if any(k in name for k in ("esrgan", "real-esrgan", "realesrgan", "omnisr", "dat2", "upscaler")):
+        return "upscale_models"
+
+    return None
 
 

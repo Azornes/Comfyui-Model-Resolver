@@ -20,9 +20,19 @@ from ..path_utils import METADATA_DIR, read_json_safe
 from ..type_utils import build_model_result, normalize_alphanumeric_key
 
 POPULAR_MODELS_FILE = os.path.join(METADATA_DIR, "popular-models.json")
+POPULAR_MODELS_META_FILE = os.path.join(METADATA_DIR, "popular-models.meta.json")
 MODEL_ALIASES_FILE = os.path.join(METADATA_DIR, "model-aliases.json")
 BASE_MODELS_FILE = os.path.join(METADATA_DIR, "base-models.json")
 BASE_MODELS_META_FILE = os.path.join(METADATA_DIR, "base-models.meta.json")
+
+POPULAR_MODELS_SOURCE_URL = (
+    "https://raw.githubusercontent.com/jnxmx/ComfyUI_HuggingFace_Downloader/main/metadata/popular-models.json"
+)
+POPULAR_MODELS_GITHUB_URL = (
+    "https://github.com/jnxmx/ComfyUI_HuggingFace_Downloader/blob/main/metadata/popular-models.json"
+)
+
+popular_models_mgr = CatalogManager(POPULAR_MODELS_FILE, POPULAR_MODELS_META_FILE, "models")
 
 # Cache for loaded data
 _popular_models_cache: Optional[Dict] = None
@@ -37,8 +47,18 @@ def _load_popular_models() -> Dict[str, Any]:
     if _popular_models_cache is not None:
         return _popular_models_cache
 
-    data = read_json_safe(POPULAR_MODELS_FILE, {})
-    _popular_models_cache = data.get("models", {})
+    data = popular_models_mgr.read_data()
+    raw_models = data.get("models", {})
+    if isinstance(raw_models, list):
+        models_dict = {}
+        for item in raw_models:
+            if isinstance(item, dict) and item.get("filename"):
+                models_dict[item["filename"]] = item
+        _popular_models_cache = models_dict
+    elif isinstance(raw_models, dict):
+        _popular_models_cache = raw_models
+    else:
+        _popular_models_cache = {}
     return _popular_models_cache
 
 
@@ -434,4 +454,81 @@ def update_base_models_from_remote() -> Dict[str, Any]:
         "new_models_added": new_added_count,
         "new_models_added_list": new_added_names,
         "updated": True
+    }
+
+
+
+def get_popular_models_status(check_remote: bool = False) -> Dict[str, Any]:
+    """Return local popular-models metadata and optionally compare with remote."""
+    models = _load_popular_models()
+    meta = popular_models_mgr.read_meta()
+
+    local_count = len(models) if isinstance(models, (dict, list)) else 0
+    local_updated_at = meta.get("updated_at") or ""
+
+    status = {
+        "source_url": POPULAR_MODELS_SOURCE_URL,
+        "github_url": POPULAR_MODELS_GITHUB_URL,
+        "local_count": local_count,
+        "local_updated_at": local_updated_at,
+        "remote_checked_at": meta.get("last_checked_at") or "",
+        "update_available": False,
+    }
+
+    if check_remote:
+        try:
+            from ..type_utils import utc_now_iso
+            request_kwargs = {
+                "timeout": 15,
+                "log_name": "Popular Models Remote Check",
+            }
+            remote_data = request_source_json(POPULAR_MODELS_SOURCE_URL, **request_kwargs)
+            if remote_data and isinstance(remote_data, dict):
+                remote_models = remote_data.get("models", {})
+                remote_count = len(remote_models) if isinstance(remote_models, (dict, list)) else 0
+                now_str = utc_now_iso()
+                update_available = remote_count > local_count or (remote_count > 0 and local_count == 0)
+                status.update({
+                    "remote_checked_at": now_str,
+                    "remote_count": remote_count,
+                    "update_available": update_available,
+                })
+        except Exception as e:
+            log.warning(f"Error checking remote popular models: {e}")
+
+    return status
+
+
+def update_popular_models_from_remote() -> Dict[str, Any]:
+    """Fetch live popular-models database from remote and save to popular-models.json."""
+    from ..type_utils import utc_now_iso
+    request_kwargs = {
+        "timeout": 60,
+        "log_name": "Popular Models Remote Update",
+        "raise_on_error": True,
+    }
+    remote_data = request_source_json(POPULAR_MODELS_SOURCE_URL, **request_kwargs)
+    if not remote_data or not isinstance(remote_data, dict):
+        raise ValueError("Remote source did not return a valid popular models catalog")
+
+    models = remote_data.get("models", {})
+    if not models:
+        raise ValueError("Remote source returned an empty models catalog")
+
+    now_str = utc_now_iso()
+    count = len(models) if isinstance(models, (dict, list)) else 0
+    meta = {
+        "updated_at": now_str,
+        "last_checked_at": now_str,
+        "local_count": count,
+        "source": "remote_update",
+        "source_url": POPULAR_MODELS_SOURCE_URL,
+    }
+    popular_models_mgr.sync_catalog(remote_data, meta, indent=2)
+    reload_databases()
+
+    return {
+        "local_count": count,
+        "local_updated_at": now_str,
+        "updated": True,
     }

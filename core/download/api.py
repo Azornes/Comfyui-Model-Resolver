@@ -173,6 +173,9 @@ context.is_allowed_model_download_filename = (
     validation.is_allowed_model_download_filename
 )
 context.sanitize_download_filename = validation.sanitize_download_filename
+context.extract_filename_from_content_disposition = (
+    validation.extract_filename_from_content_disposition
+)
 context.extract_response_file_size = extract_response_file_size
 context.format_bytes = format_bytes
 context.calculate_file_sha256 = calculate_file_sha256
@@ -422,6 +425,7 @@ context.download_model = _download_model
 
 is_allowed_model_download_filename = context.is_allowed_model_download_filename
 sanitize_download_filename = context.sanitize_download_filename
+extract_filename_from_content_disposition = context.extract_filename_from_content_disposition
 get_existing_model_preview_path = context.get_existing_model_preview_path
 
 
@@ -431,6 +435,7 @@ __all__ = [
     "delete_badsha_download",
     "download_file",
     "download_model",
+    "extract_filename_from_content_disposition",
     "get_all_progress",
     "get_aria2_status",
     "get_download_directory",

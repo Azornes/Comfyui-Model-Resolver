@@ -8,7 +8,7 @@ import heapq
 import os
 import re
 from difflib import SequenceMatcher
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from .contracts import ModelMatch, ResolvedModel, SearchResult
 from .log_system import create_module_logger
@@ -17,7 +17,7 @@ from .metadata_model_utils import normalize_models
 log = create_module_logger(__name__)
 
 from .path_utils import get_filename_from_path
-from .type_utils import NON_MODEL_EXTENSIONS
+from .type_utils import NON_MODEL_EXTENSIONS, get_category_folder_keys
 
 try:
     from rapidfuzz import fuzz as rapidfuzz_fuzz
@@ -98,6 +98,7 @@ def find_matches(
     candidate_models: List[ResolvedModel],
     threshold: float = 0.0,
     max_results: int = 10,
+    expected_categories: Optional[Sequence[str] | str] = None,
 ) -> List[ModelMatch]:
     """
     Find similar models using fuzzy matching.
@@ -107,13 +108,27 @@ def find_matches(
         candidate_models: List of candidate model dictionaries with 'filename' or 'path' key
         threshold: Minimum similarity score (0.0 to 1.0) to include in results
         max_results: Maximum number of results to return
+        expected_categories: Optional expected category or categories to check for category mismatch
 
     Returns:
-        Typed local matches sorted by similarity (highest first).
+        Typed local matches sorted by similarity (highest first, right-folder before wrong-folder).
     """
     # Keep only the best N matches instead of collecting and sorting everything.
     best_matches = []
     match_counter = 0
+
+    expected_keys = set()
+    if expected_categories:
+        raw_cats = (
+            [expected_categories]
+            if isinstance(expected_categories, str)
+            else list(expected_categories)
+        )
+        for cat in raw_cats:
+            if not cat or cat == "unknown":
+                continue
+            for key in get_category_folder_keys(cat):
+                expected_keys.add(key.lower())
 
     # Normalize path separators in target_model based on current OS
     # This ensures paths with \ vs / separators are treated as identical
@@ -143,6 +158,13 @@ def find_matches(
         candidate_ext = os.path.splitext(candidate_filename)[1].lower()
         if candidate_ext and candidate_ext in NON_MODEL_EXTENSIONS:
             continue
+
+        candidate_cat = (candidate.category or "").strip().lower()
+        category_mismatch = False
+        if expected_keys and candidate_cat:
+            candidate_keys = set(k.lower() for k in get_category_folder_keys(candidate_cat))
+            if not (candidate_keys & expected_keys):
+                category_mismatch = True
 
         # Normalize candidate path separators based on current OS
         # This ensures paths with \ vs / separators are treated as identical
@@ -181,15 +203,16 @@ def find_matches(
                     "filename": candidate_filename,
                     "similarity": similarity,
                     "confidence": round(similarity * 100, 1),
+                    "category_mismatch": category_mismatch,
                 }
             )
             if max_results <= 0:
                 return []
-            entry = (similarity, match_counter, match)
+            entry = (similarity, 0 if category_mismatch else 1, match_counter, match)
             match_counter += 1
             if len(best_matches) < max_results:
                 heapq.heappush(best_matches, entry)
-            elif similarity > best_matches[0][0]:
+            elif (similarity, 0 if category_mismatch else 1) > (best_matches[0][0], best_matches[0][1]):
                 heapq.heapreplace(best_matches, entry)
             continue
 
@@ -215,20 +238,25 @@ def find_matches(
                     "filename": candidate_filename,
                     "similarity": similarity,
                     "confidence": confidence,
+                    "category_mismatch": category_mismatch,
                 }
             )
             if max_results <= 0:
                 return []
-            entry = (similarity, match_counter, match)
+            entry = (similarity, 0 if category_mismatch else 1, match_counter, match)
             match_counter += 1
             if len(best_matches) < max_results:
                 heapq.heappush(best_matches, entry)
-            elif similarity > best_matches[0][0]:
+            elif (similarity, 0 if category_mismatch else 1) > (best_matches[0][0], best_matches[0][1]):
                 heapq.heapreplace(best_matches, entry)
 
     return [
         match
-        for _, _, match in sorted(best_matches, key=lambda x: x[0], reverse=True)
+        for _, _, _, match in sorted(
+            best_matches,
+            key=lambda x: (x[0], x[1]),
+            reverse=True,
+        )
     ]
 
 

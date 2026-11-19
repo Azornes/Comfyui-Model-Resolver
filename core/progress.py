@@ -22,6 +22,7 @@ class JobProgressTracker:
         self.lock = threading.Lock()
         self.progress = {}
         self.cancelled = set()
+        self.skipped_models = {}
         self.default_message = default_message
 
     def cleanup(self, max_age_seconds=300):
@@ -34,6 +35,7 @@ class JobProgressTracker:
             ]
             for pid in expired:
                 self.progress.pop(pid, None)
+                self.skipped_models.pop(pid, None)
             self.cancelled.difference_update(expired)
 
     def update(self, progress_id, source=None, stage=None, message=None, percent=None, status=None, **payload):
@@ -103,6 +105,28 @@ class JobProgressTracker:
             return False
         with self.lock:
             return progress_id in self.cancelled
+
+    def skip_model(self, progress_id: str, filename: Optional[str] = None) -> None:
+        if not progress_id:
+            return
+        with self.lock:
+            if progress_id not in self.skipped_models:
+                self.skipped_models[progress_id] = set()
+            if filename:
+                self.skipped_models[progress_id].add(str(filename).strip().lower())
+
+    def is_model_skipped(self, progress_id: str, filename: Optional[str] = None) -> bool:
+        if not progress_id:
+            return False
+        with self.lock:
+            if progress_id in self.cancelled:
+                return True
+            skipped = self.skipped_models.get(progress_id)
+            if not skipped:
+                return False
+            if not filename:
+                return True
+            return str(filename).strip().lower() in skipped
 
     def mark_cancelled(self, progress_id, cancel_message="Cancelled") -> bool:
         self.cleanup()

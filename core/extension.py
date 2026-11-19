@@ -27,6 +27,15 @@ class ModelResolverExtension:
         except Exception:
             pass
 
+        try:
+            from .download.hf_cache import cleanup_hf_incomplete_blobs
+            from .scanner import cleanup_zero_byte_model_files
+
+            cleanup_zero_byte_model_files()
+            cleanup_hf_incomplete_blobs()
+        except Exception as e:
+            self.logger.debug(f"Startup cleanup note: {e}")
+
     def _update_analysis_progress(
         self,
         analysis_id: Optional[str],

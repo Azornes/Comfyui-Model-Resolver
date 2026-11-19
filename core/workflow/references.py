@@ -12,7 +12,12 @@ from ..custom_nodes import (
 from ..log_system import create_module_logger
 from ..metadata_model_utils import normalize_models
 from ..path_utils import normalize_string_values
-from ..type_utils import MODEL_EXTENSIONS, URN_TYPE_MAP, normalize_download_category
+from ..type_utils import (
+    MODEL_EXTENSIONS,
+    URN_TYPE_MAP,
+    guess_category_from_filename,
+    normalize_download_category,
+)
 from . import dynamic_widgets
 from .widgets import (
     NESTED_MODEL_KEYS,
@@ -523,11 +528,24 @@ def get_node_model_info(
             or NODE_TYPE_TO_CATEGORY_HINTS.get(node_type)
             or schema_output_category_hint
         )
-        categories_to_try_for_widget = (
+        val_name = str(value or "").strip()
+        filename_category_hint = guess_category_from_filename(val_name)
+        if (
+            not effective_category_hint or effective_category_hint in ("unknown", "checkpoints")
+        ) and filename_category_hint:
+            effective_category_hint = filename_category_hint
+
+        base_categories = (
             model_widget_category_hints
             if model_widget_category_hints
             else ([effective_category_hint] if effective_category_hint else None)
         )
+        if filename_category_hint:
+            categories_to_try_for_widget = _ordered_unique_categories(
+                [filename_category_hint, *list(base_categories)] if base_categories else [filename_category_hint]
+            )
+        else:
+            categories_to_try_for_widget = base_categories
         # A generic widget name such as ``model_name`` is useful for choosing a
         # category, but it is not proof that an arbitrary STRING value is a local
         # model reference. Some metadata/search nodes use that name for human-

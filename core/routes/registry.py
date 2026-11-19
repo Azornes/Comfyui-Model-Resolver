@@ -229,6 +229,8 @@ def register_routes(self):
             )
             from ..sources.popular import (
                 get_popular_model_url,
+                get_popular_models_status,
+                update_popular_models_from_remote,
             )
             from ..sources.popular import (
                 reload_databases as reload_popular_databases,

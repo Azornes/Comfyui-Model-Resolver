@@ -2301,25 +2301,40 @@ export const searchPanelMethods = {
     },
 
     getLocalMatchBadFolderWarning(missing = {}, match = {}) {
-        const matchCategory = this.getLocalMatchCategory?.(match) || '';
-        if (!matchCategory) return null;
+        const matchCategory = this.getLocalMatchCategory?.(match)
+            || match?.model?.category
+            || match?.category
+            || '';
 
         const supportedCategories = (this.getMissingSupportedDownloadCategories?.(missing) || [])
             .map(category => this.normalizeDownloadCategory?.(category) || String(category || '').trim())
             .filter(category => category && category !== 'unknown');
+        if (missing.category && missing.category !== 'unknown') {
+            const normCat = this.normalizeDownloadCategory?.(missing.category) || missing.category;
+            if (!supportedCategories.includes(normCat)) {
+                supportedCategories.unshift(normCat);
+            }
+        }
         const supported = Array.from(new Set(supportedCategories));
-        if (!supported.length || supported.includes(matchCategory)) return null;
+        const isBackendMismatch = Boolean(match?.category_mismatch || match?.extra?.category_mismatch);
 
-        const matchLabel = this.getCategoryDisplayName?.(matchCategory) || matchCategory;
+        if (!matchCategory && !isBackendMismatch) return null;
+        if (supported.length && matchCategory && supported.includes(matchCategory) && !isBackendMismatch) return null;
+        if (!supported.length && !isBackendMismatch) return null;
+
+        const matchLabel = (matchCategory && this.getCategoryDisplayName?.(matchCategory)) || matchCategory || 'another folder';
         const supportedLabels = supported.map(category => this.getCategoryDisplayName?.(category) || category);
         const supportedText = supportedLabels.length === 1
             ? supportedLabels[0]
-            : `one of: ${supportedLabels.join(', ')}`;
+            : (supportedLabels.length > 1 ? `one of: ${supportedLabels.join(', ')}` : 'the correct model folder');
+
+        const targetCategory = supported[0] || (missing.category && missing.category !== 'unknown' ? missing.category : '');
 
         return {
             matchCategory,
             supportedCategories: supported,
-            tooltip: `This local file is in ${matchLabel}, but this node likely accepts ${supportedText}. Linking it may leave the model missing; move or copy the file to a supported model folder.`
+            targetCategory,
+            tooltip: `This local file is in ${matchLabel}, but this node expects ${supportedText}. Linking it may leave the model missing; move or copy the file to a supported model folder.`
         };
     },
 
@@ -2532,10 +2547,19 @@ export const searchPanelMethods = {
         const alternativeAttr = alternative ? ' data-local-match-alternative="true"' : '';
         const rowClass = `mr-match-row${bestMatch ? ' mr-best-match' : ''}`;
 
+        const warning = this.getLocalMatchBadFolderWarning?.(missing, match);
+
         let html = `<div class="${rowClass}" data-local-match-index="${matchIndex}"${alternativeAttr}${localMatchKeyAttr}${identityAttr}${this.getContextMenuAttrs(contextModel)}>`;
         html += this.getConfidenceBadge(match.confidence);
         html += `<span class="mr-match-filename"${this.getModelPreviewTooltipAttrs(match.model || match, matchPath)}>${this.escapeHtml(matchPath)}</span>`;
         html += this.renderLocalMatchStatusGroup(missing, match, hashLabelMap);
+        if (warning?.targetCategory) {
+            const targetDisplayName = this.getCategoryDisplayName?.(warning.targetCategory) || warning.targetCategory;
+            const fullPath = match.model?.path || match.path || matchPath;
+            html += `<button type="button" class="mr-btn mr-btn-secondary mr-btn-xs mr-local-relocate-btn" data-model-path="${this.escapeHtml(fullPath)}" data-target-category="${this.escapeHtml(warning.targetCategory)}" data-tooltip="Move file to ${this.escapeHtml(targetDisplayName)}" aria-label="Move file to ${this.escapeHtml(targetDisplayName)}">`;
+            html += `${getSvgIcon('folder')} Move to ${this.escapeHtml(targetDisplayName)}`;
+            html += `</button>`;
+        }
         html += `<button type="button" id="${buttonId}" class="mr-btn mr-btn-secondary mr-btn-sm mr-btn-icon-only mr-local-link-btn" data-tooltip="Link this local match" aria-label="Link this local match">`;
         html += getSvgIcon('link');
         html += `</button>`;
@@ -2610,6 +2634,20 @@ export const searchPanelMethods = {
 
     wireLocalMatchButtons(container, missing) {
         bindEventOnce(container, 'click', (event) => {
+            const relocateButton = event.target?.closest?.('.mr-local-relocate-btn');
+            if (relocateButton && container.contains(relocateButton)) {
+                event.preventDefault?.();
+                event.stopPropagation?.();
+                const currentMissing = (this.missingModels || [])
+                    .find(item => this.getMissingModelKey?.(item) === this.selectedMissingModelKey)
+                    || missing;
+                const modelPath = relocateButton.dataset.modelPath;
+                const targetCategory = relocateButton.dataset.targetCategory;
+                if (!modelPath || !targetCategory) return;
+                this.relocateMisplacedLocalModel(modelPath, targetCategory, currentMissing, relocateButton);
+                return;
+            }
+
             const button = event.target?.closest?.('.mr-local-link-btn');
             if (!button || !container.contains(button)) return;
 
@@ -2642,6 +2680,42 @@ export const searchPanelMethods = {
 
         this.wireLocalHashMatchResultHighlights?.(container);
         this.bindTooltips?.(container);
+    },
+
+    async relocateMisplacedLocalModel(modelPath, targetCategory, missing, button = null) {
+        if (!modelPath || !targetCategory) return;
+        if (button) {
+            button.disabled = true;
+            button.classList.add('mr-btn-is-disabled');
+        }
+
+        try {
+            const data = await this.fetchJson('/model_resolver/placement/move', {
+                method: 'POST',
+                body: JSON.stringify({
+                    path: modelPath,
+                    target_category: targetCategory
+                })
+            }, 'Move misplaced model');
+
+            if (data?.success) {
+                const targetLabel = this.getCategoryDisplayName?.(targetCategory) || targetCategory;
+                this.showNotification(`Successfully moved model to ${targetLabel}`, 'success');
+                if (missing) {
+                    await this.refreshLocalMatchesForMissing(missing);
+                }
+            } else {
+                this.showNotification(data?.error || 'Failed to move model', 'error');
+            }
+        } catch (error) {
+            console.error('Model Resolver: Error moving model:', error);
+            this.showNotification(`Failed to move model: ${error.message}`, 'error');
+        } finally {
+            if (button) {
+                button.disabled = false;
+                button.classList.remove('mr-btn-is-disabled');
+            }
+        }
     },
 
     decodeLocalMatchIdentityList(value = '') {

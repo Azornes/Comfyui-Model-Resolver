@@ -424,7 +424,7 @@
     box-shadow: var(--mr-shadow-focus-ring);
 }
 
-.p-splitter.is-resizing::after,
+#model-resolver-modal .p-splitter.is-resizing::after,
 #model-resolver-panel.is-resizing::after {
     content: "";
     position: absolute;
@@ -436,17 +436,17 @@
 
 .mr-missing-detail-pane,
 .mr-missing-list-pane,
-.p-splitter-panel {
+#model-resolver-modal .p-splitter-panel {
     contain: layout style;
 }
 
 .mr-missing-browser-splitter.is-resizing,
-.p-splitter-gutter.is-resizing,
+#model-resolver-modal .p-splitter-gutter.is-resizing,
 #model-resolver-splitter.is-resizing {
     will-change: transform;
 }
 
-#queue-toggle-icon {
+#model-resolver-modal #queue-toggle-icon {
     position: absolute;
     top: 50%;
     right: 0;
@@ -465,7 +465,7 @@
     overflow: visible;
 }
 
-#queue-toggle-icon::before {
+#model-resolver-modal #queue-toggle-icon::before {
     content: "";
     position: absolute;
     top: 8px;
@@ -478,7 +478,7 @@
     transition: var(--mr-transition-smooth);
 }
 
-#queue-toggle-icon .mr-queue-toggle-count {
+#model-resolver-modal #queue-toggle-icon .mr-queue-toggle-count {
     position: absolute;
     left: 50%;
     z-index: 1;
@@ -501,30 +501,30 @@
     transform: translateX(-50%);
 }
 
-#queue-toggle-icon .mr-queue-toggle-count-queued {
+#model-resolver-modal #queue-toggle-icon .mr-queue-toggle-count-queued {
     top: -11px;
 }
 
-#queue-toggle-icon .mr-queue-toggle-count-downloads {
+#model-resolver-modal #queue-toggle-icon .mr-queue-toggle-count-downloads {
     bottom: -11px;
 }
 
-#queue-toggle-icon:hover,
-#queue-toggle-icon:focus-visible {
+#model-resolver-modal #queue-toggle-icon:hover,
+#model-resolver-modal #queue-toggle-icon:focus-visible {
     opacity: 1;
     outline: none;
 }
 
-#queue-toggle-icon:hover::before,
-#queue-toggle-icon:focus-visible::before,
-#queue-toggle-icon.is-collapsed::before {
+#model-resolver-modal #queue-toggle-icon:hover::before,
+#model-resolver-modal #queue-toggle-icon:focus-visible::before,
+#model-resolver-modal #queue-toggle-icon.is-collapsed::before {
     background: rgba(114, 211, 138, 0.82);
     box-shadow: var(--mr-shadow-focus-ring);
 }
 
-#queue-toggle-icon:hover .mr-queue-toggle-count,
-#queue-toggle-icon:focus-visible .mr-queue-toggle-count,
-#queue-toggle-icon.is-collapsed .mr-queue-toggle-count {
+#model-resolver-modal #queue-toggle-icon:hover .mr-queue-toggle-count,
+#model-resolver-modal #queue-toggle-icon:focus-visible .mr-queue-toggle-count,
+#model-resolver-modal #queue-toggle-icon.is-collapsed .mr-queue-toggle-count {
     color: var(--mr-accent, #72d38a);
     border-color: rgba(114, 211, 138, 0.45);
 }

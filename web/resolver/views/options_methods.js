@@ -584,6 +584,35 @@ export const optionsMethods = {
                                     </div>
                                 </div>
                             </div>
+                            <div class="mr-options-section-head" style="margin-top: 24px;">
+                                <h4 class="mr-options-section-title">Popular Models Database</h4>
+                            </div>
+                            <div class="mr-options-grid">
+                                <div class="mr-options-panel">
+                                    <div class="mr-options-stack">
+                                        <div class="mr-options-db-summary">
+                                            <div class="mr-options-db-row">
+                                                <span>Popular Models</span>
+                                                <strong id="mr-options-popular-models-count">Loading...</strong>
+                                            </div>
+                                            <div class="mr-options-db-row">
+                                                <span>Last update</span>
+                                                <strong id="mr-options-popular-models-updated">Loading...</strong>
+                                            </div>
+                                            <div class="mr-options-db-row">
+                                                <span>Status</span>
+                                                <strong id="mr-options-popular-models-state">Checking local file...</strong>
+                                            </div>
+                                        </div>
+                                        <div id="mr-options-popular-models-message" class="mr-options-db-message">Curated Hugging Face and Cloud marketplace popular models database.</div>
+                                        <div class="mr-options-db-actions">
+                                            <button id="mr-options-popular-models-check" type="button" class="mr-btn mr-btn-secondary">${getSvgIcon('refreshCw')} Check latest</button>
+                                            <button id="mr-options-popular-models-update" type="button" class="mr-btn mr-btn-primary">${getSvgIcon('download')} Update Popular Models</button>
+                                            <a class="mr-options-inline-link" href="https://github.com/jnxmx/ComfyUI_HuggingFace_Downloader/blob/main/metadata/popular-models.json" target="_blank" rel="noopener noreferrer">Source</a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </section>
                         <section id="mr-options-section-civitai" class="mr-options-card mr-options-section">
                             <div class="mr-options-section-head">
@@ -1092,6 +1121,12 @@ export const optionsMethods = {
         const baseModelsMessageEl = this.contentElement.querySelector('#mr-options-base-models-message');
         const baseModelsCheckBtn = this.contentElement.querySelector('#mr-options-base-models-check');
         const baseModelsUpdateBtn = this.contentElement.querySelector('#mr-options-base-models-update');
+        const popularModelsCountEl = this.contentElement.querySelector('#mr-options-popular-models-count');
+        const popularModelsUpdatedEl = this.contentElement.querySelector('#mr-options-popular-models-updated');
+        const popularModelsStateEl = this.contentElement.querySelector('#mr-options-popular-models-state');
+        const popularModelsMessageEl = this.contentElement.querySelector('#mr-options-popular-models-message');
+        const popularModelsCheckBtn = this.contentElement.querySelector('#mr-options-popular-models-check');
+        const popularModelsUpdateBtn = this.contentElement.querySelector('#mr-options-popular-models-update');
         const hfIndexAuthorsEl = this.contentElement.querySelector('#mr-options-hf-index-authors');
         const hfIndexUpdatedEl = this.contentElement.querySelector('#mr-options-hf-index-updated');
         const hfIndexStateEl = this.contentElement.querySelector('#mr-options-hf-index-state');
@@ -2883,6 +2918,78 @@ export const optionsMethods = {
             notificationErrorText: 'Base Models update failed'
         });
 
+        const setPopularModelsBusy = (busy) => {
+            if (popularModelsCheckBtn) popularModelsCheckBtn.disabled = busy;
+            if (popularModelsUpdateBtn) popularModelsUpdateBtn.disabled = busy;
+        };
+
+        const renderPopularModelsStatus = (data = {}, checkedRemote = false) => {
+            const statusMode = checkedRemote && !data.update_available ? 'is-valid' : '';
+            setStatusMode(popularModelsStateEl, statusMode);
+            setStatusMode(popularModelsMessageEl, statusMode);
+            if (popularModelsCountEl) {
+                popularModelsCountEl.textContent = Number.isFinite(Number(data.local_count))
+                    ? Number(data.local_count).toLocaleString()
+                    : '-';
+            }
+            if (popularModelsUpdatedEl) {
+                popularModelsUpdatedEl.textContent = formatOptionDate(data.local_updated_at);
+            }
+            if (popularModelsStateEl) {
+                if (checkedRemote && data.update_available) {
+                    popularModelsStateEl.textContent = 'Update available';
+                } else if (checkedRemote) {
+                    popularModelsStateEl.textContent = 'Up to date';
+                } else {
+                    popularModelsStateEl.textContent = data.local_updated_at ? 'Tracked' : 'Bundled';
+                }
+            }
+            if (popularModelsMessageEl) {
+                if (checkedRemote && data.update_available) {
+                    popularModelsMessageEl.textContent = 'A newer Popular Models database is available.';
+                } else if (checkedRemote) {
+                    popularModelsMessageEl.textContent = 'Popular Models database is current.';
+                } else {
+                    popularModelsMessageEl.textContent = 'Curated Hugging Face and Cloud marketplace popular models database.';
+                }
+            }
+        };
+
+        const loadPopularModelsStatus = (checkRemote = false) => executeOptionsTask({
+            setBusy: setPopularModelsBusy,
+            stateEl: popularModelsStateEl,
+            loadingText: checkRemote ? 'Checking remote...' : 'Loading...',
+            endpoint: `/model_resolver/popular-models/status${checkRemote ? '?check_remote=1' : ''}`,
+            errorContext: 'Load popular models status',
+            successCallback: (data) => renderPopularModelsStatus(data, checkRemote),
+            errorFallbackText: 'Failed to read Popular Models status.'
+        });
+
+        const updatePopularModels = () => executeOptionsTask({
+            setBusy: setPopularModelsBusy,
+            stateEl: popularModelsStateEl,
+            messageEl: popularModelsMessageEl,
+            loadingText: 'Updating...',
+            startingMessageText: 'Downloading latest Popular Models database...',
+            endpoint: '/model_resolver/popular-models/update',
+            fetchOptions: { method: 'POST' },
+            errorContext: 'Update popular models',
+            successAction: async () => {
+                await this.clearSearchCaches();
+            },
+            successCallback: (data) => {
+                renderPopularModelsStatus(data, false);
+                setElementStatusText(popularModelsStateEl, 'Updated', 'is-valid');
+                if (popularModelsMessageEl) {
+                    popularModelsMessageEl.textContent = `Popular Models updated. ${Number(data.local_count || 0).toLocaleString()} models loaded.`;
+                }
+                setStatusMode(popularModelsMessageEl, 'is-valid');
+                this.showNotification('Popular Models database updated successfully', 'success');
+            },
+            errorFallbackText: 'Failed to update Popular Models database.',
+            notificationErrorText: 'Popular Models database update failed'
+        });
+
         const renderHfIndexStatus = (data = {}) => {
             const authorStatuses = Array.isArray(data.authors) && data.authors.length
                 ? data.authors
@@ -2949,7 +3056,10 @@ export const optionsMethods = {
             endpoint: '/model_resolver/huggingface/author-index/refresh',
             fetchOptions: {
                 method: 'POST',
-                body: JSON.stringify({ hf_token: hfInput?.value || '' })
+                body: JSON.stringify({ hf_token: hfInput?.value || '' }),
+                signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+                    ? AbortSignal.timeout(180000)
+                    : undefined
             },
             errorContext: 'Refresh HuggingFace index',
             successAction: async (data) => {
@@ -3459,6 +3569,7 @@ export const optionsMethods = {
                 if (targetId === 'mr-options-section-local-db') {
                     loadModelListStatus(false);
                     loadBaseModelsStatus(false);
+                    loadPopularModelsStatus(false);
                 } else if (targetId === 'mr-options-section-hf') {
                     loadHfIndexStatus();
                 }
@@ -3486,6 +3597,18 @@ export const optionsMethods = {
         if (baseModelsUpdateBtn) {
             baseModelsUpdateBtn.addEventListener('click', () => {
                 updateBaseModels();
+            });
+        }
+
+        if (popularModelsCheckBtn) {
+            popularModelsCheckBtn.addEventListener('click', () => {
+                loadPopularModelsStatus(true);
+            });
+        }
+
+        if (popularModelsUpdateBtn) {
+            popularModelsUpdateBtn.addEventListener('click', () => {
+                updatePopularModels();
             });
         }
 

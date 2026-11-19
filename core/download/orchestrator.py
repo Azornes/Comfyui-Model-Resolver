@@ -423,6 +423,43 @@ def download_file(
                         timeout=(connect_timeout, read_timeout),
                     )
                     response.raise_for_status()
+            elif (
+                status_code in (401, 403)
+                and source == "HuggingFace"
+                and "Authorization" in request_headers
+            ):
+                err_text = ""
+                try:
+                    err_text = getattr(http_err, "response", None).text or ""
+                except Exception:
+                    pass
+                _GATED_MARKERS = (
+                    "gated",
+                    "restricted",
+                    "authorized list",
+                    "license",
+                    "agreement",
+                    "terms",
+                    "conditions",
+                )
+                if not any(m in err_text.lower() for m in _GATED_MARKERS):
+                    log.info(
+                        f"Hugging Face token rejected (HTTP {status_code}) for {filename}. "
+                        "Retrying anonymously without Authorization header..."
+                    )
+                    request_headers = dict(request_headers)
+                    request_headers.pop("Authorization", None)
+                    response, final_url, _final_headers = request_download_response(
+                        facade,
+                        download_id,
+                        url,
+                        headers=request_headers,
+                        stream=True,
+                        timeout=(connect_timeout, read_timeout),
+                    )
+                    response.raise_for_status()
+                else:
+                    raise
             else:
                 raise
 
@@ -476,6 +513,28 @@ def download_file(
                 content_len = int(response.headers.get("content-length", 0) or 0)
                 if content_len > 0:
                     total_size = existing_size + content_len
+
+            cd_header = getattr(response, "headers", {}).get("content-disposition")
+            if cd_header:
+                from .validation import (
+                    extract_filename_from_content_disposition,
+                    is_allowed_model_download_filename,
+                )
+
+                server_filename = extract_filename_from_content_disposition(cd_header)
+                current_filename = facade.get_filename_from_path(dest_path)
+                if (
+                    server_filename
+                    and is_allowed_model_download_filename(server_filename)
+                    and (
+                        not is_allowed_model_download_filename(current_filename)
+                        or current_filename in ("model", "download", "file")
+                    )
+                ):
+                    dest_path = os.path.join(os.path.dirname(dest_path), server_filename)
+                    partial_path = f"{dest_path}.part"
+                    filename = server_filename
+                    log.info(f"Using server-provided filename from Content-Disposition: {server_filename}")
 
             downloaded = existing_size if is_resumed else 0
             last_downloaded = downloaded

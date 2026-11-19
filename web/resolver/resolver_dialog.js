@@ -236,6 +236,15 @@ export class ResolverManagerDialog extends ComfyDialog {
                 }),
                 $el("span", { textContent: "Locate Node" })
             ]),
+            $el("div.mr-context-menu-item.mr-context-menu-action-swap-model", {
+                "data-menu-action": "swapModel",
+                onclick: () => this.handleContextMenuAction('swapModel')
+            }, [
+                $el("span.mr-context-menu-item-icon", {
+                    innerHTML: getSvgIcon('swap', 'currentColor', 'mr-context-menu-item-svg')
+                }),
+                $el("span", { textContent: "Swap Model in Workflow..." })
+            ]),
             $el("div.mr-context-menu-item.mr-context-menu-action-switch-workflow", {
                 "data-menu-action": "switchWorkflow",
                 onclick: () => this.handleContextMenuAction('switchWorkflow')

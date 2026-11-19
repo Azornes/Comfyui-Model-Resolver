@@ -309,7 +309,12 @@ class SearchProviderRunner:
         self.owner = owner
 
     def raise_if_search_cancelled(self, request: SearchRequest, source=""):
-        if self.owner.search_tracker.is_cancelled(request.progress_id):
+        if (
+            self.owner.search_tracker.is_cancelled(request.progress_id)
+            or self.owner.search_tracker.is_model_skipped(
+                request.progress_id, request.filename
+            )
+        ):
             raise SearchCancelled("Search cancelled")
 
     def make_source_progress_callback(

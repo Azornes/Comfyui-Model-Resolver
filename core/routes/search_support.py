@@ -67,3 +67,22 @@ def register_search_support_routes(context: RouteContext):
         error_prefix="Model list update",
         operation=service.update_model_list,
     )
+    register_service_route(
+        context,
+        path="/model_resolver/popular-models/status",
+        methods=("get",),
+        error_prefix="Popular models status",
+        operation=service.popular_models_status,
+    )
+    register_service_route(
+        context,
+        path="/model_resolver/popular-models/update",
+        error_prefix="Popular models update",
+        operation=service.update_popular_models,
+    )
+    register_service_route(
+        context,
+        path="/model_resolver/search/skip",
+        error_prefix="Search skip model",
+        operation=service.skip_search_model,
+    )

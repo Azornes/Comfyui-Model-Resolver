@@ -22,11 +22,11 @@ class CatalogManager:
     def save(self, data: Any, meta: Any, indent: int = 2) -> None:
         save_catalog_with_backup(self.data_file, data, self.meta_file, meta, indent=indent)
 
-    def get_items(self) -> list:
+    def get_items(self) -> Any:
         data = self.read_data()
         if isinstance(data, dict):
             items = data.get(self.root_key, [])
-            return items if isinstance(items, list) else []
+            return items if isinstance(items, (list, dict)) else []
         return []
 
     def get_local_count(self) -> int:

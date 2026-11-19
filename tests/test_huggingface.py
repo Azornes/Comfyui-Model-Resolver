@@ -25,6 +25,7 @@ from core.sources.huggingface import (
     get_huggingface_model_details,
     get_known_author_fallback_indexes_status,
     parse_huggingface_url,
+    refresh_author_fallback_index,
     search_huggingface,
     search_huggingface_for_file,
 )
@@ -69,6 +70,14 @@ class HuggingFaceSourceTests(unittest.TestCase):
             "black-forest-labs",
             "nunchaku-ai",
             "comfyanonymous",
+            "Kim2091",
+            "Phips",
+            "lightx2v",
+            "vrgamedevgirl84",
+            "unsloth",
+            "Lightricks",
+            "Winnougan",
+            "LBH-123-AI",
         ]:
             self.assertIn(author, HF_AUTHOR_FALLBACKS)
 
@@ -901,3 +910,93 @@ class HuggingFaceSourceTests(unittest.TestCase):
             branch="main",
         )
         self.assertEqual(expected_headers, mock_request.call_args.kwargs["headers"])
+
+    def test_build_author_index_reuses_known_hashes_from_existing_index(self):
+        sha256 = "d" * 64
+        existing_index = {
+            "author": "Comfy-Org",
+            "updated_at": 100,
+            "repo_count": 1,
+            "file_count": 1,
+            "hash_count": 1,
+            "repos": ["Comfy-Org/example"],
+            "files": [
+                {
+                    "repo_id": "Comfy-Org/example",
+                    "path": "models/known.safetensors",
+                    "filename": "known.safetensors",
+                    "size": 12345,
+                    "sha256": sha256,
+                }
+            ],
+        }
+        repos = [
+            {
+                "id": "Comfy-Org/example",
+                "siblings": [
+                    {
+                        "rfilename": "models/known.safetensors",
+                    }
+                ],
+            }
+        ]
+
+        # 1. Direct build reuses known sha256 and size from existing_index
+        index = _build_author_index_from_models(
+            "Comfy-Org", repos, existing_index=existing_index
+        )
+        self.assertEqual(1, index["hash_count"])
+        self.assertEqual(sha256, index["files"][0]["sha256"])
+        self.assertEqual(12345, index["files"][0]["size"])
+
+        # 2. _fetch_author_index skips repo tree API calls because hash is already present
+        with (
+            patch(
+                "core.sources.huggingface.execute_provider_json_request",
+                return_value=repos,
+            ),
+            patch(
+                "core.sources.huggingface._read_persistent_author_indexes",
+                return_value={"version": 2, "authors": {"Comfy-Org": existing_index}},
+            ),
+            patch(
+                "core.sources.huggingface._get_repo_tree",
+            ) as mock_tree,
+        ):
+            refreshed = _fetch_author_index("Comfy-Org", headers={})
+
+        self.assertIsNotNone(refreshed)
+        self.assertEqual(1, refreshed["hash_count"])
+        self.assertEqual(sha256, refreshed["files"][0]["sha256"])
+        mock_tree.assert_not_called()
+
+    def test_refresh_author_fallback_index_uses_token_and_persists(self):
+        token = "hf_test_token_123"
+        repo_data = [
+            {
+                "id": "Comfy-Org/example",
+                "siblings": [{"rfilename": "test.safetensors"}],
+            }
+        ]
+        with (
+            patch(
+                "core.sources.huggingface.execute_provider_json_request",
+                return_value=repo_data,
+            ) as mock_request,
+            patch(
+                "core.sources.huggingface._get_repo_tree",
+                return_value=[],
+            ),
+            patch(
+                "core.sources.huggingface._write_persistent_author_index",
+            ) as mock_write,
+        ):
+            clear_search_cache()
+            status = refresh_author_fallback_index(token=token, author="Comfy-Org")
+
+        self.assertTrue(status["success"])
+        self.assertTrue(status["persisted"])
+        expected_auth = {"Authorization": f"Bearer {token}"}
+        self.assertEqual(expected_auth, mock_request.call_args.kwargs["headers"])
+        mock_write.assert_called_once()
+

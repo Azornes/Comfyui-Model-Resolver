@@ -584,6 +584,7 @@ def search_local_matches(
         candidates,
         threshold=similarity_threshold,
         max_results=max_matches_per_model,
+        expected_categories=category if category and category != "unknown" else None,
     )
 
     deduplicated_matches = _deduplicate_local_matches(matches)
@@ -1280,6 +1281,7 @@ def analyze_and_find_matches(
             get_candidates_for_category(category),
             threshold=similarity_threshold,
             max_results=max_matches_per_model,
+            expected_categories=category if category and category != "unknown" else None,
         )
         deduplicated_matches = annotate_local_matches_with_download_state(
             _deduplicate_local_matches(matches),

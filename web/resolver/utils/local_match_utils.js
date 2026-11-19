@@ -4,10 +4,13 @@ export function classifyLocalMatches(
     matches = [],
     { minConfidence = 70, perfectConfidence = 100, visibleLimit = 5 } = {},
 ) {
+    const isMismatch = match => Boolean(match?.category_mismatch || match?.extra?.category_mismatch);
     const filteredMatches = matches.filter(match => match.confidence >= minConfidence);
-    const perfectMatches = filteredMatches.filter(match => match.confidence === perfectConfidence);
+    const perfectMatches = filteredMatches.filter(
+        match => match.confidence === perfectConfidence && !isMismatch(match)
+    );
     const otherMatches = filteredMatches.filter(
-        match => match.confidence < perfectConfidence && match.confidence >= minConfidence,
+        match => (match.confidence < perfectConfidence || isMismatch(match)) && match.confidence >= minConfidence,
     );
     const visibleMatches = perfectMatches.length > 0
         ? perfectMatches

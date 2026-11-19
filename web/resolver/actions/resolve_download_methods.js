@@ -19,9 +19,14 @@ export const resolveDownloadMethods = {
         const seenKeys = new Set();
 
         for (const missing of Array.isArray(missingModels) ? missingModels : []) {
-            const match = this.getBestLocalMatch?.(missing, 100)
-                || (missing.matches || []).find(item => Number(item.confidence || 0) >= 100);
+            const match = this.getBestLocalMatch?.(missing, 100, { excludeMismatch: true })
+                || (missing.matches || []).find(item => (
+                    Number(item.confidence || 0) >= 100
+                    && !item.category_mismatch
+                    && !item.extra?.category_mismatch
+                ));
             if (!match?.model) continue;
+            if (this.getLocalMatchBadFolderWarning?.(missing, match)) continue;
 
             const selection = this.buildResolutionSelection(missing, match.model);
             const key = this.getResolutionQueueKey(selection);

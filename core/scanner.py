@@ -153,6 +153,12 @@ def scan_directory(
 
                 if is_candidate:
                     full_path = os.path.join(root, filename)
+                    try:
+                        if os.path.getsize(full_path) == 0:
+                            log.debug(f"Skipping 0-byte placeholder model file: {full_path}")
+                            continue
+                    except OSError:
+                        pass
 
                     # Calculate relative path from base directory
                     # IMPORTANT: Use OS-native path separators (backslashes on Windows)
@@ -340,3 +346,43 @@ def find_local_file_path(filename: str, category: Optional[str] = None) -> Optio
             pass
 
     return file_path
+
+
+
+def cleanup_zero_byte_model_files(dry_run: bool = False) -> List[str]:
+    """Scan configured ComfyUI model directories for 0-byte placeholder files and remove them."""
+    removed = []
+    dirs_dict = get_model_directories()
+    visited_roots = set()
+
+    for _category, dir_spec in dirs_dict.items():
+        if isinstance(dir_spec, tuple) and len(dir_spec) >= 1:
+            paths = dir_spec[0]
+        elif isinstance(dir_spec, list):
+            paths = dir_spec
+        else:
+            continue
+
+        for p in paths:
+            if not isinstance(p, str) or not os.path.isdir(p):
+                continue
+            abs_p = os.path.abspath(p)
+            if abs_p in visited_roots:
+                continue
+            visited_roots.add(abs_p)
+
+            for root, _dirs, files in os.walk(abs_p):
+                for f in files:
+                    ext = os.path.splitext(f)[1].lower()
+                    if ext in MODEL_EXTENSIONS and ext not in NON_MODEL_EXTENSIONS:
+                        fpath = os.path.join(root, f)
+                        try:
+                            if os.path.getsize(fpath) == 0:
+                                if not dry_run:
+                                    os.remove(fpath)
+                                removed.append(fpath)
+                                log.info(f"Removed 0-byte placeholder model file: {fpath}")
+                        except OSError as e:
+                            log.debug(f"Could not inspect/remove 0-byte file {fpath}: {e}")
+
+    return removed

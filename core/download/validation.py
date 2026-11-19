@@ -60,6 +60,45 @@ def is_allowed_model_download_filename(filename: Any) -> bool:
     return bool(safe_name and os.path.splitext(safe_name)[1].lower() in MODEL_EXTENSIONS)
 
 
+def extract_filename_from_content_disposition(header_value: Optional[str]) -> str:
+    """Extract and sanitize a filename from a Content-Disposition header value."""
+    if not header_value:
+        return ""
+    text = str(header_value).strip()
+
+    # RFC 5987 / RFC 6266 form: filename*=UTF-8''encoded-name
+    match_star = re.search(r"filename\*\s*=\s*([^;]+)", text, flags=re.IGNORECASE)
+    if match_star:
+        raw = match_star.group(1).strip().strip("\"'")
+        if "''" in raw:
+            raw = raw.split("''", 1)[1]
+        try:
+            from urllib.parse import unquote
+
+            decoded = unquote(raw)
+            sanitized = sanitize_download_filename(decoded)
+            if sanitized:
+                return sanitized
+        except Exception:
+            pass
+
+    # Standard form: filename="name.ext" or filename=name.ext
+    match = re.search(r"filename\s*=\s*([^;]+)", text, flags=re.IGNORECASE)
+    if match:
+        raw = match.group(1).strip().strip("\"'")
+        try:
+            from urllib.parse import unquote
+
+            decoded = unquote(raw)
+            sanitized = sanitize_download_filename(decoded)
+            if sanitized:
+                return sanitized
+        except Exception:
+            pass
+
+    return ""
+
+
 def _is_sensitive_metadata_key(key: Any) -> bool:
     key_text = str(key or "").strip().lower()
     return (

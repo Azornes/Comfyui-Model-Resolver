@@ -46,8 +46,32 @@ HF_AUTHOR_FALLBACKS = [
     "black-forest-labs",
     "nunchaku-ai",
     "comfyanonymous",
+    "Kim2091",
+    "Phips",
+    "lightx2v",
+    "vrgamedevgirl84",
+    "unsloth",
+    "Lightricks",
+    "Winnougan",
+    "LBH-123-AI",
 ]
 BRAVE_SEARCH_API_URL = "https://api.search.brave.com/res/v1/web/search"
+AMBIGUOUS_HF_MODEL_FILENAMES = frozenset({
+    "model.safetensors",
+    "model.bin",
+    "model.ckpt",
+    "model.pt",
+    "pytorch_model.bin",
+    "pytorch_model.safetensors",
+    "adapter_model.bin",
+    "adapter_model.safetensors",
+    "diffusion_pytorch_model.bin",
+    "diffusion_pytorch_model.safetensors",
+    "consolidated.safetensors",
+    "weights.safetensors",
+    "config.json",
+    "tokenizer.json",
+})
 HF_AUTHOR_INDEX_CACHE_TTL_SECONDS = 24 * 60 * 60
 HF_AUTHOR_INDEX_CACHE_VERSION = 2
 
@@ -73,6 +97,37 @@ def clear_search_cache():
 
 
 _report_progress = get_progress_reporter("HuggingFace progress callback")
+
+
+def _resolve_huggingface_token(token: Optional[str] = None) -> Optional[str]:
+    """Resolve Hugging Face token from parameter, settings, or environment."""
+    if token and str(token).strip():
+        return str(token).strip()
+
+    try:
+        from ..settings import load_settings
+
+        settings = load_settings()
+        stored_token = settings.get("hf_token")
+        if stored_token and str(stored_token).strip():
+            return str(stored_token).strip()
+    except Exception:
+        pass
+
+    env_token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
+    if env_token and env_token.strip():
+        return env_token.strip()
+
+    return None
+
+
+def _build_huggingface_headers(token: Optional[str] = None) -> Dict[str, str]:
+    """Build request headers with Hugging Face authorization if a token is available."""
+    headers: Dict[str, str] = {}
+    resolved_token = _resolve_huggingface_token(token)
+    if resolved_token:
+        headers["Authorization"] = f"Bearer {resolved_token}"
+    return headers
 
 
 def check_huggingface_token(token: Optional[str]) -> Dict[str, Any]:
@@ -185,11 +240,29 @@ def _write_persistent_author_index(author: str, index: Dict[str, Any]) -> None:
 
 
 def _build_author_index_from_models(
-    author: str, repos: List[Dict[str, Any]]
+    author: str,
+    repos: List[Dict[str, Any]],
+    existing_index: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     files = []
     repo_ids = []
     hash_count = 0
+
+    known_hashes: Dict[tuple[str, str], str] = {}
+    known_sizes: Dict[tuple[str, str], Optional[int]] = {}
+    if isinstance(existing_index, dict):
+        for f in existing_index.get("files") or []:
+            if not isinstance(f, dict):
+                continue
+            r_id = f.get("repo_id")
+            p = f.get("path")
+            if r_id and p:
+                key = (r_id, p)
+                h = _extract_huggingface_file_sha256(f)
+                if h:
+                    known_hashes[key] = h
+                if f.get("size") is not None:
+                    known_sizes[key] = f.get("size")
 
     for repo in repos:
         repo_id = repo.get("id", "")
@@ -203,15 +276,22 @@ def _build_author_index_from_models(
                 continue
 
             sha256 = _extract_huggingface_file_sha256(sibling)
+            if not sha256:
+                sha256 = known_hashes.get((repo_id, file_path))
+
             if sha256:
                 hash_count += 1
+
+            size = sibling.get("size")
+            if size is None:
+                size = known_sizes.get((repo_id, file_path))
 
             files.append(
                 {
                     "repo_id": repo_id,
                     "path": file_path,
                     "filename": get_filename_from_path(file_path),
-                    "size": sibling.get("size"),
+                    "size": size,
                     "sha256": sha256,
                 }
             )
@@ -305,7 +385,12 @@ def _enrich_author_index_with_repo_trees(
     return index
 
 
-def _fetch_author_index(author: str, headers: Dict[str, str], limit: int = 200):
+def _fetch_author_index(
+    author: str,
+    headers: Dict[str, str],
+    limit: int = 200,
+    existing_index: Optional[Dict[str, Any]] = None,
+):
     try:
         repos = execute_provider_json_request(
             "HuggingFace author index",
@@ -317,7 +402,14 @@ def _fetch_author_index(author: str, headers: Dict[str, str], limit: int = 200):
         if not isinstance(repos, list):
             return None
 
-        index = _build_author_index_from_models(author, repos)
+        if existing_index is None:
+            existing_index = _read_persistent_author_indexes().get("authors", {}).get(
+                author
+            )
+
+        index = _build_author_index_from_models(
+            author, repos, existing_index=existing_index
+        )
         index = _enrich_author_index_with_repo_trees(index, headers=headers)
         log.info(
             f"HuggingFace author index refreshed for author={author}: "
@@ -338,7 +430,9 @@ def _get_author_index(
     allow_stale: bool = False,
 ) -> Optional[Dict[str, Any]]:
     cache_key = _author_index_cache_key(author, headers)
-    can_persist = not headers.get("Authorization")
+    can_persist = persist and (
+        not headers.get("Authorization") or author in HF_AUTHOR_FALLBACKS
+    )
 
     with _author_index_lock:
         memory_index = _author_index_cache.get(cache_key)
@@ -352,6 +446,9 @@ def _get_author_index(
             )
             if not force_refresh and _is_author_index_fresh(persistent_index):
                 _author_index_cache[cache_key] = persistent_index
+                if author in HF_AUTHOR_FALLBACKS:
+                    _author_index_cache[f"{author}::public"] = persistent_index
+                    _author_index_cache[f"{author}::token"] = persistent_index
                 log.debug(f"HuggingFace author index cache hit for author={author}")
                 return persistent_index
 
@@ -359,12 +456,18 @@ def _get_author_index(
             stale_index = persistent_index or memory_index
             if isinstance(stale_index, dict):
                 _author_index_cache[cache_key] = stale_index
+                if author in HF_AUTHOR_FALLBACKS:
+                    _author_index_cache[f"{author}::public"] = stale_index
+                    _author_index_cache[f"{author}::token"] = stale_index
                 log.debug(f"HuggingFace stale author index cache hit for author={author}")
                 return stale_index
 
         fresh_index = _fetch_author_index(author, headers=headers)
         if fresh_index:
             _author_index_cache[cache_key] = fresh_index
+            if author in HF_AUTHOR_FALLBACKS:
+                _author_index_cache[f"{author}::public"] = fresh_index
+                _author_index_cache[f"{author}::token"] = fresh_index
             if can_persist and persist:
                 _write_persistent_author_index(author, fresh_index)
             return fresh_index
@@ -374,6 +477,9 @@ def _get_author_index(
                 f"Using stale HuggingFace author index for author={author}; refresh failed"
             )
             _author_index_cache[cache_key] = persistent_index
+            if author in HF_AUTHOR_FALLBACKS:
+                _author_index_cache[f"{author}::public"] = persistent_index
+                _author_index_cache[f"{author}::token"] = persistent_index
             return persistent_index
 
         return None
@@ -431,7 +537,7 @@ def refresh_author_fallback_index(
     token: Optional[str] = None, author: str = "Comfy-Org"
 ) -> Dict[str, Any]:
     """Force refresh the public HuggingFace author fallback index."""
-    headers = {}
+    headers = _build_huggingface_headers(token)
 
     index = _get_author_index(author, headers=headers, force_refresh=True)
     status = get_author_fallback_index_status(author)
@@ -444,8 +550,9 @@ def refresh_known_author_fallback_indexes(
     token: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Force refresh all known public HuggingFace author indexes."""
+    resolved_token = _resolve_huggingface_token(token)
     refresh_results = [
-        refresh_author_fallback_index(token, author) for author in HF_AUTHOR_FALLBACKS
+        refresh_author_fallback_index(resolved_token, author) for author in HF_AUTHOR_FALLBACKS
     ]
     status = get_known_author_fallback_indexes_status()
     failed_authors = [
@@ -689,7 +796,7 @@ def get_huggingface_model_details(
 
     target_path = _normalize_huggingface_path(file_path)
     target_directory = posixpath.dirname(target_path)
-    headers = {"Authorization": f"Bearer {token.strip()}"} if token and token.strip() else {}
+    headers = _build_huggingface_headers(token)
     repo_tree = _get_repo_tree(
         normalized_repo_id,
         headers=headers,
@@ -981,6 +1088,11 @@ def _find_matching_file_in_author_index(
 ) -> Optional[SearchResult]:
     files = index.get("files") or []
     requested_sha256 = normalize_sha256(sha256)
+    if not requested_sha256 and filename and filename.strip().lower() in AMBIGUOUS_HF_MODEL_FILENAMES:
+        log.debug(
+            f"Skipping HuggingFace search for ambiguous generic filename: {filename}"
+        )
+        return None
 
     if requested_sha256:
         for file_info in files:
@@ -1193,6 +1305,9 @@ def search_huggingface_for_file(
     global _search_cache
 
     requested_sha256 = normalize_sha256(sha256)
+    if not requested_sha256 and filename and filename.strip().lower() in AMBIGUOUS_HF_MODEL_FILENAMES:
+        log.debug(f'Skipping HuggingFace search for ambiguous generic filename: {filename}')
+        return None
     brave_key = "brave" if brave_api_key and use_brave_fallback else "nobrave"
     token_key = "token" if token else "notoken"
     methods_key = (
@@ -1223,9 +1338,11 @@ def search_huggingface_for_file(
                 or (result.hashes or {}).get("sha256")
             ) == requested_sha256
 
-        headers = {}
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
+        headers = (
+            {"Authorization": f"Bearer {str(token).strip()}"}
+            if token and str(token).strip()
+            else {}
+        )
 
         log.info(f"HuggingFace start file={filename} exact={exact_only}")
 
@@ -1234,7 +1351,7 @@ def search_huggingface_for_file(
         ) -> tuple[Optional[Dict[str, Any]], Optional[SearchResult]]:
             index = _get_author_index(
                 author,
-                headers={},
+                headers=headers,
                 allow_stale=force_refresh,
             )
             result = (
@@ -1242,7 +1359,7 @@ def search_huggingface_for_file(
                     index,
                     filename,
                     exact_only=exact_only,
-                    headers={},
+                    headers=headers,
                     sha256=requested_sha256,
                 )
                 if index
@@ -1257,7 +1374,7 @@ def search_huggingface_for_file(
             ):
                 index = _get_author_index(
                     author,
-                    headers={},
+                    headers=headers,
                     force_refresh=True,
                 )
                 result = (
@@ -1265,7 +1382,7 @@ def search_huggingface_for_file(
                         index,
                         filename,
                         exact_only=exact_only,
-                        headers={},
+                        headers=headers,
                         sha256=requested_sha256,
                     )
                     if index
@@ -1422,7 +1539,7 @@ def search_huggingface_for_file(
                             index,
                             filename,
                             exact_only=exact_only,
-                            headers={},
+                            headers=headers,
                             sha256=requested_sha256,
                         )
                         if index

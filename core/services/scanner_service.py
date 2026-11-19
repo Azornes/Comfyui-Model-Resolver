@@ -34,6 +34,25 @@ class ScannerService:
         models = normalize_models(
             self.get_model_files(force_rescan=force_rescan)
         )
+        category = str(request.query.get("category") or "").strip()
+        current = str(request.query.get("current") or "").strip()
+
+        if category and category.lower() != "all":
+            from ..type_utils import get_category_folder_keys
+            keys = set(k.lower() for k in get_category_folder_keys(category))
+            if keys:
+                models = [m for m in models if (m.category or "").strip().lower() in keys]
+            else:
+                models = [m for m in models if (m.category or "").strip().lower() == category.lower()]
+
+        if current and models:
+            from ..matcher import find_matches
+            matches = find_matches(current, models, threshold=0.0, max_results=len(models))
+            matched_models = [match.model for match in matches]
+            matched_paths = {m.path for m in matched_models}
+            remaining = [m for m in models if m.path not in matched_paths]
+            models = matched_models + remaining
+
         return self.web.json_response(
             [model.to_dict() for model in models]
         )

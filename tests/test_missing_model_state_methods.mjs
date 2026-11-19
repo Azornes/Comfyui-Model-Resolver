@@ -118,3 +118,39 @@ test('search result status and missing model counters expose stable state', () =
   assert.equal(dialog.isAutoDownloadModel({ auto_download_candidate: true }), true);
   assert.equal(dialog.getResolvedMissingCount([resolved, {}, { __isExistingResolved: true }]), 2);
 });
+
+test('category mismatch handling in getBestLocalMatch and summary stats', () => {
+  const dialog = createDialog();
+  const missingModel = {
+    matches: [
+      { confidence: 100, category_mismatch: true, path: '/loras/model.safetensors' },
+      { confidence: 90, category_mismatch: false, path: '/checkpoints/model.safetensors' },
+    ]
+  };
+
+  // Non-mismatch is prioritized over category mismatch
+  const best = dialog.getBestLocalMatch(missingModel, 70);
+  assert.equal(best.category_mismatch, false);
+  assert.equal(best.confidence, 90);
+
+  // When only mismatch exists, it returns the mismatch
+  const mismatchOnly = {
+    matches: [
+      { confidence: 100, category_mismatch: true, path: '/loras/model.safetensors' },
+    ]
+  };
+  assert.equal(dialog.getBestLocalMatch(mismatchOnly, 70).category_mismatch, true);
+
+  // When excludeMismatch: true is specified, mismatch is completely excluded
+  assert.equal(dialog.getBestLocalMatch(mismatchOnly, 70, { excludeMismatch: true }), null);
+
+  // An exact 100% match with category_mismatch is counted as partial, not exact, in summary stats
+  const missingModels = [
+    { matches: [{ confidence: 100, category_mismatch: true }] },
+    { matches: [{ confidence: 100, category_mismatch: false }] },
+  ];
+  const stats = dialog.getMissingModelSummaryStats(missingModels);
+  assert.equal(stats.exact, 1);
+  assert.equal(stats.partial, 1);
+  assert.equal(stats.none, 0);
+});

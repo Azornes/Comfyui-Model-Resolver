@@ -41,6 +41,12 @@ class SearchSupportService:
         self.update_model_list_from_remote = context.require(
             "update_model_list_from_remote"
         )
+        self.get_popular_models_status = context.get(
+            "get_popular_models_status"
+        )
+        self.update_popular_models_from_remote = context.get(
+            "update_popular_models_from_remote"
+        )
         self.web = context.require("web")
 
     async def clear_search_cache(self, request):
@@ -155,3 +161,39 @@ class SearchSupportService:
         self.clear_all_search_caches()
         self.extension.search_result_timestamps.clear()
         return self.web.json_response(result)
+
+
+    async def popular_models_status(self, request):
+        """Return local popular-models status and optionally compare with remote."""
+        try:
+            check_remote = read_bool_field(
+                request.query,
+                "check_remote",
+                contract_name="Popular models status request",
+            )
+        except TypeError as exc:
+            return self.web.json_response({"error": str(exc)}, status=400)
+        if self.get_popular_models_status:
+            return self.web.json_response(
+                self.get_popular_models_status(check_remote=check_remote)
+            )
+        return self.web.json_response({"error": "Popular models status not available"}, status=501)
+
+    async def update_popular_models(self, request):
+        """Download latest popular-models.json."""
+        if not self.update_popular_models_from_remote:
+            return self.web.json_response({"error": "Popular models update not available"}, status=501)
+        result = await self.asyncio.to_thread(self.update_popular_models_from_remote)
+        self.clear_all_search_caches()
+        self.extension.search_result_timestamps.clear()
+        return self.web.json_response(result)
+
+    async def skip_search_model(self, request):
+        """Skip searching for a specific model without cancelling entire workflow search."""
+        data = await read_optional_object_payload(request)
+        progress_id = data.get("progress_id", "")
+        filename = data.get("filename", "")
+        if hasattr(self.extension, "search_tracker") and progress_id:
+            self.extension.search_tracker.skip_model(progress_id, filename)
+            return self.web.json_response({"skipped": True, "progress_id": progress_id, "filename": filename})
+        return self.web.json_response({"error": "Invalid progress_id or search_tracker unavailable"}, status=400)

@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from core.contracts import SearchResult
+from core.contracts import ResolvedModel, SearchResult
 from core.matcher import (
     build_filename_search_queries,
     calculate_archived_model_confidence,
@@ -459,6 +459,28 @@ class TypeUtilsTests(unittest.TestCase):
         self.assertIsNone(format_size_bytes(""))
         self.assertEqual("invalid_str", format_size_bytes("invalid_str"))
         self.assertEqual("500.0 KB", format_size_bytes("512000"))
+
+    def test_find_matches_category_mismatch(self):
+        candidates = [
+            ResolvedModel(filename="model.safetensors", path="/models/loras/model.safetensors", category="loras"),
+            ResolvedModel(filename="model.safetensors", path="/models/checkpoints/model.safetensors", category="checkpoints"),
+        ]
+
+        matches = find_matches(
+            "model.safetensors",
+            candidates,
+            threshold=0.0,
+            expected_categories=["checkpoints"],
+        )
+
+        self.assertEqual(len(matches), 2)
+        # Checkpoint is same category so category_mismatch should be False and ranked first
+        self.assertEqual(matches[0].model.category, "checkpoints")
+        self.assertFalse(matches[0].category_mismatch)
+        # LoRA is wrong category so category_mismatch should be True and ranked second
+        self.assertEqual(matches[1].model.category, "loras")
+        self.assertTrue(matches[1].category_mismatch)
+        self.assertTrue(matches[1].to_dict()["category_mismatch"])
 
 
 if __name__ == "__main__":

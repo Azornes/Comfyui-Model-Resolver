@@ -296,6 +296,11 @@ def download_huggingface_worker(
         return {"success": False, "download_id": download_id, "path": dest_path, "error": str(e)}
 
     _remove_staging(staging)
+    try:
+        from .hf_cache import clear_hf_cache_for_repo
+        clear_hf_cache_for_repo(repo_id)
+    except Exception as e:
+        log.debug(f"HF cache cleanup skipped: {e}")
     file_size = os.path.getsize(dest_path) if os.path.exists(dest_path) else total_size
 
     metadata_path = None

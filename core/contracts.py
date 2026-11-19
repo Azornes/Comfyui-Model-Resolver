@@ -882,6 +882,7 @@ class ModelMatch:
     filename: str = ""
     similarity: float = 0.0
     confidence: float = 0.0
+    category_mismatch: bool = False
     extra: Mapping[str, Any] = field(default_factory=dict, repr=False, compare=False)
     raw: Mapping[str, Any] = field(default_factory=dict, repr=False, compare=False)
 
@@ -915,6 +916,11 @@ class ModelMatch:
         )
         object.__setattr__(
             self,
+            "category_mismatch",
+            bool(self.category_mismatch),
+        )
+        object.__setattr__(
+            self,
             "extra",
             _freeze_value(_as_contract_mapping(self.extra, "ModelMatch extra")),
         )
@@ -935,12 +941,19 @@ class ModelMatch:
             model = ResolvedModel.from_mapping(model_value)
         else:
             raise TypeError("ModelMatch model must be a model object")
-        known_keys = {"model", "filename", "similarity", "confidence"}
+        known_keys = {
+            "model",
+            "filename",
+            "similarity",
+            "confidence",
+            "category_mismatch",
+        }
         return cls(
             model=model,
             filename=raw.get("filename"),
             similarity=raw.get("similarity"),
             confidence=raw.get("confidence"),
+            category_mismatch=bool(raw.get("category_mismatch", False)),
             extra={key: item for key, item in raw.items() if key not in known_keys},
             raw=raw,
         )
@@ -953,6 +966,7 @@ class ModelMatch:
         result["filename"] = self.filename
         result["similarity"] = self.similarity
         result["confidence"] = self.confidence
+        result["category_mismatch"] = self.category_mismatch
         return result
 
     def with_extra(self, **values: Any) -> "ModelMatch":

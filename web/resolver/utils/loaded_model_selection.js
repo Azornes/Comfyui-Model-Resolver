@@ -190,6 +190,11 @@ export function initLoadedModelSelection(container, dialog = null) {
             }
         }
 
+        const swapBtn = event.target?.closest?.('.mr-model-chip-swap-btn');
+        if (swapBtn && container.contains(swapBtn)) {
+            return;
+        }
+
         const chip = event.target?.closest?.('.mr-model-chip');
         if (chip && container.contains(chip)) {
             event.stopPropagation();

@@ -422,6 +422,16 @@ export const workflowStateMethods = {
         if (route && signature) return `${route}\n${signature}`;
         return route || signature || null;
     },
+
+    getWorkflowKey(workflow = null) {
+        if (!workflow) {
+            return this.getWorkflowScopedQueueKey();
+        }
+        const signature = this.getWorkflowSignature(workflow);
+        const route = this.getActiveWorkflowRouteKey?.() || '';
+        return this.getWorkflowScopedQueueKey(route, signature);
+    },
+
     clonePendingResolutions(list = this.pendingResolutions) {
         try {
             return JSON.parse(JSON.stringify(Array.isArray(list) ? list : []));
