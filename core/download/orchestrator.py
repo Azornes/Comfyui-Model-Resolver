@@ -963,7 +963,8 @@ def download_file(
                 log.error(f"✗ Download rejected: {filename} - {error_msg}")
                 return result
 
-        damage = facade.check_safetensors_damage(partial_path)
+        check_damage = getattr(facade, "check_safetensors_damage", None)
+        damage = check_damage(partial_path) if callable(check_damage) else None
         if damage:
             try:
                 if os.path.exists(partial_path):

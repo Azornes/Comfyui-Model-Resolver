@@ -1241,7 +1241,7 @@ export const queueMethods = {
             const nodeLabel = info.missing?.subgraph_name || info.missing?.node_type || (info.missing?.subgraph_id ? 'Subgraph' : 'Node');
             const status = progress.status || info.lastStatus || 'starting';
             const backend = String(progress.download_backend || info.downloadBackend || '').toLowerCase();
-            const isAria2 = backend === 'aria2';
+            const supportsPauseResume = backend === 'aria2' || backend === 'python';
             const isPaused = status === 'paused';
             const isVerifying = status === 'verifying';
             const isError = status === 'error' || status === 'refresh_error';
@@ -1313,7 +1313,7 @@ export const queueMethods = {
                     isPaused ? 'mr-download-queue-resume' : 'mr-download-queue-pause',
                     isPaused ? 'Resume download' : 'Pause download',
                     isPaused ? 'play' : 'pause',
-                    !isAria2 || isVerifying
+                    (!supportsPauseResume && !isPaused) || isVerifying
                 );
             }
             html += actionButton('mr-download-queue-cancel', 'Cancel download', 'x');
