@@ -160,14 +160,51 @@ export const resolveDownloadMethods = {
             }
         ];
 
+        const normalizeMatchScore = (result, source) => {
+            const matchType = String(result?.match_type || '').toLowerCase();
+            const isHash = Boolean(
+                result?.hash_verified
+                || result?.hash_verified_sha256
+                || matchType === 'hash'
+            );
+            const rawConf = Number(result?.confidence);
+            const hasConf = Number.isFinite(rawConf) && rawConf > 0;
+            const candidateFilename = String(result?.filename || '').toLowerCase();
+            const targetFilename = String(filename || '').toLowerCase();
+            const exactFilename = Boolean(targetFilename && candidateFilename && candidateFilename === targetFilename);
+
+            if (isHash) return { tier: 4, confidence: hasConf ? rawConf : 100 };
+            if (matchType === 'exact' || exactFilename) return { tier: 3, confidence: hasConf ? rawConf : 100 };
+            if (matchType === 'model_title' || (hasConf && rawConf >= 90)) {
+                return { tier: 2, confidence: hasConf ? rawConf : 90 };
+            }
+            if (matchType === 'partial' || matchType === 'fuzzy' || matchType === 'similar') {
+                return { tier: 1, confidence: hasConf ? rawConf : 50 };
+            }
+            if (hasConf) {
+                return { tier: rawConf >= 75 ? 2 : 1, confidence: rawConf };
+            }
+            return { tier: (source === 'popular' || source === 'model_list') ? 2 : 1, confidence: 80 };
+        };
+
+        let bestMatch = null;
+        let bestScore = null;
+
         for (const candidate of candidates) {
             const result = candidate.result;
             const url = result?.[candidate.urlKey]
                 || (candidate.fallbackUrlKey ? result?.[candidate.fallbackUrlKey] : '');
             if (!url) continue;
-            const rawModelUrl = result.model_url || result.url || url;
 
-            return {
+            const score = normalizeMatchScore(result, candidate.source);
+            const isBetter = !bestScore
+                || score.tier > bestScore.tier
+                || (score.tier === bestScore.tier && score.confidence > bestScore.confidence);
+            if (!isBetter) continue;
+
+            const rawModelUrl = result.model_url || result.url || url;
+            bestScore = score;
+            bestMatch = {
                 source: candidate.source,
                 url,
                 filename: result[candidate.filenameKey] || missing.civitai_info?.expected_filename || filename,
@@ -179,7 +216,7 @@ export const resolveDownloadMethods = {
             };
         }
 
-        return null;
+        return bestMatch;
     },
 
     getBatchSearchTargets(mode) {
@@ -4478,6 +4515,8 @@ export const resolveDownloadMethods = {
                 localHashMatches,
                 detailsContext: {
                     ...hfResult,
+                    model_id: hfResult.model_id || hfResult.modelId || hfRepo,
+                    repo_id: hfRepo,
                     name: hfRepo || hfResult.filename,
                     filename: hfResult.filename,
                     details_source: 'huggingface',

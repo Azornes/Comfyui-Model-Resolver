@@ -527,6 +527,80 @@ class DownloaderMetadataSidecarTests(unittest.TestCase):
 
         self.assertEqual(preview_path, result)
 
+    def test_existing_model_preview_path_finds_hidden_cmr_preview(self):
+        from core.path_utils import set_sidecar_layout_override
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_path = os.path.join(tmpdir, "model.safetensors")
+            hidden_dir = os.path.join(tmpdir, ".cmr")
+            os.makedirs(hidden_dir, exist_ok=True)
+            hidden_preview = os.path.join(hidden_dir, "model.preview.png")
+            beside_preview = os.path.join(tmpdir, "model.jpeg")
+            with open(model_path, "wb") as model_file:
+                model_file.write(b"model")
+            with open(hidden_preview, "wb") as preview_file:
+                preview_file.write(b"hidden-preview")
+
+            try:
+                set_sidecar_layout_override("beside")
+                self.assertEqual(
+                    hidden_preview,
+                    downloader.get_existing_model_preview_path(model_path),
+                )
+
+                with open(beside_preview, "wb") as preview_file:
+                    preview_file.write(b"beside-preview")
+
+                self.assertEqual(
+                    beside_preview,
+                    downloader.get_existing_model_preview_path(model_path),
+                )
+
+                set_sidecar_layout_override("hidden")
+                self.assertEqual(
+                    hidden_preview,
+                    downloader.get_existing_model_preview_path(model_path),
+                )
+            finally:
+                set_sidecar_layout_override(None)
+
+    def test_create_model_preview_saves_into_hidden_cmr_dir_when_configured(self):
+        from core.path_utils import set_sidecar_layout_override
+
+        video_data = b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_path = os.path.join(tmpdir, "hidden-video.safetensors")
+            with open(model_path, "wb") as handle:
+                handle.write(b"weights")
+
+            response = MagicMock()
+            response.headers = {"Content-Length": str(len(video_data))}
+            response.iter_content.return_value = [video_data]
+
+            try:
+                set_sidecar_layout_override("hidden")
+                with patch(
+                    "core.download.api.context.request_public_url",
+                    return_value=(response, "https://example.com/preview.mp4", {}),
+                ):
+                    saved_path = downloader.create_model_preview(
+                        model_path,
+                        metadata={
+                            "images": [
+                                {
+                                    "url": "https://example.com/preview.mp4",
+                                    "type": "video",
+                                }
+                            ]
+                        },
+                    )
+            finally:
+                set_sidecar_layout_override(None)
+
+            expected_path = os.path.join(tmpdir, ".cmr", "hidden-video.mp4")
+            self.assertEqual(expected_path, saved_path)
+            self.assertTrue(os.path.isfile(expected_path))
+
     def test_existing_file_with_same_hash_is_marked_already_downloaded(self):
         content = b"existing model"
         expected_sha256 = hashlib.sha256(content).hexdigest()

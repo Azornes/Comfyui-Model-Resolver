@@ -4126,6 +4126,56 @@ test('HuggingFace fallback download source prefers the direct file URL', () => {
   assert.equal(source.url, downloadUrl);
 });
 
+test('getBestDownloadSourceForMissing prefers exact HuggingFace match over low-confidence similar model_list match', () => {
+  const getBestDownloadSourceForMissing = eval(`(${extractMethod(resolveDownloadMethodsSource, 'getBestDownloadSourceForMissing')})`);
+  const missing = {
+    missing_search_key: 'missing-key-rank',
+    original_path: 'batch_probe_alpha.safetensors',
+    category: 'loras',
+  };
+  const hfDownloadUrl = 'https://huggingface.co/BatchAuthor/alpha-repo/resolve/main/batch_probe_alpha.safetensors';
+  const dialog = {
+    searchResultCache: new Map([[
+      'missing-key-rank',
+      {
+        results: {
+          model_list: {
+            source: 'model_list',
+            name: 'Depth Pro model',
+            filename: 'depth_pro.fp16.safetensors',
+            url: 'https://huggingface.co/spacepxl/ml-depth-pro/resolve/main/depth_pro.fp16.safetensors',
+            directory: 'depth/ml-depth-pro',
+            match_type: 'similar',
+            confidence: 51.6,
+          },
+          huggingface: {
+            source: 'huggingface',
+            repo_id: 'BatchAuthor/alpha-repo',
+            name: 'Batch Probe Alpha',
+            filename: 'batch_probe_alpha.safetensors',
+            url: 'https://huggingface.co/BatchAuthor/alpha-repo',
+            download_url: hfDownloadUrl,
+            match_type: 'exact',
+            confidence: 99,
+          },
+        },
+      },
+    ]]),
+    getMissingSearchKey() {
+      return 'missing-key-rank';
+    },
+    getFilenameFromPath(value = '') {
+      return String(value).split(/[\\/]/).at(-1) || '';
+    },
+  };
+
+  const source = getBestDownloadSourceForMissing.call(dialog, missing);
+
+  assert.equal(source.source, 'huggingface');
+  assert.equal(source.url, hfDownloadUrl);
+  assert.equal(source.filename, 'batch_probe_alpha.safetensors');
+});
+
 test('inactive missing models require every workflow reference to be inactive', () => {
   const { isMissingModelInactive } = missingModelStateMethods;
 

@@ -9,7 +9,13 @@ from urllib.parse import urlparse, urlunparse
 import requests
 
 from ..log_system import create_module_logger
-from ..path_utils import get_filename_from_path
+from ..path_utils import (
+    HIDDEN_SIDECAR_DIRS,
+    PRIMARY_HIDDEN_DIR,
+    ensure_hidden_directory,
+    get_configured_sidecar_layout,
+    get_filename_from_path,
+)
 from ..type_utils import as_dict, as_list
 from .dependencies import require_download_dependencies
 
@@ -36,13 +42,49 @@ MODEL_PREVIEW_EXTENSIONS = (
 )
 
 
+def _get_preview_base_paths(dest_path: str) -> Tuple[str, ...]:
+    """Return beside and hidden preview base paths ordered by configured layout."""
+    directory = os.path.dirname(dest_path)
+    stem, _model_ext = os.path.splitext(os.path.basename(dest_path))
+    beside_base = os.path.join(directory, stem)
+    hidden_bases = [
+        os.path.join(directory, hidden_dir, stem)
+        for hidden_dir in HIDDEN_SIDECAR_DIRS
+    ]
+    if get_configured_sidecar_layout() == "hidden":
+        return (*hidden_bases, beside_base)
+    return (beside_base, *hidden_bases)
+
+
+def _get_target_preview_base_path(dest_path: str) -> str:
+    """Return the destination base path for saving a newly created preview."""
+    directory = os.path.dirname(dest_path)
+    stem, _model_ext = os.path.splitext(os.path.basename(dest_path))
+    if get_configured_sidecar_layout() == "hidden":
+        return os.path.join(directory, PRIMARY_HIDDEN_DIR, stem)
+    return os.path.join(directory, stem)
+
+
+def _ensure_preview_parent_dir(preview_path: str) -> None:
+    """Ensure the preview parent directory exists, marking hidden dirs on Windows."""
+    preview_dir = os.path.dirname(preview_path)
+    if not preview_dir:
+        return
+    if os.path.basename(preview_dir) in HIDDEN_SIDECAR_DIRS:
+        ensure_hidden_directory(preview_dir)
+    else:
+        os.makedirs(preview_dir, exist_ok=True)
+
+
 def get_existing_model_preview_path(dest_path: str) -> str:
-    """Return the first adjacent preview media file available for a model."""
-    model_base_path, _model_ext = os.path.splitext(dest_path)
-    for extension in MODEL_PREVIEW_EXTENSIONS:
-        candidate = f"{model_base_path}{extension}"
-        if os.path.isfile(candidate):
-            return candidate
+    """Return the first preview media file available for a model (beside or hidden)."""
+    if not dest_path:
+        return ""
+    for base_path in _get_preview_base_paths(dest_path):
+        for extension in MODEL_PREVIEW_EXTENSIONS:
+            candidate = f"{base_path}{extension}"
+            if os.path.isfile(candidate):
+                return candidate
     return ""
 
 
@@ -266,6 +308,7 @@ def _save_preview_video(video_data: bytes, preview_path: str) -> None:
     if not video_data:
         raise ValueError("Preview video is empty")
 
+    _ensure_preview_parent_dir(preview_path)
     temp_path = ""
     try:
         with tempfile.NamedTemporaryFile(
@@ -292,6 +335,7 @@ def _save_preview_video(video_data: bytes, preview_path: str) -> None:
 def _save_optimized_jpeg(image_data: bytes, preview_path: str) -> None:
     from PIL import Image, ImageOps
 
+    _ensure_preview_parent_dir(preview_path)
     temp_path = ""
     try:
         with Image.open(BytesIO(image_data)) as source_image:
@@ -394,7 +438,7 @@ def create_model_preview(
     if existing_path and not (media_type == "video" and existing_type != "video"):
         return existing_path
 
-    model_base_path, _model_ext = os.path.splitext(dest_path)
+    model_base_path = _get_target_preview_base_path(dest_path)
     if media_type == "video":
         source_extension = os.path.splitext(urlparse(preview_url).path)[1].lower()
         preview_extension = source_extension if source_extension in {".mp4", ".webm"} else ".mp4"
