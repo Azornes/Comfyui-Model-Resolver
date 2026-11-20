@@ -9,6 +9,7 @@ from ..request_utils import (
     validate_workflow_payload,
 )
 from ..routes.context import RouteContext
+from ..workflow.formats import detect_workflow_format, normalize_workflow_payload
 
 
 class WorkflowService:
@@ -71,6 +72,14 @@ class WorkflowService:
                 return web.json_response(
                     {"error": workflow_error}, status=400
                 )
+
+            if detect_workflow_format(workflow_json) == "api":
+                try:
+                    workflow_json, _workflow_format = normalize_workflow_payload(
+                        workflow_json
+                    )
+                except ValueError as exc:
+                    return web.json_response({"error": str(exc)}, status=400)
 
             if analysis_id:
                 self._update_analysis_progress(

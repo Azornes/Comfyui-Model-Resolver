@@ -9139,3 +9139,68 @@ test('LoRA workflow fallback ignores Qwen CLIP and VAE and follows Krea diffusio
   dialog.missingModels.push({ category: 'diffusion_models', civitai_info: { base_model: 'Krea 2' } });
   assert.equal(dialog.getDominantWorkflowBaseModel({ category: 'loras' }), 'Krea 2');
 });
+
+test('getBestDownloadSourceForMissing skips results removed via removedSearchResultKeys', () => {
+  const getBestDownloadSourceForMissing = eval(`(function(missing) {
+    const getModelCardUrl = (u) => u;
+    return (${extractMethod(resolveDownloadMethodsSource, 'getBestDownloadSourceForMissing')}).call(this, missing);
+  })`);
+
+  const missing = {
+    original_path: 'cryptic_lora.safetensors',
+    category: 'loras',
+  };
+  const civUrl = 'https://civitai.com/api/download/models/999';
+  const hfUrl = 'https://huggingface.co/author/repo/resolve/main/backup.safetensors';
+
+  const searchResultCache = new Map([
+    [
+      'missing:cryptic_lora.safetensors',
+      {
+        removedSearchResultKeys: [`civitai:${civUrl}`],
+        results: {
+          civitai: {
+            name: 'Removed CivitAI Match',
+            filename: 'removed_civ.safetensors',
+            download_url: civUrl,
+            url: 'https://civitai.com/models/999',
+            match_type: 'exact',
+            confidence: 99,
+          },
+          huggingface: {
+            name: 'Remaining HF Backup',
+            filename: 'backup.safetensors',
+            download_url: hfUrl,
+            url: 'https://huggingface.co/author/repo',
+            match_type: 'partial',
+            confidence: 70,
+          },
+        },
+      },
+    ],
+  ]);
+
+  const dialog = {
+    searchResultCache,
+    getMissingSearchKey: () => 'missing:cryptic_lora.safetensors',
+    getFilenameFromPath: (p) => String(p).split(/[\\/]/).pop(),
+  };
+
+  const best = getBestDownloadSourceForMissing.call(dialog, missing);
+  assert.equal(best?.source, 'huggingface');
+  assert.equal(best?.filename, 'backup.safetensors');
+
+  // If the remaining HF result is also removed, best source must be null
+  searchResultCache.get('missing:cryptic_lora.safetensors').removedSearchResultKeys.push(`huggingface:${hfUrl}`);
+  assert.equal(getBestDownloadSourceForMissing.call(dialog, missing), null);
+});
+
+test('displayLoadedModels replaces previous swap click handler instead of stacking listeners', () => {
+  assert.match(
+    tabsLoadedMethodsSource,
+    /container\.removeEventListener\('click',\s*container\._mlSwapClickHandler\)/,
+    'Expected displayLoadedModels to detach prior swap click handler before binding a new one'
+  );
+});
+
+

@@ -346,6 +346,13 @@ class LoadedModelsService:
                         "custom_node_adapter": ref.extra_value(
                             "custom_node_adapter"
                         ),
+                        "custom_node_original_identity": ref.extra_value(
+                            "custom_node_original_identity"
+                        ),
+                        "nested_key": ref.extra_value("nested_key"),
+                        "promoted_widget_name": ref.extra_value(
+                            "promoted_widget_name"
+                        ),
                         "active": ref.extra_value("active"),
                         "connected": ref.extra_value("connected", True),
                         "resolved_path": (

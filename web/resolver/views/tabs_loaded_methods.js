@@ -556,7 +556,10 @@ export const tabsLoadedMethods = {
             this.bindLoadedModelSelection?.(container);
             this.bindTooltips?.(container);
 
-            container.addEventListener('click', (event) => {
+            if (typeof container._mlSwapClickHandler === 'function') {
+                container.removeEventListener('click', container._mlSwapClickHandler);
+            }
+            container._mlSwapClickHandler = (event) => {
                 const swapBtn = event.target?.closest?.('.mr-model-chip-swap-btn');
                 if (!swapBtn || !container.contains(swapBtn)) return;
                 event.preventDefault();
@@ -567,7 +570,8 @@ export const tabsLoadedMethods = {
                 if (model) {
                     this.openModelSwapDialog(model);
                 }
-            });
+            };
+            container.addEventListener('click', container._mlSwapClickHandler);
         }
     },
 

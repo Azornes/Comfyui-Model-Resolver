@@ -107,54 +107,79 @@ export const resolveDownloadMethods = {
     getBestDownloadSourceForMissing(missing) {
         if (!missing) return null;
 
+        const state = this.searchResultCache?.get?.(this.getMissingSearchKey(missing));
+        const removedKeys = new Set(state?.removedSearchResultKeys || []);
+        const isResultRemoved = (result, sourceKeys = []) => {
+            if (!result || typeof result !== 'object' || removedKeys.size === 0) return false;
+            const identifiers = [
+                result.download_url,
+                result.downloadUrl,
+                result.url,
+                result.openUrl,
+                `${result.name || result.model}:${result.filename}`
+            ].filter(Boolean);
+            for (const keyPrefix of sourceKeys) {
+                if (!keyPrefix) continue;
+                for (const id of identifiers) {
+                    if (removedKeys.has(`${keyPrefix}:${id}`)) return true;
+                }
+            }
+            return false;
+        };
+
         if (missing.download_source?.url) {
-            return {
-                ...missing.download_source,
-                directory: missing.download_source.directory || missing.download_source.category || missing.category || 'checkpoints'
-            };
+            const dsSource = String(missing.download_source.source || '').toLowerCase();
+            if (!isResultRemoved(missing.download_source, [dsSource, 'workflow'])) {
+                return {
+                    ...missing.download_source,
+                    directory: missing.download_source.directory || missing.download_source.category || missing.category || 'checkpoints'
+                };
+            }
         }
 
-        const state = this.searchResultCache.get(this.getMissingSearchKey(missing));
         const results = state?.results || {};
         const filename = this.getFilenameFromPath(missing.original_path);
-        const first = (value) => Array.isArray(value) ? value[0] : value;
+        const firstVisible = (value, rowSourceKeys) => {
+            const list = Array.isArray(value) ? value : (value ? [value] : []);
+            return list.find(item => item && !isResultRemoved(item, rowSourceKeys)) || null;
+        };
         const candidates = [
             {
                 source: 'popular',
-                result: first(results.popular),
+                result: firstVisible(results.popular, ['popular']),
                 urlKey: 'url',
                 filenameKey: 'filename',
                 categoryKey: 'directory'
             },
             {
                 source: 'model_list',
-                result: first(results.model_list),
+                result: firstVisible(results.model_list, ['model-list', 'model_list']),
                 urlKey: 'url',
                 filenameKey: 'filename',
                 categoryKey: 'directory'
             },
             {
                 source: 'huggingface',
-                result: first(results.huggingface),
+                result: firstVisible(results.huggingface, ['huggingface']),
                 urlKey: 'download_url',
                 fallbackUrlKey: 'url',
                 filenameKey: 'filename'
             },
             {
                 source: 'civarchive',
-                result: first(results.civarchive),
+                result: firstVisible(results.civarchive, ['civarchive']),
                 urlKey: 'download_url',
                 filenameKey: 'filename'
             },
             {
                 source: 'lora_manager_archive',
-                result: first(results.lora_manager_archive),
+                result: firstVisible(results.lora_manager_archive, ['lora-archive', 'lora_manager_archive']),
                 urlKey: 'download_url',
                 filenameKey: 'filename'
             },
             {
                 source: 'civitai',
-                result: first(results.civitai),
+                result: firstVisible(results.civitai, ['civitai']),
                 urlKey: 'download_url',
                 filenameKey: 'filename'
             }
@@ -3794,6 +3819,7 @@ export const resolveDownloadMethods = {
                 this.persistSearchStateForWorkflow(workflowKey, missing, state);
                 const resultsContainer = btn.closest('.mr-search-results-table-wrap')?.parentElement;
                 this.displaySearchResults(missing, state, resultsContainer);
+                this.updateBatchFooterButtons?.();
                 return;
             }
 
