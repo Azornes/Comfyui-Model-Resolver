@@ -759,13 +759,22 @@ def get_local_model_hash_metadata(
         except OSError:
             file_size = 0
     filename = get_filename_from_path(normalized_path)
+    resolved_input = None
+    if isinstance(model, ResolvedModel):
+        resolved_input = model
+    elif isinstance(model, dict) and model:
+        try:
+            resolved_input = ResolvedModel.from_mapping(model)
+        except (TypeError, ValueError):
+            resolved_input = None
+
     model_info = (
-        model.with_updates(
+        resolved_input.with_updates(
             path=normalized_path,
-            filename=model.filename or filename,
-            relative_path=model.relative_path or model.filename or filename,
+            filename=resolved_input.filename or filename,
+            relative_path=resolved_input.relative_path or resolved_input.filename or filename,
         )
-        if model is not None
+        if resolved_input is not None
         else ResolvedModel(
             path=normalized_path,
             filename=filename,

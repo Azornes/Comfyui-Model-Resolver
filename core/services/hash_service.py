@@ -120,8 +120,15 @@ class HashService:
                 status=403,
             )
 
+        model_info = None
+        if model:
+            try:
+                model_info = ResolvedModel.from_mapping(model)
+            except (TypeError, ValueError):
+                model_info = None
+
         return self.web.json_response(
-            self.get_local_model_hash_metadata(normalized_path, model=model)
+            self.get_local_model_hash_metadata(normalized_path, model=model_info)
         )
 
     async def get_model_preview(self, request):

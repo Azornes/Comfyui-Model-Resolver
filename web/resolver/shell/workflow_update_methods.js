@@ -412,6 +412,29 @@ export const workflowUpdateMethods = {
                 widgetIndex,
                 value: workflowNode.widgets_values[widgetIndex]
             });
+
+            // Sync companion formatted text widget updated by the backend LoraManager adapter
+            const isLoraManagerNode =
+                resolution?.custom_node_adapter === 'lora-manager' ||
+                graphNode.type === 'LoraLoaderV2' ||
+                graphNode.type === 'Lora Loader (LoraManager)' ||
+                graphNode.type === 'Lora Stacker (LoraManager)';
+            if (isLoraManagerNode && widgetIndex === 2 && typeof workflowNode.widgets_values[1] === 'string') {
+                const namedStringTextWidget = Array.isArray(graphNode.widgets)
+                    ? graphNode.widgets.find(w => w?.name === 'text' && typeof w.value === 'string')
+                    : null;
+                const textWidget = namedStringTextWidget || this.findGraphWidgetForResolution(graphNode, workflowNode, {
+                    widget_index: 1
+                });
+                if (textWidget && textWidget !== widget) {
+                    updates.set(`${nodeId}:1`, {
+                        graphNode,
+                        widget: textWidget,
+                        widgetIndex: 1,
+                        value: workflowNode.widgets_values[1]
+                    });
+                }
+            }
         }
 
         if (!updates.size) return false;
