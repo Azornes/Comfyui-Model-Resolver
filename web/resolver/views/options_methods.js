@@ -3083,10 +3083,14 @@ export const optionsMethods = {
                 setControlsBusyState(clearAllCacheBtn, true);
                 setElementStatusText(clearAllCacheStatus, 'Clearing frontend and backend cache...', 'is-pending');
                 await this.clearAllResolverCaches();
+                this._pendingClearCacheStatus = {
+                    text: 'Frontend and backend cache cleared.',
+                    state: 'is-valid'
+                };
                 setElementStatusText(clearAllCacheStatus, 'Frontend and backend cache cleared.', 'is-valid');
                 this.showNotification('Resolver cache cleared', 'success');
                 if (this.activeTab === 'options') {
-                    this.displayOptions();
+                    await this.displayOptions();
                 }
             } catch (error) {
                 console.error('Model Resolver: clear all cache error:', error);
@@ -3104,6 +3108,7 @@ export const optionsMethods = {
         };
 
         const setVisibleSection = (targetId) => {
+            this._activeOptionsSectionId = targetId;
             optionSections.forEach((section) => {
                 section.classList.toggle('is-hidden', section.id !== targetId);
             });
@@ -3544,7 +3549,19 @@ export const optionsMethods = {
         loadMetadataBuildCapabilities();
 
         setStatus('Saved only on this machine.');
-        setVisibleSection('mr-options-section-sources');
+        const initialSection = this._activeOptionsSectionId
+            && optionSections.some((section) => section.id === this._activeOptionsSectionId)
+            ? this._activeOptionsSectionId
+            : 'mr-options-section-sources';
+        setVisibleSection(initialSection);
+        if (this._pendingClearCacheStatus && clearAllCacheStatus) {
+            setElementStatusText(
+                clearAllCacheStatus,
+                this._pendingClearCacheStatus.text,
+                this._pendingClearCacheStatus.state
+            );
+            this._pendingClearCacheStatus = null;
+        }
 
         trackedInputs.forEach((input) => {
             const eventName = input.type === 'checkbox' || input.tagName === 'SELECT' ? 'change' : 'input';

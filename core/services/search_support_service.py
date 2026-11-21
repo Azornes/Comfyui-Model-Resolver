@@ -51,10 +51,13 @@ class SearchSupportService:
 
     async def clear_search_cache(self, request):
         """Clear backend search caches after token/settings changes."""
-        self.clear_all_search_caches()
-        self.reload_popular_databases()
-        self.reload_model_list()
-        self.invalidate_model_caches()
+        def _clear_all():
+            self.clear_all_search_caches()
+            self.reload_popular_databases()
+            self.reload_model_list()
+            self.invalidate_model_caches()
+
+        await self.asyncio.to_thread(_clear_all)
         self.extension.search_result_timestamps.clear()
         self.extension.logger.info("Cleared backend search caches")
         return self.web.json_response({"success": True, "cleared": "all"})
@@ -119,9 +122,10 @@ class SearchSupportService:
 
     async def author_index_status(self, request):
         """Return local HuggingFace author fallback index status."""
-        return self.web.json_response(
-            self.get_known_author_fallback_indexes_status()
+        status = await self.asyncio.to_thread(
+            self.get_known_author_fallback_indexes_status
         )
+        return self.web.json_response(status)
 
     async def refresh_author_index(self, request):
         """Refresh HuggingFace author fallback index."""
@@ -151,9 +155,11 @@ class SearchSupportService:
             )
         except TypeError as exc:
             return self.web.json_response({"error": str(exc)}, status=400)
-        return self.web.json_response(
-            self.get_model_list_update_status(check_remote=check_remote)
+        status = await self.asyncio.to_thread(
+            self.get_model_list_update_status,
+            check_remote=check_remote,
         )
+        return self.web.json_response(status)
 
     async def update_model_list(self, request):
         """Download latest ComfyUI-Manager model-list.json."""
@@ -174,9 +180,11 @@ class SearchSupportService:
         except TypeError as exc:
             return self.web.json_response({"error": str(exc)}, status=400)
         if self.get_popular_models_status:
-            return self.web.json_response(
-                self.get_popular_models_status(check_remote=check_remote)
+            status = await self.asyncio.to_thread(
+                self.get_popular_models_status,
+                check_remote=check_remote,
             )
+            return self.web.json_response(status)
         return self.web.json_response({"error": "Popular models status not available"}, status=501)
 
     async def update_popular_models(self, request):

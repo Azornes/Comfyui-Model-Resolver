@@ -485,11 +485,7 @@ def _get_author_index(
         return None
 
 
-def get_author_fallback_index_status(author: str = "Comfy-Org") -> Dict[str, Any]:
-    """Return persisted public author fallback index status for the options UI."""
-    with _author_index_lock:
-        index = _read_persistent_author_indexes().get("authors", {}).get(author)
-
+def _build_author_fallback_index_status(author: str, index: Any) -> Dict[str, Any]:
     updated_at = index.get("updated_at") if isinstance(index, dict) else None
     age_seconds = (time.time() - updated_at) if isinstance(updated_at, (int, float)) else None
     return {
@@ -505,10 +501,20 @@ def get_author_fallback_index_status(author: str = "Comfy-Org") -> Dict[str, Any
     }
 
 
+def get_author_fallback_index_status(author: str = "Comfy-Org") -> Dict[str, Any]:
+    """Return persisted public author fallback index status for the options UI."""
+    with _author_index_lock:
+        index = _read_persistent_author_indexes().get("authors", {}).get(author)
+    return _build_author_fallback_index_status(author, index)
+
+
 def get_known_author_fallback_indexes_status() -> Dict[str, Any]:
     """Return aggregate status for all known HuggingFace author indexes."""
+    with _author_index_lock:
+        authors_map = _read_persistent_author_indexes().get("authors", {})
     author_statuses = [
-        get_author_fallback_index_status(author) for author in HF_AUTHOR_FALLBACKS
+        _build_author_fallback_index_status(author, authors_map.get(author))
+        for author in HF_AUTHOR_FALLBACKS
     ]
     updated_times = [
         status["updated_at"]

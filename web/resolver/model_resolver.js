@@ -1025,18 +1025,34 @@ export class ModelResolver {
             !node
             || typeof node !== 'object'
             || node.__modelResolverWorkflowLifecyclePatched
-            || typeof node.onRemoved !== 'function'
         ) return;
 
         const owner = this;
-        const originalOnRemoved = node.onRemoved;
+        const originalOnRemoved = typeof node.onRemoved === 'function' ? node.onRemoved : null;
+        const originalOnWidgetChanged = typeof node.onWidgetChanged === 'function' ? node.onWidgetChanged : null;
         try {
             node.onRemoved = function(...args) {
                 let result;
                 try {
-                    result = originalOnRemoved.apply(this, args);
+                    if (originalOnRemoved) {
+                        result = originalOnRemoved.apply(this, args);
+                    }
                 } finally {
                     owner.dialog?.scheduleActiveWorkflowRefresh?.('node-removed');
+                }
+                return result;
+            };
+            node.onWidgetChanged = function(...args) {
+                let result;
+                try {
+                    if (originalOnWidgetChanged) {
+                        result = originalOnWidgetChanged.apply(this, args);
+                    }
+                } finally {
+                    if (!owner.dialog?.isWorkflowRefreshSuppressed?.()) {
+                        owner.scheduleNodeContextMenuAnalysis?.();
+                        owner.dialog?.scheduleActiveWorkflowRefresh?.('node-widget-change');
+                    }
                 }
                 return result;
             };
