@@ -145,6 +145,14 @@ export const resolveDownloadMethods = {
         };
         const candidates = [
             {
+                source: 'custom',
+                result: firstVisible(results.custom, ['custom', 'civitai', 'huggingface', 'civarchive', 'lora-archive', 'lora_manager_archive']),
+                urlKey: 'download_url',
+                fallbackUrlKey: 'url',
+                filenameKey: 'filename',
+                categoryKey: 'directory'
+            },
+            {
                 source: 'popular',
                 result: firstVisible(results.popular, ['popular']),
                 urlKey: 'url',
@@ -198,6 +206,7 @@ export const resolveDownloadMethods = {
             const targetFilename = String(filename || '').toLowerCase();
             const exactFilename = Boolean(targetFilename && candidateFilename && candidateFilename === targetFilename);
 
+            if (source === 'custom') return { tier: 5, confidence: hasConf ? rawConf : 100 };
             if (isHash) return { tier: 4, confidence: hasConf ? rawConf : 100 };
             if (matchType === 'exact' || exactFilename) return { tier: 3, confidence: hasConf ? rawConf : 100 };
             if (matchType === 'model_title' || (hasConf && rawConf >= 90)) {
@@ -228,9 +237,12 @@ export const resolveDownloadMethods = {
             if (!isBetter) continue;
 
             const rawModelUrl = result.model_url || result.url || url;
+            const resolvedSource = candidate.source === 'custom'
+                ? (result.source || 'custom')
+                : candidate.source;
             bestScore = score;
             bestMatch = {
-                source: candidate.source,
+                source: resolvedSource,
                 url,
                 filename: result[candidate.filenameKey] || missing.civitai_info?.expected_filename || filename,
                 directory: result[candidate.categoryKey] || result.directory || result.category || missing.category || 'checkpoints',
@@ -360,7 +372,8 @@ export const resolveDownloadMethods = {
 
         const toDownload = [];
         for (const missing of targets) {
-            if (this.getBestLocalMatch(missing, 100)) continue;
+            const exactMatch = this.getBestLocalMatch(missing, 100, { excludeMismatch: true });
+            if (exactMatch && !this.getLocalMatchBadFolderWarning?.(missing, exactMatch)) continue;
             const source = this.getBestDownloadSourceForMissing(missing);
             if (!source?.url) continue;
             missing.download_source = source;
@@ -388,8 +401,9 @@ export const resolveDownloadMethods = {
         let queued = 0;
 
         for (const missing of targets) {
-            const match = this.getBestLocalMatch(missing, 100);
+            const match = this.getBestLocalMatch(missing, 100, { excludeMismatch: true });
             if (!match?.model) continue;
+            if (this.getLocalMatchBadFolderWarning?.(missing, match)) continue;
             this.queueResolution(missing, match.model);
             queued += 1;
         }

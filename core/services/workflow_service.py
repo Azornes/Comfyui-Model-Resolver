@@ -147,7 +147,11 @@ class WorkflowService:
                                 source = "workflow"
 
                             # Try to get file size using cached remote helper
-                            file_size = fetch_remote_file_size_cached(workflow_url, timeout=5)
+                            file_size = await asyncio.to_thread(
+                                fetch_remote_file_size_cached,
+                                workflow_url,
+                                timeout=5,
+                            )
 
                             filtered_missing[index] = missing.with_extra(
                                 download_source={
@@ -170,10 +174,15 @@ class WorkflowService:
                             continue
 
                         # 1. Check popular models (always exact match)
-                        popular_info = get_popular_model_url(filename)
+                        popular_info = await asyncio.to_thread(
+                            get_popular_model_url,
+                            filename,
+                        )
                         if popular_info:
-                            popular_model_list_result = search_model_list(
-                                filename, exact_only=True
+                            popular_model_list_result = await asyncio.to_thread(
+                                search_model_list,
+                                filename,
+                                exact_only=True,
                             )
                             filtered_missing[index] = missing.with_extra(
                                 download_source={
@@ -200,8 +209,10 @@ class WorkflowService:
 
                         # 2. Check model list (ComfyUI Manager database)
                         # Use exact_only=True to avoid confusing fuzzy matches for downloads
-                        model_list_result = search_model_list(
-                            filename, exact_only=True
+                        model_list_result = await asyncio.to_thread(
+                            search_model_list,
+                            filename,
+                            exact_only=True,
                         )
                         if model_list_result:
                             filtered_missing[index] = missing.with_extra(
@@ -265,7 +276,7 @@ class WorkflowService:
         workflow_json, workflow_error = validate_workflow_payload(
             data.get("workflow"),
             empty_is_missing=True,
-            require_object=False,
+            require_object=True,
         )
         raw_resolutions = data.get("resolutions", [])
 
@@ -298,7 +309,11 @@ class WorkflowService:
             )
 
         # Apply resolutions
-        updated_workflow = apply_resolution(workflow_json, resolutions)
+        updated_workflow = await self.asyncio.to_thread(
+            apply_resolution,
+            workflow_json,
+            resolutions,
+        )
 
         return web.json_response(
             {"workflow": updated_workflow, "success": True}
@@ -336,7 +351,8 @@ class WorkflowService:
                 {"error": "filename is required"}, status=400
             )
 
-        matches = search_local_matches(
+        matches = await self.asyncio.to_thread(
+            search_local_matches,
             filename,
             category=category or None,
             similarity_threshold=0.0,

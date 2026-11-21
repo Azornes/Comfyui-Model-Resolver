@@ -81,23 +81,25 @@ export const selectionMethods = {
     },
 
     getMissingWithExactLocalMatches(missingModels = this.missingModels || []) {
-        return this._filterMissingModels(
-            missing => this.getBestLocalMatch(missing, 100),
-            missingModels,
-        );
+        return this._filterMissingModels(missing => {
+            const match = this.getBestLocalMatch(missing, 100, { excludeMismatch: true });
+            return Boolean(match && !this.getLocalMatchBadFolderWarning?.(missing, match));
+        }, missingModels);
     },
 
     getMissingWithoutExactLocalMatches(missingModels = this.missingModels || []) {
-        return this._filterMissingModels(
-            missing => !this.getBestLocalMatch(missing, 100),
-            missingModels,
-        );
+        return this._filterMissingModels(missing => {
+            const match = this.getBestLocalMatch(missing, 100, { excludeMismatch: true });
+            return !(match && !this.getLocalMatchBadFolderWarning?.(missing, match));
+        }, missingModels);
     },
 
     getMissingWithPartialLocalMatches(missingModels = this.missingModels || []) {
         return this._filterMissingModels(missing => {
+            const exact = this.getBestLocalMatch(missing, 100, { excludeMismatch: true });
+            if (exact && !this.getLocalMatchBadFolderWarning?.(missing, exact)) return false;
             const bestMatch = this.getBestLocalMatch(missing, 70);
-            return bestMatch && Number(bestMatch.confidence || 0) < 100;
+            return Boolean(bestMatch);
         }, missingModels);
     },
 

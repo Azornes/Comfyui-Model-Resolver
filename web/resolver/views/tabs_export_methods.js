@@ -492,9 +492,21 @@ export const tabsExportMethods = {
             if (options.properties) {
                 let written = 0;
                 for (const { entry, name, directory, url } of models) {
-                    if (!url) continue;
                     for (const ref of (entry.all_node_refs || [entry])) {
                         for (const node of this.findLiveNodes(ref)) {
+                            if (!url) {
+                                if (!Array.isArray(node.properties?.models)) continue;
+                                const filtered = node.properties.models.filter((m) => m?.name !== name);
+                                if (filtered.length !== node.properties.models.length) {
+                                    if (filtered.length > 0) {
+                                        node.properties.models = filtered;
+                                    } else {
+                                        delete node.properties.models;
+                                    }
+                                    written++;
+                                }
+                                continue;
+                            }
                             node.properties = node.properties || {};
                             const list = Array.isArray(node.properties.models) ? [...node.properties.models] : [];
                             const item = { name, url, directory };
