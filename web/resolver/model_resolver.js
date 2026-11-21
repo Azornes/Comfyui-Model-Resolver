@@ -1147,7 +1147,7 @@ export class ModelResolver {
         const button = target?.closest(`[data-testid="${this.sidebarTabId}-tab-button"], .${this.sidebarTabId}-tab-button`);
         if (!(button instanceof HTMLElement)) return;
         if (!this.dialog?.isVisible()) return;
-        if (this.dialog.pendingDockToSidebar) return;
+        if (this.dialog.pendingDockToSidebar || this.dialog._closingSidebarProgrammatically) return;
 
         const wasDocked = this.dialog.docked;
         const didClose = this.dialog.requestClose({ collapseSidebar: false });
@@ -1165,7 +1165,12 @@ export class ModelResolver {
 
             requestAnimationFrame(() => {
                 if (isSidebarButtonActive(button)) {
-                    button.click();
+                    this.dialog._closingSidebarProgrammatically = true;
+                    try {
+                        button.click();
+                    } finally {
+                        this.dialog._closingSidebarProgrammatically = false;
+                    }
                 }
             });
         }

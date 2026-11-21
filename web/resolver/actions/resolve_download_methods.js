@@ -2233,7 +2233,22 @@ export const resolveDownloadMethods = {
             for (const downloadId of Object.keys(this.activeDownloads || {})) {
                 if (!activeIds.has(String(downloadId))) {
                     const deadInfo = this.activeDownloads[downloadId];
-                    this.finalizeCancelledDownloadFrontend?.(downloadId, deadInfo);
+                    const backendProgress = allProgress?.[downloadId];
+                    const backendStatus = String(backendProgress?.status || '').toLowerCase();
+                    if (backendStatus === 'completed') {
+                        void this.pollDownloadProgress(downloadId);
+                        continue;
+                    }
+                    if (backendStatus === 'error' || backendStatus === 'refresh_error') {
+                        const alreadyInSameErrorState =
+                            String(deadInfo?.lastStatus || '').toLowerCase() === backendStatus;
+                        deadInfo.lastProgress = backendProgress;
+                        if (!alreadyInSameErrorState) {
+                            void this.pollDownloadProgress(downloadId);
+                        }
+                        continue;
+                    }
+                    this.finalizeCancelledDownloadFrontend?.(downloadId, deadInfo, backendProgress || {});
                 }
             }
 
@@ -2574,7 +2589,8 @@ export const resolveDownloadMethods = {
 
     async pollDownloadProgress(downloadId) {
         const info = this.activeDownloads[downloadId];
-        if (!info) return;
+        if (!info || info._pollInFlight) return;
+        info._pollInFlight = true;
 
         try {
             let progress = await this.fetchJson(`/model_resolver/progress/${downloadId}`, { silent: true }, 'Get download progress');
@@ -2729,6 +2745,8 @@ export const resolveDownloadMethods = {
             }
             this.updateDownloadAllButtonState();
             this.updateQueuePanel?.();
+        } finally {
+            info._pollInFlight = false;
         }
     },
 

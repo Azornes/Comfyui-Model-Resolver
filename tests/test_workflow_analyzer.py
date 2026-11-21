@@ -1885,6 +1885,41 @@ class WorkflowModelInventoryCacheTests(unittest.TestCase):
         self.assertNotIn("zero_strength.safetensors", filenames)
         self.assertIn("active_row.safetensors", filenames)
 
+    def test_muted_and_bypassed_nodes_marked_inactive(self):
+        workflow = {
+            "nodes": [
+                {
+                    "id": 1,
+                    "type": "LoraLoader",
+                    "mode": 0,
+                    "inputs": [{"name": "model", "link": 1}],
+                    "outputs": [{"name": "MODEL", "links": [2]}],
+                    "widgets_values": ["active_lora.safetensors", 0.8, 0.8],
+                },
+                {
+                    "id": 2,
+                    "type": "LoraLoader",
+                    "mode": 2,
+                    "inputs": [{"name": "model", "link": 2}],
+                    "outputs": [{"name": "MODEL", "links": [3]}],
+                    "widgets_values": ["muted_lora.safetensors", 0.8, 0.8],
+                },
+                {
+                    "id": 3,
+                    "type": "LoraLoader",
+                    "mode": 4,
+                    "inputs": [{"name": "model", "link": 3}],
+                    "outputs": [{"name": "MODEL", "links": [4]}],
+                    "widgets_values": ["bypassed_lora.safetensors", 0.8, 0.8],
+                },
+            ]
+        }
+        refs = analysis.analyze_workflow_models(workflow, available_models=[])
+        by_path = {ref.original_path: ref for ref in refs}
+        self.assertTrue(by_path["active_lora.safetensors"].extra_value("connected"))
+        self.assertFalse(by_path["muted_lora.safetensors"].extra_value("connected"))
+        self.assertFalse(by_path["bypassed_lora.safetensors"].extra_value("connected"))
+
 
 if __name__ == "__main__":
     unittest.main()

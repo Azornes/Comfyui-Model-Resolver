@@ -1,5 +1,6 @@
 """CivitAI model search service."""
 
+import asyncio
 from typing import Any, Dict
 
 from .. import path_utils
@@ -648,95 +649,103 @@ class CivitAISearchService(ModelServiceDependencies):
             metadata_path = ""
             metadata_saved = False
             if download_available and file_path and _os.path.exists(file_path):
-                try:
+                def _load_local_info():
                     from ..sources.civitai import (
                         get_model_info_for_file,
                     )
 
-                    result = get_model_info_for_file(
+                    local_result = get_model_info_for_file(
                         file_path,
                         local_only=True,
                     )
+                    local_meta_path = ""
+                    local_meta_saved = False
                     source_metadata_path = (
-                        result.get("metadata_path")
-                        if isinstance(result, dict)
+                        local_result.get("metadata_path")
+                        if isinstance(local_result, dict)
                         else ""
                     )
                     canonical_metadata_path = get_model_resolver_sidecar_path(
                         file_path
                     )
                     if (
-                        isinstance(result, dict)
-                        and result.get("from_metadata")
+                        isinstance(local_result, dict)
+                        and local_result.get("from_metadata")
                         and source_metadata_path
                         and canonical_metadata_path
                         and _os.path.abspath(source_metadata_path)
                         != _os.path.abspath(canonical_metadata_path)
                         and not _os.path.exists(canonical_metadata_path)
                     ):
-                        preview_url = result.get("preview_url") or ""
+                        preview_url = local_result.get("preview_url") or ""
                         if not preview_url:
                             preview_path = get_existing_model_preview_path(file_path)
                             if preview_path:
                                 preview_url = preview_path.replace("\\", "/")
                         model_description, version_description = (
-                            split_result_descriptions(result)
+                            split_result_descriptions(local_result)
                         )
-                        model_type = result.get("model_type", "")
+                        model_type = local_result.get("model_type", "")
                         metadata_payload = build_metadata_source_payload(
                             source="metadata_import",
-                            details_source=result.get("source") or "metadata",
+                            details_source=local_result.get("source") or "metadata",
                             filename=filename,
                             category=category,
-                            model_name=result.get("model_name", clean_name),
+                            model_name=local_result.get("model_name", clean_name),
                             model_type=model_type,
-                            sha256=result.get("sha256"),
-                            size=result.get("size"),
-                            result=result,
+                            sha256=local_result.get("sha256"),
+                            size=local_result.get("size"),
+                            result=local_result,
                             description=model_description,
                             version_description=version_description,
                             extra_fields={
                                 "type": model_type,
-                                "model_id": result.get("model_id"),
-                                "version_id": result.get("version_id"),
-                                "version_name": result.get("version_name", ""),
-                                "tags": result.get("tags", []),
-                                "trained_words": result.get("trained_words", []),
-                                "images": result.get("images", []),
-                                "clip_skip": result.get("clip_skip"),
-                                "download_url": result.get("download_url"),
+                                "model_id": local_result.get("model_id"),
+                                "version_id": local_result.get("version_id"),
+                                "version_name": local_result.get("version_name", ""),
+                                "tags": local_result.get("tags", []),
+                                "trained_words": local_result.get("trained_words", []),
+                                "images": local_result.get("images", []),
+                                "clip_skip": local_result.get("clip_skip"),
+                                "download_url": local_result.get("download_url"),
                                 "preview_url": preview_url,
-                                "source_url": result.get("version_url")
-                                or result.get("url"),
-                                "version_url": result.get("version_url")
-                                or result.get("url"),
-                                "model_url": result.get("url"),
-                                "url": result.get("version_url")
-                                or result.get("url"),
+                                "source_url": local_result.get("version_url")
+                                or local_result.get("url"),
+                                "version_url": local_result.get("version_url")
+                                or local_result.get("url"),
+                                "model_url": local_result.get("url"),
+                                "url": local_result.get("version_url")
+                                or local_result.get("url"),
                                 "path_metadata": {
                                     "filename": filename,
                                     "category": category,
                                     "source": "metadata_import",
-                                    "model_id": result.get("model_id"),
-                                    "version_id": result.get("version_id"),
+                                    "model_id": local_result.get("model_id"),
+                                    "version_id": local_result.get("version_id"),
                                     "imported_from": source_metadata_path,
                                 },
                             },
                         )
-                        metadata_path, metadata_saved = _persist_metadata_sidecar(
+                        local_meta_path, local_meta_saved = _persist_metadata_sidecar(
                             metadata_payload,
-                            result,
+                            local_result,
                             source_url=(
-                                result.get("version_url")
-                                or result.get("url")
-                                or result.get("download_url")
+                                local_result.get("version_url")
+                                or local_result.get("url")
+                                or local_result.get("download_url")
                                 or ""
                             ),
                             create_preview=True,
                         )
-                        if metadata_path:
-                            result["metadata_path"] = metadata_path
-                            result["metadata_imported_from"] = source_metadata_path
+                        if local_meta_path:
+                            local_result["metadata_path"] = local_meta_path
+                            local_result["metadata_imported_from"] = source_metadata_path
+                    return local_result, local_meta_path, local_meta_saved
+
+                try:
+                    result, metadata_path, metadata_saved = await asyncio.to_thread(
+                        _load_local_info
+                    )
                 except Exception as e:
                     self.logger.warning(f"Local model info error: {e}")
             return web.json_response(
@@ -759,7 +768,8 @@ class CivitAISearchService(ModelServiceDependencies):
                 )
 
                 if provided_hash:
-                    result = get_model_info_by_hash(
+                    result = await asyncio.to_thread(
+                        get_model_info_by_hash,
                         provided_hash,
                         use_cache=not force_refresh,
                     )
@@ -775,7 +785,10 @@ class CivitAISearchService(ModelServiceDependencies):
                         if not extract_result_sha256(result):
                             result["sha256"] = provided_hash
                 elif not force_refresh:
-                    result = get_model_info_for_file(file_path)
+                    result = await asyncio.to_thread(
+                        get_model_info_for_file,
+                        file_path,
+                    )
                 else:
                     result = None
 
@@ -799,7 +812,8 @@ class CivitAISearchService(ModelServiceDependencies):
                         else "civitai"
                     )
                     result = prepare_remote_result(result, result_source)
-                    metadata_path, metadata_saved = save_remote_metadata(
+                    metadata_path, metadata_saved = await asyncio.to_thread(
+                        save_remote_metadata,
                         result,
                         result_source,
                     )
@@ -817,20 +831,24 @@ class CivitAISearchService(ModelServiceDependencies):
 
             if provided_hash:
                 try:
-                    result = serialize_provider_result(
-                        resolve_civarchive_by_hash(
-                            provided_hash,
-                            query=filename,
-                            exact_only=False,
-                            model_type=infer_model_type_from_category(category),
-                        )
+                    raw_civarchive = await asyncio.to_thread(
+                        resolve_civarchive_by_hash,
+                        provided_hash,
+                        query=filename,
+                        exact_only=False,
+                        model_type=infer_model_type_from_category(category),
                     )
+                    result = serialize_provider_result(raw_civarchive)
                     if result:
                         if not extract_result_sha256(result):
                             result["sha256"] = provided_hash
                         result = prepare_remote_result(result, "civarchive")
-                        if result_hash_matches(result) and civarchive_result_has_live_download(result):
-                            metadata_path, metadata_saved = save_remote_metadata(
+                        if result_hash_matches(result) and await asyncio.to_thread(
+                            civarchive_result_has_live_download,
+                            result,
+                        ):
+                            metadata_path, metadata_saved = await asyncio.to_thread(
+                                save_remote_metadata,
                                 result,
                                 "civarchive",
                             )
@@ -871,22 +889,22 @@ class CivitAISearchService(ModelServiceDependencies):
 
                 for hf_attempt in hf_attempts:
                     try:
-                        result = serialize_provider_result(
-                            search_huggingface_for_file(
-                                filename,
-                                token=hf_token or None,
-                                exact_only=True,
-                                brave_api_key=brave_search_api_key or None,
-                                use_api_search=hf_attempt["use_api_search"],
-                                use_comfy_org_fallback=hf_attempt[
-                                    "use_comfy_org_fallback"
-                                ],
-                                use_brave_fallback=hf_attempt[
-                                    "use_brave_fallback"
-                                ],
-                                force_refresh=force_refresh,
-                            )
+                        raw_hf = await asyncio.to_thread(
+                            search_huggingface_for_file,
+                            filename,
+                            token=hf_token or None,
+                            exact_only=True,
+                            brave_api_key=brave_search_api_key or None,
+                            use_api_search=hf_attempt["use_api_search"],
+                            use_comfy_org_fallback=hf_attempt[
+                                "use_comfy_org_fallback"
+                            ],
+                            use_brave_fallback=hf_attempt[
+                                "use_brave_fallback"
+                            ],
+                            force_refresh=force_refresh,
                         )
+                        result = serialize_provider_result(raw_hf)
                         if result and result_hash_matches(
                             result,
                             require_filename=True,
@@ -895,7 +913,8 @@ class CivitAISearchService(ModelServiceDependencies):
                                 result,
                                 "huggingface",
                             )
-                            metadata_path, metadata_saved = save_remote_metadata(
+                            metadata_path, metadata_saved = await asyncio.to_thread(
+                                save_remote_metadata,
                                 result,
                                 "huggingface",
                             )
@@ -906,7 +925,7 @@ class CivitAISearchService(ModelServiceDependencies):
                                     metadata_saved=metadata_saved,
                                     civitai_checked=True,
                                 )
-                        )
+                            )
                         if result:
                             self.logger.info(
                                 f"{hf_attempt['label']} metadata candidate rejected: "
@@ -925,7 +944,8 @@ class CivitAISearchService(ModelServiceDependencies):
             try:
                 from ..sources.civitai import get_model_info_for_file
 
-                local_candidate = get_model_info_for_file(
+                local_candidate = await asyncio.to_thread(
+                    get_model_info_for_file,
                     file_path,
                     local_only=True,
                 )
@@ -974,7 +994,8 @@ class CivitAISearchService(ModelServiceDependencies):
                         "remote_metadata_missing": True,
                     },
                 )
-                metadata_path, metadata_saved = _persist_metadata_sidecar(
+                metadata_path, metadata_saved = await asyncio.to_thread(
+                    _persist_metadata_sidecar,
                     metadata_payload,
                     response,
                 )

@@ -376,12 +376,12 @@ def get_node_model_info(
         out.get("links") and len(out.get("links", [])) > 0 for out in outputs
     )
 
-    # Check if node is in bypass mode (mode 4)
+    # Check if node is muted (mode 2 / LiteGraph.NEVER) or bypassed (mode 4 / LiteGraph.BYPASS)
     node_mode = node.get("mode", 0)
-    is_bypassed = node_mode == 4
+    is_disabled_mode = node_mode in (2, 4)
 
-    # Node is active if connected AND not bypassed
-    is_active = is_connected and not is_bypassed
+    # Node is active if connected AND not muted/bypassed
+    is_active = is_connected and not is_disabled_mode
 
     if not widgets_values:
         return []

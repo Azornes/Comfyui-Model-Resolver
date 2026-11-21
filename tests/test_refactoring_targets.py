@@ -1850,6 +1850,93 @@ class TestRefactoringTargets(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(metadata_payload["civitai_checked"])
         self.assertTrue(metadata_payload["remote_metadata_missing"])
 
+    async def test_civitai_search_runs_blocking_lookup_off_event_loop(self):
+        import asyncio as _asyncio
+        import threading
+
+        event_loop_thread_id = threading.get_ident()
+        lookup_started = threading.Event()
+        allow_lookup_finish = threading.Event()
+        observed_threads = {}
+
+        sha256 = "a" * 64
+
+        def fake_get_model_info_by_hash(file_hash, use_cache=True):
+            observed_threads["lookup"] = threading.get_ident()
+            lookup_started.set()
+            allow_lookup_finish.wait(timeout=2.0)
+            return {
+                "source": "civitai",
+                "model_id": 123,
+                "version_id": 456,
+                "model_name": "Async Safe LoRA",
+                "url": "https://civitai.com/models/123",
+                "version_url": "https://civitai.com/models/123?modelVersionId=456",
+                "sha256": sha256,
+                "trained_words": ["async_ok"],
+            }
+
+        def fake_write_metadata(*args, **kwargs):
+            observed_threads["write"] = threading.get_ident()
+            return "/tmp/async_safe.metadata.json"
+
+        service = self._build_model_service_for_unit_test(
+            service_module="civitai_search_service",
+            service_class="CivitAISearchService",
+            download_available=True,
+            extract_sha256_from_metadata=lambda value: (
+                value.get("sha256", "") if isinstance(value, dict) else ""
+            ),
+            find_external_metadata_sidecar_path=lambda path: "",
+            get_filename_from_path=lambda value: str(value or "").replace(
+                "\\", "/"
+            ).rsplit("/", 1)[-1],
+            is_path_in_configured_model_roots=lambda path: True,
+            normalize_category_to_model_type=lambda value: "LORA",
+            normalize_sha256=lambda value: str(value or "").lower(),
+            read_json_safe=lambda path, default=None: default,
+            search_huggingface_for_file=MagicMock(return_value=None),
+            write_model_resolver_metadata=fake_write_metadata,
+        )
+
+        with tempfile.NamedTemporaryFile(
+            suffix=".safetensors", delete=False
+        ) as handle:
+            model_path = handle.name
+
+        request = AsyncMock()
+        request.json.return_value = {
+            "filename": "async_safe.safetensors",
+            "category": "loras",
+            "resolved_path": model_path,
+            "sha256": sha256,
+        }
+
+        try:
+            civitai_module = importlib.import_module(
+                "comfyui-model-resolver.core.sources.civitai"
+            )
+            with patch.object(
+                civitai_module,
+                "get_model_info_by_hash",
+                side_effect=fake_get_model_info_by_hash,
+            ):
+                task = _asyncio.create_task(service.civitai_search(request))
+                while not lookup_started.is_set():
+                    await _asyncio.sleep(0.01)
+                # Proves event loop stayed responsive while blocking lookup waited!
+                loop_tick_completed = True
+                allow_lookup_finish.set()
+                response = await task
+        finally:
+            allow_lookup_finish.set()
+            os.unlink(model_path)
+
+        self.assertTrue(loop_tick_completed)
+        self.assertEqual(response.status, 200)
+        self.assertNotEqual(observed_threads.get("lookup"), event_loop_thread_id)
+        self.assertNotEqual(observed_threads.get("write"), event_loop_thread_id)
+
     async def test_custom_url_service_rejects_unsafe_url(self):
         class TestUnsafeUrlError(Exception):
             pass

@@ -726,19 +726,54 @@ export const dialogShellMethods = {
         }
     },
 
+    isComfySidebarStateActive() {
+        const extensionManager = app.extensionManager;
+        const candidates = [
+            extensionManager?.sidebarTab,
+            extensionManager?.sidebarTabs,
+            extensionManager?.sidebar,
+            extensionManager
+        ].filter(Boolean);
+
+        for (const candidate of candidates) {
+            try {
+                if ('activeSidebarTabId' in candidate) {
+                    return candidate.activeSidebarTabId === this.sidebarTabId;
+                }
+                if ('activeSidebarTab' in candidate) {
+                    const active = candidate.activeSidebarTab;
+                    const activeId = typeof active === 'string' ? active : active?.id;
+                    return activeId === this.sidebarTabId;
+                }
+            } catch (_error) {
+                // Ignore inaccessible sidebar state getters.
+            }
+        }
+
+        return null;
+    },
+
     closeComfySidebar(dockContainer = null) {
         const closedByState = this.tryCloseComfySidebarState();
 
         requestAnimationFrame(() => {
             if (dockContainer && !dockContainer.isConnected) return;
 
+            const stateStillActive = this.isComfySidebarStateActive();
+            if (closedByState && stateStillActive === false) return;
+
             const button = document.querySelector(`[data-testid="${this.sidebarTabId}-tab-button"], .${this.sidebarTabId}-tab-button`);
             if (!(button instanceof HTMLElement)) return;
 
             const isActive = isSidebarButtonActive(button);
 
-            if (!closedByState || isActive) {
-                button.click();
+            if (!closedByState || (isActive && stateStillActive !== false)) {
+                this._closingSidebarProgrammatically = true;
+                try {
+                    button.click();
+                } finally {
+                    this._closingSidebarProgrammatically = false;
+                }
             }
         });
     },

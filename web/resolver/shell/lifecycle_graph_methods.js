@@ -305,15 +305,35 @@ export const lifecycleGraphMethods = {
                 this._analysisProgressToken = null;
             }
             console.error('Model Resolver: Error loading workflow data:', error);
-            if (!preserveContent && shouldRenderMissingModels()) {
-                this.contentElement.innerHTML = `<p class="mr-error-text">Error: ${error.message}</p>`;
-            } else if (
-                !preserveContent &&
-                !loadToken &&
-                this.activeTab === 'missing' &&
-                this.contentElement
-            ) {
-                this.contentElement.innerHTML = `<p class="mr-error-text">Error: ${error.message}</p>`;
+            const showMissingError = (
+                (!preserveContent && shouldRenderMissingModels()) ||
+                (
+                    !preserveContent &&
+                    !loadToken &&
+                    this.activeTab === 'missing' &&
+                    this.contentElement
+                )
+            );
+            if (showMissingError && this.contentElement) {
+                const escapedMessage = typeof this.escapeHtml === 'function'
+                    ? this.escapeHtml(error?.message || String(error))
+                    : String(error?.message || error).replace(/[&<>"']/g, (ch) => ({
+                        '&': '&amp;',
+                        '<': '&lt;',
+                        '>': '&gt;',
+                        '"': '&quot;',
+                        "'": '&#39;',
+                    }[ch]));
+                this.contentElement.innerHTML = `
+                    <div class="mr-error-state" role="alert">
+                        <p class="mr-error-text">Error: ${escapedMessage}</p>
+                        <button id="mr-refresh-missing-analysis" type="button" class="mr-btn mr-btn-secondary">Retry</button>
+                    </div>
+                `;
+                const retryBtn = this.contentElement.querySelector('#mr-refresh-missing-analysis');
+                if (retryBtn) {
+                    retryBtn.addEventListener('click', () => this.refreshMissingAnalysis(retryBtn));
+                }
             }
             return null;
         }

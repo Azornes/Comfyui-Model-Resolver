@@ -288,15 +288,30 @@ def _first_mapping_value(mapping: Mapping[str, Any], keys: tuple[str, ...]) -> A
     return None
 
 
+def _resolve_civitai_resource_category(value: Mapping[str, Any]) -> tuple[str, str]:
+    candidates = [
+        str(value.get(key) or "").strip()
+        for key in ("model_type", "modelType", "type")
+        if value.get(key) not in (None, "")
+    ]
+    if not candidates:
+        return "", "unknown"
+    for raw in candidates:
+        token = normalize_category_token(raw)
+        if token in CATEGORY_MAP:
+            return raw, CATEGORY_MAP[token]
+    primary = candidates[0]
+    token = normalize_category_token(primary)
+    if token == "model":
+        return primary, "checkpoints"
+    return primary, token or "unknown"
+
+
 def _normalize_civitai_resource(value: Any, index: int) -> Optional[dict[str, Any]]:
     if not isinstance(value, Mapping):
         return None
 
-    resource_type = str(
-        _first_mapping_value(value, ("type", "model_type", "modelType")) or ""
-    ).strip()
-    category_key = normalize_category_token(resource_type)
-    category = CATEGORY_MAP.get(category_key, category_key or "unknown")
+    resource_type, category = _resolve_civitai_resource_category(value)
     model_version_id = _coerce_identifier(
         _first_mapping_value(
             value,

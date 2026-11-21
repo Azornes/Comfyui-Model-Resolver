@@ -615,3 +615,42 @@ async def test_metadata_service_workflow_source_detects_civitai_url():
     assert body["source_type"] == "civitai"
     assert body["civitai_image_id"] == 145110824
 
+
+def test_civitai_resource_prefers_specific_model_type_over_generic_model():
+    from core.services.image_metadata_service import _normalize_civitai_resource
+
+    ckpt = _normalize_civitai_resource(
+        {
+            "type": "model",
+            "modelType": "Checkpoint",
+            "modelId": 133005,
+            "modelVersionId": 357609,
+            "modelName": "Juggernaut XL",
+        },
+        0,
+    )
+    assert ckpt is not None
+    assert ckpt["category"] == "checkpoints"
+
+    lora = _normalize_civitai_resource(
+        {
+            "type": "model",
+            "modelType": "LORA",
+            "modelId": 122359,
+            "modelVersionId": 135867,
+            "modelName": "Detail Tweaker XL",
+        },
+        1,
+    )
+    assert lora is not None
+    assert lora["category"] == "loras"
+
+    generic_only = _normalize_civitai_resource(
+        {
+            "type": "model",
+            "name": "legacy_base_checkpoint.safetensors",
+        },
+        2,
+    )
+    assert generic_only is not None
+    assert generic_only["category"] == "checkpoints"
